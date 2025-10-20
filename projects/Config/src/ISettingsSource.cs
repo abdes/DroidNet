@@ -21,11 +21,6 @@ public interface ISettingsSource
     public string Id { get; }
 
     /// <summary>
-    /// Gets a value indicating whether this source supports write operations.
-    /// </summary>
-    public bool CanWrite { get; }
-
-    /// <summary>
     /// Gets a value indicating whether this source supports encryption for sensitive data.
     /// </summary>
     public bool SupportsEncryption { get; }

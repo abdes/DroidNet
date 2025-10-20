@@ -2,9 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -34,9 +31,6 @@ public abstract class SettingsSource(string id, IEncryptionProvider? crypto = nu
 
     /// <inheritdoc/>
     public string Id { get; } = id;
-
-    /// <inheritdoc/>
-    public abstract bool CanWrite { get; }
 
     /// <inheritdoc/>
     public bool SupportsEncryption => crypto != null;

@@ -105,89 +105,6 @@ public class FileSettingsSourceTests : IDisposable
     }
 
     [TestMethod]
-    public void CanWrite_WhenFileExistsAndWritable_ReturnsTrue()
-    {
-        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "canwrite-exists.json");
-        var directory = this.fs.Path.GetDirectoryName(path)!;
-        _ = this.fs.Directory.CreateDirectory(directory);
-        this.fs.File.WriteAllText(path, "content");
-
-        using var source = new TestFileSettingsSource("canwrite-existing", path, this.fs, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void CanWrite_WhenFileExistsAndReadOnly_ReturnsFalse()
-    {
-        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "canwrite-readonly.json");
-        var directory = this.fs.Path.GetDirectoryName(path)!;
-        _ = this.fs.Directory.CreateDirectory(directory);
-        this.fs.File.WriteAllText(path, "content");
-        var fileInfo = this.fs.FileInfo.New(path);
-        fileInfo.IsReadOnly = true;
-
-        using var source = new TestFileSettingsSource("canwrite-file-ro", path, this.fs, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void CanWrite_WhenParentDirectoryMissing_ReturnsFalse()
-    {
-        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "missing", "canwrite.json");
-
-        using var source = new TestFileSettingsSource("canwrite-no-dir", path, this.fs, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void CanWrite_WhenDirectoryWritable_ReturnsTrue()
-    {
-        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "dir", "canwrite.json");
-        var directory = this.fs.Path.GetDirectoryName(path)!;
-        _ = this.fs.Directory.CreateDirectory(directory);
-
-        using var source = new TestFileSettingsSource("canwrite-dir", path, this.fs, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeTrue();
-    }
-
-    [TestMethod]
-    public void CanWrite_WhenDirectoryReadOnly_ReturnsFalse()
-    {
-        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "dir-ro", "canwrite.json");
-        var directory = this.fs.Path.GetDirectoryName(path)!;
-        _ = this.fs.Directory.CreateDirectory(directory);
-        var directoryInfo = this.fs.DirectoryInfo.New(directory);
-        directoryInfo.Attributes |= FileAttributes.ReadOnly;
-
-        using var source = new TestFileSettingsSource("canwrite-dir-ro", path, this.fs, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeFalse();
-    }
-
-    [TestMethod]
-    public void CanWrite_WhenFileInfoThrows_ReturnsFalse()
-    {
-        var realFs = this.fs;
-        var path = realFs.Path.Combine(realFs.Path.GetTempPath(), "throws", "canwrite.json");
-
-        var mockFileInfoFactory = new Mock<IFileInfoFactory>();
-        _ = mockFileInfoFactory.Setup(f => f.New(It.IsAny<string>())).Throws(new IOException("boom"));
-
-        var mockFs = new Mock<IFileSystem>();
-        _ = mockFs.SetupGet(fs => fs.Path).Returns(realFs.Path);
-        _ = mockFs.SetupGet(fs => fs.Directory).Returns(realFs.Directory);
-        _ = mockFs.SetupGet(fs => fs.FileInfo).Returns(mockFileInfoFactory.Object);
-
-        using var source = new TestFileSettingsSource("canwrite-throws", path, mockFs.Object, loggerFactory: this.loggerFactory);
-
-        _ = source.CanWrite.Should().BeFalse();
-    }
-
-    [TestMethod]
     public void IsAvailable_WhenFileCanBeOpened_ReturnsTrue()
     {
         var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "available", "settings.json");
@@ -234,6 +151,23 @@ public class FileSettingsSourceTests : IDisposable
         using var source = new TestFileSettingsSource("available-unreadable", path, mockFs.Object, loggerFactory: this.loggerFactory);
 
         _ = source.IsAvailable.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void SupportsEncryption_ReturnsTrue_WhenEncryptionProviderIsSet()
+    {
+        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "enc-support.txt");
+        var crypto = new SimpleCrypto();
+        using var source = new TestFileSettingsSource("enc-support", path, this.fs, crypto: crypto, loggerFactory: this.loggerFactory);
+        _ = source.SupportsEncryption.Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void SupportsEncryption_ReturnsFalse_WhenNoEncryptionProviderIsSet()
+    {
+        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "plain-support.txt");
+        using var source = new TestFileSettingsSource("plain-support", path, this.fs, crypto: null, loggerFactory: this.loggerFactory);
+        _ = source.SupportsEncryption.Should().BeFalse();
     }
 
     [TestMethod]
@@ -726,27 +660,6 @@ public class FileSettingsSourceTests : IDisposable
 
         Func<Task> act = async () => await source.WriteAllTextAsync("payload", this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = await act.Should().ThrowAsync<System.Security.Cryptography.CryptographicException>().ConfigureAwait(true);
-    }
-
-    // Write exception path is covered by the existing Read/Write tests (read-only target test). No additional filesystem wrapper required.
-    [TestMethod]
-    public void CanWrite_IsFalse_WhenDirectoryMissing()
-    {
-        var nonExistentDir = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "no-such-dir", Guid.NewGuid().ToString());
-        var path = this.fs.Path.Combine(nonExistentDir, "file.txt");
-        var directory = this.fs.Path.GetDirectoryName(path) ?? this.fs.Path.GetTempPath();
-
-        // Ensure directory does NOT exist for this test
-        if (this.fs.Directory.Exists(directory))
-        {
-            this.fs.Directory.Delete(directory, recursive: true);
-        }
-
-        using var source = new TestFileSettingsSource("cw", path, this.fs, crypto: null, loggerFactory: this.loggerFactory);
-
-        // Directory does not exist: CanWrite should be false
-        _ = source.CanWrite.Should().BeFalse();
-        _ = source.IsAvailable.Should().BeFalse();
     }
 
     [TestMethod]

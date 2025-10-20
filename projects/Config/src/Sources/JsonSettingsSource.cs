@@ -18,13 +18,13 @@ namespace DroidNet.Config.Sources;
 ///     to distinguish between global, user, and built-in application settings.
 /// </param>
 /// <param name="filePath">The file system path to the configuration file.</param>
-/// <param name="watch">
-///     A value indicating whether the source should watch the file for changes and raise
-///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
-/// </param>
 /// <param name="fileSystem">
 ///     The <see cref="IFileSystem"/> abstraction used for file operations; this parameter cannot be <see
 ///     langword="null"/> and can be mocked or stubbed in tests.
+/// </param>
+/// <param name="watch">
+///     A value indicating whether the source should watch the file for changes and raise
+///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
 /// </param>
 /// <param name="crypto">
 ///     An optional <see cref="IEncryptionProvider"/> used to encrypt and decrypt file contents. If <see

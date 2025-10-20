@@ -27,8 +27,6 @@ public class MockSettingsSource : ISettingsSource
 
     public string Id { get; }
 
-    public bool CanWrite { get; set; } = true;
-
     public bool SupportsEncryption { get; set; }
 
     public bool IsAvailable { get; set; } = true;

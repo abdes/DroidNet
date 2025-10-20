@@ -17,7 +17,7 @@ namespace DroidNet.Config.Tests.Integration;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DI Integration")]
-public class DependencyInjectionTests : SettingsTestBase
+public partial class DependencyInjectionTests : SettingsTestBase
 {
     public DependencyInjectionTests()
         : base(registerDefaultSettingsServices: false)
@@ -31,30 +31,30 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithConfig_WhenCalled_RegistersSettingsManager()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
 
         // Assert
         var manager = this.Container.Resolve<ISettingsManager>();
-        manager.Should().NotBeNull();
-        manager.Should().BeOfType<SettingsManager>();
+        _ = manager.Should().NotBeNull();
+        _ = manager.Should().BeOfType<SettingsManager>();
     }
 
     [TestMethod]
     public void WithConfig_WhenCalled_RegistersFileSystemDependency()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var fileSystem = this.Container.Resolve<System.IO.Abstractions.IFileSystem>();
-        fileSystem.Should().NotBeNull();
+        _ = fileSystem.Should().NotBeNull();
     }
 
     [TestMethod]
     public void WithConfig_WhenCalled_RegistersLoggerFactoryDependency()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var loggerFactory = this.Container.Resolve<Microsoft.Extensions.Logging.ILoggerFactory>();
-        loggerFactory.Should().NotBeNull();
+        _ = loggerFactory.Should().NotBeNull();
     }
 
     // Group: WithJsonConfigSource
@@ -62,25 +62,25 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithJsonConfigSource_WhenCalled_RegistersSettingsSource()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithJsonConfigSource("test", filePath);
 
         // Assert
         var source = this.Container.Resolve<ISettingsSource>(serviceKey: "test");
-        source.Should().NotBeNull();
-        source.Should().BeOfType<JsonSettingsSource>();
+        _ = source.Should().NotBeNull();
+        _ = source.Should().BeOfType<JsonSettingsSource>();
     }
 
     [TestMethod]
     public void WithJsonConfigSource_WhenEncryptionTypeIsValid_RegistersWithEncryptionProvider()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
 
         // Add the fake encryption provider to the container
         this.Container.Register<FakeEncryptionProvider>(Reuse.Singleton);
@@ -92,50 +92,41 @@ public class DependencyInjectionTests : SettingsTestBase
         var filePath = this.CreateMultiSectionSettingsFile("test-encrypted.json", settings);
 
         // Act
-        this.Container.WithJsonConfigSource("encrypted", filePath, encryption: typeof(FakeEncryptionProvider));
+        _ = this.Container.WithJsonConfigSource("encrypted", filePath, encryption: typeof(FakeEncryptionProvider));
 
         // Assert
         var source = this.Container.Resolve<ISettingsSource>(serviceKey: "encrypted");
-        source.Should().NotBeNull();
-        source.Should().BeOfType<JsonSettingsSource>();
+        _ = source.Should().NotBeNull();
+        _ = source.Should().BeOfType<JsonSettingsSource>();
     }
 
     [TestMethod]
     public void WithJsonConfigSource_WhenEncryptionTypeIsInvalid_ThrowsArgumentException()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithJsonConfigSource("test", filePath);
 
         // Act
+        // Use a type that does NOT implement IEncryptionProvider (e.g., typeof(string))
         Action act = () =>
-        {
-            // Use a type that does NOT implement IEncryptionProvider (e.g., typeof(string))
             this.Container.WithJsonConfigSource("test", filePath, encryption: typeof(string));
-        };
 
         // Assert
-        act.Should().Throw<ArgumentException>()
+        _ = act.Should().Throw<ArgumentException>()
             .WithMessage("*must implement IEncryptionProvider*");
-    }
-
-    // Helper for encryption provider branch coverage
-    private class FakeEncryptionProvider : IEncryptionProvider
-    {
-        public byte[] Encrypt(byte[] data) => data;
-        public byte[] Decrypt(byte[] data) => data;
     }
 
     [TestMethod]
     public void WithJsonConfigSource_WhenMultipleFilesProvided_RegistersAllSources()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings1 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings { Name = "File1" } },
@@ -147,52 +138,52 @@ public class DependencyInjectionTests : SettingsTestBase
 
         var file1 = this.CreateMultiSectionSettingsFile("test1.json", settings1);
         var file2 = this.CreateMultiSectionSettingsFile("test2.json", settings2);
-        this.Container.WithJsonConfigSource("file1", file1);
-        this.Container.WithJsonConfigSource("file2", file2);
+        _ = this.Container.WithJsonConfigSource("file1", file1);
+        _ = this.Container.WithJsonConfigSource("file2", file2);
 
         // Assert
         var source1 = this.Container.Resolve<ISettingsSource>(serviceKey: "file1");
         var source2 = this.Container.Resolve<ISettingsSource>(serviceKey: "file2");
-        source1.Should().NotBeNull();
-        source2.Should().NotBeNull();
-        source1.Should().BeOfType<JsonSettingsSource>();
-        source2.Should().BeOfType<JsonSettingsSource>();
+        _ = source1.Should().NotBeNull();
+        _ = source2.Should().NotBeNull();
+        _ = source1.Should().BeOfType<JsonSettingsSource>();
+        _ = source2.Should().BeOfType<JsonSettingsSource>();
     }
 
     [TestMethod]
     public void WithJsonConfigSource_WhenMultipleIdsProvided_RegistersDistinctSources()
     {
         // Arrange
-        this.Container.WithConfig();
-        var filePath1 = this.CreateMultiSectionSettingsFile("settings1.json", new Dictionary<string, object> { { nameof(TestSettings), new TestSettings() } });
-        var filePath2 = this.CreateMultiSectionSettingsFile("settings2.json", new Dictionary<string, object> { { nameof(TestSettings), new TestSettings() } });
-        this.Container.WithJsonConfigSource("id1", filePath1);
-        this.Container.WithJsonConfigSource("id2", filePath2);
+        _ = this.Container.WithConfig();
+        var filePath1 = this.CreateMultiSectionSettingsFile("settings1.json", new Dictionary<string, object>(StringComparer.Ordinal) { { nameof(TestSettings), new TestSettings() } });
+        var filePath2 = this.CreateMultiSectionSettingsFile("settings2.json", new Dictionary<string, object>(StringComparer.Ordinal) { { nameof(TestSettings), new TestSettings() } });
+        _ = this.Container.WithJsonConfigSource("id1", filePath1);
+        _ = this.Container.WithJsonConfigSource("id2", filePath2);
 
         // Assert
         var source1 = this.Container.Resolve<ISettingsSource>(serviceKey: "id1");
         var source2 = this.Container.Resolve<ISettingsSource>(serviceKey: "id2");
-        source1.Should().NotBeNull();
-        source2.Should().NotBeNull();
-        source1.Should().NotBeSameAs(source2);
+        _ = source1.Should().NotBeNull();
+        _ = source2.Should().NotBeNull();
+        _ = source1.Should().NotBeSameAs(source2);
     }
 
     [TestMethod]
     public void WithJsonConfigSource_WhenWatchParameterUsed_RegistersWithCorrectWatchSetting()
     {
         // Arrange
-        this.Container.WithConfig();
-        var filePath = this.CreateMultiSectionSettingsFile("watched.json", new Dictionary<string, object> { { nameof(TestSettings), new TestSettings() } });
-        this.Container.WithJsonConfigSource("watched", filePath, watch: true);
-        this.Container.WithJsonConfigSource("unwatched", filePath, watch: false);
+        _ = this.Container.WithConfig();
+        var filePath = this.CreateMultiSectionSettingsFile("watched.json", new Dictionary<string, object>(StringComparer.Ordinal) { { nameof(TestSettings), new TestSettings() } });
+        _ = this.Container.WithJsonConfigSource("watched", filePath, watch: true);
+        _ = this.Container.WithJsonConfigSource("unwatched", filePath, watch: false);
 
         // Assert
         var watchedSource = this.Container.Resolve<ISettingsSource>(serviceKey: "watched");
         var unwatchedSource = this.Container.Resolve<ISettingsSource>(serviceKey: "unwatched");
-        watchedSource.Should().NotBeNull();
-        unwatchedSource.Should().NotBeNull();
-        watchedSource.Should().BeOfType<JsonSettingsSource>();
-        unwatchedSource.Should().BeOfType<JsonSettingsSource>();
+        _ = watchedSource.Should().NotBeNull();
+        _ = unwatchedSource.Should().NotBeNull();
+        _ = watchedSource.Should().BeOfType<JsonSettingsSource>();
+        _ = unwatchedSource.Should().BeOfType<JsonSettingsSource>();
     }
 
     // Group: WithSettings
@@ -200,84 +191,84 @@ public class DependencyInjectionTests : SettingsTestBase
     public void WithSettings_WhenCalled_RegistersTypedService()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         // Assert
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        service.Should().NotBeNull();
+        _ = service.Should().NotBeNull();
     }
 
     [TestMethod]
     public void WithSettings_WhenCalled_ReturnsSingletonInstance()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         // Act
         var service1 = this.Container.Resolve<ISettingsService<ITestSettings>>();
         var service2 = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Assert
-        service1.Should().BeSameAs(service2);
+        _ = service1.Should().BeSameAs(service2);
     }
 
     [TestMethod]
     public void WithSettings_WhenMultipleTypesProvided_ResolvesBoth()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings() },
             { nameof(AlternativeTestSettings), new AlternativeTestSettings() },
         };
         var filePath = this.CreateMultiSectionSettingsFile("multi.json", settings);
-        this.Container.WithJsonConfigSource("multi", filePath);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
-        this.Container.WithSettings<IAlternativeTestSettings, AlternativeTestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("multi", filePath);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithSettings<IAlternativeTestSettings, AlternativeTestSettingsService>();
 
         // Act
         var service1 = this.Container.Resolve<ISettingsService<ITestSettings>>();
         var service2 = this.Container.Resolve<ISettingsService<IAlternativeTestSettings>>();
 
         // Assert
-        service1.Should().NotBeNull();
-        service2.Should().NotBeNull();
-        service1.Should().NotBeSameAs(service2);
+        _ = service1.Should().NotBeNull();
+        _ = service2.Should().NotBeNull();
+        _ = service1.Should().NotBeSameAs(service2);
     }
 
     [TestMethod]
     public void WithSettings_WhenChained_RegistersServiceCorrectly()
     {
         // Arrange
-        this.Container.WithConfig()
-            .WithJsonConfigSource("test", this.CreateMultiSectionSettingsFile("test.json", new Dictionary<string, object> { { nameof(TestSettings), new TestSettings() } }))
+        _ = this.Container.WithConfig()
+            .WithJsonConfigSource("test", this.CreateMultiSectionSettingsFile("test.json", new Dictionary<string, object>(StringComparer.Ordinal) { { nameof(TestSettings), new TestSettings() } }))
             .WithSettings<ITestSettings, TestSettingsService>();
 
         // Assert
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        service.Should().NotBeNull();
+        _ = service.Should().NotBeNull();
     }
 
     [TestMethod]
     public async Task WithSettings_WhenMultipleSources_LastLoadedWins()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings1 = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings { Name = "First", Value = 1 } },
@@ -289,9 +280,9 @@ public class DependencyInjectionTests : SettingsTestBase
 
         var file1 = this.CreateMultiSectionSettingsFile("first.json", settings1);
         var file2 = this.CreateMultiSectionSettingsFile("second.json", settings2);
-        this.Container.WithJsonConfigSource("first", file1);
-        this.Container.WithJsonConfigSource("second", file2);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("first", file1);
+        _ = this.Container.WithJsonConfigSource("second", file2);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -301,22 +292,22 @@ public class DependencyInjectionTests : SettingsTestBase
         await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        service.Settings.Name.Should().Be("Second");
-        service.Settings.Value.Should().Be(2);
+        _ = service.Settings.Name.Should().Be("Second");
+        _ = service.Settings.Value.Should().Be(2);
     }
 
     [TestMethod]
     public async Task WithSettings_WhenServiceResolved_ProvidesInitializedData()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings { Name = "InitialData", Value = 42 } },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -326,22 +317,22 @@ public class DependencyInjectionTests : SettingsTestBase
         await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        service.Settings.Name.Should().Be("InitialData");
-        service.Settings.Value.Should().Be(42);
+        _ = service.Settings.Name.Should().Be("InitialData");
+        _ = service.Settings.Value.Should().Be(42);
     }
 
     [TestMethod]
     public async Task WithSettings_WhenValidationFails_ThrowsSettingsValidationException()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var settings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings { Name = "Test", Value = 50 } },
         };
         var filePath = this.CreateMultiSectionSettingsFile("test.json", settings);
-        this.Container.WithJsonConfigSource("test", filePath);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("test", filePath);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -356,7 +347,7 @@ public class DependencyInjectionTests : SettingsTestBase
         var act = async () => await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(true);
+        _ = await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(true);
     }
 
     // Group: FullPipeline
@@ -364,7 +355,7 @@ public class DependencyInjectionTests : SettingsTestBase
     public async Task FullPipeline_WhenScenarioIsReal_WorksEndToEnd()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var appSettings = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             { nameof(TestSettings), new TestSettings { Name = "AppSettings", Value = 100 } },
@@ -376,9 +367,9 @@ public class DependencyInjectionTests : SettingsTestBase
 
         var appFile = this.CreateMultiSectionSettingsFile("appsettings.json", appSettings);
         var userFile = this.CreateMultiSectionSettingsFile("user-settings.json", userSettings);
-        this.Container.WithJsonConfigSource("app", appFile);
-        this.Container.WithJsonConfigSource("user", userFile);
-        this.Container.WithSettings<ITestSettings, TestSettingsService>();
+        _ = this.Container.WithJsonConfigSource("app", appFile);
+        _ = this.Container.WithJsonConfigSource("user", userFile);
+        _ = this.Container.WithSettings<ITestSettings, TestSettingsService>();
 
         var manager = this.Container.Resolve<ISettingsManager>();
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -393,9 +384,9 @@ public class DependencyInjectionTests : SettingsTestBase
         await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        service.Settings.Name.Should().Be("UserSettings");
-        service.Settings.Value.Should().Be(999);
-        service.IsDirty.Should().BeFalse();
+        _ = service.Settings.Name.Should().Be("UserSettings");
+        _ = service.Settings.Value.Should().Be(999);
+        _ = service.IsDirty.Should().BeFalse();
     }
 
     // Group: SettingsManager
@@ -403,11 +394,11 @@ public class DependencyInjectionTests : SettingsTestBase
     public void SettingsManager_WhenResolvedMultipleTimes_IsSingleton()
     {
         // Arrange
-        this.Container.WithConfig();
+        _ = this.Container.WithConfig();
         var manager1 = this.Container.Resolve<ISettingsManager>();
         var manager2 = this.Container.Resolve<ISettingsManager>();
 
         // Assert
-        manager1.Should().BeSameAs(manager2);
+        _ = manager1.Should().BeSameAs(manager2);
     }
 }

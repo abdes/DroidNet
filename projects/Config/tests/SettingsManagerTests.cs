@@ -118,12 +118,12 @@ public class SettingsManagerTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task SaveSettingsAsync_ShouldWriteToAllWritableSources()
+    public async Task SaveSettingsAsync_ShouldWriteToAllSources()
     {
         // Arrange
-        var source1 = new MockSettingsSource("source1") { CanWrite = true };
-        var source2 = new MockSettingsSource("source2") { CanWrite = true };
-        var source3 = new MockSettingsSource("source3") { CanWrite = false };
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+        var source3 = new MockSettingsSource("source3");
 
         using var manager = new SettingsManager([source1, source2, source3], this.Container, this.LoggerFactory);
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -137,15 +137,15 @@ public class SettingsManagerTests : SettingsTestBase
         // Assert
         _ = source1.WriteCallCount.Should().Be(1);
         _ = source2.WriteCallCount.Should().Be(1);
-        _ = source3.WriteCallCount.Should().Be(0);
+        _ = source3.WriteCallCount.Should().Be(1);
     }
 
     [TestMethod]
     public async Task SaveSettingsAsync_WhenSourceWriteFails_ShouldContinueWithOtherSources()
     {
         // Arrange
-        var source1 = new MockSettingsSource("source1") { CanWrite = true, ShouldFailWrite = true };
-        var source2 = new MockSettingsSource("source2") { CanWrite = true };
+        var source1 = new MockSettingsSource("source1") { ShouldFailWrite = true };
+        var source2 = new MockSettingsSource("source2");
 
         using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -325,7 +325,7 @@ public class SettingsManagerTests : SettingsTestBase
     public async Task SaveSettingsAsync_WithNullMetadata_ShouldUseDefaultMetadata()
     {
         // Arrange
-        var source = new MockSettingsSource("source") { CanWrite = true };
+        var source = new MockSettingsSource("source");
         using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
