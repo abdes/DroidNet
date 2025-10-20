@@ -94,16 +94,8 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         private set => this.SetField(ref this.isBusy, value);
     }
 
-    /// <summary>
-    /// Gets the concrete POCO type used for deserialization from storage.
-    /// Override this property if TSettings is an interface to specify the concrete implementation type.
-    /// </summary>
-    /// <remarks>
-    /// When TSettings is an interface, this property should return the concrete class type
-    /// that implements the interface and can be deserialized from JSON.
-    /// The default implementation returns typeof(TSettings).
-    /// </remarks>
-    protected virtual Type PocoType => typeof(TSettings);
+    /// <inheritdoc/>
+    public abstract Type SettingsType { get; }
 
     /// <summary>
     /// Loads settings from all sources and initializes the service.
@@ -122,7 +114,7 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         try
         {
             this.IsBusy = true;
-            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
+            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
 
             // If no settings were loaded from sources, use default settings
             loadedSettings ??= this.CreateDefaultSettings();
@@ -196,7 +188,7 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
             await this.manager.ReloadAllAsync(cancellationToken).ConfigureAwait(false);
 
             // Then load the refreshed settings from the updated cache
-            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.PocoType, cancellationToken).ConfigureAwait(false);
+            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
 
             // If no settings were loaded from sources, use default settings
             loadedSettings ??= this.CreateDefaultSettings();
@@ -240,18 +232,6 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
         }
 
         return errors.AsReadOnly();
-    }
-
-    /// <summary>
-    /// Runs migrations for the settings type. (No-op by default.)
-    /// </summary>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task RunMigrationsAsync(CancellationToken cancellationToken = default)
-    {
-        this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
-        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     /// <summary>

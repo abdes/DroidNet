@@ -40,7 +40,7 @@ public sealed class AlternativeTestSettingsService(
         set => this.SetField(ref this.autoSave, value);
     }
 
-    protected override Type PocoType => typeof(AlternativeTestSettings);
+    public override Type SettingsType => typeof(AlternativeTestSettings);
 
     protected override IAlternativeTestSettings GetSettingsSnapshot() => new AlternativeTestSettings
     {

@@ -12,7 +12,7 @@ and generative tools to implement, test, and validate the design.
 
 Provide a single, well-defined, type-safe, and testable configuration/settings
 subsystem that supports application-wide settings, runtime notifications,
-persistence, validation, secure secrets handling, and versioning/migration.
+persistence, validation, and secure secrets handling.
 
 ### Scope & Coverage
 
@@ -23,7 +23,7 @@ The Settings Module covers:
 - Multi-source settings composition with last-loaded-wins strategy
 - Type-safe settings access via strongly-typed POCOs
 - Unit and integration test contracts
-- Migration system for settings schema evolution
+
 - Runtime configuration hot-reloading (with source change notifications)
 
 ### Exclusions
@@ -82,7 +82,6 @@ The Settings Module covers:
 - **REQ-008**: Validate settings using source-level (e.g. JSON schema,) when applicable/supported
 - **REQ-009**: Validate settings at the property level via `Settings Service` implementations
 - **REQ-010**: Handle secrets securely with encryption-at-rest for sources that support it
-- **REQ-011**: Provide settings migration capability for schema evolution and version upgrades
 
 ### Non-Functional Requirements
 
@@ -134,7 +133,6 @@ The **SettingsManager** is the central orchestrator that:
 - Coordinates source loading (last loaded source wins, no precedence)
 - Provides factory methods to create `ISettingsService<TSettings>` instances
 - Handles source-level events and notifications
-- Manages global operations like migrations across all sources
 
 #### ISettingsService&lt;TSettings&gt;
 
@@ -244,13 +242,7 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     /// <returns>Disposable subscription that can be disposed to unsubscribe</returns>
     IDisposable SubscribeToSourceChanges(Action<SettingsSourceChangedEventArgs> handler);
 
-    /// <summary>
-    /// Run any pending migrations for stored settings documents (version upgrades, schema changes).
-    /// Should be called after InitializeAsync and before first use in production scenarios.
-    /// </summary>
-    /// <param name="ct">Cancellation token</param>
-    /// <returns>Task that completes when migrations are finished</returns>
-    Task RunMigrationsAsync(CancellationToken ct = default);
+
 
     /// <summary>
     /// Reset settings to default values as defined by the TSettings interface.
@@ -545,67 +537,6 @@ public sealed record SettingsSourceResult
 }
 ```
 
-### Migration System Contracts
-
-Settings migration is handled by the `ISettingsService<TSettings>` implementation, which knows its schema evolution, and orchestrated by the `SettingsManager`.
-
-#### Enhanced ISettingsService Contract
-
-The `ISettingsService<TSettings>` interface already includes `RunMigrationsAsync()`. The service implementation determines:
-
-- What migrations are available for its `TSettings` type
-- What the current schema version is
-- How to transform data between versions
-
-#### Enhanced SettingsManager Contract
-
-The `SettingsManager` interface already includes `RunMigrationsAsync()`. The manager orchestrates:
-
-- Migration execution across all registered services
-- Source-level backup and recovery
-- Version coordination between sources
-
-#### Migration Exception
-
-```csharp
-/// <summary>
-/// Exception thrown when migration execution fails.
-/// </summary>
-public sealed class SettingsMigrationException : Exception
-{
-    /// <summary>
-    /// The source version being migrated from.
-    /// </summary>
-    public string? FromVersion { get; }
-
-    /// <summary>
-    /// The target version being migrated to.
-    /// </summary>
-    public string? ToVersion { get; }
-
-    /// <summary>
-    /// The settings type that failed migration.
-    /// </summary>
-    public Type? SettingsType { get; }
-
-    public SettingsMigrationException(string message, string? fromVersion = null, string? toVersion = null, Type? settingsType = null)
-        : base(message)
-    {
-        FromVersion = fromVersion;
-        ToVersion = toVersion;
-        SettingsType = settingsType;
-    }
-
-    public SettingsMigrationException(string message, Exception innerException, string? fromVersion = null, string? toVersion = null, Type? settingsType = null)
-        : base(message, innerException)
-    {
-        FromVersion = fromVersion;
-        ToVersion = toVersion;
-        SettingsType = settingsType;
-    }
-}
-```
-
 ### Data Contract for Persisted Settings
 
 #### JSON File Format Requirements
@@ -671,7 +602,7 @@ Each settings file MUST follow this structure:
 
 | Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `version` | Yes | string | Settings content version for migration purposes |
+| `version` | Yes | string | Settings content version |
 | `schemaVersion` | Yes | string | Settings schema version (typically date-based) |
 | `service` | No | string | Identifier for the SettingsService that manages this section of settings source (Fully Qualified Type) |
 | `writtenAt` | No | string | ISO 8601 timestamp when file was last written |
@@ -776,7 +707,6 @@ public sealed class Secret<T>
 
 - Sources MUST validate they can handle secrets before accepting them in WriteAsync
 - Service layer MUST validate `Secret<T>` properties against source capabilities before persistence
-- Migration logic MUST preserve secret encryption during schema upgrades
 
 ## 5. Acceptance Criteria
 
@@ -845,13 +775,6 @@ public sealed class Secret<T>
   - **Then**: A source change event is fired with `ChangeType.Updated`
   - **And**: The settings are automatically reloaded if auto-reload is enabled
   - **And**: Property change notifications fire for any changed values
-
-- **AC-010**: **Migration Execution**
-  - **Given**: Settings files with older version metadata
-  - **When**: `RunMigrationsAsync()` is called
-  - **Then**: All applicable migrations are executed in order
-  - **And**: Version metadata is updated to reflect the new schema version
-  - **And**: Original files are backed up before migration (if configured)
 
 ## Bootstrapper integration and DI registration
 
@@ -1040,7 +963,7 @@ Tests/
 │   ├── MultiSourceTests.cs               # Multiple sources with last-loaded-wins
 │   ├── ConcurrencyTests.cs               # Thread safety and concurrent access
 │   ├── FileSystemTests.cs                # Real file system operations
-│   └── MigrationTests.cs                 # Schema migration scenarios
+
 └── DroidNet.Settings.Security.Tests/     # Security-focused tests
     ├── SecretEncryptionTests.cs           # Secret encryption verification
     └── AccessControlTests.cs              # Security boundary testing
@@ -1162,7 +1085,7 @@ public class MultiSourceIntegrationTests
 
 - **Deterministic Test Data**: Use fixed JSON files with known values for predictable test outcomes
 - **Temporary Isolation**: Each test gets isolated temporary directories to prevent cross-test contamination
-- **Schema Variations**: Test files for different schema versions to verify migration scenarios
+
 - **Invalid Data Sets**: Deliberately corrupted/invalid files to test error handling
 
 #### Mock Objects & Stubs
@@ -1479,7 +1402,7 @@ catch (NotSupportedException ex)
 ### Internal Documentation
 
 - **Design Rationale**: `projects/Config/docs/settings-design.md` - Design and architectural decisions
-- **Migration Guide**: `projects/Config/docs/settings-migration.md` - Guide for migrating from legacy settings systems
+
 - **Security Guidelines**: `projects/Config/docs/settings-security.md` - Security considerations and threat model
 
 ### External Standards & References

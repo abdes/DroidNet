@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Reflection;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -10,12 +12,29 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Central orchestrator that manages all settings sources and provides access to settings services.
-/// Implements last-loaded-wins strategy for multi-source composition.
+///     An implementation of the <see cref="ISettingsManager"/> interface, that implements last-loaded-wins strategy for
+///     multi-source composition.
 /// </summary>
 /// <remarks>
-/// Initializes a new instance of the <see cref="SettingsManager"/> class.
+///     This implementation follows the contract specified in <see cref="ISettingsManager"/>, and handles multi-source
+///     composition using a last-loaded-wins strategy. When initialized, its loads all registered sources in the order
+///     they were added. Settings sections from later-loaded sources override those from earlier ones when there are
+///     conflicts.
+///     <para>
+///     This implementation supports reloading, adding and removing sources at runtime via <see cref="AddSourceAsync"/>
+///     and <see cref="RemoveSourceAsync"/> and automatic or manually triggered reloads via <see cref="ReloadAllAsync"/>.
+///     Updates resulting from these operations are propagated to all active settings services, but it remains the
+///     responsibility of the service implementation to honor them.
+///     </para>
+///     <para>
+///     Applications can subscribe to the <see cref="SourceChanged"/> event to be notified of any lifecycle changes
+///     occurring to the managed sources.
+///     </para>
 /// </remarks>
+/// <note>
+///     When a source is configured, it stays configured until it is explicitly removed, even if it fails to load. This
+///     allows it to be retried on subsequent reloads or when its data changes and the source is being watched.
+/// </note>
 /// <param name="sources">The collection of settings sources to manage.</param>
 /// <param name="resolver">The DI container resolver for creating service instances.</param>
 /// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
@@ -29,8 +48,7 @@ public sealed partial class SettingsManager(
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
     private readonly ConcurrentDictionary<Type, object> serviceInstances = new();
     private readonly Dictionary<string, object> cachedSections = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim initializationLock = new(1, 1);
-    private readonly List<IDisposable> subscriptions = [];
+    private readonly AsyncLock initializationLock = new();
     private bool isInitialized;
     private bool isDisposed;
 
@@ -52,8 +70,8 @@ public sealed partial class SettingsManager(
     {
         this.ThrowIfDisposed();
 
-        await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
             if (this.isInitialized)
             {
@@ -63,131 +81,94 @@ public sealed partial class SettingsManager(
 
             LogInitializing(this.logger, this.sources.Count);
 
-            // Load all sources in order (last-loaded-wins)
             foreach (var source in this.sources)
             {
-                try
-                {
-                    LogLoadingSource(this.logger, source.Id);
-                    var result = await source.LoadAsync(false, cancellationToken).ConfigureAwait(false);
-
-                    if (result.IsSuccess)
-                    {
-                        var payload = result.Value;
-
-                        foreach (var (sectionName, sectionData) in payload.Sections)
-                        {
-                            if (sectionData != null)
-                            {
-                                this.cachedSections[sectionName] = sectionData;
-                            }
-                        }
-
-                        LogLoadedSource(this.logger, source.Id);
-                        this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
-                    }
-                    else
-                    {
-                        var errorMessage = result.Error.Message;
-                        LogFailedToLoadSource(this.logger, source.Id, errorMessage);
-                    }
-                }
-#pragma warning disable CA1031 // Do not catch general exception types
-                catch (Exception ex)
-                {
-                    LogExceptionLoadingSource(this.logger, ex, source.Id);
-                }
-#pragma warning restore CA1031 // Do not catch general exception types
+                await TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
             }
 
             this.isInitialized = true;
             LogInitializationComplete(this.logger);
         }
-        finally
-        {
-            _ = this.initializationLock.Release();
-        }
     }
 
     /// <inheritdoc/>
-    public ISettingsService<TSettings> GetService<TSettings>()
-        where TSettings : class
+    public ISettingsService<TSettingsInterface> GetService<TSettingsInterface>()
+        where TSettingsInterface : class
     {
         this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
 
-        if (!this.isInitialized)
-        {
-            throw new InvalidOperationException(
-                "SettingsManager must be initialized before getting services. Call InitializeAsync first.");
-        }
-
-        var settingsType = typeof(TSettings);
+        var settingsType = typeof(TSettingsInterface);
 
         // Return existing instance if available
         if (this.serviceInstances.TryGetValue(settingsType, out var existingService))
         {
-            return (ISettingsService<TSettings>)existingService;
+            return (ISettingsService<TSettingsInterface>)existingService;
         }
 
-        // Create new service instance using DI container
         LogCreatingService(this.logger, settingsType.Name);
 
-        var service = this.resolver.Resolve<ISettingsService<TSettings>>();
-        _ = this.serviceInstances.TryAdd(settingsType, service);
+        // Get the concrete service instance from the resolver, keyed by the settings type
+        var service = resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
+        this.ApplySettings(service);
+        var added = this.serviceInstances.TryAdd(settingsType, service);
+        Debug.Assert(added, "Service instance should have been added successfully.");
 
         return service;
+    }
+
+    private void ApplySettings<TSettingsInterface>(ISettingsService<TSettingsInterface> service)
+        where TSettingsInterface : class
+    {
+        var sectionName = service.SectionName;
+        var settings = service.Settings;
+
+        // Use cached sections data instead of re-reading from sources
+        if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
+        {
+            if (sectionData is System.Text.Json.JsonElement jsonElement)
+            {
+                // Deserialize JsonElement to the POCO type first
+                // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
+                var deserializedData = System.Text.Json.JsonSerializer.Deserialize(
+                    jsonElement.GetRawText(),
+                    service.SettingsType);
+
+                // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
+                if (deserializedData is TSettingsInterface typedInstance)
+                {
+                    ApplyProperties(typedInstance, settings);
+                    LogLoadedSettingsForType(this.logger, sectionName, "cache (deserialized from JsonElement)");
+                }
+                else
+                {
+                    LogSettingsDeserializationFailed(this.logger, sectionName, service.SettingsType);
+                }
+
+            }
+        }
+
     }
 
     /// <inheritdoc/>
     public async Task ReloadAllAsync(CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
-
-        if (!this.isInitialized)
-        {
-            throw new InvalidOperationException("SettingsManager must be initialized before reloading.");
-        }
+        this.ThrowIfNotInitialized();
 
         LogReloadingAllSources(this.logger);
 
-        await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
-            await this.ReloadSourcesAsync(cancellationToken).ConfigureAwait(false);
-            this.NotifyServicesOfReload();
-        }
-        finally
-        {
-            _ = this.initializationLock.Release();
-        }
-    }
+            this.cachedSections.Clear();
 
-    /// <inheritdoc/>
-    public async Task RunMigrationsAsync(CancellationToken cancellationToken = default)
-    {
-        this.ThrowIfDisposed();
-
-        if (!this.isInitialized)
-        {
-            throw new InvalidOperationException("SettingsManager must be initialized before running migrations.");
-        }
-
-        LogRunningMigrations(this.logger);
-
-        foreach (var serviceInstance in this.serviceInstances.Values)
-        {
-            if (serviceInstance is ISettingsService<object> service)
+            foreach (var source in this.sources)
             {
-                try
-                {
-                    await service.RunMigrationsAsync(cancellationToken).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    LogMigrationFailed(this.logger, ex, serviceInstance.GetType().Name);
-                    throw;
-                }
+                await TryLoadSourceAsync(source, true, cancellationToken).ConfigureAwait(false);
             }
+
+            this.NotifyServicesOfReload();
         }
     }
 
@@ -197,8 +178,8 @@ public sealed partial class SettingsManager(
         this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(source);
 
-        await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
             if (this.sources.Any(s => string.Equals(s.Id, source.Id, StringComparison.Ordinal)))
             {
@@ -211,28 +192,8 @@ public sealed partial class SettingsManager(
             // Load the new source if manager is already initialized
             if (this.isInitialized)
             {
-                var result = await source.LoadAsync(false, cancellationToken).ConfigureAwait(false);
-                if (result.IsSuccess)
-                {
-                    foreach (var (sectionName, sectionData) in result.Value.Sections)
-                    {
-                        if (sectionData != null)
-                        {
-                            this.cachedSections[sectionName] = sectionData;
-                        }
-                    }
-
-                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
-                }
-                else
-                {
-                    LogFailedToLoadSource(this.logger, source.Id, result.Error.Message);
-                }
+                await TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
             }
-        }
-        finally
-        {
-            _ = this.initializationLock.Release();
         }
     }
 
@@ -242,41 +203,27 @@ public sealed partial class SettingsManager(
         this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(sourceId);
 
-        await this.initializationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
-            var source = this.sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal)) ?? throw new InvalidOperationException($"Source with ID '{sourceId}' not found.");
-            _ = this.sources.Remove(source);
-            LogRemovedSource(this.logger, sourceId);
+            // Find and remove in one pass
+            var index = this.sources.FindIndex(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
+            if (index < 0)
+            {
+                throw new InvalidOperationException($"Source with ID '{sourceId}' not found.");
+            }
 
+            var source = this.sources[index];
+            this.sources.RemoveAt(index);
+
+            LogRemovedSource(this.logger, sourceId);
             this.OnSourceChanged(new SourceChangedEventArgs(sourceId, SourceChangeType.Removed));
 
-            // Dispose the source if it's disposable
             if (source is IDisposable disposable)
             {
                 disposable.Dispose();
             }
         }
-        finally
-        {
-            _ = this.initializationLock.Release();
-        }
-    }
-
-    /// <inheritdoc/>
-    public IDisposable SubscribeToSourceChanges(Action<SourceChangedEventArgs> handler)
-    {
-        this.ThrowIfDisposed();
-        ArgumentNullException.ThrowIfNull(handler);
-
-        this.SourceChanged += EventHandler;
-
-        var subscription = new Subscription(() => this.SourceChanged -= EventHandler);
-        this.subscriptions.Add(subscription);
-
-        return subscription;
-
-        void EventHandler(object? sender, SourceChangedEventArgs args) => handler(args);
     }
 
     /// <inheritdoc/>
@@ -299,14 +246,6 @@ public sealed partial class SettingsManager(
         }
 
         this.serviceInstances.Clear();
-
-        // Dispose all subscriptions
-        foreach (var subscription in this.subscriptions)
-        {
-            subscription.Dispose();
-        }
-
-        this.subscriptions.Clear();
 
         // Dispose all sources
         foreach (var source in this.sources)
@@ -416,48 +355,47 @@ public sealed partial class SettingsManager(
         }
     }
 
+    private static void ApplyProperties<T>(T source, T target)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(target);
+
+        var props = typeof(T)
+            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0);
+
+        foreach (var prop in props)
+        {
+            var value = prop.GetValue(source);
+            prop.SetValue(target, value); // goes through the setter → triggers notifications
+        }
+    }
+
     private void OnSourceChanged(SourceChangedEventArgs args)
     {
         this.SourceChanged?.Invoke(this, args);
     }
 
-    private async Task ReloadSourcesAsync(CancellationToken cancellationToken)
+    private async Task TryLoadSourceAsync(ISettingsSource source, bool allowReload, CancellationToken cancellationToken)
     {
-        this.cachedSections.Clear();
-
-        foreach (var source in this.sources)
-        {
-            try
+        LogLoadingSource(this.logger, source.Id);
+        var loadResult = await source.LoadAsync(reload: allowReload, cancellationToken).ConfigureAwait(false);
+        _ = loadResult.Tap(
+            payload =>
             {
-                var result = await source.LoadAsync(true, cancellationToken).ConfigureAwait(false);
-
-                if (result.IsSuccess)
+                // On success: cache sections, and raise change event
+                foreach (var (sectionName, sectionData) in payload.Sections)
                 {
-                    var payload = result.Value;
-
-                    foreach (var (sectionName, sectionData) in payload.Sections)
-                    {
-                        if (sectionData != null)
-                        {
-                            this.cachedSections[sectionName] = sectionData;
-                        }
-                    }
-
-                    LogReloadedSource(this.logger, source.Id);
-                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Updated));
+                    // On success, neither the section name nor data should be null
+                    Debug.Assert(sectionName is { Length: > 0 }, "Section name should not be null or empty.");
+                    Debug.Assert(sectionData is { }, "Section data should not be null.");
+                    this.cachedSections[sectionName] = sectionData;
                 }
-                else
-                {
-                    LogFailedToReloadSource(this.logger, source.Id, result.Error.Message);
-                }
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                LogExceptionReloadingSource(this.logger, ex, source.Id);
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-        }
+
+                LogLoadedSource(this.logger, source.Id);
+                this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
+            },
+            err => LogFailedToLoadSource(this.logger, source.Id, err.Message));
     }
 
     private void NotifyServicesOfReload()
@@ -474,17 +412,54 @@ public sealed partial class SettingsManager(
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsManager));
 
-    private sealed class Subscription(Action unsubscribe) : IDisposable
+    private void ThrowIfNotInitialized()
     {
-        private readonly Action unsubscribe = unsubscribe;
-        private bool isDisposed;
+        if (!this.isInitialized)
+        {
+            throw new InvalidOperationException("SettingsManager must be initialized.");
+        }
+    }
+
+    public sealed class AsyncLock : IDisposable, IAsyncDisposable
+    {
+        private readonly SemaphoreSlim semaphore = new(1, 1);
+        private bool disposed;
+
+        public async ValueTask<Releaser> AcquireAsync(CancellationToken ct = default)
+        {
+            this.ThrowIfDisposed();
+            await this.semaphore.WaitAsync(ct).ConfigureAwait(false);
+            return new Releaser(this.semaphore);
+        }
 
         public void Dispose()
         {
-            if (!this.isDisposed)
+            if (this.disposed)
             {
-                this.unsubscribe();
-                this.isDisposed = true;
+                return;
+            }
+
+            this.disposed = true;
+            this.semaphore.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            this.Dispose(); // SemaphoreSlim has only sync Dispose
+            return ValueTask.CompletedTask;
+        }
+
+        private void ThrowIfDisposed()
+            => ObjectDisposedException.ThrowIf(this.disposed, nameof(AsyncLock));
+
+        public readonly struct Releaser(SemaphoreSlim toRelease) : IDisposable, IAsyncDisposable
+        {
+            public void Dispose() => toRelease?.Release();
+
+            public ValueTask DisposeAsync()
+            {
+                toRelease?.Release();
+                return ValueTask.CompletedTask;
             }
         }
     }

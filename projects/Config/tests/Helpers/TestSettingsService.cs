@@ -45,7 +45,7 @@ public sealed class TestSettingsService(SettingsManager manager, ILoggerFactory?
         set => this.SetField(ref this.description, value);
     }
 
-    protected override Type PocoType => typeof(TestSettings);
+    public override Type SettingsType => typeof(TestSettings);
 
     protected override ITestSettings GetSettingsSnapshot() => new TestSettings
     {

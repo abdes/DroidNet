@@ -38,7 +38,7 @@ public sealed class InvalidTestSettingsService(SettingsManager manager, ILoggerF
         set => this.SetField(ref this.invalidEmail, value);
     }
 
-    protected override Type PocoType => typeof(InvalidTestSettings);
+    public override Type SettingsType => typeof(InvalidTestSettings);
 
     protected override IInvalidTestSettings GetSettingsSnapshot() => new InvalidTestSettings
     {
