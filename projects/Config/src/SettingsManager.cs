@@ -75,19 +75,19 @@ public sealed partial class SettingsManager(
         {
             if (this.isInitialized)
             {
-                LogAlreadyInitialized(this.logger);
+                this.LogAlreadyInitialized();
                 return;
             }
 
-            LogInitializing(this.logger, this.sources.Count);
+            this.LogInitializing(this.sources.Count);
 
             foreach (var source in this.sources)
             {
-                await TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
             }
 
             this.isInitialized = true;
-            LogInitializationComplete(this.logger);
+            this.LogInitializationComplete();
         }
     }
 
@@ -106,10 +106,10 @@ public sealed partial class SettingsManager(
             return (ISettingsService<TSettingsInterface>)existingService;
         }
 
-        LogCreatingService(this.logger, settingsType.Name);
+        this.LogCreatingService(settingsType.Name);
 
         // Get the concrete service instance from the resolver, keyed by the settings type
-        var service = resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
+        var service = this.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
         this.ApplySettings(service);
         var added = this.serviceInstances.TryAdd(settingsType, service);
         Debug.Assert(added, "Service instance should have been added successfully.");
@@ -138,11 +138,11 @@ public sealed partial class SettingsManager(
                 if (deserializedData is TSettingsInterface typedInstance)
                 {
                     ApplyProperties(typedInstance, settings);
-                    LogLoadedSettingsForType(this.logger, sectionName, "cache (deserialized from JsonElement)");
+                    this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
                 }
                 else
                 {
-                    LogSettingsDeserializationFailed(this.logger, sectionName, service.SettingsType);
+                    this.LogSettingsDeserializationFailed(sectionName, service.SettingsType);
                 }
 
             }
@@ -156,7 +156,7 @@ public sealed partial class SettingsManager(
         this.ThrowIfDisposed();
         this.ThrowIfNotInitialized();
 
-        LogReloadingAllSources(this.logger);
+        this.LogReloadingAllSources();
 
         var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
         await using (releaser.ConfigureAwait(false))
@@ -165,7 +165,7 @@ public sealed partial class SettingsManager(
 
             foreach (var source in this.sources)
             {
-                await TryLoadSourceAsync(source, true, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, true, cancellationToken).ConfigureAwait(false);
             }
 
             this.NotifyServicesOfReload();
@@ -187,12 +187,12 @@ public sealed partial class SettingsManager(
             }
 
             this.sources.Add(source);
-            LogAddedSource(this.logger, source.Id);
+            this.LogAddedSource(source.Id);
 
             // Load the new source if manager is already initialized
             if (this.isInitialized)
             {
-                await TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -216,7 +216,7 @@ public sealed partial class SettingsManager(
             var source = this.sources[index];
             this.sources.RemoveAt(index);
 
-            LogRemovedSource(this.logger, sourceId);
+            this.LogRemovedSource(sourceId);
             this.OnSourceChanged(new SourceChangedEventArgs(sourceId, SourceChangeType.Removed));
 
             if (source is IDisposable disposable)
@@ -234,7 +234,7 @@ public sealed partial class SettingsManager(
             return;
         }
 
-        LogDisposingManager(this.logger);
+        this.LogDisposingManager();
 
         // Dispose all service instances
         foreach (var serviceInstance in this.serviceInstances.Values)
@@ -286,7 +286,7 @@ public sealed partial class SettingsManager(
             if (sectionData is TSettings typedData)
             {
                 mergedSettings = typedData;
-                LogLoadedSettingsForType(this.logger, sectionName, "cache");
+                this.LogLoadedSettingsForType(sectionName, "cache");
             }
             else if (sectionData is System.Text.Json.JsonElement jsonElement)
             {
@@ -302,7 +302,7 @@ public sealed partial class SettingsManager(
                     mergedSettings = typedInstance;
                 }
 
-                LogLoadedSettingsForType(this.logger, sectionName, "cache (deserialized from JsonElement)");
+                this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
             }
         }
 
@@ -336,17 +336,17 @@ public sealed partial class SettingsManager(
                 if (result.IsSuccess)
                 {
                     this.cachedSections[sectionName] = settings!;
-                    LogSavedSettingsForType(this.logger, sectionName, source.Id);
+                    this.LogSavedSettingsForType(sectionName, source.Id);
                     this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Updated));
                 }
                 else
                 {
-                    LogFailedToSaveSettingsForType(this.logger, sectionName, source.Id, result.Error.Message);
+                    this.LogFailedToSaveSettingsForType(sectionName, source.Id, result.Error.Message);
                 }
             }
             catch (Exception ex)
             {
-                LogExceptionSavingSettingsForType(this.logger, ex, sectionName, source.Id);
+                this.LogExceptionSavingSettingsForType(ex, sectionName, source.Id);
                 throw new SettingsPersistenceException(
                     $"Failed to save settings to source '{source.Id}'",
                     source.Id,
@@ -378,7 +378,7 @@ public sealed partial class SettingsManager(
 
     private async Task TryLoadSourceAsync(ISettingsSource source, bool allowReload, CancellationToken cancellationToken)
     {
-        LogLoadingSource(this.logger, source.Id);
+        this.LogLoadingSource(source.Id);
         var loadResult = await source.LoadAsync(reload: allowReload, cancellationToken).ConfigureAwait(false);
         _ = loadResult.Tap(
             payload =>
@@ -392,10 +392,10 @@ public sealed partial class SettingsManager(
                     this.cachedSections[sectionName] = sectionData;
                 }
 
-                LogLoadedSource(this.logger, source.Id);
+                this.LogLoadedSource(source.Id);
                 this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
             },
-            err => LogFailedToLoadSource(this.logger, source.Id, err.Message));
+            err => this.LogFailedToLoadSource(source.Id, err.Message));
     }
 
     private void NotifyServicesOfReload()
@@ -405,7 +405,7 @@ public sealed partial class SettingsManager(
             if (serviceInstance is IAsyncDisposable)
             {
                 // Services will handle their own reload internally
-                LogServiceHandlesReload(this.logger, serviceInstance.GetType().Name);
+                this.LogServiceHandlesReload(serviceInstance.GetType().Name);
             }
         }
     }
