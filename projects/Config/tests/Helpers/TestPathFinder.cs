@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 namespace DroidNet.Config.Tests.Helpers;
 
 [ExcludeFromCodeCoverage]
-internal sealed class TestPathFinder : IPathFinder
+public sealed class TestPathFinder : IPathFinder
 {
     private readonly string resolvedPath;
 

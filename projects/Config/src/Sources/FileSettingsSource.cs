@@ -44,13 +44,13 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     ///     to distinguish between global, user, and built-in application settings.
     /// </param>
     /// <param name="filePath">The file system path to the configuration file.</param>
-    /// <param name="watch">
-    ///     A value indicating whether the source should watch the file for changes and raise
-    ///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
-    /// </param>
     /// <param name="fileSystem">
     ///     The <see cref="IFileSystem"/> abstraction used for file operations; this parameter cannot be <see
     ///     langword="null"/> and can be mocked or stubbed in tests.
+    /// </param>
+    /// <param name="watch">
+    ///     A value indicating whether the source should watch the file for changes and raise
+    ///     <see cref="ISettingsSource.SourceChanged"/> events accordingly.
     /// </param>
     /// <param name="crypto">
     ///     An optional <see cref="IEncryptionProvider"/> used to encrypt and decrypt file contents. If <see
@@ -85,41 +85,6 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
         if (watch)
         {
             this.StartWatching();
-        }
-    }
-
-    /// <inheritdoc/>
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "returning false")]
-    public override bool CanWrite
-    {
-        get
-        {
-            try
-            {
-                var fileInfo = this.fs.FileInfo.New(this.path);
-
-                if (fileInfo.Exists)
-                {
-                    // If the file exists, it's writable unless marked read-only.
-                    return !fileInfo.IsReadOnly;
-                }
-
-                // File doesn't exist: check that the parent directory exists and is writable.
-                var directory = fileInfo.Directory;
-                if (directory?.Exists != true)
-                {
-                    return false;
-                }
-
-                // On Windows the ReadOnly attribute on directories is not a reliable indicator of writability,
-                // but it's a reasonable, low-cost heuristic here. Access exceptions are caught below.
-                return !directory.Attributes.HasFlag(FileAttributes.ReadOnly);
-            }
-            catch (Exception ex)
-            {
-                this.LogFileIoError("CanWrite", ex);
-                return false;
-            }
         }
     }
 
@@ -288,10 +253,8 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
             var directory = this.fs.Path.GetDirectoryName(this.path);
             Debug.Assert(!string.IsNullOrWhiteSpace(directory), "Validated path must include a directory component.");
 
-            if (!string.IsNullOrWhiteSpace(directory) && !this.fs.Directory.Exists(directory))
-            {
-                this.fs.Directory.CreateDirectory(directory);
-            }
+            // Ensure directories are created if they do not exist
+            _ = this.fs.Directory.CreateDirectory(directory);
 
             var fileName = this.fs.Path.GetFileName(this.path);
             Debug.Assert(!string.IsNullOrWhiteSpace(fileName), "Validated path must include a file name.");
@@ -602,6 +565,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     [ExcludeFromCodeCoverage]
     private static partial void LogFileMoved(ILogger logger, string sourceId, string sourcePath, string destinationPath);
 
+    [Conditional("DEBUG")]
     private void LogFileMoved(string sourcePath, string destinationPath)
         => LogFileMoved(this.Logger, this.Id, sourcePath, destinationPath);
 
@@ -612,6 +576,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     [ExcludeFromCodeCoverage]
     private static partial void LogFileDeleted(ILogger logger, string sourceId, string filePath);
 
+    [Conditional("DEBUG")]
     private void LogFileDeleted(string filePath)
         => LogFileDeleted(this.Logger, this.Id, filePath);
 
@@ -622,6 +587,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     [ExcludeFromCodeCoverage]
     private static partial void LogFileReplaced(ILogger logger, string sourceId, string sourcePath, string destinationPath);
 
+    [Conditional("DEBUG")]
     private void LogFileReplaced(string sourcePath, string destinationPath)
         => LogFileReplaced(this.Logger, this.Id, sourcePath, destinationPath);
 

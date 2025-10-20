@@ -389,7 +389,7 @@ public sealed partial class SettingsManager(
     {
         var sectionsData = new Dictionary<string, object>(StringComparer.Ordinal) { [sectionName] = settings };
 
-        foreach (var source in this.sources.Where(s => s.CanWrite))
+        foreach (var source in this.sources)
         {
             try
             {
