@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
+using DroidNet.Config.Helpers;
 using FluentAssertions;
 using Moq;
 
@@ -126,9 +127,7 @@ public class PathFinderTests
         var downloadsPath = pathFinder.UserDownloads;
 
         // Assert
-        var knownFolderPath = KnownFolderPathHelpers.GetKnownFolderPath(
-            new Guid("374DE290-123F-4565-9164-39C4925E467B"),
-            0);
+        var knownFolderPath = KnownFolders.GetKnownFolderPath(new Guid(0x374DE290, 0x123F, 0x4565, 0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B) /* 374DE290-123F-4565-9164-39C4925E467B */, 0);
         _ = downloadsPath.Should().Be(knownFolderPath);
     }
 
@@ -285,9 +284,7 @@ public class PathFinderTests
         var oneDrivePath = pathFinder.UserOneDrive;
 
         // Assert
-        var knownFolderPath = KnownFolderPathHelpers.GetKnownFolderPath(
-            new Guid("A52BBA46-E9E1-435F-B3D9-28DAA648C0F6"),
-            0);
+        var knownFolderPath = KnownFolders.GetKnownFolderPath(new Guid(0xA52BBA46, 0xE9E1, 0x435F, 0xB3, 0xD9, 0x28, 0xDA, 0xA6, 0x48, 0xC0, 0xF6) /* A52BBA46-E9E1-435F-B3D9-28DAA648C0F6 */, 0);
         _ = oneDrivePath.Should().Be(knownFolderPath);
     }
 }

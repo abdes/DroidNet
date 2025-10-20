@@ -4,12 +4,12 @@
 
 using System.Runtime.InteropServices;
 
-namespace DroidNet.Config;
+namespace DroidNet.Config.Helpers;
 
 /// <summary>
 ///     Provides helper methods for retrieving known folder paths.
 /// </summary>
-internal static partial class KnownFolderPathHelpers
+internal static partial class KnownFolders
 {
     /// <summary>
     ///     Retrieves the full path of a known folder identified by the folder's GUID.
