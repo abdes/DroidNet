@@ -7,79 +7,88 @@ using System.Text.Json.Serialization;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Metadata associated with settings content.
+///     Metadata associated with settings content.
 /// </summary>
 public sealed class SettingsMetadata
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsMetadata"/> class.
+    ///     Gets the version of the settings schema.
     /// </summary>
-    public SettingsMetadata()
-    {
-    }
-
-    /// <summary>
-    /// Gets the settings content version for migration purposes.
-    /// </summary>
-    [JsonPropertyName("Version")]
-    public string Version { get; init; } = string.Empty;
-
-    /// <summary>
-    /// Gets the settings schema version (typically date-based).
-    /// </summary>
+    /// <remarks>
+    ///     This value reflects the structure and validation rules for the settings. It only changes when the schema
+    ///     itself evolves—such as when new fields are added, types are changed, or validation rules are updated.
+    ///     Typically, this is a date or semantic version string.
+    /// </remarks>
     [JsonPropertyName("SchemaVersion")]
-    public string SchemaVersion { get; init; } = string.Empty;
+    public required string SchemaVersion { get; init; } = string.Empty;
 
     /// <summary>
-    /// Gets the identifier for the SettingsService that manages this section of settings source (Fully Qualified Type), if available.
+    ///     Gets the version of the settings content.
     /// </summary>
+    /// <remarks>
+    ///     This value changes every time the actual configuration data is updated—whether by a user, a migration, or a
+    ///     system process. Use it to track the logical state of the settings and to help with change detection,
+    ///     rollbacks, or conflict resolution.
+    /// </remarks>
+    [JsonPropertyName("Version")]
+    public required string Version { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Gets the identifier for the SettingsService that manages this settings section.
+    /// </summary>
+    /// <remarks>
+    ///     This is usually the fully qualified type name of the service or component responsible for the settings. It
+    ///     helps clarify ownership and can be useful for diagnostics or tooling.
+    /// </remarks>
     [JsonPropertyName("Service")]
     public string? Service { get; init; }
 
     /// <summary>
-    /// Gets the timestamp when the settings were written.
+    ///     Gets the timestamp when the settings were last written.
     /// </summary>
+    /// <remarks>
+    ///     This is set automatically whenever the settings are saved or updated. It’s useful for auditing, debugging,
+    ///     and understanding the timing of changes.
+    /// </remarks>
     [JsonPropertyName("WrittenAt")]
     public DateTimeOffset WrittenAt { get; init; } = DateTimeOffset.UtcNow;
 
     /// <summary>
-    /// Gets the tool/component that wrote the settings, if available.
+    ///     Gets the name of the tool or component that wrote the settings, if available.
     /// </summary>
+    /// <remarks>
+    ///     This field identifies which application, service, or migration tool last modified the settings. It’s
+    ///     especially useful in environments where multiple tools or services may update configuration data.
+    /// </remarks>
     [JsonPropertyName("WrittenBy")]
     public string? WrittenBy { get; init; }
 
     /// <summary>
-    /// Creates a new instance with updated timestamp and optional writer information.
-    /// </summary>
-    /// <param name="writtenBy">Optional tool/component that wrote the settings.</param>
-    /// <returns>A new SettingsMetadata instance with updated timestamp.</returns>
-    public SettingsMetadata WithUpdate(string? writtenBy = null)
-    {
-        return new SettingsMetadata
-        {
-            Version = this.Version,
-            SchemaVersion = this.SchemaVersion,
-            Service = this.Service,
-            WrittenAt = DateTimeOffset.UtcNow,
-            WrittenBy = writtenBy ?? this.WrittenBy,
-        };
-    }
-
-    /// <summary>
-    /// Creates a new instance with updated version information.
+    ///     Creates a new instance with updated version information.
     /// </summary>
     /// <param name="newVersion">The new version to set.</param>
     /// <param name="writtenBy">Optional tool/component that wrote the settings.</param>
     /// <returns>A new SettingsMetadata instance with updated version and timestamp.</returns>
-    public SettingsMetadata WithVersion(string newVersion, string? writtenBy = null)
+    public SettingsMetadata WithVersion(string newVersion, string? writtenBy = null) => new()
     {
-        return new SettingsMetadata
-        {
-            Version = newVersion,
-            SchemaVersion = this.SchemaVersion,
-            Service = this.Service,
-            WrittenAt = DateTimeOffset.UtcNow,
-            WrittenBy = writtenBy ?? this.WrittenBy,
-        };
-    }
+        Version = newVersion,
+        SchemaVersion = this.SchemaVersion,
+        Service = this.Service,
+        WrittenAt = DateTimeOffset.UtcNow,
+        WrittenBy = writtenBy ?? this.WrittenBy,
+    };
+
+    /// <summary>
+    ///     Creates a new instance with updated timestamp and optional writer information.
+    /// </summary>
+    /// <param name="writtenBy">Optional tool/component that wrote the settings.</param>
+    /// <returns>A new SettingsMetadata instance with updated timestamp.</returns>
+    public SettingsMetadata WithUpdate(string? writtenBy = null) => new()
+    {
+        Version = this.Version,
+        SchemaVersion = this.SchemaVersion,
+        Service = this.Service,
+        WrittenAt = DateTimeOffset.UtcNow,
+        WrittenBy = writtenBy ?? this.WrittenBy,
+    };
 }

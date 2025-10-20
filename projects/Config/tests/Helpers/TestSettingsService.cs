@@ -4,29 +4,22 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Concrete implementation of SettingsService for ITestSettings interface.
 /// This service implements both the abstract SettingsService base class and the ITestSettings interface.
 /// </summary>
-public sealed class TestSettingsService : SettingsService<ITestSettings>, ITestSettings
+public sealed class TestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
+    : SettingsService<ITestSettings>(manager, loggerFactory), ITestSettings
 {
     private string name = "Default";
     private int value = 42;
     private bool isEnabled = true;
     private string? description;
 
-    public TestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
-        : base(manager, loggerFactory)
-    {
-    }
-
     /// <inheritdoc/>
     public override string SectionName => "TestSettings";
-
-    /// <inheritdoc/>
-    protected override Type PocoType => typeof(TestSettings);
 
     public string Name
     {
@@ -52,25 +45,19 @@ public sealed class TestSettingsService : SettingsService<ITestSettings>, ITestS
         set => this.SetField(ref this.description, value);
     }
 
-    protected override ITestSettings GetSettingsSnapshot()
+    protected override Type PocoType => typeof(TestSettings);
+
+    protected override ITestSettings GetSettingsSnapshot() => new TestSettings
     {
-        return new TestSettings
-        {
-            Name = this.Name,
-            Value = this.Value,
-            IsEnabled = this.IsEnabled,
-            Description = this.Description,
-        };
-    }
+        Name = this.Name,
+        Value = this.Value,
+        IsEnabled = this.IsEnabled,
+        Description = this.Description,
+    };
 
     protected override void UpdateProperties(ITestSettings source)
     {
-        Console.WriteLine($"[DEBUG UpdateProperties] Called with source type: {source?.GetType().FullName ?? "NULL"}");
-        Console.WriteLine($"[DEBUG UpdateProperties] Source.Name: {source?.Name ?? "NULL"}");
-        Console.WriteLine($"[DEBUG UpdateProperties] Source.Value: {source?.Value}");
-        Console.WriteLine($"[DEBUG UpdateProperties] Current this.Name before update: {this.Name}");
-
-        if (source == null)
+        if (source is null)
         {
             return;
         }
@@ -79,18 +66,13 @@ public sealed class TestSettingsService : SettingsService<ITestSettings>, ITestS
         this.Value = source.Value;
         this.IsEnabled = source.IsEnabled;
         this.Description = source.Description;
-
-        Console.WriteLine($"[DEBUG UpdateProperties] Current this.Name after update: {this.Name}");
     }
 
-    protected override ITestSettings CreateDefaultSettings()
+    protected override ITestSettings CreateDefaultSettings() => new TestSettings
     {
-        return new TestSettings
-        {
-            Name = "Default",
-            Value = 42,
-            IsEnabled = true,
-            Description = null,
-        };
-    }
+        Name = "Default",
+        Value = 42,
+        IsEnabled = true,
+        Description = null,
+    };
 }

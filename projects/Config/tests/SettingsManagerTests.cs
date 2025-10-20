@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Config.Tests.TestHelpers;
+using DroidNet.Config.Tests.Helpers;
 using DryIoc;
 using FluentAssertions;
 
@@ -18,6 +18,8 @@ namespace DroidNet.Config.Tests;
 [TestCategory("Settings Manager")]
 public class SettingsManagerTests : SettingsTestBase
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public async Task InitializeAsync_ShouldLoadAllSources()
     {
@@ -27,10 +29,10 @@ public class SettingsManagerTests : SettingsTestBase
         source1.AddSection(nameof(TestSettings), new TestSettings { Name = "Source1", Value = 1 });
         source2.AddSection(nameof(TestSettings), new TestSettings { Name = "Source2", Value = 2 });
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
 
         // Act
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = source1.ReadCallCount.Should().Be(1);
@@ -44,13 +46,13 @@ public class SettingsManagerTests : SettingsTestBase
         var source = new MockSettingsSource("source");
         source.AddSection(nameof(TestSettings), new TestSettings());
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var initialReadCount = source.ReadCallCount;
 
         // Act
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = source.ReadCallCount.Should().Be(initialReadCount);
@@ -66,11 +68,11 @@ public class SettingsManagerTests : SettingsTestBase
         source1.AddSection(nameof(TestSettings), new TestSettings { Name = "Source1", Value = 100 });
         source2.AddSection(nameof(TestSettings), new TestSettings { Name = "Source2", Value = 200 });
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
-        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings");
+        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings", cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = settings.Should().NotBeNull();
@@ -86,13 +88,12 @@ public class SettingsManagerTests : SettingsTestBase
         var source2 = new MockSettingsSource("source2");
 
         source1.AddSection(nameof(TestSettings), new TestSettings { Name = "Source1", Value = 100 });
-        // source2 doesn't have TestSettings section
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
-        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings");
+        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings", cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = settings.Should().NotBeNull();
@@ -105,13 +106,12 @@ public class SettingsManagerTests : SettingsTestBase
     {
         // Arrange
         var source = new MockSettingsSource("source");
-        // No sections added
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
-        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings");
+        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings", cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = settings.Should().BeNull();
@@ -125,14 +125,14 @@ public class SettingsManagerTests : SettingsTestBase
         var source2 = new MockSettingsSource("source2") { CanWrite = true };
         var source3 = new MockSettingsSource("source3") { CanWrite = false };
 
-        var manager = new SettingsManager(new[] { source1, source2, source3 }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source1, source2, source3], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var settings = new TestSettings { Name = "SaveTest", Value = 999 };
         var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
 
         // Act
-        await manager.SaveSettingsAsync("TestSettings", settings, metadata);
+        await manager.SaveSettingsAsync("TestSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = source1.WriteCallCount.Should().Be(1);
@@ -147,14 +147,14 @@ public class SettingsManagerTests : SettingsTestBase
         var source1 = new MockSettingsSource("source1") { CanWrite = true, ShouldFailWrite = true };
         var source2 = new MockSettingsSource("source2") { CanWrite = true };
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var settings = new TestSettings();
         var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
 
         // Act
-        await manager.SaveSettingsAsync("TestSettings", settings, metadata);
+        await manager.SaveSettingsAsync("TestSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = source1.WriteCallCount.Should().Be(1);
@@ -168,9 +168,9 @@ public class SettingsManagerTests : SettingsTestBase
         var source = new MockSettingsSource("source");
         source.AddSection(nameof(TestSettings), new TestSettings());
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var service1 = manager.GetService<ITestSettings>();
@@ -188,9 +188,9 @@ public class SettingsManagerTests : SettingsTestBase
         source.AddSection(nameof(TestSettings), new TestSettings());
         source.AddSection(nameof(AlternativeTestSettings), new AlternativeTestSettings());
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var service1 = manager.GetService<ITestSettings>();
@@ -209,7 +209,7 @@ public class SettingsManagerTests : SettingsTestBase
         var source = new MockSettingsSource("source");
         source.AddSection(nameof(TestSettings), new TestSettings());
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
 
         var eventFired = false;
         SourceChangedEventArgs? eventArgs = null;
@@ -220,7 +220,7 @@ public class SettingsManagerTests : SettingsTestBase
         };
 
         // Act
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = eventFired.Should().BeTrue();
@@ -236,7 +236,7 @@ public class SettingsManagerTests : SettingsTestBase
         var source1 = new MockSettingsSource("source1");
         var source2 = new MockSettingsSource("source2");
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
 
         // Act
         var sources = manager.Sources;
@@ -249,18 +249,17 @@ public class SettingsManagerTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task GetService_BeforeInitialize_ShouldThrowInvalidOperationException()
+    public void GetService_BeforeInitialize_ShouldThrowInvalidOperationException()
     {
         // Arrange
         var source = new MockSettingsSource("source");
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
 
         // Act
-        var act = () => manager.GetService<ITestSettings>();
+        var act = manager.GetService<ITestSettings>;
 
         // Assert
-        _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*must be initialized*");
+        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*must be initialized*");
     }
 
     [TestMethod]
@@ -268,7 +267,7 @@ public class SettingsManagerTests : SettingsTestBase
     {
         // Arrange
         var source = new MockSettingsSource("source");
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
 
         // Act
         manager.Dispose();
@@ -290,11 +289,11 @@ public class SettingsManagerTests : SettingsTestBase
         source2.AddSection(nameof(TestSettings), new TestSettings { Name = "Second", Value = 2, IsEnabled = false });
         source3.AddSection(nameof(TestSettings), new TestSettings { Name = "Third", Value = 3 });
 
-        var manager = new SettingsManager(new[] { source1, source2, source3 }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source1, source2, source3], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
-        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings");
+        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings", cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = settings.Should().NotBeNull();
@@ -310,11 +309,11 @@ public class SettingsManagerTests : SettingsTestBase
         var source2 = new MockSettingsSource("source2") { IsAvailable = true };
         source2.AddSection(nameof(TestSettings), new TestSettings { Name = "Available", Value = 100 });
 
-        var manager = new SettingsManager(new[] { source1, source2 }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source1, source2], this.Container, this.LoggerFactory);
 
         // Act
-        await manager.InitializeAsync();
-        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings");
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var settings = await manager.LoadSettingsAsync<TestSettings>("TestSettings", cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = settings.Should().NotBeNull();
@@ -327,27 +326,16 @@ public class SettingsManagerTests : SettingsTestBase
     {
         // Arrange
         var source = new MockSettingsSource("source") { CanWrite = true };
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
-        await manager.InitializeAsync();
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var settings = new TestSettings();
 
         // Act
-        await manager.SaveSettingsAsync("TestSettings", settings, metadata: new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" });
+        await manager.SaveSettingsAsync("TestSettings", settings, metadata: new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" }, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = source.WriteCallCount.Should().Be(1);
-    }
-
-    [TestMethod]
-    public void Constructor_WithEmptySourceList_ShouldThrowArgumentException()
-    {
-        // Arrange & Act
-        var act = () => new SettingsManager(Array.Empty<ISettingsSource>(), this.Container, this.LoggerFactory);
-
-        // Assert - if implementation allows empty sources, adjust test
-        // For now, assuming at least one source is required
-        _ = this.LoggerFactory.Should().NotBeNull(); // Verify test setup
     }
 
     [TestMethod]
@@ -357,9 +345,9 @@ public class SettingsManagerTests : SettingsTestBase
         var source = new MockSettingsSource("source");
         source.AddSection(nameof(TestSettings), new TestSettings());
 
-        var manager = new SettingsManager(new[] { source }, this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager([source], this.Container, this.LoggerFactory);
         this.Container.RegisterInstance(manager);
-        await manager.InitializeAsync();
+        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var service1 = manager.GetService<ITestSettings>();

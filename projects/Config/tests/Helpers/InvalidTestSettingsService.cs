@@ -4,29 +4,21 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Concrete implementation of SettingsService for IInvalidTestSettings interface.
 /// This service implements both the abstract SettingsService base class and the IInvalidTestSettings interface.
 /// Used for testing validation failure scenarios.
 /// </summary>
-public sealed class InvalidTestSettingsService : SettingsService<IInvalidTestSettings>, IInvalidTestSettings
+public sealed class InvalidTestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
+    : SettingsService<IInvalidTestSettings>(manager, loggerFactory), IInvalidTestSettings
 {
     private string? requiredField; // Invalid: null/empty
     private int outOfRangeValue = -1; // Invalid: out of range (should be 1-10)
     private string? invalidEmail = "not-an-email"; // Invalid: not an email
 
-    public InvalidTestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
-        : base(manager, loggerFactory)
-    {
-    }
-
-    /// <inheritdoc/>
     public override string SectionName => "InvalidTestSettings";
-
-    /// <inheritdoc/>
-    protected override Type PocoType => typeof(InvalidTestSettings);
 
     public string? RequiredField
     {
@@ -46,15 +38,14 @@ public sealed class InvalidTestSettingsService : SettingsService<IInvalidTestSet
         set => this.SetField(ref this.invalidEmail, value);
     }
 
-    protected override IInvalidTestSettings GetSettingsSnapshot()
+    protected override Type PocoType => typeof(InvalidTestSettings);
+
+    protected override IInvalidTestSettings GetSettingsSnapshot() => new InvalidTestSettings
     {
-        return new InvalidTestSettings
-        {
-            RequiredField = this.RequiredField,
-            OutOfRangeValue = this.OutOfRangeValue,
-            InvalidEmail = this.InvalidEmail,
-        };
-    }
+        RequiredField = this.RequiredField,
+        OutOfRangeValue = this.OutOfRangeValue,
+        InvalidEmail = this.InvalidEmail,
+    };
 
     protected override void UpdateProperties(IInvalidTestSettings source)
     {
@@ -63,13 +54,10 @@ public sealed class InvalidTestSettingsService : SettingsService<IInvalidTestSet
         this.InvalidEmail = source.InvalidEmail;
     }
 
-    protected override IInvalidTestSettings CreateDefaultSettings()
+    protected override IInvalidTestSettings CreateDefaultSettings() => new InvalidTestSettings
     {
-        return new InvalidTestSettings
-        {
-            RequiredField = null,
-            OutOfRangeValue = -1,
-            InvalidEmail = "not-an-email",
-        };
-    }
+        RequiredField = null,
+        OutOfRangeValue = -1,
+        InvalidEmail = "not-an-email",
+    };
 }

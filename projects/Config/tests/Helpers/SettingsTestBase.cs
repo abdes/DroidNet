@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.Json;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Testably.Abstractions.Testing;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Base class for tests that require a properly configured DI container with settings services.
@@ -15,9 +16,15 @@ namespace DroidNet.Config.Tests.TestHelpers;
 [ExcludeFromCodeCoverage]
 public abstract class SettingsTestBase : IDisposable
 {
+    // Add a static readonly field for the options at the class level
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+    };
+
     private bool isDisposed;
 
-    protected SettingsTestBase()
+    protected SettingsTestBase(bool registerDefaultSettingsServices = true)
     {
         this.FileSystem = new MockFileSystem();
         this.Container = new Container();
@@ -28,7 +35,7 @@ public abstract class SettingsTestBase : IDisposable
         this.Container.RegisterInstance<System.IO.Abstractions.IFileSystem>(this.FileSystem);
 
         // Register default settings services if not disabled
-        if (this.RegisterDefaultSettingsServices)
+        if (registerDefaultSettingsServices)
         {
             // Register settings services using factory delegates that resolve the SettingsManager
             this.Container.RegisterDelegate<ISettingsService<ITestSettings>>(
@@ -51,21 +58,18 @@ public abstract class SettingsTestBase : IDisposable
         }
     }
 
-    /// <summary>
-    /// Gets a value indicating whether default settings service registrations should be performed.
-    /// Override this property in derived classes to control automatic service registration.
-    /// </summary>
-    protected virtual bool RegisterDefaultSettingsServices => true;
-
     protected MockFileSystem FileSystem { get; }
 
     protected IContainer Container { get; }
 
     protected ILoggerFactory LoggerFactory { get; }
 
-    /// <summary>
-    /// Creates a temporary JSON settings file with the specified content.
-    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
     protected string CreateTempSettingsFile(string fileName, string jsonContent)
     {
         var tempPath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), fileName);
@@ -73,21 +77,18 @@ public abstract class SettingsTestBase : IDisposable
 
         if (!string.IsNullOrEmpty(directory) && !this.FileSystem.Directory.Exists(directory))
         {
-            this.FileSystem.Directory.CreateDirectory(directory);
+            _ = this.FileSystem.Directory.CreateDirectory(directory);
         }
 
         this.FileSystem.File.WriteAllText(tempPath, jsonContent);
         return tempPath;
     }
 
-    /// <summary>
-    /// Creates a settings file with proper multi-section structure.
-    /// </summary>
-    protected string CreateMultiSectionSettingsFile(string fileName, Dictionary<string, object> sections, SettingsMetadata? metadata = null)
+    protected string CreateMultiSectionSettingsFile(string fileName, IDictionary<string, object> sections, SettingsMetadata? metadata = null)
     {
-        var document = new Dictionary<string, object>
+        var document = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["metadata"] = metadata ?? new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" }
+            ["metadata"] = metadata ?? new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" },
         };
 
         // Add all sections directly to the root document (flat structure)
@@ -96,19 +97,7 @@ public abstract class SettingsTestBase : IDisposable
             document[section.Key] = section.Value;
         }
 
-        // DO NOT use camelCase for root-level properties - preserve section names!
-        var json = System.Text.Json.JsonSerializer.Serialize(document, new System.Text.Json.JsonSerializerOptions
-        {
-            WriteIndented = true,
-        });
-
-        return this.CreateTempSettingsFile(fileName, json);
-    }
-
-    public void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
+        return this.CreateTempSettingsFile(fileName, JsonSerializer.Serialize(document, JsonOptions));
     }
 
     protected virtual void Dispose(bool disposing)

@@ -8,7 +8,7 @@ using DroidNet.Config.Helpers;
 using FluentAssertions;
 using Moq;
 
-namespace DroidNet.Config.Tests.Finder;
+namespace DroidNet.Config.Tests;
 
 /// <summary>
 ///     Contains unit tests for the <see cref="PathFinder" /> class.

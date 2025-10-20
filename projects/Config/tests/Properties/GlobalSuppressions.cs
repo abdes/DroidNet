@@ -4,6 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 
+[assembly: SuppressMessage("Style", "IDE0130:Namespace does not match folder structure", Justification = "Directories used to group test files", Scope = "namespace", Target = "~N:DroidNet.Config.Tests")]
+
 [assembly: SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test method names are more readable with underscores", Scope = "namespaceanddescendants", Target = "~N:DroidNet.Config.Tests")]
 
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "namespaceanddescendants", Target = "~N:DroidNet.Config.Tests")]

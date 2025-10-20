@@ -21,11 +21,6 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
 
     /// <summary>
-    /// Event raised when a settings source experiences an error or failure.
-    /// </summary>
-    public event EventHandler<SourceErrorEventArgs>? SourceError;
-
-    /// <summary>
     /// Gets the section name used to identify this settings type in storage sources.
     /// </summary>
     /// <remarks>

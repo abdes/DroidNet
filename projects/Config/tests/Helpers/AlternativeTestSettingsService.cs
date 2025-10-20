@@ -4,28 +4,23 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Concrete implementation of SettingsService for IAlternativeTestSettings interface.
 /// This service implements both the abstract SettingsService base class and the IAlternativeTestSettings interface.
 /// </summary>
-public sealed class AlternativeTestSettingsService : SettingsService<IAlternativeTestSettings>, IAlternativeTestSettings
+public sealed class AlternativeTestSettingsService(
+    SettingsManager manager,
+    ILoggerFactory? loggerFactory = null)
+    : SettingsService<IAlternativeTestSettings>(manager, loggerFactory), IAlternativeTestSettings
 {
     private string theme = "Light";
     private int fontSize = 12;
     private bool autoSave = true;
 
-    public AlternativeTestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
-        : base(manager, loggerFactory)
-    {
-    }
-
     /// <inheritdoc/>
     public override string SectionName => "AlternativeTestSettings";
-
-    /// <inheritdoc/>
-    protected override Type PocoType => typeof(AlternativeTestSettings);
 
     public string Theme
     {
@@ -45,15 +40,14 @@ public sealed class AlternativeTestSettingsService : SettingsService<IAlternativ
         set => this.SetField(ref this.autoSave, value);
     }
 
-    protected override IAlternativeTestSettings GetSettingsSnapshot()
+    protected override Type PocoType => typeof(AlternativeTestSettings);
+
+    protected override IAlternativeTestSettings GetSettingsSnapshot() => new AlternativeTestSettings
     {
-        return new AlternativeTestSettings
-        {
-            Theme = this.Theme,
-            FontSize = this.FontSize,
-            AutoSave = this.AutoSave,
-        };
-    }
+        Theme = this.Theme,
+        FontSize = this.FontSize,
+        AutoSave = this.AutoSave,
+    };
 
     protected override void UpdateProperties(IAlternativeTestSettings source)
     {
@@ -62,13 +56,10 @@ public sealed class AlternativeTestSettingsService : SettingsService<IAlternativ
         this.AutoSave = source.AutoSave;
     }
 
-    protected override IAlternativeTestSettings CreateDefaultSettings()
+    protected override IAlternativeTestSettings CreateDefaultSettings() => new AlternativeTestSettings
     {
-        return new AlternativeTestSettings
-        {
-            Theme = "Light",
-            FontSize = 12,
-            AutoSave = true,
-        };
-    }
+        Theme = "Light",
+        FontSize = 12,
+        AutoSave = true,
+    };
 }

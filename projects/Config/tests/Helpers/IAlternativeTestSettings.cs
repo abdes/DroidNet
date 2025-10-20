@@ -5,17 +5,17 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 
-namespace DroidNet.Config.Tests.TestHelpers;
+namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
 /// Interface for alternative test settings for multi-service testing.
 /// </summary>
 public interface IAlternativeTestSettings : INotifyPropertyChanged
 {
-    string Theme { get; set; }
+    public string Theme { get; set; }
 
     [Range(8, 72)]
-    int FontSize { get; set; }
+    public int FontSize { get; set; }
 
-    bool AutoSave { get; set; }
+    public bool AutoSave { get; set; }
 }
