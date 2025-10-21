@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using DroidNet.Controls.OutputLog.Theming;
 using Serilog.Core;
 using Serilog.Events;
-using System.Collections.Concurrent;
 
 namespace DroidNet.Controls.OutputLog;
 
