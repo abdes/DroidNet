@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using DroidNet.Config.Sources;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,8 +52,9 @@ public sealed partial class SettingsManager(
     private readonly List<ISettingsSource> sources = sources?.ToList() ?? throw new ArgumentNullException(nameof(sources));
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
     private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = new();
-    private readonly Dictionary<string, CachedSection> cachedSections = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CachedSection> cachedSections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> suppressChangeNotificationFor = new(StringComparer.Ordinal);
+    private readonly SettingsSourceMetadata.SetterKey metadataSetterKey = new();
     private readonly AsyncLock initializationLock = new();
     private bool isInitialized;
     private bool isDisposed;
@@ -112,23 +114,31 @@ public sealed partial class SettingsManager(
         var settingsType = typeof(TSettingsInterface);
         this.LogGetServiceRequested(settingsType.Name);
 
-        // Return existing instance if available
-        if (this.serviceInstances.TryGetValue(settingsType, out var existingService))
+        var isNew = false;
+
+        // Use GetOrAdd to atomically get existing or create new service
+        var service = (ISettingsService<TSettingsInterface>)this.serviceInstances.GetOrAdd(
+            settingsType,
+            _ =>
+            {
+                isNew = true;
+                this.LogCreatingService(settingsType.Name);
+
+                // Get the concrete service instance from the resolver, keyed by the settings type
+                var newService = this.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
+                this.ApplySettings(newService);
+
+                return newService;
+            });
+
+        if (isNew)
+        {
+            this.LogServiceRegistered(settingsType.Name, this.serviceInstances.Count);
+        }
+        else
         {
             this.LogReturningExistingService(settingsType.Name);
-            return (ISettingsService<TSettingsInterface>)existingService;
         }
-
-        this.LogCreatingService(settingsType.Name);
-
-        // Get the concrete service instance from the resolver, keyed by the settings type
-        var service = this.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
-
-        this.ApplySettings(service);
-
-        var added = this.serviceInstances.TryAdd(settingsType, service);
-        Debug.Assert(added, "Service instance should have been added successfully.");
-        this.LogServiceRegistered(settingsType.Name, this.serviceInstances.Count);
 
         return service;
     }
@@ -294,24 +304,36 @@ public sealed partial class SettingsManager(
     /// <typeparam name="TSettings">The settings type.</typeparam>
     /// <param name="sectionName">The section name to use when saving.</param>
     /// <param name="settings">The settings data to save.</param>
-    /// <param name="metadata">Metadata for the settings.</param>
+    /// <param name="sectionMetadata">Metadata for the settings section.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     internal async Task SaveSettingsAsync<TSettings>(
         string sectionName,
         TSettings settings,
-        SettingsMetadata metadata,
+        SettingsSectionMetadata sectionMetadata,
         CancellationToken cancellationToken = default)
         where TSettings : class
     {
         this.EnsureReadyForOperations();
         this.LogSaveSettingsRequested(sectionName);
         var targetSourceId = this.ResolveSaveTargetSourceId(sectionName);
-        var targetSource = this.GetSourceByIdOrThrow(targetSourceId);
+
+        // Get source reference under lock to prevent concurrent removal
+        ISettingsSource targetSource;
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
+        {
+            targetSource = this.GetSourceByIdOrThrow(targetSourceId);
+        }
 
         var sectionsData = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             [sectionName] = settings,
+        };
+
+        var sectionsMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            [sectionName] = sectionMetadata,
         };
 
         try
@@ -320,7 +342,22 @@ public sealed partial class SettingsManager(
                 targetSourceId,
                 async () =>
                 {
-                    var result = await targetSource.SaveAsync(sectionsData, metadata, cancellationToken).ConfigureAwait(false);
+                    // Increment version and create source metadata within the save operation
+                    // Lock on the source to prevent concurrent version increments
+                    SettingsSourceMetadata sourceMetadata;
+                    lock (targetSource)
+                    {
+                        var newVersion = (targetSource.SourceMetadata?.Version ?? 0) + 1;
+                        sourceMetadata = new SettingsSourceMetadata
+                        {
+                            WrittenAt = DateTimeOffset.UtcNow,
+                            WrittenBy = "DroidNet.Config", // TODO: Make this configurable
+                        };
+                        sourceMetadata.SetVersion(newVersion, this.metadataSetterKey);
+                        targetSource.SourceMetadata = sourceMetadata;
+                    }
+
+                    var result = await targetSource.SaveAsync(sectionsData, sectionsMetadata, sourceMetadata, cancellationToken).ConfigureAwait(false);
                     if (!result.IsSuccess)
                     {
                         this.LogFailedToSaveSettingsForType(sectionName, targetSource.Id, result.Error.Message);
@@ -422,7 +459,7 @@ public sealed partial class SettingsManager(
             }
 
             this.LogRemovingStaleSection(sectionName, source.Id);
-            _ = this.cachedSections.Remove(sectionName);
+            _ = this.cachedSections.TryRemove(sectionName, out _);
         }
     }
 
@@ -548,6 +585,12 @@ public sealed partial class SettingsManager(
         _ = loadResult.Tap(
             payload =>
             {
+                // Initialize the source metadata from loaded data
+                if (payload.SourceMetadata != null)
+                {
+                    source.SourceMetadata = payload.SourceMetadata;
+                }
+
                 if (allowReload)
                 {
                     this.RemoveSectionsNoLongerProvided(source, payload.Sections);
@@ -660,12 +703,12 @@ public sealed partial class SettingsManager(
     {
         private readonly SettingsManager owner;
         private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances;
-        private readonly Dictionary<string, CachedSection> cachedSections;
+        private readonly ConcurrentDictionary<string, CachedSection> cachedSections;
 
         public ServiceUpdateCoordinator(
             SettingsManager owner,
             ConcurrentDictionary<Type, ISettingsService> serviceInstances,
-            Dictionary<string, CachedSection> cachedSections)
+            ConcurrentDictionary<string, CachedSection> cachedSections)
         {
             this.owner = owner;
             this.serviceInstances = serviceInstances;

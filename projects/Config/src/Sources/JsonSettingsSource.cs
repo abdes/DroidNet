@@ -82,27 +82,29 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
     /// <inheritdoc/>
     public override async Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
-        SettingsMetadata metadata,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata sourceMetadata,
         CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
 
         ArgumentNullException.ThrowIfNull(sectionsData);
-        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(sectionMetadata);
+        ArgumentNullException.ThrowIfNull(sourceMetadata);
 
         await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             LogSaveRequested(this.logger, this.Id, sectionsData.Count);
 
-            var mergedSections = await this.MergeWithExistingSectionsAsync(sectionsData, cancellationToken).ConfigureAwait(false);
-            var jsonContent = SerializeSections(mergedSections, metadata);
+            var mergedSections = await this.MergeWithExistingSectionsAsync(sectionsData, sectionMetadata, cancellationToken).ConfigureAwait(false);
+            var jsonContent = SerializeSections(mergedSections.sections, mergedSections.metadata, sourceMetadata);
 
             await this.WriteAllBytesAsync(jsonContent, cancellationToken).ConfigureAwait(false);
 
-            LogSaveSucceeded(this.logger, this.Id, mergedSections.Count);
+            LogSaveSucceeded(this.logger, this.Id, mergedSections.sections.Count);
 
-            var payload = new SettingsWritePayload(metadata, sectionsData.Count, this.SourcePath);
+            var payload = new SettingsWritePayload(sourceMetadata, sectionsData.Count, this.SourcePath);
             return Result.Ok(payload);
         }
         catch (JsonException ex)
@@ -172,29 +174,71 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
 
     private static string SerializeSections(
         IReadOnlyDictionary<string, object> sectionsData,
-        SettingsMetadata metadata)
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata sourceMetadata)
     {
-        var flatStructure = new Dictionary<string, object>(StringComparer.Ordinal)
+        var rootStructure = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["metadata"] = metadata,
+            ["$meta"] = sourceMetadata,
         };
 
-        foreach (var (key, value) in sectionsData)
+        foreach (var (sectionName, sectionData) in sectionsData)
         {
-            flatStructure[key] = value;
+            var sectionWithMeta = new Dictionary<string, object>(StringComparer.Ordinal);
+
+            // Add section metadata if available
+            if (sectionMetadata.TryGetValue(sectionName, out var meta))
+            {
+                sectionWithMeta["$meta"] = meta;
+            }
+
+            // Add section data - need to merge if it's already a dictionary
+            if (sectionData is JsonElement jsonElement)
+            {
+                var deserialized = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonElement.GetRawText());
+                if (deserialized != null)
+                {
+                    foreach (var (key, value) in deserialized)
+                    {
+                        sectionWithMeta[key] = value;
+                    }
+                }
+            }
+            else if (sectionData is Dictionary<string, object> dict)
+            {
+                foreach (var (key, value) in dict)
+                {
+                    sectionWithMeta[key] = value;
+                }
+            }
+            else
+            {
+                // For POCOs, serialize then deserialize to get properties
+                var serialized = JsonSerializer.Serialize(sectionData, SerializerOptions);
+                var deserialized = JsonSerializer.Deserialize<Dictionary<string, object>>(serialized);
+                if (deserialized != null)
+                {
+                    foreach (var (key, value) in deserialized)
+                    {
+                        sectionWithMeta[key] = value;
+                    }
+                }
+            }
+
+            rootStructure[sectionName] = sectionWithMeta;
         }
 
-        return JsonSerializer.Serialize(flatStructure, SerializerOptions);
+        return JsonSerializer.Serialize(rootStructure, SerializerOptions);
     }
 
     private static Dictionary<string, object> CreateValidationStructure(IReadOnlyDictionary<string, object> sectionsData)
     {
         var structure = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["metadata"] = new SettingsMetadata
+            ["$meta"] = new SettingsSourceMetadata
             {
-                Version = "validation",
-                SchemaVersion = "validation",
+                WrittenAt = DateTimeOffset.UtcNow,
+                WrittenBy = "validation",
             },
         };
 
@@ -238,7 +282,9 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
             LogFileMissing(this.logger, this.Id, this.SourcePath);
             var emptySections = new ReadOnlyDictionary<string, object>(
                 new Dictionary<string, object>(StringComparer.Ordinal));
-            return new SettingsReadPayload(emptySections, metadata: null, this.SourcePath);
+            var emptySectionMetadata = new ReadOnlyDictionary<string, SettingsSectionMetadata>(
+                new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal));
+            return new SettingsReadPayload(emptySections, emptySectionMetadata, sourceMetadata: null, this.SourcePath);
         }
 
         var content = await this.ReadAllBytesAsync(cancellationToken).ConfigureAwait(false);
@@ -254,32 +300,61 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
 
-        if (!root.TryGetProperty("metadata", out var metadataElement))
+        // Read source-level metadata from root $meta
+        SettingsSourceMetadata? sourceMetadata = null;
+        if (root.TryGetProperty("$meta", out var sourceMetadataElement))
         {
-            throw new SettingsPersistenceException(
-                $"Settings file '{this.SourcePath}' is missing required 'metadata' section.",
-                this.Id,
-                new JsonException("Missing required metadata section"));
+            sourceMetadata = JsonSerializer.Deserialize<SettingsSourceMetadata>(sourceMetadataElement.GetRawText());
         }
 
-        var metadata = JsonSerializer.Deserialize<SettingsMetadata>(metadataElement.GetRawText())
-                       ?? throw new SettingsPersistenceException(
-                           $"Failed to deserialize metadata from '{this.SourcePath}'.",
-                           this.Id,
-                           new JsonException("Invalid metadata format"));
-
+        // Read sections and their metadata
         var sections = new Dictionary<string, object>(StringComparer.Ordinal);
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal);
+
         foreach (var property in root.EnumerateObject())
         {
-            if (property.Name.Equals("metadata", StringComparison.OrdinalIgnoreCase))
+            // Skip the root $meta
+            if (property.Name.Equals("$meta", StringComparison.Ordinal))
             {
                 continue;
             }
 
-            var sectionValue = JsonSerializer.Deserialize<object>(property.Value.GetRawText());
-            if (sectionValue is not null)
+            var sectionElement = property.Value;
+
+            // Extract section metadata if present
+            if (sectionElement.TryGetProperty("$meta", out var sectionMetaElement))
             {
-                sections[property.Name] = sectionValue;
+                var meta = JsonSerializer.Deserialize<SettingsSectionMetadata>(sectionMetaElement.GetRawText());
+                if (meta != null)
+                {
+                    sectionMetadata[property.Name] = meta;
+                }
+            }
+
+            // Store the entire section (minus $meta) as a JsonElement for later deserialization
+            if (sectionElement.ValueKind == JsonValueKind.Object)
+            {
+                // Reconstruct section without $meta
+                using var stream = new MemoryStream();
+                using (var writer = new Utf8JsonWriter(stream))
+                {
+                    writer.WriteStartObject();
+                    foreach (var sectionProp in sectionElement.EnumerateObject())
+                    {
+                        if (sectionProp.Name.Equals("$meta", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        sectionProp.WriteTo(writer);
+                    }
+
+                    writer.WriteEndObject();
+                }
+
+                stream.Position = 0;
+                using var doc = JsonDocument.Parse(stream);
+                sections[property.Name] = doc.RootElement.Clone();
             }
         }
 
@@ -287,22 +362,26 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
 
         return new SettingsReadPayload(
             new ReadOnlyDictionary<string, object>(sections),
-            metadata,
+            new ReadOnlyDictionary<string, SettingsSectionMetadata>(sectionMetadata),
+            sourceMetadata,
             this.SourcePath);
     }
 
-    private async Task<Dictionary<string, object>> MergeWithExistingSectionsAsync(
+    private async Task<(Dictionary<string, object> sections, Dictionary<string, SettingsSectionMetadata> metadata)> MergeWithExistingSectionsAsync(
         IReadOnlyDictionary<string, object> sectionsData,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
         CancellationToken cancellationToken)
     {
-        Dictionary<string, object> merged;
+        Dictionary<string, object> mergedSections;
+        Dictionary<string, SettingsSectionMetadata> mergedMetadata;
 
         if (this.FileSystem.File.Exists(this.SourcePath))
         {
             try
             {
                 var existing = await this.ReadFilePayloadAsync(cancellationToken).ConfigureAwait(false);
-                merged = new Dictionary<string, object>(existing.Sections, StringComparer.Ordinal);
+                mergedSections = new Dictionary<string, object>(existing.Sections, StringComparer.Ordinal);
+                mergedMetadata = new Dictionary<string, SettingsSectionMetadata>(existing.SectionMetadata, StringComparer.Ordinal);
             }
             catch (SettingsPersistenceException ex)
             {
@@ -312,15 +391,22 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         }
         else
         {
-            merged = new Dictionary<string, object>(StringComparer.Ordinal);
+            mergedSections = new Dictionary<string, object>(StringComparer.Ordinal);
+            mergedMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal);
         }
 
+        // Merge new sections and metadata
         foreach (var (sectionName, sectionValue) in sectionsData)
         {
-            merged[sectionName] = sectionValue;
+            mergedSections[sectionName] = sectionValue;
         }
 
-        return merged;
+        foreach (var (sectionName, meta) in sectionMetadata)
+        {
+            mergedMetadata[sectionName] = meta;
+        }
+
+        return (mergedSections, mergedMetadata);
     }
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, this);

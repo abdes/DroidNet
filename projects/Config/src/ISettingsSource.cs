@@ -36,6 +36,15 @@ public interface ISettingsSource
     public bool WatchForChanges { get; set; }
 
     /// <summary>
+    /// Gets or sets the source-level metadata for this settings source.
+    /// </summary>
+    /// <remarks>
+    /// This metadata is managed by the <see cref="SettingsManager"/> and tracks version,
+    /// last write time, and writer information. The manager updates this when loading or saving settings.
+    /// </remarks>
+    public SettingsSourceMetadata? SourceMetadata { get; set; }
+
+    /// <summary>
     /// Reads settings content from the source.
     /// </summary>
     /// <param name="reload">If true, forces a reload from the underlying source; otherwise, may use cached data.</param>
@@ -47,12 +56,14 @@ public interface ISettingsSource
     /// Writes settings content to the source using atomic operations.
     /// </summary>
     /// <param name="sectionsData">Dictionary of section names to their serialized content.</param>
-    /// <param name="metadata">Metadata to be written alongside the settings.</param>
+    /// <param name="sectionMetadata">Dictionary of section names to their metadata.</param>
+    /// <param name="sourceMetadata">Source-level metadata to be written alongside the settings.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A task that represents the write operation. The task result contains the write result.</returns>
     public Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
-        SettingsMetadata metadata,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata sourceMetadata,
         CancellationToken cancellationToken = default);
 
     /// <summary>

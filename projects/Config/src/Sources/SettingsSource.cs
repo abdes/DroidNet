@@ -41,6 +41,9 @@ public abstract class SettingsSource(string id, IEncryptionProvider? crypto = nu
     /// <inheritdoc/>
     public abstract bool WatchForChanges { get; set; }
 
+    /// <inheritdoc/>
+    public SettingsSourceMetadata? SourceMetadata { get; set; }
+
     /// <summary>Gets the logger instance for this settings source.</summary>
     protected ILogger Logger => this.logger;
 
@@ -48,7 +51,11 @@ public abstract class SettingsSource(string id, IEncryptionProvider? crypto = nu
     public abstract Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default);
 
     /// <inheritdoc/>
-    public abstract Task<Result<SettingsWritePayload>> SaveAsync(IReadOnlyDictionary<string, object> sectionsData, SettingsMetadata metadata, CancellationToken cancellationToken = default);
+    public abstract Task<Result<SettingsWritePayload>> SaveAsync(
+        IReadOnlyDictionary<string, object> sectionsData,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata sourceMetadata,
+        CancellationToken cancellationToken = default);
 
     /// <inheritdoc/>
     public abstract Task<Result<SettingsValidationPayload>> ValidateAsync(IReadOnlyDictionary<string, object> sectionsData, CancellationToken cancellationToken = default);

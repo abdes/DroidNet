@@ -14,6 +14,7 @@ namespace DroidNet.Config.Tests.Helpers;
 public class MockSettingsSource : ISettingsSource
 {
     private readonly Dictionary<string, object> sections = [];
+    private readonly Dictionary<string, SettingsSectionMetadata> sectionMetadata = [];
 
     public MockSettingsSource(string id)
     {
@@ -31,7 +32,7 @@ public class MockSettingsSource : ISettingsSource
 
     public bool IsAvailable { get; set; } = true;
 
-    public SettingsMetadata? Metadata { get; set; }
+    public SettingsSourceMetadata? SourceMetadata { get; set; }
 
     public int ReadCallCount { get; private set; }
 
@@ -43,9 +44,20 @@ public class MockSettingsSource : ISettingsSource
 
     bool ISettingsSource.WatchForChanges { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
 
-    public void AddSection(string sectionName, object data) => this.sections[sectionName] = data;
+    public void AddSection(string sectionName, object data, SettingsSectionMetadata? metadata = null)
+    {
+        this.sections[sectionName] = data;
+        if (metadata != null)
+        {
+            this.sectionMetadata[sectionName] = metadata;
+        }
+    }
 
-    public void RemoveSection(string sectionName) => _ = this.sections.Remove(sectionName);
+    public void RemoveSection(string sectionName)
+    {
+        _ = this.sections.Remove(sectionName);
+        _ = this.sectionMetadata.Remove(sectionName);
+    }
 
     public void TriggerSourceChanged(SourceChangeType changeType)
         => this.SourceChanged?.Invoke(this, new SourceChangedEventArgs(this.Id, changeType));
@@ -62,13 +74,15 @@ public class MockSettingsSource : ISettingsSource
         }
 
         var newSections = new ReadOnlyDictionary<string, object>(new Dictionary<string, object>(this.sections, StringComparer.Ordinal));
-        var payload = new SettingsReadPayload(newSections, this.Metadata, this.Id);
+        var newSectionMetadata = new ReadOnlyDictionary<string, SettingsSectionMetadata>(new Dictionary<string, SettingsSectionMetadata>(this.sectionMetadata, StringComparer.Ordinal));
+        var payload = new SettingsReadPayload(newSections, newSectionMetadata, this.SourceMetadata, this.Id);
         return Task.FromResult(Result.Ok(payload));
     }
 
     public Task<Result<SettingsWritePayload>> SaveAsync(
         IReadOnlyDictionary<string, object> sectionsData,
-        SettingsMetadata metadata,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata sourceMetadata,
         CancellationToken cancellationToken = default)
     {
         this.WriteCallCount++;
@@ -83,9 +97,14 @@ public class MockSettingsSource : ISettingsSource
             this.sections[section.Key] = section.Value;
         }
 
-        this.Metadata = metadata;
+        foreach (var meta in sectionMetadata)
+        {
+            this.sectionMetadata[meta.Key] = meta.Value;
+        }
 
-        var payload = new SettingsWritePayload(metadata, sectionsData.Count, this.Id);
+        this.SourceMetadata = sourceMetadata;
+
+        var payload = new SettingsWritePayload(sourceMetadata, sectionsData.Count, this.Id);
         return Task.FromResult(Result.Ok(payload));
     }
 

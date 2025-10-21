@@ -88,6 +88,9 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     /// <inheritdoc/>
     public abstract Type SettingsType { get; }
 
+    /// <inheritdoc/>
+    public abstract SettingsSectionMetadata SectionMetadata { get; set; }
+
     /// <summary>
     /// Gets helper to get the manager instance from the weak reference. Throws if the manager has been collected.
     /// </summary>
@@ -128,12 +131,11 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
                     throw new SettingsValidationException("Settings validation failed", validationErrors);
                 }
 
-                var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
                 var settingsSnapshot = this.GetSettingsSnapshot();
 
                 try
                 {
-                    await this.Manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, metadata, cancellationToken).ConfigureAwait(false);
+                    await this.Manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, this.SectionMetadata, cancellationToken).ConfigureAwait(false);
                     this.IsDirty = false;
 
                     // Log successful save
