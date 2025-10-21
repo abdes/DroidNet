@@ -24,43 +24,34 @@ public abstract class SettingsTestBase : IDisposable
 
     private bool isDisposed;
 
-    protected SettingsTestBase(bool registerDefaultSettingsServices = true)
+    protected SettingsTestBase(bool withSettings = true)
     {
         this.FileSystem = new MockFileSystem();
         this.Container = new Container();
         this.LoggerFactory = new LoggerFactory();
 
         // Register common services
-        this.Container.RegisterInstance<Microsoft.Extensions.Logging.ILoggerFactory>(this.LoggerFactory);
-        this.Container.RegisterInstance<System.IO.Abstractions.IFileSystem>(this.FileSystem);
+        this.Container.RegisterInstance(this.LoggerFactory);
+        this.Container.RegisterInstance(this.FileSystem);
+
+        // All tests will need a SettingsManager
+        this.Container.Register<SettingsManager>(Reuse.Singleton);
 
         // Register default settings services if not disabled
-        if (registerDefaultSettingsServices)
+        if (withSettings)
         {
-            // Register settings services using factory delegates that resolve the SettingsManager
-            this.Container.RegisterDelegate<ISettingsService<ITestSettings>>(
-                resolver => new TestSettingsService(
-                    resolver.Resolve<SettingsManager>(),
-                    resolver.Resolve<ILoggerFactory>()),
-                Reuse.Singleton);
-
-            this.Container.RegisterDelegate<ISettingsService<IAlternativeTestSettings>>(
-                resolver => new AlternativeTestSettingsService(
-                    resolver.Resolve<SettingsManager>(),
-                    resolver.Resolve<ILoggerFactory>()),
-                Reuse.Singleton);
-
-            this.Container.RegisterDelegate<ISettingsService<IInvalidTestSettings>>(
-                resolver => new InvalidTestSettingsService(
-                    resolver.Resolve<SettingsManager>(),
-                    resolver.Resolve<ILoggerFactory>()),
-                Reuse.Singleton);
+            _ = this.Container
+                .WithSettings<ITestSettings, TestSettingsService>()
+                .WithSettings<IAlternativeTestSettings, AlternativeTestSettingsService>()
+                .WithSettings<ITestSettingsWithValidation, TestSettingsServiceWithValidation>();
         }
     }
 
     protected MockFileSystem FileSystem { get; }
 
     protected IContainer Container { get; }
+
+    protected SettingsManager SettingsManager => this.Container.Resolve<SettingsManager>();
 
     protected ILoggerFactory LoggerFactory { get; }
 

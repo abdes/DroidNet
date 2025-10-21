@@ -10,7 +10,7 @@ namespace DroidNet.Config.Tests.Helpers;
 /// <summary>
 /// Interface for test settings with validation errors.
 /// </summary>
-public interface IInvalidTestSettings : INotifyPropertyChanged
+public interface ITestSettingsWithValidation : INotifyPropertyChanged
 {
     [Required]
     public string? RequiredField { get; set; }

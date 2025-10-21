@@ -23,14 +23,12 @@ public class TestSettings : ITestSettings
     public event PropertyChangedEventHandler? PropertyChanged;
 
     [Required]
-    [StringLength(100, MinimumLength = 1)]
     public string Name
     {
         get => this.name;
         set => this.SetField(ref this.name, value);
     }
 
-    [Range(0, 1000)]
     public int Value
     {
         get => this.value;

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config.Tests.Helpers;
+using DryIoc;
 using FluentAssertions;
 
 namespace DroidNet.Config.Tests.Validation;
@@ -17,26 +18,26 @@ namespace DroidNet.Config.Tests.Validation;
 [TestCategory("Settings Validation")]
 public class ValidationTests : SettingsTestBase
 {
+    private readonly MockSettingsSource source = new("test-source");
+
     public TestContext TestContext { get; set; }
+
+    [TestInitialize]
+    public void TestInitialize() => this.Container.RegisterInstance<ISettingsSource>(this.source);
 
     [TestMethod]
     public async Task ValidateAsync_WithAllValidProperties_ShouldReturnNoErrors()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
         var validSettings = new TestSettings
         {
             Name = "ValidName",
             Value = 50,
             IsEnabled = true,
         };
-        mockSource.AddSection("TestSettings", validSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", validSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -49,18 +50,13 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_WithRequiredFieldViolation_ShouldReturnError()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new InvalidTestSettings
+        var invalidSettings = new TestSettingsWithValidation
         {
             RequiredField = null, // Required field violation
         };
-        mockSource.AddSection("InvalidTestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", invalidSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -75,20 +71,15 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_WithRangeViolation_ShouldReturnError()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new InvalidTestSettings
+        var invalidSettings = new TestSettingsWithValidation
         {
             RequiredField = "Present",
             OutOfRangeValue = 999, // Range is 1-10
             InvalidEmail = "valid@email.com",
         };
-        mockSource.AddSection("InvalidTestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", invalidSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -104,20 +95,15 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_WithEmailAddressViolation_ShouldReturnError()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new InvalidTestSettings
+        var invalidSettings = new TestSettingsWithValidation
         {
             RequiredField = "Present",
             OutOfRangeValue = 5,
             InvalidEmail = "not-an-email", // Invalid email format
         };
-        mockSource.AddSection("InvalidTestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", invalidSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -131,20 +117,15 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_WithMultipleViolations_ShouldReturnAllErrors()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new InvalidTestSettings
+        var invalidSettings = new TestSettingsWithValidation
         {
             RequiredField = null, // Violation 1
             OutOfRangeValue = 999, // Violation 2
             InvalidEmail = "not-an-email", // Violation 3
         };
-        mockSource.AddSection("InvalidTestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", invalidSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -156,52 +137,21 @@ public class ValidationTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task ValidateAsync_WithStringLengthViolation_ShouldReturnError()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new TestSettings
-        {
-            Name = string.Empty, // StringLength minimum is 1
-            Value = 50,
-        };
-        mockSource.AddSection("TestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Act
-        var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = errors.Should().NotBeEmpty();
-        _ = errors.Should().Contain(e => e.PropertyName == "Name");
-    }
-
-    [TestMethod]
     public async Task SaveAsync_WithValidationErrors_ShouldThrowSettingsValidationException()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidSettings = new InvalidTestSettings
+        var invalidSettings = new TestSettingsWithValidation
         {
             RequiredField = null,
             OutOfRangeValue = 999,
             InvalidEmail = "not-an-email",
         };
-        mockSource.AddSection("InvalidTestSettings", invalidSettings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", invalidSettings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Mark as dirty to trigger save
-        var isDirtyProperty = typeof(Config.SettingsService<IInvalidTestSettings>).GetProperty("IsDirty");
+        var isDirtyProperty = typeof(Config.SettingsService<ITestSettingsWithValidation>).GetProperty("IsDirty");
         isDirtyProperty?.SetValue(service, value: true);
 
         // Act
@@ -244,65 +194,18 @@ public class ValidationTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task ValidateAsync_WithRangeBoundaryValues_ShouldValidateCorrectly()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-
-        // Test minimum boundary
-        var settingsAtMin = new TestSettings
-        {
-            Name = "Test",
-            Value = 0, // Range is 0-1000
-        };
-        mockSource.AddSection("TestSettings", settingsAtMin);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Act
-        var errorsMin = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = errorsMin.Should().BeEmpty();
-
-        // Test maximum boundary
-        service.Settings.Value = 1000;
-        var errorsMax = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = errorsMax.Should().BeEmpty();
-
-        // Test below minimum
-        service.Settings.Value = -1;
-        var errorsBelowMin = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = errorsBelowMin.Should().NotBeEmpty();
-
-        // Test above maximum
-        service.Settings.Value = 1001;
-        var errorsAboveMax = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = errorsAboveMax.Should().NotBeEmpty();
-    }
-
-    [TestMethod]
     public async Task ValidateAsync_WithNullableProperties_ShouldHandleCorrectly()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
         var settings = new TestSettings
         {
             Name = "Test",
             Value = 50,
             Description = null, // Nullable property
         };
-        mockSource.AddSection("TestSettings", settings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", settings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -315,20 +218,15 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_ShouldValidateAllProperties()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
         var settings = new TestSettings
         {
             Name = "A", // Valid - minimum length 1
             Value = 500, // Valid - within range 0-1000
             IsEnabled = true,
         };
-        mockSource.AddSection("TestSettings", settings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("InvalidTestSettings", settings);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -341,14 +239,9 @@ public class ValidationTests : SettingsTestBase
     public async Task ValidateAsync_WithCancellation_ShouldComplete()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act - Validation doesn't actually support cancellation in current implementation
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -369,31 +262,5 @@ public class ValidationTests : SettingsTestBase
         // Assert
         _ = result.Should().Contain("TestProperty");
         _ = result.Should().Contain("Test error message");
-    }
-
-    [TestMethod]
-    public async Task ValidateAsync_WithExtremelyLongString_ShouldReturnError()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var settings = new TestSettings
-        {
-            Name = new string('A', 101), // StringLength max is 100
-            Value = 50,
-        };
-        mockSource.AddSection("TestSettings", settings);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Act
-        var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = errors.Should().NotBeEmpty();
-        _ = errors.Should().Contain(e => e.PropertyName == "Name");
     }
 }

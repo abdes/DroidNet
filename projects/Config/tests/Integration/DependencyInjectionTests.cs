@@ -3,10 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.IO.Abstractions;
+using System.Text.Json;
 using DroidNet.Config.Sources;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Testably.Abstractions.Testing;
 
 namespace DroidNet.Config.Tests.Integration;
 
@@ -17,14 +21,34 @@ namespace DroidNet.Config.Tests.Integration;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DI Integration")]
-public partial class DependencyInjectionTests : SettingsTestBase
+public class DependencyInjectionTests
 {
-    public DependencyInjectionTests()
-        : base(registerDefaultSettingsServices: false)
+    // Add a static readonly field for the options at the class level
+    private static readonly JsonSerializerOptions JsonOptions = new()
     {
+        WriteIndented = true,
+    };
+
+    public DependencyInjectionTests()
+    {
+        this.FileSystem = new MockFileSystem();
+        this.Container = new Container();
+        this.LoggerFactory = new LoggerFactory();
+
+        // Register common services
+        this.Container.RegisterInstance(this.LoggerFactory);
+        this.Container.RegisterInstance(this.FileSystem);
     }
 
     public TestContext TestContext { get; set; }
+
+    protected IFileSystem FileSystem { get; }
+
+    protected IContainer Container { get; }
+
+    protected SettingsManager SettingsManager => this.Container.Resolve<SettingsManager>();
+
+    protected ILoggerFactory LoggerFactory { get; }
 
     // Group: WithConfig
     [TestMethod]
@@ -282,7 +306,6 @@ public partial class DependencyInjectionTests : SettingsTestBase
 
         // Act
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = service.Settings.Name.Should().Be("Second");
@@ -307,7 +330,6 @@ public partial class DependencyInjectionTests : SettingsTestBase
 
         // Act
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = service.Settings.Name.Should().Be("InitialData");
@@ -331,7 +353,6 @@ public partial class DependencyInjectionTests : SettingsTestBase
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act - Set invalid value
         service.Settings.Name = string.Empty; // Violates StringLength minimum
@@ -368,7 +389,6 @@ public partial class DependencyInjectionTests : SettingsTestBase
         await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Modify and save
         service.Settings.Value = 999;
@@ -393,5 +413,35 @@ public partial class DependencyInjectionTests : SettingsTestBase
 
         // Assert
         _ = manager1.Should().BeSameAs(manager2);
+    }
+
+    protected string CreateTempSettingsFile(string fileName, string jsonContent)
+    {
+        var tempPath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), fileName);
+        var directory = this.FileSystem.Path.GetDirectoryName(tempPath);
+
+        if (!string.IsNullOrEmpty(directory) && !this.FileSystem.Directory.Exists(directory))
+        {
+            _ = this.FileSystem.Directory.CreateDirectory(directory);
+        }
+
+        this.FileSystem.File.WriteAllText(tempPath, jsonContent);
+        return tempPath;
+    }
+
+    private string CreateMultiSectionSettingsFile(string fileName, IDictionary<string, object> sections, SettingsMetadata? metadata = null)
+    {
+        var document = new Dictionary<string, object>(StringComparer.Ordinal)
+        {
+            ["metadata"] = metadata ?? new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" },
+        };
+
+        // Add all sections directly to the root document (flat structure)
+        foreach (var section in sections)
+        {
+            document[section.Key] = section.Value;
+        }
+
+        return this.CreateTempSettingsFile(fileName, JsonSerializer.Serialize(document, JsonOptions));
     }
 }

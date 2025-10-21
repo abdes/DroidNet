@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config.Tests.Helpers;
+using DryIoc;
 using FluentAssertions;
 
 namespace DroidNet.Config.Tests;
@@ -18,66 +19,20 @@ namespace DroidNet.Config.Tests;
 [TestCategory("Settings Service")]
 public class SettingsServiceTests : SettingsTestBase
 {
+    private readonly MockSettingsSource source = new("test-source");
+
     public TestContext TestContext { get; set; }
 
-    [TestMethod]
-    public async Task InitializeAsync_ShouldLoadSettingsFromManager()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var testData = new TestSettings { Name = "TestName", Value = 123 };
-        mockSource.AddSection("TestSettings", testData);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-
-        // Act
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = service.Settings.Should().NotBeNull();
-        _ = service.Settings.Name.Should().Be("TestName");
-        _ = service.Settings.Value.Should().Be(123);
-        _ = service.IsDirty.Should().BeFalse();
-        _ = mockSource.ReadCallCount.Should().Be(1);
-    }
-
-    [TestMethod]
-    public async Task InitializeAsync_WhenAlreadyInitialized_ShouldNotReload()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        var initialReadCount = mockSource.ReadCallCount;
-
-        // Act
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = mockSource.ReadCallCount.Should().Be(initialReadCount);
-    }
+    [TestInitialize]
+    public void TestInitialize() => this.Container.RegisterInstance<ISettingsSource>(this.source);
 
     [TestMethod]
     public async Task Settings_WhenModified_ShouldSetIsDirtyToTrue()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         var propertyChangedEvents = new List<string>();
         service.PropertyChanged += (_, e) => propertyChangedEvents.Add(e.PropertyName ?? string.Empty);
@@ -101,14 +56,9 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task SaveAsync_WithValidSettings_ShouldPersistChanges()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Manually mark as dirty since TestSettings doesn't implement INotifyPropertyChanged
         service.Settings.Name = "Updated";
@@ -121,7 +71,7 @@ public class SettingsServiceTests : SettingsTestBase
         await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        _ = mockSource.WriteCallCount.Should().Be(1);
+        _ = this.source.WriteCallCount.Should().Be(1);
         _ = service.IsDirty.Should().BeFalse();
     }
 
@@ -129,45 +79,35 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task SaveAsync_WhenNotDirty_ShouldNotPersist()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
+        this.source.AddSection("TestSettings", new TestSettings());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        var initialWriteCount = mockSource.WriteCallCount;
+        var initialWriteCount = this.source.WriteCallCount;
 
         // Act
         await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
-        _ = mockSource.WriteCallCount.Should().Be(initialWriteCount);
+        _ = this.source.WriteCallCount.Should().Be(initialWriteCount);
     }
 
     [TestMethod]
     public async Task SaveAsync_WithInvalidSettings_ShouldThrowValidationException()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        var invalidData = new InvalidTestSettings
+        var invalidData = new TestSettingsWithValidation
         {
             RequiredField = null, // Required field violation
             OutOfRangeValue = 999, // Range validation violation
             InvalidEmail = "not-an-email", // Email validation violation
         };
-        mockSource.AddSection("InvalidTestSettings", invalidData);
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", invalidData);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Manually set dirty flag
-        var isDirtyProperty = typeof(InvalidTestSettingsService).GetProperty("IsDirty");
+        var isDirtyProperty = typeof(TestSettingsServiceWithValidation).GetProperty("IsDirty");
         isDirtyProperty?.SetValue(service, value: true);
 
         // Act & Assert
@@ -180,14 +120,9 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task ValidateAsync_WithValidSettings_ShouldReturnEmptyList()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings { Name = "ValidName", Value = 50 });
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 50 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -200,14 +135,9 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task ValidateAsync_WithInvalidSettings_ShouldReturnErrors()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("InvalidTestSettings", new InvalidTestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new InvalidTestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettingsWithValidation());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettingsWithValidation>>();
 
         // Act
         var errors = await service.ValidateAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -221,20 +151,15 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task ReloadAsync_ShouldDiscardChangesAndReloadFromSource()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Modify settings
         service.Settings.Name = "Modified";
 
         // Update the mock source with new data
-        mockSource.AddSection("TestSettings", new TestSettings { Name = "Reloaded", Value = 100 });
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Reloaded", Value = 100 });
 
         // Act
         await service.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -249,14 +174,9 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task ResetToDefaultsAsync_ShouldResetToNewInstance()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         await service.ResetToDefaultsAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -271,13 +191,9 @@ public class SettingsServiceTests : SettingsTestBase
     public async Task IsBusy_ShouldBeTrueDuringOperations()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
+        this.source.AddSection("TestSettings", new TestSettings());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         var busyStates = new List<bool>();
         service.PropertyChanged += (_, e) =>
@@ -289,7 +205,7 @@ public class SettingsServiceTests : SettingsTestBase
         };
 
         // Act
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        await service.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = busyStates.Should().Contain(expected: true);
@@ -297,13 +213,12 @@ public class SettingsServiceTests : SettingsTestBase
     }
 
     [TestMethod]
-    public void Dispose_ShouldReleaseResources()
+    public async Task Dispose_ShouldReleaseResources()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         // Act
         service.Dispose();
@@ -314,32 +229,12 @@ public class SettingsServiceTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task SaveAsync_BeforeInitialize_ShouldThrowInvalidOperationException()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-
-        // Act & Assert
-        var act = async () => await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*must be initialized*").ConfigureAwait(true);
-    }
-
-    [TestMethod]
     public async Task PropertyChanged_ShouldFireForIsDirtyChanges()
     {
         // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        this.source.AddSection("TestSettings", new TestSettings());
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
         var propertyChanges = new List<string>();
         service.PropertyChanged += (_, e) => propertyChanges.Add(e.PropertyName ?? string.Empty);
@@ -350,31 +245,5 @@ public class SettingsServiceTests : SettingsTestBase
 
         // Assert
         _ = propertyChanges.Should().Contain("IsDirty");
-    }
-
-    [TestMethod]
-    public async Task InitializationStateChanged_ShouldFireWhenInitialized()
-    {
-        // Arrange
-        var mockSource = new MockSettingsSource("test-source");
-        mockSource.AddSection("TestSettings", new TestSettings());
-
-        using var manager = new SettingsManager([mockSource], this.Container, this.LoggerFactory);
-        await manager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        using var service = new TestSettingsService(manager, this.LoggerFactory);
-
-        var eventFired = false;
-        service.InitializationStateChanged += (_, e) =>
-        {
-            eventFired = true;
-            _ = e.IsInitialized.Should().BeTrue();
-        };
-
-        // Act
-        await service.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = eventFired.Should().BeTrue();
     }
 }

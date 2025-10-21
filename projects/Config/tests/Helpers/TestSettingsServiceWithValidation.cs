@@ -8,13 +8,13 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Config.Tests.Helpers;
 
 /// <summary>
-/// Concrete implementation of SettingsService for IInvalidTestSettings interface.
-/// This service implements both the abstract SettingsService base class and the IInvalidTestSettings interface.
+/// Concrete implementation of SettingsService for ITestSettingsWithValidation interface.
+/// This service implements both the abstract SettingsService base class and the ITestSettingsWithValidation interface.
 /// Used for testing validation failure scenarios.
 /// </summary>
 [ExcludeFromCodeCoverage]
-public sealed class InvalidTestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
-    : SettingsService<IInvalidTestSettings>(manager, loggerFactory), IInvalidTestSettings
+public sealed class TestSettingsServiceWithValidation(SettingsManager manager, ILoggerFactory? loggerFactory = null)
+    : SettingsService<ITestSettingsWithValidation>(manager, loggerFactory), ITestSettingsWithValidation
 {
     private string? requiredField; // Invalid: null/empty
     private int outOfRangeValue = -1; // Invalid: out of range (should be 1-10)
@@ -40,23 +40,23 @@ public sealed class InvalidTestSettingsService(SettingsManager manager, ILoggerF
         set => this.SetField(ref this.invalidEmail, value);
     }
 
-    public override Type SettingsType => typeof(InvalidTestSettings);
+    public override Type SettingsType => typeof(TestSettingsWithValidation);
 
-    protected override IInvalidTestSettings GetSettingsSnapshot() => new InvalidTestSettings
+    protected override ITestSettingsWithValidation GetSettingsSnapshot() => new TestSettingsWithValidation
     {
         RequiredField = this.RequiredField,
         OutOfRangeValue = this.OutOfRangeValue,
         InvalidEmail = this.InvalidEmail,
     };
 
-    protected override void UpdateProperties(IInvalidTestSettings source)
+    protected override void UpdateProperties(ITestSettingsWithValidation source)
     {
         this.RequiredField = source.RequiredField;
         this.OutOfRangeValue = source.OutOfRangeValue;
         this.InvalidEmail = source.InvalidEmail;
     }
 
-    protected override IInvalidTestSettings CreateDefaultSettings() => new InvalidTestSettings
+    protected override ITestSettingsWithValidation CreateDefaultSettings() => new TestSettingsWithValidation
     {
         RequiredField = null,
         OutOfRangeValue = -1,

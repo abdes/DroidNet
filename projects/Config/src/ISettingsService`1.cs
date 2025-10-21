@@ -16,11 +16,6 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     where TSettings : class
 {
     /// <summary>
-    /// Event raised when the settings service initialization state changes.
-    /// </summary>
-    public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
-
-    /// <summary>
     /// Gets the section name used to identify this settings type in storage sources.
     /// </summary>
     /// <remarks>
@@ -63,14 +58,6 @@ public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposab
     /// Gets a value indicating whether the service is currently performing an async operation.
     /// </summary>
     public bool IsBusy { get; }
-
-    /// <summary>
-    /// Initializes the settings service by loading from all configured sources.
-    /// Must be called before using the service.
-    /// </summary>
-    /// <param name="cancellationToken">Token to cancel the initialization.</param>
-    /// <returns>A task that represents the initialization operation.</returns>
-    public Task InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Saves the current settings to persistent storage if modifications exist.

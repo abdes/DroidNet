@@ -83,7 +83,7 @@ public sealed partial class SettingsManager(
 
             foreach (var source in this.sources)
             {
-                await this.TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, allowReload: false, cancellationToken).ConfigureAwait(false);
             }
 
             this.isInitialized = true;
@@ -117,39 +117,6 @@ public sealed partial class SettingsManager(
         return service;
     }
 
-    private void ApplySettings<TSettingsInterface>(ISettingsService<TSettingsInterface> service)
-        where TSettingsInterface : class
-    {
-        var sectionName = service.SectionName;
-        var settings = service.Settings;
-
-        // Use cached sections data instead of re-reading from sources
-        if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
-        {
-            if (sectionData is System.Text.Json.JsonElement jsonElement)
-            {
-                // Deserialize JsonElement to the POCO type first
-                // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
-                var deserializedData = System.Text.Json.JsonSerializer.Deserialize(
-                    jsonElement.GetRawText(),
-                    service.SettingsType);
-
-                // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
-                if (deserializedData is TSettingsInterface typedInstance)
-                {
-                    ApplyProperties(typedInstance, settings);
-                    this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
-                }
-                else
-                {
-                    this.LogSettingsDeserializationFailed(sectionName, service.SettingsType);
-                }
-
-            }
-        }
-
-    }
-
     /// <inheritdoc/>
     public async Task ReloadAllAsync(CancellationToken cancellationToken = default)
     {
@@ -165,7 +132,7 @@ public sealed partial class SettingsManager(
 
             foreach (var source in this.sources)
             {
-                await this.TryLoadSourceAsync(source, true, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, allowReload: true, cancellationToken).ConfigureAwait(false);
             }
 
             this.NotifyServicesOfReload();
@@ -181,7 +148,7 @@ public sealed partial class SettingsManager(
         var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
         await using (releaser.ConfigureAwait(false))
         {
-            if (this.sources.Any(s => string.Equals(s.Id, source.Id, StringComparison.Ordinal)))
+            if (this.sources.Exists(s => string.Equals(s.Id, source.Id, StringComparison.Ordinal)))
             {
                 throw new InvalidOperationException($"Source with ID '{source.Id}' already exists.");
             }
@@ -192,7 +159,7 @@ public sealed partial class SettingsManager(
             // Load the new source if manager is already initialized
             if (this.isInitialized)
             {
-                await this.TryLoadSourceAsync(source, false, cancellationToken).ConfigureAwait(false);
+                await this.TryLoadSourceAsync(source, allowReload: false, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -371,10 +338,39 @@ public sealed partial class SettingsManager(
         }
     }
 
-    private void OnSourceChanged(SourceChangedEventArgs args)
+    private void ApplySettings<TSettingsInterface>(ISettingsService<TSettingsInterface> service)
+        where TSettingsInterface : class
     {
-        this.SourceChanged?.Invoke(this, args);
+        var sectionName = service.SectionName;
+        var settings = service.Settings;
+
+        // Use cached sections data instead of re-reading from sources
+        if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
+        {
+            if (sectionData is System.Text.Json.JsonElement jsonElement)
+            {
+                // Deserialize JsonElement to the POCO type first
+                // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
+                var deserializedData = System.Text.Json.JsonSerializer.Deserialize(
+                    jsonElement.GetRawText(),
+                    service.SettingsType);
+
+                // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
+                if (deserializedData is TSettingsInterface typedInstance)
+                {
+                    ApplyProperties(typedInstance, settings);
+                    this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
+                }
+                else
+                {
+                    this.LogSettingsDeserializationFailed(sectionName, service.SettingsType);
+                }
+            }
+        }
     }
+
+    private void OnSourceChanged(SourceChangedEventArgs args)
+        => this.SourceChanged?.Invoke(this, args);
 
     private async Task TryLoadSourceAsync(ISettingsSource source, bool allowReload, CancellationToken cancellationToken)
     {
@@ -417,50 +413,6 @@ public sealed partial class SettingsManager(
         if (!this.isInitialized)
         {
             throw new InvalidOperationException("SettingsManager must be initialized.");
-        }
-    }
-
-    public sealed class AsyncLock : IDisposable, IAsyncDisposable
-    {
-        private readonly SemaphoreSlim semaphore = new(1, 1);
-        private bool disposed;
-
-        public async ValueTask<Releaser> AcquireAsync(CancellationToken ct = default)
-        {
-            this.ThrowIfDisposed();
-            await this.semaphore.WaitAsync(ct).ConfigureAwait(false);
-            return new Releaser(this.semaphore);
-        }
-
-        public void Dispose()
-        {
-            if (this.disposed)
-            {
-                return;
-            }
-
-            this.disposed = true;
-            this.semaphore.Dispose();
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            this.Dispose(); // SemaphoreSlim has only sync Dispose
-            return ValueTask.CompletedTask;
-        }
-
-        private void ThrowIfDisposed()
-            => ObjectDisposedException.ThrowIf(this.disposed, nameof(AsyncLock));
-
-        public readonly struct Releaser(SemaphoreSlim toRelease) : IDisposable, IAsyncDisposable
-        {
-            public void Dispose() => toRelease?.Release();
-
-            public ValueTask DisposeAsync()
-            {
-                toRelease?.Release();
-                return ValueTask.CompletedTask;
-            }
         }
     }
 }
