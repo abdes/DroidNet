@@ -1,14 +1,16 @@
 {
-  "metadata": {
-    "SchemaVersion": "20251021",
-    "Version": "1.0",
-    "Service": null,
-    "WrittenAt": "2025-10-21T13:54:43.1932714+00:00",
-    "WrittenBy": null
+  "$meta": {
+    "version": 6,
+    "writtenAt": "2025-10-21T21:43:07.7651315+00:00",
+    "writtenBy": "DroidNet.Config"
   },
   "AppSettings": {
-    "applicationName": "DroidNet Config Sample (modified 2)",
-    "loggingLevel": "Warning",
-    "enableExperimental": false
+    "$meta": {
+      "schemaVersion": "20251022",
+      "service": "DroidNet.Config.Example.AppSettingsService"
+    },
+    "applicationName": "DroidNet Config Sample (Modified)",
+    "loggingLevel": "Information",
+    "enableExperimental": true
   }
 }

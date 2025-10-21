@@ -18,6 +18,12 @@ internal sealed partial class AppSettingsService(SettingsManager manager, ILogge
 
     public override Type SettingsType => typeof(AppSettings);
 
+    public override SettingsSectionMetadata SectionMetadata { get; set; } = new()
+    {
+        SchemaVersion = "20251022",
+        Service = typeof(AppSettingsService).FullName,
+    };
+
     public string ApplicationName { get => this.applicationName; set => this.SetField(ref this.applicationName, value); }
 
     public string LoggingLevel { get => this.loggingLevel; set => this.SetField(ref this.loggingLevel, value); }

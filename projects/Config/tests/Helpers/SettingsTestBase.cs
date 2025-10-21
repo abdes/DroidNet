@@ -75,17 +75,66 @@ public abstract class SettingsTestBase : IDisposable
         return tempPath;
     }
 
-    protected string CreateMultiSectionSettingsFile(string fileName, IDictionary<string, object> sections, SettingsMetadata? metadata = null)
+    protected string CreateMultiSectionSettingsFile(
+        string fileName,
+        IDictionary<string, object> sections,
+        SettingsSourceMetadata? sourceMetadata = null,
+        IDictionary<string, SettingsSectionMetadata>? sectionMetadata = null)
     {
         var document = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            ["metadata"] = metadata ?? new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" },
+            ["$meta"] = sourceMetadata ?? new SettingsSourceMetadata
+            {
+                WrittenAt = DateTimeOffset.UtcNow,
+                WrittenBy = "TestHelper",
+            },
         };
 
-        // Add all sections directly to the root document (flat structure)
+        // Add all sections with their metadata
         foreach (var section in sections)
         {
-            document[section.Key] = section.Value;
+            var sectionContent = new Dictionary<string, object>(StringComparer.Ordinal);
+
+            // Add section metadata if provided
+            if (sectionMetadata != null && sectionMetadata.TryGetValue(section.Key, out var meta))
+            {
+                sectionContent["$meta"] = meta;
+            }
+
+            // Add section data
+            if (section.Value is JsonElement jsonElement)
+            {
+                var deserialized = JsonSerializer.Deserialize<Dictionary<string, object>>(jsonElement.GetRawText());
+                if (deserialized != null)
+                {
+                    foreach (var (key, value) in deserialized)
+                    {
+                        sectionContent[key] = value;
+                    }
+                }
+            }
+            else if (section.Value is Dictionary<string, object> dict)
+            {
+                foreach (var (key, value) in dict)
+                {
+                    sectionContent[key] = value;
+                }
+            }
+            else
+            {
+                // For POCOs, serialize then deserialize to get properties
+                var serialized = JsonSerializer.Serialize(section.Value, JsonOptions);
+                var deserialized = JsonSerializer.Deserialize<Dictionary<string, object>>(serialized);
+                if (deserialized != null)
+                {
+                    foreach (var (key, value) in deserialized)
+                    {
+                        sectionContent[key] = value;
+                    }
+                }
+            }
+
+            document[section.Key] = sectionContent;
         }
 
         return this.CreateTempSettingsFile(fileName, JsonSerializer.Serialize(document, JsonOptions));

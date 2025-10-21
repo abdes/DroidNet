@@ -44,6 +44,12 @@ public sealed class AlternativeTestSettingsService(
 
     public override Type SettingsType => typeof(AlternativeTestSettings);
 
+    public override SettingsSectionMetadata SectionMetadata { get; set; } = new()
+    {
+        SchemaVersion = "20251022",
+        Service = typeof(AlternativeTestSettingsService).FullName,
+    };
+
     protected override IAlternativeTestSettings GetSettingsSnapshot() => new AlternativeTestSettings
     {
         Theme = this.Theme,

@@ -28,11 +28,11 @@ public class JsonSettingsSourceTests : SettingsTestBase
 
         _ = result.IsSuccess.Should().BeTrue();
         _ = result.Value.Sections.Should().BeEmpty();
-        _ = result.Value.Metadata.Should().BeNull();
+        _ = result.Value.SourceMetadata.Should().BeNull();
     }
 
     [TestMethod]
-    public async Task LoadAsync_ReturnsFailure_WhenMetadataMissing()
+    public async Task LoadAsync_ReturnsSuccess_WhenMetadataMissing()
     {
         var jsonWithoutMetadata = JsonSerializer.Serialize(new
         {
@@ -43,9 +43,9 @@ public class JsonSettingsSourceTests : SettingsTestBase
 
         var result = await source.LoadAsync(cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        _ = result.IsSuccess.Should().BeFalse();
-        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
-        _ = result.Error!.InnerException.Should().BeOfType<JsonException>();
+        _ = result.IsSuccess.Should().BeTrue();
+        _ = result.Value.SourceMetadata.Should().BeNull("no $meta key at root level");
+        _ = result.Value.Sections.Should().ContainKey("Sample");
     }
 
     [TestMethod]
@@ -81,13 +81,21 @@ public class JsonSettingsSourceTests : SettingsTestBase
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "structure.json");
         using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
-        var metadata = new SettingsMetadata { Version = "1.2.3", SchemaVersion = "20251020" };
+        var sourceMetadata = new SettingsSourceMetadata
+        {
+            WrittenAt = DateTimeOffset.UtcNow,
+            WrittenBy = "Test",
+        };
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            [nameof(TestSettings)] = new SettingsSectionMetadata { SchemaVersion = "20251020", Service = "TestService" },
+        };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             [nameof(TestSettings)] = new TestSettings { Name = "Json Source", Value = 7 },
         };
 
-        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var result = await source.SaveAsync(sections, sectionMetadata, sourceMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = result.IsSuccess.Should().BeTrue();
 
@@ -95,13 +103,18 @@ public class JsonSettingsSourceTests : SettingsTestBase
         using var document = JsonDocument.Parse(content);
         var root = document.RootElement;
 
-        _ = root.TryGetProperty("metadata", out var metadataElement).Should().BeTrue();
-        _ = metadataElement.TryGetProperty("Version", out var version).Should().BeTrue();
-        _ = version.GetString().Should().Be("1.2.3");
-        _ = metadataElement.TryGetProperty("SchemaVersion", out var schemaVersion).Should().BeTrue();
+        // Check source metadata
+        _ = root.TryGetProperty("$meta", out var sourceMetaElement).Should().BeTrue();
+        _ = sourceMetaElement.TryGetProperty("writtenBy", out var writtenBy).Should().BeTrue();
+        _ = writtenBy.GetString().Should().Be("Test");
+
+        // Check section structure
+        _ = root.TryGetProperty(nameof(TestSettings), out var sectionElement).Should().BeTrue();
+        _ = sectionElement.TryGetProperty("$meta", out var sectionMetaElement).Should().BeTrue();
+        _ = sectionMetaElement.TryGetProperty("schemaVersion", out var schemaVersion).Should().BeTrue();
         _ = schemaVersion.GetString().Should().Be("20251020");
 
-        _ = root.TryGetProperty(nameof(TestSettings), out var sectionElement).Should().BeTrue();
+        // Check section data
         _ = sectionElement.TryGetProperty("name", out var name).Should().BeTrue();
         _ = name.GetString().Should().Be("Json Source");
     }
@@ -113,10 +126,14 @@ public class JsonSettingsSourceTests : SettingsTestBase
         var filePath = this.FileSystem.Path.Combine(directory, "settings.json");
         using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sourceMetadata = new SettingsSourceMetadata { WrittenAt = DateTimeOffset.UtcNow, WrittenBy = "Test" };
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            ["Section"] = new SettingsSectionMetadata { SchemaVersion = "20251020", Service = "TestService" },
+        };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "Created", Value = 1 } };
 
-        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var result = await source.SaveAsync(sections, sectionMetadata, sourceMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = result.IsSuccess.Should().BeTrue();
         _ = this.FileSystem.Directory.Exists(directory).Should().BeTrue();
@@ -134,13 +151,17 @@ public class JsonSettingsSourceTests : SettingsTestBase
         var existingPath = this.CreateMultiSectionSettingsFile("merge.json", initialSections);
         using var source = new JsonSettingsSource("test", existingPath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
-        var metadata = new SettingsMetadata { Version = "2.0", SchemaVersion = "20251020" };
+        var sourceMetadata = new SettingsSourceMetadata { WrittenAt = DateTimeOffset.UtcNow, WrittenBy = "Test" };
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            ["Section3"] = new SettingsSectionMetadata { SchemaVersion = "20251020", Service = "TestService" },
+        };
         var update = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["Section3"] = new TestSettings { Name = "Third", Value = 3 },
         };
 
-        var result = await source.SaveAsync(update, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var result = await source.SaveAsync(update, sectionMetadata, sourceMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = result.IsSuccess.Should().BeTrue();
 
@@ -155,19 +176,22 @@ public class JsonSettingsSourceTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task SaveAsync_ReturnsFailure_WhenExistingContentInvalid()
+    public async Task SaveAsync_Succeeds_WhenExistingContentWithoutMetadata()
     {
         var invalidExistingJson = JsonSerializer.Serialize(new { Section = new { Value = 5 } });
-        var filePath = this.CreateTempSettingsFile("invalid-existing.json", invalidExistingJson);
+        var filePath = this.CreateTempSettingsFile("existing-without-metadata.json", invalidExistingJson);
         using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sourceMetadata = new SettingsSourceMetadata { WrittenAt = DateTimeOffset.UtcNow, WrittenBy = "Test" };
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            ["Section"] = new SettingsSectionMetadata { SchemaVersion = "20251020", Service = "TestService" },
+        };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal) { ["Section"] = new TestSettings { Name = "New", Value = 10 } };
 
-        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var result = await source.SaveAsync(sections, sectionMetadata, sourceMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        _ = result.IsSuccess.Should().BeFalse();
-        _ = result.Error.Should().BeOfType<SettingsPersistenceException>();
+        _ = result.IsSuccess.Should().BeTrue("existing content without $meta can be merged");
     }
 
     [TestMethod]
@@ -176,13 +200,17 @@ public class JsonSettingsSourceTests : SettingsTestBase
         var filePath = this.FileSystem.Path.Combine(this.FileSystem.Path.GetTempPath(), "serialize-fail.json");
         using var source = new JsonSettingsSource("test", filePath, this.FileSystem, watch: false, crypto: null, this.LoggerFactory);
 
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251020" };
+        var sourceMetadata = new SettingsSourceMetadata { WrittenAt = DateTimeOffset.UtcNow, WrittenBy = "Test" };
+        var sectionMetadata = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal)
+        {
+            ["ThrowingSection"] = new SettingsSectionMetadata { SchemaVersion = "20251020", Service = "TestService" },
+        };
         var sections = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["ThrowingSection"] = new ThrowingSection { Value = 123 },
         };
 
-        var result = await source.SaveAsync(sections, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var result = await source.SaveAsync(sections, sectionMetadata, sourceMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = result.IsSuccess.Should().BeFalse();
         _ = result.Error.Should().BeOfType<SettingsPersistenceException>();

@@ -14,27 +14,27 @@ public sealed record SettingsWritePayload
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsWritePayload"/> class.
     /// </summary>
-    /// <param name="metadata">The metadata persisted alongside the settings.</param>
+    /// <param name="sourceMetadata">The source-level metadata persisted alongside the settings.</param>
     /// <param name="sectionsWritten">The number of sections written during the operation.</param>
     /// <param name="sourcePath">The absolute path of the underlying source.</param>
-    public SettingsWritePayload(SettingsMetadata metadata, int sectionsWritten, string sourcePath)
+    public SettingsWritePayload(SettingsSourceMetadata sourceMetadata, int sectionsWritten, string sourcePath)
     {
-        ArgumentNullException.ThrowIfNull(metadata);
+        ArgumentNullException.ThrowIfNull(sourceMetadata);
 
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
             throw new ArgumentException("Source path cannot be null or whitespace.", nameof(sourcePath));
         }
 
-        this.Metadata = metadata;
+        this.SourceMetadata = sourceMetadata;
         this.SectionsWritten = sectionsWritten;
         this.SourcePath = sourcePath;
     }
 
     /// <summary>
-    /// Gets the metadata persisted alongside the settings.
+    /// Gets the source-level metadata persisted alongside the settings.
     /// </summary>
-    public SettingsMetadata Metadata { get; }
+    public SettingsSourceMetadata SourceMetadata { get; }
 
     /// <summary>
     /// Gets the number of sections written during the operation.

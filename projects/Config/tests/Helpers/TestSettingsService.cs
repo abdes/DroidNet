@@ -49,6 +49,12 @@ public sealed class TestSettingsService(SettingsManager manager, ILoggerFactory?
 
     public override Type SettingsType => typeof(TestSettings);
 
+    public override SettingsSectionMetadata SectionMetadata { get; set; } = new()
+    {
+        SchemaVersion = "20251022",
+        Service = typeof(TestSettingsService).FullName,
+    };
+
     protected override ITestSettings GetSettingsSnapshot() => new TestSettings
     {
         Name = this.Name,

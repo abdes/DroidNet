@@ -16,14 +16,17 @@ public sealed record SettingsReadPayload
     /// Initializes a new instance of the <see cref="SettingsReadPayload"/> class.
     /// </summary>
     /// <param name="sections">The settings sections that were read.</param>
-    /// <param name="metadata">The metadata associated with the settings, if any.</param>
+    /// <param name="sectionMetadata">The metadata for each section, keyed by section name.</param>
+    /// <param name="sourceMetadata">The source-level metadata, if any.</param>
     /// <param name="sourcePath">The absolute path of the underlying source.</param>
     public SettingsReadPayload(
         IReadOnlyDictionary<string, object> sections,
-        SettingsMetadata? metadata,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+        SettingsSourceMetadata? sourceMetadata,
         string sourcePath)
     {
         ArgumentNullException.ThrowIfNull(sections);
+        ArgumentNullException.ThrowIfNull(sectionMetadata);
 
         if (string.IsNullOrWhiteSpace(sourcePath))
         {
@@ -31,7 +34,8 @@ public sealed record SettingsReadPayload
         }
 
         this.Sections = sections;
-        this.Metadata = metadata;
+        this.SectionMetadata = sectionMetadata;
+        this.SourceMetadata = sourceMetadata;
         this.SourcePath = sourcePath;
     }
 
@@ -41,9 +45,18 @@ public sealed record SettingsReadPayload
     public IReadOnlyDictionary<string, object> Sections { get; }
 
     /// <summary>
-    /// Gets the metadata associated with the settings, if any.
+    /// Gets the metadata for each section, keyed by section name.
     /// </summary>
-    public SettingsMetadata? Metadata { get; }
+    public IReadOnlyDictionary<string, SettingsSectionMetadata> SectionMetadata { get; }
+
+    /// <summary>
+    /// Gets the source-level metadata, if any.
+    /// </summary>
+    /// <remarks>
+    /// This will be <see langword="null"/> if the source has never been written to or if it doesn't
+    /// contain source metadata (e.g., legacy format or newly created source).
+    /// </remarks>
+    public SettingsSourceMetadata? SourceMetadata { get; }
 
     /// <summary>
     /// Gets the absolute path of the underlying source.

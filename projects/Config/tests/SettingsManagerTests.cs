@@ -132,10 +132,10 @@ public class SettingsManagerTests : SettingsTestBase
         await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var settings = new TestSettings { Name = "SaveTest", Value = 999 };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
+        var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
 
         // Act - Save should only go to source2 (last-loaded-wins for TestSettings)
-        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Only source2 should be written to (it was the winning source)
         _ = source1.WriteCallCount.Should().Be(0, "source1 did not contribute the TestSettings section");
@@ -156,10 +156,10 @@ public class SettingsManagerTests : SettingsTestBase
         await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         var settings = new TestSettings();
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
+        var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
 
         // Act
-        var act = async () => await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var act = async () => await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Should throw because the winning source (source1) fails
         _ = await act.Should().ThrowAsync<SettingsPersistenceException>().ConfigureAwait(true);
@@ -327,7 +327,7 @@ public class SettingsManagerTests : SettingsTestBase
         var settings = new TestSettings();
 
         // Act
-        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, metadata: new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" }, this.TestContext.CancellationToken).ConfigureAwait(true);
+        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" }, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
         _ = this.source.WriteCallCount.Should().Be(1);
@@ -465,8 +465,8 @@ public class SettingsManagerTests : SettingsTestBase
 
         // Act - Save new section that hasn't been loaded from any source
         var settings = new TestSettings { Name = "NewSection", Value = 777 };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        await this.SettingsManager.SaveSettingsAsync("NewSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
+        await this.SettingsManager.SaveSettingsAsync("NewSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Should save to first source (test-source)
         _ = this.source.WriteCallCount.Should().Be(1, "first source (test-source) should receive the write");
@@ -525,8 +525,8 @@ public class SettingsManagerTests : SettingsTestBase
 
         // Act - Save modified settings
         var settings = new TestSettings { Name = "Modified", Value = 999 };
-        var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = "20251019" };
-        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, metadata, this.TestContext.CancellationToken).ConfigureAwait(true);
+        var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
+        await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Should save only to source3 (last-loaded-wins)
         _ = source1.WriteCallCount.Should().Be(0);

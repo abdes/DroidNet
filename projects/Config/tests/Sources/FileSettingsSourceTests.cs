@@ -878,7 +878,11 @@ public class FileSettingsSourceTests : IDisposable
         public override Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("LoadAsync is not used in these unit tests. Call ReadAllTextAsync instead.");
 
-        public override Task<Result<SettingsWritePayload>> SaveAsync(IReadOnlyDictionary<string, object> sectionsData, SettingsMetadata metadata, CancellationToken cancellationToken = default)
+        public override Task<Result<SettingsWritePayload>> SaveAsync(
+            IReadOnlyDictionary<string, object> sectionsData,
+            IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+            SettingsSourceMetadata sourceMetadata,
+            CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("SaveAsync is not used in these unit tests. Call WriteAllTextAsync instead.");
 
         public override Task<Result<SettingsValidationPayload>> ValidateAsync(IReadOnlyDictionary<string, object> sectionsData, CancellationToken cancellationToken = default)

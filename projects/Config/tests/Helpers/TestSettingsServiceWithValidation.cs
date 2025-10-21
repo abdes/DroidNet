@@ -42,6 +42,12 @@ public sealed class TestSettingsServiceWithValidation(SettingsManager manager, I
 
     public override Type SettingsType => typeof(TestSettingsWithValidation);
 
+    public override SettingsSectionMetadata SectionMetadata { get; set; } = new()
+    {
+        SchemaVersion = "20251022",
+        Service = typeof(TestSettingsServiceWithValidation).FullName,
+    };
+
     protected override ITestSettingsWithValidation GetSettingsSnapshot() => new TestSettingsWithValidation
     {
         RequiredField = this.RequiredField,

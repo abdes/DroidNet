@@ -22,6 +22,15 @@ public interface ISettingsService : INotifyPropertyChanged, IDisposable
     public Type SettingsType { get; }
 
     /// <summary>
+    /// Gets or sets the metadata for this settings section.
+    /// </summary>
+    /// <remarks>
+    /// This metadata is fully owned and managed by the service implementation.
+    /// It contains service-specific information like schema version and service identifier.
+    /// </remarks>
+    public SettingsSectionMetadata SectionMetadata { get; set; }
+
+    /// <summary>
     /// Applies properties from cached data (POCO or JsonElement) to this service's settings.
     /// Used by the SettingsManager to update the service when sources change.
     /// </summary>
