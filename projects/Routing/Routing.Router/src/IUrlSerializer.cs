@@ -32,7 +32,7 @@ public interface IUrlSerializer
     /// var urlTree = serializer.Parse("/inbox/33(popup:compose)?open=true");
     /// ]]></code>
     /// </example>
-    IUrlTree Parse(string url);
+    public IUrlTree Parse(string url);
 
     /// <summary>
     /// Converts the provided URL <paramref name="tree"/> into a string.
@@ -51,5 +51,5 @@ public interface IUrlSerializer
     /// var urlString = serializer.Serialize(urlTree);
     /// ]]></code>
     /// </example>
-    string Serialize(IUrlTree tree);
+    public string Serialize(IUrlTree tree);
 }

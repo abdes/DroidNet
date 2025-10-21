@@ -63,7 +63,7 @@ public interface IContextProvider
     /// A navigation context for the specified target. May return the current context
     /// if appropriate for the target.
     /// </returns>
-    INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null);
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null);
 
     /// <summary>
     /// Activates the specified navigation context.
@@ -73,7 +73,7 @@ public interface IContextProvider
     /// Called by the router after all routes are activated to make the navigation target
     /// active in the application.
     /// </remarks>
-    void ActivateContext(INavigationContext context);
+    public void ActivateContext(INavigationContext context);
 }
 
 /// <summary>
@@ -92,11 +92,11 @@ public interface IContextProvider<T> : IContextProvider
     /// A navigation context of type <typeparamref name="T"/> for the specified target. May return
     /// the current context if appropriate for the target.
     /// </returns>
-    T ContextForTarget(Target target, T? currentContext = null);
+    public T ContextForTarget(Target target, T? currentContext = null);
 
     /// <summary>
     /// Activates the specified navigation context.
     /// </summary>
     /// <param name="context">The navigation context to activate.</param>
-    void ActivateContext(T context);
+    public void ActivateContext(T context);
 }

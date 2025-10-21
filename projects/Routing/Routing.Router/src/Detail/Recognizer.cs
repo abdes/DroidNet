@@ -102,7 +102,7 @@ internal sealed partial class Recognizer(
         /// <summary>
         /// Gets the state contributed by this match result, if any.
         /// </summary>
-        ActiveRoute? ContributedState { get; }
+        public ActiveRoute? ContributedState { get; }
     }
 
     /// <summary>
@@ -275,7 +275,7 @@ internal sealed partial class Recognizer(
 
         return new Match
         {
-            Consumed = new List<IUrlSegment>(result.Consumed),
+            Consumed = [.. result.Consumed],
             ContributedState = newState,
         };
 

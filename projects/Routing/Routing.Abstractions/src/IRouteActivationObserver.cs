@@ -23,7 +23,7 @@ public interface IRouteActivationObserver
     /// <exception cref="ArgumentException">
     /// Thrown if <paramref name="route" /> is not of a valid or expected type.
     /// </exception>
-    bool OnActivating(IActiveRoute route, INavigationContext context);
+    public bool OnActivating(IActiveRoute route, INavigationContext context);
 
     /// <summary>
     /// Invoked after a route has been successfully activated.
@@ -32,5 +32,5 @@ public interface IRouteActivationObserver
     /// <param name="route">The route that has been activated.</param>
     /// <param name="context">The navigation context associated with the activation.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    Task OnActivatedAsync(IActiveRoute route, INavigationContext context);
+    public Task OnActivatedAsync(IActiveRoute route, INavigationContext context);
 }

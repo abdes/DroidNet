@@ -37,7 +37,7 @@ public interface IUrlSegment
     /// assumptions about their format or meaning.
     /// </para>
     /// </remarks>
-    IParameters Parameters { get; }
+    public IParameters Parameters { get; }
 
     /// <summary>
     /// Gets the path component of this URL segment.
@@ -52,5 +52,5 @@ public interface IUrlSegment
     /// during URL resolution and do not persist in the final routing structure.
     /// </para>
     /// </remarks>
-    string Path { get; }
+    public string Path { get; }
 }

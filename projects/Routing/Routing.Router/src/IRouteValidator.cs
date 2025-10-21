@@ -17,5 +17,5 @@ public interface IRouteValidator
     /// <exception cref="RoutesConfigurationException">
     /// Thrown when validation of the <paramref name="route" /> fails.
     /// </exception>
-    void ValidateRoute(Routes routes, Route route);
+    public void ValidateRoute(Routes routes, Route route);
 }

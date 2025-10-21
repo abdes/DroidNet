@@ -16,5 +16,5 @@ public interface IUrlParser
     /// <returns>A <see cref="IUrlTree" /> representing the hierarchy of route segments and segment groups.
     /// </returns>
     /// <exception cref="UriFormatException">The URL string is malformed.</exception>
-    IUrlTree Parse(string url);
+    public IUrlTree Parse(string url);
 }

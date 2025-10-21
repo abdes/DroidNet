@@ -61,5 +61,5 @@ public interface IRoutingAware
     /// <param name="route">The active route associated with this view model.</param>
     /// <param name="navigationContext">The navigation context.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext);
+    public Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext);
 }

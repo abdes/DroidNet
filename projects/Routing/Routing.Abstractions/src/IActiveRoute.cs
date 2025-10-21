@@ -39,7 +39,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// For example if the route is `/users/:id`, then the list will contain two segments `users`
     /// and `:id`.
     /// </value>
-    IReadOnlyList<IUrlSegment> Segments { get; }
+    public IReadOnlyList<IUrlSegment> Segments { get; }
 
     /// <summary>
     /// Gets the parameters for this route.
@@ -55,7 +55,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// combines those.
     /// </para>
     /// </remarks>
-    IParameters Params { get; }
+    public IParameters Params { get; }
 
     /// <summary>
     /// Gets the query parameters shared by all routes in this navigation.
@@ -64,7 +64,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// Query parameters from the URL (after '?'), shared across all routes in the current
     /// navigation state.
     /// </value>
-    IParameters QueryParams { get; }
+    public IParameters QueryParams { get; }
 
     /// <summary>
     /// Gets the outlet where this route's content should be displayed.
@@ -74,7 +74,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// activation. Primary routes use the primary outlet, while auxiliary routes specify their
     /// target outlet.
     /// </value>
-    OutletName Outlet { get; }
+    public OutletName Outlet { get; }
 
     /// <summary>
     /// Gets the view model instance after route activation.
@@ -86,7 +86,7 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// <value>
     /// The activated view model instance, or null if the route has not been activated.
     /// </value>
-    object? ViewModel { get; }
+    public object? ViewModel { get; }
 
     /// <summary>
     /// Gets the route configuration that defines this route's behavior.
@@ -95,5 +95,5 @@ public interface IActiveRoute : IActiveRouteTreeNode
     /// The route configuration containing the path, view model type, and other settings used to
     /// match and activate this route.
     /// </value>
-    IRoute Config { get; }
+    public IRoute Config { get; }
 }

@@ -68,14 +68,14 @@ public interface IRoute
     /// a prefix of any URL.
     /// </para>
     /// </remarks>
-    PathMatch MatchMethod { get; }
+    public PathMatch MatchMethod { get; }
 
     /// <summary>Gets the path of the current route.</summary>
     /// <remarks>
     /// The path of a route is a URL path string, but it cannot start with '/' and its value should
     /// be unique across all sibling routes.
     /// </remarks>
-    string? Path { get; }
+    public string? Path { get; }
 
     /// <summary>
     /// Gets the <see cref="PathMatcher" /> to be used to match this route's <see cref="Path" /> to segments in the URL.
@@ -86,7 +86,7 @@ public interface IRoute
     /// matching rules are completely bypassed, the <see cref="Path" /> and <see cref="MatchMethod" />
     /// no longer have a meaning for the route matching unless the custom matcher uses them.
     /// </remarks>
-    PathMatcher Matcher { get; }
+    public PathMatcher Matcher { get; }
 
     /// <summary>
     /// Gets the type of the view model for this route.
@@ -94,17 +94,17 @@ public interface IRoute
     /// <remarks>
     /// Can be null if child routes specify a <see cref="ViewModelType" />.
     /// </remarks>
-    Type? ViewModelType { get; }
+    public Type? ViewModelType { get; }
 
     /// <summary>
     /// Gets the outlet for which this route is specified.
     /// </summary>
-    OutletName Outlet { get; }
+    public OutletName Outlet { get; }
 
     /// <summary>
     /// Gets the collection of child routes, if any.
     /// </summary>
-    IRoutes Children { get; }
+    public IRoutes Children { get; }
 }
 
 /*

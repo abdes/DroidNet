@@ -32,7 +32,7 @@ public interface IUrlTree
     /// Through this root, the entire URL structure can be traversed, enabling sophisticated route
     /// matching and navigation.
     /// </remarks>
-    IUrlSegmentGroup Root { get; }
+    public IUrlSegmentGroup Root { get; }
 
     /// <summary>
     /// Gets the query parameters from the URL.
@@ -43,7 +43,7 @@ public interface IUrlTree
     /// navigation context. The router makes these parameters available to all activated routes,
     /// regardless of their position in the hierarchy.
     /// </remarks>
-    IParameters QueryParams { get; }
+    public IParameters QueryParams { get; }
 
     /// <summary>
     /// Gets a value indicating whether this tree represents a relative URL.
@@ -54,5 +54,5 @@ public interface IUrlTree
     /// against the current navigation state before processing. When <see langword="true"/>, the
     /// router combines this tree with the current state to produce an absolute navigation target.
     /// </remarks>
-    bool IsRelative { get; }
+    public bool IsRelative { get; }
 }
