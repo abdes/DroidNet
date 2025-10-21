@@ -57,13 +57,8 @@ public class PathFinder : IPathFinder
         this.ProgramData = AppContext.BaseDirectory;
 
         var localAppDataSpecialFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var localAppData = fs.Path.GetFullPath(
+        this.LocalAppData = fs.Path.GetFullPath(
             Path.Combine(localAppDataSpecialFolder, pathFinderConfig.CompanyName, pathFinderConfig.ApplicationName));
-        this.LocalAppData = this.Mode switch
-        {
-            DevelopmentMode => fs.Path.GetFullPath(fs.Path.Combine(localAppData, "Development")),
-            _ => localAppData,
-        };
 
         this.LocalAppState = Path.Combine(this.LocalAppData, ApplicationStateFolderName);
     }
