@@ -61,33 +61,4 @@ public sealed class SettingsMetadata
     /// </remarks>
     [JsonPropertyName("WrittenBy")]
     public string? WrittenBy { get; init; }
-
-    /// <summary>
-    ///     Creates a new instance with updated version information.
-    /// </summary>
-    /// <param name="newVersion">The new version to set.</param>
-    /// <param name="writtenBy">Optional tool/component that wrote the settings.</param>
-    /// <returns>A new SettingsMetadata instance with updated version and timestamp.</returns>
-    public SettingsMetadata WithVersion(string newVersion, string? writtenBy = null) => new()
-    {
-        Version = newVersion,
-        SchemaVersion = this.SchemaVersion,
-        Service = this.Service,
-        WrittenAt = DateTimeOffset.UtcNow,
-        WrittenBy = writtenBy ?? this.WrittenBy,
-    };
-
-    /// <summary>
-    ///     Creates a new instance with updated timestamp and optional writer information.
-    /// </summary>
-    /// <param name="writtenBy">Optional tool/component that wrote the settings.</param>
-    /// <returns>A new SettingsMetadata instance with updated timestamp.</returns>
-    public SettingsMetadata WithUpdate(string? writtenBy = null) => new()
-    {
-        Version = this.Version,
-        SchemaVersion = this.SchemaVersion,
-        Service = this.Service,
-        WrittenAt = DateTimeOffset.UtcNow,
-        WrittenBy = writtenBy ?? this.WrittenBy,
-    };
 }
