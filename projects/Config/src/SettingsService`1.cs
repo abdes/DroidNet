@@ -324,6 +324,14 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
 
         field = value;
         this.OnPropertyChanged(propertyName);
+
+        // Mark dirty only when the property name refers to a property of TSettings
+        if (!string.IsNullOrEmpty(propertyName) && typeof(TSettings).GetProperty(propertyName) is not null)
+        {
+            // Use the public IsDirty property so PropertyChanged is raised for it as well
+            this.IsDirty = true;
+        }
+
         return true;
     }
 
