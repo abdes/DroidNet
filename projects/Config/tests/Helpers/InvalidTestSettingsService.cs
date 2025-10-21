@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Config.Tests.Helpers;
@@ -11,6 +12,7 @@ namespace DroidNet.Config.Tests.Helpers;
 /// This service implements both the abstract SettingsService base class and the IInvalidTestSettings interface.
 /// Used for testing validation failure scenarios.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class InvalidTestSettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
     : SettingsService<IInvalidTestSettings>(manager, loggerFactory), IInvalidTestSettings
 {

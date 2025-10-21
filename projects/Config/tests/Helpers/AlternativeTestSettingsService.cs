@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Config.Tests.Helpers;
@@ -10,6 +11,7 @@ namespace DroidNet.Config.Tests.Helpers;
 /// Concrete implementation of SettingsService for IAlternativeTestSettings interface.
 /// This service implements both the abstract SettingsService base class and the IAlternativeTestSettings interface.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed class AlternativeTestSettingsService(
     SettingsManager manager,
     ILoggerFactory? loggerFactory = null)
