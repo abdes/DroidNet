@@ -93,12 +93,12 @@ public interface IParameters : IEnumerable<Parameter>
     /// <summary>
     /// Gets the number of distinct parameter names in the collection.
     /// </summary>
-    int Count { get; }
+    public int Count { get; }
 
     /// <summary>
     /// Gets a value indicating whether the collection contains any parameters.
     /// </summary>
-    bool IsEmpty { get; }
+    public bool IsEmpty { get; }
 
     /// <summary>
     /// Gets the value(s) associated with the specified parameter name as a single string.
@@ -113,7 +113,7 @@ public interface IParameters : IEnumerable<Parameter>
     /// </list>
     /// </param>
     /// <returns><see langword="true"/> if the parameter exists; otherwise, <see langword="false"/>.</returns>
-    bool TryGetValue(string name, out string? value);
+    public bool TryGetValue(string name, out string? value);
 
     /// <summary>
     /// Gets all values associated with the specified parameter name as separate strings.
@@ -126,12 +126,12 @@ public interface IParameters : IEnumerable<Parameter>
     ///   <item>array of individual values, split from either comma-separated lists or multiple parameter occurrences</item>
     /// </list>
     /// </returns>
-    string?[]? GetValues(string name);
+    public string?[]? GetValues(string name);
 
     /// <summary>
     /// Determines whether a parameter with the specified name exists.
     /// </summary>
     /// <param name="parameterName">The parameter name to check (case-insensitive).</param>
     /// <returns><see langword="true"/> if the parameter exists; otherwise, <see langword="false"/>.</returns>
-    bool Contains(string parameterName);
+    public bool Contains(string parameterName);
 }

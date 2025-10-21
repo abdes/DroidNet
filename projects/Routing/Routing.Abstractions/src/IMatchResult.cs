@@ -23,7 +23,7 @@ public interface IMatchResult
     /// <see langword="true"/> if the route's path matched the URL segments;
     /// otherwise, <see langword="false"/>.
     /// </value>
-    bool IsMatch { get; }
+    public bool IsMatch { get; }
 
     /// <summary>
     /// Gets the list of URL segments that were matched by the route.
@@ -32,7 +32,7 @@ public interface IMatchResult
     /// The segments from the URL tree that were successfully matched and consumed during route
     /// recognition.
     /// </value>
-    IReadOnlyList<IUrlSegment> Consumed { get; }
+    public IReadOnlyList<IUrlSegment> Consumed { get; }
 
     /// <summary>
     /// Gets the positional parameters extracted during route matching.
@@ -46,5 +46,5 @@ public interface IMatchResult
     /// A dictionary mapping parameter names to their matched URL segments. For example, matching
     /// '/users/123' against '/users/:id' produces a parameter entry of "id" → segment "123".
     /// </value>
-    IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; }
+    public IReadOnlyDictionary<string, IUrlSegment> PositionalParams { get; }
 }

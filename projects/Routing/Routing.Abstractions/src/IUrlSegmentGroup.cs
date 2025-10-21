@@ -34,7 +34,7 @@ public interface IUrlSegmentGroup
     /// in a URL path "users/123", a segment group would contain two segments. The segments maintain
     /// their original order, which is crucial for proper route matching and parameter extraction.
     /// </remarks>
-    ReadOnlyCollection<IUrlSegment> Segments { get; }
+    public ReadOnlyCollection<IUrlSegment> Segments { get; }
 
     /// <summary>
     /// Gets the child segment groups, each targeting a specific named outlet.
@@ -45,7 +45,7 @@ public interface IUrlSegmentGroup
     /// application interface. The router uses this structure to match routes and activate view
     /// models in their appropriate outlets.
     /// </remarks>
-    IReadOnlyDictionary<OutletName, IUrlSegmentGroup> Children { get; }
+    public IReadOnlyDictionary<OutletName, IUrlSegmentGroup> Children { get; }
 
     /// <summary>
     /// Gets the child segment groups in a specialized order with the primary outlet's group first.
@@ -55,7 +55,7 @@ public interface IUrlSegmentGroup
     /// to auxiliary paths. The ordering is particularly important during route matching, where primary
     /// routes should be considered before auxiliary ones to ensure consistent navigation behavior.
     /// </remarks>
-    ReadOnlyCollection<KeyValuePair<OutletName, IUrlSegmentGroup>> SortedChildren { get; }
+    public ReadOnlyCollection<KeyValuePair<OutletName, IUrlSegmentGroup>> SortedChildren { get; }
 
     /// <summary>
     /// Gets the parent segment group in the URL hierarchy.
@@ -65,5 +65,5 @@ public interface IUrlSegmentGroup
     /// structure. This bidirectional relationship enables both downward and upward traversal of the
     /// URL hierarchy, which is essential for resolving relative paths and maintaining navigation context.
     /// </remarks>
-    IUrlSegmentGroup? Parent { get; }
+    public IUrlSegmentGroup? Parent { get; }
 }

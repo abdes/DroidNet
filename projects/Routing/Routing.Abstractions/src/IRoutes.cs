@@ -50,5 +50,5 @@ public interface IRoutes : IList<IRoute>
     /// URL. By prioritizing routes that match the target outlet, the router can efficiently match
     /// URL segments against the most relevant routes first.
     /// </remarks>
-    IRoutes SortedByMatchingOutlet(OutletName outlet);
+    public IRoutes SortedByMatchingOutlet(OutletName outlet);
 }

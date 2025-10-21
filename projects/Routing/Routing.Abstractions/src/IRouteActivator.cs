@@ -77,7 +77,7 @@ public interface IRouteActivator
     /// proper state tracking. This design allows for flexible, platform-specific view loading while
     /// maintaining a consistent activation model across different implementations.
     /// </remarks>
-    Task<bool> ActivateRouteAsync(IActiveRoute route, INavigationContext context);
+    public Task<bool> ActivateRouteAsync(IActiveRoute route, INavigationContext context);
 
     /// <summary>
     /// Recursively activates a tree of routes, starting from the specified root.
@@ -97,5 +97,5 @@ public interface IRouteActivator
     /// containers needed by their children's views. The method tracks activation success across the
     /// entire tree, allowing the router to handle partial activation failures appropriately.
     /// </remarks>
-    Task<bool> ActivateRoutesRecursiveAsync(IActiveRoute root, INavigationContext context);
+    public Task<bool> ActivateRoutesRecursiveAsync(IActiveRoute root, INavigationContext context);
 }

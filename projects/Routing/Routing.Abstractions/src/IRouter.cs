@@ -69,12 +69,12 @@ public interface IRouter
     /// Subscribers can use these events to coordinate UI updates, handle navigation failures,
     /// or maintain navigation history.
     /// </remarks>
-    IObservable<RouterEvent> Events { get; }
+    public IObservable<RouterEvent> Events { get; }
 
     /// <summary>
     /// Gets the route configuration that defines the application's navigation structure.
     /// </summary>
-    IRoutes Config { get; }
+    public IRoutes Config { get; }
 
     /// <summary>
     /// Initiates a full navigation to the specified URL.
@@ -89,7 +89,7 @@ public interface IRouter
     /// any point, the router emits appropriate error events while maintaining the application in a
     /// consistent state.
     /// </remarks>
-    Task NavigateAsync(string url, FullNavigation? options = null);
+    public Task NavigateAsync(string url, FullNavigation? options = null);
 
     /// <summary>
     /// Performs a partial navigation that surgically updates the current application state.
@@ -104,7 +104,7 @@ public interface IRouter
     /// a full navigation cycle. The navigation context from the options determines the scope of the
     /// update.
     /// </remarks>
-    Task NavigateAsync(string url, PartialNavigation options);
+    public Task NavigateAsync(string url, PartialNavigation options);
 
     /// <summary>
     /// Request a partial navigation using the specified changes, which need to
@@ -161,5 +161,5 @@ public interface IRouter
     /// router.Navigate(changes, options);
     /// ]]></code>
     /// </example>
-    Task NavigateAsync(IList<RouteChangeItem> changes, PartialNavigation options);
+    public Task NavigateAsync(IList<RouteChangeItem> changes, PartialNavigation options);
 }

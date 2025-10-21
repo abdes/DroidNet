@@ -22,7 +22,7 @@ public interface IActiveRouteTreeNode
     /// The root <see cref="IActiveRoute"/> from which all other routes in the current router state
     /// descend.
     /// </value>
-    IActiveRoute Root { get; }
+    public IActiveRoute Root { get; }
 
     /// <summary>
     /// Gets the parent route of this route in the router state tree.
@@ -35,7 +35,7 @@ public interface IActiveRouteTreeNode
     /// The parent <see cref="IActiveRoute"/> if this route has a parent; otherwise, null for the root
     /// route.
     /// </value>
-    IActiveRoute? Parent { get; }
+    public IActiveRoute? Parent { get; }
 
     /// <summary>
     /// Gets all child routes of this route in the router state tree.
@@ -44,7 +44,7 @@ public interface IActiveRouteTreeNode
     /// A read-only collection of <see cref="IActiveRoute"/>s that are direct descendants of this
     /// route in the hierarchy.
     /// </value>
-    IReadOnlyCollection<IActiveRoute> Children { get; }
+    public IReadOnlyCollection<IActiveRoute> Children { get; }
 
     /// <summary>
     /// Gets all sibling routes of this route in the router state tree.
@@ -53,7 +53,7 @@ public interface IActiveRouteTreeNode
     /// A read-only collection of <see cref="IActiveRoute"/>s that share the same parent as this
     /// route.
     /// </value>
-    IReadOnlyCollection<IActiveRoute> Siblings { get; }
+    public IReadOnlyCollection<IActiveRoute> Siblings { get; }
 
     /// <summary>
     /// Gets a value indicating whether this route is the root of the router state tree.
@@ -62,7 +62,7 @@ public interface IActiveRouteTreeNode
     /// <see langword="true"/> if this route has no parent (is the root);
     /// otherwise, <see langword="false"/>.
     /// </value>
-    bool IsRoot => this.Parent is null;
+    public bool IsRoot => this.Parent is null;
 
     /// <summary>
     /// Adds a route as a child of this route.
@@ -71,7 +71,7 @@ public interface IActiveRouteTreeNode
     /// The order of children in the collection is not guaranteed and should not be relied upon.
     /// </remarks>
     /// <param name="route">The route to add as a child of this route.</param>
-    void AddChild(IActiveRoute route);
+    public void AddChild(IActiveRoute route);
 
     /// <summary>
     /// Removes a child route from this route's children.
@@ -81,7 +81,7 @@ public interface IActiveRouteTreeNode
     /// <see langword="true"/> if the route was found and removed from the children collection;
     /// <see langword="false"/> if the route was not found.
     /// </returns>
-    bool RemoveChild(IActiveRoute route);
+    public bool RemoveChild(IActiveRoute route);
 
     /// <summary>
     /// Adds a route as a sibling of this route.
@@ -93,7 +93,7 @@ public interface IActiveRouteTreeNode
     /// <exception cref="InvalidOperationException">
     /// Thrown when attempting to add a sibling to a root route that has no parent.
     /// </exception>
-    void AddSibling(IActiveRoute route);
+    public void AddSibling(IActiveRoute route);
 
     /// <summary>
     /// Removes a sibling route from this route's parent's children.
@@ -103,7 +103,7 @@ public interface IActiveRouteTreeNode
     /// <see langword="true"/> if the route was found and removed from the parent's children;
     /// <see langword="false"/> if this route has no parent or if the specified route was not found.
     /// </returns>
-    bool RemoveSibling(IActiveRoute route);
+    public bool RemoveSibling(IActiveRoute route);
 
     /// <summary>
     /// Moves this route from its current parent to a new parent in the router state tree.
@@ -116,10 +116,10 @@ public interface IActiveRouteTreeNode
     /// <exception cref="InvalidOperationException">
     /// Thrown when attempting to move the root route which has no parent.
     /// </exception>
-    void MoveTo(IActiveRoute parent);
+    public void MoveTo(IActiveRoute parent);
 
     /// <summary>
     /// Removes all child routes from this route.
     /// </summary>
-    void ClearChildren();
+    public void ClearChildren();
 }
