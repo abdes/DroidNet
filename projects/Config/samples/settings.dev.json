@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "SchemaVersion": "20251021",
+    "Version": "1.0",
+    "Service": null,
+    "WrittenAt": "2025-10-21T13:54:43.1932714+00:00",
+    "WrittenBy": null
+  },
+  "AppSettings": {
+    "applicationName": "DroidNet Config Sample",
+    "loggingLevel": "Warning",
+    "enableExperimental": false
+  }
+}
