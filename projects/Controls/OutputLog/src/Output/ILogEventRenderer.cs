@@ -51,5 +51,5 @@ public interface ILogEventRenderer
     /// - Ensure proper escaping of content.
     /// </para>
     /// </remarks>
-    void Render(LogEvent logEvent, Paragraph paragraph);
+    public void Render(LogEvent logEvent, Paragraph paragraph);
 }
