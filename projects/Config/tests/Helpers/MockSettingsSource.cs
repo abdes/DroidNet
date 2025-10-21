@@ -45,6 +45,11 @@ public class MockSettingsSource : ISettingsSource
 
     public void AddSection(string sectionName, object data) => this.sections[sectionName] = data;
 
+    public void RemoveSection(string sectionName) => _ = this.sections.Remove(sectionName);
+
+    public void TriggerSourceChanged(SourceChangeType changeType)
+        => this.SourceChanged?.Invoke(this, new SourceChangedEventArgs(this.Id, changeType));
+
     public Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
     {
         _ = cancellationToken; // unused

@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
 using FluentAssertions;
@@ -245,5 +247,58 @@ public class SettingsServiceTests : SettingsTestBase
 
         // Assert
         _ = propertyChanges.Should().Contain("IsDirty");
+    }
+
+    [TestMethod]
+    public async Task ApplyProperties_WithExternalSnapshot_ShouldClearDirtyState()
+    {
+        // Arrange
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 1, IsEnabled = true });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
+
+        var propertyChanges = new List<string>();
+        service.PropertyChanged += (_, e) => propertyChanges.Add(e.PropertyName ?? string.Empty);
+
+        service.Settings.Name = "UserChange";
+        service.Settings.Value = 10;
+        _ = service.IsDirty.Should().BeTrue();
+
+        propertyChanges.Clear();
+
+        // Act
+        service.ApplyProperties(new TestSettings
+        {
+            Name = "ManagerValue",
+            Value = 99,
+            IsEnabled = false,
+        });
+
+        // Assert
+        _ = service.IsDirty.Should().BeFalse();
+        _ = service.Settings.Name.Should().Be("ManagerValue");
+        _ = service.Settings.Value.Should().Be(99);
+        _ = propertyChanges.Where(p => string.Equals(p, "IsDirty", StringComparison.Ordinal)).Count().Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task ApplyProperties_WithNullSnapshot_WhenClean_ShouldRemainClean()
+    {
+        // Arrange
+        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 1, IsEnabled = true });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
+
+        var propertyChanges = new List<string>();
+        service.PropertyChanged += (_, e) => propertyChanges.Add(e.PropertyName ?? string.Empty);
+
+        _ = service.IsDirty.Should().BeFalse();
+
+        // Act
+        service.ApplyProperties(null);
+
+        // Assert
+        _ = service.IsDirty.Should().BeFalse();
+        _ = propertyChanges.Should().NotContain("IsDirty");
     }
 }
