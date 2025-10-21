@@ -25,38 +25,22 @@ namespace DroidNet.Config;
 /// <item>Override <see cref="CreateDefaultSettings"/> to provide default settings instance</item>
 /// </list>
 /// </remarks>
-public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
+/// <param name="manager">The settings manager used to load and save settings.</param>
+/// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
+public abstract partial class SettingsService<TSettings>(SettingsManager manager, ILoggerFactory? loggerFactory = null) : ISettingsService<TSettings>
     where TSettings : class
 {
-    private readonly SettingsManager manager;
-    private readonly ILogger logger;
-    private readonly SemaphoreSlim operationLock;
+    private readonly ILogger logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ?? NullLogger<SettingsService<TSettings>>.Instance;
+    private readonly WeakReference<SettingsManager> managerReference = new(manager ?? throw new ArgumentNullException(nameof(manager)));
+    private readonly AsyncLock operationLock = new();
+
     private bool isDirty;
     private bool isBusy;
-    private bool isInitialized;
     private bool isDisposed;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsService{TSettings}"/> class.
-    /// </summary>
-    /// <param name="manager">The settings manager used to load and save settings.</param>
-    /// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
-    protected SettingsService(SettingsManager manager, ILoggerFactory? loggerFactory = null)
-    {
-        this.logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ?? NullLogger<SettingsService<TSettings>>.Instance;
-
-        this.manager = manager ?? throw new ArgumentNullException(nameof(manager));
-        this.operationLock = new SemaphoreSlim(1, 1);
-    }
 
     /// <inheritdoc/>
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
-
-    /// <summary>
-    /// Occurs when the initialization state changes.
-    /// </summary>
-    public event EventHandler<InitializationStateChangedEventArgs>? InitializationStateChanged;
 
     /// <summary>
     /// Gets the section name used to identify this settings type in storage sources.
@@ -98,40 +82,11 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     public abstract Type SettingsType { get; }
 
     /// <summary>
-    /// Loads settings from all sources and initializes the service.
+    /// Gets helper to get the manager instance from the weak reference. Throws if the manager has been collected.
     /// </summary>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task InitializeAsync(CancellationToken cancellationToken = default)
-    {
-        this.ThrowIfDisposed();
-        if (this.isInitialized)
-        {
-            return;
-        }
-
-        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            this.IsBusy = true;
-            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
-
-            // If no settings were loaded from sources, use default settings
-            loadedSettings ??= this.CreateDefaultSettings();
-
-            // Update properties from loaded settings
-            this.UpdateProperties(loadedSettings);
-
-            this.isInitialized = true;
-            this.IsDirty = false;
-            this.InitializationStateChanged?.Invoke(this, new InitializationStateChangedEventArgs(true));
-        }
-        finally
-        {
-            this.IsBusy = false;
-            _ = this.operationLock.Release();
-        }
-    }
+    private SettingsManager Manager => this.managerReference.TryGetTarget(out var m)
+        ? m
+        : throw new InvalidOperationException("SettingsManager reference is no longer available.");
 
     /// <summary>
     /// Validates and saves the current settings to all writable sources.
@@ -141,31 +96,52 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     public async Task SaveAsync(CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
+
         if (!this.IsDirty)
         {
             return;
         }
 
-        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
-            this.IsBusy = true;
-            var validationErrors = await this.ValidateAsync(cancellationToken).ConfigureAwait(false);
-            if (validationErrors.Count > 0)
+            try
             {
-                throw new SettingsValidationException("Settings validation failed", validationErrors);
-            }
+                this.IsBusy = true;
 
-            var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
-            var settingsSnapshot = this.GetSettingsSnapshot();
-            await this.manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, metadata, cancellationToken).ConfigureAwait(false);
-            this.IsDirty = false;
-        }
-        finally
-        {
-            this.IsBusy = false;
-            _ = this.operationLock.Release();
+                // Log save start
+                this.LogSaving();
+
+                var validationErrors = await this.ValidateAsync(cancellationToken).ConfigureAwait(false);
+                if (validationErrors.Count > 0)
+                {
+                    // Log validation failure
+                    this.LogValidationFailed(validationErrors.Count);
+                    throw new SettingsValidationException("Settings validation failed", validationErrors);
+                }
+
+                var metadata = new SettingsMetadata { Version = "1.0", SchemaVersion = DateTime.UtcNow.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) };
+                var settingsSnapshot = this.GetSettingsSnapshot();
+
+                try
+                {
+                    await this.Manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, metadata, cancellationToken).ConfigureAwait(false);
+                    this.IsDirty = false;
+
+                    // Log successful save
+                    this.LogSavedSettings();
+                }
+                catch (Exception ex)
+                {
+                    // Log and rethrow
+                    this.LogExceptionSaving(ex);
+                    throw;
+                }
+            }
+            finally
+            {
+                this.IsBusy = false;
+            }
         }
     }
 
@@ -177,31 +153,47 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
 
-        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
-            this.IsBusy = true;
+            try
+            {
+                this.IsBusy = true;
 
-            // First, reload all sources in the manager to refresh the cache
-            await this.manager.ReloadAllAsync(cancellationToken).ConfigureAwait(false);
+                // Log reload
+                this.LogReloading();
 
-            // Then load the refreshed settings from the updated cache
-            var loadedSettings = await this.manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
+                // First, reload all sources in the manager to refresh the cache
+                await this.Manager.ReloadAllAsync(cancellationToken).ConfigureAwait(false);
 
-            // If no settings were loaded from sources, use default settings
-            loadedSettings ??= this.CreateDefaultSettings();
+                // Then load the refreshed settings from the updated cache
+                var loadedSettings = await this.Manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
 
-            this.UpdateProperties(loadedSettings);
+                var usedDefaults = false;
+                if (loadedSettings == null)
+                {
+                    loadedSettings = this.CreateDefaultSettings();
+                    usedDefaults = true;
+                }
 
-            this.IsDirty = false;
-            this.OnPropertyChanged(nameof(this.Settings));
-        }
-        finally
-        {
-            this.IsBusy = false;
-            _ = this.operationLock.Release();
+                this.UpdateProperties(loadedSettings);
+
+                this.IsDirty = false;
+
+                if (usedDefaults)
+                {
+                    this.LogUsingDefaults();
+                }
+
+                this.LogReloaded();
+
+                this.OnPropertyChanged(nameof(this.Settings));
+            }
+            finally
+            {
+                this.IsBusy = false;
+            }
         }
     }
 
@@ -242,23 +234,28 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     public async Task ResetToDefaultsAsync(CancellationToken cancellationToken = default)
     {
         this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
 
-        await this.operationLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
         {
-            this.IsBusy = true;
-            var defaultSettings = this.CreateDefaultSettings();
+            try
+            {
+                this.IsBusy = true;
+                var defaultSettings = this.CreateDefaultSettings();
 
-            this.UpdateProperties(defaultSettings);
+                this.UpdateProperties(defaultSettings);
 
-            this.IsDirty = true;
-            this.OnPropertyChanged(nameof(this.Settings));
-        }
-        finally
-        {
-            this.IsBusy = false;
-            _ = this.operationLock.Release();
+                this.IsDirty = true;
+
+                // Log reset
+                this.LogResetToDefaults();
+
+                this.OnPropertyChanged(nameof(this.Settings));
+            }
+            finally
+            {
+                this.IsBusy = false;
+            }
         }
     }
 
@@ -284,6 +281,8 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
 
         if (disposing)
         {
+            // Log disposing
+            this.LogDisposingService();
             this.operationLock.Dispose();
         }
 
@@ -339,15 +338,4 @@ public abstract class SettingsService<TSettings> : ISettingsService<TSettings>
     /// Throws if the service has been disposed.
     /// </summary>
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsService<>));
-
-    /// <summary>
-    /// Throws if the service has not been initialized.
-    /// </summary>
-    private void ThrowIfNotInitialized()
-    {
-        if (!this.isInitialized)
-        {
-            throw new InvalidOperationException("SettingsService must be initialized. Call InitializeAsync first.");
-        }
-    }
 }

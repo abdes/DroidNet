@@ -13,7 +13,7 @@ namespace DroidNet.Config.Tests.Helpers;
 /// Test settings with validation errors for testing validation scenarios.
 /// </summary>
 [ExcludeFromCodeCoverage]
-public class InvalidTestSettings : IInvalidTestSettings
+public class TestSettingsWithValidation : ITestSettingsWithValidation
 {
     private string? requiredField;
     private int outOfRangeValue = 999;
