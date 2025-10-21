@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "DroidNet.Config.Example (dev)": {
+      "commandName": "Project",
+      "commandLineArgs": "samples --mode dev",
+      "workingDirectory": "F:\\projects\\DroidNet\\projects\\Config"
+    },
+    "DroidNet.Config.Example (prod)": {
+      "commandName": "Project",
+      "commandLineArgs": "samples --mode prod",
+      "workingDirectory": "F:\\projects\\DroidNet\\projects\\Config"
+    }
+  }
+}
