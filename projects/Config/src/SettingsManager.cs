@@ -4,7 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
+using System.Text.Json;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -44,16 +44,26 @@ public sealed partial class SettingsManager(
     ILoggerFactory? loggerFactory = null) : ISettingsManager
 {
     private readonly ILogger<SettingsManager> logger = loggerFactory?.CreateLogger<SettingsManager>() ?? NullLogger<SettingsManager>.Instance;
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+    };
     private readonly List<ISettingsSource> sources = sources?.ToList() ?? throw new ArgumentNullException(nameof(sources));
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
-    private readonly ConcurrentDictionary<Type, object> serviceInstances = new();
-    private readonly Dictionary<string, object> cachedSections = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = new();
+    private readonly Dictionary<string, CachedSection> cachedSections = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, byte> suppressChangeNotificationFor = new(StringComparer.Ordinal);
     private readonly AsyncLock initializationLock = new();
     private bool isInitialized;
     private bool isDisposed;
 
     /// <inheritdoc/>
     public event EventHandler<SourceChangedEventArgs>? SourceChanged;
+
+    private ServiceUpdateCoordinator ServiceUpdates => new(
+        this,
+        this.serviceInstances,
+        this.cachedSections);
 
     /// <inheritdoc/>
     public IReadOnlyList<ISettingsSource> Sources
@@ -83,8 +93,10 @@ public sealed partial class SettingsManager(
 
             foreach (var source in this.sources)
             {
-                await this.TryLoadSourceAsync(source, allowReload: false, cancellationToken).ConfigureAwait(false);
+                this.SubscribeToSourceEvents(source);
             }
+
+            await this.LoadAllSourcesAsync(allowReload: false, cancellationToken).ConfigureAwait(false);
 
             this.isInitialized = true;
             this.LogInitializationComplete();
@@ -95,14 +107,15 @@ public sealed partial class SettingsManager(
     public ISettingsService<TSettingsInterface> GetService<TSettingsInterface>()
         where TSettingsInterface : class
     {
-        this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
+        this.EnsureReadyForOperations();
 
         var settingsType = typeof(TSettingsInterface);
+        this.LogGetServiceRequested(settingsType.Name);
 
         // Return existing instance if available
         if (this.serviceInstances.TryGetValue(settingsType, out var existingService))
         {
+            this.LogReturningExistingService(settingsType.Name);
             return (ISettingsService<TSettingsInterface>)existingService;
         }
 
@@ -110,9 +123,12 @@ public sealed partial class SettingsManager(
 
         // Get the concrete service instance from the resolver, keyed by the settings type
         var service = this.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
+
         this.ApplySettings(service);
+
         var added = this.serviceInstances.TryAdd(settingsType, service);
         Debug.Assert(added, "Service instance should have been added successfully.");
+        this.LogServiceRegistered(settingsType.Name, this.serviceInstances.Count);
 
         return service;
     }
@@ -120,8 +136,7 @@ public sealed partial class SettingsManager(
     /// <inheritdoc/>
     public async Task ReloadAllAsync(CancellationToken cancellationToken = default)
     {
-        this.ThrowIfDisposed();
-        this.ThrowIfNotInitialized();
+        this.EnsureReadyForOperations();
 
         this.LogReloadingAllSources();
 
@@ -130,10 +145,7 @@ public sealed partial class SettingsManager(
         {
             this.cachedSections.Clear();
 
-            foreach (var source in this.sources)
-            {
-                await this.TryLoadSourceAsync(source, allowReload: true, cancellationToken).ConfigureAwait(false);
-            }
+            await this.LoadAllSourcesAsync(allowReload: false, cancellationToken).ConfigureAwait(false);
 
             this.NotifyServicesOfReload();
         }
@@ -148,18 +160,29 @@ public sealed partial class SettingsManager(
         var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
         await using (releaser.ConfigureAwait(false))
         {
-            if (this.sources.Exists(s => string.Equals(s.Id, source.Id, StringComparison.Ordinal)))
+            if (this.FindSourceIndexById(source.Id) >= 0)
             {
                 throw new InvalidOperationException($"Source with ID '{source.Id}' already exists.");
             }
 
             this.sources.Add(source);
+            this.SubscribeToSourceEvents(source);
             this.LogAddedSource(source.Id);
 
             // Load the new source if manager is already initialized
             if (this.isInitialized)
             {
                 await this.TryLoadSourceAsync(source, allowReload: false, cancellationToken).ConfigureAwait(false);
+
+                // Update any existing services that might be impacted by the new source
+                var affectedSections = this.GetSectionsOwnedBySource(source.Id);
+
+                if (affectedSections.Count > 0)
+                {
+                    var serviceUpdates = this.ServiceUpdates;
+                    var impactedServices = serviceUpdates.GetImpactedServices(affectedSections);
+                    serviceUpdates.UpdateServices(impactedServices);
+                }
             }
         }
     }
@@ -174,7 +197,7 @@ public sealed partial class SettingsManager(
         await using (releaser.ConfigureAwait(false))
         {
             // Find and remove in one pass
-            var index = this.sources.FindIndex(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
+            var index = this.FindSourceIndexById(sourceId);
             if (index < 0)
             {
                 throw new InvalidOperationException($"Source with ID '{sourceId}' not found.");
@@ -183,6 +206,7 @@ public sealed partial class SettingsManager(
             var source = this.sources[index];
             this.sources.RemoveAt(index);
 
+            this.UnsubscribeFromSourceEvents(source);
             this.LogRemovedSource(sourceId);
             this.OnSourceChanged(new SourceChangedEventArgs(sourceId, SourceChangeType.Removed));
 
@@ -217,6 +241,8 @@ public sealed partial class SettingsManager(
         // Dispose all sources
         foreach (var source in this.sources)
         {
+            this.UnsubscribeFromSourceEvents(source);
+
             if (source is IDisposable disposable)
             {
                 disposable.Dispose();
@@ -248,28 +274,13 @@ public sealed partial class SettingsManager(
         pocoType ??= typeof(TSettings);
 
         // Use cached sections data instead of re-reading from sources
-        if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
+        if (this.cachedSections.ContainsKey(sectionName))
         {
-            if (sectionData is TSettings typedData)
+            var materialized = this.GetMaterializedSectionData(sectionName, pocoType);
+            if (materialized is TSettings typedInstance)
             {
-                mergedSettings = typedData;
+                mergedSettings = typedInstance;
                 this.LogLoadedSettingsForType(sectionName, "cache");
-            }
-            else if (sectionData is System.Text.Json.JsonElement jsonElement)
-            {
-                // Deserialize JsonElement to the POCO type first
-                // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
-                var pocoInstance = System.Text.Json.JsonSerializer.Deserialize(
-                    jsonElement.GetRawText(),
-                    pocoType);
-
-                // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
-                if (pocoInstance is TSettings typedInstance)
-                {
-                    mergedSettings = typedInstance;
-                }
-
-                this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
             }
         }
 
@@ -278,7 +289,7 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Saves settings data to all writable sources.
+    /// Saves settings data to the source that last contributed this section.
     /// </summary>
     /// <typeparam name="TSettings">The settings type.</typeparam>
     /// <param name="sectionName">The section name to use when saving.</param>
@@ -293,84 +304,242 @@ public sealed partial class SettingsManager(
         CancellationToken cancellationToken = default)
         where TSettings : class
     {
-        var sectionsData = new Dictionary<string, object>(StringComparer.Ordinal) { [sectionName] = settings };
+        this.EnsureReadyForOperations();
+        this.LogSaveSettingsRequested(sectionName);
+        var targetSourceId = this.ResolveSaveTargetSourceId(sectionName);
+        var targetSource = this.GetSourceByIdOrThrow(targetSourceId);
 
-        foreach (var source in this.sources)
+        var sectionsData = new Dictionary<string, object>(StringComparer.Ordinal)
         {
-            try
-            {
-                var result = await source.SaveAsync(sectionsData, metadata, cancellationToken).ConfigureAwait(false);
-                if (result.IsSuccess)
+            [sectionName] = settings,
+        };
+
+        try
+        {
+            await this.ExecuteWithSuppressedSourceChangeAsync(
+                targetSourceId,
+                async () =>
                 {
-                    this.cachedSections[sectionName] = settings!;
-                    this.LogSavedSettingsForType(sectionName, source.Id);
-                    this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Updated));
-                }
-                else
-                {
-                    this.LogFailedToSaveSettingsForType(sectionName, source.Id, result.Error.Message);
-                }
-            }
-            catch (Exception ex)
-            {
-                this.LogExceptionSavingSettingsForType(ex, sectionName, source.Id);
-                throw new SettingsPersistenceException(
-                    $"Failed to save settings to source '{source.Id}'",
-                    source.Id,
-                    ex);
-            }
+                    var result = await targetSource.SaveAsync(sectionsData, metadata, cancellationToken).ConfigureAwait(false);
+                    if (!result.IsSuccess)
+                    {
+                        this.LogFailedToSaveSettingsForType(sectionName, targetSource.Id, result.Error.Message);
+                        throw new SettingsPersistenceException(
+                            $"Failed to save settings to source '{targetSource.Id}': {result.Error.Message}",
+                            targetSource.Id);
+                    }
+
+                    this.CacheSection(sectionName, settings!, targetSourceId);
+                    this.LogSavedSettingsForType(sectionName, targetSource.Id);
+
+                    // Relay the event to external listeners, but not to our internal handler
+                    this.OnSourceChanged(new SourceChangedEventArgs(targetSource.Id, SourceChangeType.Updated));
+                }).ConfigureAwait(false);
+        }
+        catch (SettingsPersistenceException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            this.LogExceptionSavingSettingsForType(ex, sectionName, targetSource.Id);
+            throw new SettingsPersistenceException(
+                $"Failed to save settings to source '{targetSource.Id}'",
+                targetSource.Id,
+                ex);
         }
     }
 
-    private static void ApplyProperties<T>(T source, T target)
-    {
-        ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(target);
-
-        var props = typeof(T)
-            .GetProperties(BindingFlags.Public | BindingFlags.Instance)
-            .Where(p => p.CanRead && p.CanWrite && p.GetIndexParameters().Length == 0);
-
-        foreach (var prop in props)
-        {
-            var value = prop.GetValue(source);
-            prop.SetValue(target, value); // goes through the setter → triggers notifications
-        }
-    }
-
-    private void ApplySettings<TSettingsInterface>(ISettingsService<TSettingsInterface> service)
-        where TSettingsInterface : class
+    private void ApplySettings(ISettingsService service)
     {
         var sectionName = service.SectionName;
-        var settings = service.Settings;
+        this.LogApplyingSettings(sectionName);
 
-        // Use cached sections data instead of re-reading from sources
-        if (this.cachedSections.TryGetValue(sectionName, out var sectionData))
+        if (this.cachedSections.ContainsKey(sectionName))
         {
-            if (sectionData is System.Text.Json.JsonElement jsonElement)
+            var materialized = this.GetMaterializedSectionData(sectionName, service.SettingsType);
+            if (materialized is not null)
             {
-                // Deserialize JsonElement to the POCO type first
-                // Note: Do NOT use CamelCase policy - the JSON is already in the correct case
-                var deserializedData = System.Text.Json.JsonSerializer.Deserialize(
-                    jsonElement.GetRawText(),
-                    service.SettingsType);
-
-                // Cast the POCO instance to TSettings (works if POCO implements TSettings interface)
-                if (deserializedData is TSettingsInterface typedInstance)
-                {
-                    ApplyProperties(typedInstance, settings);
-                    this.LogLoadedSettingsForType(sectionName, "cache (deserialized from JsonElement)");
-                }
-                else
-                {
-                    this.LogSettingsDeserializationFailed(sectionName, service.SettingsType);
-                }
+                this.LogApplyingCachedSection(sectionName, materialized.GetType().Name);
             }
+            else
+            {
+                this.LogApplyingCachedSection(sectionName, "null");
+            }
+
+            service.ApplyProperties(materialized);
+            this.LogLoadedSettingsForType(sectionName, "cache");
+        }
+        else
+        {
+            this.LogNoCachedData(sectionName);
         }
     }
 
     private void OnSourceChanged(SourceChangedEventArgs args)
         => this.SourceChanged?.Invoke(this, args);
+
+    private void SubscribeToSourceEvents(ISettingsSource source)
+    {
+        this.LogSubscribingToSource(source.Id);
+        source.SourceChanged += this.OnSourceChangedInternal;
+    }
+
+    private void UnsubscribeFromSourceEvents(ISettingsSource source)
+    {
+        this.LogUnsubscribingFromSource(source.Id);
+        source.SourceChanged -= this.OnSourceChangedInternal;
+    }
+
+    private void OnSourceChangedInternal(object? sender, SourceChangedEventArgs args)
+    {
+        this.LogSourceChangedEventReceived(args.SourceId, args.ChangeType);
+
+        // Handle source changes asynchronously without blocking the event handler
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await this.HandleSourceChangedAsync(args, CancellationToken.None).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Do not catch general exception types - fire-and-forget handler
+            catch (Exception ex)
+#pragma warning restore CA1031
+            {
+                this.LogErrorHandlingSourceChange(ex, args.SourceId);
+            }
+        });
+    }
+
+    private void RemoveSectionsNoLongerProvided(ISettingsSource source, IReadOnlyDictionary<string, object> latestSections)
+    {
+        var ownedSections = this.GetSectionsOwnedBySource(source.Id);
+        foreach (var sectionName in ownedSections)
+        {
+            if (latestSections.ContainsKey(sectionName))
+            {
+                continue;
+            }
+
+            this.LogRemovingStaleSection(sectionName, source.Id);
+            _ = this.cachedSections.Remove(sectionName);
+        }
+    }
+
+    private bool ShouldUpdateCacheFor(string sectionName, string sourceId, bool allowReload)
+    {
+        if (!allowReload)
+        {
+            return true;
+        }
+
+        if (!this.cachedSections.TryGetValue(sectionName, out var cached))
+        {
+            return true;
+        }
+
+        return string.Equals(cached.SourceId, sourceId, StringComparison.Ordinal);
+    }
+
+    private void CacheSection(string sectionName, object sectionData, string sourceId)
+        => this.cachedSections[sectionName] = new CachedSection(sectionData, sourceId);
+
+    private List<string> GetSectionsOwnedBySource(string sourceId)
+        => this.cachedSections
+            .Where(kvp => string.Equals(kvp.Value.SourceId, sourceId, StringComparison.Ordinal))
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+    private object? GetMaterializedSectionData(string sectionName, Type targetType)
+    {
+        if (!this.cachedSections.TryGetValue(sectionName, out var cached))
+        {
+            return null;
+        }
+
+        var materialized = ConvertSectionData(cached.Data, targetType);
+        if (!ReferenceEquals(materialized, cached.Data))
+        {
+            cached.Data = materialized;
+        }
+
+        return materialized;
+    }
+
+    private static object? ConvertSectionData(object? data, Type targetType)
+    {
+        ArgumentNullException.ThrowIfNull(targetType);
+
+        if (data is null)
+        {
+            return null;
+        }
+
+        if (targetType.IsInstanceOfType(data))
+        {
+            return data;
+        }
+
+        if (data is JsonElement jsonElement)
+        {
+            return JsonSerializer.Deserialize(jsonElement.GetRawText(), targetType, JsonOptions);
+        }
+
+        return data;
+    }
+
+    private async Task HandleSourceChangedAsync(
+        SourceChangedEventArgs args,
+        CancellationToken cancellationToken)
+    {
+        // Check if we should suppress handling this change (e.g., during save operations)
+        if (this.suppressChangeNotificationFor.ContainsKey(args.SourceId))
+        {
+            this.LogSuppressingChangeNotification(args.SourceId);
+            return;
+        }
+
+        this.LogHandlingSourceChange(args.SourceId, args.ChangeType);
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
+        {
+            var source = this.sources.FirstOrDefault(
+                s => string.Equals(s.Id, args.SourceId, StringComparison.Ordinal));
+
+            if (source is null)
+            {
+                this.LogSourceNotFound(args.SourceId);
+                return; // Source was removed
+            }
+
+            // Track which sections this source owned before reload (i.e., was the winner for)
+            var sectionsBeforeReload = this.GetSectionsOwnedBySource(args.SourceId)
+                .ToHashSet(StringComparer.Ordinal);
+
+            // Reload the source - this will update cache/map for sections this source provides
+            // BUT it will only update cache for sections where this source is the winner
+            // (TryLoadSourceAsync now respects last-loaded-wins)
+            await this.TryLoadSourceAsync(source, allowReload: true, cancellationToken).ConfigureAwait(false);
+
+            // Find sections this source owns after reload (i.e., is the winner for)
+            var sectionsAfterReload = this.GetSectionsOwnedBySource(args.SourceId)
+                .ToHashSet(StringComparer.Ordinal);
+
+            // Only affect sections that this source is the WINNER for (owns in the map)
+            // This respects last-loaded-wins: if another source later loaded the same section,
+            // this source's change won't override it
+            var affectedSections = sectionsBeforeReload.Union(sectionsAfterReload).ToList();
+            this.LogSourceReloadSummary(args.SourceId, sectionsBeforeReload.Count, sectionsAfterReload.Count, affectedSections.Count);
+
+            if (affectedSections.Count > 0)
+            {
+                var serviceUpdates = this.ServiceUpdates;
+                var impactedServices = serviceUpdates.GetImpactedServices(affectedSections);
+                this.LogReloadingImpactedServices(impactedServices.Count, affectedSections.Count);
+                serviceUpdates.UpdateServices(impactedServices);
+            }
+        }
+    }
 
     private async Task TryLoadSourceAsync(ISettingsSource source, bool allowReload, CancellationToken cancellationToken)
     {
@@ -379,13 +548,31 @@ public sealed partial class SettingsManager(
         _ = loadResult.Tap(
             payload =>
             {
-                // On success: cache sections, and raise change event
+                if (allowReload)
+                {
+                    this.RemoveSectionsNoLongerProvided(source, payload.Sections);
+                }
+
                 foreach (var (sectionName, sectionData) in payload.Sections)
                 {
                     // On success, neither the section name nor data should be null
                     Debug.Assert(sectionName is { Length: > 0 }, "Section name should not be null or empty.");
                     Debug.Assert(sectionData is { }, "Section data should not be null.");
-                    this.cachedSections[sectionName] = sectionData;
+
+                    var shouldUpdate = this.ShouldUpdateCacheFor(sectionName, source.Id, allowReload);
+
+                    if (shouldUpdate)
+                    {
+                        this.CacheSection(sectionName, sectionData, source.Id);
+                        this.LogSectionCached(sectionName, source.Id);
+                    }
+                    else
+                    {
+                        var currentOwnerLabel = this.cachedSections.TryGetValue(sectionName, out var cached)
+                            ? cached.SourceId
+                            : null;
+                        this.LogSectionCacheSkipped(sectionName, source.Id, currentOwnerLabel);
+                    }
                 }
 
                 this.LogLoadedSource(source.Id);
@@ -396,15 +583,62 @@ public sealed partial class SettingsManager(
 
     private void NotifyServicesOfReload()
     {
-        foreach (var serviceInstance in this.serviceInstances.Values)
+        // After reloading all sources, update all registered services with the latest cached data
+        this.ServiceUpdates.NotifyAllServices();
+    }
+
+    private async Task LoadAllSourcesAsync(bool allowReload, CancellationToken cancellationToken)
+    {
+        foreach (var source in this.sources)
         {
-            if (serviceInstance is IAsyncDisposable)
-            {
-                // Services will handle their own reload internally
-                this.LogServiceHandlesReload(serviceInstance.GetType().Name);
-            }
+            await this.TryLoadSourceAsync(source, allowReload, cancellationToken).ConfigureAwait(false);
         }
     }
+
+    private async Task ExecuteWithSuppressedSourceChangeAsync(string sourceId, Func<Task> action)
+    {
+        _ = this.suppressChangeNotificationFor.TryAdd(sourceId, 0);
+        try
+        {
+            await action().ConfigureAwait(false);
+        }
+        finally
+        {
+            _ = this.suppressChangeNotificationFor.TryRemove(sourceId, out _);
+        }
+    }
+
+    private string ResolveSaveTargetSourceId(string sectionName)
+    {
+        if (this.cachedSections.TryGetValue(sectionName, out var cached))
+        {
+            this.LogSavingToWinningSource(sectionName, cached.SourceId);
+            return cached.SourceId;
+        }
+
+        var fallbackSourceId = this.sources.FirstOrDefault()?.Id;
+        if (fallbackSourceId is null)
+        {
+            throw new InvalidOperationException("No sources available to save settings.");
+        }
+
+        this.LogSavingToFirstAvailableSource(sectionName, fallbackSourceId);
+        return fallbackSourceId;
+    }
+
+    private ISettingsSource GetSourceByIdOrThrow(string sourceId)
+    {
+        var targetSource = this.sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
+        if (targetSource is null)
+        {
+            throw new InvalidOperationException($"Winning source '{sourceId}' not found in sources list.");
+        }
+
+        return targetSource;
+    }
+
+    private int FindSourceIndexById(string sourceId)
+        => this.sources.FindIndex(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
 
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsManager));
 
@@ -414,5 +648,87 @@ public sealed partial class SettingsManager(
         {
             throw new InvalidOperationException("SettingsManager must be initialized.");
         }
+    }
+
+    private void EnsureReadyForOperations()
+    {
+        this.ThrowIfDisposed();
+        this.ThrowIfNotInitialized();
+    }
+
+    private sealed class ServiceUpdateCoordinator
+    {
+        private readonly SettingsManager owner;
+        private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances;
+        private readonly Dictionary<string, CachedSection> cachedSections;
+
+        public ServiceUpdateCoordinator(
+            SettingsManager owner,
+            ConcurrentDictionary<Type, ISettingsService> serviceInstances,
+            Dictionary<string, CachedSection> cachedSections)
+        {
+            this.owner = owner;
+            this.serviceInstances = serviceInstances;
+            this.cachedSections = cachedSections;
+        }
+
+        public List<ISettingsService> GetImpactedServices(IReadOnlyCollection<string> sectionNames)
+        {
+            var impactedServices = new List<ISettingsService>();
+
+            foreach (var serviceInstance in this.serviceInstances.Values)
+            {
+                if (sectionNames.Contains(serviceInstance.SectionName, StringComparer.Ordinal))
+                {
+                    impactedServices.Add(serviceInstance);
+                }
+            }
+
+            return impactedServices;
+        }
+
+        public void UpdateServices(List<ISettingsService> impactedServices)
+        {
+            this.owner.LogUpdatingImpactedServices(impactedServices.Count);
+
+            foreach (var serviceInstance in impactedServices)
+            {
+                var serviceType = serviceInstance.GetType();
+                var sectionName = serviceInstance.SectionName;
+
+                if (this.cachedSections.ContainsKey(sectionName))
+                {
+                    this.owner.LogServiceCacheHit(serviceType.Name, sectionName);
+                    var materialized = this.owner.GetMaterializedSectionData(sectionName, serviceInstance.SettingsType);
+                    serviceInstance.ApplyProperties(materialized);
+                    this.owner.LogUpdatedService(serviceType.Name);
+                }
+                else
+                {
+                    serviceInstance.ApplyProperties(null);
+                    this.owner.LogUpdatedService(serviceType.Name);
+                    this.owner.LogServiceResetToDefaults(serviceType.Name, sectionName);
+                }
+            }
+        }
+
+        public void NotifyAllServices()
+        {
+            var allServices = this.serviceInstances.Values.ToList();
+            this.UpdateServices(allServices);
+        }
+    }
+
+    private sealed class CachedSection
+    {
+        public CachedSection(object? data, string sourceId)
+        {
+            this.Data = data;
+            this.SourceId = sourceId;
+        }
+
+        public object? Data { get; set; }
+
+        public string SourceId { get; }
     }
 }

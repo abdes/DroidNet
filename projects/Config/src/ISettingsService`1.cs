@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
-
 namespace DroidNet.Config;
 
 /// <summary>
@@ -12,29 +10,9 @@ namespace DroidNet.Config;
 /// The service implementation must implement the TSettings interface for direct property access.
 /// </summary>
 /// <typeparam name="TSettings">The strongly-typed settings interface.</typeparam>
-public interface ISettingsService<TSettings> : INotifyPropertyChanged, IDisposable
+public interface ISettingsService<TSettings> : ISettingsService
     where TSettings : class
 {
-    /// <summary>
-    /// Gets the section name used to identify this settings type in storage sources.
-    /// </summary>
-    /// <remarks>
-    /// This name is used as the key in the JSON sections dictionary and must be unique
-    /// across all settings types managed by the SettingsManager.
-    /// </remarks>
-    public string SectionName { get; }
-
-    /// <summary>
-    /// Gets the concrete POCO type used for deserialization from storage.
-    /// Override this property if TSettings is an interface to specify the concrete implementation type.
-    /// </summary>
-    /// <remarks>
-    /// When TSettings is an interface, this property should return the concrete class type
-    /// that implements the interface and can be deserialized from JSON.
-    /// The default implementation returns typeof(TSettings).
-    /// </remarks>
-    public Type SettingsType { get; }
-
     /// <summary>
     /// Gets the settings instance that implements the TSettings interface.
     /// This provides typed access to all settings properties.

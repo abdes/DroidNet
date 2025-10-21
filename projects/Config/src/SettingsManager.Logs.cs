@@ -159,4 +159,265 @@ public partial class SettingsManager
     private static partial void LogExceptionSavingSettingsForType(ILogger logger, Exception exception, string settingsType, string sourceId);
 
     private void LogExceptionSavingSettingsForType(Exception exception, string settingsType, string sourceId) => LogExceptionSavingSettingsForType(this.logger, exception, settingsType, sourceId);
+
+    [LoggerMessage(
+        EventId = 24,
+        Level = LogLevel.Debug,
+        Message = "Saving section {SectionName} to winning source: {SourceId}")]
+    private static partial void LogSavingToWinningSource(ILogger logger, string sectionName, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogSavingToWinningSource(string sectionName, string sourceId) => LogSavingToWinningSource(this.logger, sectionName, sourceId);
+
+    [LoggerMessage(
+        EventId = 30,
+        Level = LogLevel.Debug,
+        Message = "GetService requested for {SettingsType}")]
+    private static partial void LogGetServiceRequested(ILogger logger, string settingsType);
+
+    [Conditional("DEBUG")]
+    private void LogGetServiceRequested(string settingsType) => LogGetServiceRequested(this.logger, settingsType);
+
+    [LoggerMessage(
+        EventId = 31,
+        Level = LogLevel.Debug,
+        Message = "Returning existing service instance for {SettingsType}")]
+    private static partial void LogReturningExistingService(ILogger logger, string settingsType);
+
+    [Conditional("DEBUG")]
+    private void LogReturningExistingService(string settingsType) => LogReturningExistingService(this.logger, settingsType);
+
+    [LoggerMessage(
+        EventId = 32,
+        Level = LogLevel.Debug,
+        Message = "Registered service {SettingsType}. Total services: {ServiceCount}")]
+    private static partial void LogServiceRegistered(ILogger logger, string settingsType, int serviceCount);
+
+    [Conditional("DEBUG")]
+    private void LogServiceRegistered(string settingsType, int serviceCount) => LogServiceRegistered(this.logger, settingsType, serviceCount);
+
+    [LoggerMessage(
+        EventId = 33,
+        Level = LogLevel.Debug,
+        Message = "Saving settings requested for section {SectionName}")]
+    private static partial void LogSaveSettingsRequested(ILogger logger, string sectionName);
+
+    [Conditional("DEBUG")]
+    private void LogSaveSettingsRequested(string sectionName) => LogSaveSettingsRequested(this.logger, sectionName);
+
+    [LoggerMessage(
+        EventId = 34,
+        Level = LogLevel.Debug,
+        Message = "Applying settings for section {SectionName}")]
+    private static partial void LogApplyingSettings(ILogger logger, string sectionName);
+
+    [Conditional("DEBUG")]
+    private void LogApplyingSettings(string sectionName) => LogApplyingSettings(this.logger, sectionName);
+
+    [LoggerMessage(
+        EventId = 35,
+        Level = LogLevel.Debug,
+        Message = "Applying cached section {SectionName} with value type {ValueType}")]
+    private static partial void LogApplyingCachedSection(ILogger logger, string sectionName, string valueType);
+
+    [Conditional("DEBUG")]
+    private void LogApplyingCachedSection(string sectionName, string valueType) => LogApplyingCachedSection(this.logger, sectionName, valueType);
+
+    [LoggerMessage(
+        EventId = 36,
+        Level = LogLevel.Debug,
+        Message = "Cached JsonElement for section {SectionName} contains property {PropertyName} = {PropertyValue}")]
+    private static partial void LogCachedJsonElementProperty(ILogger logger, string sectionName, string propertyName, string? propertyValue);
+
+    [Conditional("DEBUG")]
+    private void LogCachedJsonElementProperty(string sectionName, string propertyName, string? propertyValue)
+        => LogCachedJsonElementProperty(this.logger, sectionName, propertyName, propertyValue);
+
+    [LoggerMessage(
+        EventId = 37,
+        Level = LogLevel.Debug,
+        Message = "No cached data found for section {SectionName}; keeping service defaults")]
+    private static partial void LogNoCachedData(ILogger logger, string sectionName);
+
+    [Conditional("DEBUG")]
+    private void LogNoCachedData(string sectionName) => LogNoCachedData(this.logger, sectionName);
+
+    [LoggerMessage(
+        EventId = 38,
+        Level = LogLevel.Debug,
+        Message = "Subscribing to source change events for {SourceId}")]
+    private static partial void LogSubscribingToSource(ILogger logger, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogSubscribingToSource(string sourceId) => LogSubscribingToSource(this.logger, sourceId);
+
+    [LoggerMessage(
+        EventId = 39,
+        Level = LogLevel.Debug,
+        Message = "Unsubscribing from source change events for {SourceId}")]
+    private static partial void LogUnsubscribingFromSource(ILogger logger, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogUnsubscribingFromSource(string sourceId) => LogUnsubscribingFromSource(this.logger, sourceId);
+
+    [LoggerMessage(
+        EventId = 40,
+        Level = LogLevel.Debug,
+        Message = "Source change event received for {SourceId} with change type {ChangeType}")]
+    private static partial void LogSourceChangedEventReceived(ILogger logger, string sourceId, SourceChangeType changeType);
+
+    [Conditional("DEBUG")]
+    private void LogSourceChangedEventReceived(string sourceId, SourceChangeType changeType)
+        => LogSourceChangedEventReceived(this.logger, sourceId, changeType);
+
+    [LoggerMessage(
+        EventId = 41,
+        Level = LogLevel.Debug,
+        Message = "Suppressing change notification for {SourceId} due to pending operation")]
+    private static partial void LogSuppressingChangeNotification(ILogger logger, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogSuppressingChangeNotification(string sourceId) => LogSuppressingChangeNotification(this.logger, sourceId);
+
+    [LoggerMessage(
+        EventId = 42,
+        Level = LogLevel.Information,
+        Message = "Source {SourceId} was not found while handling change notification")]
+    private static partial void LogSourceNotFound(ILogger logger, string sourceId);
+
+    private void LogSourceNotFound(string sourceId) => LogSourceNotFound(this.logger, sourceId);
+
+    [LoggerMessage(
+        EventId = 43,
+        Level = LogLevel.Debug,
+        Message = "Reloaded source {SourceId}. Sections before: {SectionsBefore}, after: {SectionsAfter}, affected: {AffectedSections}")]
+    private static partial void LogSourceReloadSummary(ILogger logger, string sourceId, int sectionsBefore, int sectionsAfter, int affectedSections);
+
+    [Conditional("DEBUG")]
+    private void LogSourceReloadSummary(string sourceId, int sectionsBefore, int sectionsAfter, int affectedSections)
+        => LogSourceReloadSummary(this.logger, sourceId, sectionsBefore, sectionsAfter, affectedSections);
+
+    [LoggerMessage(
+        EventId = 44,
+        Level = LogLevel.Debug,
+        Message = "Removing section {SectionName} previously provided by {SourceId}")]
+    private static partial void LogRemovingStaleSection(ILogger logger, string sectionName, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogRemovingStaleSection(string sectionName, string sourceId)
+        => LogRemovingStaleSection(this.logger, sectionName, sourceId);
+
+    [LoggerMessage(
+        EventId = 45,
+        Level = LogLevel.Debug,
+        Message = "Cached section {SectionName} with data from source {SourceId}")]
+    private static partial void LogSectionCached(ILogger logger, string sectionName, string sourceId);
+
+    [Conditional("DEBUG")]
+    private void LogSectionCached(string sectionName, string sourceId) => LogSectionCached(this.logger, sectionName, sourceId);
+
+    [LoggerMessage(
+        EventId = 46,
+        Level = LogLevel.Debug,
+        Message = "Skipped caching section {SectionName} from source {SourceId}; current owner is {CurrentOwner}")]
+    private static partial void LogSectionCacheSkipped(ILogger logger, string sectionName, string sourceId, string? currentOwner);
+
+    [Conditional("DEBUG")]
+    private void LogSectionCacheSkipped(string sectionName, string sourceId, string? currentOwner)
+        => LogSectionCacheSkipped(this.logger, sectionName, sourceId, currentOwner);
+
+    [LoggerMessage(
+        EventId = 47,
+        Level = LogLevel.Warning,
+        Message = "Service {ServiceType} does not expose a SectionName property")]
+    private static partial void LogServiceMissingSectionName(ILogger logger, string serviceType);
+
+    private void LogServiceMissingSectionName(string serviceType) => LogServiceMissingSectionName(this.logger, serviceType);
+
+    [LoggerMessage(
+        EventId = 48,
+        Level = LogLevel.Warning,
+        Message = "Service {ServiceType} has a null SectionName value")]
+    private static partial void LogServiceSectionNameNull(ILogger logger, string serviceType);
+
+    private void LogServiceSectionNameNull(string serviceType) => LogServiceSectionNameNull(this.logger, serviceType);
+
+    [LoggerMessage(
+        EventId = 49,
+        Level = LogLevel.Warning,
+        Message = "Service {ServiceType} does not expose an ApplyProperties method")]
+    private static partial void LogServiceMissingApplyPropertiesMethod(ILogger logger, string serviceType);
+
+    private void LogServiceMissingApplyPropertiesMethod(string serviceType)
+        => LogServiceMissingApplyPropertiesMethod(this.logger, serviceType);
+
+    [LoggerMessage(
+        EventId = 50,
+        Level = LogLevel.Debug,
+        Message = "Updating {ServiceCount} impacted services")]
+    private static partial void LogUpdatingImpactedServices(ILogger logger, int serviceCount);
+
+    [Conditional("DEBUG")]
+    private void LogUpdatingImpactedServices(int serviceCount) => LogUpdatingImpactedServices(this.logger, serviceCount);
+
+    [LoggerMessage(
+        EventId = 51,
+        Level = LogLevel.Debug,
+        Message = "Service {ServiceType} section {SectionName} refreshed from cache")]
+    private static partial void LogServiceCacheHit(ILogger logger, string serviceType, string sectionName);
+
+    [Conditional("DEBUG")]
+    private void LogServiceCacheHit(string serviceType, string sectionName)
+        => LogServiceCacheHit(this.logger, serviceType, sectionName);
+
+    [LoggerMessage(
+        EventId = 52,
+        Level = LogLevel.Information,
+        Message = "Service {ServiceType} section {SectionName} reset to defaults (no cached data)")]
+    private static partial void LogServiceResetToDefaults(ILogger logger, string serviceType, string sectionName);
+
+    private void LogServiceResetToDefaults(string serviceType, string sectionName)
+        => LogServiceResetToDefaults(this.logger, serviceType, sectionName);
+
+    [LoggerMessage(
+        EventId = 25,
+        Level = LogLevel.Warning,
+        Message = "No winning source for section {SectionName}, saving to first available source: {SourceId}")]
+    private static partial void LogSavingToFirstAvailableSource(ILogger logger, string sectionName, string sourceId);
+
+    private void LogSavingToFirstAvailableSource(string sectionName, string sourceId) => LogSavingToFirstAvailableSource(this.logger, sectionName, sourceId);
+
+    [LoggerMessage(
+        EventId = 26,
+        Level = LogLevel.Debug,
+        Message = "Handling source change event: {SourceId}, {ChangeType}")]
+    private static partial void LogHandlingSourceChange(ILogger logger, string sourceId, SourceChangeType changeType);
+
+    [Conditional("DEBUG")]
+    private void LogHandlingSourceChange(string sourceId, SourceChangeType changeType) => LogHandlingSourceChange(this.logger, sourceId, changeType);
+
+    [LoggerMessage(
+        EventId = 27,
+        Level = LogLevel.Information,
+        Message = "Reloading {ServiceCount} impacted services for {SectionCount} sections")]
+    private static partial void LogReloadingImpactedServices(ILogger logger, int serviceCount, int sectionCount);
+
+    private void LogReloadingImpactedServices(int serviceCount, int sectionCount) => LogReloadingImpactedServices(this.logger, serviceCount, sectionCount);
+
+    [LoggerMessage(
+        EventId = 28,
+        Level = LogLevel.Debug,
+        Message = "Updated service {ServiceType} with new settings")]
+    private static partial void LogUpdatedService(ILogger logger, string serviceType);
+
+    [Conditional("DEBUG")]
+    private void LogUpdatedService(string serviceType) => LogUpdatedService(this.logger, serviceType);
+
+    [LoggerMessage(
+        EventId = 29,
+        Level = LogLevel.Error,
+        Message = "Error handling source change event for {SourceId}")]
+    private static partial void LogErrorHandlingSourceChange(ILogger logger, Exception exception, string sourceId);
+
+    private void LogErrorHandlingSourceChange(Exception exception, string sourceId) => LogErrorHandlingSourceChange(this.logger, exception, sourceId);
 }

@@ -2,9 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -33,10 +38,12 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     private readonly ILogger logger = loggerFactory?.CreateLogger<SettingsService<TSettings>>() ?? NullLogger<SettingsService<TSettings>>.Instance;
     private readonly WeakReference<SettingsManager> managerReference = new(manager ?? throw new ArgumentNullException(nameof(manager)));
     private readonly AsyncLock operationLock = new();
+    private readonly AsyncLocal<int> operationScopeDepth = new();
 
     private bool isDirty;
     private bool isBusy;
     private bool isDisposed;
+    private bool suppressDirtyTracking;
 
     /// <inheritdoc/>
     /// <inheritdoc/>
@@ -66,7 +73,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     public bool IsDirty
     {
         get => this.isDirty;
-        internal set => this.SetField(ref this.isDirty, value);
+        internal set => this.SetDirtyInternal(value);
     }
 
     /// <summary>
@@ -103,6 +110,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
         }
 
         var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        this.operationScopeDepth.Value++;
         await using (releaser.ConfigureAwait(false))
         {
             try
@@ -140,6 +148,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             }
             finally
             {
+                this.operationScopeDepth.Value--;
                 this.IsBusy = false;
             }
         }
@@ -155,6 +164,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
         this.ThrowIfDisposed();
 
         var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        this.operationScopeDepth.Value++;
         await using (releaser.ConfigureAwait(false))
         {
             try
@@ -192,6 +202,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             }
             finally
             {
+                this.operationScopeDepth.Value--;
                 this.IsBusy = false;
             }
         }
@@ -236,6 +247,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
         this.ThrowIfDisposed();
 
         var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        this.operationScopeDepth.Value++;
         await using (releaser.ConfigureAwait(false))
         {
             try
@@ -254,6 +266,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             }
             finally
             {
+                this.operationScopeDepth.Value--;
                 this.IsBusy = false;
             }
         }
@@ -266,6 +279,32 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     {
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc/>
+    public void ApplyProperties(object? data)
+    {
+        this.ThrowIfDisposed();
+        if (this.operationScopeDepth.Value > 0)
+        {
+            this.ApplyPropertiesCore(data);
+            return;
+        }
+
+        var releaserTask = this.operationLock.AcquireAsync(CancellationToken.None).AsTask();
+        var releaser = releaserTask.GetAwaiter().GetResult();
+        using (releaser)
+        {
+            try
+            {
+                this.operationScopeDepth.Value++;
+                this.ApplyPropertiesCore(data);
+            }
+            finally
+            {
+                this.operationScopeDepth.Value--;
+            }
+        }
     }
 
     /// <summary>
@@ -325,14 +364,26 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
         field = value;
         this.OnPropertyChanged(propertyName);
 
-        // Mark dirty only when the property name refers to a property of TSettings
-        if (!string.IsNullOrEmpty(propertyName) && typeof(TSettings).GetProperty(propertyName) is not null)
+        if (!this.suppressDirtyTracking
+            && !string.IsNullOrEmpty(propertyName)
+            && typeof(TSettings).GetProperty(propertyName) is not null)
         {
-            // Use the public IsDirty property so PropertyChanged is raised for it as well
-            this.IsDirty = true;
+            this.SetDirtyInternal(true);
         }
 
         return true;
+    }
+
+    private void SetDirtyInternal(bool value)
+    {
+        if (this.isDirty == value)
+        {
+            return;
+        }
+
+        this.isDirty = value;
+        this.LogDirtyStateChanged(value);
+        this.OnPropertyChanged(nameof(this.IsDirty));
     }
 
     /// <summary>
@@ -342,8 +393,58 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 
+    private void ApplyPropertiesCore(object? data)
+    {
+        using var suppression = new DirtyTrackingScope(this);
+
+        if (data is null)
+        {
+            var defaultSettings = this.CreateDefaultSettings();
+            this.UpdateProperties(defaultSettings);
+            suppression.MarkClean();
+            return;
+        }
+
+        if (data is TSettings typedData)
+        {
+            this.UpdateProperties(typedData);
+            suppression.MarkClean();
+            return;
+        }
+
+        throw new ArgumentException(
+            $"Unsupported data type: {data.GetType().Name}. Expected {typeof(TSettings).Name}.",
+            nameof(data));
+    }
+
     /// <summary>
     /// Throws if the service has been disposed.
     /// </summary>
     private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(SettingsService<>));
+
+    private sealed class DirtyTrackingScope : IDisposable
+    {
+        private readonly SettingsService<TSettings> owner;
+        private readonly bool previousValue;
+        private bool markClean;
+
+        public DirtyTrackingScope(SettingsService<TSettings> owner)
+        {
+            this.owner = owner;
+            this.previousValue = owner.suppressDirtyTracking;
+            owner.suppressDirtyTracking = true;
+        }
+
+        public void MarkClean() => this.markClean = true;
+
+        public void Dispose()
+        {
+            this.owner.suppressDirtyTracking = this.previousValue;
+
+            if (this.markClean)
+            {
+                this.owner.SetDirtyInternal(false);
+            }
+        }
+    }
 }

@@ -86,4 +86,13 @@ public abstract partial class SettingsService<TSettings>
 
     [Conditional("DEBUG")]
     private void LogDisposingService() => LogDisposingService(this.logger, typeof(TSettings).Name);
+
+    [LoggerMessage(
+    EventId = 110,
+    Level = LogLevel.Debug,
+    Message = "IsDirty changed to {IsDirty} for {SettingsType}")]
+    static partial void LogDirtyStateChanged(ILogger logger, string settingsType, bool isDirty);
+
+    [Conditional("DEBUG")]
+    private void LogDirtyStateChanged(bool isDirty) => LogDirtyStateChanged(this.logger, typeof(TSettings).Name, isDirty);
 }
