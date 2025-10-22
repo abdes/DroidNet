@@ -439,7 +439,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         return this;
     }
 
-
     /// <summary>
     ///     Creates a PathFinderConfig instance.
     /// </summary>
