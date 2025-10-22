@@ -8,19 +8,24 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config.Sources;
 
 /// <summary>
-///     Initializes a new instance of the <see cref="SettingsSource"/> class.
+///     Base class for settings storage implementations.
+///     <para>
+///     Implementations of <see cref="ISettingsSource"/> should derive from this type and provide the concrete
+///     behavior for loading, saving and validating settings data. The constructor parameters configure the
+///     source identifier, optional encryption provider and optional logger factory.
+///     </para>
 /// </summary>
 /// <param name="id">
-///     A unique identifier for this settings source. Recommended format: `Domain:FileName` where Domain may be used to
-///     distinguish between global, user, and built-in application settings.
+///     A unique identifier for this settings source. Recommended format: <c>Domain:FileName</c> where the
+///     <c>Domain</c> portion can be used to distinguish global, user or built-in application settings.
 /// </param>
 /// <param name="crypto">
-///     An optional <see cref="IEncryptionProvider"/> used to encrypt and decrypt file contents. If <see
-///     langword="null"/>, <see cref="NoEncryptionProvider.Instance"/> is used, meaning no encryption.
+///     An optional <see cref="IEncryptionProvider"/> used to encrypt and decrypt persisted contents. If
+///     <see langword="null"/>, <see cref="NoEncryptionProvider.Instance"/> is used and data is stored unencrypted.
 /// </param>
 /// <param name="loggerFactory">
-///     An optional <see cref="ILoggerFactory"/> used to create an <see cref="ILogger{SettingsSource}"/>; if
-///     <see langword="null"/>, a <see cref="NullLogger{SettingsSource}"/> instance is used.
+///     An optional <see cref="ILoggerFactory"/> used to create an <see cref="ILogger{SettingsSource}"/>. If
+///     <see langword="null"/>, a <see cref="NullLogger{SettingsSource}"/> is used so logging calls are no-ops.
 /// </param>
 public abstract class SettingsSource(string id, IEncryptionProvider? crypto = null, ILoggerFactory? loggerFactory = null) : ISettingsSource
 {
@@ -44,7 +49,9 @@ public abstract class SettingsSource(string id, IEncryptionProvider? crypto = nu
     /// <inheritdoc/>
     public SettingsSourceMetadata? SourceMetadata { get; set; }
 
-    /// <summary>Gets the logger instance for this settings source.</summary>
+    /// <summary>
+    ///     Gets the logger instance for this settings source.
+    /// </summary>
     protected ILogger Logger => this.logger;
 
     /// <inheritdoc/>

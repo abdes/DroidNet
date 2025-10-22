@@ -7,11 +7,8 @@ using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Config;
 
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-
 /// <summary>
-/// Central orchestrator that manages all settings sources and provides access to settings services.
-/// Implements last-loaded-wins strategy for multi-source composition.
+///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 public partial class SettingsManager
 {

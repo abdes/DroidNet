@@ -13,10 +13,17 @@ namespace DroidNet.Config;
 ///     loaded and ready, all sections are discovered, and services can be properly mapped to their corresponding
 ///     sections loaded from the source.
 /// </remarks>
+/// <remarks>
+///     The settings manager must be initialized by calling <see cref="InitializeAsync(CancellationToken)"/> before any
+///     settings services can be retrieved via <see cref="GetService{TSettingsInterface}"/>. This ensures that all sources are
+///     loaded and ready, all sections are discovered, and services can be properly mapped to their corresponding
+///     sections loaded from the source.
+/// </remarks>
 public interface ISettingsManager : IDisposable
 {
     /// <summary>
-    ///     Event raised when a settings source <see cref="SourceChangedEventArgs">lifecycle change</see> occurs.
+    ///     Event raised when a settings source lifecycle changes. The event provides details about the change via
+    ///     <see cref="SourceChangedEventArgs"/>.
     /// </summary>
     public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
@@ -31,9 +38,9 @@ public interface ISettingsManager : IDisposable
     public IReadOnlyList<ISettingsSource> Sources { get; }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether automatic saving of dirty settings is enabled.
-    ///     When enabled, dirty services will be automatically saved after <see cref="AutoSaveDelay"/> with no further changes.
-    ///     Toggling from ON to OFF will immediately save all dirty services before stopping.
+    ///     Gets or sets a value indicating whether automatic saving of dirty settings is enabled. When enabled, dirty
+    ///     services will be automatically saved after <see cref="AutoSaveDelay"/> with no further changes. Toggling
+    ///     from ON to OFF will immediately save all dirty services before stopping.
     /// </summary>
     public bool AutoSave { get; set; }
 

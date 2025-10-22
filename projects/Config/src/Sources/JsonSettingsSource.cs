@@ -31,9 +31,32 @@ namespace DroidNet.Config.Sources;
 ///     langword="null"/>, <see cref="NoEncryptionProvider.Instance"/> is used, meaning no encryption.
 /// </param>
 /// <param name="loggerFactory">
-///     An optional <see cref="ILoggerFactory"/> used to create an <see cref="ILogger{FileSettingsSource}"/>; if
-///     <see langword="null"/>, a <see cref="NullLogger{FileSettingsSource}"/> instance is used.
+///     An optional <see cref="ILoggerFactory"/> used to create an <see cref="ILogger{JsonSettingsSource}"/>; if
+///     <see langword="null"/>, a <see cref="NullLogger{JsonSettingsSource}"/> instance is used.
 /// </param>
+/// <remarks>
+///     The configuration file is expected to be a JSON object where each top-level property is a settings section.
+///     Each section is itself an object and may include an optional <c>$meta</c> property for section-level metadata.
+///     Additionally, the root object MAY contain a <c>$meta</c> property for source-level metadata.
+///     <para>
+///     <strong>Example:</strong>
+///     <code><![CDATA[
+///     {
+///         "$meta": {
+///             "writtenAt": "2025-10-22T15:03:00Z",
+///             "writtenBy": "app"
+///         },
+///         "database": {
+///             "$meta": {
+///                 "schemaVersion": "1.0"
+///             },
+///             "connectionString": "Server=...;Database=...;",
+///             "poolSize": 5
+///         }
+///     }
+///     ]]></code>
+///     </para>
+/// </remarks>
 /// <exception cref="ArgumentNullException">
 ///     Thrown when <paramref name="filePath"/> or <paramref name="fileSystem"/> is <see langword="null"/>.
 /// </exception>

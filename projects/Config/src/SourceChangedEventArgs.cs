@@ -5,7 +5,7 @@
 namespace DroidNet.Config;
 
 /// <summary>
-/// Types of changes that can occur to settings sources.
+///     Types of changes that can occur to settings sources.
 /// </summary>
 public enum SourceChangeType
 {
@@ -23,15 +23,16 @@ public enum SourceChangeType
 }
 
 /// <summary>
-/// Event arguments for settings source lifecycle changes.
+///     Event arguments for settings source lifecycle changes.
 /// </summary>
 public sealed class SourceChangedEventArgs : EventArgs
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
+    ///     Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
     /// </summary>
     /// <param name="sourceId">The identifier of the settings source that changed.</param>
     /// <param name="changeType">The type of change that occurred.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sourceId"/> is <see langword="null"/>.</exception>
     public SourceChangedEventArgs(string sourceId, SourceChangeType changeType)
     {
         this.SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));
@@ -40,11 +41,12 @@ public sealed class SourceChangedEventArgs : EventArgs
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
+    ///     Initializes a new instance of the <see cref="SourceChangedEventArgs"/> class.
     /// </summary>
     /// <param name="sourceId">The identifier of the settings source that changed.</param>
     /// <param name="changeType">The type of change that occurred.</param>
     /// <param name="errorMessage">Optional error message if the change represents a failure.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sourceId"/> is <see langword="null"/>.</exception>
     public SourceChangedEventArgs(string sourceId, SourceChangeType changeType, string? errorMessage)
     {
         this.SourceId = sourceId ?? throw new ArgumentNullException(nameof(sourceId));

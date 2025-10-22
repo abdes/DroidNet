@@ -12,32 +12,33 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config;
 
 /// <summary>
-///     An implementation of the <see cref="ISettingsManager"/> interface, that implements last-loaded-wins strategy for
-///     multi-source composition.
+///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 /// <remarks>
-///     This implementation follows the contract specified in <see cref="ISettingsManager"/>, and handles multi-source
-///     composition using a last-loaded-wins strategy. When initialized, its loads all registered sources in the order
-///     they were added. Settings sections from later-loaded sources override those from earlier ones when there are
-///     conflicts.
+///     This class manages multiple <see cref="ISettingsSource"/> instances, loading them in the order added. When multiple
+///     sources provide the same section, the last-loaded source wins for that section.
 ///     <para>
-///     This implementation supports reloading, adding and removing sources at runtime via <see cref="AddSourceAsync"/>
-///     and <see cref="RemoveSourceAsync"/> and automatic or manually triggered reloads via <see cref="ReloadAllAsync"/>.
-///     Updates resulting from these operations are propagated to all active settings services, but it remains the
-///     responsibility of the service implementation to honor them.
+///     Supports runtime reloading, addition, and removal of sources via <see cref="AddSourceAsync"/>, <see
+///     cref="RemoveSourceAsync"/>, and <see cref="ReloadAllAsync"/>. These operations propagate updates to all active
+///     settings services, but it is the responsibility of each service implementation to respond to changes.
 ///     </para>
 ///     <para>
-///     Applications can subscribe to the <see cref="SourceChanged"/> event to be notified of any lifecycle changes
-///     occurring to the managed sources.
+///     Subscribe to the <see cref="SourceChanged"/> event to receive notifications about lifecycle changes to managed
+///     sources.
 ///     </para>
 /// </remarks>
 /// <note>
-///     When a source is configured, it stays configured until it is explicitly removed, even if it fails to load. This
-///     allows it to be retried on subsequent reloads or when its data changes and the source is being watched.
+///     When a source is configured, it remains configured until explicitly removed, even if it fails to load. This allows
+///     retrying on subsequent reloads or when the source data changes.
 /// </note>
 /// <param name="sources">The collection of settings sources to manage.</param>
-/// <param name="resolver">The DI container resolver for creating service instances.</param>
-/// <param name="loggerFactory">Optional logger factory used to create a logger for diagnostic output.</param>
+/// <param name="resolver">The dependency injection resolver for creating service instances.</param>
+/// <param name="loggerFactory">
+///     Optional logger factory for diagnostic output. If <see langword="null"/>, a no-op logger is used.
+/// </param>
+/// <exception cref="System.ArgumentNullException">
+///     Thrown when <paramref name="sources"/> or <paramref name="resolver"/> is <see langword="null"/>.
+/// </exception>
 public sealed partial class SettingsManager(
     IEnumerable<ISettingsSource> sources,
     IResolver resolver,
@@ -279,14 +280,16 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Loads settings data from all sources for a specific settings type.
-    /// Applies last-loaded-wins strategy.
+    ///     Loads settings data for a specific settings type from all sources, applying the last-loaded-wins strategy.
     /// </summary>
-    /// <typeparam name="TSettings">The settings type.</typeparam>
+    /// <typeparam name="TSettings">The settings type to load.</typeparam>
     /// <param name="sectionName">The section name to load from the cached data.</param>
-    /// <param name="pocoType">The concrete POCO type to deserialize to when data is stored as JsonElement. If null, defaults to typeof(TSettings).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>Merged settings data, or null if no data found for the section.</returns>
+    /// <param name="pocoType">
+    ///     The concrete POCO type to deserialize to when data is stored as <see cref="System.Text.Json.JsonElement"/>.
+    ///     If <see langword="null"/>, defaults to <c>typeof(TSettings)</c>.
+    /// </param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>The merged settings data, or <see langword="null"/> if no data is found for the section.</returns>
     internal async Task<TSettings?> LoadSettingsAsync<TSettings>(string sectionName, Type? pocoType = null, CancellationToken cancellationToken = default)
         where TSettings : class
     {
@@ -312,14 +315,14 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Saves settings data to the source that last contributed this section.
+    ///     Saves settings data to the source that last contributed the specified section.
     /// </summary>
-    /// <typeparam name="TSettings">The settings type.</typeparam>
+    /// <typeparam name="TSettings">The settings type to save.</typeparam>
     /// <param name="sectionName">The section name to use when saving.</param>
     /// <param name="settings">The settings data to save.</param>
     /// <param name="sectionMetadata">Metadata for the settings section.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A <see cref="System.Threading.Tasks.Task"/> representing the asynchronous operation.</returns>
     internal async Task SaveSettingsAsync<TSettings>(
         string sectionName,
         TSettings settings,
@@ -344,13 +347,13 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Saves multiple settings sections to their respective sources in batched operations.
-    /// Groups sections by target source for efficient I/O and lock management.
+    ///     Saves multiple settings sections to their respective sources in batched operations.
+    ///     Groups sections by target source for efficient I/O and lock management.
     /// </summary>
-    /// <param name="sectionsData">Dictionary of section names to their data.</param>
-    /// <param name="sectionsMetadata">Dictionary of section names to their metadata.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <param name="sectionsData">A dictionary mapping section names to their data.</param>
+    /// <param name="sectionsMetadata">A dictionary mapping section names to their metadata.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A <see cref="System.Threading.Tasks.Task"/> representing the asynchronous operation.</returns>
     /// <exception cref="SettingsPersistenceException">Thrown when saving to any source fails.</exception>
     internal async Task SaveSectionsToSourcesAsync(
         IReadOnlyDictionary<string, object> sectionsData,
@@ -405,8 +408,11 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Saves grouped sections to their sources. Must be called within the initialization lock.
+    ///     Saves grouped sections to their sources. Must be called within the initialization lock.
     /// </summary>
+    /// <param name="sectionsBySource">A dictionary mapping source IDs to the sections and their data to save to each source.</param>
+    /// <param name="metadataBySource">A dictionary mapping source IDs to the corresponding sections' metadata.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
     private async Task SaveGroupedSectionsLockedAsync(
         Dictionary<string, Dictionary<string, object>> sectionsBySource,
         Dictionary<string, Dictionary<string, SettingsSectionMetadata>> metadataBySource,
@@ -421,8 +427,13 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Saves sections to a specific source. Must be called within the initialization lock.
+    ///     Saves sections to a specific source. Must be called within the initialization lock.
     /// </summary>
+    /// <param name="sourceId">The ID of the target source to save sections to.</param>
+    /// <param name="sectionsData">A dictionary mapping section names to the data to save for that source.</param>
+    /// <param name="sectionsMetadata">A dictionary mapping section names to their metadata for that source.</param>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <exception cref="SettingsPersistenceException">Thrown when saving to the target source fails.</exception>
     private async Task SaveToSourceLockedAsync(
         string sourceId,
         Dictionary<string, object> sectionsData,
@@ -476,8 +487,10 @@ public sealed partial class SettingsManager(
     }
 
     /// <summary>
-    /// Updates the source version and metadata. Must be called under source lock.
+    ///     Updates the source version and metadata. Must be called under the source lock.
     /// </summary>
+    /// <param name="source">The source whose version and metadata will be updated.</param>
+    /// <returns>The new <see cref="SettingsSourceMetadata"/> instance set on the source.</returns>
     private SettingsSourceMetadata UpdateSourceVersion(ISettingsSource source)
     {
         // Increment version and create source metadata within the save operation

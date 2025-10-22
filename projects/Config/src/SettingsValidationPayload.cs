@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-
 namespace DroidNet.Config;
 
 /// <summary>
@@ -12,10 +10,11 @@ namespace DroidNet.Config;
 public sealed record SettingsValidationPayload
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsValidationPayload"/> class.
+    ///     Initializes a new instance of the <see cref="SettingsValidationPayload"/> class.
     /// </summary>
     /// <param name="sectionsValidated">The number of sections that participated in validation.</param>
     /// <param name="message">A human-readable description of the validation result.</param>
+    /// <exception cref="System.ArgumentException">Thrown when <paramref name="message"/> is <see langword="null"/> or whitespace.</exception>
     public SettingsValidationPayload(int sectionsValidated, string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -28,12 +27,12 @@ public sealed record SettingsValidationPayload
     }
 
     /// <summary>
-    /// Gets the number of sections that participated in validation.
+    ///     Gets the number of sections that participated in validation.
     /// </summary>
     public int SectionsValidated { get; }
 
     /// <summary>
-    /// Gets a human-readable description of the validation result.
+    ///     Gets a human-readable description of the validation result.
     /// </summary>
     public string Message { get; }
 }

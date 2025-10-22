@@ -8,7 +8,7 @@ using System.ComponentModel;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Partial class containing AutoSave functionality for <see cref="SettingsManager"/>.
+///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 public sealed partial class SettingsManager
 {
@@ -96,8 +96,21 @@ public sealed partial class SettingsManager
     }
 
     /// <summary>
-    /// Private helper class that manages automatic saving of dirty settings with debouncing.
+    ///     Private helper class that manages automatic saving of dirty settings with debouncing.
     /// </summary>
+    /// <param name="owner">Reference to the parent <see cref="SettingsManager"/> that owns this helper.</param>
+    /// <param name="serviceInstances">Collection of registered settings services to monitor and save.</param>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="serviceInstances"/> is <c>null</c>.</exception>
+    /// <remarks>
+    ///     The <c>AutoSaver</c> subscribes to <see cref="INotifyPropertyChanged"/> notifications from
+    ///     monitored services and debounces saves using <see cref="SettingsManager.AutoSaveDelay"/>. It
+    ///     coalesces concurrent save requests, runs saves serially, and will execute any pending save that
+    ///     occurred while a save was in progress.
+    ///     <para>
+    ///     Disposal blocks until any ongoing save operation finishes; disposal is safe to call multiple
+    ///     times (the parent protects against double-disposal).
+    ///     </para>
+    /// </remarks>
     private sealed class AutoSaver(SettingsManager owner, ConcurrentDictionary<Type, ISettingsService> serviceInstances) : IDisposable
     {
         private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = serviceInstances ?? throw new ArgumentNullException(nameof(serviceInstances));

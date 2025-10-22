@@ -32,6 +32,7 @@ public sealed class SettingsSourceMetadata
     ///     </para>
     /// </remarks>
     [JsonPropertyName("version")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Roslynator", "RCS1085:Use auto-implemented property", Justification = "backing field is important for the SeterKey pattern")]
     public long Version
     {
         get => this.version;

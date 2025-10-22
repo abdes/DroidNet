@@ -5,29 +5,40 @@
 namespace DroidNet.Config;
 
 /// <summary>
-///     The primary contract for strongly-typed settings service used at runtime.
-///     This is the single canonical service contract consumers should use.
-///     The service implementation must implement the TSettings interface for direct property access.
+///     The primary contract for a strongly-typed settings service used at runtime.
+///     <para>
+///     This is the canonical service contract consumers should use to access and mutate settings.
+///     Implementations MUST also implement the <typeparamref name="TSettingsInterface"/> interface so the service
+///     instance exposes typed properties directly for UI binding and programmatic access.
+///     </para>
 /// </summary>
-/// <typeparam name="TSettings">The strongly-typed settings interface.</typeparam>
+/// <typeparam name="TSettingsInterface">
+///     The strongly-typed settings interface that the service implements (for example, <c>IAppearanceSettings</c>).
+///     The service instance returned by DI will implement this interface so consumers can read and write
+///     strongly-typed settings properties directly via the service itself.
+/// </typeparam>
 /// <remarks>
-///     All concrete services must derive from <see cref="ISettingsService{TSettings}"/> or have methods that
-///     are equivalent to all its public members.
+///     Concrete services should be registered and consumed as <c>ISettingsService&lt;TSettingsInterface&gt;</c> so the
+///     `SettingsManager` can initialize and coordinate their lifecycle (loading, validation, and persistence).
+///     <para>
+///     Consumers **DO NOT** need to access settings via the <see cref="Settings"/> property; instead, they can read and
+///     write settings properties directly on the service instance since it implements <typeparamref name="TSettingsInterface"/>.
+///    </para>
 /// </remarks>
-public interface ISettingsService<TSettings> : ISettingsService
-    where TSettings : class
+public interface ISettingsService<TSettingsInterface> : ISettingsService
+    where TSettingsInterface : class
 {
     /// <summary>
-    ///     Gets the settings instance that implements the TSettings interface.
-    ///     This provides typed access to all settings properties.
+    ///     Gets the settings instance that implements the <typeparamref name="TSettingsInterface"/> interface.
     /// </summary>
+    /// <note>
+    ///     This property provides typed access to all settings properties implemented by the service, useful for
+    ///     property enumeration and generic processing. Prefer to access settings directly via the service instance.
+    /// </note>
     /// <remarks>
-    ///     The Settings property provides direct access to settings properties:
-    ///     <code><![CDATA[
-    ///     ISettingsService&lt;IEditorSettings&gt; service = ...;
-    ///     var fontSize = service.Settings.FontSize;
-    ///     service.Settings.FontSize = 14;
-    ///     ]]></code>
+    ///     Changes made to the settings properties should normally participate in the service's change-tracking (for
+    ///     example updating <see cref="ISettingsService.IsDirty"/>) and be persisted via
+    ///     <see cref="ISettingsService.SaveAsync(CancellationToken)"/> or the manager's auto-save.
     /// </remarks>
-    public TSettings Settings { get; }
+    public TSettingsInterface Settings { get; }
 }
