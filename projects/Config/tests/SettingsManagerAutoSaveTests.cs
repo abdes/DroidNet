@@ -506,6 +506,36 @@ public class SettingsManagerAutoSaveTests : SettingsTestBase
     }
 
     [TestMethod]
+    public async Task AutoSave_Reload_ShouldNotTriggerSave()
+    {
+        // Arrange - add a section and initialize
+        this.source.AddSection(nameof(TestSettings), new TestSettings { Name = "Original", Value = 1 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Enable AutoSave
+        this.SettingsManager.AutoSaveDelay = TimeSpan.FromMilliseconds(50);
+        this.SettingsManager.AutoSave = true;
+
+        // Ensure service is clean initially
+        _ = service.IsDirty.Should().BeFalse();
+
+        // Simulate a source reload - this should update services but not trigger AutoSave
+        this.source.TriggerSourceChanged(SourceChangeType.Updated);
+
+        // Wait to allow reload handling to complete
+        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - no save should have occurred as a result of reload
+        _ = this.source.WriteCallCount.Should().Be(0);
+
+        // Cleanup
+        this.SettingsManager.AutoSave = false;
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+    }
+
+    [TestMethod]
     public void AutoSaveDelayProperty_Setter_UpdatesValue()
     {
         // Arrange
