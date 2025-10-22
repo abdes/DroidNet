@@ -307,3 +307,9 @@ dotnet_diagnostic.CA1515.severity = suggestion
 dotnet_diagnostic.CA1823.severity = suggestion
 # Remove unused private member (duplicate of CA1823)
 dotnet_diagnostic.IDE0051.severity = none
+
+
+# Suppress specific StyleCop rule(s) for files whose name ends with .Log.cs
+[**/*.Logs.cs]
+# turn off SA1204 (static elements ordering) in these files
+dotnet_diagnostic.SA1204.severity = none
