@@ -97,14 +97,14 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         {
             LogSaveRequested(this.logger, this.Id, sectionsData.Count);
 
-            var mergedSections = await this.MergeWithExistingSectionsAsync(sectionsData, sectionMetadata, cancellationToken).ConfigureAwait(false);
-            var jsonContent = SerializeSections(mergedSections.sections, mergedSections.metadata, sourceMetadata);
+            var (sections, metadata) = await this.MergeWithExistingSectionsAsync(sectionsData, sectionMetadata, cancellationToken).ConfigureAwait(false);
+            var jsonContent = SerializeSections(sections, metadata, sourceMetadata);
 
             await this.WriteAllBytesAsync(jsonContent, cancellationToken).ConfigureAwait(false);
 
-            LogSaveSucceeded(this.logger, this.Id, mergedSections.sections.Count);
+            LogSaveSucceeded(this.logger, this.Id, sections.Count);
 
-            var payload = new SettingsWritePayload(sourceMetadata, sectionsData.Count, this.SourcePath);
+            var payload = new SettingsWritePayload(sourceMetadata, sections.Count, this.SourcePath);
             return Result.Ok(payload);
         }
         catch (JsonException ex)
@@ -172,6 +172,7 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
         base.Dispose(disposing);
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "enforce immutability")]
     private static string SerializeSections(
         IReadOnlyDictionary<string, object> sectionsData,
         IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
@@ -319,43 +320,13 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
                 continue;
             }
 
-            var sectionElement = property.Value;
-
-            // Extract section metadata if present
-            if (sectionElement.TryGetProperty("$meta", out var sectionMetaElement))
+            var (sectionObj, sectionMeta) = ExtractSection(property.Name, property.Value);
+            if (sectionMeta is not null)
             {
-                var meta = JsonSerializer.Deserialize<SettingsSectionMetadata>(sectionMetaElement.GetRawText());
-                if (meta != null)
-                {
-                    sectionMetadata[property.Name] = meta;
-                }
+                sectionMetadata[property.Name] = sectionMeta;
             }
 
-            // Store the entire section (minus $meta) as a JsonElement for later deserialization
-            if (sectionElement.ValueKind == JsonValueKind.Object)
-            {
-                // Reconstruct section without $meta
-                using var stream = new MemoryStream();
-                using (var writer = new Utf8JsonWriter(stream))
-                {
-                    writer.WriteStartObject();
-                    foreach (var sectionProp in sectionElement.EnumerateObject())
-                    {
-                        if (sectionProp.Name.Equals("$meta", StringComparison.Ordinal))
-                        {
-                            continue;
-                        }
-
-                        sectionProp.WriteTo(writer);
-                    }
-
-                    writer.WriteEndObject();
-                }
-
-                stream.Position = 0;
-                using var doc = JsonDocument.Parse(stream);
-                sections[property.Name] = doc.RootElement.Clone();
-            }
+            sections[property.Name] = sectionObj;
         }
 
         LogReadSections(this.logger, this.Id, sections.Count);
@@ -365,6 +336,58 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
             new ReadOnlyDictionary<string, SettingsSectionMetadata>(sectionMetadata),
             sourceMetadata,
             this.SourcePath);
+
+        /*
+         * A section is expected to be a JSON object, with an optional $meta property for metadata.
+         *
+         * Example:
+         * "database": {
+         *    "$meta": {
+         *      "schemaVersion": "1.0",
+         *      "service": "UserService"
+         *    },
+         *    "connectionString": "Server=...",
+         *    "poolSize": 5
+         * }
+         */
+        (JsonElement sectionObject, SettingsSectionMetadata? meta) ExtractSection(string sectionName, JsonElement element)
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+            {
+                throw new SettingsPersistenceException(
+                    $"Section '{sectionName}' in '{this.SourcePath}' must be a JSON object.",
+                    this.Id,
+                    new JsonException($"Section '{sectionName}' must be a JSON object."));
+            }
+
+            SettingsSectionMetadata? meta = null;
+            if (element.TryGetProperty("$meta", out var sectionMetaElement))
+            {
+                meta = JsonSerializer.Deserialize<SettingsSectionMetadata>(sectionMetaElement.GetRawText());
+            }
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream))
+            {
+                writer.WriteStartObject();
+                foreach (var sectionProp in element.EnumerateObject())
+                {
+                    if (sectionProp.Name.Equals("$meta", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    sectionProp.WriteTo(writer);
+                }
+
+                writer.WriteEndObject();
+                writer.Flush();
+            }
+
+            var bytes = stream.ToArray();
+            using var doc = JsonDocument.Parse(bytes);
+            return (doc.RootElement.Clone(), meta);
+        }
     }
 
     private async Task<(Dictionary<string, object> sections, Dictionary<string, SettingsSectionMetadata> metadata)> MergeWithExistingSectionsAsync(
