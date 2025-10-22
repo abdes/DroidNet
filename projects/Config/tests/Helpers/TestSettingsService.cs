@@ -55,6 +55,11 @@ public sealed class TestSettingsService(SettingsManager manager, ILoggerFactory?
         Service = typeof(TestSettingsService).FullName,
     };
 
+    // Test helpers to avoid reflection in tests
+    public void SetTestIsBusy(bool value) => this.IsBusy = value;
+
+    public void SetTestIsDirty(bool value) => this.IsDirty = value;
+
     protected override ITestSettings GetSettingsSnapshot() => new TestSettings
     {
         Name = this.Name,

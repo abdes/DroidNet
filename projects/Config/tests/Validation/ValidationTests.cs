@@ -20,8 +20,6 @@ public class ValidationTests : SettingsTestBase
 {
     private readonly MockSettingsSource source = new("test-source");
 
-    public TestContext TestContext { get; set; }
-
     [TestInitialize]
     public void TestInitialize() => this.Container.RegisterInstance<ISettingsSource>(this.source);
 

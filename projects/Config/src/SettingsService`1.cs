@@ -2,14 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -68,21 +63,21 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     }
 
     /// <summary>
-    /// Gets a value indicating whether the settings have unsaved changes.
+    /// Gets or sets a value indicating whether the settings have unsaved changes.
     /// </summary>
     public bool IsDirty
     {
         get => this.isDirty;
-        internal set => this.SetDirtyInternal(value);
+        protected set => this.SetDirtyInternal(value);
     }
 
     /// <summary>
-    /// Gets a value indicating whether an operation is in progress.
+    /// Gets or sets a value indicating whether an operation is in progress.
     /// </summary>
     public bool IsBusy
     {
         get => this.isBusy;
-        private set => this.SetField(ref this.isBusy, value);
+        protected set => this.SetField(ref this.isBusy, value);
     }
 
     /// <inheritdoc/>
@@ -136,9 +131,19 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
                 try
                 {
                     await this.Manager.SaveSettingsAsync(this.SectionName, settingsSnapshot, this.SectionMetadata, cancellationToken).ConfigureAwait(false);
-                    this.IsDirty = false;
 
-                    // Log successful save
+                    // Only mark clean if settings haven't changed during the save operation
+                    var currentSnapshot = this.GetSettingsSnapshot();
+                    if (AreSnapshotsEquivalent(settingsSnapshot, currentSnapshot))
+                    {
+                        this.IsDirty = false;
+                    }
+                    else
+                    {
+                        // Settings changed during save - force PropertyChanged to notify AutoSave
+                        this.OnPropertyChanged(nameof(this.IsDirty));
+                    }
+
                     this.LogSavedSettings();
                 }
                 catch (Exception ex)
@@ -332,6 +337,48 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             && typeof(TSettings).GetProperty(propertyName) is not null)
         {
             this.SetDirtyInternal(value: true);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Compares two settings snapshots to determine if they are equivalent.
+    /// Uses property-by-property comparison of TSettings interface properties only.
+    /// </summary>
+    /// <param name="snapshot1">The first snapshot to compare.</param>
+    /// <param name="snapshot2">The second snapshot to compare.</param>
+    /// <returns>True if the snapshots are equivalent; otherwise, false.</returns>
+    private static bool AreSnapshotsEquivalent(object snapshot1, object snapshot2)
+    {
+        if (ReferenceEquals(snapshot1, snapshot2))
+        {
+            return true;
+        }
+
+        if (snapshot1 is null || snapshot2 is null)
+        {
+            return false;
+        }
+
+        // Compare only properties defined in the TSettings interface
+        var interfaceType = typeof(TSettings);
+        var properties = interfaceType.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+
+        foreach (var property in properties)
+        {
+            if (!property.CanRead)
+            {
+                continue;
+            }
+
+            var value1 = property.GetValue(snapshot1);
+            var value2 = property.GetValue(snapshot2);
+
+            if (!Equals(value1, value2))
+            {
+                return false;
+            }
         }
 
         return true;

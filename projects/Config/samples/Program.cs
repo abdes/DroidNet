@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using DroidNet.Bootstrap;
 using DryIoc;
 using Microsoft.Extensions.Logging;
@@ -95,11 +96,13 @@ internal static class Program
             ["show"] = ShowAction,
             ["toggle"] = ToggleAction,
             ["setname"] = SetNameAction,
+            ["autosave"] = AutoSaveAction,
+            ["autodelay"] = AutoSaveDelayAction,
             ["save"] = SaveAction,
             ["reload"] = ReloadAction,
         };
 
-        Console.WriteLine("Settings loaded. Enter commands: show | toggle | setname <name> | save | reload | exit");
+        Console.WriteLine("Settings loaded. Enter commands: show | toggle | setname <name> | autosave [on|off|toggle|status] | autodelay <seconds> | save | reload | exit");
 
         while (true)
         {
@@ -166,6 +169,50 @@ internal static class Program
             return Task.CompletedTask;
         }
 
+        Task AutoSaveAction(string[] p)
+        {
+            // Obtain the manager instance
+            var manager = bootstrap.Container.Resolve<SettingsManager>();
+
+            if (p.Length == 1)
+            {
+                Console.WriteLine($"AutoSave: {manager.AutoSave} (Delay: {manager.AutoSaveDelay.TotalSeconds} sec)");
+                return Task.CompletedTask;
+            }
+
+            var arg = p[1].Trim();
+
+            if (string.Equals(arg, "toggle", StringComparison.OrdinalIgnoreCase))
+            {
+                manager.AutoSave = !manager.AutoSave;
+                Console.WriteLine($"AutoSave -> {manager.AutoSave}");
+                return Task.CompletedTask;
+            }
+
+            if (string.Equals(arg, "on", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "true", StringComparison.OrdinalIgnoreCase))
+            {
+                manager.AutoSave = true;
+                Console.WriteLine("AutoSave enabled.");
+                return Task.CompletedTask;
+            }
+
+            if (string.Equals(arg, "off", StringComparison.OrdinalIgnoreCase) || string.Equals(arg, "false", StringComparison.OrdinalIgnoreCase))
+            {
+                manager.AutoSave = false;
+                Console.WriteLine("AutoSave disabled.");
+                return Task.CompletedTask;
+            }
+
+            if (string.Equals(arg, "status", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine($"AutoSave: {manager.AutoSave} (Delay: {manager.AutoSaveDelay.TotalSeconds} sec)");
+                return Task.CompletedTask;
+            }
+
+            Console.WriteLine("Usage: autosave [on|off|toggle|status]");
+            return Task.CompletedTask;
+        }
+
         async Task SaveAction(string[] p)
         {
             // Obtain the typed settings service
@@ -184,6 +231,27 @@ internal static class Program
             Console.WriteLine("Reloading all sources...");
             await manager.ReloadAllAsync().ConfigureAwait(true);
             Console.WriteLine("Reloaded.");
+        }
+
+        Task AutoSaveDelayAction(string[] p)
+        {
+            var manager = bootstrap.Container.Resolve<SettingsManager>();
+
+            if (p.Length == 2 && double.TryParse(p[1], NumberStyles.Float | NumberStyles.AllowThousands, CultureInfo.InvariantCulture, out var seconds))
+            {
+                if (seconds <= 0)
+                {
+                    Console.WriteLine("Delay must be positive.");
+                    return Task.CompletedTask;
+                }
+
+                manager.AutoSaveDelay = TimeSpan.FromSeconds(seconds);
+                Console.WriteLine($"AutoSaveDelay -> {manager.AutoSaveDelay.TotalSeconds} seconds");
+                return Task.CompletedTask;
+            }
+
+            Console.WriteLine("Usage: autodelay <seconds>");
+            return Task.CompletedTask;
         }
 
         Task UnknownAction(string[] p)

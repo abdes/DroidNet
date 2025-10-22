@@ -23,6 +23,7 @@ public abstract class SettingsTestBase : IDisposable
     };
 
     private bool isDisposed;
+    private TestContextLoggerProvider? loggerProvider;
 
     protected SettingsTestBase(bool withSettings = true)
     {
@@ -47,6 +48,8 @@ public abstract class SettingsTestBase : IDisposable
         }
     }
 
+    public required TestContext TestContext { get; set; }
+
     protected MockFileSystem FileSystem { get; }
 
     protected IContainer Container { get; }
@@ -55,10 +58,23 @@ public abstract class SettingsTestBase : IDisposable
 
     protected ILoggerFactory LoggerFactory { get; }
 
+    protected bool EnableTestLogging { get; set; }
+
     public void Dispose()
     {
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    protected void SetupTestLogging(TestContext testContext)
+    {
+        this.TestContext = testContext;
+
+        if (this.EnableTestLogging && this.TestContext != null)
+        {
+            this.loggerProvider = new TestContextLoggerProvider(this.TestContext);
+            this.LoggerFactory.AddProvider(this.loggerProvider);
+        }
     }
 
     protected string CreateTempSettingsFile(string fileName, string jsonContent)
@@ -146,6 +162,7 @@ public abstract class SettingsTestBase : IDisposable
         {
             if (disposing)
             {
+                this.loggerProvider?.Dispose();
                 this.Container?.Dispose();
                 this.LoggerFactory?.Dispose();
             }
