@@ -157,60 +157,6 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     }
 
     /// <summary>
-    /// Reloads settings from all sources, discarding unsaved changes.
-    /// </summary>
-    /// <param name="cancellationToken">A cancellation token.</param>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task ReloadAsync(CancellationToken cancellationToken = default)
-    {
-        this.ThrowIfDisposed();
-
-        var releaser = await this.operationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
-        this.operationScopeDepth.Value++;
-        await using (releaser.ConfigureAwait(false))
-        {
-            try
-            {
-                this.IsBusy = true;
-
-                // Log reload
-                this.LogReloading();
-
-                // First, reload all sources in the manager to refresh the cache
-                await this.Manager.ReloadAllAsync(cancellationToken).ConfigureAwait(false);
-
-                // Then load the refreshed settings from the updated cache
-                var loadedSettings = await this.Manager.LoadSettingsAsync<TSettings>(this.SectionName, this.SettingsType, cancellationToken).ConfigureAwait(false);
-
-                var usedDefaults = false;
-                if (loadedSettings == null)
-                {
-                    loadedSettings = this.CreateDefaultSettings();
-                    usedDefaults = true;
-                }
-
-                this.UpdateProperties(loadedSettings);
-
-                this.IsDirty = false;
-
-                if (usedDefaults)
-                {
-                    this.LogUsingDefaults();
-                }
-
-                this.LogReloaded();
-
-                this.OnPropertyChanged(nameof(this.Settings));
-            }
-            finally
-            {
-                this.operationScopeDepth.Value--;
-                this.IsBusy = false;
-            }
-        }
-    }
-
-    /// <summary>
     /// Validates the current settings instance using data annotations.
     /// </summary>
     /// <param name="cancellationToken">A cancellation token.</param>
@@ -255,9 +201,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             try
             {
                 this.IsBusy = true;
-                var defaultSettings = this.CreateDefaultSettings();
-
-                this.UpdateProperties(defaultSettings);
+                this.ApplyDefaults();
 
                 this.IsDirty = true;
 
@@ -287,6 +231,8 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     public void ApplyProperties(object? data)
     {
         this.ThrowIfDisposed();
+
+        // Avoid nested locking if we are already inside a locked operation
         if (this.operationScopeDepth.Value > 0)
         {
             this.ApplyPropertiesCore(data);
@@ -349,6 +295,21 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
     protected abstract TSettings CreateDefaultSettings();
 
     /// <summary>
+    /// Creates and applies default settings to this service.
+    /// </summary>
+    /// <remarks>
+    /// This helper centralizes the common pattern of creating a default settings instance via
+    /// <see cref="CreateDefaultSettings"/> and delegating to <see cref="UpdateProperties(TSettings)"/>.
+    /// It does not change dirty-tracking behavior; callers decide whether the application should mark
+    /// the service dirty or clean (typically via <see cref="DirtyTrackingScope"/>).
+    /// </remarks>
+    protected virtual void ApplyDefaults()
+    {
+        var defaultSettings = this.CreateDefaultSettings();
+        this.UpdateProperties(defaultSettings);
+    }
+
+    /// <summary>
     /// Sets a field and raises <see cref="PropertyChanged"/> if the value changes.
     /// </summary>
     /// <typeparam name="T">The field type.</typeparam>
@@ -370,7 +331,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
             && !string.IsNullOrEmpty(propertyName)
             && typeof(TSettings).GetProperty(propertyName) is not null)
         {
-            this.SetDirtyInternal(true);
+            this.SetDirtyInternal(value: true);
         }
 
         return true;
@@ -401,8 +362,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
 
         if (data is null)
         {
-            var defaultSettings = this.CreateDefaultSettings();
-            this.UpdateProperties(defaultSettings);
+            this.ApplyDefaults();
             suppression.MarkClean();
             return;
         }
@@ -445,7 +405,7 @@ public abstract partial class SettingsService<TSettings>(SettingsManager manager
 
             if (this.markClean)
             {
-                this.owner.SetDirtyInternal(false);
+                this.owner.SetDirtyInternal(value: false);
             }
         }
     }

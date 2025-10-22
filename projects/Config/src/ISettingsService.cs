@@ -22,6 +22,16 @@ public interface ISettingsService : INotifyPropertyChanged, IDisposable
     public Type SettingsType { get; }
 
     /// <summary>
+    /// Gets a value indicating whether the settings have been modified since the last save.
+    /// </summary>
+    public bool IsDirty { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether the service is currently performing an async operation.
+    /// </summary>
+    public bool IsBusy { get; }
+
+    /// <summary>
     /// Gets or sets the metadata for this settings section.
     /// </summary>
     /// <remarks>
@@ -29,6 +39,27 @@ public interface ISettingsService : INotifyPropertyChanged, IDisposable
     /// It contains service-specific information like schema version and service identifier.
     /// </remarks>
     public SettingsSectionMetadata SectionMetadata { get; set; }
+
+    /// <summary>
+    /// Saves the current settings to persistent storage if modifications exist.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the save operation.</param>
+    /// <returns>A task that represents the save operation.</returns>
+    public Task SaveAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates the current settings and returns any validation errors.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the validation.</param>
+    /// <returns>A task that represents the validation operation. The task result contains validation errors.</returns>
+    public Task<IReadOnlyList<SettingsValidationError>> ValidateAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resets the settings to their default values.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the reset operation.</param>
+    /// <returns>A task that represents the reset operation.</returns>
+    public Task ResetToDefaultsAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Applies properties from cached data (POCO or JsonElement) to this service's settings.
