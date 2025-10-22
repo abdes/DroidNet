@@ -468,3 +468,15 @@ The README above shows the typical coverage XML location produced by the tests (
 1. Install the **Coverage Gutters** extension.
 2. Run `cover.ps1` (or the dotnet command) to produce a Cobertura XML file.
 3. Open the generated Cobertura file or use the extension's "Watch" feature to show coverage in the editor gutter.
+
+## Missing Features
+
+- GOAL-004: Implement secure storage for sensitive configuration data using encryption
+
+| Completed | Task | Description |
+|------|-------------|-----------|
+|✅| TASK-021 | Create `EncryptedJsonSettingsSource` class in `src/Sources/EncryptedJsonSettingsSource.cs` extending JsonSettingsSource |
+|✅| TASK-022 | Implement Secret&lt;T&gt; encryption/decryption using platform-appropriate APIs (DPAPI on Windows) |
+| | TASK-023 | Add key management and rotation capabilities to EncryptedJsonSettingsSource |
+| | TASK-024 | Implement secure memory handling to prevent secret leakage in logs or exceptions |
+| | TASK-025 | Add validation to prevent Secret&lt;T&gt; properties from being saved to non-encrypted sources |
