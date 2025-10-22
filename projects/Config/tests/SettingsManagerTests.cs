@@ -368,7 +368,7 @@ public class SettingsManagerTests : SettingsTestBase
         source1.TriggerSourceChanged(SourceChangeType.Updated);
 
         // Give the async handler time to process
-        await Task.Delay(500).ConfigureAwait(true);
+        await Task.Delay(500, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should be automatically updated with new values
         _ = service.Settings.Name.Should().Be("Updated");
@@ -394,7 +394,7 @@ public class SettingsManagerTests : SettingsTestBase
         source1.TriggerSourceChanged(SourceChangeType.Updated);
 
         // Give the async handler time to process
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should have reset to defaults
         _ = service.Settings.Name.Should().Be("Default");
@@ -418,7 +418,7 @@ public class SettingsManagerTests : SettingsTestBase
         await this.SettingsManager.AddSourceAsync(newSource, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Give the async handler time to process
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should use settings from new source (last-loaded-wins)
         _ = service.Settings.Name.Should().Be("FromNewSource");
@@ -447,7 +447,7 @@ public class SettingsManagerTests : SettingsTestBase
         await this.SettingsManager.RemoveSourceAsync("source2", this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Give time for cleanup
-        await Task.Delay(50).ConfigureAwait(true);
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Note: After removal, the section is no longer tracked, so service keeps its last values
         // This is expected behavior - removal doesn't trigger automatic reload
@@ -494,7 +494,7 @@ public class SettingsManagerTests : SettingsTestBase
         source1.AddSection("TestSettings", new TestSettings { Name = "Test1-Updated", Value = 150 });
         source1.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Only TestSettings service should be updated
         _ = testService.Settings.Name.Should().Be("Test1-Updated");
@@ -556,7 +556,7 @@ public class SettingsManagerTests : SettingsTestBase
         source1.AddSection("TestSettings", new TestSettings { Name = "S1-Changed", Value = 111 });
         source1.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should still use source2 values (source2 is still the winner)
         _ = service.Settings.Name.Should().Be("S2");
@@ -566,7 +566,7 @@ public class SettingsManagerTests : SettingsTestBase
         source2.AddSection("TestSettings", new TestSettings { Name = "S2-Changed", Value = 222 });
         source2.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should now use updated source2 values
         _ = service.Settings.Name.Should().Be("S2-Changed");
@@ -691,6 +691,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Modify services locally to set dirty flags
         testService.Settings.Name = "UserChange";
         altService.Settings.Theme = "UserTheme";
+
         // Mark dirty via reflection (tests use this pattern elsewhere)
         var isDirtyPropTest = typeof(SettingsService<ITestSettings>).GetProperty("IsDirty");
         isDirtyPropTest?.SetValue(testService, value: true);
@@ -723,7 +724,7 @@ public class SettingsManagerTests : SettingsTestBase
 
         // Act - Trigger change on source
         source1.TriggerSourceChanged(SourceChangeType.Updated);
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Manager should have received the event (subscription happened during init)
         _ = eventFired.Should().BeTrue("manager should be subscribed to source events");
@@ -745,7 +746,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Act - Dispose and then trigger source change
         this.SettingsManager.Dispose();
         source1.TriggerSourceChanged(SourceChangeType.Updated);
-        await Task.Delay(100).ConfigureAwait(true);
+        await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - No events should be received after disposal
         _ = eventCount.Should().Be(0, "manager should unsubscribe from source events on disposal");
@@ -755,7 +756,7 @@ public class SettingsManagerTests : SettingsTestBase
     public async Task GetService_WithJsonElementData_ShouldDeserializeWithCaseInsensitivePropertyNames()
     {
         // Arrange - Simulate JSON with camelCase properties (like from JSON files)
-        var jsonText = """
+        const string jsonText = """
             {
                 "name": "CamelCaseTest",
                 "value": 999
@@ -847,7 +848,7 @@ public class SettingsManagerTests : SettingsTestBase
     public async Task SourceChanged_WithJsonElement_ShouldUpdateServiceCorrectly()
     {
         // Arrange - Initialize with JsonElement data
-        var initialJson = """
+        const string initialJson = """
             {
                 "name": "InitialValue",
                 "value": 100
@@ -862,7 +863,7 @@ public class SettingsManagerTests : SettingsTestBase
         _ = service.Settings.Name.Should().Be("InitialValue");
 
         // Act - Simulate source change with new JsonElement
-        var updatedJson = """
+        const string updatedJson = """
             {
                 "name": "UpdatedValue",
                 "value": 999
@@ -872,7 +873,7 @@ public class SettingsManagerTests : SettingsTestBase
         this.source.AddSection(nameof(TestSettings), updatedElement);
         this.source.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(200).ConfigureAwait(true); // Wait for async handler
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true); // Wait for async handler
 
         // Assert - Service should reflect new values from JsonElement
         _ = service.Settings.Name.Should().Be("UpdatedValue");
@@ -890,7 +891,7 @@ public class SettingsManagerTests : SettingsTestBase
         source1.AddSection(nameof(TestSettings), new TestSettings { Name = "MockPoco", Value = 100 });
 
         // JSON source provides JsonElement
-        var jsonText = """
+        const string jsonText = """
             {
                 "name": "JsonElement",
                 "value": 200
@@ -926,7 +927,7 @@ public class SettingsManagerTests : SettingsTestBase
         this.source.RemoveSection(nameof(TestSettings));
         this.source.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(200).ConfigureAwait(true);
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Service should reset to defaults
         _ = service.Settings.Name.Should().Be("Default");
@@ -951,7 +952,7 @@ public class SettingsManagerTests : SettingsTestBase
         this.source.AddSection(nameof(TestSettings), new TestSettings { Name = "Test2", Value = 200 });
         this.source.TriggerSourceChanged(SourceChangeType.Updated);
 
-        await Task.Delay(200).ConfigureAwait(true);
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Both service references should show updated values
         _ = service1.Settings.Name.Should().Be("Test2");

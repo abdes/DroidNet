@@ -5,7 +5,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
-using DroidNet.Config.Sources;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -44,11 +43,12 @@ public sealed partial class SettingsManager(
     IResolver resolver,
     ILoggerFactory? loggerFactory = null) : ISettingsManager
 {
-    private readonly ILogger<SettingsManager> logger = loggerFactory?.CreateLogger<SettingsManager>() ?? NullLogger<SettingsManager>.Instance;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
     };
+
+    private readonly ILogger<SettingsManager> logger = loggerFactory?.CreateLogger<SettingsManager>() ?? NullLogger<SettingsManager>.Instance;
 
     private readonly List<ISettingsSource> sources = sources?.ToList() ?? throw new ArgumentNullException(nameof(sources));
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
@@ -63,11 +63,6 @@ public sealed partial class SettingsManager(
     /// <inheritdoc/>
     public event EventHandler<SourceChangedEventArgs>? SourceChanged;
 
-    private ServiceUpdateCoordinator ServiceUpdates => new(
-        this,
-        this.serviceInstances,
-        this.cachedSections);
-
     /// <inheritdoc/>
     public IReadOnlyList<ISettingsSource> Sources
     {
@@ -77,6 +72,11 @@ public sealed partial class SettingsManager(
             return this.sources.AsReadOnly();
         }
     }
+
+    private ServiceUpdateCoordinator ServiceUpdates => new(
+        this,
+        this.serviceInstances,
+        this.cachedSections);
 
     /// <inheritdoc/>
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
@@ -115,28 +115,28 @@ public sealed partial class SettingsManager(
         var settingsType = typeof(TSettingsInterface);
         this.LogGetServiceRequested(settingsType.Name);
 
-        var isNew = false;
-
-        // Use GetOrAdd to atomically get existing or create new service
-        var service = (ISettingsService<TSettingsInterface>)this.serviceInstances.GetOrAdd(
+        // Use GetOrAdd overload with factoryArgument to avoid closure
+        var result = this.serviceInstances.GetOrAdd(
             settingsType,
-            _ =>
+            static (type, state) =>
             {
-                isNew = true;
-                this.LogCreatingService(settingsType.Name);
+                var (owner, settingsTypeLocal) = state;
+                owner.LogCreatingService(settingsTypeLocal.Name);
 
                 // Get the concrete service instance from the resolver, keyed by the settings type
-                var newService = this.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
-                this.ApplySettings(newService);
+                var newService = owner.resolver.Resolve<ISettingsService<TSettingsInterface>>(serviceKey: "__uninitialized__");
+                owner.ApplySettings(newService);
 
+                owner.LogServiceRegistered(settingsTypeLocal.Name, owner.serviceInstances.Count);
                 return newService;
-            });
+            },
+            (this, settingsType));
 
-        if (isNew)
-        {
-            this.LogServiceRegistered(settingsType.Name, this.serviceInstances.Count);
-        }
-        else
+        // The cast is safe because we only ever add ISettingsService<TSettingsInterface> for this type
+        var service = (ISettingsService<TSettingsInterface>)result;
+
+        // If the service was already present, log returning existing service
+        if (result is not null && !ReferenceEquals(result, this.serviceInstances[settingsType]))
         {
             this.LogReturningExistingService(settingsType.Name);
         }
@@ -343,20 +343,7 @@ public sealed partial class SettingsManager(
                 targetSourceId,
                 async () =>
                 {
-                    // Increment version and create source metadata within the save operation
-                    // Lock on the source to prevent concurrent version increments
-                    SettingsSourceMetadata sourceMetadata;
-                    lock (targetSource)
-                    {
-                        var newVersion = (targetSource.SourceMetadata?.Version ?? 0) + 1;
-                        sourceMetadata = new SettingsSourceMetadata
-                        {
-                            WrittenAt = DateTimeOffset.UtcNow,
-                            WrittenBy = "DroidNet.Config", // TODO: Make this configurable
-                        };
-                        sourceMetadata.SetVersion(newVersion, this.metadataSetterKey);
-                        targetSource.SourceMetadata = sourceMetadata;
-                    }
+                    var sourceMetadata = UpdateSourceVersion(targetSource);
 
                     var result = await targetSource.SaveAsync(sectionsData, sectionsMetadata, sourceMetadata, cancellationToken).ConfigureAwait(false);
                     if (!result.IsSuccess)
@@ -385,6 +372,26 @@ public sealed partial class SettingsManager(
                 $"Failed to save settings to source '{targetSource.Id}'",
                 targetSource.Id,
                 ex);
+        }
+
+        // Local function to update the source version and metadata under lock
+        SettingsSourceMetadata UpdateSourceVersion(ISettingsSource src)
+        {
+            // Increment version and create source metadata within the save operation
+            // Lock on the source to prevent concurrent version increments
+            lock (src)
+            {
+                var newVersion = (src.SourceMetadata?.Version ?? 0) + 1;
+                var meta = new SettingsSourceMetadata
+                {
+                    WrittenAt = DateTimeOffset.UtcNow,
+                    WrittenBy = "DroidNet.Config", // TODO: Make this configurable
+                };
+
+                meta.SetVersion(newVersion, this.metadataSetterKey);
+                src.SourceMetadata = meta;
+                return meta;
+            }
         }
     }
 
@@ -465,28 +472,19 @@ public sealed partial class SettingsManager(
     }
 
     private bool ShouldUpdateCacheFor(string sectionName, string sourceId, bool allowReload)
-    {
-        if (!allowReload)
-        {
-            return true;
-        }
-
-        if (!this.cachedSections.TryGetValue(sectionName, out var cached))
-        {
-            return true;
-        }
-
-        return string.Equals(cached.SourceId, sourceId, StringComparison.Ordinal);
-    }
+        => !allowReload
+            || !this.cachedSections.TryGetValue(sectionName, out var cached)
+            || string.Equals(cached.SourceId, sourceId, StringComparison.Ordinal);
 
     private void CacheSection(string sectionName, object sectionData, string sourceId)
         => this.cachedSections[sectionName] = new CachedSection(sectionData, sourceId);
 
     private List<string> GetSectionsOwnedBySource(string sourceId)
-        => this.cachedSections
-            .Where(kvp => string.Equals(kvp.Value.SourceId, sourceId, StringComparison.Ordinal))
-            .Select(kvp => kvp.Key)
-            .ToList();
+        => [..
+            this.cachedSections
+                .Where(kvp => string.Equals(kvp.Value.SourceId, sourceId, StringComparison.Ordinal))
+                .Select(kvp => kvp.Key),
+        ];
 
     private object? GetMaterializedSectionData(string sectionName, Type targetType)
     {
@@ -503,6 +501,7 @@ public sealed partial class SettingsManager(
 
         return materialized;
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
         static object? ConvertSectionData(object? data, Type targetType)
         {
             ArgumentNullException.ThrowIfNull(targetType);
@@ -566,7 +565,7 @@ public sealed partial class SettingsManager(
             // Only affect sections that this source is the WINNER for (owns in the map)
             // This respects last-loaded-wins: if another source later loaded the same section,
             // this source's change won't override it
-            var affectedSections = sectionsBeforeReload.Union(sectionsAfterReload).ToList();
+            var affectedSections = sectionsBeforeReload.Union(sectionsAfterReload, StringComparer.Ordinal).ToList();
             this.LogSourceReloadSummary(args.SourceId, sectionsBeforeReload.Count, sectionsAfterReload.Count, affectedSections.Count);
 
             if (affectedSections.Count > 0)
@@ -625,11 +624,8 @@ public sealed partial class SettingsManager(
             err => this.LogFailedToLoadSource(source.Id, err.Message));
     }
 
-    private void NotifyServicesOfReload()
-    {
-        // After reloading all sources, update all registered services with the latest cached data
-        this.ServiceUpdates.NotifyAllServices();
-    }
+    // After reloading all sources, update all registered services with the latest cached data
+    private void NotifyServicesOfReload() => this.ServiceUpdates.NotifyAllServices();
 
     private async Task LoadAllSourcesAsync(bool allowReload, CancellationToken cancellationToken)
     {
@@ -660,26 +656,15 @@ public sealed partial class SettingsManager(
             return cached.SourceId;
         }
 
-        var fallbackSourceId = this.sources.FirstOrDefault()?.Id;
-        if (fallbackSourceId is null)
-        {
-            throw new InvalidOperationException("No sources available to save settings.");
-        }
-
+        var fallbackSourceId = this.sources.FirstOrDefault()?.Id
+            ?? throw new InvalidOperationException("No sources available to save settings.");
         this.LogSavingToFirstAvailableSource(sectionName, fallbackSourceId);
         return fallbackSourceId;
     }
 
     private ISettingsSource GetSourceByIdOrThrow(string sourceId)
-    {
-        var targetSource = this.sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
-        if (targetSource is null)
-        {
-            throw new InvalidOperationException($"Winning source '{sourceId}' not found in sources list.");
-        }
-
-        return targetSource;
-    }
+        => this.sources.FirstOrDefault(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException($"Winning source '{sourceId}' not found in sources list.");
 
     private int FindSourceIndexById(string sourceId)
         => this.sources.FindIndex(s => string.Equals(s.Id, sourceId, StringComparison.Ordinal));
@@ -700,21 +685,14 @@ public sealed partial class SettingsManager(
         this.ThrowIfNotInitialized();
     }
 
-    private sealed class ServiceUpdateCoordinator
+    private sealed class ServiceUpdateCoordinator(
+        SettingsManager owner,
+        ConcurrentDictionary<Type, ISettingsService> serviceInstances,
+        ConcurrentDictionary<string, SettingsManager.CachedSection> cachedSections)
     {
-        private readonly SettingsManager owner;
-        private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances;
-        private readonly ConcurrentDictionary<string, CachedSection> cachedSections;
-
-        public ServiceUpdateCoordinator(
-            SettingsManager owner,
-            ConcurrentDictionary<Type, ISettingsService> serviceInstances,
-            ConcurrentDictionary<string, CachedSection> cachedSections)
-        {
-            this.owner = owner;
-            this.serviceInstances = serviceInstances;
-            this.cachedSections = cachedSections;
-        }
+        private readonly SettingsManager owner = owner;
+        private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = serviceInstances;
+        private readonly ConcurrentDictionary<string, CachedSection> cachedSections = cachedSections;
 
         public List<ISettingsService> GetImpactedServices(IReadOnlyCollection<string> sectionNames)
         {
@@ -749,7 +727,7 @@ public sealed partial class SettingsManager(
                 }
                 else
                 {
-                    serviceInstance.ApplyProperties(null);
+                    serviceInstance.ApplyProperties(data: null);
                     this.owner.LogUpdatedService(serviceType.Name);
                     this.owner.LogServiceResetToDefaults(serviceType.Name, sectionName);
                 }
@@ -763,16 +741,10 @@ public sealed partial class SettingsManager(
         }
     }
 
-    private sealed class CachedSection
+    private sealed class CachedSection(object? data, string sourceId)
     {
-        public CachedSection(object? data, string sourceId)
-        {
-            this.Data = data;
-            this.SourceId = sourceId;
-        }
+        public object? Data { get; set; } = data;
 
-        public object? Data { get; set; }
-
-        public string SourceId { get; }
+        public string SourceId { get; } = sourceId;
     }
 }
