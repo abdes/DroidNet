@@ -13,21 +13,28 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config.Sources;
 
 /// <summary>
-///     Provides access to configuration data stored in a file, with optional encryption.
+///     Provides access to configuration data stored in a file, with optional encryption and atomic write semantics.
 /// </summary>
 /// <remarks>
 ///     This class encapsulates the logic for reading and writing configuration files as UTF-8 encoded text. It
 ///     delegates encryption and decryption to an <see cref="IEncryptionProvider"/> implementation, allowing the same
 ///     file source to transparently handle both plain-text and encrypted files.
-/// <para>
+///     <para>
 ///     By default, if no encryption provider is supplied, the class uses <see cref="NoEncryptionProvider.Instance"/>,
 ///     which performs no transformation. This follows the Null Object pattern, ensuring that consumers never need to
 ///     handle <see langword="null"/> encryption providers explicitly.
-/// </para>
-/// <para>
+///     </para>
+///     <para>
 ///     The decrypted content is always interpreted as UTF-8 text, making this class suitable for human-readable
 ///     configuration formats such as JSON, YAML, INI, or TOML.
-/// </para>
+///     </para>
+///     <para>
+///     When writing updates the implementation attempts to perform an atomic update: the new content is written to a
+///     temporary file and then moved or replaced into place. On platforms that support it the code will attempt to
+///     use <c>File.Replace</c> for an atomic replacement; if that fails it falls back to a move-with-backup approach
+///     and will attempt to restore the original file if the final move fails. This reduces the risk of leaving a
+///     partially-written configuration file in case of failures.
+///     </para>
 /// </remarks>
 public abstract partial class FileSettingsSource : SettingsSource, IDisposable
 {
@@ -140,7 +147,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     protected string SourcePath => this.path;
 
     /// <summary>
-    /// Releases resources used by the FileSettingsSource.
+    ///     Releases resources used by the FileSettingsSource.
     /// </summary>
     public void Dispose()
     {
@@ -149,7 +156,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     }
 
     /// <summary>
-    /// Releases the unmanaged resources used by the FileSettingsSource and optionally releases the managed resources.
+    ///     Releases the unmanaged resources used by the FileSettingsSource and optionally releases the managed resources.
     /// </summary>
     /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
     protected virtual void Dispose(bool disposing)
@@ -177,7 +184,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
     /// <summary>
     ///     Asynchronously reads the configuration file, decrypts it if necessary, and returns the content as UTF-8 text.
     /// </summary>
-    /// <param name="cancellationToken">A token that can be used to cancel the asynchronous read operation.</param>
+    /// <param name="cancellationToken">A token that can be used to cancel the asynchronous write operation.</param>
     /// <returns>
     ///     A task that represents the asynchronous operation. The task result contains the decrypted file content as a
     ///     <see cref="string"/>.
@@ -506,99 +513,4 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
 
         return true;
     }
-
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-    [LoggerMessage(
-        EventId = 31001,
-        Level = LogLevel.Error,
-        Message = "File IO error in `{Operation}`, source='{SourceId}', path='{SourcePath}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogFileIoError(ILogger logger, string sourceId, string sourcePath, string operation, Exception exception);
-
-    private void LogFileIoError(string operation, Exception ex)
-        => LogFileIoError(this.Logger, this.Id, this.path, operation, ex);
-
-    [LoggerMessage(
-        EventId = 31002,
-        Level = LogLevel.Error,
-        Message = "Error reading configuration data from source '{SourceId}' at '{SourcePath}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogReadError(ILogger logger, string sourceId, string sourcePath, Exception exception);
-
-    private void LogReadError(Exception ex)
-        => LogReadError(this.Logger, this.Id, this.path, ex);
-
-    [LoggerMessage(
-        EventId = 31003,
-        Level = LogLevel.Error,
-        Message = "Error writing configuration data from source '{SourceId}' at '{SourcePath}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogWriteError(ILogger logger, string sourceId, string sourcePath, Exception exception);
-
-    private void LogWriteError(Exception ex)
-        => LogWriteError(this.Logger, this.Id, this.path, ex);
-
-    [LoggerMessage(
-        EventId = 31004,
-        Level = LogLevel.Error,
-        Message = "Error {Operation} configuration data from source '{SourceId}' at '{SourcePath}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogCryptoError(ILogger logger, string sourceId, string sourcePath, string operation, Exception exception);
-
-    private void LogCryptoError(string operation, CryptographicException ex)
-        => LogCryptoError(this.Logger, this.Id, this.path, operation, ex);
-
-    [LoggerMessage(
-        EventId = 31005,
-        Level = LogLevel.Information,
-        Message = "Operation '{Operation}' was canceled while processing source '{SourceId}' at '{SourcePath}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogOperationCancelled(ILogger logger, string sourceId, string sourcePath, string operation);
-
-    private void LogOperationCancelled(string operation)
-        => LogOperationCancelled(this.Logger, this.Id, this.path, operation);
-
-    [LoggerMessage(
-        EventId = 31006,
-        Level = LogLevel.Debug,
-        Message = "Moved file '{SourcePath}' to '{DestinationPath}' for source '{SourceId}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogFileMoved(ILogger logger, string sourceId, string sourcePath, string destinationPath);
-
-    [Conditional("DEBUG")]
-    private void LogFileMoved(string sourcePath, string destinationPath)
-        => LogFileMoved(this.Logger, this.Id, sourcePath, destinationPath);
-
-    [LoggerMessage(
-        EventId = 31007,
-        Level = LogLevel.Debug,
-        Message = "Deleted file '{FilePath}' for source '{SourceId}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogFileDeleted(ILogger logger, string sourceId, string filePath);
-
-    [Conditional("DEBUG")]
-    private void LogFileDeleted(string filePath)
-        => LogFileDeleted(this.Logger, this.Id, filePath);
-
-    [LoggerMessage(
-        EventId = 31008,
-        Level = LogLevel.Debug,
-        Message = "Replaced file '{DestinationPath}' with '{SourcePath}' for source '{SourceId}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogFileReplaced(ILogger logger, string sourceId, string sourcePath, string destinationPath);
-
-    [Conditional("DEBUG")]
-    private void LogFileReplaced(string sourcePath, string destinationPath)
-        => LogFileReplaced(this.Logger, this.Id, sourcePath, destinationPath);
-
-    [LoggerMessage(
-        EventId = 31009,
-        Level = LogLevel.Information,
-        Message = "Restored original file '{DestinationPath}' from backup '{BackupPath}' for source '{SourceId}'")]
-    [ExcludeFromCodeCoverage]
-    private static partial void LogRestoredOriginal(ILogger logger, string sourceId, string backupPath, string destinationPath);
-
-    private void LogRestoredOriginal(string backupPath, string destinationPath)
-        => LogRestoredOriginal(this.Logger, this.Id, backupPath, destinationPath);
-#pragma warning restore SA1204 // Static elements should appear before instance elements
 }

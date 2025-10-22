@@ -10,7 +10,7 @@ namespace DroidNet.Config.Sources;
 public class NoEncryptionProvider : IEncryptionProvider
 {
     /// <summary>
-    /// Gets a singleton instance of the no-op encryption provider.
+    ///     Gets a singleton instance of the no-op encryption provider.
     /// </summary>
     public static NoEncryptionProvider Instance { get; } = new NoEncryptionProvider();
 

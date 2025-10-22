@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-
 namespace DroidNet.Config;
 
 /// <summary>
@@ -12,11 +10,13 @@ namespace DroidNet.Config;
 public sealed record SettingsWritePayload
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsWritePayload"/> class.
+    ///     Initializes a new instance of the <see cref="SettingsWritePayload"/> class.
     /// </summary>
     /// <param name="sourceMetadata">The source-level metadata persisted alongside the settings.</param>
     /// <param name="sectionsWritten">The number of sections written during the operation.</param>
     /// <param name="sourcePath">The absolute path of the underlying source.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sourceMetadata"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sourcePath"/> is <see langword="null"/> or whitespace.</exception>
     public SettingsWritePayload(SettingsSourceMetadata sourceMetadata, int sectionsWritten, string sourcePath)
     {
         ArgumentNullException.ThrowIfNull(sourceMetadata);
@@ -32,17 +32,17 @@ public sealed record SettingsWritePayload
     }
 
     /// <summary>
-    /// Gets the source-level metadata persisted alongside the settings.
+    ///     Gets the source-level metadata persisted alongside the settings.
     /// </summary>
     public SettingsSourceMetadata SourceMetadata { get; }
 
     /// <summary>
-    /// Gets the number of sections written during the operation.
+    ///     Gets the number of sections written during the operation.
     /// </summary>
     public int SectionsWritten { get; }
 
     /// <summary>
-    /// Gets the absolute path of the underlying source.
+    ///     Gets the absolute path of the underlying source.
     /// </summary>
     public string SourcePath { get; }
 }

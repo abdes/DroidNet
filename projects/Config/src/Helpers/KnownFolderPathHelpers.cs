@@ -21,7 +21,7 @@ internal static partial class KnownFolders
     ///     requests the known folder for the current user.
     /// </param>
     /// <returns>The path of the known folder.</returns>
-    /// <exception cref="System.Runtime.InteropServices.COMException">
+    /// <exception cref="COMException">
     ///     Thrown when the method fails to retrieve the known folder path.
     /// </exception>
     public static string GetKnownFolderPath(Guid folderId, uint flags = 0, nint hToken = 0)

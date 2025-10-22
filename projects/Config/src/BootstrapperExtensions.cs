@@ -10,38 +10,40 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Extension methods for integrating the DroidNet Config module with DryIoc dependency injection.
+///     Extension methods for integrating the DroidNet Config module with DryIoc dependency injection.
 /// </summary>
 /// <remarks>
-/// <para>
-/// These extensions enable easy registration of config sources and strongly-typed settings services in applications using the DroidNet bootstrapper pattern.
-/// </para>
-/// <para><strong>Typical Usage</strong></para>
-/// <code><![CDATA[
-/// var bootstrapper = new Bootstrapper(args)
-///     .Configure()
-///     .WithLoggingAbstraction()
-///     .WithConfig()
-///     .WithJsonConfigSource(id: "droidnet.aura", filePath: "path/to/Aura.json", watch: true)
-///     .WithJsonConfigSource(id: "localsettings", filePath: "path/to/LocalSettings.json", watch: true)
-///     .WithSettings<IAppearanceSettings, AppearanceSettingsService>()
-///     .WithSettings<IWindowDecorationSettings, WindowDecorationSettingsService>()
-///     .Build();
-/// ]]></code>
-/// <para>
-/// This pattern registers the config infrastructure, adds JSON config sources, and enables injection of settings services into client code.
-/// </para>
+///     These extensions enable easy registration of config sources and strongly-typed settings services in applications
+///     using the DroidNet bootstrapper pattern.
+///     <para><strong>Typical Usage</strong></para>
+///     <code><![CDATA[
+///     var bootstrapper = new Bootstrapper(args)
+///         .Configure()
+///         .WithLoggingAbstraction()
+///         .WithConfig()
+///         .WithJsonConfigSource(id: "droidnet.aura", filePath: "path/to/Aura.json", watch: true)
+///         .WithJsonConfigSource(id: "localsettings", filePath: "path/to/LocalSettings.json", watch: true)
+///         .WithSettings<IAppearanceSettings, AppearanceSettingsService>()
+///         .WithSettings<IWindowDecorationSettings, WindowDecorationSettingsService>()
+///         .Build();
+///     ]]></code>
+///     <para>
+///     This pattern registers the config infrastructure, adds JSON config sources, and enables injection of
+///     settings services into client code.
+///     </para>
 /// </remarks>
 public static class BootstrapperExtensions
 {
     /// <summary>
-    /// Registers baseline Config services in the DryIoc container, including SettingsManager and related abstractions.
+    ///     Registers baseline Config services in the DryIoc container, including SettingsManager and related abstractions.
     /// </summary>
     /// <param name="container">The DryIoc container to configure.</param>
     /// <returns>The container instance for method chaining.</returns>
     /// <remarks>
-    /// Call this before adding config sources or settings services. This sets up the core infrastructure for config and settings management.
+    ///     Call this before adding config sources or settings services. This sets up the core infrastructure for
+    ///     configuration and settings management.
     /// </remarks>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
     public static IContainer WithConfig(this IContainer container)
     {
         ArgumentNullException.ThrowIfNull(container);
@@ -67,15 +69,23 @@ public static class BootstrapperExtensions
     }
 
     /// <summary>
-    /// Registers a settings service for a specific settings type, enabling injection of strongly-typed settings into client code.
+    ///     Registers a settings service for a specific settings type, enabling injection of strongly-typed settings
+    ///     into client code.
     /// </summary>
-    /// <typeparam name="TSettingsInterface">The settings interface type.</typeparam>
-    /// <typeparam name="TService">The concrete settings service implementation type (must inherit SettingsService&lt;TSettings&gt;).</typeparam>
+    /// <typeparam name="TSettingsInterface">The settings interface type exposed to consumers.</typeparam>
+    /// <typeparam name="TService">
+    ///     The concrete settings service implementation type. Must implement
+    ///     <c>ISettingsService&lt;TSettingsInterface&gt;</c> (this is enforced by the generic constraints).
+    /// </typeparam>
     /// <param name="container">The DryIoc container to configure.</param>
     /// <returns>The container instance for method chaining.</returns>
     /// <remarks>
-    /// Call this for each settings type you want to inject. The service will be resolved from the registered SettingsManager.
+    ///     Call this for each settings type you want to inject. The concrete service type is registered with a
+    ///     private service key ("__uninitialized__") for use by the internal <see cref="SettingsManager"/>. Consumers
+    ///     should depend on <typeparamref name="TSettingsInterface"/>; resolving that interface will return a
+    ///     singleton delegate which proxies to <see cref="SettingsManager.GetService{T}()"/>.
     /// </remarks>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
     public static IContainer WithSettings<TSettingsInterface, TService>(this IContainer container)
         where TSettingsInterface : class
         where TService : ISettingsService<TSettingsInterface>
@@ -99,20 +109,27 @@ public static class BootstrapperExtensions
     }
 
     /// <summary>
-    /// Registers a JSON config source for settings, optionally with encryption and file watching, keyed by a unique id.
+    ///     Registers a JSON config source for settings, optionally with encryption and file watching, keyed by a unique id.
     /// </summary>
     /// <param name="container">The DryIoc container to configure.</param>
     /// <param name="id">Unique key for the config source (used for service resolution).</param>
     /// <param name="filePath">Path to the JSON settings file.</param>
     /// <param name="encryption">
-    /// Optional type of encryption provider. Must implement <see cref="IEncryptionProvider"/> if provided.
+    ///     Optional type of encryption provider. Must implement <see cref="IEncryptionProvider"/> if provided.
     /// </param>
     /// <param name="watch">Whether to watch the file for changes (passed to the source).</param>
     /// <returns>The container instance for method chaining.</returns>
     /// <remarks>
-    /// Registers a config source for the given file. Encryption support is planned for future versions.
-    /// The <paramref name="id"/> is used as the DryIoc service key.
+    ///     Registers a config source for the given file. When registered, the <paramref name="id"/> is used as the
+    ///     DryIoc service key for the produced <see cref="ISettingsSource"/> singleton. The delegate resolves an
+    ///     <see cref="IFileSystem"/>, an <see cref="ILoggerFactory"/>, and optionally an implementation of the
+    ///     <see cref="IEncryptionProvider"/> type passed via <paramref name="encryption"/>.
     /// </remarks>
+    /// <exception cref="System.ArgumentNullException">Thrown when <paramref name="container"/> is <c>null</c>.</exception>
+    /// <exception cref="System.ArgumentException">
+    ///     Thrown when <paramref name="id"/> or <paramref name="filePath"/> is <c>null</c>, empty, or whitespace, or when
+    ///     <paramref name="encryption"/> is supplied but does not implement <see cref="IEncryptionProvider"/>.
+    /// </exception>
     public static IContainer WithJsonConfigSource(
         this IContainer container,
         string id,

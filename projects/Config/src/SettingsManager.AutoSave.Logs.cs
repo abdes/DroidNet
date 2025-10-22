@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Config;
 
 /// <summary>
-/// Partial class containing AutoSave logging methods for <see cref="SettingsManager"/>.
+///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 public sealed partial class SettingsManager
 {

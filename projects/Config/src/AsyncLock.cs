@@ -30,7 +30,7 @@ namespace DroidNet.Config;
 ///     }
 ///     ]]></code>
 /// </example>
-public sealed class AsyncLock : IDisposable, IAsyncDisposable
+internal sealed class AsyncLock : IDisposable, IAsyncDisposable
 {
     private readonly SemaphoreSlim semaphore = new(1, 1);
     private bool disposed;
@@ -94,7 +94,7 @@ public sealed class AsyncLock : IDisposable, IAsyncDisposable
 ///     both <see cref="IDisposable"/> and <see cref="IAsyncDisposable"/> so it can be used with both
 ///     `using` and `await using`.
 /// </remarks>
-public class Releaser(SemaphoreSlim toRelease) : IDisposable, IAsyncDisposable
+internal class Releaser(SemaphoreSlim toRelease) : IDisposable, IAsyncDisposable
 {
     private bool disposed;
 

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
