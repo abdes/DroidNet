@@ -477,6 +477,35 @@ public class SettingsManagerAutoSaveTests : SettingsTestBase
     }
 
     [TestMethod]
+    public async Task AutoSave_ToggleOn_WhenServiceAlreadyDirty_ShouldSaveImmediately()
+    {
+        // Arrange - add a section and initialize
+        this.source.AddSection(nameof(TestSettings), new TestSettings { Name = "Original", Value = 1 });
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Mark service dirty BEFORE enabling AutoSave
+        _ = service.Should().BeOfType<TestSettingsService>();
+        ((TestSettingsService)service).SetTestIsDirty(value: true);
+
+        // Act - enable AutoSave with short delay and ensure it triggers immediate save for existing dirty
+        this.SettingsManager.AutoSaveDelay = TimeSpan.FromMilliseconds(50);
+        this.SettingsManager.AutoSave = true;
+
+        // Give time for the immediate save to run
+        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - source should have been written and service should be clean
+        _ = this.source.WriteCallCount.Should().Be(1);
+        _ = service.IsDirty.Should().BeFalse();
+
+        // Cleanup
+        this.SettingsManager.AutoSave = false;
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+    }
+
+    [TestMethod]
     public void AutoSaveDelayProperty_Setter_UpdatesValue()
     {
         // Arrange
