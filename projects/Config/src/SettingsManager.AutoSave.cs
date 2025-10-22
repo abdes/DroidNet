@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.ComponentModel;
+using System.Linq;
 
 namespace DroidNet.Config;
 
@@ -118,6 +119,26 @@ public sealed partial class SettingsManager
             foreach (var service in this.serviceInstances.Values)
             {
                 this.SubscribeToService(service);
+            }
+
+            // If any service is already dirty when AutoSave starts, trigger a save immediately.
+            var hasDirty = this.serviceInstances.Values.Any(s => s.IsDirty);
+            if (hasDirty)
+            {
+                // Fire-and-forget: start the save operation respecting existing save locks.
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await this.TriggerSaveOperationAsync().ConfigureAwait(false);
+                    }
+#pragma warning disable CA1031 // Do not catch general exception types
+                    catch (Exception ex)
+#pragma warning restore CA1031
+                    {
+                        owner.LogAutoSaveError(ex);
+                    }
+                });
             }
 
             owner.LogAutoSaveStarted();
