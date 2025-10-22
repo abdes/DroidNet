@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
 using FluentAssertions;
@@ -22,8 +20,6 @@ namespace DroidNet.Config.Tests;
 public class SettingsServiceTests : SettingsTestBase
 {
     private readonly MockSettingsSource source = new("test-source");
-
-    public TestContext TestContext { get; set; }
 
     [TestInitialize]
     public void TestInitialize() => this.Container.RegisterInstance<ISettingsSource>(this.source);
@@ -185,7 +181,7 @@ public class SettingsServiceTests : SettingsTestBase
         {
             if (string.Equals(e.PropertyName, "IsBusy", StringComparison.Ordinal) && service.IsBusy)
             {
-                tcs.TrySetResult(true);
+                _ = tcs.TrySetResult(true);
             }
         };
 
@@ -265,7 +261,7 @@ public class SettingsServiceTests : SettingsTestBase
         _ = service.IsDirty.Should().BeFalse();
         _ = service.Settings.Name.Should().Be("ManagerValue");
         _ = service.Settings.Value.Should().Be(99);
-        _ = propertyChanges.Where(p => string.Equals(p, "IsDirty", StringComparison.Ordinal)).Count().Should().Be(1);
+        _ = propertyChanges.Count(p => string.Equals(p, "IsDirty", StringComparison.Ordinal)).Should().Be(1);
     }
 
     [TestMethod]
@@ -282,7 +278,7 @@ public class SettingsServiceTests : SettingsTestBase
         _ = service.IsDirty.Should().BeFalse();
 
         // Act
-        service.ApplyProperties(null);
+        service.ApplyProperties(data: null);
 
         // Assert
         _ = service.IsDirty.Should().BeFalse();

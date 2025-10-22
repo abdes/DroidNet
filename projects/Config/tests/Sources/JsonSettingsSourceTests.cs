@@ -18,8 +18,6 @@ namespace DroidNet.Config.Tests.Sources;
 [TestCategory("JSON Settings Source")]
 public class JsonSettingsSourceTests : SettingsTestBase
 {
-    public TestContext TestContext { get; set; }
-
     [TestMethod]
     public async Task LoadAsync_ReturnsEmptyPayload_WhenFileMissing()
     {

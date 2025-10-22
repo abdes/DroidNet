@@ -31,6 +31,19 @@ public interface ISettingsManager : IDisposable
     public IReadOnlyList<ISettingsSource> Sources { get; }
 
     /// <summary>
+    ///     Gets or sets a value indicating whether automatic saving of dirty settings is enabled.
+    ///     When enabled, dirty services will be automatically saved after <see cref="AutoSaveDelay"/> with no further changes.
+    ///     Toggling from ON to OFF will immediately save all dirty services before stopping.
+    /// </summary>
+    public bool AutoSave { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the delay period for auto-save debouncing.
+    ///     Changes take effect on the next dirty notification.
+    /// </summary>
+    public TimeSpan AutoSaveDelay { get; set; }
+
+    /// <summary>
     ///     Initializes the settings manager during application startup, by loading all settings sources in the current
     ///     snapshot of the <see cref="Sources"/> collection. This method must be called before any settings services
     ///     can be retrieved, and will only have an effect the first time it is invoked.

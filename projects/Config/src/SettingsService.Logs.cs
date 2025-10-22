@@ -32,11 +32,11 @@ public abstract partial class SettingsService<TSettings>
     [LoggerMessage(
     EventId = 103,
     Level = LogLevel.Debug,
-    Message = "Saved settings for {SettingsType} in section {SectionName}")]
-    static partial void LogSavedSettings(ILogger logger, string settingsType, string sectionName);
+    Message = "Saved settings for {SettingsType} in section {SectionName}. IsDirty after save: {IsDirty}")]
+    static partial void LogSavedSettings(ILogger logger, string settingsType, string sectionName, bool isDirty);
 
     [Conditional("DEBUG")]
-    private void LogSavedSettings() => LogSavedSettings(this.logger, typeof(TSettings).Name, this.SectionName);
+    private void LogSavedSettings() => LogSavedSettings(this.logger, typeof(TSettings).Name, this.SectionName, this.IsDirty);
 
     [LoggerMessage(
     EventId = 104,

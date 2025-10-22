@@ -103,6 +103,9 @@ public sealed partial class SettingsManager(
 
             this.isInitialized = true;
             this.LogInitializationComplete();
+
+            // Start AutoSave if it was enabled before initialization
+            this.OnAutoSaveChanged();
         }
     }
 
@@ -139,6 +142,11 @@ public sealed partial class SettingsManager(
         if (result is not null && !ReferenceEquals(result, this.serviceInstances[settingsType]))
         {
             this.LogReturningExistingService(settingsType.Name);
+        }
+        else
+        {
+            // Notify AutoSaver if a new service was added
+            this.autoSaver?.OnServiceAdded(service);
         }
 
         return service;
@@ -238,6 +246,10 @@ public sealed partial class SettingsManager(
 
         this.LogDisposingManager();
 
+        // Dispose AutoSaver first
+        this.autoSaver?.Dispose();
+        this.autoSaver = null;
+
         // Dispose all service instances
         foreach (var serviceInstance in this.serviceInstances.Values)
         {
@@ -317,15 +329,6 @@ public sealed partial class SettingsManager(
     {
         this.EnsureReadyForOperations();
         this.LogSaveSettingsRequested(sectionName);
-        var targetSourceId = this.ResolveSaveTargetSourceId(sectionName);
-
-        // Get source reference under lock to prevent concurrent removal
-        ISettingsSource targetSource;
-        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
-        await using (releaser.ConfigureAwait(false))
-        {
-            targetSource = this.GetSourceByIdOrThrow(targetSourceId);
-        }
 
         var sectionsData = new Dictionary<string, object>(StringComparer.Ordinal)
         {
@@ -337,25 +340,121 @@ public sealed partial class SettingsManager(
             [sectionName] = sectionMetadata,
         };
 
+        await this.SaveSectionsToSourcesAsync(sectionsData, sectionsMetadata, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Saves multiple settings sections to their respective sources in batched operations.
+    /// Groups sections by target source for efficient I/O and lock management.
+    /// </summary>
+    /// <param name="sectionsData">Dictionary of section names to their data.</param>
+    /// <param name="sectionsMetadata">Dictionary of section names to their metadata.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <exception cref="SettingsPersistenceException">Thrown when saving to any source fails.</exception>
+    internal async Task SaveSectionsToSourcesAsync(
+        IReadOnlyDictionary<string, object> sectionsData,
+        IReadOnlyDictionary<string, SettingsSectionMetadata> sectionsMetadata,
+        CancellationToken cancellationToken = default)
+    {
+        if (sectionsData.Count == 0)
+        {
+            return;
+        }
+
+        // Group sections by target source (unlocked operation)
+        var (sectionsBySource, metadataBySource) = this.GroupSectionsBySource(sectionsData, sectionsMetadata);
+
+        // Acquire lock once for all save operations
+        var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
+        await using (releaser.ConfigureAwait(false))
+        {
+            await this.SaveGroupedSectionsLockedAsync(sectionsBySource, metadataBySource, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    private (
+        Dictionary<string, Dictionary<string, object>> sectionsBySource,
+        Dictionary<string, Dictionary<string, SettingsSectionMetadata>> metadataBySource)
+        GroupSectionsBySource(
+            IReadOnlyDictionary<string, object> sectionsData,
+            IReadOnlyDictionary<string, SettingsSectionMetadata> sectionsMetadata)
+    {
+        var sectionsBySource = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
+        var metadataBySource = new Dictionary<string, Dictionary<string, SettingsSectionMetadata>>(StringComparer.Ordinal);
+
+        foreach (var (sectionName, sectionData) in sectionsData)
+        {
+            var targetSourceId = this.ResolveSaveTargetSourceId(sectionName);
+
+            if (!sectionsBySource.TryGetValue(targetSourceId, out var value))
+            {
+                value = new Dictionary<string, object>(StringComparer.Ordinal);
+                sectionsBySource[targetSourceId] = value;
+                metadataBySource[targetSourceId] = new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal);
+            }
+
+            value[sectionName] = sectionData;
+            if (sectionsMetadata.TryGetValue(sectionName, out var metadata))
+            {
+                metadataBySource[targetSourceId][sectionName] = metadata;
+            }
+        }
+
+        return (sectionsBySource, metadataBySource);
+    }
+
+    /// <summary>
+    /// Saves grouped sections to their sources. Must be called within the initialization lock.
+    /// </summary>
+    private async Task SaveGroupedSectionsLockedAsync(
+        Dictionary<string, Dictionary<string, object>> sectionsBySource,
+        Dictionary<string, Dictionary<string, SettingsSectionMetadata>> metadataBySource,
+        CancellationToken cancellationToken)
+    {
+        // Save to each source with its batched sections
+        foreach (var (sourceId, sourceSections) in sectionsBySource)
+        {
+            var sourceMetadata = metadataBySource[sourceId];
+            await this.SaveToSourceLockedAsync(sourceId, sourceSections, sourceMetadata, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
+    /// Saves sections to a specific source. Must be called within the initialization lock.
+    /// </summary>
+    private async Task SaveToSourceLockedAsync(
+        string sourceId,
+        Dictionary<string, object> sectionsData,
+        Dictionary<string, SettingsSectionMetadata> sectionsMetadata,
+        CancellationToken cancellationToken)
+    {
+        var targetSource = this.GetSourceByIdOrThrow(sourceId);
+
         try
         {
             await this.ExecuteWithSuppressedSourceChangeAsync(
-                targetSourceId,
+                sourceId,
                 async () =>
                 {
-                    var sourceMetadata = UpdateSourceVersion(targetSource);
+                    var sourceMetadata = this.UpdateSourceVersion(targetSource);
 
                     var result = await targetSource.SaveAsync(sectionsData, sectionsMetadata, sourceMetadata, cancellationToken).ConfigureAwait(false);
                     if (!result.IsSuccess)
                     {
-                        this.LogFailedToSaveSettingsForType(sectionName, targetSource.Id, result.Error.Message);
+                        var sectionNames = string.Join(", ", sectionsData.Keys);
+                        this.LogFailedToSaveSettingsForType(sectionNames, targetSource.Id, result.Error.Message);
                         throw new SettingsPersistenceException(
                             $"Failed to save settings to source '{targetSource.Id}': {result.Error.Message}",
                             targetSource.Id);
                     }
 
-                    this.CacheSection(sectionName, settings!, targetSourceId);
-                    this.LogSavedSettingsForType(sectionName, targetSource.Id);
+                    // Cache all saved sections
+                    foreach (var (sectionName, sectionData) in sectionsData)
+                    {
+                        this.CacheSection(sectionName, sectionData, sourceId);
+                        this.LogSavedSettingsForType(sectionName, targetSource.Id);
+                    }
 
                     // Relay the event to external listeners, but not to our internal handler
                     this.OnSourceChanged(new SourceChangedEventArgs(targetSource.Id, SourceChangeType.Updated));
@@ -367,31 +466,34 @@ public sealed partial class SettingsManager(
         }
         catch (Exception ex)
         {
-            this.LogExceptionSavingSettingsForType(ex, sectionName, targetSource.Id);
+            var sectionNames = string.Join(", ", sectionsData.Keys);
+            this.LogExceptionSavingSettingsForType(ex, sectionNames, targetSource.Id);
             throw new SettingsPersistenceException(
                 $"Failed to save settings to source '{targetSource.Id}'",
                 targetSource.Id,
                 ex);
         }
+    }
 
-        // Local function to update the source version and metadata under lock
-        SettingsSourceMetadata UpdateSourceVersion(ISettingsSource src)
+    /// <summary>
+    /// Updates the source version and metadata. Must be called under source lock.
+    /// </summary>
+    private SettingsSourceMetadata UpdateSourceVersion(ISettingsSource source)
+    {
+        // Increment version and create source metadata within the save operation
+        // Lock on the source to prevent concurrent version increments
+        lock (source)
         {
-            // Increment version and create source metadata within the save operation
-            // Lock on the source to prevent concurrent version increments
-            lock (src)
+            var newVersion = (source.SourceMetadata?.Version ?? 0) + 1;
+            var meta = new SettingsSourceMetadata
             {
-                var newVersion = (src.SourceMetadata?.Version ?? 0) + 1;
-                var meta = new SettingsSourceMetadata
-                {
-                    WrittenAt = DateTimeOffset.UtcNow,
-                    WrittenBy = "DroidNet.Config", // TODO: Make this configurable
-                };
+                WrittenAt = DateTimeOffset.UtcNow,
+                WrittenBy = "DroidNet.Config", // TODO: Make this configurable
+            };
 
-                meta.SetVersion(newVersion, this.metadataSetterKey);
-                src.SourceMetadata = meta;
-                return meta;
-            }
+            meta.SetVersion(newVersion, this.metadataSetterKey);
+            source.SourceMetadata = meta;
+            return meta;
         }
     }
 
@@ -537,91 +639,111 @@ public sealed partial class SettingsManager(
         }
 
         this.LogHandlingSourceChange(args.SourceId, args.ChangeType);
+
         var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
         await using (releaser.ConfigureAwait(false))
         {
-            var source = this.sources.FirstOrDefault(
-                s => string.Equals(s.Id, args.SourceId, StringComparison.Ordinal));
-
-            if (source is null)
-            {
-                this.LogSourceNotFound(args.SourceId);
-                return; // Source was removed
-            }
-
-            // Track which sections this source owned before reload (i.e., was the winner for)
-            var sectionsBeforeReload = this.GetSectionsOwnedBySource(args.SourceId)
-                .ToHashSet(StringComparer.Ordinal);
-
-            // Reload the source - this will update cache/map for sections this source provides
-            // BUT it will only update cache for sections where this source is the winner
-            // (TryLoadSourceAsync now respects last-loaded-wins)
-            await this.TryLoadSourceAsync(source, allowReload: true, cancellationToken).ConfigureAwait(false);
-
-            // Find sections this source owns after reload (i.e., is the winner for)
-            var sectionsAfterReload = this.GetSectionsOwnedBySource(args.SourceId)
-                .ToHashSet(StringComparer.Ordinal);
-
-            // Only affect sections that this source is the WINNER for (owns in the map)
-            // This respects last-loaded-wins: if another source later loaded the same section,
-            // this source's change won't override it
-            var affectedSections = sectionsBeforeReload.Union(sectionsAfterReload, StringComparer.Ordinal).ToList();
-            this.LogSourceReloadSummary(args.SourceId, sectionsBeforeReload.Count, sectionsAfterReload.Count, affectedSections.Count);
-
-            if (affectedSections.Count > 0)
-            {
-                var serviceUpdates = this.ServiceUpdates;
-                var impactedServices = serviceUpdates.GetImpactedServices(affectedSections);
-                this.LogReloadingImpactedServices(impactedServices.Count, affectedSections.Count);
-                serviceUpdates.UpdateServices(impactedServices);
-            }
+            await this.HandleSourceChangedLockedAsync(args, cancellationToken).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Handles source changed event. Must be called within the initialization lock.
+    /// </summary>
+    private async Task HandleSourceChangedLockedAsync(
+        SourceChangedEventArgs args,
+        CancellationToken cancellationToken)
+    {
+        var source = this.sources.FirstOrDefault(
+            s => string.Equals(s.Id, args.SourceId, StringComparison.Ordinal));
+
+        if (source is null)
+        {
+            this.LogSourceNotFound(args.SourceId);
+            return; // Source was removed
+        }
+
+        // Track which sections this source owned before reload
+        var sectionsBeforeReload = this.GetSectionsOwnedBySource(args.SourceId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Reload the source - respects last-loaded-wins
+        await this.TryLoadSourceAsync(source, allowReload: true, cancellationToken).ConfigureAwait(false);
+
+        // Find sections this source owns after reload
+        var sectionsAfterReload = this.GetSectionsOwnedBySource(args.SourceId)
+            .ToHashSet(StringComparer.Ordinal);
+
+        // Only affect sections that this source is the WINNER for
+        var affectedSections = sectionsBeforeReload.Union(sectionsAfterReload, StringComparer.Ordinal).ToList();
+        this.LogSourceReloadSummary(args.SourceId, sectionsBeforeReload.Count, sectionsAfterReload.Count, affectedSections.Count);
+
+        if (affectedSections.Count > 0)
+        {
+            this.UpdateImpactedServices(affectedSections);
+        }
+    }
+
+    private void UpdateImpactedServices(List<string> affectedSections)
+    {
+        var serviceUpdates = this.ServiceUpdates;
+        var impactedServices = serviceUpdates.GetImpactedServices(affectedSections);
+        this.LogReloadingImpactedServices(impactedServices.Count, affectedSections.Count);
+        serviceUpdates.UpdateServices(impactedServices);
     }
 
     private async Task TryLoadSourceAsync(ISettingsSource source, bool allowReload, CancellationToken cancellationToken)
     {
         this.LogLoadingSource(source.Id);
         var loadResult = await source.LoadAsync(reload: allowReload, cancellationToken).ConfigureAwait(false);
+
         _ = loadResult.Tap(
-            payload =>
-            {
-                // Initialize the source metadata from loaded data
-                if (payload.SourceMetadata != null)
-                {
-                    source.SourceMetadata = payload.SourceMetadata;
-                }
-
-                if (allowReload)
-                {
-                    this.RemoveSectionsNoLongerProvided(source, payload.Sections);
-                }
-
-                foreach (var (sectionName, sectionData) in payload.Sections)
-                {
-                    // On success, neither the section name nor data should be null
-                    Debug.Assert(sectionName is { Length: > 0 }, "Section name should not be null or empty.");
-                    Debug.Assert(sectionData is { }, "Section data should not be null.");
-
-                    var shouldUpdate = this.ShouldUpdateCacheFor(sectionName, source.Id, allowReload);
-
-                    if (shouldUpdate)
-                    {
-                        this.CacheSection(sectionName, sectionData, source.Id);
-                        this.LogSectionCached(sectionName, source.Id);
-                    }
-                    else
-                    {
-                        var currentOwnerLabel = this.cachedSections.TryGetValue(sectionName, out var cached)
-                            ? cached.SourceId
-                            : null;
-                        this.LogSectionCacheSkipped(sectionName, source.Id, currentOwnerLabel);
-                    }
-                }
-
-                this.LogLoadedSource(source.Id);
-                this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
-            },
+            ProcessLoadedPayload,
             err => this.LogFailedToLoadSource(source.Id, err.Message));
+
+        void ProcessLoadedPayload(SettingsReadPayload payload)
+        {
+            // Initialize the source metadata from loaded data
+            if (payload.SourceMetadata != null)
+            {
+                source.SourceMetadata = payload.SourceMetadata;
+            }
+
+            if (allowReload)
+            {
+                this.RemoveSectionsNoLongerProvided(source, payload.Sections);
+            }
+
+            CacheSections(payload.Sections);
+
+            this.LogLoadedSource(source.Id);
+            this.OnSourceChanged(new SourceChangedEventArgs(source.Id, SourceChangeType.Added));
+        }
+
+        void CacheSections(IReadOnlyDictionary<string, object> sections)
+        {
+            foreach (var (sectionName, sectionData) in sections)
+            {
+                // On success, neither the section name nor data should be null
+                Debug.Assert(sectionName is { Length: > 0 }, "Section name should not be null or empty.");
+                Debug.Assert(sectionData is { }, "Section data should not be null.");
+
+                var shouldUpdate = this.ShouldUpdateCacheFor(sectionName, source.Id, allowReload);
+
+                if (shouldUpdate)
+                {
+                    this.CacheSection(sectionName, sectionData, source.Id);
+                    this.LogSectionCached(sectionName, source.Id);
+                }
+                else
+                {
+                    var currentOwnerLabel = this.cachedSections.TryGetValue(sectionName, out var cached)
+                        ? cached.SourceId
+                        : null;
+                    this.LogSectionCacheSkipped(sectionName, source.Id, currentOwnerLabel);
+                }
+            }
+        }
     }
 
     // After reloading all sources, update all registered services with the latest cached data
