@@ -4,6 +4,7 @@
 
 using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;

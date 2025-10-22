@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;

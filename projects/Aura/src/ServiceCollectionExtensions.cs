@@ -2,9 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
+using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DroidNet.Aura;
@@ -17,9 +20,9 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers all Aura window management services with optional feature configuration.
     /// </summary>
-    /// <param name="services">The service collection to configure.</param>
+    /// <param name="container">The DryIoc container to configure.</param>
     /// <param name="configure">Optional configuration action for enabling optional features.</param>
-    /// <returns>The service collection for chaining.</returns>
+    /// <returns>The container for chaining.</returns>
     /// <remarks>
     /// <para>
     /// This method registers the mandatory Aura services and optionally registers additional features
@@ -51,7 +54,7 @@ public static class ServiceCollectionExtensions
     /// <para/>
     /// <strong>Full Setup with Optional Features:</strong>
     /// <code>
-    /// services.WithAura(options => options
+    /// container.WithAura(options => options
     ///     .WithDecorationSettings()
     ///     .WithAppearanceSettings()
     ///     .WithBackdropService()
@@ -59,106 +62,117 @@ public static class ServiceCollectionExtensions
     /// );
     /// <para/>
     /// // Register custom windows
-    /// services.AddWindow&lt;MainWindow&gt;();
+    /// container.AddWindow&lt;MainWindow&gt;();
     /// <para/>
     /// // Menu providers registered separately
-    /// services.AddSingleton&lt;IMenuProvider&gt;(
-    ///     new MenuProvider("App.MainMenu", () => new MenuBuilder()...)
+    /// container.Register&lt;IMenuProvider&gt;(
+    ///     made: Made.Of(() => new MenuProvider("App.MainMenu", () => new MenuBuilder()...)),
+    ///     reuse: Reuse.Singleton
     /// );
     /// </code>
     /// <para/>
     /// <strong>Custom Window Factory:</strong>
     /// <code>
-    /// services.WithAura(options => options
+    /// container.WithAura(options => options
     ///     .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
     /// );
     /// </code>
     /// </example>
-    public static IServiceCollection WithAura(
-        this IServiceCollection services,
+    public static IContainer WithAura(
+        this IContainer container,
         Action<AuraOptions>? configure = null)
     {
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(container);
 
         var options = new AuraOptions();
         configure?.Invoke(options);
 
         // Register mandatory services
-        RegisterMandatoryServices(services, options);
+        RegisterMandatoryServices(container, options);
 
         // Register optional services based on configuration
-        RegisterOptionalServices(services, options);
+        RegisterOptionalServices(container, options);
 
-        return services;
+        return container;
     }
 
     /// <summary>
     /// Registers a window type as transient for creation by the window factory.
     /// </summary>
     /// <typeparam name="TWindow">The window type to register.</typeparam>
-    /// <param name="services">The service collection.</param>
-    /// <returns>The service collection for chaining.</returns>
+    /// <param name="container">The DryIoc container.</param>
+    /// <returns>The container for chaining.</returns>
     /// <remarks>
     /// Windows should be registered as transient since a new instance is created
     /// each time the window manager requests one.
     /// </remarks>
-    public static IServiceCollection AddWindow<TWindow>(this IServiceCollection services)
+    public static IContainer AddWindow<TWindow>(this IContainer container)
         where TWindow : Microsoft.UI.Xaml.Window
     {
-        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(container);
 
-        _ = services.AddTransient<TWindow>();
+        container.Register<TWindow>(Reuse.Transient);
 
-        return services;
+        return container;
     }
 
-    private static void RegisterMandatoryServices(IServiceCollection services, AuraOptions options)
+    private static void RegisterMandatoryServices(IContainer container, AuraOptions options)
     {
         // Register window factory (default or custom)
         if (options.CustomWindowFactoryType is not null)
         {
-            _ = services.AddSingleton(typeof(IWindowFactory), options.CustomWindowFactoryType);
+            container.Register(typeof(IWindowFactory), options.CustomWindowFactoryType, Reuse.Singleton);
         }
         else
         {
-            _ = services.AddSingleton<IWindowFactory, DefaultWindowFactory>();
+            container.Register<IWindowFactory, DefaultWindowFactory>(Reuse.Singleton);
         }
 
         // Register window context factory and window manager service
-        _ = services.AddSingleton<IWindowContextFactory, WindowContextFactory>();
-        _ = services.AddSingleton<IWindowManagerService, WindowManagerService>();
+        container.Register<IWindowContextFactory, WindowContextFactory>(Reuse.Singleton);
+        container.Register<IWindowManagerService, WindowManagerService>(Reuse.Singleton);
     }
 
-    private static void RegisterOptionalServices(IServiceCollection services, AuraOptions options)
+    private static void RegisterOptionalServices(IContainer container, AuraOptions options)
     {
+        var pathFinder = container.Resolve<IPathFinder>();
+
         // Register decoration settings service if requested
         if (options.RegisterDecorationSettings)
         {
-            _ = services.AddSingleton<ISettingsService<IWindowDecorationSettings>, WindowDecorationSettingsService>();
+            _ = container.WithJsonConfigSource(
+                "aura.decoration",
+                pathFinder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName),
+                watch: true);
+            _ = container.WithSettings<IWindowDecorationSettings, WindowDecorationSettingsService>();
         }
 
         // Register appearance settings service if requested
         if (options.RegisterAppearanceSettings)
         {
-            _ = services.AddSingleton<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>();
+            _ = container.WithJsonConfigSource(
+                "aura.appearance",
+                pathFinder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
+                watch: true);
+            _ = container.WithSettings<IAppearanceSettings, AppearanceSettingsService>();
         }
 
         // Register backdrop service if requested
         if (options.RegisterBackdropService)
         {
-            _ = services.AddSingleton<WindowBackdropService>();
+            container.Register<WindowBackdropService>(Reuse.Singleton);
         }
 
         // Register chrome service if requested
         if (options.RegisterChromeService)
         {
-            _ = services.AddSingleton<WindowChromeService>();
+            container.Register<WindowChromeService>(Reuse.Singleton);
         }
 
         // Register theme mode service if requested
         if (options.RegisterThemeModeService)
         {
-            _ = services.AddSingleton<IAppThemeModeService, AppThemeModeService>();
+            container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
         }
     }
 }

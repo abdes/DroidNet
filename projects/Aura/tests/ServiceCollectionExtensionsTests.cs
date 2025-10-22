@@ -5,13 +5,13 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;

@@ -67,6 +67,11 @@ public sealed partial class JsonSettingsSource(string id, string filePath, IFile
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters =
+        {
+            // Serialize enum values as strings (names) instead of integers
+            new System.Text.Json.Serialization.JsonStringEnumConverter(),
+        },
     };
 
     private readonly ILogger<JsonSettingsSource> logger = loggerFactory?.CreateLogger<JsonSettingsSource>() ?? NullLogger<JsonSettingsSource>.Instance;

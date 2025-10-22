@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
-using Microsoft.UI.Xaml;
+using DroidNet.Aura.Settings;
 
 namespace DroidNet.Aura.Decoration.Serialization;
 
@@ -40,7 +40,9 @@ namespace DroidNet.Aura.Decoration.Serialization;
         typeof(WindowCategoryJsonConverter),
         typeof(JsonStringEnumConverter<BackdropKind>),
         typeof(JsonStringEnumConverter<DragRegionBehavior>),
-        typeof(JsonStringEnumConverter<ButtonPlacement>)])]
+        typeof(JsonStringEnumConverter<ButtonPlacement>),
+    ]
+)]
 [JsonSerializable(typeof(WindowDecorationSettings))]
 [JsonSerializable(typeof(WindowDecorationOptions))]
 [JsonSerializable(typeof(TitleBarOptions))]
@@ -50,6 +52,5 @@ namespace DroidNet.Aura.Decoration.Serialization;
 [JsonSerializable(typeof(DragRegionBehavior))]
 [JsonSerializable(typeof(ButtonPlacement))]
 [JsonSerializable(typeof(Dictionary<WindowCategory, WindowDecorationOptions>))]
-public partial class WindowDecorationJsonContext : JsonSerializerContext
-{
-}
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.ReadabilityRules", "SA1118:Parameter should not span multiple lines", Justification = "more readable like this")]
+public partial class WindowDecorationJsonContext : JsonSerializerContext;

@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
-using Microsoft.Extensions.DependencyInjection;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 
@@ -37,27 +37,33 @@ public static class MenuConfiguration
     public const string WindowMenuId = "App.WindowMenu";
 
     /// <summary>
-    /// Registers all menu providers with the service collection.
+    /// Registers all menu providers with the DryIoc container.
     /// </summary>
-    /// <param name="services">The service collection to configure.</param>
-    /// <returns>The service collection for chaining.</returns>
-    public static IServiceCollection RegisterMenus(this IServiceCollection services)
+    /// <param name="container">The DryIoc container to configure.</param>
+    /// <returns>The container for chaining.</returns>
+    public static IContainer RegisterMenus(this IContainer container)
     {
         // Register main application menu with ILoggerFactory injection
-        _ = services.AddSingleton<IMenuProvider>(sp =>
-        {
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new MenuProvider(MainMenuId, () => BuildMainMenu(loggerFactory));
-        });
+        container.RegisterDelegate<IMenuProvider>(
+            resolver =>
+            {
+                var loggerFactory = resolver.Resolve<ILoggerFactory>();
+                return new MenuProvider(MainMenuId, () => BuildMainMenu(loggerFactory));
+            },
+            Reuse.Singleton,
+            serviceKey: MainMenuId);
 
         // Register window management menu for tool windows with ILoggerFactory injection
-        _ = services.AddSingleton<IMenuProvider>(sp =>
-        {
-            var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
-            return new MenuProvider(WindowMenuId, () => BuildWindowMenu(loggerFactory));
-        });
+        container.RegisterDelegate<IMenuProvider>(
+            resolver =>
+            {
+                var loggerFactory = resolver.Resolve<ILoggerFactory>();
+                return new MenuProvider(WindowMenuId, () => BuildWindowMenu(loggerFactory));
+            },
+            Reuse.Singleton,
+            serviceKey: WindowMenuId);
 
-        return services;
+        return container;
     }
 
     /// <summary>

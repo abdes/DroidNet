@@ -47,6 +47,12 @@ public sealed partial class SettingsManager(
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
+        Converters =
+        {
+            // Accept enum names as strings during deserialization and disallow integer values to avoid
+            // accidental numeric mapping. This ensures config files use readable enum names like "Dark".
+            new System.Text.Json.Serialization.JsonStringEnumConverter(allowIntegerValues: false),
+        },
     };
 
     private readonly ILogger<SettingsManager> logger = loggerFactory?.CreateLogger<SettingsManager>() ?? NullLogger<SettingsManager>.Instance;

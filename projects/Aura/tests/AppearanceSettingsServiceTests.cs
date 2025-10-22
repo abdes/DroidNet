@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
+using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;

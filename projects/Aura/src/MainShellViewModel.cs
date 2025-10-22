@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura.Settings;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;

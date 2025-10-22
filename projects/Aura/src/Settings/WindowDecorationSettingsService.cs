@@ -2,11 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
+using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace DroidNet.Aura.Decoration;
 
@@ -14,7 +12,8 @@ namespace DroidNet.Aura.Decoration;
 /// Settings service responsible for persisting <see cref="WindowDecorationSettings"/> and resolving
 /// effective window decorations from code-defined defaults and persisted category overrides.
 /// </summary>
-public sealed partial class WindowDecorationSettingsService : SettingsService<IWindowDecorationSettings>, IWindowDecorationSettings
+public sealed partial class WindowDecorationSettingsService(SettingsManager manager, ILoggerFactory? factory = null)
+    : SettingsService<IWindowDecorationSettings>(manager, factory), IWindowDecorationSettings
 {
     /// <summary>
     /// Code-defined default window decoration options for standard window categories.
@@ -68,116 +67,26 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<IW
         },
     };
 
-    private readonly string configFilePath;
-    private Dictionary<WindowCategory, WindowDecorationOptions> categoryOverrides;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="WindowDecorationSettingsService"/> class.
-    /// </summary>
-    /// <param name="settingsMonitor">Options monitor providing persisted settings.</param>
-    /// <param name="fs">The abstracted file system.</param>
-    /// <param name="finder">Path finder used to resolve configuration file locations.</param>
-    /// <param name="loggerFactory">Optional logger factory.</param>
-    public WindowDecorationSettingsService(
-        IOptionsMonitor<WindowDecorationSettings> settingsMonitor,
-        IFileSystem fs,
-        IPathFinder finder,
-        ILoggerFactory? loggerFactory = null)
-        : base(settingsMonitor, fs, loggerFactory ?? NullLoggerFactory.Instance, autoSaveDelay: TimeSpan.FromSeconds(5))
-    {
-        ArgumentNullException.ThrowIfNull(finder);
-
-        this.configFilePath = finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName);
-
-        var logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<WindowDecorationSettingsService>();
-
-        // Try to load from IOptionsMonitor first (works for simple types)
-        var current = settingsMonitor.CurrentValue ?? new WindowDecorationSettings();
-
-        // If IOptionsMonitor couldn't load the data (complex dictionary keys), load manually using JSON
-        if ((current.CategoryOverrides is null || current.CategoryOverrides.Count == 0) &&
-            fs.File.Exists(this.configFilePath))
-        {
-            try
-            {
-                logger.LogInformation(
-                    "IOptionsMonitor loaded 0 overrides, attempting manual JSON deserialization from {Path}",
-                    this.configFilePath);
-
-                var json = fs.File.ReadAllText(this.configFilePath);
-
-                // Parse the JSON to extract the WindowDecorationSettings section
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty(WindowDecorationSettings.ConfigSectionName, out var section))
-                {
-                    var sectionJson = section.GetRawText();
-                    var options = new System.Text.Json.JsonSerializerOptions
-                    {
-                        Converters =
-                        {
-                            new WindowCategoryJsonConverter(),
-                            new Serialization.MenuOptionsJsonConverter(),
-                            new System.Text.Json.Serialization.JsonStringEnumConverter(),
-                        },
-                    };
-
-                    var loaded = System.Text.Json.JsonSerializer.Deserialize<WindowDecorationSettings>(
-                        sectionJson,
-                        options);
-
-                    if (loaded is not null)
-                    {
-                        current = loaded;
-                        logger.LogInformation(
-                            "Successfully loaded {Count} category overrides via manual JSON deserialization",
-                            current.CategoryOverrides?.Count ?? 0);
-                    }
-                }
-            }
-            catch (System.Text.Json.JsonException ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "Failed to manually load settings from {Path}: {Message}. Using empty defaults",
-                    this.configFilePath,
-                    ex.Message);
-            }
-            catch (System.Exception ex)
-            {
-                logger.LogWarning(
-                    ex,
-                    "Unexpected error loading settings from {Path}: {Message}. Using empty defaults",
-                    this.configFilePath,
-                    ex.Message);
-            }
-        }
-        else
-        {
-            logger.LogInformation(
-                "Loaded {Count} category overrides from IOptionsMonitor",
-                current.CategoryOverrides?.Count ?? 0);
-        }
-
-        if (current.CategoryOverrides is not null)
-        {
-            foreach (var kvp in current.CategoryOverrides)
-            {
-                logger.LogInformation(
-                    "  Category '{Category}': Menu={Menu}, IsCompact={IsCompact}",
-                    kvp.Key,
-                    kvp.Value.Menu?.MenuProviderId,
-                    kvp.Value.Menu?.IsCompact);
-            }
-        }
-
-        this.categoryOverrides = CloneCategoryOverrides(current.CategoryOverrides);
-    }
+    private Dictionary<WindowCategory, WindowDecorationOptions> categoryOverrides = [];
 
     /// <summary>
     /// Gets the current read-only dictionary of category-specific window decoration overrides.
     /// </summary>
     /// <inheritdoc/>
     public IReadOnlyDictionary<WindowCategory, WindowDecorationOptions> CategoryOverrides => this.categoryOverrides;
+
+    /// <inheritdoc/>
+    public override string SectionName => WindowDecorationSettings.ConfigSectionName;
+
+    /// <inheritdoc/>
+    public override Type SettingsType => typeof(WindowDecorationSettings);
+
+    /// <inheritdoc/>
+    public override SettingsSectionMetadata SectionMetadata { get; set; } = new()
+    {
+        SchemaVersion = "20251022",
+        Service = typeof(WindowDecorationSettingsService).FullName,
+    };
 
     /// <summary>
     /// Resolves the effective decoration options for a given window category.
@@ -251,7 +160,7 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<IW
     }
 
     /// <inheritdoc/>
-    protected override WindowDecorationSettings GetSettingsSnapshot()
+    protected override object GetSettingsSnapshot()
     {
         var snapshot = new WindowDecorationSettings
         {
@@ -272,10 +181,7 @@ public sealed partial class WindowDecorationSettingsService : SettingsService<IW
     }
 
     /// <inheritdoc/>
-    protected override string GetConfigFilePath() => this.configFilePath;
-
-    /// <inheritdoc/>
-    protected override string GetConfigSectionName() => WindowDecorationSettings.ConfigSectionName;
+    protected override WindowDecorationSettings CreateDefaultSettings() => new();
 
     private static Dictionary<WindowCategory, WindowDecorationOptions> CloneCategoryOverrides(
         IEnumerable<KeyValuePair<WindowCategory, WindowDecorationOptions>>? source)

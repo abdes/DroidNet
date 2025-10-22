@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Aura.Decoration;
+using DroidNet.Aura.Decoration;
+
+namespace DroidNet.Aura.Settings;
 
 /// <summary>
 /// Persistent window decoration configuration containing category-based overrides.
