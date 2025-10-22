@@ -4,7 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.ComponentModel;
-using System.Linq;
 
 namespace DroidNet.Config;
 
@@ -230,9 +229,20 @@ public sealed partial class SettingsManager
                 return;
             }
 
-            if (sender is ISettingsService service && service.IsDirty)
+            if (sender is ISettingsService service)
             {
-                this.ScheduleDebouncedSave();
+                // If the change originated from a source reload or other suppressed source change,
+                // ignore it so reloads do not trigger AutoSave.
+                if (owner.cachedSections.TryGetValue(service.SectionName, out var cached)
+                    && owner.suppressChangeNotificationFor.ContainsKey(cached.SourceId))
+                {
+                    return;
+                }
+
+                if (service.IsDirty)
+                {
+                    this.ScheduleDebouncedSave();
+                }
             }
         }
 
