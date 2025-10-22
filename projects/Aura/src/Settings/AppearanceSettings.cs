@@ -5,7 +5,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Aura;
+namespace DroidNet.Aura.Settings;
 
 /// <summary>
 ///     Implements the <see cref="IAppearanceSettings" /> interface to provide appearance settings for an application.

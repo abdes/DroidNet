@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using DroidNet.Aura.WindowManagement;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -27,6 +28,7 @@ public partial class App
     /// <param name="lifetime">The host application lifetime, used to imperatively exit the application when needed.</param>
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter used to set the content inside the content control.</param>
+    /// <param name="windowManager">Window manager service - injected to force early initialization before navigation.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service
@@ -39,8 +41,13 @@ public partial class App
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
-        IValueConverter converter)
+        IValueConverter converter,
+        IWindowManagerService windowManager)
     {
+        // Force WindowManagerService initialization BEFORE navigation starts
+        // This ensures it subscribes to router events before the main window is created
+        _ = windowManager;
+
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;

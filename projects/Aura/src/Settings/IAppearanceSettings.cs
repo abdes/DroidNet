@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Aura;
+namespace DroidNet.Aura.Settings;
 
 /// <summary>
 /// Represents the appearance settings for an application.

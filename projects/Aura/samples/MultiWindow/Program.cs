@@ -4,21 +4,17 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
-using System.Reactive.Linq;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Routing;
-using DroidNet.Samples.Aura.MultiWindow;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
 
@@ -59,13 +55,30 @@ public static partial class Program
         {
             _ = bootstrap.Configure()
                 .WithLoggingAbstraction()
-                .WithConfiguration(
-                    MakeConfigFiles,
-                    ConfigureOptionsPattern)
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
                 .WithAppServices(ConfigureApplicationServices);
+
+            // Build the host so the final container is available and any registered modules can be
+            // initialized (for example the Config SettingsManager).
+            var host = bootstrap.Build();
+
+            // If the Config module was registered it will have added a SettingsManager. Initialize it
+            // now so sources are loaded and services receive their initial values.
+            try
+            {
+                var manager = bootstrap.Container.Resolve<SettingsManager>();
+                manager?.InitializeAsync().GetAwaiter().GetResult();
+                _ = manager?.AutoSave = true;
+
+                // Configure Main window decoration with menu after DI integration
+                ConfigureMainWindowDecoration(bootstrap.Container);
+            }
+            catch (Exception ex) when (ex is ContainerException or InvalidOperationException)
+            {
+                // No SettingsManager registered - skip initialization
+            }
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -80,19 +93,6 @@ public static partial class Program
             Log.CloseAndFlush();
             bootstrap.Dispose();
         }
-    }
-
-    private static IEnumerable<string> MakeConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
-        =>
-        [
-            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-            finder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName),
-        ];
-
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-    {
-        _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
-        _ = sc.Configure<WindowDecorationSettings>(config.GetSection(WindowDecorationSettings.ConfigSectionName));
     }
 
     private static Routes MakeRoutes() => new(
@@ -118,32 +118,23 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register core services in DryIoc
-        container.Register<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
+        // Register Config module
+        _ = container.WithConfig();
 
-        // Register multi-window management services
-        // Note: We use Microsoft.Extensions.DependencyInjection extensions for registration
-        var serviceCollection = new ServiceCollection();
-
-        // Add Aura window management with backdrop service, chrome service, and decoration settings
-        _ = serviceCollection.WithAura(options => options
+        // Register Aura window management with all required services
+        _ = container.WithAura(options => options
+            .WithAppearanceSettings()
+            .WithDecorationSettings()
             .WithBackdropService()
             .WithChromeService()
-            .WithDecorationSettings());
+            .WithThemeModeService());
 
         // Register menu providers using standard DI patterns
-        _ = serviceCollection.RegisterMenus();
+        _ = container.RegisterMenus();
 
         // Register secondary window types as transient (Main window is singleton)
-        _ = serviceCollection.AddWindow<ToolWindow>();
-        _ = serviceCollection.AddWindow<DocumentWindow>();
-
-        // Integrate with DryIoc container
-        container.Populate(serviceCollection);
-
-        // Configure Main window decoration with menu after DI integration
-        ConfigureMainWindowDecoration(container);
+        _ = container.AddWindow<ToolWindow>();
+        _ = container.AddWindow<DocumentWindow>();
 
         /*
          * Configure the Application's Windows.

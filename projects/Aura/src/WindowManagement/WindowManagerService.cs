@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;

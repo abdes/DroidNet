@@ -6,12 +6,14 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
+using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
-using Microsoft.Extensions.Configuration;
+using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -60,13 +62,27 @@ public static partial class Program
         {
             _ = bootstrap.Configure()
                 .WithLoggingAbstraction()
-                .WithConfiguration(
-                    MakeConfigFiles,
-                    ConfigureOptionsPattern)
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
                 .WithAppServices(ConfigureApplicationServices);
+
+            // Build the host so the final container is available and any registered modules can be
+            // initialized (for example the Config SettingsManager).
+            var host = bootstrap.Build();
+
+            // If the Config module was registered it will have added a SettingsManager. Initialize it
+            // now so sources are loaded and services receive their initial values.
+            try
+            {
+                var manager = bootstrap.Container.Resolve<SettingsManager>();
+                manager?.InitializeAsync().GetAwaiter().GetResult();
+                _ = manager?.AutoSave = true;
+            }
+            catch (Exception ex) when (ex is DryIoc.ContainerException or InvalidOperationException)
+            {
+                // No SettingsManager registered - skip initialization
+            }
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -83,15 +99,6 @@ public static partial class Program
         }
     }
 
-    private static IEnumerable<string> MakeConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
-        =>
-        [
-            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-        ];
-
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
-
     private static Routes MakeRoutes() => new(
     [
         new Route
@@ -107,11 +114,16 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register core services
+        // Register Config module
+        _ = container.WithConfig();
 
-        // Register domain specific services, which serve data required by the views
-        container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        // Register Aura window management with all required services
+        _ = container.WithAura(options => options
+            .WithAppearanceSettings()
+            .WithDecorationSettings()
+            .WithBackdropService()
+            .WithChromeService()
+            .WithThemeModeService());
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the
@@ -124,9 +136,6 @@ public static partial class Program
         // registered with a key that corresponding to name of the special target <see
         // cref="Target.Main" />.
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // UI Services
-        container.Register<IAppThemeModeService, AppThemeModeService>();
 
         // Views and ViewModels
         container.Register<MainShellView>(Reuse.Singleton);
