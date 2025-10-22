@@ -150,29 +150,6 @@ public class SettingsServiceTests : SettingsTestBase
     }
 
     [TestMethod]
-    public async Task ReloadAsync_ShouldDiscardChangesAndReloadFromSource()
-    {
-        // Arrange
-        this.source.AddSection("TestSettings", new TestSettings { Name = "Original", Value = 42 });
-        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
-
-        // Modify settings
-        service.Settings.Name = "Modified";
-
-        // Update the mock source with new data
-        this.source.AddSection("TestSettings", new TestSettings { Name = "Reloaded", Value = 100 });
-
-        // Act
-        await service.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert
-        _ = service.Settings.Name.Should().Be("Reloaded");
-        _ = service.Settings.Value.Should().Be(100);
-        _ = service.IsDirty.Should().BeFalse();
-    }
-
-    [TestMethod]
     public async Task ResetToDefaultsAsync_ShouldResetToNewInstance()
     {
         // Arrange
@@ -197,20 +174,30 @@ public class SettingsServiceTests : SettingsTestBase
         await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         using var service = this.Container.Resolve<ISettingsService<ITestSettings>>();
 
-        var busyStates = new List<bool>();
+        // We need to ensure the service performs an actual save operation that
+        // sets IsBusy to true while running. Mark the service dirty via reflection so
+        // SaveAsync will run.
+        var isDirtyProperty = typeof(SettingsService<ITestSettings>).GetProperty("IsDirty");
+        isDirtyProperty?.SetValue(service, value: true);
+
+        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         service.PropertyChanged += (_, e) =>
         {
-            if (string.Equals(e.PropertyName, "IsBusy", StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, "IsBusy", StringComparison.Ordinal) && service.IsBusy)
             {
-                busyStates.Add(service.IsBusy);
+                tcs.TrySetResult(true);
             }
         };
 
-        // Act
-        await service.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        // Act - start the save operation without awaiting so we can observe IsBusy.
+        var saveTask = service.SaveAsync(this.TestContext.CancellationToken);
 
-        // Assert
-        _ = busyStates.Should().Contain(expected: true);
+        // Wait up to 2 seconds for the PropertyChanged event to signal IsBusy==true.
+        var completed = await Task.WhenAny(tcs.Task, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(true);
+        _ = tcs.Task.IsCompleted.Should().BeTrue("IsBusy should be raised while the save operation is running");
+
+        // Now await completion and assert final state.
+        await saveTask.ConfigureAwait(true);
         _ = service.IsBusy.Should().BeFalse();
     }
 

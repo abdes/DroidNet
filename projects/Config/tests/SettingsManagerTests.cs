@@ -604,6 +604,111 @@ public class SettingsManagerTests : SettingsTestBase
     }
 
     [TestMethod]
+    public async Task ReloadAllAsync_ShouldResetServicesWithNoCachedSection()
+    {
+        // Arrange - start with a source that provides TestSettings
+        var source1 = new MockSettingsSource("source1");
+        source1.AddSection(nameof(TestSettings), new TestSettings { Name = "FromSource", Value = 500 });
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("FromSource");
+
+        // Act - remove the section from the source and reload all
+        source1.RemoveSection(nameof(TestSettings));
+        await this.SettingsManager.ReloadAllAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Service should reset to defaults and not be dirty
+        _ = service.Settings.Name.Should().Be("Default");
+        _ = service.Settings.Value.Should().Be(42);
+        _ = service.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task ReloadAllAsync_PartialSourceFailure_ShouldStillUpdateAvailableSectionsAndResetMissingOnes()
+    {
+        // Arrange - two sources: source1 will fail on read, source2 provides a section
+        var source1 = new MockSettingsSource("failing-source");
+        var source2 = new MockSettingsSource("good-source");
+
+        // source1 initially provided TestSettings
+        source1.AddSection(nameof(TestSettings), new TestSettings { Name = "FromFailing", Value = 11 });
+
+        // source2 provides AlternativeTestSettings
+        source2.AddSection(nameof(AlternativeTestSettings), new AlternativeTestSettings { Theme = "Dark", FontSize = 16 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var testService = this.SettingsManager.GetService<ITestSettings>();
+        var altService = this.SettingsManager.GetService<IAlternativeTestSettings>();
+
+        // Verify initial state populated from both sources
+        _ = testService.Settings.Name.Should().Be("FromFailing");
+        _ = altService.Settings.Theme.Should().Be("Dark");
+
+        // Now simulate failing read on source1 for the reload
+        source1.ShouldFailRead = true;
+
+        // Act
+        await this.SettingsManager.ReloadAllAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - testService (from failing source) should be reset to defaults
+        _ = testService.Settings.Name.Should().Be("Default");
+        _ = testService.Settings.Value.Should().Be(42);
+
+        // altService should still be present and unchanged from source2
+        _ = altService.Settings.Theme.Should().Be("Dark");
+        _ = altService.Settings.FontSize.Should().Be(16);
+
+        // Both services should not be dirty after reload
+        _ = testService.IsDirty.Should().BeFalse();
+        _ = altService.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task ReloadAllAsync_LeavesAllServicesConsistentAndClearsIsDirty()
+    {
+        // Arrange - multiple services with mixed source coverage
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection(nameof(TestSettings), new TestSettings { Name = "S1", Value = 1 });
+        source2.AddSection(nameof(AlternativeTestSettings), new AlternativeTestSettings { Theme = "Light", FontSize = 12 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var testService = this.SettingsManager.GetService<ITestSettings>();
+        var altService = this.SettingsManager.GetService<IAlternativeTestSettings>();
+
+        // Modify services locally to set dirty flags
+        testService.Settings.Name = "UserChange";
+        altService.Settings.Theme = "UserTheme";
+        // Mark dirty via reflection (tests use this pattern elsewhere)
+        var isDirtyPropTest = typeof(SettingsService<ITestSettings>).GetProperty("IsDirty");
+        isDirtyPropTest?.SetValue(testService, value: true);
+        var isDirtyPropAlt = typeof(SettingsService<IAlternativeTestSettings>).GetProperty("IsDirty");
+        isDirtyPropAlt?.SetValue(altService, value: true);
+
+        // Act - reload all sources (should discard local changes and apply manager cache)
+        await this.SettingsManager.ReloadAllAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - each service should either have manager-provided values or defaults, and be not dirty
+        _ = testService.Settings.Name.Should().Be("S1");
+        _ = testService.IsDirty.Should().BeFalse();
+
+        _ = altService.Settings.Theme.Should().Be("Light");
+        _ = altService.IsDirty.Should().BeFalse();
+    }
+
+    [TestMethod]
     public async Task SubscribeToSourceEvents_ShouldHappenDuringInitialization()
     {
         // Arrange

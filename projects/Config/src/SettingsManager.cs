@@ -49,6 +49,7 @@ public sealed partial class SettingsManager(
     {
         PropertyNameCaseInsensitive = true,
     };
+
     private readonly List<ISettingsSource> sources = sources?.ToList() ?? throw new ArgumentNullException(nameof(sources));
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
     private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = new();
@@ -501,28 +502,28 @@ public sealed partial class SettingsManager(
         }
 
         return materialized;
-    }
 
-    private static object? ConvertSectionData(object? data, Type targetType)
-    {
-        ArgumentNullException.ThrowIfNull(targetType);
-
-        if (data is null)
+        static object? ConvertSectionData(object? data, Type targetType)
         {
-            return null;
-        }
+            ArgumentNullException.ThrowIfNull(targetType);
 
-        if (targetType.IsInstanceOfType(data))
-        {
+            if (data is null)
+            {
+                return null;
+            }
+
+            if (targetType.IsInstanceOfType(data))
+            {
+                return data;
+            }
+
+            if (data is JsonElement jsonElement)
+            {
+                return JsonSerializer.Deserialize(jsonElement.GetRawText(), targetType, JsonOptions);
+            }
+
             return data;
         }
-
-        if (data is JsonElement jsonElement)
-        {
-            return JsonSerializer.Deserialize(jsonElement.GetRawText(), targetType, JsonOptions);
-        }
-
-        return data;
     }
 
     private async Task HandleSourceChangedAsync(
