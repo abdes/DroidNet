@@ -5,6 +5,8 @@
 using System.Diagnostics;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -23,15 +25,18 @@ namespace DroidNet.Aura;
 public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposable
 {
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
+    private readonly ILogger<AppThemeModeService> logger;
     private bool isDisposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AppThemeModeService"/> class.
     /// </summary>
     /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
-    public AppThemeModeService(ISettingsService<IAppearanceSettings> appearanceSettings)
+    /// <param name="loggerFactory">The logger factory for creating loggers.</param>
+    public AppThemeModeService(ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
     {
         this.appearanceSettings = appearanceSettings;
+        this.logger = loggerFactory?.CreateLogger<AppThemeModeService>() ?? NullLogger<AppThemeModeService>.Instance;
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
     }
 
@@ -93,7 +98,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to change theme mode of the app. {ex}");
+            this.LogFailedToChangeThemeMode(ex);
         }
     }
 
@@ -192,7 +197,7 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
     {
         if (args.PropertyName?.Equals(nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal) == true)
         {
-            Debug.WriteLine("AppThemeModeService: theme mode setting changed");
+            this.LogThemeModeSettingChanged();
         }
     }
 }

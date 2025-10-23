@@ -35,14 +35,15 @@ namespace DroidNet.Aura.Decoration.Serialization;
 /// </example>
 [JsonSourceGenerationOptions(
     WriteIndented = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    Converters = [
+    Converters =
+    [
         typeof(WindowCategoryJsonConverter),
         typeof(JsonStringEnumConverter<BackdropKind>),
         typeof(JsonStringEnumConverter<DragRegionBehavior>),
         typeof(JsonStringEnumConverter<ButtonPlacement>),
-    ]
-)]
+    ])]
 [JsonSerializable(typeof(WindowDecorationSettings))]
 [JsonSerializable(typeof(WindowDecorationOptions))]
 [JsonSerializable(typeof(TitleBarOptions))]

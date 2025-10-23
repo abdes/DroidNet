@@ -52,7 +52,6 @@ public static partial class Program
         {
             // Configure aned Build the host so the final container is available.
             _ = bootstrap.Configure()
-                .WithLoggingAbstraction()
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
@@ -103,11 +102,11 @@ public static partial class Program
         _ = container
             .WithJsonConfigSource(
                 "aura.decoration",
-                pathFinder.GetConfigFilePath("Aura.json"),
+                pathFinder.GetConfigFilePath("aura.json"),
                 watch: true)
             .WithJsonConfigSource(
                 "aura.appearance",
-                pathFinder.GetConfigFilePath("LocalSettings"),
+                pathFinder.GetConfigFilePath("settings.json"),
                 watch: true);
 
         manager.InitializeAsync().GetAwaiter().GetResult();

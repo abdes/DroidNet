@@ -164,7 +164,6 @@ public sealed record WindowDecorationOptions
     /// <item><see cref="Menu"/> specified when <see cref="ChromeEnabled"/> is <see langword="false"/></item>
     /// <item>Primary category window with <see cref="WindowButtonsOptions.ShowClose"/> set to <see langword="false"/></item>
     /// <item><see cref="TitleBarOptions.Height"/> is zero or negative</item>
-    /// <item><see cref="TitleBarOptions.Padding"/> is negative</item>
     /// </list>
     /// </exception>
     /// <remarks>
@@ -219,7 +218,10 @@ public sealed record WindowDecorationOptions
         if (this.TitleBar.Height <= 0.0)
         {
             throw new ValidationException(
-                $"Title bar height must be greater than zero. Current value: {this.TitleBar.Height}");
+                string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "Title bar height must be greater than zero. Current value: {0}",
+                    this.TitleBar.Height));
         }
 
         // Validate MenuProviderId if Menu is specified

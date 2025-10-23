@@ -9,7 +9,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Samples.WinPackagedApp;
+namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
 /// Configures and registers menu providers for the multi-window sample application.
@@ -24,7 +24,7 @@ namespace DroidNet.Samples.WinPackagedApp;
 /// </list>
 /// </remarks>
 [ExcludeFromCodeCoverage]
-public static class MenuConfiguration
+internal static class MenuConfiguration
 {
     /// <summary>
     /// Main application menu displayed in the title bar.
@@ -87,8 +87,7 @@ public static class MenuConfiguration
     /// Builds the File menu section.
     /// </summary>
     private static void BuildFileMenu(MenuBuilder builder)
-    {
-        _ = builder.AddSubmenu(
+        => _ = builder.AddSubmenu(
             "File",
             fileMenu =>
             {
@@ -107,16 +106,13 @@ public static class MenuConfiguration
                     "Exit",
                     icon: new FontIconSource { Glyph = "\uE8BB", FontSize = 16 },
                     acceleratorText: "Alt+F4");
-            },
-            new FontIconSource { Glyph = "\uE8B7", FontSize = 16 });
-    }
+            });
 
     /// <summary>
     /// Builds the Window menu section for the main menu.
     /// </summary>
     private static void BuildWindowMenu_ForMain(MenuBuilder builder)
-    {
-        _ = builder.AddSubmenu(
+        => _ = builder.AddSubmenu(
             "Window",
             windowMenu =>
             {
@@ -161,16 +157,13 @@ public static class MenuConfiguration
                 _ = windowMenu.AddMenuItem(
                     "Tile Vertically",
                     icon: new FontIconSource { Glyph = "\uE89A", FontSize = 16 });
-            },
-            new FontIconSource { Glyph = "\uE890", FontSize = 16 });
-    }
+            });
 
     /// <summary>
     /// Builds the View menu section.
     /// </summary>
     private static void BuildViewMenu(MenuBuilder builder)
-    {
-        _ = builder.AddSubmenu(
+        => _ = builder.AddSubmenu(
             "View",
             viewMenu =>
             {
@@ -194,16 +187,13 @@ public static class MenuConfiguration
                     "Full Screen",
                     icon: new FontIconSource { Glyph = "\uE740", FontSize = 16 },
                     acceleratorText: "F11");
-            },
-            new FontIconSource { Glyph = "\uE890", FontSize = 16 });
-    }
+            });
 
     /// <summary>
     /// Builds the Help menu section.
     /// </summary>
     private static void BuildHelpMenu(MenuBuilder builder)
-    {
-        _ = builder.AddSubmenu(
+        => _ = builder.AddSubmenu(
             "Help",
             helpMenu =>
             {
@@ -217,9 +207,7 @@ public static class MenuConfiguration
                 _ = helpMenu.AddMenuItem(
                     "About",
                     icon: new FontIconSource { Glyph = "\uE946", FontSize = 16 });
-            },
-            new FontIconSource { Glyph = "\uE897", FontSize = 16 });
-    }
+            });
 
     /// <summary>
     /// Builds a simplified window management menu for tool windows.

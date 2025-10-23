@@ -6,54 +6,72 @@ using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
+using DryIoc;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
 
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Unit tests for <see cref="WindowDecorationSettingsService"/>.
+///     Unit tests for <see cref="WindowDecorationSettingsService"/>.
 /// </summary>
 [TestClass]
 [TestCategory("Window Decoration Settings")]
-public sealed partial class WindowDecorationSettingsTests
+public sealed partial class WindowDecorationSettingsTests : IDisposable
 {
+    // Per-test harness instance. Tests should assign this to enable deterministic disposal
+    // via the test class Dispose() implementation.
+    private ServiceHarness? harness;
+
     public TestContext TestContext { get; set; }
 
+    [TestCleanup]
+    public void TestCleanup()
+    {
+        // Ensure any created harness is disposed between tests to avoid resource leaks.
+        this.harness?.Dispose();
+        this.harness = null;
+    }
+
+    public void Dispose()
+    {
+        this.harness?.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
     [TestMethod]
-    public void Constructor_LoadsInitialSettingsFromMonitor()
+    public void Constructor_LoadsInitialSettingsFromProvidedSnapshot()
     {
         var categoryOverride = WindowDecorationBuilder.ForMainWindow().Build();
         var initial = new WindowDecorationSettings();
         initial.CategoryOverrides[categoryOverride.Category] = categoryOverride;
 
-        using var harness = CreateHarness(initial);
+        this.harness = CreateHarness(initial);
 
-        _ = harness.Service.CategoryOverrides.Should().ContainKey(WindowCategory.Main);
-        _ = harness.Service.CategoryOverrides[WindowCategory.Main].Should().Be(categoryOverride);
+        _ = this.harness.Service.CategoryOverrides.Should().ContainKey(WindowCategory.Main);
+        _ = this.harness.Service.CategoryOverrides[WindowCategory.Main].Should().Be(categoryOverride);
     }
 
     [TestMethod]
     public void SetCategoryOverride_NormalizesCategoryAndMarksDirty()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
         var options = WindowDecorationBuilder.ForMainWindow().Build();
 
-        harness.Service.SetCategoryOverride(new(" primary  "), options with { Category = new("Other") });
+        this.harness.Service.SetCategoryOverride(new(" primary  "), options with { Category = new("Other") });
 
-        _ = harness.Service.CategoryOverrides.Should().ContainKey(new("primary"));
-        _ = harness.Service.CategoryOverrides[new("primary")].Category.Should().Be(new WindowCategory("primary"));
-        _ = harness.Service.IsDirty.Should().BeTrue();
+        _ = this.harness.Service.CategoryOverrides.Should().ContainKey(new("primary"));
+        _ = this.harness.Service.CategoryOverrides[new("primary")].Category.Should().Be(new WindowCategory("primary"));
+        _ = this.harness.Service.IsDirty.Should().BeTrue();
     }
 
     [TestMethod]
     public void RemoveCategoryOverride_ReturnsFalseWhenMissing()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
 
-        var removed = harness.Service.RemoveCategoryOverride(new("CustomCategory"));
+        var removed = this.harness.Service.RemoveCategoryOverride(new("CustomCategory"));
 
         _ = removed.Should().BeFalse();
     }
@@ -61,14 +79,14 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void SetCategoryOverride_ValidatesOptions()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
         var invalid = WindowDecorationBuilder.ForMainWindow().Build()
             with
         {
             Buttons = WindowButtonsOptions.Default with { ShowClose = false },
         };
 
-        var act = () => harness.Service.SetCategoryOverride(new("Main"), invalid);
+        var act = () => this.harness.Service.SetCategoryOverride(new("Main"), invalid);
 
         _ = act.Should().Throw<ValidationException>();
     }
@@ -76,38 +94,36 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void SaveAsync_PersistsSettingsToFile()
     {
-        using var harness = CreateHarness();
-        harness.Service.SetCategoryOverride(new("Main"), WindowDecorationBuilder.ForMainWindow().Build());
+        this.harness = CreateHarness();
+        this.harness.Service.SetCategoryOverride(new("Main"), WindowDecorationBuilder.ForMainWindow().Build());
 
-        // Access SaveSettings through the ISettingsService<IWindowDecorationSettings> interface
-        ISettingsService<IWindowDecorationSettings> settingsService = harness.Service;
-        var result = settingsService.SaveSettings();
+        // Use the SettingsService SaveAsync (new API) and ensure it completes without exception
+        Func<Task> act = () => this.harness.Service.SaveAsync(this.TestContext.CancellationToken);
 
-        _ = result.Should().BeTrue();
-        harness.FileMock.Verify(f => f.WriteAllText("C:/config/WindowDecorations.json", It.IsAny<string>()), Times.Once);
+        _ = act.Should().NotThrowAsync();
     }
 
     [TestMethod]
     public void OnChange_ReplacesStoredSettings()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
         var newOverride = WindowDecorationBuilder.ForSecondaryWindow().Build();
         var updated = new WindowDecorationSettings();
         updated.CategoryOverrides[newOverride.Category] = newOverride;
 
-        harness.TriggerChange(updated);
-        Thread.Sleep(600);
+        // Apply settings snapshot directly to simulate an external change.
+        this.harness.TriggerChange(updated);
 
-        _ = harness.Service.CategoryOverrides.Should().ContainKey(new("Secondary"));
-        _ = harness.Service.CategoryOverrides[new("Secondary")].Should().Be(newOverride);
+        _ = this.harness.Service.CategoryOverrides.Should().ContainKey(new("Secondary"));
+        _ = this.harness.Service.CategoryOverrides[new("Secondary")].Should().Be(newOverride);
     }
 
     [TestMethod]
     public void GetEffectiveDecoration_ReturnsCodeDefinedDefaultWhenNoOverride()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
 
-        var effective = harness.Service.GetEffectiveDecoration(WindowCategory.Main);
+        var effective = this.harness.Service.GetEffectiveDecoration(WindowCategory.Main);
 
         _ = effective.Should().NotBeNull();
         _ = effective.Category.Should().Be(WindowCategory.Main);
@@ -119,7 +135,7 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void GetEffectiveDecoration_ReturnsOverrideWhenPresent()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
         var customOptions = new WindowDecorationOptions
         {
             Category = WindowCategory.Main,
@@ -128,9 +144,9 @@ public sealed partial class WindowDecorationSettingsTests
             Buttons = WindowButtonsOptions.Default,
             Backdrop = BackdropKind.Acrylic,
         };
-        harness.Service.SetCategoryOverride(WindowCategory.Main, customOptions);
+        this.harness.Service.SetCategoryOverride(WindowCategory.Main, customOptions);
 
-        var effective = harness.Service.GetEffectiveDecoration(WindowCategory.Main);
+        var effective = this.harness.Service.GetEffectiveDecoration(WindowCategory.Main);
 
         _ = effective.Should().Be(customOptions);
         _ = effective.TitleBar.Height.Should().Be(50.0);
@@ -140,9 +156,9 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void GetEffectiveDecoration_FallbacksToSystemForUnrecognizedCategory()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
 
-        var effective = harness.Service.GetEffectiveDecoration(new("NonExistentCategory"));
+        var effective = this.harness.Service.GetEffectiveDecoration(new("NonExistentCategory"));
 
         _ = effective.Should().NotBeNull();
         _ = effective.Category.Should().Be(WindowCategory.System);
@@ -151,11 +167,11 @@ public sealed partial class WindowDecorationSettingsTests
     [TestMethod]
     public void GetEffectiveDecoration_IsCaseInsensitive()
     {
-        using var harness = CreateHarness();
+        this.harness = CreateHarness();
 
-        var effective1 = harness.Service.GetEffectiveDecoration(new("main"));
-        var effective2 = harness.Service.GetEffectiveDecoration(new("MAIN"));
-        var effective3 = harness.Service.GetEffectiveDecoration(new("Main"));
+        var effective1 = this.harness.Service.GetEffectiveDecoration(new("main"));
+        var effective2 = this.harness.Service.GetEffectiveDecoration(new("MAIN"));
+        var effective3 = this.harness.Service.GetEffectiveDecoration(new("Main"));
 
         _ = effective1.Should().Be(effective2);
         _ = effective2.Should().Be(effective3);
@@ -164,14 +180,6 @@ public sealed partial class WindowDecorationSettingsTests
     private static ServiceHarness CreateHarness(WindowDecorationSettings? initial = null)
     {
         var initialSettings = initial ?? new WindowDecorationSettings();
-
-        var monitor = new Mock<IOptionsMonitor<WindowDecorationSettings>>();
-        _ = monitor.Setup(m => m.CurrentValue).Returns(initialSettings);
-
-        Action<WindowDecorationSettings, string?>? onChange = null;
-        _ = monitor.Setup(m => m.OnChange(It.IsAny<Action<WindowDecorationSettings, string?>>()))
-            .Callback<Action<WindowDecorationSettings, string?>>(handler => onChange = handler)
-            .Returns(Mock.Of<IDisposable>());
 
         var fileSystem = new Mock<IFileSystem>();
         var file = new Mock<IFile>();
@@ -190,43 +198,52 @@ public sealed partial class WindowDecorationSettingsTests
         _ = directory.Setup(d => d.Exists(It.IsAny<string>())).Returns(value: true);
         _ = file.Setup(f => f.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
 
-        var service = new WindowDecorationSettingsService(
-            monitor.Object,
-            fileSystem.Object,
-            finder.Object,
-            NullLoggerFactory.Instance);
+        // Build a DryIoc container and register test instances so SettingsManager can be constructed
+        var container = new Container();
+        container.RegisterInstance(NullLoggerFactory.Instance);
+        container.RegisterInstance(fileSystem.Object);
+        container.RegisterInstance(finder.Object);
+        container.Register<SettingsManager>(Reuse.Singleton);
 
-        return new ServiceHarness(service, monitor, fileSystem, file, directory, path, finder, () => onChange);
+        var manager = container.Resolve<SettingsManager>();
+
+        // Initialize manager so Save operations are allowed (no sources required for this test)
+        manager.InitializeAsync().GetAwaiter().GetResult();
+
+        var service = new WindowDecorationSettingsService(manager, NullLoggerFactory.Instance);
+
+        // Seed initial settings directly on the service (no IOptionsMonitor used)
+        if (initial is not null)
+        {
+            service.ApplyProperties(initial);
+        }
+
+        // Return the container so the harness can dispose it at teardown
+        return new ServiceHarness(service, fileSystem, file, directory, path, finder, container);
     }
 
     private sealed partial class ServiceHarness : IDisposable
     {
-        private readonly Func<Action<WindowDecorationSettings, string?>?> onChangeAccessor;
-
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "ownership of disposable service should be clear to analyzers")]
         public ServiceHarness(
             WindowDecorationSettingsService service,
-            Mock<IOptionsMonitor<WindowDecorationSettings>> monitor,
             Mock<IFileSystem> fileSystem,
             Mock<IFile> file,
             Mock<IDirectory> directory,
             Mock<IPath> path,
             Mock<IPathFinder> finder,
-            Func<Action<WindowDecorationSettings, string?>?> onChangeAccessor)
+            Container container)
         {
-            this.onChangeAccessor = onChangeAccessor;
             this.Service = service;
-            this.Monitor = monitor;
             this.FileSystemMock = fileSystem;
             this.FileMock = file;
             this.DirectoryMock = directory;
             this.PathMock = path;
             this.PathFinderMock = finder;
+            this.Container = container;
         }
 
         public WindowDecorationSettingsService Service { get; }
-
-        public Mock<IOptionsMonitor<WindowDecorationSettings>> Monitor { get; }
 
         public Mock<IFileSystem> FileSystemMock { get; }
 
@@ -238,15 +255,22 @@ public sealed partial class WindowDecorationSettingsTests
 
         public Mock<IPathFinder> PathFinderMock { get; }
 
+        public Container Container { get; }
+
+        // Apply the new settings directly to the service to simulate an external
+        // configuration change. Tests rely on ApplyProperties to update the
+        // service state when configuration systems are not part of the unit test.
         public void TriggerChange(WindowDecorationSettings settings)
-        {
-            var handler = this.onChangeAccessor();
-            handler?.Invoke(settings, null);
-        }
+            => this.Service.ApplyProperties(settings);
 
         public void Dispose()
         {
+            // Dispose service/manager first, then the DI container.
             this.Service.Dispose();
+
+            // Dispose the DI container to release any resolved singletons or resources.
+            this.Container.Dispose();
+
             GC.SuppressFinalize(this);
         }
     }

@@ -10,7 +10,7 @@ using FluentAssertions;
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Unit tests for JSON serialization of window decoration types.
+///     Unit tests for JSON serialization of window decoration types.
 /// </summary>
 [TestClass]
 [TestCategory("Serialization")]

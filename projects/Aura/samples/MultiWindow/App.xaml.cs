@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
@@ -17,6 +18,7 @@ namespace DroidNet.Samples.WinPackagedApp;
 /// <summary>
 /// Provides application-specific behavior for the multi-window sample application.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "partial App must be public")]
 public partial class App
 {
     private readonly IRouter router;
@@ -64,13 +66,6 @@ public partial class App
         // Exit if navigation fails
         _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
-        // Subscribe to window lifecycle events for logging and demo purposes
-        _ = this.windowManager.WindowEvents.Subscribe(evt =>
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"Window Event: {evt.EventType} - {evt.Context.Title} ({evt.Context.Id})");
-        });
-
         // Navigate to root - this creates the main window and loads MainShellViewModel,
         // then navigates to /demo which loads WindowManagerShellViewModel into the content outlet
         try
@@ -81,7 +76,7 @@ public partial class App
         }
         catch (NavigationFailedException ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to navigate: {ex.Message}");
+            Debug.WriteLine($"Failed to navigate: {ex.Message}");
             this.lifetime.StopApplication();
         }
     }

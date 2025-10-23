@@ -14,12 +14,10 @@
 
     <UserControl.Resources>
         <Style x:Key="CompactButton" TargetType="Control">
-            <Setter Property="Padding" Value="5" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style BasedOn="{StaticResource CompactButton}" TargetType="Button" />
-        <Style BasedOn="{StaticResource CompactButton}" TargetType="ToggleButton" />
 
         <!--  Converters for window decoration bindings  -->
         <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVis" />
@@ -46,7 +44,7 @@
         <!--  Custom TitleBar  -->
         <Grid
             x:Name="CustomTitleBar"
-            Height="{x:Bind ViewModel.Context.Decoration.TitleBar.Height, Mode=OneWay, FallbackValue=40}"
+            Height="{x:Bind ViewModel.Context.Decoration.TitleBar.Height, Mode=OneWay, FallbackValue=32}"
             Background="Transparent"
             Visibility="{x:Bind ViewModel.Context.Decoration.ChromeEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
             <Grid.ColumnDefinitions>
@@ -77,12 +75,12 @@
                 <!--  Standard persistent menu (when IsCompact=false or null)  -->
                 <cm:MenuBar
                     VerticalAlignment="Top"
-                    MenuSource="{x:Bind ViewModel.Context.MenuSource, Mode=OneWay}"
+                    MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.Context.Decoration.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsNotCompactToVis}, FallbackValue=Visible}" />
                 <!--  Compact expandable menu (when IsCompact=true)  -->
                 <cm:ExpandableMenuBar
                     VerticalAlignment="Top"
-                    MenuSource="{x:Bind ViewModel.Context.MenuSource, Mode=OneWay}"
+                    MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.Context.Decoration.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsCompactToVis}, FallbackValue=Collapsed}" />
             </StackPanel>
             <StackPanel

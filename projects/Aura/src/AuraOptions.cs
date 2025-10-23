@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Aura.Settings;
+
 namespace DroidNet.Aura;
 
 /// <summary>
@@ -104,7 +106,7 @@ public sealed class AuraOptions
 
     /// <summary>
     /// Registers the window decoration settings service (<see cref="Config.ISettingsService{T}"/>
-    /// wrapping <see cref="Decoration.WindowDecorationSettings"/>).
+    /// wrapping <see cref="WindowDecorationSettings"/>).
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>

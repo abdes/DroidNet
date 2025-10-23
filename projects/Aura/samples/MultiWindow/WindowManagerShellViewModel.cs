@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -14,7 +15,6 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
-using DroidNet.Samples.WinPackagedApp;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
@@ -30,6 +30,7 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 /// demonstrating Aura's multi-window capabilities including window lifecycle tracking,
 /// theme synchronization, and different window types.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public sealed partial class WindowManagerShellViewModel : AbstractOutletContainer
 {
     private readonly IWindowManagerService windowManager;
@@ -153,7 +154,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to create tool window: {ex.Message}");
+            Debug.WriteLine($"Failed to create tool window: {ex.Message}");
         }
     }
 
@@ -179,7 +180,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to create document window: {ex.Message}");
+            Debug.WriteLine($"Failed to create document window: {ex.Message}");
         }
     }
 
@@ -201,7 +202,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to close window: {ex.Message}");
+            Debug.WriteLine($"Failed to close window: {ex.Message}");
         }
     }
 
@@ -223,7 +224,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to activate window: {ex.Message}");
+            Debug.WriteLine($"Failed to activate window: {ex.Message}");
         }
     }
 
@@ -239,7 +240,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Failed to close all windows: {ex.Message}");
+            Debug.WriteLine($"Failed to close all windows: {ex.Message}");
         }
     }
 

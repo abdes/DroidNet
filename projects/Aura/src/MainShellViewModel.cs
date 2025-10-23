@@ -93,11 +93,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
     }
 
     /// <summary>
-    /// Gets the appearance settings (the service implements IAppearanceSettings).
-    /// </summary>
-    private IAppearanceSettings AppearanceSettings => this.appearanceSettingsService.Settings;
-
-    /// <summary>
     /// Gets the menu builder for creating the settings menu.
     /// </summary>
     public MenuBuilder MenuBuilder { get; } = new MenuBuilder();
@@ -142,27 +137,9 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
     /// <summary>
-    /// Updates the MainMenu property from the WindowContext's MenuSource.
+    /// Gets the appearance settings (the service implements IAppearanceSettings).
     /// </summary>
-    /// <remarks>
-    /// This method looks up the window context from the window manager service and uses
-    /// the menu source from the context if available. Falls back to the settings menu otherwise.
-    /// </remarks>
-    private void UpdateMenuFromWindowContext()
-    {
-        if (this.Window is null || this.windowManagerService is null)
-        {
-            this.MainMenu = this.SettingsMenu;
-            return;
-        }
-
-        // Find the window context for this window
-        var windowContext = this.windowManagerService.OpenWindows
-            .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
-
-        // Use the menu from the window context if available, otherwise fallback to settings menu
-        this.MainMenu = windowContext?.MenuSource ?? this.SettingsMenu;
-    }
+    private IAppearanceSettings AppearanceSettings => this.appearanceSettingsService.Settings;
 
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
@@ -213,6 +190,29 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private static void OnSettingsSelected()
     {
         // TODO: settings view and dialog
+    }
+
+    /// <summary>
+    /// Updates the MainMenu property from the WindowContext's MenuSource.
+    /// </summary>
+    /// <remarks>
+    /// This method looks up the window context from the window manager service and uses
+    /// the menu source from the context if available. Falls back to the settings menu otherwise.
+    /// </remarks>
+    private void UpdateMenuFromWindowContext()
+    {
+        if (this.Window is null || this.windowManagerService is null)
+        {
+            this.MainMenu = this.SettingsMenu;
+            return;
+        }
+
+        // Find the window context for this window
+        var windowContext = this.windowManagerService.OpenWindows
+            .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
+
+        // Use the menu from the window context if available, otherwise fallback to settings menu
+        this.MainMenu = windowContext?.MenuSource ?? this.SettingsMenu;
     }
 
     /// <summary>

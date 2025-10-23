@@ -440,7 +440,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     public Task CloseAllWindowsAsync_WithConcurrentModification_CompletesSuccessfully_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var windows = Enumerable.Range(0, 5).Select(_ => new Window()).ToList();
+        var windows = Enumerable.Range(0, 5).Select(_ => MakeSmallWindow()).ToList();
         var index = 0;
 
         _ = this.mockFactory.Setup(f => f.CreateWindow<Window>())
