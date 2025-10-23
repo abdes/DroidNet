@@ -5,7 +5,6 @@
 using System.Globalization;
 using DroidNet.Bootstrap;
 using DryIoc;
-using Microsoft.Extensions.Logging;
 using Serilog;
 using Testably.Abstractions;
 
@@ -37,7 +36,14 @@ internal static class Program
 
         try
         {
-            await Initialize(bootstrap, samplesPath).ConfigureAwait(true);
+            // Configure aned Build the host so the final container is available.
+            _ = bootstrap.Configure().Build();
+
+            // Final container is now available.
+            var container = bootstrap.Container;
+
+            await Initialize(container, samplesPath).ConfigureAwait(true);
+
             await Run(bootstrap).ConfigureAwait(true);
         }
         catch (Exception ex)
@@ -51,41 +57,29 @@ internal static class Program
         }
     }
 
-    private static async Task Initialize(Bootstrapper bootstrap, string samplesPath)
+    private static async Task Initialize(IContainer container, string samplesPath)
     {
-        // Configure and register application services into the bootstrapper's container
-        _ = bootstrap
-            .Configure()
-            .WithAppServices(container =>
-            {
-                // Register Testably RealFileSystem as the System.IO.Abstractions IFileSystem expected by Config
-                container.RegisterInstance<System.IO.Abstractions.IFileSystem>(new RealFileSystem());
+        // Register Testably RealFileSystem as the System.IO.Abstractions IFileSystem expected by Config
+        container.RegisterInstance<System.IO.Abstractions.IFileSystem>(new RealFileSystem());
 
-                // Register Config module and our sources/services
-                _ = container.WithConfig();
-                _ = container.WithJsonConfigSource("base", Path.Combine(samplesPath, "settings.json"), watch: true);
+        // Register Config module and our sources/services
+        _ = container.WithConfig();
+        _ = container.WithJsonConfigSource("base", Path.Combine(samplesPath, "settings.json"), watch: true);
 
-                var pathFinder = container.Resolve<IPathFinder>();
-                if (pathFinder is not null)
-                {
-                    _ = container.WithJsonConfigSource("dev", Path.Combine(samplesPath, $"settings.{pathFinder.Mode}.json"), watch: true);
-                }
+        var pathFinder = container.Resolve<IPathFinder>();
+        if (pathFinder is not null)
+        {
+            _ = container.WithJsonConfigSource("dev", Path.Combine(samplesPath, $"settings.{pathFinder.Mode}.json"), watch: true);
+        }
 
-                _ = container.WithJsonConfigSource("user", Path.Combine(samplesPath, "settings.user.json"), watch: true);
-                _ = container.WithSettings<IAppSettings, AppSettingsService>();
-            });
-
-        // Build the host so the final container is available
-        var host = bootstrap.Build();
+        _ = container.WithJsonConfigSource("user", Path.Combine(samplesPath, "settings.user.json"), watch: true);
+        _ = container.WithSettings<IAppSettings, AppSettingsService>();
 
         // set working directory to samples path so relative file operations behave as expected
         Directory.SetCurrentDirectory(samplesPath);
 
-        // Resolve a logger from the bootstrapper container and log startup info
-        var loggerFactory = bootstrap.Container.Resolve<ILoggerFactory>();
-
         // Resolve the manager from the bootstrapper container and initialize
-        var manager = bootstrap.Container.Resolve<SettingsManager>();
+        var manager = container.Resolve<SettingsManager>();
         await manager.InitializeAsync().ConfigureAwait(true);
     }
 
