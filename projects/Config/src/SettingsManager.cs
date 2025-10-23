@@ -12,11 +12,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace DroidNet.Config;
 
 /// <summary>
-///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
+///     Provides a last-added-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 /// <remarks>
 ///     This class manages multiple <see cref="ISettingsSource"/> instances, loading them in the order added. When multiple
-///     sources provide the same section, the last-loaded source wins for that section.
+///     sources provide the same section, the last-added source wins for that section.
 ///     <para>
 ///     Supports runtime reloading, addition, and removal of sources via <see cref="AddSourceAsync"/>, <see
 ///     cref="RemoveSourceAsync"/>, and <see cref="ReloadAllAsync"/>. These operations propagate updates to all active
@@ -31,16 +31,11 @@ namespace DroidNet.Config;
 ///     When a source is configured, it remains configured until explicitly removed, even if it fails to load. This allows
 ///     retrying on subsequent reloads or when the source data changes.
 /// </note>
-/// <param name="sources">The collection of settings sources to manage.</param>
 /// <param name="resolver">The dependency injection resolver for creating service instances.</param>
 /// <param name="loggerFactory">
 ///     Optional logger factory for diagnostic output. If <see langword="null"/>, a no-op logger is used.
 /// </param>
-/// <exception cref="System.ArgumentNullException">
-///     Thrown when <paramref name="sources"/> or <paramref name="resolver"/> is <see langword="null"/>.
-/// </exception>
 public sealed partial class SettingsManager(
-    IEnumerable<ISettingsSource> sources,
     IResolver resolver,
     ILoggerFactory? loggerFactory = null) : ISettingsManager
 {
@@ -57,13 +52,14 @@ public sealed partial class SettingsManager(
 
     private readonly ILogger<SettingsManager> logger = loggerFactory?.CreateLogger<SettingsManager>() ?? NullLogger<SettingsManager>.Instance;
 
-    private readonly List<ISettingsSource> sources = sources?.ToList() ?? throw new ArgumentNullException(nameof(sources));
     private readonly IResolver resolver = resolver ?? throw new ArgumentNullException(nameof(resolver));
     private readonly ConcurrentDictionary<Type, ISettingsService> serviceInstances = new();
     private readonly ConcurrentDictionary<string, CachedSection> cachedSections = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, byte> suppressChangeNotificationFor = new(StringComparer.Ordinal);
     private readonly SettingsSourceMetadata.SetterKey metadataSetterKey = new();
     private readonly AsyncLock initializationLock = new();
+    private readonly List<ISettingsSource> sources = []; // Will be populated during InitializeAsync
+
     private bool isInitialized;
     private bool isDisposed;
 
@@ -99,8 +95,8 @@ public sealed partial class SettingsManager(
                 return;
             }
 
+            this.sources.AddRange(this.resolver.ResolveMany<ISettingsSource>());
             this.LogInitializing();
-
             foreach (var source in this.sources)
             {
                 this.SubscribeToSourceEvents(source);
@@ -586,6 +582,8 @@ public sealed partial class SettingsManager(
     private void RemoveSectionsNoLongerProvided(ISettingsSource source, IReadOnlyDictionary<string, object> latestSections)
     {
         var ownedSections = this.GetSectionsOwnedBySource(source.Id);
+        var removedSections = new List<string>();
+
         foreach (var sectionName in ownedSections)
         {
             if (latestSections.ContainsKey(sectionName))
@@ -595,13 +593,84 @@ public sealed partial class SettingsManager(
 
             this.LogRemovingStaleSection(sectionName, source.Id);
             _ = this.cachedSections.TryRemove(sectionName, out _);
+            removedSections.Add(sectionName);
+        }
+
+        // Restore removed sections from earlier sources if available
+        if (removedSections.Count > 0)
+        {
+            this.RestoreSectionsFromEarlierSources(removedSections, source.Id);
+        }
+    }
+
+    private void RestoreSectionsFromEarlierSources(List<string> sectionNames, string excludeSourceId)
+    {
+        // Scan sources in reverse order to find the highest priority source that can restore each section
+        // (higher index = added later = higher priority in last-added-wins strategy)
+        for (var i = this.sources.Count - 1; i >= 0; i--)
+        {
+            var candidateSource = this.sources[i];
+
+            // Skip the source that just removed these sections
+            if (string.Equals(candidateSource.Id, excludeSourceId, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            // Try to load sections from this source
+            var loadResult = candidateSource.LoadAsync(reload: false, CancellationToken.None).GetAwaiter().GetResult();
+            if (!loadResult.IsSuccess)
+            {
+                continue;
+            }
+
+            var payload = loadResult.Value;
+            foreach (var sectionName in sectionNames)
+            {
+                // Only restore if not already restored by a later (higher priority) source
+                if (this.cachedSections.ContainsKey(sectionName))
+                {
+                    continue;
+                }
+
+                if (payload.Sections.TryGetValue(sectionName, out var sectionData))
+                {
+                    this.CacheSection(sectionName, sectionData, candidateSource.Id);
+                    this.LogSectionRestored(sectionName, candidateSource.Id);
+                }
+            }
         }
     }
 
     private bool ShouldUpdateCacheFor(string sectionName, string sourceId, bool allowReload)
-        => !allowReload
-            || !this.cachedSections.TryGetValue(sectionName, out var cached)
-            || string.Equals(cached.SourceId, sourceId, StringComparison.Ordinal);
+    {
+        // During initial load, always cache sections in order (last-added-wins)
+        if (!allowReload)
+        {
+            return true;
+        }
+
+        // During reload, update cache if:
+        // 1. Section doesn't exist in cache yet, OR
+        // 2. The reloading source is the current owner, OR
+        // 3. The reloading source has higher priority than the current owner
+        if (!this.cachedSections.TryGetValue(sectionName, out var cached))
+        {
+            return true;
+        }
+
+        if (string.Equals(cached.SourceId, sourceId, StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        // Check if the reloading source has higher priority (added later)
+        var reloadingSourceIndex = this.FindSourceIndexById(sourceId);
+        var currentOwnerIndex = this.FindSourceIndexById(cached.SourceId);
+
+        // Higher index = added later = higher priority (last-added-wins)
+        return reloadingSourceIndex > currentOwnerIndex;
+    }
 
     private void CacheSection(string sectionName, object sectionData, string sourceId)
         => this.cachedSections[sectionName] = new CachedSection(sectionData, sourceId);

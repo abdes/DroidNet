@@ -11,7 +11,7 @@ namespace DroidNet.Config.Tests;
 
 /// <summary>
 /// Comprehensive unit tests for SettingsManager covering source management,
-/// last-loaded-wins merging, service factory, and lifecycle coordination.
+/// last-added-wins merging, service factory, and lifecycle coordination.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -132,7 +132,7 @@ public class SettingsManagerTests : SettingsTestBase
         var settings = new TestSettings { Name = "SaveTest", Value = 999 };
         var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
 
-        // Act - Save should only go to source2 (last-loaded-wins for TestSettings)
+        // Act - Save should only go to source2 (last-added-wins for TestSettings)
         await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - Only source2 should be written to (it was the winning source)
@@ -230,6 +230,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Arrange
         await this.SettingsManager.AddSourceAsync(new MockSettingsSource("second-source"), this.TestContext.CancellationToken).ConfigureAwait(true);
         await this.SettingsManager.AddSourceAsync(new MockSettingsSource("third-source"), this.TestContext.CancellationToken).ConfigureAwait(true);
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act
         var sources = this.SettingsManager.Sources;
@@ -246,7 +247,7 @@ public class SettingsManagerTests : SettingsTestBase
     public void GetService_BeforeInitialize_ShouldThrowInvalidOperationException()
     {
         // Arrange
-        using var manager = new SettingsManager([this.source], this.Container, this.LoggerFactory);
+        using var manager = new SettingsManager(this.Container, this.LoggerFactory);
 
         // Act
         var act = manager.GetService<ITestSettings>;
@@ -410,7 +411,7 @@ public class SettingsManagerTests : SettingsTestBase
         _ = service.Settings.Name.Should().Be("Original");
         _ = service.Settings.Value.Should().Be(10);
 
-        // Act - Add new source with different settings (last-loaded-wins)
+        // Act - Add new source with different settings (last-added-wins)
         var newSource = new MockSettingsSource("new-source");
         newSource.AddSection("TestSettings", new TestSettings { Name = "FromNewSource", Value = 999 });
         await this.SettingsManager.AddSourceAsync(newSource, this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -418,7 +419,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Give the async handler time to process
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert - Service should use settings from new source (last-loaded-wins)
+        // Assert - Service should use settings from new source (last-added-wins)
         _ = service.Settings.Name.Should().Be("FromNewSource");
         _ = service.Settings.Value.Should().Be(999);
     }
@@ -438,7 +439,7 @@ public class SettingsManagerTests : SettingsTestBase
         await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
         var service = this.SettingsManager.GetService<ITestSettings>();
 
-        // Source2 should be the winner (last-loaded-wins)
+        // Source2 should be the winner (last-added-wins)
         _ = service.Settings.Name.Should().Be("Source2");
 
         // Act - Remove winning source
@@ -526,7 +527,7 @@ public class SettingsManagerTests : SettingsTestBase
         var sectionMetadata = new SettingsSectionMetadata { SchemaVersion = "20251019", Service = "TestService" };
         await this.SettingsManager.SaveSettingsAsync("TestSettings", settings, sectionMetadata, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert - Should save only to source3 (last-loaded-wins)
+        // Assert - Should save only to source3 (last-added-wins)
         _ = source1.WriteCallCount.Should().Be(0);
         _ = source2.WriteCallCount.Should().Be(0);
         _ = source3.WriteCallCount.Should().Be(1, "source3 was the last to load TestSettings");
@@ -596,7 +597,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Act
         await this.SettingsManager.ReloadAllAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert - Service should use source2's modified values (last-loaded-wins)
+        // Assert - Service should use source2's modified values (last-added-wins)
         _ = service.Settings.Name.Should().Be("S2-Modified");
         _ = service.Settings.Value.Should().Be(222);
     }
@@ -794,7 +795,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Act
         var service = this.SettingsManager.GetService<ITestSettings>();
 
-        // Assert - Should have values from source3 (last loaded wins)
+        // Assert - Should have values from source3 (last added wins)
         _ = service.Settings.Name.Should().Be("Third");
         _ = service.Settings.Value.Should().Be(300);
     }
@@ -906,7 +907,7 @@ public class SettingsManagerTests : SettingsTestBase
         // Act
         var service = this.SettingsManager.GetService<ITestSettings>();
 
-        // Assert - Should handle last-loaded-wins with JsonElement
+        // Assert - Should handle last-added-wins with JsonElement
         _ = service.Settings.Name.Should().Be("JsonElement");
         _ = service.Settings.Value.Should().Be(200);
     }
@@ -985,11 +986,399 @@ public class SettingsManagerTests : SettingsTestBase
         // Modify user source
         userSource.AddSection(nameof(TestSettings), new TestSettings { Name = "UserModified", Value = 999 });
 
-        // Act - ReloadAll should rebuild last-loaded-wins from scratch
+        // Act - ReloadAll should rebuild last-added-wins from scratch
         await this.SettingsManager.ReloadAllAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert - User source should still win after reload
         _ = service.Settings.Name.Should().Be("UserModified");
         _ = service.Settings.Value.Should().Be(999);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_WhenWinningSourceRemovesSection_ShouldFallbackToEarlierSource()
+    {
+        // Arrange - Two sources both provide the same section, last-added wins
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "FromSource1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "FromSource2", Value = 200 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Source2 should win initially (last-added-wins)
+        _ = service.Settings.Name.Should().Be("FromSource2");
+        _ = service.Settings.Value.Should().Be(200);
+
+        // Act - Remove section from winning source and trigger reload
+        source2.RemoveSection("TestSettings");
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should fallback to source1's values
+        _ = service.Settings.Name.Should().Be("FromSource1");
+        _ = service.Settings.Value.Should().Be(100);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_WhenWinningSourceRemovesSectionAndNoFallback_ShouldResetToDefaults()
+    {
+        // Arrange - Only one source provides the section
+        var source1 = new MockSettingsSource("source1");
+        source1.AddSection("TestSettings", new TestSettings { Name = "FromSource", Value = 500 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("FromSource");
+
+        // Act - Remove section (no fallback available)
+        source1.RemoveSection("TestSettings");
+        source1.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should reset to defaults
+        _ = service.Settings.Name.Should().Be("Default");
+        _ = service.Settings.Value.Should().Be(42);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_WhenEarlierSourceBecomesEmpty_LaterSourceShouldStillWin()
+    {
+        // Arrange
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("S2");
+
+        // Act - Remove section from source1 (not the winner anyway)
+        source1.RemoveSection("TestSettings");
+        source1.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Source2 should still win, no change
+        _ = service.Settings.Name.Should().Be("S2");
+        _ = service.Settings.Value.Should().Be(200);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_WhenEmptySourceAddsSection_ShouldOverwriteEarlierSourceIfHigherPriority()
+    {
+        // Arrange - source1 provides section initially, source2 is empty
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "FromSource1", Value = 100 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Source1 should win initially (source2 has nothing)
+        _ = service.Settings.Name.Should().Be("FromSource1");
+        _ = service.Settings.Value.Should().Be(100);
+
+        // Act - source2 now provides the section (should win as it has higher priority)
+        source2.AddSection("TestSettings", new TestSettings { Name = "FromSource2", Value = 200 });
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Source2 should now win (last-added-wins)
+        _ = service.Settings.Name.Should().Be("FromSource2");
+        _ = service.Settings.Value.Should().Be(200);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_ThreeSourcesFallbackChain_ShouldRestoreFromHighestPriorityAvailable()
+    {
+        // Arrange - Three sources with same section, last-added wins
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+        var source3 = new MockSettingsSource("source3");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+        source3.AddSection("TestSettings", new TestSettings { Name = "S3", Value = 300 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+        this.Container.RegisterInstance<ISettingsSource>(source3);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Source3 should win initially
+        _ = service.Settings.Name.Should().Be("S3");
+        _ = service.Settings.Value.Should().Be(300);
+
+        // Act - Remove from source3 (should fallback to source2)
+        source3.RemoveSection("TestSettings");
+        source3.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should fallback to source2
+        _ = service.Settings.Name.Should().Be("S2");
+        _ = service.Settings.Value.Should().Be(200);
+
+        // Act - Remove from source2 (should fallback to source1)
+        source2.RemoveSection("TestSettings");
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should fallback to source1
+        _ = service.Settings.Name.Should().Be("S1");
+        _ = service.Settings.Value.Should().Be(100);
+
+        // Act - Remove from source1 (should reset to defaults)
+        source1.RemoveSection("TestSettings");
+        source1.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should reset to defaults
+        _ = service.Settings.Name.Should().Be("Default");
+        _ = service.Settings.Value.Should().Be(42);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_WhenMiddleSourceRemovesSection_HighestPriorityShouldRemainWinner()
+    {
+        // Arrange - Three sources, test that middle source removal doesn't affect winner
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+        var source3 = new MockSettingsSource("source3");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+        source3.AddSection("TestSettings", new TestSettings { Name = "S3", Value = 300 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+        this.Container.RegisterInstance<ISettingsSource>(source3);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("S3");
+
+        // Act - Remove from middle source (source2) - shouldn't affect anything
+        source2.RemoveSection("TestSettings");
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Source3 should still win (no change)
+        _ = service.Settings.Name.Should().Be("S3");
+        _ = service.Settings.Value.Should().Be(300);
+    }
+
+    [TestMethod]
+    public async Task SourceChanged_MultipleSectionsFallback_ShouldHandleEachIndependently()
+    {
+        // Arrange - Two sources with different sections
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "Test1", Value = 100 });
+        source1.AddSection("AlternativeTestSettings", new AlternativeTestSettings { Theme = "Light", FontSize = 12 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "Test2", Value = 200 });
+        source2.AddSection("AlternativeTestSettings", new AlternativeTestSettings { Theme = "Dark", FontSize = 16 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var testService = this.SettingsManager.GetService<ITestSettings>();
+        var altService = this.SettingsManager.GetService<IAlternativeTestSettings>();
+
+        // Both should use source2 initially
+        _ = testService.Settings.Name.Should().Be("Test2");
+        _ = altService.Settings.Theme.Should().Be("Dark");
+
+        // Act - Remove only TestSettings from source2
+        source2.RemoveSection("TestSettings");
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - TestSettings should fallback to source1, AlternativeTestSettings stays with source2
+        _ = testService.Settings.Name.Should().Be("Test1");
+        _ = testService.Settings.Value.Should().Be(100);
+        _ = altService.Settings.Theme.Should().Be("Dark");
+        _ = altService.Settings.FontSize.Should().Be(16);
+    }
+
+    [TestMethod]
+    public async Task ShouldUpdateCacheFor_DuringInitialLoad_AlwaysReturnsTrue()
+    {
+        // Arrange - This is tested implicitly through initialization behavior
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        // Act - Initialize (initial load, allowReload=false)
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Assert - Last-added (source2) should win
+        _ = service.Settings.Name.Should().Be("S2");
+        _ = service.Settings.Value.Should().Be(200);
+    }
+
+    [TestMethod]
+    public async Task ShouldUpdateCacheFor_WhenReloadingWithLowerPriority_ShouldNotOverwrite()
+    {
+        // Arrange
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("S2");
+
+        // Act - Trigger reload on source1 (lower priority) with different data
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1-Updated", Value = 111 });
+        source1.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Source2 should still win (source1 has lower priority)
+        _ = service.Settings.Name.Should().Be("S2");
+        _ = service.Settings.Value.Should().Be(200);
+    }
+
+    [TestMethod]
+    public async Task ShouldUpdateCacheFor_WhenReloadingWithHigherPriority_ShouldOverwrite()
+    {
+        // Arrange
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("S2");
+
+        // Act - Trigger reload on source2 (higher priority) with different data
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2-Updated", Value = 222 });
+        source2.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Source2 should still win with updated values
+        _ = service.Settings.Name.Should().Be("S2-Updated");
+        _ = service.Settings.Value.Should().Be(222);
+    }
+
+    [TestMethod]
+    public async Task RestoreSectionsFromEarlierSources_WhenSourceLoadFails_ShouldSkipAndContinue()
+    {
+        // Arrange - Three sources, middle one will fail to load
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2") { ShouldFailRead = true };
+        var source3 = new MockSettingsSource("source3");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+        source3.AddSection("TestSettings", new TestSettings { Name = "S3", Value = 300 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+        this.Container.RegisterInstance<ISettingsSource>(source3);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        // Source3 should win initially (source2 failed during init)
+        _ = service.Settings.Name.Should().Be("S3");
+
+        // Now make source2 loadable again but keep it empty
+        source2.ShouldFailRead = false;
+        source2.RemoveSection("TestSettings");
+
+        // Act - Remove from source3 (should try to restore from source2, but it fails, then fallback to source1)
+        source3.RemoveSection("TestSettings");
+        source3.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should fallback to source1 (skipping failed source2)
+        _ = service.Settings.Name.Should().Be("S1");
+        _ = service.Settings.Value.Should().Be(100);
+    }
+
+    [TestMethod]
+    public async Task RestoreSectionsFromEarlierSources_ShouldNotRestoreAlreadyRestoredSections()
+    {
+        // Arrange - Three sources, verify that once restored, we don't restore again from lower priority
+        var source1 = new MockSettingsSource("source1");
+        var source2 = new MockSettingsSource("source2");
+        var source3 = new MockSettingsSource("source3");
+
+        source1.AddSection("TestSettings", new TestSettings { Name = "S1", Value = 100 });
+        source2.AddSection("TestSettings", new TestSettings { Name = "S2", Value = 200 });
+        source3.AddSection("TestSettings", new TestSettings { Name = "S3", Value = 300 });
+
+        this.Container.RegisterInstance<ISettingsSource>(source1);
+        this.Container.RegisterInstance<ISettingsSource>(source2);
+        this.Container.RegisterInstance<ISettingsSource>(source3);
+
+        await this.SettingsManager.InitializeAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        var service = this.SettingsManager.GetService<ITestSettings>();
+
+        _ = service.Settings.Name.Should().Be("S3");
+
+        // Act - Remove from source3 (should restore from source2, not source1)
+        source3.RemoveSection("TestSettings");
+        source3.TriggerSourceChanged(SourceChangeType.Updated);
+
+        await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert - Should use source2 (next highest priority), not source1
+        _ = service.Settings.Name.Should().Be("S2");
+        _ = service.Settings.Value.Should().Be(200);
     }
 }

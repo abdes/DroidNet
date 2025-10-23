@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Config;
 
 /// <summary>
-///     Provides a last-loaded-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
+///     Provides a last-added-wins implementation of <see cref="ISettingsManager"/> for multi-source settings composition.
 /// </summary>
 public partial class SettingsManager
 {
@@ -430,4 +430,12 @@ public partial class SettingsManager
     private static partial void LogErrorHandlingSourceChange(ILogger logger, Exception exception, string sourceId);
 
     private void LogErrorHandlingSourceChange(Exception exception, string sourceId) => LogErrorHandlingSourceChange(this.logger, exception, sourceId);
+
+    [LoggerMessage(
+        EventId = 48,
+        Level = LogLevel.Information,
+        Message = "Restored section {SectionName} from earlier source {SourceId}")]
+    private static partial void LogSectionRestored(ILogger logger, string sectionName, string sourceId);
+
+    private void LogSectionRestored(string sectionName, string sourceId) => LogSectionRestored(this.logger, sectionName, sourceId);
 }

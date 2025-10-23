@@ -53,7 +53,6 @@ public static class BootstrapperExtensions
             Reuse.Singleton,
             Made.Of(
                 () => new SettingsManager(
-                    Arg.Of<IEnumerable<ISettingsSource>>(),
                     Arg.Of<IResolver>(),
                     Arg.Of<ILoggerFactory>())));
 
