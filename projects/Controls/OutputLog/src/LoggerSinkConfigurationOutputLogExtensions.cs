@@ -40,10 +40,6 @@ namespace DroidNet.Controls.OutputLog;
 /// </remarks>
 public static class LoggerSinkConfigurationOutputLogExtensions
 {
-    private const string DefaultRichTextBoxOutputTemplate
-        = "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:l} {Properties}{NewLine}{Exception}";
-    /*= "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}";*/
-
     /// <summary>
     /// Configures Serilog to output logs to a specified <see cref="ILogEventSink"/> and integrates it with the provided <see cref="IHostBuilder"/>.
     /// </summary>
@@ -54,7 +50,7 @@ public static class LoggerSinkConfigurationOutputLogExtensions
     /// <param name="formatProvider">An optional provider to format values.</param>
     /// <param name="restrictedToMinimumLevel">The minimum level for events passed through the sink. Defaults to <see cref="LevelAlias.Minimum"/>.</param>
     /// <param name="levelSwitch">An optional switch allowing the pass-through minimum level to be changed at runtime.</param>
-    /// <param name="theme">An optional theme to apply to the output.</param>
+    /// <param name="themeId">An optional theme to apply to the output.</param>
     /// <returns>A <see cref="LoggerConfiguration"/> allowing further configuration.</returns>
     /// <remarks>
     /// <para>
@@ -76,14 +72,17 @@ public static class LoggerSinkConfigurationOutputLogExtensions
     public static LoggerConfiguration OutputLogView<T>(
         this LoggerSinkConfiguration sinkConfiguration,
         IContainer container,
-        string outputTemplate = DefaultRichTextBoxOutputTemplate,
-        IFormatProvider? formatProvider = null,
-        LogEventLevel restrictedToMinimumLevel = LevelAlias.Minimum,
-        LoggingLevelSwitch? levelSwitch = null,
-        ThemeId? theme = default)
+        string outputTemplate,
+        IFormatProvider? formatProvider,
+        LogEventLevel restrictedToMinimumLevel,
+        LoggingLevelSwitch? levelSwitch,
+        uint? themeId)
         where T : ILogEventSink
     {
-        var delegatingSink = new DelegatingSink<T>(outputTemplate, formatProvider, theme);
+        var delegatingSink = new DelegatingSink<T>(
+            outputTemplate,
+            formatProvider,
+            themeId is null ? OutputLogThemes.Empty : new ThemeId(themeId.Value));
 
         // Add the delegating sink
         container.RegisterInstance(delegatingSink);

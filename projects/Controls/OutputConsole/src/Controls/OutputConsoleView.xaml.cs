@@ -119,17 +119,14 @@ public sealed partial class OutputConsoleView
     private void RegisterContainerContentChangingHandler()
     {
         // Update only the realized container that changes
-        this.contentChangingHandler = (_, args) =>
+        this.contentChangingHandler = (sender, args) =>
         {
             if (args.ItemContainer is ListViewItem container)
             {
                 var ts = FindDescendant<TextBlock>(
                     container,
                     n => string.Equals(n.Name, "TimestampBlock", StringComparison.Ordinal));
-                if (ts is not null)
-                {
-                    ts.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
-                }
+                _ = ts?.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
 
                 var msg = FindDescendant<TextBlock>(
                     container,
@@ -341,18 +338,12 @@ public sealed partial class OutputConsoleView
                 var ts = FindDescendant<TextBlock>(
                     container,
                     n => string.Equals(n.Name, "TimestampBlock", StringComparison.Ordinal));
-                if (ts is not null)
-                {
-                    ts.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
-                }
+                _ = ts?.Visibility = this.ShowTimestamps ? Visibility.Visible : Visibility.Collapsed;
 
                 var msg = FindDescendant<TextBlock>(
                     container,
                     n => string.Equals(n.Name, "MessageBlock", StringComparison.Ordinal));
-                if (msg is not null)
-                {
-                    msg.TextWrapping = this.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
-                }
+                _ = msg?.TextWrapping = this.WordWrap ? TextWrapping.Wrap : TextWrapping.NoWrap;
             }
         }
     }

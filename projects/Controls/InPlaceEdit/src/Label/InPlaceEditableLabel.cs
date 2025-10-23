@@ -173,11 +173,7 @@ public partial class InPlaceEditableLabel : ContentControl
     /// </summary>
     internal void CancelEdit()
     {
-        if (this.editTextBox is not null)
-        {
-            this.editTextBox.Text = this.originalName;
-        }
-
+        _ = this.editTextBox?.Text = this.originalName;
         this.EndEdit();
     }
 
@@ -340,8 +336,7 @@ public partial class InPlaceEditableLabel : ContentControl
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="e">The event data.</param>
-    [SuppressMessage("ReSharper", "SwitchStatementMissingSomeEnumCasesNoDefault",
-        Justification = "we only want to handle specific keys")]
+    [SuppressMessage("ReSharper", "SwitchStatementMissingSomeEnumCasesNoDefault", Justification = "we only want to handle specific keys")]
     private void OnEditBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
         switch (e.Key)
