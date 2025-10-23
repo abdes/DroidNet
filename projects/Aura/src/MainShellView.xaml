@@ -88,6 +88,7 @@
             <StackPanel
                 x:Name="SecondaryCommands"
                 Grid.Column="3"
+                Margin="0,0,2,0"
                 VerticalAlignment="Top"
                 Background="Transparent"
                 Orientation="Horizontal"

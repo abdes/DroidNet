@@ -6,7 +6,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive;
 using System.Reactive.Linq;
-using System.Threading;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
@@ -247,7 +246,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         Debug.WriteLine($"SystemReservedRight width (updated): {this.SystemReservedRight.ActualWidth}");
 
         // Configure passthrough regions for interactive elements
-        this.ConfigurePassthroughRegions(appWindow.Id, scaleAdjustment);
+        // Pass the system right inset in device pixels so we can clamp passthrough regions
+        this.ConfigurePassthroughRegions(appWindow.Id, scaleAdjustment, appWindow.TitleBar.RightInset);
 
         // Calculate minimum window width
         this.MinWindowWidth = this.IconColumn.ActualWidth +
@@ -261,7 +261,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// </summary>
     /// <param name="windowId">The window ID.</param>
     /// <param name="scaleAdjustment">The DPI scale adjustment factor.</param>
-    private void ConfigurePassthroughRegions(Microsoft.UI.WindowId windowId, double scaleAdjustment)
+    /// <param name="systemRightInsetDevice">The system right inset in device pixels.</param>
+    private void ConfigurePassthroughRegions(Microsoft.UI.WindowId windowId, double scaleAdjustment, int systemRightInsetDevice)
     {
         // NOTE: Passthrough regions must be calculated relative to the window.
         // When we use TransformToVisual(null), the element's position already includes
@@ -281,9 +282,46 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             Debug.WriteLine($"  Passthrough Region [{i}]: X={region.X}, Y={region.Y}, W={region.Width}, H={region.Height}");
         }
 
+        // Clamp regions so they never touch or overlap the system caption area on the right.
+        // Work in device pixels.
+        var clampedRegions = new List<Windows.Graphics.RectInt32>();
+
+        // Compute device window width from logical width and rasterization scale
+        var deviceWindowWidth = (int)Math.Round(this.ActualWidth * scaleAdjustment);
+
+        // Leave a small gap between passthrough regions and system area.
+        var gap = Math.Max(2, (int)this.SecondaryCommands.Margin.Right);
+        var allowedMaxX = deviceWindowWidth - systemRightInsetDevice - gap;
+        Debug.WriteLine($"DeviceWindowWidth: {deviceWindowWidth}, SystemRightInsetDevice: {systemRightInsetDevice}, AllowedMaxX: {allowedMaxX}");
+
+        foreach (var r in passthroughRegions)
+        {
+            // If region starts beyond allowed area, skip
+            if (r.X >= allowedMaxX)
+            {
+                Debug.WriteLine($"Skipping region at X={r.X} because it is beyond allowedMaxX={allowedMaxX}");
+                continue;
+            }
+
+            var right = r.X + r.Width;
+            var clampedWidth = r.Width;
+            if (right > allowedMaxX)
+            {
+                clampedWidth = Math.Max(0, allowedMaxX - r.X);
+                Debug.WriteLine($"Clamping region X={r.X} originalW={r.Width} -> clampedW={clampedWidth}");
+            }
+
+            if (clampedWidth > 0)
+            {
+                clampedRegions.Add(new Windows.Graphics.RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height));
+            }
+        }
+
+        Debug.WriteLine($"Total passthrough regions after clamp: {clampedRegions.Count}");
+
         // Set passthrough regions (use empty array to clear if none)
         var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(windowId);
-        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. passthroughRegions]);
+        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. clampedRegions]);
 
         Debug.WriteLine($"=== ConfigurePassthroughRegions Complete - Passthrough regions updated ===");
 
