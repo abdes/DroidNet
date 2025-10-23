@@ -2,20 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Config;
 using DryIoc;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace DroidNet.Aura;
 
 /// <summary>
 /// Extension methods for configuring Aura window management services.
 /// </summary>
-public static class ServiceCollectionExtensions
+public static class DependencyInjectionExtensions
 {
     /// <summary>
     /// Registers all Aura window management services with optional feature configuration.
@@ -135,25 +133,15 @@ public static class ServiceCollectionExtensions
 
     private static void RegisterOptionalServices(IContainer container, AuraOptions options)
     {
-        var pathFinder = container.Resolve<IPathFinder>();
-
         // Register decoration settings service if requested
         if (options.RegisterDecorationSettings)
         {
-            _ = container.WithJsonConfigSource(
-                "aura.decoration",
-                pathFinder.GetConfigFilePath(WindowDecorationSettings.ConfigFileName),
-                watch: true);
             _ = container.WithSettings<IWindowDecorationSettings, WindowDecorationSettingsService>();
         }
 
         // Register appearance settings service if requested
         if (options.RegisterAppearanceSettings)
         {
-            _ = container.WithJsonConfigSource(
-                "aura.appearance",
-                pathFinder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-                watch: true);
             _ = container.WithSettings<IAppearanceSettings, AppearanceSettingsService>();
         }
 

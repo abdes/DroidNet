@@ -2,18 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
-using DroidNet.Aura.Decoration;
-using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -40,6 +37,7 @@ namespace DroidNet.Samples.Aura.SingleWindow;
 /// </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "program entrypoint class must be public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -60,24 +58,20 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
+            // Configure aned Build the host so the final container is available.
             _ = bootstrap.Configure()
                 .WithLoggingAbstraction()
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
-                .WithAppServices(ConfigureApplicationServices);
+                .Build();
 
-            // Build the host so the final container is available and any registered modules can be
-            // initialized (for example the Config SettingsManager).
-            var host = bootstrap.Build();
-
-            // If the Config module was registered it will have added a SettingsManager. Initialize it
-            // now so sources are loaded and services receive their initial values.
+            // Final container is now available.
+            var container = bootstrap.Container;
             try
             {
-                var manager = bootstrap.Container.Resolve<SettingsManager>();
-                manager?.InitializeAsync().GetAwaiter().GetResult();
-                _ = manager?.AutoSave = true;
+                InitializeSettings(container);
+                ConfigureApplicationServices(container);
             }
             catch (Exception ex) when (ex is DryIoc.ContainerException or InvalidOperationException)
             {
@@ -99,6 +93,32 @@ public static partial class Program
         }
     }
 
+    private static void InitializeSettings(DryIoc.IContainer container)
+    {
+        // Register Config module
+        _ = container.WithConfig();
+
+        // If the bootstrapper included `Config` module, it will have added a SettingsManager.
+        // Configure settings source, and initialize it now so sources are loaded and
+        // services receive their initial values.
+        var manager = container.Resolve<SettingsManager>();
+        Debug.Assert(manager is not null, "SettingsManager should be registered");
+
+        var pathFinder = container.GetRequiredService<IPathFinder>();
+        _ = container
+            .WithJsonConfigSource(
+                "aura.decoration",
+                pathFinder.GetConfigFilePath("Aura.json"),
+                watch: true)
+            .WithJsonConfigSource(
+                "aura.appearance",
+                pathFinder.GetConfigFilePath("LocalSettings"),
+                watch: true);
+
+        manager.InitializeAsync().GetAwaiter().GetResult();
+        _ = manager.AutoSave = true;
+    }
+
     private static Routes MakeRoutes() => new(
     [
         new Route
@@ -114,9 +134,6 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register Config module
-        _ = container.WithConfig();
-
         // Register Aura window management with all required services
         _ = container.WithAura(options => options
             .WithAppearanceSettings()
