@@ -5,6 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:cm="using:DroidNet.Controls.Menus">
 
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/DroidNet.Controls.Menus/TransparentButton.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
     <!--  Lightweight convenience style used for small icon/hamburger buttons  -->
     <Style
         x:Key="TransparentHamburgerButtonStyle"
