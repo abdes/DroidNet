@@ -54,8 +54,8 @@ internal static class Program
     private static async Task Initialize(Bootstrapper bootstrap, string samplesPath)
     {
         // Configure and register application services into the bootstrapper's container
-        _ = bootstrap.Configure()
-            .WithLoggingAbstraction()
+        _ = bootstrap
+            .Configure()
             .WithAppServices(container =>
             {
                 // Register Testably RealFileSystem as the System.IO.Abstractions IFileSystem expected by Config
@@ -137,7 +137,7 @@ internal static class Program
 
             Console.WriteLine($"ApplicationName: {svc.Settings.ApplicationName}");
             Console.WriteLine($"LoggingLevel: {svc.Settings.LoggingLevel}");
-            Console.WriteLine($"EnableExperimental: {svc.Settings.EnableExperimental}");
+            Console.WriteLine($"EnableExperimental: {svc.Settings.EnableExperimental.ToString(CultureInfo.InvariantCulture)}");
             return Task.CompletedTask;
         }
 
@@ -147,7 +147,7 @@ internal static class Program
             var svc = bootstrap.Container.Resolve<ISettingsService<IAppSettings>>();
 
             svc.Settings.EnableExperimental = !svc.Settings.EnableExperimental;
-            Console.WriteLine($"Toggled EnableExperimental -> {svc.Settings.EnableExperimental}");
+            Console.WriteLine($"Toggled EnableExperimental -> {svc.Settings.EnableExperimental.ToString(CultureInfo.InvariantCulture)}");
             return Task.CompletedTask;
         }
 
@@ -176,7 +176,7 @@ internal static class Program
 
             if (p.Length == 1)
             {
-                Console.WriteLine($"AutoSave: {manager.AutoSave} (Delay: {manager.AutoSaveDelay.TotalSeconds} sec)");
+                Console.WriteLine($"AutoSave: {manager.AutoSave.ToString(CultureInfo.InvariantCulture)} (Delay: {manager.AutoSaveDelay.TotalSeconds.ToString(CultureInfo.InvariantCulture)} sec)");
                 return Task.CompletedTask;
             }
 
@@ -185,7 +185,7 @@ internal static class Program
             if (string.Equals(arg, "toggle", StringComparison.OrdinalIgnoreCase))
             {
                 manager.AutoSave = !manager.AutoSave;
-                Console.WriteLine($"AutoSave -> {manager.AutoSave}");
+                Console.WriteLine($"AutoSave -> {manager.AutoSave.ToString(CultureInfo.InvariantCulture)}");
                 return Task.CompletedTask;
             }
 
@@ -205,7 +205,7 @@ internal static class Program
 
             if (string.Equals(arg, "status", StringComparison.OrdinalIgnoreCase))
             {
-                Console.WriteLine($"AutoSave: {manager.AutoSave} (Delay: {manager.AutoSaveDelay.TotalSeconds} sec)");
+                Console.WriteLine($"AutoSave: {manager.AutoSave.ToString(CultureInfo.InvariantCulture)} (Delay: {manager.AutoSaveDelay.TotalSeconds.ToString(CultureInfo.InvariantCulture)} sec)");
                 return Task.CompletedTask;
             }
 
@@ -246,7 +246,7 @@ internal static class Program
                 }
 
                 manager.AutoSaveDelay = TimeSpan.FromSeconds(seconds);
-                Console.WriteLine($"AutoSaveDelay -> {manager.AutoSaveDelay.TotalSeconds} seconds");
+                Console.WriteLine($"AutoSaveDelay -> {manager.AutoSaveDelay.TotalSeconds.ToString(CultureInfo.InvariantCulture)} seconds");
                 return Task.CompletedTask;
             }
 
