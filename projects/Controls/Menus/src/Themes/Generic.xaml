@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
@@ -7,6 +7,7 @@
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/ColumnPresenter.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuBar.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/MenuButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/TransparentButton.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/ExpandableMenuBar.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/CascadedColumnsPresenter.xaml" />
     </ResourceDictionary.MergedDictionaries>

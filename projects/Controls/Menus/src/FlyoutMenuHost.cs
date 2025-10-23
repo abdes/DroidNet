@@ -241,7 +241,6 @@ internal sealed partial class FlyoutMenuHost : ICascadedMenuHost
     private void OnFlyoutOpened(object? sender, object e)
     {
         this.LogOpened();
-        //this.FocusColumn(MenuLevel.First, MenuNavigationMode.Programmatic);
         this.Opened?.Invoke(this, EventArgs.Empty);
     }
 

@@ -196,7 +196,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
             else if (!this.TrySwitchRootExpansion(context, menuItemData))
             {
                 this.TryCollapseItem(context, current);
-                this.TryExpandItem(context, menuItemData, this.NavigationMode);
+                _ = this.TryExpandItem(context, menuItemData, this.NavigationMode);
             }
         }
         else
@@ -204,7 +204,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
             if (context is { Kind: MenuInteractionContextKind.Column, ColumnSurface: { } columnSurface }
                 && columnSurface.GetExpandedItem(context.ColumnLevel) is not null)
             {
-                this.TryExpandItem(context, menuItemData, this.NavigationMode);
+                _ = this.TryExpandItem(context, menuItemData, this.NavigationMode);
             }
         }
     }
@@ -215,12 +215,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
     /// <param name="context">The context defining which menu surface lost focus.</param>
     /// <param name="menuItemData">The menu item that lost focus.</param>
     public void OnItemLostFocus(MenuInteractionContext context, MenuItemData menuItemData)
-    {
-        this.LogItemLostFocus(menuItemData, context);
-
-        // Conservative: keep hasMenuFocus true unless we explicitly restore focus upon dismissal.
-        // A single item losing focus during internal navigation shouldn't clear menu focus.
-    }
+        => this.LogItemLostFocus(menuItemData, context);
 
     /// <summary>
     ///     Expands a menu item's submenu in response to an explicit user request.
@@ -297,7 +292,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
         }
 
         this.CaptureFocusOwner(root);
-        root.Show(this.NavigationMode);
+        _ = root.Show(this.NavigationMode);
     }
 
     /// <summary>
@@ -574,17 +569,22 @@ public sealed partial class MenuInteractionController(MenuServices services)
 
     private void RestoreFocusAfterDismissal()
     {
-        if (this.focusReturnTarget is null)
+        if (this.focusReturnTarget is not { } weakReference || !weakReference.TryGetTarget(out var element))
         {
+            this.LogRestoreFocusNoElement();
             return;
         }
 
-        if (!this.RestoreFocusOwner())
+        if (!element.Focus(FocusState.Programmatic))
         {
-            this.LogRestoreFocusOwnerFailed();
+            this.LogFocusRestoreFailed();
+        }
+        else
+        {
+            this.LogFocusRestoreSucceeded();
         }
 
-        this.ClearFocusReturnElement();
+        this.focusReturnTarget = null;
         this.hasMenuFocus = false;
     }
 
@@ -606,7 +606,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
             return true;
         }
 
-        rootSurface.ExpandItem(targetItem, this.NavigationMode);
+        _ = rootSurface.ExpandItem(targetItem, this.NavigationMode);
         return true;
     }
 
@@ -615,7 +615,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
         // Right: expand submenu if present.
         if (direction is MenuNavigationDirection.Right && fromItemData.HasChildren)
         {
-            this.TryExpandItem(context, fromItemData, navMode);
+            _ = this.TryExpandItem(context, fromItemData, navMode);
             return true;
         }
 
@@ -659,7 +659,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
             Debug.Assert(rootExpandedItem is not null, "Expecting a valid root expanded item when navigating from columns to root");
 
             var adjacent = rootSurface.GetAdjacentItem(rootExpandedItem, direction, wrap: true);
-            rootSurface.ExpandItem(adjacent, navMode);
+            _ = rootSurface.ExpandItem(adjacent, navMode);
             return true;
         }
 
@@ -684,7 +684,7 @@ public sealed partial class MenuInteractionController(MenuServices services)
             }
             else
             {
-                rootSurface.ExpandItem(adjacent, navMode);
+                _ = rootSurface.ExpandItem(adjacent, navMode);
             }
 
             return true;
@@ -701,34 +701,11 @@ public sealed partial class MenuInteractionController(MenuServices services)
 
             if (fromItemData.HasChildren)
             {
-                rootSurface.ExpandItem(fromItemData, navMode);
+                _ = rootSurface.ExpandItem(fromItemData, navMode);
                 return true;
             }
         }
 
-        return false;
-    }
-
-    private void ClearFocusReturnElement()
-        => this.focusReturnTarget = null;
-
-    private bool RestoreFocusOwner()
-    {
-        if (this.focusReturnTarget is not { } weakReference || !weakReference.TryGetTarget(out var element))
-        {
-            this.LogRestoreFocusNoElement();
-            this.focusReturnTarget = null;
-            return false;
-        }
-
-        if (element.Focus(FocusState.Programmatic))
-        {
-            this.LogFocusRestoreSucceeded();
-            this.focusReturnTarget = null;
-            return true;
-        }
-
-        this.LogFocusRestoreFailed();
         return false;
     }
 

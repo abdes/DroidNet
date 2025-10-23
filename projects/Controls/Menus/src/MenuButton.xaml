@@ -5,21 +5,29 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:cm="using:DroidNet.Controls.Menus">
 
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/DroidNet.Controls.Menus/TransparentButton.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
     <Style
         x:Key="DefaultMenuButtonStyle"
         BasedOn="{StaticResource DefaultButtonStyle}"
         TargetType="cm:MenuButton" />
 
+    <!--
+        Preserve the implicit default MenuButton style (no key) so controls without a Chrome
+        setting still inherit the default styling.
+    -->
+    <Style BasedOn="{StaticResource DefaultMenuButtonStyle}" TargetType="cm:MenuButton" />
+
+    <!--
+        Expose the transparent chrome variant under the key expected by MenuButton.Chrome
+        so ApplyChromeStyle can locate and apply it at runtime. It reuses the shared
+        TransparentButtonStyle from TransparentButton.xaml.
+    -->
     <Style
         x:Key="MenuButtonTransparentStyle"
-        BasedOn="{StaticResource DefaultMenuButtonStyle}"
-        TargetType="cm:MenuButton">
-        <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
-        <Setter Property="Padding" Value="{ThemeResource ButtonPadding}" />
-    </Style>
-
-    <Style BasedOn="{StaticResource DefaultMenuButtonStyle}" TargetType="cm:MenuButton" />
+        BasedOn="{StaticResource TransparentButtonStyle}"
+        TargetType="cm:MenuButton" />
 
 </ResourceDictionary>
