@@ -30,7 +30,6 @@ public sealed partial class MenuBar : Control
     private readonly Dictionary<MenuItemData, MenuItem> rootItemMap = [];
     private StackPanel? rootItemsPanel;
     private ObservableCollection<MenuItemData>? rootItemsCollection;
-    private Style? rootMenuItemStyle;
     private ICascadedMenuHost? activeHost;
     private Func<ICascadedMenuHost> hostFactory = static () => new PopupMenuHost();
     private CaptureInfo? capture;
@@ -89,7 +88,6 @@ public sealed partial class MenuBar : Control
         this.rootItemsPanel = this.GetTemplateChild(RootItemsPanelPart) as StackPanel
             ?? throw new InvalidOperationException($"{nameof(MenuBar)} template must declare a StackPanel named '{RootItemsPanelPart}'.");
 
-        _ = this.TryResolveRootMenuItemStyle();
         this.RebuildRootItems();
     }
 
@@ -539,11 +537,6 @@ public sealed partial class MenuBar : Control
             ItemData = data,
         };
 
-        if (this.TryResolveRootMenuItemStyle() is Style style)
-        {
-            menuItem.Style = style;
-        }
-
         this.AttachRootMenuItem(menuItem);
         return menuItem;
     }
@@ -709,29 +702,6 @@ public sealed partial class MenuBar : Control
         }
 
         this.rootItemsPanel?.Children.Clear();
-    }
-
-    private Style? TryResolveRootMenuItemStyle()
-    {
-        if (this.rootMenuItemStyle is not null)
-        {
-            return this.rootMenuItemStyle;
-        }
-
-        if (this.Resources.TryGetValue("MenuBarRootMenuItemStyle", out var styleResource) && styleResource is Style localStyle)
-        {
-            this.rootMenuItemStyle = localStyle;
-            return localStyle;
-        }
-
-        if (Application.Current?.Resources.TryGetValue("MenuBarRootMenuItemStyle", out var appStyleResource) == true
-            && appStyleResource is Style appStyle)
-        {
-            this.rootMenuItemStyle = appStyle;
-            return appStyle;
-        }
-
-        return null;
     }
 
     private MenuItem? ResolveToItem(MenuItemData root)
