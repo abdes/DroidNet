@@ -102,4 +102,12 @@ public sealed partial class SettingsManager
     private static partial void LogAutoSaveValidationFailed(ILogger logger, string sectionName, int errorCount);
 
     private void LogAutoSaveValidationFailed(string sectionName, int errorCount) => LogAutoSaveValidationFailed(this.logger, sectionName, errorCount);
+
+    [LoggerMessage(
+        EventId = 71,
+        Level = LogLevel.Warning,
+        Message = "Save cannot proceed; there are no sources configured")]
+    private static partial void LogSaveNoSources(ILogger logger);
+
+    private void LogSaveNoSources() => LogSaveNoSources(this.logger);
 }

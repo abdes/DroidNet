@@ -304,6 +304,12 @@ public sealed partial class SettingsManager
         {
             this.ThrowIfDisposed();
 
+            if (owner.sources.Count == 0)
+            {
+                owner.LogSaveNoSources();
+                return; // No sources to save to
+            }
+
             lock (this.saveOperationLock)
             {
                 // If a save operation is already running, mark as pending and return
