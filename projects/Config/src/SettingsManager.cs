@@ -99,7 +99,7 @@ public sealed partial class SettingsManager(
                 return;
             }
 
-            this.LogInitializing(this.sources.Count);
+            this.LogInitializing();
 
             foreach (var source in this.sources)
             {
@@ -378,6 +378,12 @@ public sealed partial class SettingsManager(
         var releaser = await this.initializationLock.AcquireAsync(cancellationToken).ConfigureAwait(false);
         await using (releaser.ConfigureAwait(false))
         {
+            if (this.sources.Count == 0)
+            {
+                this.LogSaveNoSources();
+                return; // No sources to save to
+            }
+
             await this.SaveGroupedSectionsLockedAsync(sectionsBySource, metadataBySource, cancellationToken).ConfigureAwait(false);
         }
     }

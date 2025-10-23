@@ -27,9 +27,22 @@ public partial class SettingsManager
         Message = "Initializing SettingsManager with {SourceCount} sources")]
     private static partial void LogInitializing(ILogger logger, int sourceCount);
 
-    private void LogInitializing(int sourceCount) => LogInitializing(this.logger, sourceCount);
+    [LoggerMessage(
+        EventId = 2,
+        Level = LogLevel.Warning,
+        Message = "SettingsManager initialized with no sources configured")]
+    private static partial void LogInitializingNoSources(ILogger logger);
 
-    private void LogInitializing() => this.LogInitializing(this.sources.Count);
+    private void LogInitializing()
+    {
+        if (this.sources.Count == 0)
+        {
+            LogInitializingNoSources(this.logger);
+            return;
+        }
+
+        LogInitializing(this.logger, this.sources.Count);
+    }
 
     [LoggerMessage(
         EventId = 3,
