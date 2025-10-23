@@ -5,11 +5,14 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:cm="using:DroidNet.Controls.Menus">
 
-    <!--  Transparent hamburger button style matching MenuButton behavior  -->
-    <Style x:Key="TransparentHamburgerButtonStyle" TargetType="Button">
-        <Setter Property="Background" Value="{ThemeResource ControlFillColorTransparentBrush}" />
-        <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="CornerRadius" Value="{ThemeResource ControlCornerRadius}" />
+    <!--  Lightweight convenience style used for small icon/hamburger buttons  -->
+    <Style
+        x:Key="TransparentHamburgerButtonStyle"
+        BasedOn="{StaticResource TransparentButtonStyle}"
+        TargetType="Button">
+        <Setter Property="Padding" Value="8" />
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
     </Style>
 
     <Style TargetType="cm:ExpandableMenuBar">
