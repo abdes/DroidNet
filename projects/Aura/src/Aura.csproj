@@ -16,15 +16,14 @@
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
+    <PropertyGroup>
+      <NoWarn>$(NoWarn),1573,1591,1712,NU5118</NoWarn>
+    </PropertyGroup>
+
     <ItemGroup>
         <None Include="..\README.md">
             <Pack>True</Pack>
             <PackagePath>\</PackagePath>
-        </None>
-    </ItemGroup>
-    <ItemGroup>
-        <None Include="Assets\**\*">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
         </None>
     </ItemGroup>
 
@@ -54,12 +53,6 @@
         <!-- We DO reference the attributes dll -->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Page Update="MainShellView.xaml">
-        <SubType>Designer</SubType>
-      </Page>
     </ItemGroup>
 
 </Project>
