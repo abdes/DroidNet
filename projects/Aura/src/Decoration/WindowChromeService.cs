@@ -90,6 +90,27 @@ public sealed partial class WindowChromeService
         }
     }
 
+    /// <summary>
+    /// Applies chrome to all open windows.
+    /// </summary>
+    public void ApplyChrome() => this.ApplyChrome(_ => true);
+
+    /// <summary>
+    /// Applies chrome to windows matching a predicate.
+    /// </summary>
+    /// <param name="predicate">Predicate to filter which windows should have chrome applied.</param>
+    public void ApplyChrome(Func<WindowContext, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+
+        this.LogApplyingChromeToWindows();
+
+        foreach (var context in this.windowManager.OpenWindows.Where(predicate))
+        {
+            this.ApplyChrome(context);
+        }
+    }
+
     private void ApplyToolWindowChrome(Window window, Guid windowId)
     {
         // Tool windows with custom chrome need to completely hide the system title bar
@@ -144,27 +165,6 @@ public sealed partial class WindowChromeService
         }
 
         this.LogChromeApplied(windowId);
-    }
-
-    /// <summary>
-    /// Applies chrome to all open windows.
-    /// </summary>
-    public void ApplyChrome() => this.ApplyChrome(_ => true);
-
-    /// <summary>
-    /// Applies chrome to windows matching a predicate.
-    /// </summary>
-    /// <param name="predicate">Predicate to filter which windows should have chrome applied.</param>
-    public void ApplyChrome(Func<WindowContext, bool> predicate)
-    {
-        ArgumentNullException.ThrowIfNull(predicate);
-
-        this.LogApplyingChromeToWindows();
-
-        foreach (var context in this.windowManager.OpenWindows.Where(predicate))
-        {
-            this.ApplyChrome(context);
-        }
     }
 
     [LoggerMessage(

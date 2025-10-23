@@ -9,7 +9,7 @@ using FluentAssertions;
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Test suite for <see cref="WindowDecorationOptions"/> validation and configuration.
+///     Test suite for <see cref="WindowDecorationOptions"/> validation and configuration.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -29,7 +29,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().NotThrow();
@@ -48,7 +48,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -68,7 +68,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -87,7 +87,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -106,7 +106,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -126,7 +126,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -146,7 +146,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -166,7 +166,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().NotThrow("Tool windows can omit the Close button");
@@ -185,7 +185,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().NotThrow("System chrome without menu is valid");
@@ -204,7 +204,7 @@ public class WindowDecorationOptionsTests
         };
 
         // Act
-        var act = () => options.Validate();
+        var act = options.Validate;
 
         // Assert
         _ = act.Should().NotThrow();

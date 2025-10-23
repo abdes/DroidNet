@@ -98,8 +98,7 @@ public sealed class WindowDecorationBuilder
     /// </code>
     /// </example>
     public static WindowDecorationBuilder ForMainWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Main,
             chromeEnabled = true,
@@ -107,7 +106,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default,
             backdrop = DefaultBackdrops[WindowCategory.Main],
         };
-    }
 
     /// <summary>
     /// Creates a builder for a document window.
@@ -133,8 +131,7 @@ public sealed class WindowDecorationBuilder
     /// </code>
     /// </example>
     public static WindowDecorationBuilder ForDocumentWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Document,
             chromeEnabled = true,
@@ -142,7 +139,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default,
             backdrop = DefaultBackdrops[WindowCategory.Document],
         };
-    }
 
     /// <summary>
     /// Creates a builder for a tool window.
@@ -173,8 +169,7 @@ public sealed class WindowDecorationBuilder
     /// </code>
     /// </example>
     public static WindowDecorationBuilder ForToolWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Tool,
             chromeEnabled = false, // Disable system chrome for custom compact title bar
@@ -182,7 +177,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default with { ShowMinimize = false, ShowMaximize = false },
             backdrop = DefaultBackdrops[WindowCategory.Tool],
         };
-    }
 
     /// <summary>
     /// Creates a builder for a secondary window.
@@ -208,8 +202,7 @@ public sealed class WindowDecorationBuilder
     /// </code>
     /// </example>
     public static WindowDecorationBuilder ForSecondaryWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Secondary,
             chromeEnabled = true,
@@ -217,7 +210,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default,
             backdrop = DefaultBackdrops[WindowCategory.Secondary],
         };
-    }
 
     /// <summary>
     /// Creates a builder for a transient window.
@@ -228,8 +220,7 @@ public sealed class WindowDecorationBuilder
     /// configured to use a lightweight backdrop and standard titlebar.
     /// </remarks>
     public static WindowDecorationBuilder ForTransientWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Transient,
             chromeEnabled = true,
@@ -237,7 +228,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
             backdrop = DefaultBackdrops[WindowCategory.Transient],
         };
-    }
 
     /// <summary>
     /// Creates a builder for a modal window.
@@ -248,8 +238,7 @@ public sealed class WindowDecorationBuilder
     /// to emphasize focus and may hide maximize controls.
     /// </remarks>
     public static WindowDecorationBuilder ForModalWindow()
-    {
-        return new WindowDecorationBuilder
+        => new()
         {
             category = WindowCategory.Modal,
             chromeEnabled = true,
@@ -257,7 +246,6 @@ public sealed class WindowDecorationBuilder
             buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
             backdrop = DefaultBackdrops[WindowCategory.Modal],
         };
-    }
 
     /// <summary>
     /// Sets the window category.

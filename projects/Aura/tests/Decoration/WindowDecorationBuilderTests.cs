@@ -8,7 +8,7 @@ using FluentAssertions;
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Unit tests for <see cref="WindowDecorationBuilder"/>.
+///     Unit tests for <see cref="WindowDecorationBuilder"/>.
 /// </summary>
 [TestClass]
 [TestCategory("Window Decoration Builder")]
@@ -275,7 +275,7 @@ public class WindowDecorationBuilderTests
         var builder = new WindowDecorationBuilder();
 
         // Act
-        var act = () => builder.WithMenu(null!, false);
+        var act = () => builder.WithMenu(null!, isCompact: false);
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
@@ -468,7 +468,7 @@ public class WindowDecorationBuilderTests
             .WithMenu("App.Menu");
 
         // Act
-        var act = () => builder.Build();
+        var act = builder.Build;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()
@@ -484,7 +484,7 @@ public class WindowDecorationBuilderTests
             .WithButtons(new WindowButtonsOptions { ShowClose = false });
 
         // Act
-        var act = () => builder.Build();
+        var act = builder.Build;
 
         // Assert
         _ = act.Should().Throw<ValidationException>()

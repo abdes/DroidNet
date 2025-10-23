@@ -10,7 +10,8 @@ using Microsoft.Extensions.DependencyInjection;
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Unit tests for <see cref="IMenuProvider"/>, <see cref="MenuProvider"/>, and <see cref="ScopedMenuProvider"/>.
+///     Unit tests for <see cref="IMenuProvider"/>, <see cref="MenuProvider"/>,
+///     and <see cref="ScopedMenuProvider"/>.
 /// </summary>
 [TestClass]
 [TestCategory("Menu Provider")]

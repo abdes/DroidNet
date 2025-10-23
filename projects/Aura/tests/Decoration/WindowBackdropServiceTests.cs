@@ -16,20 +16,22 @@ using Moq;
 namespace DroidNet.Aura.Tests.Decoration;
 
 /// <summary>
-/// Comprehensive test suite for the <see cref="WindowBackdropService"/> class.
+///     Comprehensive test suite for the <see cref="WindowBackdropService"/> class.
 /// </summary>
 /// <remarks>
-/// These tests verify backdrop application based on WindowDecorationOptions,
-/// window lifecycle event handling, and graceful error handling.
+///     These tests verify backdrop application based on WindowDecorationOptions,
+///     window lifecycle event handling, and graceful error handling.
 /// </remarks>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
+public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
 {
     private Mock<IWindowManagerService> mockWindowManager = null!;
     private Subject<WindowLifecycleEvent> windowEventsSubject = null!;
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
     private bool disposed;
+
+    public TestContext TestContext { get; set; }
 
     [TestInitialize]
     public Task InitializeAsync() => EnqueueAsync(async () =>
@@ -345,7 +347,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
             this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Created, context));
 
             // Give a moment for async processing
-            await Task.Delay(100).ConfigureAwait(true);
+            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             // Assert
             _ = window.SystemBackdrop.Should().NotBeNull("Backdrop should be automatically applied on Created event");
@@ -373,7 +375,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
             this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Activated, context));
 
             // Give a moment for async processing
-            await Task.Delay(100).ConfigureAwait(true);
+            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             // Assert
             _ = window.SystemBackdrop.Should().BeNull("Backdrop should not be applied for non-Created events");
@@ -404,7 +406,7 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
             this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Created, context));
 
             // Give a moment for async processing
-            await Task.Delay(100).ConfigureAwait(true);
+            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             // Assert - No backdrop should be applied since service is disposed
             _ = window.SystemBackdrop.Should().BeNull("Backdrop should not be applied after service disposal");
@@ -431,34 +433,10 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
         };
 
         // Assert
-        act.Should().NotThrow("Multiple dispose calls should be safe");
+        _ = act.Should().NotThrow("Multiple dispose calls should be safe");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
-
-    private static WindowContext CreateWindowContext(Window window, WindowDecorationOptions? decoration)
-        => new()
-        {
-            Id = Guid.NewGuid(),
-            Window = window,
-            Category = new WindowCategory("Test"),
-            Title = window.Title ?? "Test Window",
-            CreatedAt = DateTimeOffset.UtcNow,
-            Decoration = decoration,
-        };
-
-    private static Window MakeSmallWindow(string? title = null)
-    {
-        var window = string.IsNullOrEmpty(title) ? new Window() : new Window { Title = title };
-
-        // Set window to a small size (200x150) to not invade the screen during tests
-        window.AppWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 200, Height = 150 });
-
-        // Position it off to the side of the screen
-        window.AppWindow.Move(new Windows.Graphics.PointInt32 { X = 50, Y = 50 });
-
-        return window;
-    }
 
     /// <summary>
     /// Disposes managed resources.
@@ -486,5 +464,29 @@ public class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
         }
 
         this.disposed = true;
+    }
+
+    private static WindowContext CreateWindowContext(Window window, WindowDecorationOptions? decoration)
+        => new()
+        {
+            Id = Guid.NewGuid(),
+            Window = window,
+            Category = new WindowCategory("Test"),
+            Title = window.Title ?? "Test Window",
+            CreatedAt = DateTimeOffset.UtcNow,
+            Decoration = decoration,
+        };
+
+    private static Window MakeSmallWindow(string? title = null)
+    {
+        var window = string.IsNullOrEmpty(title) ? new Window() : new Window { Title = title };
+
+        // Set window to a small size (200x150) to not invade the screen during tests
+        window.AppWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 200, Height = 150 });
+
+        // Position it off to the side of the screen
+        window.AppWindow.Move(new Windows.Graphics.PointInt32 { X = 50, Y = 50 });
+
+        return window;
     }
 }

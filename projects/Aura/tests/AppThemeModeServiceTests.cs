@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Tests;
 using FluentAssertions;
@@ -23,7 +24,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_SetsLightTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -52,7 +53,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_SetsDarkTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -81,7 +82,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_DefaultTheme_ResolvesToSystemTheme_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -114,7 +115,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_ThrowsException_WhenContentIsNotFrameworkElement_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -142,7 +143,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task ApplyThemeMode_UpdatesApplicationResources_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
         var window = new Window
         {
@@ -170,7 +171,7 @@ public class AppThemeModeServiceTests : VisualUserInterfaceTests
     public Task Dispose_UnsubscribesFromPropertyChanged_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
         var service = new AppThemeModeService(appearanceSettings.Object);
 
         // Act

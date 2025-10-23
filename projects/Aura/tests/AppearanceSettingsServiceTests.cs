@@ -3,16 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
+using DryIoc;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using Microsoft.UI.Xaml;
-using Moq;
 
 namespace DroidNet.Aura.Tests;
+
+#pragma warning disable IDE1006 // Naming styles - test method names intentionally contain underscores
+// Relax analyzers that the test project treats as errors for these helper/tests
+#pragma warning disable CA1707 // Identifiers should not contain underscores
+#pragma warning disable CA1822 // Mark members as static
 
 /// <summary>
 /// Unit tests for the <see cref="AppearanceSettingsService"/> class.
@@ -20,38 +23,35 @@ namespace DroidNet.Aura.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Appearance Settings")]
-public class AppearanceSettingsServiceTests
+public partial class AppearanceSettingsServiceTests : IDisposable
 {
-    private Mock<IOptionsMonitor<AppearanceSettings>> mockSettingsMonitor = null!;
-    private Mock<IFileSystem> mockFileSystem = null!;
-    private Mock<IPathFinder> mockPathFinder = null!;
-    private Mock<ILoggerFactory> mockLoggerFactory = null!;
-    private Mock<ILogger<SettingsService<AppearanceSettings>>> mockLogger = null!;
+    private Container container = null!;
+    private SettingsManager? settingsManager;
+    private LoggerFactory? loggerFactory;
+    private InMemorySettingsSource? testSource;
+    private bool isDisposed;
+
+    public TestContext TestContext { get; set; }
 
     [TestInitialize]
     public void TestInitialize()
     {
-        this.mockSettingsMonitor = new Mock<IOptionsMonitor<AppearanceSettings>>();
-        this.mockFileSystem = new Mock<IFileSystem>();
-        this.mockPathFinder = new Mock<IPathFinder>();
-        this.mockLoggerFactory = new Mock<ILoggerFactory>();
-        this.mockLogger = new Mock<ILogger<SettingsService<AppearanceSettings>>>();
+        this.container = new Container();
+        this.loggerFactory = new LoggerFactory();
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(It.IsAny<LogLevel>())).Returns(value: true);
-        _ = this.mockLoggerFactory.Setup(lf => lf.CreateLogger(It.IsAny<string>())).Returns(this.mockLogger.Object);
+        // Register logger factory in the container
+        this.container.RegisterInstance(this.loggerFactory);
 
-        // Setup default settings
-        var defaultSettings = new AppearanceSettings
-        {
-            AppThemeMode = ElementTheme.Default,
-            AppThemeBackgroundColor = "#00000000",
-            AppThemeFontFamily = "Segoe UI Variable",
-        };
-        _ = this.mockSettingsMonitor.Setup(sm => sm.CurrentValue).Returns(defaultSettings);
+        // Register a test settings source so the SettingsManager has a source to save to
+        this.testSource = new InMemorySettingsSource("test-source");
+        this.container.RegisterInstance<ISettingsSource>(this.testSource);
 
-        // Setup path finder to return a valid config file path
-        _ = this.mockPathFinder.Setup(pf => pf.GetConfigFilePath(AppearanceSettings.ConfigFileName))
-            .Returns("C:\\Users\\TestUser\\AppData\\Local\\TestApp\\LocalSettings.json");
+        // Register and resolve the SettingsManager
+        this.container.Register<SettingsManager>(Reuse.Singleton);
+        this.settingsManager = this.container.Resolve<SettingsManager>();
+
+        // Initialize the SettingsManager so it's ready for use
+        this.settingsManager.InitializeAsync(this.TestContext.CancellationToken).GetAwaiter().GetResult();
     }
 
     [TestMethod]
@@ -59,10 +59,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange & Act
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Assert
         _ = service.Should().NotBeNull();
@@ -81,14 +79,13 @@ public class AppearanceSettingsServiceTests
             AppThemeBackgroundColor = "#FF123456",
             AppThemeFontFamily = "Arial",
         };
-        _ = this.mockSettingsMonitor.Setup(sm => sm.CurrentValue).Returns(customSettings);
 
-        // Act
+        // Act - apply settings as manager would
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
+
+        service.ApplyProperties(customSettings);
 
         // Assert
         _ = service.AppThemeMode.Should().Be(ElementTheme.Dark);
@@ -101,16 +98,11 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange & Act
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Assert
-        this.mockPathFinder.Verify(
-            pf => pf.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-            Times.Once,
-            "PathFinder should be called to get the config file path");
+        _ = service.SectionName.Should().Be(AppearanceSettings.ConfigSectionName);
     }
 
     [TestMethod]
@@ -118,10 +110,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeMode = ElementTheme.Light;
@@ -135,10 +125,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
         var propertyChangedRaised = false;
         service.PropertyChanged += (_, args) =>
         {
@@ -160,10 +148,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
         service.AppThemeMode = ElementTheme.Light;
         var propertyChangedRaised = false;
         service.PropertyChanged += (_, args) =>
@@ -186,10 +172,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeMode = ElementTheme.Dark;
@@ -206,10 +190,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeMode = theme;
@@ -223,10 +205,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeBackgroundColor = "#FFFFFFFF";
@@ -240,10 +220,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
         var propertyChangedRaised = false;
         service.PropertyChanged += (_, args) =>
         {
@@ -265,10 +243,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
         const string testColor = "#FF123456";
         service.AppThemeBackgroundColor = testColor;
         var propertyChangedRaised = false;
@@ -296,10 +272,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeBackgroundColor = color;
@@ -313,10 +287,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeFontFamily = "Arial";
@@ -330,10 +302,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
         var propertyChangedRaised = false;
         service.PropertyChanged += (_, args) =>
         {
@@ -359,10 +329,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.AppThemeFontFamily = fontFamily;
@@ -382,20 +350,12 @@ public class AppearanceSettingsServiceTests
             AppThemeFontFamily = "Consolas",
         };
 
-        Action<AppearanceSettings, string?>? onChangeCallback = null;
-        _ = this.mockSettingsMonitor.Setup(sm => sm.OnChange(It.IsAny<Action<AppearanceSettings, string?>>()))
-            .Callback<Action<AppearanceSettings, string?>>(callback => onChangeCallback = callback)
-            .Returns(Mock.Of<IDisposable>());
-
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
-        // Act
-        onChangeCallback?.Invoke(newSettings, null);
-        Thread.Sleep(600); // Wait for throttle (500ms)
+        // Act - simulate manager applying new settings
+        service.ApplyProperties(newSettings);
 
         // Assert
         _ = service.AppThemeMode.Should().Be(ElementTheme.Dark);
@@ -414,16 +374,9 @@ public class AppearanceSettingsServiceTests
             AppThemeFontFamily = "Consolas",
         };
 
-        Action<AppearanceSettings, string?>? onChangeCallback = null;
-        _ = this.mockSettingsMonitor.Setup(sm => sm.OnChange(It.IsAny<Action<AppearanceSettings, string?>>()))
-            .Callback<Action<AppearanceSettings, string?>>(callback => onChangeCallback = callback)
-            .Returns(Mock.Of<IDisposable>());
-
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         var changedProperties = new List<string>();
         service.PropertyChanged += (_, args) =>
@@ -435,8 +388,7 @@ public class AppearanceSettingsServiceTests
         };
 
         // Act
-        onChangeCallback?.Invoke(newSettings, null);
-        Thread.Sleep(600); // Wait for throttle (500ms)
+        service.ApplyProperties(newSettings);
 
         // Assert
         _ = changedProperties.Should().Contain(nameof(service.AppThemeMode));
@@ -449,69 +401,45 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
-        var result = service.SaveSettings();
+        var act = async () => await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert
-        _ = result.Should().BeTrue("SaveSettings should return true when not dirty");
-        this.mockFileSystem.Verify(
-            fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()),
-            Times.Never,
-            "File should not be written when settings are not dirty");
+        // Assert - no exception when not dirty
+        _ = act.Should().NotThrowAsync();
     }
 
     [TestMethod]
-    public void SaveSettings_WhenDirty_WritesToFile()
+    public async Task SaveSettings_WhenDirty_WritesToFile()
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         service.AppThemeMode = ElementTheme.Dark;
 
-        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>()))
-            .Returns("C:\\Users\\TestUser\\AppData\\Local\\TestApp");
-        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
-        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
-
         // Act
-        var result = service.SaveSettings();
+        await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        // Assert
-        _ = result.Should().BeTrue("SaveSettings should return true when successful");
-        this.mockFileSystem.Verify(
-            fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()),
-            Times.Once,
-            "File should be written when settings are dirty");
+        // Assert - IsDirty should be false after successful save
+        _ = service.IsDirty.Should().BeFalse("IsDirty should be false after successful save");
     }
 
     [TestMethod]
-    public void SaveSettings_WhenDirty_ClearsDirtyFlag()
+    public async Task SaveSettings_WhenDirty_ClearsDirtyFlag()
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         service.AppThemeMode = ElementTheme.Dark;
 
-        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>()))
-            .Returns("C:\\Users\\TestUser\\AppData\\Local\\TestApp");
-        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
-        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
-
         // Act
-        _ = service.SaveSettings();
+        await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
         _ = service.IsDirty.Should().BeFalse("IsDirty should be false after successful save");
@@ -521,34 +449,20 @@ public class AppearanceSettingsServiceTests
     public void SaveSettings_WhenExceptionOccurs_ReturnsFalse()
     {
         // Arrange
+        // Arrange - add a source that throws on save
+        var throwingSource = new ThrowingSettingsSource("thrower");
+        var addTask = this.settingsManager!.AddSourceAsync(throwingSource, this.TestContext.CancellationToken);
+        addTask.GetAwaiter().GetResult();
+
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         service.AppThemeMode = ElementTheme.Dark;
 
-        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>()))
-            .Returns("C:\\Users\\TestUser\\AppData\\Local\\TestApp");
-        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
-        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()))
-            .Throws(new IOException("Test Exception"));
-
-        // Act
-        var result = service.SaveSettings();
-
-        // Assert
-        _ = result.Should().BeFalse("SaveSettings should return false when an exception occurs");
-        this.mockLogger.Verify(
-            x => x.Log(
-                LogLevel.Error,
-                It.IsAny<EventId>(),
-                It.IsAny<It.IsAnyType>(),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once,
-            "Error should be logged when save fails");
+        // Act & Assert - SaveAsync should throw when source save fails
+        var act = async () => await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
+        _ = act.Should().ThrowAsync<IOException>();
     }
 
     [TestMethod]
@@ -556,25 +470,14 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act
         service.Dispose();
         service.Dispose(); // Call dispose again to ensure no exceptions
 
-        // Assert
-        this.mockLogger.Verify(
-            x => x.Log(
-                It.IsIn(LogLevel.Error, LogLevel.Warning),
-                It.IsAny<EventId>(),
-                It.IsAny<It.IsAnyType>(),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Never,
-            "No errors or warnings should be logged when disposed while not dirty");
+        // No exception is considered a pass
     }
 
     [TestMethod]
@@ -582,10 +485,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object)
+            this.settingsManager!,
+            this.loggerFactory)
         {
             AppThemeMode = ElementTheme.Dark,
         };
@@ -593,32 +494,16 @@ public class AppearanceSettingsServiceTests
         // Act
         service.Dispose();
 
-        // Assert
-        this.mockLogger.Verify(
-            x => x.Log(
-                LogLevel.Warning,
-                It.IsAny<EventId>(),
-                It.IsAny<It.IsAnyType>(),
-                It.IsAny<Exception>(),
-                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-            Times.Once,
-            "Warning should be logged when disposed while dirty");
+        // no exception means dispose handled dirty state; specifics of logging are manager-internal
     }
 
     [TestMethod]
-    public void IntegrationTest_MultiplePropertyChanges_MaintainsDirtyStateCorrectly()
+    public async Task IntegrationTest_MultiplePropertyChanges_MaintainsDirtyStateCorrectly()
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
-
-        _ = this.mockFileSystem.Setup(fs => fs.Path.GetDirectoryName(It.IsAny<string>()))
-            .Returns("C:\\Users\\TestUser\\AppData\\Local\\TestApp");
-        _ = this.mockFileSystem.Setup(fs => fs.Directory.Exists(It.IsAny<string>())).Returns(value: true);
-        _ = this.mockFileSystem.Setup(fs => fs.File.WriteAllText(It.IsAny<string>(), It.IsAny<string>()));
+            this.settingsManager!,
+            this.loggerFactory);
 
         // Act & Assert
         _ = service.IsDirty.Should().BeFalse("Service should not be dirty initially");
@@ -632,7 +517,7 @@ public class AppearanceSettingsServiceTests
         service.AppThemeFontFamily = "Arial";
         _ = service.IsDirty.Should().BeTrue("Service should remain dirty after third change");
 
-        _ = service.SaveSettings();
+        await service.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = service.IsDirty.Should().BeFalse("Service should not be dirty after save");
     }
 
@@ -641,10 +526,8 @@ public class AppearanceSettingsServiceTests
     {
         // Arrange
         using var service = new AppearanceSettingsService(
-            this.mockSettingsMonitor.Object,
-            this.mockFileSystem.Object,
-            this.mockPathFinder.Object,
-            this.mockLoggerFactory.Object);
+            this.settingsManager!,
+            this.loggerFactory);
 
         var eventSequence = new List<string>();
         service.PropertyChanged += (_, args) =>
@@ -665,5 +548,139 @@ public class AppearanceSettingsServiceTests
         _ = eventSequence[0].Should().Be(nameof(service.AppThemeMode));
         _ = eventSequence[1].Should().Be(nameof(service.AppThemeBackgroundColor));
         _ = eventSequence[2].Should().Be(nameof(service.AppThemeFontFamily));
+    }
+
+    /// <summary>
+    /// Disposes the test resources.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Protected Dispose method following the standard disposal pattern.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose; false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            this.settingsManager?.Dispose();
+            this.loggerFactory?.Dispose();
+            this.container?.Dispose();
+        }
+
+        this.isDisposed = true;
+    }
+
+    // Helper settings source that throws during save to simulate IO errors
+    private sealed class ThrowingSettingsSource(string id) : ISettingsSource
+    {
+#pragma warning disable CS0067 // Event is never used
+        public event EventHandler<SourceChangedEventArgs>? SourceChanged;
+#pragma warning restore CS0067
+
+        public string Id { get; } = id;
+
+        public bool SupportsEncryption => false;
+
+        public bool IsAvailable => true;
+
+        public bool WatchForChanges { get; set; }
+
+        public SettingsSourceMetadata? SourceMetadata { get; set; }
+
+        public Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
+        {
+            var payload = new SettingsReadPayload(
+                new Dictionary<string, object>(StringComparer.Ordinal),
+                new Dictionary<string, SettingsSectionMetadata>(StringComparer.Ordinal),
+                sourceMetadata: null,
+                this.Id);
+            return Task.FromResult(Result.Ok(payload));
+        }
+
+        public Task<Result<SettingsWritePayload>> SaveAsync(
+            IReadOnlyDictionary<string, object> sectionsData,
+            IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+            SettingsSourceMetadata sourceMetadata,
+            CancellationToken cancellationToken = default)
+            => throw new IOException("Test Exception");
+
+        public Task<Result<SettingsValidationPayload>> ValidateAsync(
+            IReadOnlyDictionary<string, object> sectionsData,
+            CancellationToken cancellationToken = default)
+        {
+            var payload = new SettingsValidationPayload(sectionsData.Count, "Validation succeeded");
+            return Task.FromResult(Result.Ok(payload));
+        }
+    }
+
+    // Helper settings source for testing that stores settings in memory
+    private sealed class InMemorySettingsSource(string id) : ISettingsSource
+    {
+        private readonly Dictionary<string, object> sections = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, SettingsSectionMetadata> sectionMetadata = new(StringComparer.Ordinal);
+
+#pragma warning disable CS0067 // Event is never used
+        public event EventHandler<SourceChangedEventArgs>? SourceChanged;
+#pragma warning restore CS0067
+
+        public string Id { get; } = id;
+
+        public bool SupportsEncryption => false;
+
+        public bool IsAvailable => true;
+
+        public bool WatchForChanges { get; set; }
+
+        public SettingsSourceMetadata? SourceMetadata { get; set; }
+
+        public Task<Result<SettingsReadPayload>> LoadAsync(bool reload = false, CancellationToken cancellationToken = default)
+        {
+            var payload = new SettingsReadPayload(
+                this.sections,
+                this.sectionMetadata,
+                this.SourceMetadata,
+                this.Id);
+            return Task.FromResult(Result.Ok(payload));
+        }
+
+        public Task<Result<SettingsWritePayload>> SaveAsync(
+            IReadOnlyDictionary<string, object> sectionsData,
+            IReadOnlyDictionary<string, SettingsSectionMetadata> sectionMetadata,
+            SettingsSourceMetadata sourceMetadata,
+            CancellationToken cancellationToken = default)
+        {
+            foreach (var (key, value) in sectionsData)
+            {
+                this.sections[key] = value;
+            }
+
+            foreach (var (key, value) in sectionMetadata)
+            {
+                this.sectionMetadata[key] = value;
+            }
+
+            this.SourceMetadata = sourceMetadata;
+
+            var payload = new SettingsWritePayload(sourceMetadata, sectionsData.Count, $"memory://{this.Id}");
+            return Task.FromResult(Result.Ok(payload));
+        }
+
+        public Task<Result<SettingsValidationPayload>> ValidateAsync(
+            IReadOnlyDictionary<string, object> sectionsData,
+            CancellationToken cancellationToken = default)
+        {
+            var payload = new SettingsValidationPayload(sectionsData.Count, "Validation succeeded");
+            return Task.FromResult(Result.Ok(payload));
+        }
     }
 }

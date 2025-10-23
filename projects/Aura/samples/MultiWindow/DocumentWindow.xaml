@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <Window
     x:Class="DroidNet.Samples.Aura.MultiWindow.DocumentWindow"
@@ -48,7 +48,7 @@
                 Margin="8,0,0,0"
                 VerticalAlignment="Center"
                 FontSize="12"
-                Text="{x:Bind Title, Mode=OneWay}" />
+                Text="{x:Bind Title, Mode=OneTime}" />
         </Grid>
 
         <!--  Document Toolbar  -->

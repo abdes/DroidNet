@@ -41,25 +41,21 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         var loadedObservable = Observable.FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
             h => this.CustomTitleBar.Loaded += h,
             h => this.CustomTitleBar.Loaded -= h)
-            .Do(_ => Debug.WriteLine("[MainShellView] CustomTitleBar.Loaded event fired"))
             .Select(_ => Unit.Default);
 
         var sizeChangedObservable = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
             h => this.CustomTitleBar.SizeChanged += h,
             h => this.CustomTitleBar.SizeChanged -= h)
-            .Do(e => Debug.WriteLine($"[MainShellView] CustomTitleBar.SizeChanged event fired: PreviousSize={e.EventArgs.PreviousSize}, NewSize={e.EventArgs.NewSize}"))
             .Select(_ => Unit.Default);
 
         var primaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
                 h => this.PrimaryCommands.LayoutUpdated += h,
                 h => this.PrimaryCommands.LayoutUpdated -= h)
-            .Do(_ => Debug.WriteLine("[MainShellView] PrimaryCommands.LayoutUpdated event fired"))
             .Select(_ => Unit.Default);
 
         var secondaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
                 h => this.SecondaryCommands.LayoutUpdated += h,
                 h => this.SecondaryCommands.LayoutUpdated -= h)
-            .Do(_ => Debug.WriteLine("[MainShellView] SecondaryCommands.LayoutUpdated event fired"))
             .Select(_ => Unit.Default);
 
         // Merge the observables and throttle the events
@@ -68,8 +64,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             .Merge(primaryCommandsLayoutObservable)
             .Merge(secondaryCommandsLayoutObservable)
             .Throttle(TimeSpan.FromMilliseconds(100))
-            .ObserveOn(uiContext)
-            .Do(_ => Debug.WriteLine("[MainShellView] Throttled event triggered, will call SetupCustomTitleBar"));
+            .ObserveOn(uiContext);
 
         // Subscribe to the throttled observable to call SetupCustomTitleBar
         _ = throttledObservable.Subscribe(_ =>
@@ -77,7 +72,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             // Skip scheduling when the title bar has already been unloaded (window closing).
             if (!this.IsLoaded)
             {
-                Debug.WriteLine("[MainShellView] SetupCustomTitleBar skipped because view is unloaded");
                 return;
             }
 
@@ -126,25 +120,17 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     private static void AddPassthroughRegion(
         FrameworkElement element,
         double scaleAdjustment,
-        List<Windows.Graphics.RectInt32> regions,
-        string label)
+        List<Windows.Graphics.RectInt32> regions)
     {
-        Debug.WriteLine($"{label}.Visibility: {element.Visibility}");
-        Debug.WriteLine($"{label}.ActualWidth: {element.ActualWidth}");
-        Debug.WriteLine($"{label}.ActualHeight: {element.ActualHeight}");
-
         if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
         {
-            Debug.WriteLine($"{label} skipped for passthrough region calculation");
             return;
         }
 
         var transform = element.TransformToVisual(visual: null);
         var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
 
-        Debug.WriteLine($"{label} bounds (window coords): X={bounds.X}, Y={bounds.Y}, W={bounds.Width}, H={bounds.Height}");
         var scaledRect = GetRect(bounds, scaleAdjustment);
-        Debug.WriteLine($"{label} rect (scaled): X={scaledRect.X}, Y={scaledRect.Y}, W={scaledRect.Width}, H={scaledRect.Height}");
         regions.Add(scaledRect);
     }
 
@@ -190,11 +176,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     {
         if (!this.IsLoaded)
         {
-            Debug.WriteLine("[MainShellView] SetupCustomTitleBar call ignored after unload");
             return;
         }
-
-        Debug.WriteLine($"=== SetupCustomTitleBar CALLED at {DateTime.Now:HH:mm:ss.fff} ===");
 
         Debug.Assert(
             this.ViewModel?.Window is not null,
@@ -202,13 +185,11 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
         if (this.ViewModel?.Window is null)
         {
-            Debug.WriteLine("[MainShellView] SetupCustomTitleBar aborted: ViewModel.Window is null");
             return;
         }
 
         if (this.CustomTitleBar.XamlRoot is null)
         {
-            Debug.WriteLine("[MainShellView] SetupCustomTitleBar aborted: XamlRoot is null");
             return;
         }
 
@@ -219,31 +200,12 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // Configure system insets for caption buttons
         // The system insets tell us how much space Windows needs for the caption buttons.
         // We must reserve this full space with empty padding columns.
-        Debug.WriteLine("=== SetupCustomTitleBar ===");
-        Debug.WriteLine($"Window Width: {this.ActualWidth}");
-        Debug.WriteLine($"CustomTitleBar Width: {this.CustomTitleBar.ActualWidth}");
-        Debug.WriteLine($"Scale: {scaleAdjustment}");
-        Debug.WriteLine($"System LeftInset (raw): {appWindow.TitleBar.LeftInset}");
-        Debug.WriteLine($"System RightInset (raw): {appWindow.TitleBar.RightInset}");
-        Debug.WriteLine($"System LeftInset (scaled): {appWindow.TitleBar.LeftInset / scaleAdjustment}");
-        Debug.WriteLine($"System RightInset (scaled): {appWindow.TitleBar.RightInset / scaleAdjustment}");
-
         var rightInset = appWindow.TitleBar.RightInset / scaleAdjustment;
-
-        Debug.WriteLine($"SystemReservedRight width: {rightInset}");
-        Debug.WriteLine($"IconColumn width: {this.IconColumn.ActualWidth}");
-        Debug.WriteLine($"PrimaryCommandsColumn width: {this.PrimaryCommandsColumn.ActualWidth}");
-        Debug.WriteLine($"DragColumn width: {this.DragColumn.ActualWidth}");
-        Debug.WriteLine($"SecondaryCommandsColumn width: {this.SecondaryCommandsColumn.ActualWidth}");
 
         this.SystemReservedRight.Width = new GridLength(rightInset);
 
         // Force Grid to recalculate layout with the new SystemReservedRight width
         this.CustomTitleBar.UpdateLayout();
-
-        Debug.WriteLine("=== AFTER UpdateLayout ===");
-        Debug.WriteLine($"DragColumn width (updated): {this.DragColumn.ActualWidth}");
-        Debug.WriteLine($"SystemReservedRight width (updated): {this.SystemReservedRight.ActualWidth}");
 
         // Configure passthrough regions for interactive elements
         // Pass the system right inset in device pixels so we can clamp passthrough regions
@@ -269,18 +231,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // the CustomTitleBar margin, so we don't need to add it separately.
         var passthroughRegions = new List<Windows.Graphics.RectInt32>();
 
-        Debug.WriteLine("=== ConfigurePassthroughRegions ===");
-        AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions, nameof(this.PrimaryCommands));
-        AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions, nameof(this.SecondaryCommands));
-
-        Debug.WriteLine($"Total passthrough regions: {passthroughRegions.Count}");
-
-        // Log details of each passthrough region
-        for (var i = 0; i < passthroughRegions.Count; i++)
-        {
-            var region = passthroughRegions[i];
-            Debug.WriteLine($"  Passthrough Region [{i}]: X={region.X}, Y={region.Y}, W={region.Width}, H={region.Height}");
-        }
+        AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions);
+        AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions);
 
         // Clamp regions so they never touch or overlap the system caption area on the right.
         // Work in device pixels.
@@ -292,14 +244,12 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // Leave a small gap between passthrough regions and system area.
         var gap = Math.Max(2, (int)this.SecondaryCommands.Margin.Right);
         var allowedMaxX = deviceWindowWidth - systemRightInsetDevice - gap;
-        Debug.WriteLine($"DeviceWindowWidth: {deviceWindowWidth}, SystemRightInsetDevice: {systemRightInsetDevice}, AllowedMaxX: {allowedMaxX}");
 
         foreach (var r in passthroughRegions)
         {
             // If region starts beyond allowed area, skip
             if (r.X >= allowedMaxX)
             {
-                Debug.WriteLine($"Skipping region at X={r.X} because it is beyond allowedMaxX={allowedMaxX}");
                 continue;
             }
 
@@ -308,7 +258,6 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             if (right > allowedMaxX)
             {
                 clampedWidth = Math.Max(0, allowedMaxX - r.X);
-                Debug.WriteLine($"Clamping region X={r.X} originalW={r.Width} -> clampedW={clampedWidth}");
             }
 
             if (clampedWidth > 0)
@@ -317,13 +266,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             }
         }
 
-        Debug.WriteLine($"Total passthrough regions after clamp: {clampedRegions.Count}");
-
         // Set passthrough regions (use empty array to clear if none)
         var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(windowId);
         nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. clampedRegions]);
-
-        Debug.WriteLine("=== ConfigurePassthroughRegions Complete - Passthrough regions updated ===");
-        Debug.WriteLine("=== ConfigurePassthroughRegions Complete ===");
     }
 }
