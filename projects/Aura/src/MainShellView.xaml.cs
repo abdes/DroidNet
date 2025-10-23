@@ -219,7 +219,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // Configure system insets for caption buttons
         // The system insets tell us how much space Windows needs for the caption buttons.
         // We must reserve this full space with empty padding columns.
-        Debug.WriteLine($"=== SetupCustomTitleBar ===");
+        Debug.WriteLine("=== SetupCustomTitleBar ===");
         Debug.WriteLine($"Window Width: {this.ActualWidth}");
         Debug.WriteLine($"CustomTitleBar Width: {this.CustomTitleBar.ActualWidth}");
         Debug.WriteLine($"Scale: {scaleAdjustment}");
@@ -241,7 +241,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // Force Grid to recalculate layout with the new SystemReservedRight width
         this.CustomTitleBar.UpdateLayout();
 
-        Debug.WriteLine($"=== AFTER UpdateLayout ===");
+        Debug.WriteLine("=== AFTER UpdateLayout ===");
         Debug.WriteLine($"DragColumn width (updated): {this.DragColumn.ActualWidth}");
         Debug.WriteLine($"SystemReservedRight width (updated): {this.SystemReservedRight.ActualWidth}");
 
@@ -269,7 +269,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // the CustomTitleBar margin, so we don't need to add it separately.
         var passthroughRegions = new List<Windows.Graphics.RectInt32>();
 
-        Debug.WriteLine($"=== ConfigurePassthroughRegions ===");
+        Debug.WriteLine("=== ConfigurePassthroughRegions ===");
         AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions, nameof(this.PrimaryCommands));
         AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions, nameof(this.SecondaryCommands));
 
@@ -323,8 +323,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(windowId);
         nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. clampedRegions]);
 
-        Debug.WriteLine($"=== ConfigurePassthroughRegions Complete - Passthrough regions updated ===");
-
-        Debug.WriteLine($"=== ConfigurePassthroughRegions Complete ===");
+        Debug.WriteLine("=== ConfigurePassthroughRegions Complete - Passthrough regions updated ===");
+        Debug.WriteLine("=== ConfigurePassthroughRegions Complete ===");
     }
 }

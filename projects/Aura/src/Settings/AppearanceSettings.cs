@@ -13,11 +13,6 @@ namespace DroidNet.Aura.Settings;
 public partial class AppearanceSettings : IAppearanceSettings
 {
     /// <summary>
-    ///     The name of the configuration file where the appearance settings are stored.
-    /// </summary>
-    public const string ConfigFileName = "LocalSettings.json";
-
-    /// <summary>
     ///     The name of the configuration section that contains the appearance settings.
     /// </summary>
     public const string ConfigSectionName = "AppearanceSettings";

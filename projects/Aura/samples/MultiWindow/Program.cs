@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
@@ -13,7 +13,6 @@ using DroidNet.Config;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml;
 using Serilog;
@@ -33,6 +32,7 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 /// </list>
 /// </remarks>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "program entrypoint class must be public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -40,10 +40,7 @@ public static partial class Program
     private static partial void XamlCheckProcessRequirements();
 
     [STAThread]
-    [SuppressMessage(
-        "Design",
-        "CA1031:Do not catch general exception types",
-        Justification = "the Main method need to catch all")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "the Main method need to catch all")]
     private static void Main(string[] args)
     {
         // Ensures that the process can run XAML, and provides a deterministic error if a check
@@ -53,27 +50,23 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
+            // Configure aned Build the host so the final container is available.
             _ = bootstrap.Configure()
                 .WithLoggingAbstraction()
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
-                .WithAppServices(ConfigureApplicationServices);
+                .Build();
 
-            // Build the host so the final container is available and any registered modules can be
-            // initialized (for example the Config SettingsManager).
-            var host = bootstrap.Build();
-
-            // If the Config module was registered it will have added a SettingsManager. Initialize it
-            // now so sources are loaded and services receive their initial values.
+            // Final container is now available.
+            var container = bootstrap.Container;
             try
             {
-                var manager = bootstrap.Container.Resolve<SettingsManager>();
-                manager?.InitializeAsync().GetAwaiter().GetResult();
-                _ = manager?.AutoSave = true;
+                InitializeSettings(container);
+                ConfigureApplicationServices(container);
 
                 // Configure Main window decoration with menu after DI integration
-                ConfigureMainWindowDecoration(bootstrap.Container);
+                ConfigureMainWindowDecoration(container);
             }
             catch (Exception ex) when (ex is ContainerException or InvalidOperationException)
             {
@@ -93,6 +86,32 @@ public static partial class Program
             Log.CloseAndFlush();
             bootstrap.Dispose();
         }
+    }
+
+    private static void InitializeSettings(DryIoc.IContainer container)
+    {
+        // Register Config module
+        _ = container.WithConfig();
+
+        // If the bootstrapper included `Config` module, it will have added a SettingsManager.
+        // Configure settings source, and initialize it now so sources are loaded and
+        // services receive their initial values.
+        var manager = container.Resolve<SettingsManager>();
+        Debug.Assert(manager is not null, "SettingsManager should be registered");
+
+        var pathFinder = container.GetRequiredService<IPathFinder>();
+        _ = container
+            .WithJsonConfigSource(
+                "aura.decoration",
+                pathFinder.GetConfigFilePath("Aura.json"),
+                watch: true)
+            .WithJsonConfigSource(
+                "aura.appearance",
+                pathFinder.GetConfigFilePath("LocalSettings"),
+                watch: true);
+
+        manager.InitializeAsync().GetAwaiter().GetResult();
+        _ = manager.AutoSave = true;
     }
 
     private static Routes MakeRoutes() => new(
@@ -118,11 +137,9 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register Config module
-        _ = container.WithConfig();
-
         // Register Aura window management with all required services
-        _ = container.WithAura(options => options
+        _ = container
+            .WithAura(options => options
             .WithAppearanceSettings()
             .WithDecorationSettings()
             .WithBackdropService()

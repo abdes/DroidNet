@@ -249,7 +249,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
             ],
         };
 
-        this.MenuBuilder
+        _ = this.MenuBuilder
             .AddMenuItem(new MenuItemData
             {
                 Text = "Settings",

@@ -19,8 +19,8 @@ using Moq;
 namespace DroidNet.Aura.Tests;
 
 /// <summary>
-/// Integration tests for <see cref="ServiceCollectionExtensions"/> validating
-/// the unified <see cref="ServiceCollectionExtensions.WithAura"/> registration method.
+/// Integration tests for <see cref="DependencyInjectionExtensions"/> validating
+/// the unified <see cref="DependencyInjectionExtensions.WithAura"/> registration method.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -57,7 +57,7 @@ public class ServiceCollectionExtensionsTests : VisualUserInterfaceTests
     }
 
     /// <summary>
-    /// Validates that <see cref="ServiceCollectionExtensions.WithAura"/> with no configuration
+    /// Validates that <see cref="DependencyInjectionExtensions.WithAura"/> with no configuration
     /// registers only mandatory services.
     /// </summary>
     [TestMethod]
@@ -86,7 +86,7 @@ public class ServiceCollectionExtensionsTests : VisualUserInterfaceTests
     });
 
     /// <summary>
-    /// Validates that <see cref="ServiceCollectionExtensions.WithAura"/> with full configuration
+    /// Validates that <see cref="DependencyInjectionExtensions.WithAura"/> with full configuration
     /// registers all optional services.
     /// </summary>
     [TestMethod]
@@ -219,8 +219,8 @@ public class ServiceCollectionExtensionsTests : VisualUserInterfaceTests
     });
 
     /// <summary>
-    /// Validates that <see cref="ServiceCollectionExtensions.AddWindow{TWindow}"/>
-    /// still works with the new <see cref="ServiceCollectionExtensions.WithAura"/> method.
+    /// Validates that <see cref="DependencyInjectionExtensions.AddWindow{TWindow}"/>
+    /// still works with the new <see cref="DependencyInjectionExtensions.WithAura"/> method.
     /// </summary>
     [TestMethod]
     public Task AddWindow_WorksWithWithAura() => EnqueueAsync(async () =>
