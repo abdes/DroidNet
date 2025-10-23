@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Controls.OutputConsole;
 using DroidNet.Controls.OutputConsole.Model;
 using Serilog;
 using Serilog.Events;
@@ -26,6 +27,42 @@ public partial class OutputConsoleDemoViewModel : ObservableObject
     ///     Gets the output log buffer used by the demo UI.
     /// </summary>
     public OutputLogBuffer Buffer { get; }
+
+    /// <summary>
+    ///     Gets or sets the level filter for the output console.
+    /// </summary>
+    [ObservableProperty]
+    public partial LevelMask LevelFilter { get; set; } = LevelMask.Information | LevelMask.Warning | LevelMask.Error | LevelMask.Fatal;
+
+    /// <summary>
+    ///     Gets or sets the text filter for the output console.
+    /// </summary>
+    [ObservableProperty]
+    public partial string TextFilter { get; set; } = string.Empty;
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether timestamps are shown in the output console.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool ShowTimestamps { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether word wrap is enabled in the output console.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool WordWrap { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the output console follows the tail (auto-scrolls to bottom).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool FollowTail { get; set; } = true;
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the output console is paused.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsPaused { get; set; }
 
     /// <summary>
     /// Writes a single Serilog event at the specified log level.

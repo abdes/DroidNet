@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
+using DroidNet.Aura.WindowManagement;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,7 @@ namespace DroidNet.Controls.Demo;
 
 /// <summary>Provides application-specific behavior to supplement the default Application class.</summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "cannot")]
 public partial class App
 {
     private const string VmToViewConverterResourceKey = "VmToViewConverter";
@@ -35,6 +37,7 @@ public partial class App
     /// <param name="converter">
     /// The ViewModel to View converter to be used to set the content inside the content control.
     /// </param>
+    /// <param name="windowManager">The window manager service. Must be injected in the App so it can hook into the MainWindow.</param>
     /// <remarks>
     /// The <paramref name="converter" /> needs to be available in the XAML as a static resource. However, because it has
     /// dependencies injected via the Dependency Injector, we create it in the code behind and programmatically add it as a static
@@ -44,8 +47,11 @@ public partial class App
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
-        IValueConverter converter)
+        IValueConverter converter,
+        IWindowManagerService windowManager)
     {
+        _ = windowManager;
+
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;

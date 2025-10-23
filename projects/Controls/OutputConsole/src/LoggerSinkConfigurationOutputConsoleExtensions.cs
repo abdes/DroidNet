@@ -30,9 +30,9 @@ public static class LoggerSinkConfigurationOutputConsoleExtensions
     public static LoggerConfiguration OutputConsole(
         this LoggerSinkConfiguration sinkConfiguration,
         IContainer container,
-        int capacity = 10000,
-        LogEventLevel restrictedToMinimumLevel = LevelAlias.Minimum,
-        LoggingLevelSwitch? levelSwitch = null)
+        int capacity,
+        LogEventLevel restrictedToMinimumLevel,
+        LoggingLevelSwitch? levelSwitch)
     {
         var buffer = new OutputLogBuffer(capacity);
         var sink = new BufferedSink(buffer);

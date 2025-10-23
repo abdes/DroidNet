@@ -2,8 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Bootstrap;
@@ -18,15 +19,10 @@ using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DryIoc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Serilog;
-
-#if !DISABLE_XAML_GENERATED_MAIN
-#error "This project only works with custom Main entry point. Must set DISABLE_XAML_GENERATED_MAIN to True."
-#endif
 
 namespace DroidNet.Controls.Demo;
 
@@ -51,6 +47,7 @@ namespace DroidNet.Controls.Demo;
 /// </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "program entrypoint class must be public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -71,15 +68,27 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            _ = bootstrap.Configure()
-                .WithLoggingAbstraction()
-                .WithConfiguration(
-                    MakeConfigFiles,
-                    ConfigureOptionsPattern)
+            // Configure aned Build the host so the final container is available.
+            _ = bootstrap.Configure(
+                options => options
+                    .WithOutputConsole()
+                    .WithOutputLog(formatProvider: CultureInfo.InvariantCulture))
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
-                .WithAppServices(ConfigureApplicationServices);
+                .Build();
+
+            // Final container is now available.
+            var container = bootstrap.Container;
+            try
+            {
+                InitializeSettings(container);
+                ConfigureApplicationServices(container);
+            }
+            catch (Exception ex) when (ex is DryIoc.ContainerException or InvalidOperationException)
+            {
+                // No SettingsManager registered - skip initialization
+            }
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -96,25 +105,53 @@ public static partial class Program
         }
     }
 
-    private static IEnumerable<string> MakeConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
-        =>
-        [
-            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-        ];
+    private static void InitializeSettings(DryIoc.IContainer container)
+    {
+        // Register Config module
+        _ = container.WithConfig();
 
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
+        // If the bootstrapper included `Config` module, it will have added a SettingsManager.
+        // Configure settings source, and initialize it now so sources are loaded and
+        // services receive their initial values.
+        var manager = container.Resolve<SettingsManager>();
+        Debug.Assert(manager is not null, "SettingsManager should be registered");
+
+        var pathFinder = container.GetRequiredService<IPathFinder>();
+        _ = container
+            .WithJsonConfigSource(
+                "aura.decoration",
+                pathFinder.GetConfigFilePath("aura.json"),
+                watch: true)
+            .WithJsonConfigSource(
+                "aura.appearance",
+                pathFinder.GetConfigFilePath("settings.json"),
+                watch: true);
+
+        manager.InitializeAsync().GetAwaiter().GetResult();
+        _ = manager.AutoSave = true;
+    }
 
     private static void ConfigureApplicationServices(this IContainer container)
     {
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+        // Register Aura window management with all required services
+        _ = container.WithAura(options => options
+            .WithAppearanceSettings()
+            .WithDecorationSettings()
+            .WithBackdropService()
+            .WithChromeService()
+            .WithThemeModeService());
 
-        // UI Services
-        container.Register<IAppThemeModeService, AppThemeModeService>();
-        container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<IAppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        /*
+         * Configure the Application's Windows. Each window represents a target in which to open the
+         * requested url. The target name is the key used when registering the window type.
+         *
+         * There should always be a Window registered for the special target <c>_main</c>.
+         */
+
+        // The Main Window is a singleton and its content can be re-assigned as needed. It is
+        // registered with a key that corresponding to name of the special target <see
+        // cref="Target.Main" />.
+        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
         container.Register<MainShellView>(Reuse.Singleton);
         container.Register<MainShellViewModel>(Reuse.Singleton);
@@ -124,7 +161,7 @@ public static partial class Program
         container.Register<OutputLogDemoView>(Reuse.Transient);
         container.Register<OutputLogDemoViewModel>(Reuse.Transient);
         container.Register<OutputConsoleDemoView>(Reuse.Transient);
-        container.Register<OutputConsoleDemoViewModel>(Reuse.Transient);
+        container.Register<OutputConsoleDemoViewModel>(Reuse.Singleton);
         container.Register<ProjectLayoutView>(Reuse.Transient);
         container.Register<ProjectLayoutViewModel>(Reuse.Transient);
         container.Register<InPlaceEditDemoView>(Reuse.Transient);
