@@ -33,6 +33,7 @@
         <PackageReference Include="Serilog.Settings.Configuration" />
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
+        <PackageReference Include="ReflectionMagic" />
     </ItemGroup>
     <ItemGroup>
         <PackageReference Include="Microsoft.WindowsAppSDK" />

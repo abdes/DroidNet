@@ -8,8 +8,6 @@ using System.Globalization;
 using System.IO.Abstractions;
 using System.Reflection;
 using DroidNet.Config;
-using DroidNet.Controls.OutputLog;
-using DroidNet.Controls.OutputLog.Theming;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
@@ -18,12 +16,13 @@ using DroidNet.Routing.WinUI;
 using DryIoc;
 using DryIoc.Microsoft.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Serilog;
+using Serilog.Configuration;
+using Serilog.Core;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using Serilog.Templates;
@@ -41,7 +40,7 @@ namespace DroidNet.Bootstrap;
 ///         <item>Basic initialization via <see cref="Configure" /></item>
 ///         <item>
 ///             Service configuration through fluent methods like <see cref="WithWinUI{TApplication}" />,
-///             <see cref="WithConfiguration" />
+///             <see cref="WithMvvm" />, and <see cref="WithRouting" />
 ///         </item>
 ///         <item>Application startup with <see cref="Build" /> and <see cref="Run" /></item>
 ///     </list>
@@ -49,29 +48,32 @@ namespace DroidNet.Bootstrap;
 ///         <strong>Customization</strong>
 ///     </para>
 ///     <para>
-///         The bootstrapping process offers flexibility through various customization options. The first
-///         opportunity is when <see cref="WithConfiguration" /> isued. You might use the delegates accepted
-///         by that method to add configuration files to the host configuration, or to bind configuration
-///         sections to strongly-typed options.
+///         The bootstrapping process offers flexibility through various customization options. You can
+///         configure bootstrap options by passing an <see cref="Action{BootstrapOptions}" /> to the
+///         <see cref="Configure" /> method to control logging outputs, format providers, and other
+///         bootstrap-time settings.
 ///     </para>
 ///     <para>
-///         Another approach is to directly access and configure the `IHostBuilder` for additional customizations.
-///         This method is ideal when you need to perform more extensive modifications that go beyond the capabilities
-///         of delegates. By working directly with the `IHostBuilder`, you can add or replace services, configure
-///         middleware, and set up advanced hosting options. This level of customization is often necessary for
-///         complex applications that require a high degree of flexibility and control over the hosting environment.
+///         For more advanced customization, you can directly access the underlying `IHostBuilder` instance
+///         through the builder field after calling <see cref="Configure" />. This allows you to add or replace
+///         services, configure middleware, and set up advanced hosting options. This level of customization is
+///         often necessary for complex applications that require a high degree of flexibility and control over
+///         the hosting environment.
 ///     </para>
 /// </remarks>
 /// <example>
 ///     <strong>Example Usage</strong>
-///     <code>
-/// var bootstrap = new Bootstrapper(args)
-///     .Configure()
-///     .WithWinUI()
-///     .WithConfiguration(...)
+///     <code><![CDATA[
+///     var bootstrap = new Bootstrapper(args)
+///     .Configure(options => options
+///         .WithOutputConsole()
+///         .WithOutputLog())
+///     .WithMvvm()
+///     .WithRouting(routes)
+///     .WithWinUI&lt;App&gt;()
 ///     .Build();
-/// bootstrap.Run();
-/// </code>
+///     bootstrap.Run();
+/// ]]></code>
 /// </example>
 public sealed partial class Bootstrapper(string[] args) : IDisposable
 {
@@ -133,18 +135,26 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <summary>
     ///     Performs initial bootstrap configuration including logging, dependency injection, and early services.
     /// </summary>
+    /// <param name="configure">
+    ///     Optional delegate to configure <see cref="BootstrapOptions" />. Use this to control logging sinks
+    ///     (OutputConsole, OutputLog), format providers, log levels, and other bootstrap-time settings.
+    /// </param>
     /// <returns>The configured bootstrapper instance for method chaining.</returns>
     /// <remarks>
     ///     This must be the first method called in the bootstrap chain. It:
     ///     <list type="bullet">
-    ///         <item>Initializes basic logging,</item>
+    ///         <item>Initializes the file system abstraction,</item>
     ///         <item>Sets up the DryIoc container,</item>
     ///         <item>Configures the pathfinder service,</item>
+    ///         <item>Initializes basic Serilog logging,</item>
     ///         <item>Prepares early application services.</item>
     ///     </list>
     /// </remarks>
-    public Bootstrapper Configure()
+    public Bootstrapper Configure(Action<BootstrapOptions>? configure = null)
     {
+        var options = new BootstrapOptions();
+        configure?.Invoke(options);
+
         this.FileSystemService = new RealFileSystem();
 
         // This is the initial container that will be used to configure the DryIoc container.
@@ -154,6 +164,9 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         {
             this.builder = Host.CreateDefaultBuilder(args)
                 .UseServiceProviderFactory(new DryIocServiceProviderFactory(initialContainer))
+
+                // Clear default logging providers - we'll use Serilog exclusively
+                .ConfigureLogging(logging => logging.ClearProviders())
 
                 // Add configuration files and configure Options, but first, initialize the IPathFinder instance, so it
                 // can be used to resolve configuration file paths.
@@ -166,11 +179,17 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
 
                     // Create the early logger, with default config, so we can start logging.
                     this.CreateLogger();
+
+                    Log.Information(
+                        $"Application `{this.PathFinderService.ApplicationName}` starting in `{this.PathFinderService.Mode}` mode");
                 })
+
+                // Configure Serilog as the logging provider for Microsoft.Extensions.Logging
+                .UseSerilog()
 
                 // Continue configuration using DryIoc container API.
                 .ConfigureContainer<DryIocServiceProvider>((_, provider) =>
-                    this.ConfigureEarlyServices(provider.Container));
+                    this.ConfigureEarlyServices(provider.Container, options));
 
             initialContainer = null; // Ownership transferred to the HostBuilder
         }
@@ -180,98 +199,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         }
 
         return this;
-    }
-
-    /// <summary>
-    ///     Configures application settings using JSON configuration files.
-    /// </summary>
-    /// <param name="getConfigFiles">Function that returns paths to configuration files based on the environment.</param>
-    /// <param name="configureOptionsPattern">Action to bind configuration sections to strongly-typed options.</param>
-    /// <returns>The bootstrapper instance for method chaining.</returns>
-    /// <remarks>
-    ///     Must be called after <see cref="Configure" /> but before <see cref="Build" />.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown if called after Build().</exception>
-    public Bootstrapper WithConfiguration(
-        Func<IPathFinder, IFileSystem, IConfiguration, IEnumerable<string>> getConfigFiles,
-        Action<IConfiguration, IServiceCollection>? configureOptionsPattern)
-    {
-        this.EnsureConfiguredButNotBuilt();
-
-        _ = this.builder
-            .ConfigureAppConfiguration((context, configBuilder) => this.AddConfigurationFiles(
-                configBuilder,
-                getConfigFiles(this.PathFinderService!, this.FileSystemService!, context.Configuration)));
-
-        if (configureOptionsPattern is not null)
-        {
-            _ = this.builder.ConfigureServices((context, sc) => configureOptionsPattern(context.Configuration, sc));
-        }
-
-        return this;
-    }
-
-    /// <summary>
-    ///     Configures the <see cref="Microsoft.Extensions.Logging" /> abstraction layer as the
-    ///     preferred logging API for the application.
-    /// </summary>
-    /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <remarks>
-    ///     Must be called after <see cref="Configure" /> but before <see cref="Build" />.
-    ///     <para>
-    ///     This method:
-    ///     <list type="number">
-    ///         <item>Creates and registers a Serilog logger factory</item>
-    ///         <item>Handles proper disposal of the factory after container ownership transfer</item>
-    ///         <item>
-    ///             Registers two logger resolution strategies:
-    ///             <list type="bullet">
-    ///                 <item>Default logger for components without implementation type,</item>
-    ///                 <item>Type-specific loggers for components with implementation type.</item>
-    ///             </list>
-    ///         </item>
-    ///     </list>
-    ///     The registration ensures that:
-    ///     <list type="bullet">
-    ///         <item>Components get appropriate loggers based on their type,</item>
-    ///         <item>Logger instances are properly scoped and disposed,</item>
-    ///         <item>Integration between Serilog and Microsoft.Extensions.Logging is configured.</item>
-    ///     </list>
-    ///     </para>
-    /// </remarks>
-    public Bootstrapper WithLoggingAbstraction()
-    {
-        this.EnsureConfiguredButNotBuilt();
-
-        _ = this.builder.ConfigureContainer<DryIocServiceProvider>(provider => ConfigureFactory(provider.Container));
-        return this;
-
-        static void ConfigureFactory(IContainer container)
-        {
-            var loggerFactory = new SerilogLoggerFactory(Log.Logger);
-            try
-            {
-                container.RegisterInstance<ILoggerFactory>(loggerFactory);
-                loggerFactory = null; // Dispose ownership transferred to the DryIoc Container
-            }
-            finally
-            {
-                loggerFactory?.Dispose();
-            }
-
-            container.Register(
-                Made.Of(
-                    _ => ServiceInfo.Of<ILoggerFactory>(),
-                    f => f.CreateLogger(null!)),
-                setup: Setup.With(condition: r => r.Parent.ImplementationType == null));
-
-            container.Register(
-                Made.Of(
-                    _ => ServiceInfo.Of<ILoggerFactory>(),
-                    f => f.CreateLogger(Arg.Index<Type>(0)),
-                    r => r.Parent.ImplementationType),
-                setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
-        }
     }
 
     /// <summary>
@@ -324,17 +251,19 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     }
 
     /// <summary>
-    ///     Initializes WinUI infrastructure.
+    ///     Configures WinUI infrastructure and registers the application instance.
     /// </summary>
-    /// <typeparam name="TApplication">The type of the UI <see cref="Application" />.</typeparam>
+    /// <typeparam name="TApplication">The type of the WinUI <see cref="Application" />.</typeparam>
     /// <param name="isLifetimeLinked">
-    ///     Specifies whether the UI lifecycle and the Hosted Application lifecycle are linked or not.
+    ///     Specifies whether the UI lifecycle and the Hosted Application lifecycle are linked.
+    ///     When <c>true</c> (default), closing the UI will terminate the application, and vice versa.
+    ///     When <c>false</c>, the UI and application lifetimes are independent.
     /// </param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
     /// <remarks>
     ///     <list type="bullet">
-    ///         <item>Adds WinUI hosting services early in the startup sequence,</item>
-    ///         <item>Links UI thread lifetime with application lifetime,</item>
+    ///         <item>Registers WinUI hosting services,</item>
+    ///         <item>Configures the UI thread and application lifecycle,</item>
     ///         <item>Must be called after <see cref="Configure" /> but before <see cref="Build" />.</item>
     ///     </list>
     /// </remarks>
@@ -402,44 +331,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     }
 
     /// <summary>
-    ///     Configures application-specific services using the IoC container.
-    ///     <remarks>
-    ///         This is the preferred and most flexible method, using the <see cref="IRegistrator.Register" />
-    ///         family of methods.
-    ///     </remarks>
-    /// </summary>
-    /// <param name="configureApplicationServices">An action to configure application services.</param>
-    /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <seealso cref="WithAppServices(Action{IServiceCollection, Bootstrapper})" />
-    public Bootstrapper WithAppServices(Action<IContainer> configureApplicationServices)
-    {
-        this.EnsureConfiguredButNotBuilt();
-
-        _ = this.builder.ConfigureContainer<DryIocServiceProvider>(provider =>
-            configureApplicationServices(provider.Container));
-        return this;
-    }
-
-    /// <summary>
-    ///     Configures application-specific services directly on the <see cref="IServiceCollection" />.
-    ///     <remarks>
-    ///         This method is less flexible than <see cref="WithAppServices(Action{IContainer})" />,
-    ///         but is compatible with those extension methods that use the
-    ///         <see cref="Microsoft.Extensions.Hosting" /> API.
-    ///     </remarks>
-    /// </summary>
-    /// <param name="configureApplicationServices"> An action to configure application services.</param>
-    /// <returns>The Bootstrapper instance for chaining calls.</returns>
-    /// <seealso cref="WithAppServices(Action{IContainer})" />
-    public Bootstrapper WithAppServices(Action<IServiceCollection, Bootstrapper> configureApplicationServices)
-    {
-        this.EnsureConfiguredButNotBuilt();
-
-        _ = this.builder.ConfigureServices(sc => configureApplicationServices(sc, this));
-        return this;
-    }
-
-    /// <summary>
     ///     Creates a PathFinderConfig instance.
     /// </summary>
     /// <param name="mode">The mode (development or real).</param>
@@ -463,38 +354,191 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         where T : Attribute
         => (T?)Attribute.GetCustomAttribute(assembly, typeof(T));
 
-    private static void ConfigureLoggingControls(LoggerConfiguration loggerConfig, DryIoc.IContainer container)
+    private static void ConfigureLoggingControls(LoggerConfiguration loggerConfig, DryIoc.IContainer container, BootstrapOptions? options)
     {
-        // Always register OutputLogView and OutputConsole if assembly is present
+        if (options is null)
+        {
+            return;
+        }
+
         try
         {
-            var asm = AppDomain.CurrentDomain
-                          .GetAssemblies()
-                          .FirstOrDefault(a => string.Equals(a.GetName().Name, "DroidNet.Controls.OutputConsole", StringComparison.Ordinal));
-
-            if (asm is not null)
+            if (options.RegisterOutputLog)
             {
-                _ = loggerConfig.WriteTo.OutputLogView<RichTextBlockSink>(container, theme: OutputLogThemes.Literate);
+                ConfigureOutputLog(loggerConfig, container, options);
+            }
 
-                // Always try to add OutputConsole sink (registers OutputLogBuffer) if the assembly is present
-                var extType = asm.GetType(
-                    "DroidNet.Controls.OutputConsole.LoggerSinkConfigurationOutputConsoleExtensions",
-                    throwOnError: false);
-
-                if (extType is not null)
-                {
-                    var extMethod = extType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                        .FirstOrDefault(m => string.Equals(m.Name, "OutputConsole", StringComparison.Ordinal));
-                    _ = extMethod?.Invoke(null, [loggerConfig.WriteTo, container, 10000, LevelAlias.Minimum, null]);
-                }
+            if (options.RegisterOutputConsole)
+            {
+                ConfigureOutputConsole(loggerConfig, container, options);
             }
         }
 #pragma warning disable CA1031 // Do not catch general exception types
         catch
         {
-            // Ignore if cannot find the assembly or any error occurs
+            // Optional sinks are best-effort. Swallow any exception to avoid crashing the host bootstrap.
         }
 #pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    [SuppressMessage("Design", "MA0051:Method is too long", Justification = "method is quite simple, but some calls have many arguments")]
+    private static void ConfigureOutputLog(LoggerConfiguration loggerConfig, IContainer container, BootstrapOptions options)
+    {
+        var assembly = TryLoadAssembly("DroidNet.Controls.OutputLog");
+        if (assembly is null)
+        {
+            return;
+        }
+
+        var extType = assembly.GetType(
+            "DroidNet.Controls.OutputLog.LoggerSinkConfigurationOutputLogExtensions",
+            throwOnError: false);
+
+        if (extType is null)
+        {
+            return;
+        }
+
+        var sinkType = assembly.GetType("DroidNet.Controls.OutputLog.RichTextBlockSink", throwOnError: false);
+        if (sinkType is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var writeTo = GetWriteToConfiguration(loggerConfig);
+            if (writeTo is null)
+            {
+                return;
+            }
+
+            var method = extType.GetMethod(
+                "OutputLogView",
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                [
+                    typeof(LoggerSinkConfiguration),
+                    typeof(IContainer),
+                    typeof(string),
+                    typeof(IFormatProvider),
+                    typeof(LogEventLevel),
+                    typeof(LoggingLevelSwitch),
+                    typeof(uint?),
+                ],
+                modifiers: null);
+
+            if (method is not null)
+            {
+                var genericMethod = method.MakeGenericMethod(sinkType);
+                _ = genericMethod.Invoke(
+                    null,
+                    [
+                        writeTo,
+                        container,
+                        options.OutputLogTemplate,
+                        options.OutputLogFormatProvider,
+                        options.OutputLogMinimumLevel,
+                        options.OutputLogLevelSwitch,
+                        options.OutputLogThemeId,
+                    ]);
+            }
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch
+        {
+            // best-effort; ignore plugin failures
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    private static void ConfigureOutputConsole(LoggerConfiguration loggerConfig, IContainer container, BootstrapOptions options)
+    {
+        var assembly = TryLoadAssembly("DroidNet.Controls.OutputConsole");
+        if (assembly is null)
+        {
+            return;
+        }
+
+        var extType = assembly.GetType(
+            "DroidNet.Controls.OutputConsole.LoggerSinkConfigurationOutputConsoleExtensions",
+            throwOnError: false);
+
+        if (extType is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var writeTo = GetWriteToConfiguration(loggerConfig);
+            if (writeTo is null)
+            {
+                return;
+            }
+
+            var method = extType.GetMethod(
+                "OutputConsole",
+                BindingFlags.Public | BindingFlags.Static,
+                binder: null,
+                [
+                    typeof(LoggerSinkConfiguration),
+                    typeof(IContainer),
+                    typeof(int),
+                    typeof(LogEventLevel),
+                    typeof(LoggingLevelSwitch),
+                ],
+                modifiers: null);
+
+            if (method is not null)
+            {
+                _ = method.Invoke(
+                    null,
+                    [
+                        writeTo,
+                        container,
+                        options.OutputConsoleCapacity,
+                        options.OutputConsoleMinimumLevel,
+                        options.OutputConsoleLevelSwitch,
+                    ]);
+            }
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch
+        {
+            // best-effort; ignore plugin failures
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    private static Assembly? TryLoadAssembly(string assemblyName)
+    {
+        // Try to find the assembly in already loaded assemblies first
+        var assembly = AppDomain.CurrentDomain.GetAssemblies()
+            .FirstOrDefault(a => string.Equals(a.GetName().Name, assemblyName, StringComparison.OrdinalIgnoreCase));
+
+        // If not loaded, attempt to load by name (may throw if not present)
+        if (assembly is null)
+        {
+            try
+            {
+                assembly = Assembly.Load(new AssemblyName(assemblyName));
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch
+            {
+                // Assembly not available, return null
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+        }
+
+        return assembly;
+    }
+
+    private static LoggerSinkConfiguration? GetWriteToConfiguration(LoggerConfiguration loggerConfig)
+    {
+        var writeToProp = typeof(LoggerConfiguration).GetProperty("WriteTo", BindingFlags.Public | BindingFlags.Instance);
+        return writeToProp?.GetValue(loggerConfig) as LoggerSinkConfiguration;
     }
 
     private void ConfigureBaseLogging(LoggerConfiguration loggerConfig)
@@ -505,8 +549,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         try
         {
             Directory.CreateDirectory(this.PathFinderService.LocalAppData);
-
-            var mode = this.PathFinderService.Mode;
 
             configuration = new ConfigurationBuilder()
                .SetBasePath(this.PathFinderService.LocalAppData)
@@ -546,6 +588,66 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     }
 
     /// <summary>
+    ///     Configures the <see cref="Microsoft.Extensions.Logging" /> abstraction layer as the
+    ///     preferred logging API for the application.
+    /// </summary>
+    /// <remarks>
+    ///     Must be called after <see cref="Configure" /> but before <see cref="Build" />.
+    ///     <para>
+    ///     This method:
+    ///     <list type="number">
+    ///         <item>Creates and registers a Serilog logger factory</item>
+    ///         <item>Handles proper disposal of the factory after container ownership transfer</item>
+    ///         <item>
+    ///             Registers two logger resolution strategies:
+    ///             <list type="bullet">
+    ///                 <item>Default logger for components without implementation type,</item>
+    ///                 <item>Type-specific loggers for components with implementation type.</item>
+    ///             </list>
+    ///         </item>
+    ///     </list>
+    ///     The registration ensures that:
+    ///     <list type="bullet">
+    ///         <item>Components get appropriate loggers based on their type,</item>
+    ///         <item>Logger instances are properly scoped and disposed,</item>
+    ///         <item>Integration between Serilog and Microsoft.Extensions.Logging is configured.</item>
+    ///     </list>
+    ///     </para>
+    /// </remarks>
+    private void ConfigureLoggingAbstraction()
+    {
+        this.EnsureConfiguredButNotBuilt();
+
+        _ = this.builder.ConfigureContainer<DryIocServiceProvider>(provider =>
+        {
+            var container = provider.Container;
+            var loggerFactory = new SerilogLoggerFactory(Log.Logger);
+            try
+            {
+                container.RegisterInstance<ILoggerFactory>(loggerFactory);
+                loggerFactory = null; // Dispose ownership transferred to the DryIoc Container
+            }
+            finally
+            {
+                loggerFactory?.Dispose();
+            }
+
+            container.Register(
+                Made.Of(
+                    _ => ServiceInfo.Of<ILoggerFactory>(),
+                    f => f.CreateLogger(null!)),
+                setup: Setup.With(condition: r => r.Parent.ImplementationType == null));
+
+            container.Register(
+                Made.Of(
+                    _ => ServiceInfo.Of<ILoggerFactory>(),
+                    f => f.CreateLogger(Arg.Index<Type>(0)),
+                    r => r.Parent.ImplementationType),
+                setup: Setup.With(condition: r => r.Parent.ImplementationType != null));
+        });
+    }
+
+    /// <summary>
     ///     Creates and configures the global Serilog logger instance.
     /// </summary>
     /// <param name="container">The IoC container, which can be used to register the OutputLog delegating sink.</param>
@@ -575,8 +677,10 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     ///         <item>Presence of external configuration.</item>
     ///     </list>
     /// </remarks>
-    private void CreateLogger(IContainer? container = null)
+    private void CreateLogger(IContainer? container = null, BootstrapOptions? options = null)
     {
+        Log.CloseAndFlush();
+
         // https://github.com/serilog/serilog-settings-configuration
         var loggerConfig = new LoggerConfiguration();
 
@@ -584,15 +688,17 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
 
         // At this stage the early logger is configured.
         // Continue only if we are at the second stage with a non-null final container
-        if (container is null)
+        if (container is not null)
         {
-            Log.Logger = loggerConfig.CreateLogger();
-            return;
+            ConfigureLoggingControls(loggerConfig, container, options);
         }
 
-        ConfigureLoggingControls(loggerConfig, container);
-
         Log.Logger = loggerConfig.CreateLogger();
+
+        if (options?.UseLoggingAbstraction == true)
+        {
+            this.ConfigureLoggingAbstraction();
+        }
     }
 
     /// <summary>
@@ -619,7 +725,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     ///     Registers the services created during the early bootstrapping phase in the final container.
     /// </summary>
     /// <param name="container">The final container, passed by the host builder.</param>
-    private void ConfigureEarlyServices(IContainer container)
+    private void ConfigureEarlyServices(IContainer container, BootstrapOptions options)
     {
         // This is the final container that will be used by the application.
         this.finalContainer = container;
@@ -629,9 +735,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         container.RegisterInstance(this.FileSystemService);
         container.RegisterInstance<IPathFinder>(this.PathFinderService!);
 
-        this.CreateLogger(container);
-        Log.Information(
-            $"Application `{this.PathFinderService.ApplicationName}` starting in `{this.PathFinderService.Mode}` mode");
+        this.CreateLogger(container, options);
     }
 
     /// <summary>
