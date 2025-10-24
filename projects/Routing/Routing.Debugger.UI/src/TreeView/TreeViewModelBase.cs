@@ -17,10 +17,10 @@ namespace DroidNet.Routing.Debugger.UI.TreeView;
 /// </param>
 public partial class TreeViewModelBase(bool showRoot = true) : ObservableObject
 {
-    [ObservableProperty]
-    private ITreeItem? selectedItem;
-
     private ITreeItem? root;
+
+    [ObservableProperty]
+    public partial ITreeItem? SelectedItem { get; set; }
 
     /// <summary>
     /// Gets the collection of tree items that are currently shown in the view.

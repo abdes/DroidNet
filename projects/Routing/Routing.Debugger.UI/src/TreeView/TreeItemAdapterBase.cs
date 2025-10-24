@@ -11,9 +11,6 @@ public abstract partial class TreeItemAdapterBase : ObservableObject, ITreeItem
 {
     private readonly Lazy<IList<TreeItemAdapterBase>> children;
 
-    [ObservableProperty]
-    private bool isExpanded;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TreeItemAdapterBase"/> class.
     /// </summary>
@@ -21,6 +18,9 @@ public abstract partial class TreeItemAdapterBase : ObservableObject, ITreeItem
     {
         this.children = new Lazy<IList<TreeItemAdapterBase>>(this.PopulateChildren);
     }
+
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; }
 
     /// <inheritdoc/>
     public abstract bool IsRoot { get; }
