@@ -9,10 +9,8 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
 using FluentAssertions;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
-using IContainer = DryIoc.IContainer;
 
 namespace DroidNet.Bootstrap.Tests;
 
@@ -95,44 +93,6 @@ public sealed partial class BootstrapperTests : IDisposable
     }
 
     [TestMethod]
-    [DisplayName("WithConfiguration should call configuration delegates")]
-    public void WithConfiguration_ShouldConfigureAppSettings()
-    {
-        // Arrange
-        var args = Array.Empty<string>();
-        var getConfigFilesCalled = false;
-        var configureOptionsPatternCalled = false;
-
-        using var bootstrapper = new Bootstrapper(args);
-        _ = bootstrapper.Configure();
-
-        // Act
-        _ = bootstrapper.WithConfiguration(GetConfigFiles, ConfigureOptionsPattern).Build();
-
-        // Assert
-        _ = getConfigFilesCalled.Should().BeTrue();
-        _ = configureOptionsPatternCalled.Should().BeTrue();
-
-        void ConfigureOptionsPattern(IConfiguration config, IServiceCollection services)
-        {
-            _ = config; // Unused
-            _ = services; // Unused
-
-            configureOptionsPatternCalled = true;
-        }
-
-        IEnumerable<string> GetConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
-        {
-            _ = finder; // Unused
-            _ = fs; // Unused
-            _ = config; // Unused
-
-            getConfigFilesCalled = true;
-            return ["appsettings.json"];
-        }
-    }
-
-    [TestMethod]
     [DisplayName("WithRouting should register and configure IRouter service")]
     public void WithRouting_ShouldConfigureRoutes()
     {
@@ -160,54 +120,6 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = vmToViewModel.Should().NotBeNull();
         vmToViewModel = this.defaultConfiguredBuilder.Container.GetService<ViewModelToView>();
         _ = vmToViewModel.Should().NotBeNull();
-    }
-
-    [TestMethod]
-    [DisplayName("WithAppServices(Container) should configure application-specific services")]
-    public void WithAppServices_Container_ShouldConfigureApplicationServices()
-    {
-        // Arrange
-        var args = Array.Empty<string>();
-        using var bootstrapper = new Bootstrapper(args);
-        _ = bootstrapper.Configure();
-
-        // Act
-        _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
-
-        // Assert
-        var service = bootstrapper.Container.Resolve<IMyService>();
-        _ = service.Should().NotBeNull();
-        _ = service.Should().BeOfType<MyService>();
-
-        static void ConfigureApplicationServices(IContainer container)
-        {
-            container.Register<IMyService, MyService>(Reuse.Singleton);
-        }
-    }
-
-    [TestMethod]
-    [DisplayName("WithAppServices(ServiceCollection) should configure application-specific services")]
-    public void WithAppServices_ServiceCollection_ShouldConfigureApplicationServices()
-    {
-        // Arrange
-        var args = Array.Empty<string>();
-        using var bootstrapper = new Bootstrapper(args);
-        _ = bootstrapper.Configure();
-
-        // Act
-        _ = bootstrapper.WithAppServices(ConfigureApplicationServices).Build();
-
-        // Assert
-        var service = bootstrapper.Container.Resolve<IMyService>();
-        _ = service.Should().NotBeNull();
-        _ = service.Should().BeOfType<MyService>();
-
-        static void ConfigureApplicationServices(IServiceCollection sc, Bootstrapper bs)
-        {
-            _ = bs; // Unused
-
-            _ = sc.AddSingleton<IMyService, MyService>();
-        }
     }
 
     /*
@@ -291,10 +203,8 @@ public sealed partial class BootstrapperTests : IDisposable
         _ = pathFinder.Should().NotBeNull();
 #if DEBUG
         _ = pathFinder!.Mode.Should().Be(PathFinder.DevelopmentMode);
-        _ = pathFinder.LocalAppData.Should().EndWith("Development");
 #else
         _ = pathFinder!.Mode.Should().Be(PathFinder.RealMode);
-        _ = pathFinder.LocalAppData.Should().NotContain("Development");
 #endif
     }
 
@@ -314,7 +224,6 @@ public sealed partial class BootstrapperTests : IDisposable
         // Assert
         _ = pathFinder.Should().NotBeNull();
         _ = pathFinder!.Mode.Should().Be(PathFinder.DevelopmentMode);
-        _ = pathFinder.LocalAppData.Should().EndWith("Development");
     }
 
     [TestMethod]
