@@ -154,6 +154,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     {
         var options = new BootstrapOptions();
         configure?.Invoke(options);
+        this.LogConfigureCalled();
 
         this.FileSystemService = new RealFileSystem();
 
@@ -214,6 +215,8 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     {
         this.EnsureConfiguredButNotBuilt();
 
+        this.LogWithRouting();
+
         _ = this.builder.ConfigureContainer<DryIocServiceProvider>(provider =>
             provider.Container.ConfigureRouter(config));
         return this;
@@ -235,6 +238,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     public Bootstrapper WithMvvm()
     {
         this.EnsureConfiguredButNotBuilt();
+        this.LogWithMvvm();
 
         _ = this.builder.ConfigureContainer<DryIocServiceProvider>(provider =>
         {
@@ -256,8 +260,8 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     /// <typeparam name="TApplication">The type of the WinUI <see cref="Application" />.</typeparam>
     /// <param name="isLifetimeLinked">
     ///     Specifies whether the UI lifecycle and the Hosted Application lifecycle are linked.
-    ///     When <c>true</c> (default), closing the UI will terminate the application, and vice versa.
-    ///     When <c>false</c>, the UI and application lifetimes are independent.
+    ///     When <see langword="true"/> (default), closing the UI will terminate the application, and vice versa.
+    ///     When <see langword="false"/>, the UI and application lifetimes are independent.
     /// </param>
     /// <returns>The Bootstrapper instance for chaining calls.</returns>
     /// <remarks>
@@ -273,6 +277,8 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         where TApplication : Application
     {
         this.EnsureConfiguredButNotBuilt();
+
+        this.LogWithWinUI<TApplication>(isLifetimeLinked);
 
         _ = this.builder.ConfigureServices(services => services.ConfigureWinUI<TApplication>(isLifetimeLinked));
 
@@ -307,6 +313,28 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         }
 
         this.host = this.builder.Build();
+
+        // Try to obtain the final ILogger for Bootstrapper from the host's service provider.
+        try
+        {
+            var resolved = this.host.Services.GetService(typeof(ILogger<Bootstrapper>)) as Microsoft.Extensions.Logging.ILogger;
+            if (resolved is not null)
+            {
+                this.logger = resolved;
+                this.LogHostBuilt();
+            }
+            else
+            {
+                Log.Information("Host built but final ILogger<Bootstrapper> not available");
+            }
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to obtain ILogger<Bootstrapper> from host.Services");
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+
         return this.host;
     }
 
@@ -327,7 +355,19 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         }
 
         Debug.Assert(this.host is not null, "host should be built");
-        this.host.Run();
+
+        // Log the start of the host run cycle (uses final ILogger when available)
+        this.LogHostStarting();
+
+        try
+        {
+            this.host.Run();
+        }
+        finally
+        {
+            // host.Run returns when the application is shutting down — log finalization
+            this.LogHostStopped();
+        }
     }
 
     /// <summary>
@@ -736,6 +776,10 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         container.RegisterInstance<IPathFinder>(this.PathFinderService!);
 
         this.CreateLogger(container, options);
+
+        // Early services registration finished — log it. The wrapper will prefer the final
+        // ILogger when available, otherwise fall back to Serilog early logging.
+        this.LogEarlyServicesConfigured();
     }
 
     /// <summary>
