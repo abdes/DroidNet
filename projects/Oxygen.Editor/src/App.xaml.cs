@@ -13,6 +13,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
+using Oxygen.Editor.Data;
 using Oxygen.Editor.Services;
 
 namespace Oxygen.Editor;
@@ -47,7 +48,8 @@ public partial class App
         IHostApplicationLifetime lifetime,
         IRouter router,
         [FromKeyedServices("VmToView")]
-        IValueConverter converter)
+        IValueConverter converter,
+        PersistentState dbContext)
     {
         // Create the DispatcherScheduler for the UI thread
         this.hostingContext = hostingContext;

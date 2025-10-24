@@ -13,7 +13,7 @@ namespace Oxygen.Editor.Data;
 /// Manages the persistence and retrieval of module settings using a database context.
 /// </summary>
 /// <remarks>
-/// The <see cref="SettingsManager"/> class provides methods to save and load settings for different modules.
+/// The <see cref="EditorSettingsManager"/> class provides methods to save and load settings for different modules.
 /// It uses a <see cref="PersistentState"/> context to interact with the database and caches settings in memory
 /// to improve performance. The settings are serialized and deserialized using JSON.
 /// </remarks>
@@ -26,8 +26,8 @@ namespace Oxygen.Editor.Data;
 ///     .Options;
 /// var context = new PersistentState(options);
 ///
-/// // Create the SettingsManager
-/// var settingsManager = new SettingsManager(context);
+/// // Create the EditorSettingsManager
+/// var settingsManager = new EditorSettingsManager(context);
 ///
 /// // Save a setting
 /// await settingsManager.SaveSettingAsync("MyModule", "WindowPosition", new Point(100, 100));
@@ -36,7 +36,7 @@ namespace Oxygen.Editor.Data;
 /// var windowPosition = await settingsManager.LoadSettingAsync<Point>("MyModule", "WindowPosition");
 /// ]]>
 /// </example>
-public class SettingsManager(PersistentState context) : ISettingsManager
+public class EditorSettingsManager(PersistentState context) : IEditorSettingsManager
 {
     private static readonly JsonSerializerOptions JsonSerializerOptions = new()
     {

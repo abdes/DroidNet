@@ -14,7 +14,7 @@ namespace Oxygen.Editor.ProjectBrowser;
 /// <para>
 /// The <see cref="ProjectBrowserSettings"/> class extends the <see cref="WindowedModuleSettings"/> class to
 /// include properties specific to the Project Browser module. These properties are automatically persisted
-/// and retrieved using the <see cref="ISettingsManager"/> when the <see cref="ModuleSettings.SaveAsync"/> and
+/// and retrieved using the <see cref="IEditorSettingsManager"/> when the <see cref="ModuleSettings.SaveAsync"/> and
 /// <see cref="ModuleSettings.LoadAsync"/> methods are called.
 /// </para>
 /// <para>
@@ -22,7 +22,7 @@ namespace Oxygen.Editor.ProjectBrowser;
 /// </para>
 /// </remarks>
 /// <param name="settingsManager">The settings manager responsible for persisting settings.</param>
-internal sealed partial class ProjectBrowserSettings(ISettingsManager settingsManager)
+internal sealed partial class ProjectBrowserSettings(IEditorSettingsManager settingsManager)
     : WindowedModuleSettings(settingsManager, typeof(ProjectBrowserSettings).Namespace!)
 {
     private string lastSaveLocation = string.Empty;

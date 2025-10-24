@@ -33,8 +33,12 @@ namespace Oxygen.Editor.Data;
 /// database. Particularly useful for testing and initial migration creation.
 /// </para>
 /// <para>
-/// <strong>Note:</strong> Only one of the options should be used at a time. If both are specified,
-/// an <see cref="ArgumentException"/> is thrown.
+/// <strong>--db-path</strong>: Provide an explicit path to the SQLite database file to use for
+/// design-time operations. If provided, this path takes precedence over the `--mode` option.
+/// </para>
+/// <para>
+/// <strong>Note:</strong> Only one of the options that select the database source should be used at a time
+/// (for example, `--use-in-memory-db` and `--db-path` should not both be specified).
 /// </para>
 /// <example>
 /// <para><strong>Example Usage</strong></para>
@@ -50,6 +54,12 @@ namespace Oxygen.Editor.Data;
 /// <code><![CDATA[
 /// dotnet ef migrations add InitialCreate -- --mode=dev
 /// ]]></code>
+/// <para>
+/// Using a specific database file path:
+/// </para>
+/// <code><![CDATA[
+/// dotnet ef migrations add InitialCreate -- --db-path="C:\\path\\to\\PersistentState.db"
+/// ]]></code>
 /// </example>
 /// </remarks>
 [SuppressMessage("ReSharper", "UnusedMember.Global", Justification = "Used by EF Core tools")]
@@ -58,39 +68,46 @@ public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<Pers
     /// <summary>
     /// Creates a new instance of <see cref="PersistentState"/> with the specified options.
     /// </summary>
-    /// <param name="args">Arguments passed by the design-time tools. Supports --mode and c options.</param>
+    /// <param name="args">Arguments passed by the design-time tools. Supports --mode, --use-in-memory-db and --db-path options.</param>
     /// <returns>A new instance of <see cref="PersistentState"/>.</returns>
-    /// <exception cref="ArgumentException">Thrown when both `--mode and` `--use-in-memory-db` options are specified.</exception>
+    /// <exception cref="ArgumentException">Thrown when conflicting options are specified.</exception>
     public PersistentState CreateDbContext(string[] args)
     {
         var optionsBuilder = new DbContextOptionsBuilder<PersistentState>();
 
-        ParseCommandLineArgs(args, out var useInMemoryDb, out var mode);
+        ParseCommandLineArgs(args, out var useInMemoryDb, out var mode, out var dbPath);
 
-        switch (useInMemoryDb)
+        if (useInMemoryDb && !string.IsNullOrEmpty(dbPath))
         {
-            case true:
-                _ = optionsBuilder.UseSqlite("Data Source=:memory:");
-                break;
-            default:
-                {
-                    var pathFinderConfig = new PathFinderConfig(
-                        Mode: mode ?? PathFinder.DevelopmentMode,
-                        CompanyName: Constants.Company,
-                        ApplicationName: Constants.Application);
+            throw new ArgumentException("Only one of --use-in-memory-db or --db-path should be specified.", nameof(args));
+        }
 
-                    var pathFinder = new PathFinder(new RealFileSystem(), pathFinderConfig);
-                    var databasePath = Path.Combine(pathFinder.LocalAppData, "PersistentState.db");
+        if (useInMemoryDb)
+        {
+            _ = optionsBuilder.UseSqlite("Data Source=:memory:");
+        }
+        else if (!string.IsNullOrEmpty(dbPath))
+        {
+            // Use the explicitly provided database path
+            _ = optionsBuilder.UseSqlite($"Data Source={dbPath}");
+        }
+        else
+        {
+            var pathFinderConfig = new PathFinderConfig(
+                Mode: mode ?? PathFinder.DevelopmentMode,
+                CompanyName: Constants.Company,
+                ApplicationName: Constants.Application);
 
-                    _ = optionsBuilder.UseSqlite($"Data Source={databasePath}");
-                    break;
-                }
+            var pathFinder = new PathFinder(new RealFileSystem(), pathFinderConfig);
+            var databasePath = Path.Combine(pathFinder.LocalAppData, "PersistentState.db");
+
+            _ = optionsBuilder.UseSqlite($"Data Source={databasePath}");
         }
 
         return new PersistentState(optionsBuilder.Options);
     }
 
-    private static void ParseCommandLineArgs(string[] args, out bool useInMemoryDb, out string? mode)
+    private static void ParseCommandLineArgs(string[] args, out bool useInMemoryDb, out string? mode, out string? dbPath)
     {
         // Define command-line options
         var modeOption = new Option<string>(
@@ -102,22 +119,30 @@ public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<Pers
             getDefaultValue: () => false,
             description: "Specifies whether to use an in-memory SQLite database.");
 
+        var dbPathOption = new Option<string?>(
+            "--db-path",
+            description: "Specifies an explicit path to the SQLite database file to use for design-time operations.");
+
         // Create a root command with the options
         var rootCommand = new RootCommand
         {
             modeOption,
             useInMemoryDbOption,
+            dbPathOption,
         };
 
         // Parse the command-line arguments
         var parseResult = rootCommand.Parse(args);
 
-        if (parseResult.HasOption(modeOption) && parseResult.HasOption(useInMemoryDbOption))
-        {
-            throw new ArgumentException("Only one of --mode or --use-in-memory-db should be specified.", paramName: nameof(args));
-        }
-
+        // Get the actual values (not just whether the option was present)
         useInMemoryDb = parseResult.GetValueForOption(useInMemoryDbOption);
         mode = parseResult.GetValueForOption(modeOption);
+        dbPath = parseResult.GetValueForOption(dbPathOption);
+
+        // Only treat this as a conflict when the in-memory flag is true and another DB selection was provided.
+        if (useInMemoryDb && (!string.IsNullOrEmpty(mode) || !string.IsNullOrEmpty(dbPath)))
+        {
+            throw new ArgumentException("Only one of --use-in-memory-db or another DB selection option should be specified.", paramName: nameof(args));
+        }
     }
 }

@@ -7,7 +7,7 @@ namespace Oxygen.Editor.Data;
 /// <summary>
 /// Provides methods for managing settings in the Oxygen Editor.
 /// </summary>
-public interface ISettingsManager
+public interface IEditorSettingsManager
 {
     /// <summary>
     /// Saves a setting for a specific module.
