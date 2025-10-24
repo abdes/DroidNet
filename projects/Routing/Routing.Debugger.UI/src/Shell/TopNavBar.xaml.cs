@@ -23,9 +23,6 @@ public sealed partial class TopNavBar : IDisposable
         typeof(TopNavBar),
         new PropertyMetadata(default(IRouter)));
 
-    [ObservableProperty]
-    private string? url;
-
     private IDisposable? routerEventsSub;
 
     /// <summary>
@@ -39,6 +36,9 @@ public sealed partial class TopNavBar : IDisposable
     {
         this.InitializeComponent();
     }
+
+    [ObservableProperty]
+    public partial string? Url { get; set; }
 
     /// <summary>
     /// Gets or sets the router instance used for navigation.
