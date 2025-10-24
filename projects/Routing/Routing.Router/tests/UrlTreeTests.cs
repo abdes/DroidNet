@@ -10,7 +10,7 @@ using Moq;
 namespace DroidNet.Routing.Tests;
 
 /// <summary>
-/// Contains unit tests for the <see cref="UrlTree" /> class.
+///     Contains unit tests for the <see cref="UrlTree" /> class.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]

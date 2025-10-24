@@ -200,8 +200,6 @@ public class DefaultUrlParserTests
     [DataRow("/primary(left:../(a//sub:b))")]
     [DataRow("/primary(left:a/(b//sub:b))")]
     [DataRow("/primary(left:a//right:b)")]
-    [DataRow("/primary(left:a)")]
-    [DataRow("/primary(left:a//right:b)")]
     [DataRow("/primary/(more//left:a//right:b)")]
     [DataRow("/(app:Home/Welcome//dock:left(1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
     [DataRow("/(dock:(app:Home/Welcome//1:One;pinned//2:Two;below=1//3:Three;pinned;above=2//4:Four))")]
