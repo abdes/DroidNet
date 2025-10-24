@@ -2,6 +2,10 @@
     "editor.rulers": [
         80,
         {
+            "column": 100,
+            "color": "#118baa"
+        },
+        {
             "column": 120,
             "color": "#ffcc00"
         },
