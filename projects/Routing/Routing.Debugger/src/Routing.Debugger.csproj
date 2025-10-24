@@ -70,7 +70,9 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
