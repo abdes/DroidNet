@@ -6,7 +6,7 @@
     xmlns:cm="using:DroidNet.Controls.Menus">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/DroidNet.Controls.Menus/TransparentButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/TransparentButton.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <!--  Lightweight convenience style used for small icon/hamburger buttons  -->
