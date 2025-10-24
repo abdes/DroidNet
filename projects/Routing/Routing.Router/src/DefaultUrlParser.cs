@@ -163,16 +163,28 @@ public class DefaultUrlParser : IUrlParser
             allowDots = string.Equals(segment.Path, "..", StringComparison.Ordinal);
         }
 
-        // Eventually parse children inside (...)
+        // Eventually parse children inside (...).
+        // NOTE: Treat a parenthesis group immediately following segments as children of the
+        // last parsed primary segment regardless of whether a '/' precedes the '('.
+        // Historically the parser treated '(' without a preceding slash as a sibling group at the
+        // same level which made the syntactic forms "/a(b)" and "/a(b)" behave differently.
+        // Prefer the semantics that parens following a segment attach to that segment.
         var children = new Dictionary<OutletName, IUrlSegmentGroup>();
-        if (remaining.PeekStartsWith("/("))
+
+        // If we have parsed primary segments and the next token is '(' (with or without a
+        // preceding '/'), attach the parsed parens as children of the primary segment group.
+        if (segments.Count > 0 && (remaining.PeekStartsWith("/(") || remaining.PeekStartsWith("(")))
         {
-            remaining = remaining[1..]; // Skip the '/'
+            // consume optional leading '/'
+            _ = remaining.ConsumeOptional('/');
             children = this.ParseParens(allowPrimary: true, ref remaining);
         }
 
         Dictionary<OutletName, IUrlSegmentGroup> res = [];
-        if (remaining.PeekStartsWith("("))
+
+        // If there is still a '(' left (and we didn't attach it to primary segments above),
+        // parse it as a group at the current level.
+        if (remaining.PeekStartsWith("(") && segments.Count == 0)
         {
             res = this.ParseParens(allowPrimary, ref remaining);
         }
@@ -371,6 +383,13 @@ public class DefaultUrlParser : IUrlParser
         var segmentGroups = new Dictionary<OutletName, IUrlSegmentGroup>();
         remaining.Capture('(');
         if (remaining.Length == 0)
+        {
+            throw new UriFormatException("group was not closed");
+        }
+
+        // Reject immediate nested '(' with no segment between '(' characters as malformed
+        // e.g. "( ( ..." or "((..." is not valid syntax and should raise an error.
+        if (remaining.PeekStartsWith("("))
         {
             throw new UriFormatException("group was not closed");
         }
