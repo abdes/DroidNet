@@ -12,6 +12,7 @@ using DroidNet.Docking.Layouts.GridFlow;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -27,10 +28,10 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     private readonly IDisposable routerEventsSub;
     private readonly IRouter router;
     private readonly ILogger logger;
+    private readonly GridFlowLayout layout;
+    private readonly IDocker docker;
+    private readonly DispatcherQueue dispatcherQueue;
     private IDisposable? layoutChangedSub;
-
-    [ObservableProperty]
-    private UIElement content = new Grid();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="WorkSpaceLayout"/> class.
@@ -50,8 +51,9 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
         this.logger = logger;
 
         this.router = router;
-
-        var layout = new GridFlowLayout(dockViewFactory);
+        this.dispatcherQueue = hostingContext.Dispatcher;
+        this.docker = docker;
+        this.layout = new GridFlowLayout(dockViewFactory);
 
         this.routerEventsSub = router.Events.Subscribe(HandleRouterEvent);
 
@@ -67,44 +69,16 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
                     this.layoutChangedSub?.Dispose();
                     break;
 
-                // At the end of the navigation cycle, we need to take into account changes that
-                // resulted from the new URL. We also resume listening to docker layout changes
-                // that are not the result of navigation.
                 case NavigationEnd:
                 case NavigationError:
-                    var options = ((NavigationEvent)@event).Options;
-                    if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
-                    {
-                        docker.Layout(layout);
-                        this.Content = layout.CurrentGrid;
-                    }
-                    else
-                    {
-                        Debug.WriteLine(
-                            $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
-                    }
-
-                    // Layout changes can happen in a burst because a change to one panel can trigger changes in
-                    // other panels. We throttle the burst and only sync with router after the burst is finished.
-                    this.layoutChangedSub = Observable
-                        .FromEventPattern<EventHandler<LayoutChangedEventArgs>, LayoutChangedEventArgs>(
-                            h => docker.LayoutChanged += h,
-                            h => docker.LayoutChanged -= h)
-                        .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
-                        .Select(eventPattern => Observable.FromAsync(async () =>
-                        {
-                            Debug.WriteLine($"Workspace layout changed because {eventPattern.EventArgs.Reason}");
-                            await hostingContext.Dispatcher.EnqueueAsync(() => this.SyncWithRouterAsync(eventPattern.EventArgs.Reason)).ConfigureAwait(true);
-                        }))
-                        .Concat()
-                        .Subscribe();
-                    break;
-
                 default: // Ignore
                     break;
             }
         }
     }
+
+    [ObservableProperty]
+    public partial UIElement Content { get; set; } = new Grid();
 
     /// <summary>
     /// Gets or sets the active route for the workspace layout.
@@ -113,7 +87,44 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     public IActiveRoute? ActiveRoute { get; set; }
 
     /// <inheritdoc/>
-    public void Dispose() => this.routerEventsSub.Dispose();
+    public void Dispose()
+    {
+        this.routerEventsSub.Dispose();
+        this.layoutChangedSub?.Dispose();
+    }
+
+    /// <summary>
+    ///     Updates the workspace layout based on the provided navigation options.
+    /// </summary>
+    /// <param name="options">The navigation options containing information for updating the layout.</param>
+    internal void UpdateLayout(NavigationOptions options)
+    {
+        if (options.AdditionalInfo is not AdditionalInfo { RebuildLayout: false })
+        {
+            this.docker.Layout(this.layout);
+            this.Content = this.layout.CurrentGrid;
+        }
+        else
+        {
+            Debug.WriteLine(
+                $"Not updating workspace because {nameof(AdditionalInfo.RebuildLayout)} is false");
+        }
+
+        // Layout changes can happen in a burst because a change to one panel can trigger changes in
+        // other panels. We throttle the burst and only sync with router after the burst is finished.
+        this.layoutChangedSub = Observable
+            .FromEventPattern<EventHandler<LayoutChangedEventArgs>, LayoutChangedEventArgs>(
+                h => this.docker.LayoutChanged += h,
+                h => this.docker.LayoutChanged -= h)
+            .Throttle(TimeSpan.FromMilliseconds(LayoutSyncThrottleInMs))
+            .Select(eventPattern => Observable.FromAsync(async () =>
+            {
+                Debug.WriteLine($"Workspace layout changed because {eventPattern.EventArgs.Reason}");
+                await this.dispatcherQueue.EnqueueAsync(() => this.SyncWithRouterAsync(eventPattern.EventArgs.Reason)).ConfigureAwait(true);
+            }))
+            .Concat()
+            .Subscribe();
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,

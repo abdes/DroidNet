@@ -22,7 +22,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 {
     private readonly ILogger logger;
     private readonly Docker docker = new();
-    private readonly IDisposable routerEventsSub;
+    private readonly IDisposable? routerEventsSub;
     private readonly List<RoutedDockable> deferredDockables = [];
 
     private IActiveRoute? activeRoute;
@@ -39,15 +39,32 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
     public WorkSpaceViewModel(HostingContext hostingContext, IRouter router, IDockViewFactory dockViewFactory, ILoggerFactory? loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger("Workspace") ?? NullLoggerFactory.Instance.CreateLogger("Workspace");
-        this.Layout = new WorkSpaceLayout(hostingContext, router, this.docker, dockViewFactory, this.logger);
 
         this.routerEventsSub = router.Events.OfType<ActivationComplete>()
             .Subscribe(
                 @event =>
                 {
-                    this.Layout.ActiveRoute = this.activeRoute;
-                    this.PlaceDocks(@event.Options);
+                    this.LogActivationComplete(@event.Context.State?.RootNode);
+                    _ = hostingContext.DispatcherScheduler.DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (this.Layout is null)
+                        {
+                            this.LogNoLayout();
+                            return;
+                        }
+
+                        this.PlaceDocks(@event.Options);
+
+                        // The workspace in a child of the root node, and the layout works with
+                        // the ActiveRoute for this ViewModel.
+                        var myActiveRoute = @event.Context.State!.RootNode.Children.First().Children.First();
+                        this.LogMyActiveRoute(myActiveRoute);
+                        _ = this.Layout?.ActiveRoute = myActiveRoute;
+                        this.Layout?.UpdateLayout(@event.Options);
+                    });
                 });
+
+        this.Layout = new WorkSpaceLayout(hostingContext, router, this.docker, dockViewFactory, this.logger);
     }
 
     /// <summary>
@@ -111,11 +128,13 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         {
             this.Layout.Dispose();
             this.docker.Dispose();
-            this.routerEventsSub.Dispose();
+            this.routerEventsSub?.Dispose();
         }
 
         this.disposed = true;
     }
+
+#pragma warning disable SA1204 // Static elements should appear before instance elements
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -141,7 +160,35 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
         Message = "An error occurred while loading content for route `{Path}`: {ErrorMessage}")]
     private static partial void LogDockablePlacementError(ILogger logger, string? path, string errorMessage);
 
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Activation complete for route `{Path}`")]
+    private static partial void LogActivationComplete(ILogger logger, string? path);
+
+    private void LogActivationComplete(IActiveRoute? route)
+        => LogActivationComplete(this.logger, route?.ToString());
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "No Layout after activation was completed")]
+    private static partial void LogNoLayout(ILogger logger);
+
+    private void LogNoLayout() => LogNoLayout(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Docking workspace active route is: `{Path}`")]
+    private static partial void LogMyActiveRoute(ILogger logger, string? path);
+
+    private void LogMyActiveRoute(IActiveRoute? route)
+        => LogMyActiveRoute(this.logger, route?.ToString());
+
     private static int PutRootDockablesFirst(RoutedDockable left, RoutedDockable right) => left.DeferredDockingInfo.AnchorId != null ? 1 : right.DeferredDockingInfo.AnchorId == null ? 0 : -1;
+
+#pragma warning restore SA1204 // Static elements should appear before instance elements
 
     private void LoadApp(object viewModel)
     {

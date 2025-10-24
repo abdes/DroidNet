@@ -4,18 +4,25 @@
 
 using DroidNet.Mvvm;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Routing.Debugger.UI.Docks;
 
 /// <summary>
-/// The ViewModel for the embedded application dock.
+///     The ViewModel for the embedded application dock.
 /// </summary>
 /// <param name="appViewModel">The embedded application ViewModel.</param>
 /// <param name="viewLocator">The view locator to be used to resolve the application view model into a view.</param>
-/// <param name="logger">A logger to be used by this class.</param>
-public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator viewLocator, ILogger logger)
+/// <param name="loggerFactory">
+///     We inject a <see cref="ILoggerFactory" /> to be able to silently use a <see cref="NullLogger" /> if we fail to
+///     obtain a <see cref="ILogger" /> from the Dependency Injector.
+/// </param>
+public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator viewLocator, ILoggerFactory loggerFactory)
 {
+    private readonly ILogger logger = loggerFactory?.CreateLogger(typeof(DefaultViewLocator).Namespace!) ??
+                                      NullLoggerFactory.Instance.CreateLogger(typeof(DefaultViewLocator).Namespace!);
+
     private UIElement? appView;
 
     /// <summary>
@@ -54,7 +61,7 @@ public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator vie
         {
             this.ErrorDescription
                 = "the application dock must have exactly one dockable and its view model cannot be null";
-            LogContentLoadingError(logger, this.ErrorDescription);
+            LogContentLoadingError(this.logger, this.ErrorDescription);
             return;
         }
 
@@ -67,6 +74,6 @@ public partial class EmbeddedAppViewModel(object? appViewModel, IViewLocator vie
 
         this.ErrorDescription
             = $"the resolved view for {appViewModel} is {(resolved is null ? "null" : "not a UIElement")}";
-        LogContentLoadingError(logger, this.ErrorDescription);
+        LogContentLoadingError(this.logger, this.ErrorDescription);
     }
 }
