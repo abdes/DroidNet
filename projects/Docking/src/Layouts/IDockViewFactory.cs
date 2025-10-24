@@ -53,5 +53,5 @@ public interface IDockViewFactory
     /// </list>
     /// </para>
     /// </remarks>
-    UIElement CreateViewForDock(IDock dock);
+    public UIElement CreateViewForDock(IDock dock);
 }

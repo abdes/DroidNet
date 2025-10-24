@@ -50,17 +50,9 @@ internal partial class BinaryTreeNode<T>(T storedValue) : IDisposable
                 return;
             }
 
-            if (this.left is not null)
-            {
-                this.left.parent = null;
-            }
-
+            _ = this.left?.parent = null;
             this.left = value;
-
-            if (value is not null)
-            {
-                value.parent = this;
-            }
+            _ = value?.parent = this;
         }
     }
 
@@ -82,17 +74,9 @@ internal partial class BinaryTreeNode<T>(T storedValue) : IDisposable
                 return;
             }
 
-            if (this.right is not null)
-            {
-                this.right.parent = null;
-            }
-
+            _ = this.right?.parent = null;
             this.right = value;
-
-            if (value is not null)
-            {
-                value.parent = this;
-            }
+            _ = value?.parent = this;
         }
     }
 

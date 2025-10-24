@@ -36,5 +36,5 @@ internal interface IOptimizingDocker
     /// </list>
     /// </para>
     /// </remarks>
-    void ConsolidateUp(IDockGroup startingGroup);
+    public void ConsolidateUp(IDockGroup startingGroup);
 }

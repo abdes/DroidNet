@@ -25,23 +25,7 @@ public partial class DockPanelViewModel : ObservableRecipient
     private bool initialSizeUpdate = true;
     private Size previousSize;
 
-    [ObservableProperty]
-    private string title;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ToggleDockingModeCommand))]
-    [NotifyCanExecuteChangedFor(nameof(MinimizeCommand))]
-    [NotifyCanExecuteChangedFor(nameof(CloseCommand))]
-    private bool isInDockingMode;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(ToggleDockingModeCommand))]
-    private bool isBeingDocked;
-
     private IDock? dockBeingDocked;
-
-    [ObservableProperty]
-    private IDockable? activeDockable; // Add this line
 
     /// <summary>
     /// Initializes a new instance of the <see cref="DockPanelViewModel"/> class.
@@ -63,10 +47,26 @@ public partial class DockPanelViewModel : ObservableRecipient
 
         this.dock = dock;
         this.docker = dock.Docker;
-        this.title = dock.ToString() ?? "EMPTY";
+        this.Title = dock.ToString() ?? "EMPTY";
         this.Dockables = dock.Dockables;
-        this.activeDockable = dock.ActiveDockable; // Initialize active dockable
+        this.ActiveDockable = dock.ActiveDockable; // Initialize active dockable
     }
+
+    [ObservableProperty]
+    public partial IDockable? ActiveDockable { get; set; }
+
+    [ObservableProperty]
+    public partial string Title { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleDockingModeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(MinimizeCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CloseCommand))]
+    public partial bool IsInDockingMode { get; set; }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(ToggleDockingModeCommand))]
+    public partial bool IsBeingDocked { get; set; }
 
     /// <summary>
     /// Gets the collection of dockables in the dock.

@@ -21,7 +21,7 @@ public interface IDock : IDisposable
     /// <value>
     /// A <see cref="DockId"/> representing the unique identifier of the dock.
     /// </value>
-    DockId Id { get; }
+    public DockId Id { get; }
 
     /// <summary>
     /// Gets a read-only collection of dockable entities contained within the dock.
@@ -29,7 +29,7 @@ public interface IDock : IDisposable
     /// <value>
     /// A <see cref="ReadOnlyObservableCollection{T}"/> of <see cref="IDockable"/> representing the dockable entities.
     /// </value>
-    ReadOnlyObservableCollection<IDockable> Dockables { get; }
+    public ReadOnlyObservableCollection<IDockable> Dockables { get; }
 
     /// <summary>
     /// Gets the currently active dockable entity within the dock.
@@ -37,7 +37,7 @@ public interface IDock : IDisposable
     /// <value>
     /// An <see cref="IDockable"/> representing the currently active dockable entity, or <see langword="null"/> if no dockable is active.
     /// </value>
-    IDockable? ActiveDockable { get; }
+    public IDockable? ActiveDockable { get; }
 
     /// <summary>
     /// Gets the current docking state of the dock.
@@ -45,7 +45,7 @@ public interface IDock : IDisposable
     /// <value>
     /// A <see cref="DockingState"/> representing the current docking state of the dock.
     /// </value>
-    DockingState State { get; }
+    public DockingState State { get; }
 
     /// <summary>
     /// Gets a value indicating whether the dock can be minimized.
@@ -53,7 +53,7 @@ public interface IDock : IDisposable
     /// <value>
     /// <see langword="true"/> if the dock can be minimized; otherwise, <see langword="false"/>.
     /// </value>
-    bool CanMinimize { get; }
+    public bool CanMinimize { get; }
 
     /// <summary>
     /// Gets a value indicating whether the dock can be closed.
@@ -61,7 +61,7 @@ public interface IDock : IDisposable
     /// <value>
     /// <see langword="true"/> if the dock can be closed; otherwise, <see langword="false"/>.
     /// </value>
-    bool CanClose { get; }
+    public bool CanClose { get; }
 
     /// <summary>
     /// Gets the anchor point of the dock within the workspace.
@@ -69,7 +69,7 @@ public interface IDock : IDisposable
     /// <value>
     /// An <see cref="Anchor"/> representing the anchor point of the dock, or <see langword="null"/> if the dock is not anchored.
     /// </value>
-    Anchor? Anchor { get; }
+    public Anchor? Anchor { get; }
 
     /// <summary>
     /// Gets the width of the dock.
@@ -77,7 +77,7 @@ public interface IDock : IDisposable
     /// <value>
     /// A <see cref="Width"/> representing the width of the dock.
     /// </value>
-    Width Width { get; }
+    public Width Width { get; }
 
     /// <summary>
     /// Gets the height of the dock.
@@ -85,7 +85,7 @@ public interface IDock : IDisposable
     /// <value>
     /// A <see cref="Height"/> representing the height of the dock.
     /// </value>
-    Height Height { get; }
+    public Height Height { get; }
 
     /// <summary>
     /// Gets the docker that manages this dock.
@@ -93,7 +93,7 @@ public interface IDock : IDisposable
     /// <value>
     /// An <see cref="IDocker"/> representing the docker that manages this dock, or <see langword="null"/> if the dock is not managed by any docker.
     /// </value>
-    IDocker? Docker { get; }
+    public IDocker? Docker { get; }
 
     /// <summary>
     /// Adopts a dockable entity into the dock at the specified position.
@@ -108,7 +108,7 @@ public interface IDock : IDisposable
     /// dock.AdoptDockable(dockable, DockablePlacement.First);
     /// ]]></code>
     /// </example>
-    void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last);
+    public void AdoptDockable(IDockable dockable, DockablePlacement position = DockablePlacement.Last);
 
     /// <summary>
     /// Disowns a dockable entity from the dock.
@@ -122,7 +122,7 @@ public interface IDock : IDisposable
     /// dock.DisownDockable(dockable);
     /// ]]></code>
     /// </example>
-    void DisownDockable(IDockable dockable);
+    public void DisownDockable(IDockable dockable);
 
     /// <summary>
     /// Destroys a dockable entity within the dock.
@@ -136,7 +136,7 @@ public interface IDock : IDisposable
     /// dock.DestroyDockable(dockable);
     /// ]]></code>
     /// </example>
-    void DestroyDockable(IDockable dockable);
+    public void DestroyDockable(IDockable dockable);
 
     /// <summary>
     /// Migrates all dockable entities from this dock to another dock.
@@ -150,5 +150,5 @@ public interface IDock : IDisposable
     /// sourceDock.MigrateDockables(destinationDock);
     /// ]]></code>
     /// </example>
-    void MigrateDockables(IDock destinationDock);
+    public void MigrateDockables(IDock destinationDock);
 }
