@@ -4,7 +4,6 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Bootstrap;
@@ -17,7 +16,6 @@ using DroidNet.Routing;
 using DryIoc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -81,20 +79,31 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
-            _ = bootstrap.Configure()
-                .WithConfiguration(AddConfigurationFiles, ConfigureOptionsPattern)
-                .WithLoggingAbstraction()
+            // Configure aned Build the host so the final container is available.
+            _ = bootstrap
+                .Configure(options => options.WithOutputConsole())
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
-                .WithAppServices(ConfigureApplicationServices)
-                .WithAppServices(ConfigurePersistentStateDatabase)
-                .WithAppServices(RegisterViewsAndViewModels);
+                .Build();
 
-            _ = bootstrap.Build();
+            // Final container is now available.
+            var container = bootstrap.Container;
+            try
+            {
+                InitializeSettings(container);
+                ConfigureApplicationServices(container);
+                ConfigurePersistentStateDatabase(container);
 
-            var db = bootstrap.Container.Resolve<PersistentState>();
-            db.Database.Migrate();
+                var dbPath = container.Resolve<IOxygenPathFinder>().StateDatabasePath;
+                Log.Information("DB path: {DbPath}", dbPath);
+
+                RegisterViewsAndViewModels(container);
+            }
+            catch (Exception ex) when (ex is ContainerException or InvalidOperationException)
+            {
+                // No EditorSettingsManager registered - skip initialization
+            }
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -162,50 +171,65 @@ public static partial class Program
         },
     ]);
 
-    private static IEnumerable<string> AddConfigurationFiles(
-        IPathFinder finder,
-        IFileSystem fileSystem,
-        IConfiguration config)
+    private static void InitializeSettings(DryIoc.IContainer container)
     {
-        Debug.Assert(finder is not null, "must setup the PathFinderService before adding config files");
+        // Register Config module
+        _ = container.WithConfig();
 
-        return
-        [
-            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-            finder.GetConfigFilePath("LocalSettings.json"),
-        ];
+        // If the bootstrapper included `Config` module, it will have added a EditorSettingsManager.
+        // Configure settings source, and initialize it now so sources are loaded and
+        // services receive their initial values.
+        var manager = container.Resolve<SettingsManager>();
+        Debug.Assert(manager is not null, "SettingsManager should be registered");
+
+        var pathFinder = container.GetRequiredService<IPathFinder>();
+        _ = container
+            .WithJsonConfigSource(
+                "aura.decoration",
+                pathFinder.GetConfigFilePath("aura.json"),
+                watch: true)
+            .WithJsonConfigSource(
+                "aura.appearance",
+                pathFinder.GetConfigFilePath("settings.json"),
+                watch: true);
+
+        manager.InitializeAsync().GetAwaiter().GetResult();
+        _ = manager.AutoSave = true;
     }
-
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
 
     private static void ConfigurePersistentStateDatabase(IContainer container)
     {
-        container.RegisterInstance(
-            new DbContextOptionsBuilder<PersistentState>()
-                .UseLoggerFactory(container.Resolve<ILoggerFactory>())
-                .EnableDetailedErrors()
-                .EnableSensitiveDataLogging()
-                .UseSqlite(
-                    $"Data Source={container.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
-                .Options);
-        container.Register<PersistentState>(Reuse.Singleton);
+        // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
+        container.RegisterDelegate(
+            resolver => new PersistentState(
+                new DbContextOptionsBuilder<PersistentState>()
+                    .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
+                    .EnableDetailedErrors()
+                    .EnableSensitiveDataLogging()
+                    .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
+                    .Options),
+            Reuse.Transient);
     }
 
     private static void ConfigureApplicationServices(this IContainer container)
     {
+        // Register Aura window management with all required services
+        _ = container
+            .WithAura(options => options
+            .WithAppearanceSettings()
+            .WithDecorationSettings()
+            .WithBackdropService()
+            .WithChromeService()
+            .WithThemeModeService());
+
         // Core services
         container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
-        // Domain-specific services
-        container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
-
         container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
-        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);
-        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Singleton);
+        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Transient);
+        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Transient);
 
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
@@ -218,7 +242,7 @@ public static partial class Program
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
-        container.Register<ISettingsManager, SettingsManager>(Reuse.Singleton);
+        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton);
         container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Transient);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 

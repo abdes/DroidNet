@@ -47,12 +47,14 @@ public partial class ProjectBrowserService : IProjectBrowserService
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
     private readonly IProjectUsageService projectUsage;
+    private readonly ITemplateUsageService templateUsage;
     private readonly Lazy<Task<ProjectBrowserSettings>> lazySettings;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
     /// </summary>
     /// <param name="projectUsage">Service for reading and updating project usage data.</param>
+    /// <param name="templateUsage">Service for recording template usage metrics.</param>
     /// <param name="projectManager">Service for managing project operations.</param>
     /// <param name="finder">Service for locating system paths.</param>
     /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
@@ -68,14 +70,16 @@ public partial class ProjectBrowserService : IProjectBrowserService
     /// </remarks>
     public ProjectBrowserService(
         IProjectUsageService projectUsage,
+        ITemplateUsageService templateUsage,
         IProjectManagerService projectManager,
         IOxygenPathFinder finder,
         IStorageProvider localStorage,
-        ISettingsManager settingsManager,
+        IEditorSettingsManager settingsManager,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
         this.projectUsage = projectUsage;
+        this.templateUsage = templateUsage;
         this.projectManager = projectManager;
         this.finder = finder;
 
@@ -119,6 +123,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
     }
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Project creation reports errors as boolean results and logs details for diagnostics.")]
     public async Task<bool> NewProjectFromTemplate(
         ITemplateInfo templateInfo,
         string projectName,
@@ -162,14 +167,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
                 projectInfo.Name = projectName;
                 if (await this.projectManager.SaveProjectInfoAsync(projectInfo).ConfigureAwait(true))
                 {
-                    // Update the recently used project entry for the project being saved
-                    await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
-
-                    // Update the last save location
-                    await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName).ConfigureAwait(true);
-
-                    // Open the project
-                    return await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
+                    return await this.FinalizeProjectCreationAsync(projectInfo, templateInfo.Location).ConfigureAwait(true);
                 }
             }
 
@@ -267,6 +265,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
     }
 
     /// <inheritdoc/>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Project opening should not crash the UI; errors are logged and surfaced via the return value.")]
     public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
     {
         try
@@ -350,6 +349,35 @@ public partial class ProjectBrowserService : IProjectBrowserService
         {
             Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
             throw;
+        }
+    }
+
+    private async Task<bool> FinalizeProjectCreationAsync(IProjectInfo projectInfo, string templateLocation)
+    {
+        await this.projectUsage.UpdateProjectUsageAsync(projectInfo.Name, projectInfo.Location!).ConfigureAwait(true);
+
+        await this.TryUpdateLastSaveLocation(new DirectoryInfo(projectInfo.Location!).Parent!.FullName).ConfigureAwait(true);
+
+        var opened = await this.OpenProjectAsync(projectInfo).ConfigureAwait(true);
+        if (!opened)
+        {
+            return false;
+        }
+
+        await this.TryUpdateTemplateUsageAsync(templateLocation).ConfigureAwait(true);
+        return true;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Template usage tracking failures must not block project creation; log and continue.")]
+    private async Task TryUpdateTemplateUsageAsync(string templateLocation)
+    {
+        try
+        {
+            await this.templateUsage.UpdateTemplateUsageAsync(templateLocation).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to update template usage for `{templateLocation}`: {ex.Message}");
         }
     }
 

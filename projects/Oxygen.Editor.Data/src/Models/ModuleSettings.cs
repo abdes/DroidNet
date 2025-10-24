@@ -19,7 +19,7 @@ namespace Oxygen.Editor.Data.Models;
 /// well as properties to track the state of the settings.
 /// <para>
 /// Properties marked with the <see cref="PersistedAttribute"/> will be saved and loaded by the
-/// <see cref="SettingsManager"/>. These properties are automatically persisted to and retrieved from
+/// <see cref="EditorSettingsManager"/>. These properties are automatically persisted to and retrieved from
 /// the underlying storage when the <see cref="SaveAsync"/> and <see cref="LoadAsync"/> methods are
 /// called.
 /// </para>
@@ -35,21 +35,21 @@ namespace Oxygen.Editor.Data.Models;
 ///     [Persisted]
 ///     public int MySetting { get; set; }
 ///
-///     public MyModuleSettings(SettingsManager settingsManager, string moduleName)
+///     public MyModuleSettings(EditorSettingsManager settingsManager, string moduleName)
 ///         : base(settingsManager, moduleName)
 ///     {
 ///     }
 /// }
 ///
 /// // Usage
-/// var settingsManager = new SettingsManager(context);
+/// var settingsManager = new EditorSettingsManager(context);
 /// var mySettings = new MyModuleSettings(settingsManager, "MyModule");
 /// await mySettings.LoadAsync();
 /// mySettings.MySetting = 42;
 /// await mySettings.SaveAsync();
 /// ]]>
 /// </example>
-public abstract class ModuleSettings(ISettingsManager settingsManager, string moduleName) : INotifyPropertyChanged
+public abstract class ModuleSettings(IEditorSettingsManager settingsManager, string moduleName) : INotifyPropertyChanged
 {
     private readonly HashSet<string> modifiedProperties = [];
     private bool isLoaded;
@@ -134,7 +134,7 @@ public abstract class ModuleSettings(ISettingsManager settingsManager, string mo
             try
             {
                 var defaultValue = property.GetValue(this);
-                var loadSettingMethod = typeof(ISettingsManager).GetMethod(nameof(ISettingsManager.LoadSettingAsync), [typeof(string), typeof(string), property.PropertyType]);
+                var loadSettingMethod = typeof(IEditorSettingsManager).GetMethod(nameof(IEditorSettingsManager.LoadSettingAsync), [typeof(string), typeof(string), property.PropertyType]);
                 if (loadSettingMethod != null)
                 {
                     var genericMethod = loadSettingMethod.MakeGenericMethod(property.PropertyType);

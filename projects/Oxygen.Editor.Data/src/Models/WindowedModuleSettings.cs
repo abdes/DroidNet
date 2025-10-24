@@ -14,7 +14,7 @@ namespace Oxygen.Editor.Data.Models;
 /// <remarks>
 /// The <see cref="WindowedModuleSettings"/> class extends the <see cref="ModuleSettings"/> class to
 /// include properties for managing the position and size of a window. These properties are
-/// automatically persisted and retrieved using the <see cref="SettingsManager"/> when the
+/// automatically persisted and retrieved using the <see cref="EditorSettingsManager"/> when the
 /// <see cref="ModuleSettings.SaveAsync"/> and <see cref="ModuleSettings.LoadAsync"/> methods are called.
 /// <para>
 /// The <see cref="WindowPosition"/> property represents the coordinates of the window's top-left corner,
@@ -27,14 +27,14 @@ namespace Oxygen.Editor.Data.Models;
 /// <![CDATA[
 /// public class MyWindowedModuleSettings : WindowedModuleSettings
 /// {
-///     public MyWindowedModuleSettings(SettingsManager settingsManager, string moduleName)
+///     public MyWindowedModuleSettings(EditorSettingsManager settingsManager, string moduleName)
 ///         : base(settingsManager, moduleName)
 ///     {
 ///     }
 /// }
 ///
 /// // Usage
-/// var settingsManager = new SettingsManager(context);
+/// var settingsManager = new EditorSettingsManager(context);
 /// var mySettings = new MyWindowedModuleSettings(settingsManager, "MyWindowedModule");
 /// await mySettings.LoadAsync();
 /// mySettings.WindowPosition = new Point(100, 100);
@@ -57,7 +57,7 @@ public abstract class WindowedModuleSettings : ModuleSettings
     /// </remarks>
     [SuppressMessage("ReSharper", "ConvertToPrimaryConstructor", Justification = "don't want to capture settingsManager, which is also captured in the base class")]
     [SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "Don't want to capture settingsManager, which is also captured in the base class")]
-    protected WindowedModuleSettings(ISettingsManager settingsManager, string moduleName)
+    protected WindowedModuleSettings(IEditorSettingsManager settingsManager, string moduleName)
         : base(settingsManager, moduleName)
     {
     }
