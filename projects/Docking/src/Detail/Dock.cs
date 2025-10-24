@@ -89,10 +89,7 @@ public abstract partial class Dock : IDock
         internal set
         {
             this.width = value;
-            if (this.ActiveDockable != null)
-            {
-                this.ActiveDockable.PreferredWidth = value;
-            }
+            _ = this.ActiveDockable?.PreferredWidth = value;
         }
     }
 
@@ -109,10 +106,7 @@ public abstract partial class Dock : IDock
         internal set
         {
             this.height = value;
-            if (this.ActiveDockable != null)
-            {
-                this.ActiveDockable.PreferredHeight = value;
-            }
+            _ = this.ActiveDockable?.PreferredHeight = value;
         }
     }
 
@@ -281,11 +275,7 @@ public abstract partial class Dock : IDock
         // If the dockable is becoming active, deactivate the current active dockable.
         if (dockable.IsActive)
         {
-            if (this.ActiveDockable != null)
-            {
-                this.ActiveDockable.AsDockable().IsActive = false;
-            }
-
+            _ = this.ActiveDockable?.AsDockable().IsActive = false;
             this.ActiveDockable = dockable;
         }
 
