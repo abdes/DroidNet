@@ -201,13 +201,18 @@ public static partial class Program
     {
         // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
         container.RegisterDelegate(
-            resolver => new PersistentState(
-                new DbContextOptionsBuilder<PersistentState>()
-                    .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
-                    .EnableDetailedErrors()
-                    .EnableSensitiveDataLogging()
+            resolver =>
+            {
+                var path = resolver.Resolve<IOxygenPathFinder>().StateDatabasePath;
+                Log.Information("Configuring PersistentState database at path: {DbPath}", path);
+                return new PersistentState(
+                    new DbContextOptionsBuilder<PersistentState>()
+                        .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
+                        .EnableDetailedErrors()
+                        .EnableSensitiveDataLogging()
                     .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
-                    .Options),
+                    .Options);
+            },
             Reuse.Transient);
     }
 
