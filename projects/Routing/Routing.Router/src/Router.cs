@@ -267,7 +267,7 @@ public sealed partial class Router : IRouter, IDisposable
     private static void ApplyAddChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
         // Compute the path based on the view model type and the active route config
-        Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
+        Debug.Assert(change.ViewModelType != null, "Expecting ViewModelType not to be null");
         var config = MatchViewModelType(activeRoute.Config, change);
 
         var urlSegmentGroup = new UrlSegmentGroup(
@@ -308,7 +308,7 @@ public sealed partial class Router : IRouter, IDisposable
             {
                 case RouteChangeAction.Add:
                     // Compute the path based on the view model type and the active route config
-                    Debug.Assert(change.ViewModelType != null, "change.ViewModelType != null");
+                    Debug.Assert(change.ViewModelType != null, "Expecting ViewModelType not to be null");
                     var config = MatchViewModelType(activeRoute.Config, change);
 
                     var urlSegmentGroup = new UrlSegmentGroup(
@@ -369,8 +369,11 @@ public sealed partial class Router : IRouter, IDisposable
     {
         Debug.Assert(change.ViewModelType != null, "changemust have a valid ViewModel");
 
+        // The dock is under workspace under root
+        var workspaceConfig = config.Children[0].Children[0];
+
         var childConfig
-            = config.Children?.FirstOrDefault(configChild => configChild.ViewModelType == change.ViewModelType);
+            = workspaceConfig.Children?.FirstOrDefault(configChild => configChild.ViewModelType == change.ViewModelType);
 
         Debug.Assert(
             childConfig is not null,
