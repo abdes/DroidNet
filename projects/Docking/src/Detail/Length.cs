@@ -141,7 +141,7 @@ public abstract partial class Length
 
         if (length[^1] == '*')
         {
-            length = length.Remove(length.Length - 1);
+            length = length[..^1];
             if (string.IsNullOrEmpty(length))
             {
                 numericValue = 1;

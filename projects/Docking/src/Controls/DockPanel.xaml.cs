@@ -48,9 +48,6 @@ public sealed partial class DockPanel
 
     private IDisposable? sizeChangedSubscription;
 
-    [ObservableProperty]
-    private Visibility overlayVisibility = Visibility.Collapsed;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="DockPanel"/> class.
     /// </summary>
@@ -81,6 +78,9 @@ public sealed partial class DockPanel
         this.pointerEnterEventHandler = (_, _) => this.ShowOverlay();
         this.pointerExitEventHandler = (_, _) => this.HideOverlay();
     }
+
+    [ObservableProperty]
+    public partial Visibility OverlayVisibility { get; set; } = Visibility.Collapsed;
 
     /// <summary>
     /// Gets or sets the converter used to get an icon for the dockable entity.
