@@ -27,10 +27,11 @@
     <ItemGroup>
         <Manifest Include="$(ApplicationManifest)" />
     </ItemGroup>
-    <ItemGroup>
-        <None Include="Assets\**\*">
-            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-        </None>
+
+    <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
+    <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
+    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
+        <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
     </ItemGroup>
 
     <ItemGroup>
