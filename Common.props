@@ -108,9 +108,39 @@
     <ItemGroup Condition="'$(Configuration)' == 'Release'">
         <PackageReference Include="NuGet.Build.Tasks.Pack" PrivateAssets="all" Pack="false" />
     </ItemGroup>
-    <ItemGroup Condition="'$(IsPackable)'=='True'">
+
+    <!-- Detect project README.md presence -->
+    <!-- Typical project layout in this repository:
+         projects/<ProjectName>/src/<ProjectName>.csproj
+         Example: 'projects/Aura/src/Aura.csproj'
+
+         Project-level README.md files live at the project root (next to the folder that contains 'src').
+         Example README for the data layer: 'projects/Aura/README.md' -->
+    <PropertyGroup>
+        <_ProjectReadmePath>$(MSBuildProjectDirectory)\..\README.md</_ProjectReadmePath>
+        <HasProjectReadme Condition="Exists('$(_ProjectReadmePath)')">true</HasProjectReadme>
+    </PropertyGroup>
+
+    <ItemGroup>
         <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" Pack="true" PackagePath="\" />
         <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" Pack="true" PackagePath="\" />
+        <!-- Include README.md from the project directory if present -->
+        <None Include="$(_ProjectReadmePath)" Condition="'$(HasProjectReadme)' == 'true'" Pack="true" PackagePath="\" />
+    </ItemGroup>
+
+    <!-- If a project has a README.md, tell NuGet to use it as the package readme file -->
+    <PropertyGroup Condition="'$(IsPackable)'=='True' AND '$(HasProjectReadme)' == 'true'">
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Include all assets as Content -->
+        <Content Include="Assets\**\*">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+            <Pack>true</Pack>
+            <PackagePath>contentFiles\any\any\Assets</PackagePath>
+            <BuildAction>Content</BuildAction>
+        </Content>
     </ItemGroup>
 
     <ItemDefinitionGroup>
@@ -228,11 +258,6 @@
             </PropertyGroup>
             <ItemGroup>
                 <Manifest Include="$(ApplicationManifest)" />
-            </ItemGroup>
-            <ItemGroup>
-                <None Include="Assets\**\*">
-                    <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-                </None>
             </ItemGroup>
         </When>
         <When Condition="$(MSBuildProjectName.EndsWith('.App')) And !$(MSBuildProjectName.EndsWith('.UI.Tests'))">
