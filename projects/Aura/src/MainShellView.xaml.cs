@@ -196,7 +196,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         var appWindow = this.ViewModel.Window.AppWindow;
         var scaleAdjustment = this.CustomTitleBar.XamlRoot.RasterizationScale;
 
-        // Note: Height is now controlled by XAML binding to Context.Decoration.TitleBar.Height
+        // Note: Height is now controlled by XAML binding to Context.Decorations.TitleBar.Height
         // Configure system insets for caption buttons
         // The system insets tell us how much space Windows needs for the caption buttons.
         // We must reserve this full space with empty padding columns.

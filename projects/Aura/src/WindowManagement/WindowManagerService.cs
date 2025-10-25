@@ -7,7 +7,6 @@ using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
-using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
@@ -619,7 +618,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// </description>
     /// </item>
     /// <item>
-    /// <term>No Decoration</term>
+    /// <term>No Decorations</term>
     /// <description>If no settings service is registered, returns null (window gets no Aura chrome).</description>
     /// </item>
     /// </list>
@@ -642,6 +641,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
         if (this.decorationSettingsService is not null)
         {
+            // TODO: listen for changes on the decoration settings service and update the context accordingly as long as it is not disposed
             this.LogDecorationResolvedFromSettings(windowId, category);
             return this.decorationSettingsService.Settings.GetEffectiveDecoration(category);
         }

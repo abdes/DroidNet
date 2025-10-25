@@ -2,8 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.WindowManagement;
@@ -22,7 +23,7 @@ namespace DroidNet.Aura.WindowManagement;
 /// They will be garbage collected when the WindowContext is no longer referenced.
 /// </para>
 /// </remarks>
-public sealed class WindowContext
+public sealed partial class WindowContext : ObservableObject
 {
     private IMenuSource? menuSource;
 
@@ -54,7 +55,8 @@ public sealed class WindowContext
     /// <summary>
     /// Gets the optional decoration options for the window.
     /// </summary>
-    public Decoration.WindowDecorationOptions? Decoration { get; init; }
+    [ObservableProperty]
+    public partial WindowDecorationOptions? Decorations { get; set; }
 
     /// <summary>
     /// Gets the optional metadata for custom window properties.

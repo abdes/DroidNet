@@ -173,7 +173,7 @@ public sealed class WindowDecorationBuilder
         {
             category = WindowCategory.Tool,
             chromeEnabled = false, // Disable system chrome for custom compact title bar
-            titleBar = TitleBarOptions.Default with { Height = 24.0 }, // Compact height
+            titleBar = TitleBarOptions.Default with { Height = 24.0, ShowIcon = false }, // Compact height
             buttons = WindowButtonsOptions.Default with { ShowMinimize = false, ShowMaximize = false },
             backdrop = DefaultBackdrops[WindowCategory.Tool],
         };

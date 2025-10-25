@@ -57,7 +57,7 @@ public sealed partial class WindowContextFactory : IWindowContextFactory
             Category = category,
             Title = title ?? window.Title ?? $"Untitled {category} Window",
             CreatedAt = DateTimeOffset.UtcNow,
-            Decoration = decoration,
+            Decorations = decoration,
             Metadata = metadata,
         };
 

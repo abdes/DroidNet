@@ -85,7 +85,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
                     Category = category,
                     Title = title ?? window.Title ?? $"Untitled {category} Window",
                     CreatedAt = DateTimeOffset.UtcNow,
-                    Decoration = decoration,
+                    Decorations = decoration,
                     Metadata = metadata,
                 });
     });

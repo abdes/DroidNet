@@ -80,16 +80,13 @@ public sealed class MenuOptionsJsonConverter : JsonConverter<MenuOptions>
             }
         }
 
-        if (string.IsNullOrWhiteSpace(menuProviderId))
-        {
-            throw new JsonException("MenuOptions requires a non-empty menuProviderId.");
-        }
-
-        return new MenuOptions
-        {
-            MenuProviderId = menuProviderId,
-            IsCompact = isCompact,
-        };
+        return string.IsNullOrWhiteSpace(menuProviderId)
+            ? throw new JsonException("MenuOptions requires a non-empty menuProviderId.")
+            : new MenuOptions
+            {
+                MenuProviderId = menuProviderId,
+                IsCompact = isCompact,
+            };
     }
 
     /// <summary>

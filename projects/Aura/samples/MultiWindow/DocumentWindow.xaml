@@ -40,7 +40,7 @@
                 Height="16"
                 Margin="8,0,0,0"
                 VerticalAlignment="Center"
-                Source="/Assets/DroidNet.png" />
+                Source="/DroidNet.Aura/Assets/DroidNet.png" />
 
             <!--  Window Title  -->
             <TextBlock

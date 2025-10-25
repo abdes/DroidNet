@@ -84,7 +84,7 @@ public sealed partial class WindowBackdropService : IDisposable
         ArgumentNullException.ThrowIfNull(context);
 
         var window = context.Window;
-        var backdrop = context.Decoration?.Backdrop;
+        var backdrop = context.Decorations?.Backdrop;
 
         // If no backdrop is specified, don't apply anything
         if (!backdrop.HasValue)
@@ -162,8 +162,8 @@ public sealed partial class WindowBackdropService : IDisposable
         ArgumentException.ThrowIfNullOrWhiteSpace(category);
 
         this.ApplyBackdrop(ctx
-            => category.Equals(ctx.Decoration?.Category)
-                && ctx.Decoration?.Backdrop is null);
+            => category.Equals(ctx.Decorations?.Category)
+                && ctx.Decorations?.Backdrop is null);
     }
 
     /// <summary>

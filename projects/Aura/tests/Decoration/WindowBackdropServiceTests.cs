@@ -297,7 +297,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = WindowCategory.Main,
             Title = "Window 1",
             CreatedAt = DateTimeOffset.UtcNow,
-            Decoration = decoration1,
+            Decorations = decoration1,
         };
         var context2 = new WindowContext
         {
@@ -306,7 +306,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = WindowCategory.Tool,
             Title = "Window 2",
             CreatedAt = DateTimeOffset.UtcNow,
-            Decoration = decoration2,
+            Decorations = decoration2,
         };
 
         var openWindows = new List<WindowContext> { context1, context2 };
@@ -317,7 +317,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         try
         {
             // Act - Only apply to Main category windows
-            sut.ApplyBackdrop(ctx => ctx.Decoration?.Category.Equals(WindowCategory.Main) == true);
+            sut.ApplyBackdrop(ctx => ctx.Decorations?.Category.Equals(WindowCategory.Main) == true);
 
             // Assert
             _ = window1.SystemBackdrop.Should().NotBeNull("Main window should have backdrop applied");
@@ -474,7 +474,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = new WindowCategory("Test"),
             Title = window.Title ?? "Test Window",
             CreatedAt = DateTimeOffset.UtcNow,
-            Decoration = decoration,
+            Decorations = decoration,
         };
 
     private static Window MakeSmallWindow(string? title = null)
