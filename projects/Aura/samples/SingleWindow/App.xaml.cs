@@ -16,6 +16,7 @@ namespace DroidNet.Samples.WinPackagedApp;
 /// <summary>
 ///     Provides application-specific behavior to supplement the default <see cref="Application" /> class.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "never for partial Application class")]
 public partial class App
 {
     private readonly IRouter router;

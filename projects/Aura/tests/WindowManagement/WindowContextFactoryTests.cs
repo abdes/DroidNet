@@ -69,7 +69,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
             _ = context.Category.Should().Be(new WindowCategory("Test"));
             _ = context.Title.Should().Be("My Test Window");
             _ = context.CreatedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(1));
-            _ = context.Decoration.Should().BeNull();
+            _ = context.Decorations.Should().BeNull();
             _ = context.Metadata.Should().BeNull();
             _ = context.MenuSource.Should().BeNull();
         }
@@ -133,9 +133,9 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
                 decoration: decoration);
 
             // Assert
-            _ = context.Decoration.Should().Be(decoration);
-            _ = context.Decoration!.Backdrop.Should().Be(BackdropKind.Mica);
-            _ = context.Decoration.ChromeEnabled.Should().BeTrue();
+            _ = context.Decorations.Should().Be(decoration);
+            _ = context.Decorations.Backdrop.Should().Be(BackdropKind.Mica);
+            _ = context.Decorations.ChromeEnabled.Should().BeTrue();
         }
         finally
         {
@@ -198,7 +198,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
         var factory = new WindowContextFactory(
             this.mockLogger.Object,
             this.mockLoggerFactory.Object,
-            new[] { mockProvider.Object });
+            [mockProvider.Object]);
 
         try
         {
@@ -289,7 +289,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
         var factory = new WindowContextFactory(
             this.mockLogger.Object,
             this.mockLoggerFactory.Object,
-            new[] { mockProvider1.Object, mockProvider2.Object, mockProvider3.Object });
+            [mockProvider1.Object, mockProvider2.Object, mockProvider3.Object]);
 
         try
         {
@@ -331,7 +331,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
         var factory = new WindowContextFactory(
             this.mockLogger.Object,
             this.mockLoggerFactory.Object,
-            new[] { mockProvider.Object });
+            [mockProvider.Object]);
 
         try
         {
@@ -373,7 +373,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
         var factory = new WindowContextFactory(
             this.mockLogger.Object,
             this.mockLoggerFactory.Object,
-            new[] { mockProvider.Object });
+            [mockProvider.Object]);
 
         var contexts = new ConcurrentBag<WindowContext>();
 
@@ -441,7 +441,7 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
         var factory = new WindowContextFactory(
             this.mockLogger.Object,
             this.mockLoggerFactory.Object,
-            new[] { mockProvider.Object });
+            [mockProvider.Object]);
 
         try
         {

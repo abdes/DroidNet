@@ -20,13 +20,6 @@
       <NoWarn>$(NoWarn),1573,1591,1712,NU5118</NoWarn>
     </PropertyGroup>
 
-    <ItemGroup>
-        <None Include="..\README.md">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
-    </ItemGroup>
-
     <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
     <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
     <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">

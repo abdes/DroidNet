@@ -64,7 +64,7 @@ public sealed partial class WindowChromeService
         ArgumentNullException.ThrowIfNull(context);
 
         var window = context.Window;
-        var decoration = context.Decoration;
+        var decoration = context.Decorations;
 
         // If no decoration is specified, use default chrome behavior (enabled)
         var chromeEnabled = decoration?.ChromeEnabled ?? true;

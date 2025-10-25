@@ -15,18 +15,27 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Windows.ApplicationModel;
+using Windows.Storage;
 
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Represents the view model for the main shell of the application, providing decorations and enhancements to the window content.
+///     Represents the view model for the main shell of the application, providing decorations and
+///     enhancements to the window content.
 /// </summary>
 /// <remarks>
-/// The <see cref="MainShellViewModel"/> class is responsible for managing the main shell view of the application. It handles window-related events, manages appearance settings, and provides a customizable menu for user interactions.
-/// It decorates the window with a custom title bar, an application icon, and provides a collapsible main menu and a flyout menu for settings and theme selection.
+///     The <see cref="MainShellViewModel"/> class is responsible for managing the main shell view
+///     of the application. It handles window-related events, manages appearance settings, and
+///     provides a customizable menu for user interactions. It decorates the window with a custom
+///     title bar, an application icon, and provides a collapsible main menu and a flyout menu for
+///     settings and theme selection.
 /// </remarks>
 public partial class MainShellViewModel : AbstractOutletContainer
 {
@@ -37,9 +46,11 @@ public partial class MainShellViewModel : AbstractOutletContainer
         ["System Default"] = ElementTheme.Default,
     };
 
+    private readonly ILogger logger;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private readonly IWindowManagerService? windowManagerService;
+    private readonly IPathFinder pathFinder;
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
@@ -49,18 +60,27 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// </summary>
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher and application information.</param>
+    /// <param name="pathFinder">The relativePath finder used to resolve file and directory paths.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
+    /// <param name="loggerFactory">
+    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
+    /// </param>
     public MainShellViewModel(
         IRouter router,
         HostingContext hostingContext,
+        IPathFinder pathFinder,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
-        IWindowManagerService? windowManagerService = null)
+        IWindowManagerService? windowManagerService = null,
+        ILoggerFactory? loggerFactory = null)
     {
         Debug.Assert(
             hostingContext.Dispatcher is not null,
             "DispatcherQueue in hosting context is not null when UI thread has been started");
+        this.logger = loggerFactory?.CreateLogger<MainShellViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<MainShellViewModel>();
         this.dispatcherQueue = hostingContext.Dispatcher;
+        this.pathFinder = pathFinder;
 
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
@@ -132,6 +152,15 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public partial WindowContext? Context { get; set; }
 
     /// <summary>
+    /// Gets the icon source for the window title bar.
+    /// </summary>
+    public IconSource IconSource => new BitmapIconSource()
+    {
+        ShowAsMonochrome = false,
+        UriSource = this.GetAssetUri(this.Context?.Decorations?.TitleBar.IconPath ?? "DroidNet.png"),
+    };
+
+    /// <summary>
     /// Gets the content view model for the primary outlet.
     /// </summary>
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
@@ -192,6 +221,77 @@ public partial class MainShellViewModel : AbstractOutletContainer
         // TODO: settings view and dialog
     }
 
+    private Uri? GetAssetUri(string relativePath)
+    {
+        Uri? uri;
+        try
+        {
+            _ = Package.Current; // throws if unpackaged
+            _ = TryPackagedAssetAtPath($"Assets/{relativePath}", out uri)
+                || TryPackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
+            this.LogIconAsset(isPackaged: true, relativePath, uri);
+            return uri;
+        }
+        catch (InvalidOperationException)
+        {
+            // Unpackaged app
+        }
+
+        _ = TryUnpackagedAssetAtPath($"Assets/{relativePath}", out uri)
+            || TryUnpackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
+        this.LogIconAsset(isPackaged: false, relativePath, uri);
+
+        return uri;
+
+        bool TryPackagedAssetAtPath(string relativePath, out Uri? uri)
+        {
+            var candidateUri = new Uri($"ms-appx:///{relativePath}");
+            try
+            {
+                // Works for packaged apps
+                var file = StorageFile.GetFileFromApplicationUriAsync(candidateUri).GetAwaiter().GetResult();
+                uri = candidateUri;
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch (Exception ex)
+            {
+                this.LogAssetFileNotFound(isPackaged: true, relativePath, ex);
+                uri = null;
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+            return uri is not null;
+        }
+
+        bool TryUnpackagedAssetAtPath(string relativePath, out Uri? uri)
+        {
+            try
+            {
+                var fullPath = Path.Combine(
+                    this.pathFinder.ProgramData,
+                    relativePath.Replace('/', Path.DirectorySeparatorChar));
+                if (Path.Exists(fullPath))
+                {
+                    uri = new Uri(fullPath);
+                }
+                else
+                {
+                    this.LogAssetFileNotFound(isPackaged: false, relativePath);
+                    uri = null;
+                }
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch (Exception ex)
+            {
+                this.LogAssetFileNotFound(isPackaged: false, relativePath, ex);
+                uri = null;
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+            return uri is not null;
+        }
+    }
+
     /// <summary>
     /// Updates the MainMenu property from the WindowContext's MenuSource.
     /// </summary>
@@ -212,7 +312,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
             .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
 
         // Use the menu from the window context if available, otherwise fallback to settings menu
-        this.MainMenu = windowContext?.MenuSource ?? this.SettingsMenu;
+        this.MainMenu = windowContext?.MenuSource;
     }
 
     /// <summary>
@@ -288,7 +388,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         Debug.Assert(this.Window is not null, "an activated ViewModel must always have a Window");
 
         // Only extend content into title bar if chrome is enabled
-        var chromeEnabled = this.Context?.Decoration?.ChromeEnabled ?? true;
+        var chromeEnabled = this.Context?.Decorations?.ChromeEnabled ?? true;
         this.Window.ExtendsContentIntoTitleBar = chromeEnabled;
 
         if (chromeEnabled)

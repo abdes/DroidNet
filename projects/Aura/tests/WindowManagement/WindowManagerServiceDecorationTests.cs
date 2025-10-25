@@ -111,10 +111,10 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration.Should().Be(explicitDecoration);
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Tool); // Tool preset
-            _ = context.Decoration.Buttons.ShowMaximize.Should().BeFalse(); // Tool characteristic
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Should().Be(explicitDecoration);
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Tool); // Tool preset
+            _ = context.Decorations.Buttons.ShowMaximize.Should().BeFalse(); // Tool characteristic
         }
         finally
         {
@@ -154,9 +154,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Tool);
-            _ = context.Decoration.Buttons.ShowMaximize.Should().BeFalse(); // Tool default
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Tool);
+            _ = context.Decorations.Buttons.ShowMaximize.Should().BeFalse(); // Tool default
         }
         finally
         {
@@ -194,7 +194,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Decoration.Should().BeNull(); // No decoration applied
+            _ = context.Decorations.Should().BeNull(); // No decoration applied
         }
         finally
         {
@@ -247,9 +247,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             _ = createdContexts.Should().HaveCount(ConcurrentCallCount);
             foreach (var context in createdContexts)
             {
-                _ = context.Decoration.Should().NotBeNull();
-                _ = context.Decoration!.Category.Should().Be(WindowCategory.Tool);
-                _ = context.Decoration.Buttons.ShowMaximize.Should().BeFalse();
+                _ = context.Decorations.Should().NotBeNull();
+                _ = context.Decorations.Category.Should().Be(WindowCategory.Tool);
+                _ = context.Decorations.Buttons.ShowMaximize.Should().BeFalse();
             }
         }
         finally
@@ -296,9 +296,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration.Should().Be(explicitDecoration);
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Main); // Main preset
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Should().Be(explicitDecoration);
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Main); // Main preset
         }
         finally
         {
@@ -348,9 +348,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Document);
-            _ = context.Decoration.Backdrop.Should().Be(BackdropKind.Mica); // Document default
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Document);
+            _ = context.Decorations.Backdrop.Should().Be(BackdropKind.Mica); // Document default
         }
         finally
         {
@@ -389,9 +389,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Main).ConfigureAwait(true);
 
             // Assert
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Main);
-            _ = context.Decoration.TitleBar.Height.Should().Be(40.0); // Main characteristic
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Main);
+            _ = context.Decorations.TitleBar.Height.Should().Be(40.0); // Main characteristic
         }
         finally
         {
@@ -430,9 +430,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Tool).ConfigureAwait(true);
 
             // Assert
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Tool);
-            _ = context.Decoration.Buttons.ShowMaximize.Should().BeFalse(); // Tool characteristic
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Tool);
+            _ = context.Decorations.Buttons.ShowMaximize.Should().BeFalse(); // Tool characteristic
         }
         finally
         {
@@ -471,9 +471,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Document).ConfigureAwait(true);
 
             // Assert
-            _ = context.Decoration.Should().NotBeNull();
-            _ = context.Decoration!.Category.Should().Be(WindowCategory.Document);
-            _ = context.Decoration.Backdrop.Should().Be(BackdropKind.Mica); // Document characteristic
+            _ = context.Decorations.Should().NotBeNull();
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Document);
+            _ = context.Decorations.Backdrop.Should().Be(BackdropKind.Mica); // Document characteristic
         }
         finally
         {

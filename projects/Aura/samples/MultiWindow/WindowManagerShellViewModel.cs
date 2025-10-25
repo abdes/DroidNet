@@ -272,7 +272,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 Category = context.Category,
                 IsActive = context.IsActive,
                 CreatedAt = context.CreatedAt.ToLocalTime(),
-                Backdrop = context.Decoration?.Backdrop ?? BackdropKind.None,
+                Backdrop = context.Decorations?.Backdrop ?? BackdropKind.None,
             });
         }
 

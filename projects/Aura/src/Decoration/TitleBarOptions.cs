@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.UI.Xaml;
-
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
@@ -64,6 +62,12 @@ public sealed record TitleBarOptions
     /// Default is <see langword="true"/>.
     /// </value>
     public bool ShowIcon { get; init; } = true;
+
+    /// <summary>
+    /// Gets the relative path to the window icon file, resolved at runtime by looking for an asset
+    /// under the application's `Assets` directory, or in Aura's assembly Assets.
+    /// </summary>
+    public string IconPath { get; init; } = "DroidNet.png";
 
     /// <summary>
     /// Gets the drag region behavior for window movement interaction.

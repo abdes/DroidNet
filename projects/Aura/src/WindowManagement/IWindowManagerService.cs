@@ -44,7 +44,7 @@ public interface IWindowManagerService : IDisposable
     /// <exception cref="InvalidOperationException">Thrown when window creation fails.</exception>
     /// <remarks>
     /// <para>
-    /// Decoration resolution priority:
+    /// Decorations resolution priority:
     /// </para>
     /// <list type="number">
     /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
@@ -72,7 +72,7 @@ public interface IWindowManagerService : IDisposable
     /// <returns>The created <see cref="WindowContext"/>.</returns>
     /// <remarks>
     /// <para>
-    /// Decoration resolution priority:
+    /// Decorations resolution priority:
     /// </para>
     /// <list type="number">
     /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
@@ -150,7 +150,7 @@ public interface IWindowManagerService : IDisposable
     /// such as windows created by the routing system. The window must not already be tracked.
     /// </para>
     /// <para>
-    /// Decoration resolution priority:
+    /// Decorations resolution priority:
     /// </para>
     /// <list type="number">
     /// <item><description>Explicit <paramref name="decoration"/> parameter (highest priority)</description></item>
