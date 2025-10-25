@@ -224,17 +224,13 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private Uri? GetAssetUri(string relativePath)
     {
         Uri? uri;
-        try
+
+        if (IsPackaged())
         {
-            _ = Package.Current; // throws if unpackaged
             _ = TryPackagedAssetAtPath($"Assets/{relativePath}", out uri)
-                || TryPackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
+                    || TryPackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
             this.LogIconAsset(isPackaged: true, relativePath, uri);
             return uri;
-        }
-        catch (InvalidOperationException)
-        {
-            // Unpackaged app
         }
 
         _ = TryUnpackagedAssetAtPath($"Assets/{relativePath}", out uri)
@@ -242,6 +238,21 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.LogIconAsset(isPackaged: false, relativePath, uri);
 
         return uri;
+
+        [DebuggerNonUserCode]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "just testing for packaged or not")]
+        static bool IsPackaged()
+        {
+            try
+            {
+                _ = Package.Current;
+                return true;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
         bool TryPackagedAssetAtPath(string relativePath, out Uri? uri)
         {
