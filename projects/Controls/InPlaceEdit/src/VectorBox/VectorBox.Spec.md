@@ -43,7 +43,7 @@ Implement as a styled custom control (partial-class files + `VectorBox.xaml`), *
 #### Vector and Dimension
 
 - **`VectorValue`** (struct, writable DP) — Aggregate numeric backing for the vector (non-nullable). Holds numeric values for all components. This DP does **not** track whether components are indeterminate (use per-component `*IsIndeterminate` DPs for that). Consumers who only care about numeric values should use `VectorValue` or `GetValues()` and `SetValues()`.
-- **`Dimension`** (int, read-only DP; default: 3) — Controls whether the control displays 2 or 3 components (2 or 3). **Recommendation**: Treat as immutable after control creation; changing dimension at runtime is complex and error-prone.
+- **`Dimension`** (int DP; default: 3) — Controls whether the control displays 2 or 3 components. The property is writable, but changing dimension at runtime is complex and error-prone; treat it as effectively immutable after control creation.
 
 #### Per-Component Numeric DPs
 
@@ -83,10 +83,8 @@ The following properties control the control-level label (for the entire `Vector
 
 #### Component Labels
 
-- **`LabelPosition ComponentLabelPosition`** (DP; default: `Left`) — Position of per-component labels ("X", "Y", "Z") relative to each internal editor.
+- **`LabelPosition ComponentLabelPosition`** (DP; default: `None`) — Position of per-component labels ("X", "Y", "Z") relative to each internal editor. By default the `VectorBox` hides per-component labels on the internal `NumberBox` instances (the control forces each `NumberBox.LabelPosition` to `None`) and exposes dedicated `TextBlock` label elements in the template (`PartLabelX`, `PartLabelY`, `PartLabelZ`).
 - **`IDictionary<string, LabelPosition> ComponentLabelPositions`** (optional, property; keys: "X", "Y", "Z") — Per-component label position overrides. If a component is not in this dictionary, `ComponentLabelPosition` is used.
-
-By default, each internal editor's `Label` is set to its component name ("X", "Y", "Z").
 
 #### Adjustment Parameters
 
@@ -175,79 +173,30 @@ Returns the current numeric values as an array of floats.
 
 1. **Non-nullable numeric storage**: The control stores non-nullable `float` values at all times.
 2. **Independent concerns**: Numeric values, indeterminate presentation, and validation are coordinated but separate.
-3. **Reentrancy guarding**: Internal updates use a `_isSyncingValues` guard to prevent feedback loops.
-4. **SetCurrentValue usage**: DP updates from code use `SetCurrentValue` to avoid overwriting consumer bindings.
+3. **Reentrancy guarding**: Internal updates use an `isSyncingValues` guard to prevent feedback loops.
+4. **DP update strategy**: The implementation uses DP setters (`SetValue` via the CLR property setters) together with the `isSyncingValues` reentrancy guard when performing programmatic updates. This prevents feedback loops while preserving expected binding behavior.
 
 ### Per-Component Synchronization
 
-When a consumer externally sets a per-component DP (e.g., `XValue = 5.0f`), the control performs the following steps in the DP's `PropertyChangedCallback`:
+When a consumer externally sets a per-component DP (for example `XValue = 5.0f`), the control follows the implementation's synchronization and validation pattern:
 
-1. **Reentrancy check**: If `_isSyncingValues` is true, return early (the change originated from internal synchronization).
-2. **Validation**: Capture old and proposed values, raise the `Validate` event (which the `VectorBox` relays to consumers with `Target` set to the component).
-3. **On validation failure**:
-   - Revert the DP to the old value using `SetCurrentValue` and `_isSyncingValues = true` to suppress feedback.
-   - The internal `NumberBox` automatically enters its invalid visual state.
-   - Return without updating internal state.
-4. **On validation success**:
-   - Set `_isSyncingValues = true`.
-   - Update the internal editor's numeric backing (write internal `NumberBox.NumberValue`).
-   - Clear the corresponding `*IsIndeterminate` flag (via `SetCurrentValue` to avoid binding conflicts).
-   - Update `VectorValue` by composing all current component values.
-   - Set `_isSyncingValues = false`.
-   - Allow the DP change to complete normally (property change notification fires).
+1. Reentrancy check: if `isSyncingValues` is true, the change is ignored because it originated from an internal sync.
+2. Validation: the control creates a `ValidationEventArgs<float>` with the old and proposed values, sets `Target` to the corresponding `Component` enum, and calls `OnValidate(args)` to relay the request to the consumer. Consumers must set `args.IsValid`.
+3. On validation failure: the control reverts the DP to the old value (the implementation uses `SetValue(...)` while respecting the reentrancy guard) and returns; the internal `NumberBox` will show the invalid visual state.
+4. On validation success: the control sets `isSyncingValues = true`, updates the internal `NumberBox.NumberValue`, clears the corresponding `*IsIndeterminate` flag via the DP setter, updates the aggregate `VectorValue`, and finally clears the reentrancy guard.
 
-**Pseudocode example for `OnXValueChanged`:**
-
-```csharp
-private static void OnXValueChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-{
-  var ctrl = (VectorBox)d;
-  var proposed = (float)e.NewValue;
-  var oldVal = (float)e.OldValue;
-
-  // Reentrancy check
-  if (ctrl._isSyncingValues) return;
-
-  // Validation is performed by the internal NumberBox editor
-  // The VectorBox relays its Validate event to consumers with Target set to Component.X
-  var args = new ValidationEventArgs<float>(oldVal, proposed)
-  {
-    Target = Component.X
-  };
-  ctrl.OnValidate(args);
-
-  if (!args.IsValid)
-  {
-    // Revert without triggering validation again
-    ctrl._isSyncingValues = true;
-    try { ctrl.SetCurrentValue(XValueProperty, oldVal); }
-    finally { ctrl._isSyncingValues = false; }
-
-    return;
-  }
-
-  // Accept the value and synchronize
-  ctrl._isSyncingValues = true;
-  try
-  {
-    ctrl.InternalSetComponentValue(Component.X, proposed);
-    ctrl.SetCurrentValue(XIsIndeterminateProperty, false);
-    ctrl.UpdateVectorValue();
-  }
-  finally { ctrl._isSyncingValues = false; }
-}
-```
+The concrete implementation in `VectorBox` uses an instance method to handle these transitions (non-static) and follows a try/finally pattern to ensure the `isSyncingValues` guard is always reset.
 
 ### VectorValue and SetValues Synchronization
 
 When `VectorValue` is set externally or `SetValues()` is called:
 
-1. Set `_isSyncingValues = true`.
+1. Set `isSyncingValues = true`.
 2. Update all internal editor numeric backings.
-3. Update all per-component proxy DPs (`XValue`, `YValue`, `ZValue`) using `SetCurrentValue` to suppress feedback loops.
+3. Update all per-component proxy DPs (`XValue`, `YValue`, `ZValue`) via the DP setters while the `isSyncingValues` reentrancy guard is active to avoid triggering validation callbacks.
 4. **By default**, clear all per-component `*IsIndeterminate` flags (optional `clearIndeterminate` parameter can preserve them).
 5. Update `VectorValue`.
-6. Set `_isSyncingValues = false`.
+6. Set `isSyncingValues = false`.
 7. Allow property change notifications to propagate normally.
 
 These updates do **not** trigger re-validation (the control is the authoritative writer; external validation has already occurred or is not required).
@@ -428,7 +377,7 @@ Avoid unnecessary allocations during pointer drag operations:
 
 - Update only the affected component during drag (not the entire `VectorValue`).
 - Batch internal updates to minimize DP callbacks.
-- Use `_isSyncingValues` guard to prevent redundant validation.
+- Use `isSyncingValues` guard to prevent redundant validation.
 
 ## Implementation Roadmap
 
@@ -463,7 +412,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
 - Verify `SetValues()` atomically updates `VectorValue` and proxy DPs; `ValuesChanged` is raised exactly once.
 - Verify user edits validate correctly; invalid edits prevent commit and set invalid visual state.
 - Verify per-component DP assignments go through validation and synchronization correctly.
-- Test reentrancy guard (`_isSyncingValues`) prevents feedback loops.
+- Test reentrancy guard (`isSyncingValues`) prevents feedback loops.
 - Verify `MaskParser` formatting/parsing for per-component masks (including component-specific overrides).
 - Verify indeterminate presentation: setting `*IsIndeterminate` shows indeterminate display without clearing numeric backing.
 - Verify `Dimension` changes are handled correctly (or document immutability requirement).
@@ -511,10 +460,10 @@ Implement the following types (likely in a separate file or nested in `VectorBox
 
 - [x] **Implement dependency properties**
   - ✅ `VectorValue` (struct, writable, triggers sync).
-  - ✅ `Dimension` (int, read-only, default: 3).
+  - ✅ `Dimension` (int DP, default: 3). (Writable in code; treat as effectively immutable at runtime.)
   - ✅ `ComponentMask` (string, default: `"~.#"`).
   - ✅ `ComponentMasks` (property, optional per-component overrides).
-  - ✅ `ComponentLabelPosition` (LabelPosition, default: Left).
+  - ✅ `ComponentLabelPosition` (LabelPosition, default: None).
   - ✅ `ComponentLabelPositions` (property, optional per-component label overrides).
   - ✅ `XValue`, `YValue`, `ZValue` (float proxies, writable, validation on set).
   - ✅ `XIsIndeterminate`, `YIsIndeterminate`, `ZIsIndeterminate` (bool, writable).
@@ -524,7 +473,7 @@ Implement the following types (likely in a separate file or nested in `VectorBox
   - ✅ `WithPadding` (bool, default: false).
 
 - [x] **Implement core synchronization logic**
-  - ✅ Add `_isSyncingValues` reentrancy guard field.
+  - ✅ Add `isSyncingValues` reentrancy guard field.
   - ✅ Implement `OnApplyTemplate()` to retrieve and set up internal `NumberBox` editors.
   - ✅ Wire up internal `NumberBox.Validate` event relay (set `Target` to `Component` enum value).
   - ✅ Implement DP change callbacks for per-component numeric DPs with full validation and sync logic.
@@ -644,12 +593,12 @@ Implement the following types (likely in a separate file or nested in `VectorBox
 2. **`SetValues()` call** → Update all internal editors → Update all proxy DPs → Update `VectorValue` → Allow property change notifications.
 3. **Internal editor value change** → Validate (relay via `Validate` event) → Propagate to proxy DPs → Update `VectorValue` → Allow property change notifications.
 
-All synchronization must use `_isSyncingValues` guard to prevent feedback loops.
+All synchronization must use `isSyncingValues` guard to prevent feedback loops.
 
 ### Critical Implementation Details
 
 - **Event relay strategy**: The `VectorBox` subscribes to internal `NumberBox.Validate` events and re-exposes them via its own `Validate` event. When relaying, set `ValidationEventArgs<float>.Target` to the `Component` enum value so consumers can discriminate.
-- **SetCurrentValue usage**: Use `SetCurrentValue` instead of `SetValue` when updating DPs from code to preserve consumer bindings.
+- **DP update strategy**: The implementation uses DP setters (`SetValue`) together with the `isSyncingValues` reentrancy guard when performing programmatic updates. This prevents feedback loops while preserving expected binding behavior.
 - **Proxy DP semantics**: `XValue`, `YValue`, `ZValue` are proxy properties that forward to internal editor instances; they are not independent storage.
 - **Indeterminate independence**: Numeric values and indeterminate flags are independent; setting a numeric value does not automatically clear indeterminate (by design), but the default behavior clears it.
 - **Per-component validation**: Validation occurs per-component via the relayed `Validate` event; there is no aggregate vector-level validation.

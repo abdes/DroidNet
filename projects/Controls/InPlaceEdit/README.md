@@ -1,160 +1,30 @@
-# DroidNet In-Place Editable Controls
+# Controls.InPlaceEdit
 
-This library provides a set of lightweight, reusable controls for editing values
-directly in the UI. The controls are designed to integrate with MVVM patterns
-and XAML-based applications, and follow common UI conventions for selection,
-editing, validation and accessibility.
+Lightweight, XAML-friendly in-place editors for WinUI-style applications.
 
-Contents
+This package provides three primary controls designed for MVVM-friendly UIs:
 
-- In-Place Editable Label
-- Number Box
-- Vector Box
-- Common features & events
-- Styling & theming
-- Accessibility
-- Examples
-- License
+- InPlaceEditableLabel — read-only text that can be edited inline or in an overlay.
+- NumberBox — a compact, editable numeric field with drag/scroll adjustments and validation.
+- VectorBox — a composite of per-component NumberBox editors for Vector2/Vector3-style values.
 
-## In-Place Editable Label
+> [!NOTE]
+> This README summarizes the public surface and common usage. For the authoritative API, consult the XML docs and the control source (`src/`).
 
-An `InPlaceEditableLabel` is a display control that shows a read-only value
-(rendered as a `TextBlock`) and allows the user to edit it in place. The control
-supports two editing modes:
+## Highlights
 
-- Inline replacement: the `TextBlock` is replaced by a `TextBox` at the same
-  location while the user edits.
-- Overlay (flyout): a `TextBox` overlay or flyout is shown above the label for
-  editing.
+- Small, templatable controls that follow the same UX patterns (display vs edit, validation, visual states) used across the Controls.* family.
+- Validation is event-driven: each control exposes a `Validate` event that allows the host to accept/reject proposed values.
+- Number adjustments via pointer drag and mouse wheel (configurable step/multiplier).
+- VectorBox coordinates multiple NumberBox instances and exposes per-component proxy dependency properties and indeterminate presentation flags.
 
-Key features
+## Quick start
 
-- Double-click (or programmatic command) to begin editing.
-- Optional validation pipeline that can run on each keystroke (partial
-  validation) or when the edit completes (full validation).
-- Configurable commit/cancel behavior (e.g., Enter commits, Esc cancels).
-- Visual feedback for validation failures (error state styling).
-- Customizable edit template and flyout placement.
+1. Add the project/assembly to your solution and reference `Controls.InPlaceEdit`.
+2. Include the default theme (the assembly provides `Themes/Generic.xaml`).
+3. Use the controls in XAML.
 
-Typical properties
-
-- `Text` — backing value displayed by the label.
-- `IsEditing` — read/write state indicating whether the control is in edit mode.
-- `EditMode` — inline or flyout overlay.
-- `ValidationMode` — partial or full validation.
-
-Events
-
-- `Validate` — raised when the text changes (partial) or when editing completes
-  (full). The handler can accept or reject the change.
-- `EditStarted` / `EditEnded` — lifecycle events for edit sessions.
-
-## Number Box
-
-`NumberBox` is a numeric editor that displays a formatted numeric value (by
-default as a `TextBlock`) and supports in-place editing via the same inline or
-overlay patterns used by the label.
-
-Key features
-
-- Numeric input and parsing for `float` (and optional other numeric types via
-  customization).
-- Optional unit suffix displayed alongside the value.
-- Value adjustment via mouse drag or scroll wheel using a configurable increment
-  step.
-- In-place editing using `TextBox` with validation support.
-- Validation prevents committing invalid numeric values when using drag/scroll
-  increments; the flyout editing will display validation errors visually and
-  prevent commit until valid.
-
-Typical properties
-
-- `Value` — numeric backing value (e.g. `float`).
-- `Unit` — optional unit string shown after the value (e.g., "px", "%").
-- `Step` — increment used for mouse-driven adjustments.
-- `Minimum` / `Maximum` — optional bounds.
-
-Events
-
-- `Validate` — similar to the label control; used to accept or reject proposed
-  value changes.
-- `ValueChanged` — raised when the numeric value is committed.
-
-Usage notes
-
-- Use the `Step` property to control sensitivity when adjusting via mouse
-  movement or scroll wheel.
-- Partial validation is used while changing via mouse/scroll; the control will
-  only apply changes when valid.
-
-## Vector Box
-
-`VectorBox` is a composite control for editing an ordered set of numeric values
-(for example X/Y/Z or a color quadruplet). The control renders a sequence of
-`NumberBox` instances either inline in a row or stacked in a column.
-
-Key features
-
-- Reuses `NumberBox` semantics for each component.
-- Supports per-component validation and a global `Validate` event.
-- Configurable layout (horizontal or vertical), spacing, and headers for each
-  component.
-
-Typical properties
-
-- `Values` — collection of numeric values bound to the UI.
-- `Orientation` — `Horizontal` or `Vertical`.
-
-## Common features & events
-
-Validation
-
-- All in-place editors expose a `Validate` event (or delegate) that the host
-  application can use to implement business rules.
-- Validation can be partial (on every keystroke) or full (on commit) depending
-  on the control and user settings.
-- When validation fails, the controls provide a consistent visual state to
-  indicate the error.
-
-Editing lifecycle
-
-- Controls expose start/end editing events and provide programmatic methods to
-  begin or cancel editing.
-- Default keyboard behavior typically follows platform conventions: `Enter` to
-  commit, `Esc` to cancel.
-
-Data binding & MVVM
-
-- All controls were built with XAML data binding in mind. Bind the `Text`,
-  `Value` or `Values` properties to view model properties and handle `Validate`
-  or `ValueChanged` events in the view model via commands or event handlers.
-
-Notifications
-
-- Controls will raise property-change notifications for relevant dependency or
-  bindable properties so UI frameworks and view models can react.
-
-## Styling & Theming
-
-- Controls are template-driven and expose visual states for normal, focussed and
-  validation-error states.
-- You can override control templates and style the `TextBlock`, `TextBox`, or
-  the overlay flyout to match your application's theme.
-- Use the normal resource mechanisms (implicit styles, theme dictionaries) to
-  provide custom visuals.
-
-## Accessibility
-
-- Controls expose appropriate automation properties for screen readers (e.g.,
-  name and value).
-- Keyboard navigation and focus management follow platform guidelines: tabbing
-  goes into the editor and keyboard commands can commit/cancel edits.
-- Ensure any custom templates preserve logical focus and automation peers for
-  best accessibility behavior.
-
-## Examples
-
-Inline label editing (XAML)
+Example — inline label
 
 ```xaml
 <controls:InPlaceEditableLabel
@@ -164,7 +34,7 @@ Inline label editing (XAML)
     Validate="OnLabelValidate" />
 ```
 
-NumberBox with unit and step (XAML)
+Example — NumberBox
 
 ```xaml
 <controls:NumberBox
@@ -176,30 +46,77 @@ NumberBox with unit and step (XAML)
     Validate="OnNumberValidate" />
 ```
 
-VectorBox example (XAML)
+Example — VectorBox (3D)
 
 ```xaml
 <controls:VectorBox
-    Values="{Binding PositionValues}"
-    Orientation="Horizontal"
+    Dimension="3"
+    XValue="0"
+    YValue="1"
+    ZValue="2"
+    ComponentMask="~.#"
     Validate="OnVectorValidate" />
 ```
 
+## API summary (most-used surface)
+
+### NumberBox
+
+- Value (float) — numeric backing value
+- Step, Minimum, Maximum — adjustment and bounds
+- Unit — optional suffix
+- Validate event — raised on commit/validation
+
+### VectorBox
+
+- Dimension (2 or 3)
+- VectorValue — aggregate struct backing
+- XValue, YValue, ZValue — per-component TwoWay proxy DPs
+- XIsIndeterminate, YIsIndeterminate, ZIsIndeterminate — presentation flags
+- ComponentMask / ComponentMasks — formatting mask(s)
+- IndeterminateDisplayText — text shown when indeterminate
+- Validate event — relayed with a `Target` (component) to indicate which component is being validated
+- Methods: SetValues(...), GetValues()
+
+### InPlaceEditableLabel
+
+- Text
+- IsEditing, EditMode
+- Validate, EditStarted, EditEnded events
+
+For more details see the source files under `src/` (for example `VectorBox.*`, `NumberBox.*`, `InPlaceEditableLabel.*`).
+
+## Styling & templating
+
+All controls are template-driven. The default styles and required template part names are defined in `Themes/Generic.xaml`.
+
+- To restyle, override the control templates and maintain the expected named parts (see control source for `Part` names used in `OnApplyTemplate`).
+- NumberBox exposes formatting/mask options (via `MaskParser`) that you can use to control decimal places, signs, and padding.
+
+## Accessibility
+
+- Controls expose automation properties (name/value) and follow standard keyboard patterns:
+  - Tab / Shift+Tab to move focus
+  - Enter to commit edits
+  - Esc to cancel
+- When creating custom templates, ensure automation peers and focusable elements are preserved.
+
 ## Troubleshooting & tips
 
-- If validation handlers are not firing, ensure the event is wired up in XAML or
-  code-behind and that bindings are correct.
-- When templating controls, remember to keep the `TextBox` element with the
-  expected name if the control template expects it for focus management.
-- For high-frequency changes (e.g. mouse drag on `NumberBox`), prefer partial
-  validation that is cheap; use full validation on commit for expensive checks.
+- If `Validate` handlers don't run, confirm the event is wired in XAML or in code-behind and bindings are correct.
+- When updating multiple vector components at once, prefer `VectorBox.SetValues(...)` to avoid reentrancy and multiple validation cycles.
+- Prefer using the CLR property setters (or `SetValue`) for programmatic DP updates; for multi-component updates use `VectorBox.SetValues(...)` to avoid multiple change notifications. The control internally uses an `isSyncingValues` reentrancy guard while synchronizing programmatic updates to prevent feedback loops.
 
-## License
+## Try it (local development)
 
-These controls are distributed under the MIT license. See `LICENSE` in the
-repository root for details.
+Open the solution in Visual Studio and build the `Controls.InPlaceEdit` project. The project uses standard .NET/MSBuild tooling.
 
----
+> [!TIP]
+> If you make template changes, reload any running demo apps to pick up the modified styles. The default templates live in `Themes/Generic.xaml`.
 
-For more advanced scenarios and API reference, consult the source code and XML
-documentation compiled into the assemblies.
+## Files of interest
+
+- `src/VectorBox/` — VectorBox control and helpers
+- `src/NumberBox/` — NumberBox implementation, mask parser, and input helpers
+- `src/Label/` — InPlaceEditableLabel control and XAML
+- `Themes/Generic.xaml` — default control templates and styles
