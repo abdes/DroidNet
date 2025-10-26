@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Controls">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/NumberBox/NumberBox.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <Style BasedOn="{StaticResource DefaultVectorBoxStyle}" TargetType="local:VectorBox" />
+
+    <Style x:Key="DefaultVectorBoxStyle" TargetType="local:VectorBox">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:VectorBox">
+                    <Border
+                        x:Name="PartBackgroundBorder"
+                        Padding="5"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="4">
+                        <local:CustomGrid
+                            x:Name="PartRootGrid"
+                            Padding="0"
+                            ColumnSpacing="12"
+                            RowSpacing="5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" MinWidth="200" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                x:Name="PartLabelTextBlock"
+                                VerticalAlignment="Center"
+                                Text="{TemplateBinding Label}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
+                            <Grid
+                                x:Name="PartComponentPanel"
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                ColumnSpacing="5"
+                                RowSpacing="5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!--  X Component  -->
+                                <Grid
+                                    Grid.Column="0"
+                                    ColumnSpacing="5"
+                                    RowSpacing="5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="PartLabelX"
+                                        Grid.Column="0"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Text="X" />
+                                    <local:NumberBox
+                                        x:Name="PartNumberBoxX"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Center"
+                                        LabelPosition="None"
+                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                </Grid>
+                                <!--  Y Component  -->
+                                <Grid
+                                    Grid.Column="1"
+                                    ColumnSpacing="5"
+                                    RowSpacing="5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="PartLabelY"
+                                        Grid.Column="0"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Text="Y" />
+                                    <local:NumberBox
+                                        x:Name="PartNumberBoxY"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Center"
+                                        LabelPosition="None"
+                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                </Grid>
+                                <!--  Z Component  -->
+                                <Grid
+                                    Grid.Column="2"
+                                    ColumnSpacing="5"
+                                    RowSpacing="5">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="PartLabelZ"
+                                        Grid.Column="0"
+                                        Margin="0,0,8,0"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center"
+                                        Text="Z" />
+                                    <local:NumberBox
+                                        x:Name="PartNumberBoxZ"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalValueAlignment="Center"
+                                        LabelPosition="None"
+                                        Style="{StaticResource DefaultNumberBoxStyle}" />
+                                </Grid>
+                            </Grid>
+                        </local:CustomGrid>
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <!--  Use the WinUI List item hover brush so the control follows platform styling  -->
+                                <VisualState x:Name="Hover">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartBackgroundBorder.Background" Value="{ThemeResource ListViewItemBackgroundPointerOver}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed" />
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

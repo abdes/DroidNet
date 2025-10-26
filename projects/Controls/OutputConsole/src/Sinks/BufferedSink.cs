@@ -39,8 +39,12 @@ public sealed class BufferedSink(OutputLogBuffer buffer) : ILogEventSink
             Timestamp = logEvent.Timestamp,
             Level = logEvent.Level,
             Message = logEvent.RenderMessage(CultureInfo.CurrentCulture),
-            Source = logEvent.Properties.TryGetValue("SourceContext", out var sc) ? sc.ToString().Trim('"') : null,
-            Channel = logEvent.Properties.TryGetValue("Channel", out var ch) ? ch.ToString().Trim('"') : null,
+            Source = logEvent.Properties.TryGetValue("SourceContext", out var sc)
+                ? sc.ToString(format: null, CultureInfo.CurrentCulture).Trim('"')
+                : null,
+            Channel = logEvent.Properties.TryGetValue("Channel", out var ch)
+                ? ch.ToString(format: null, CultureInfo.CurrentCulture).Trim('"')
+                : null,
             Exception = logEvent.Exception,
             Properties = ConvertProps(logEvent.Properties),
         };
@@ -66,7 +70,7 @@ public sealed class BufferedSink(OutputLogBuffer buffer) : ILogEventSink
         SequenceValue seq => seq.Elements is { Count: 0 } ? [] : MapSeq(seq.Elements),
         StructureValue str => MapStruct(str.Properties),
         DictionaryValue dv => MapDict(dv.Elements),
-        _ => v.ToString(),
+        _ => v.ToString(format: null, CultureInfo.CurrentCulture),
     };
 
     private static object?[] MapSeq(IReadOnlyList<LogEventPropertyValue> items)

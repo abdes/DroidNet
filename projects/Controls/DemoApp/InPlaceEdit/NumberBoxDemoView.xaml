@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.InPlaceEdit.NumberBoxDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:DroidNet.Controls.Demo.InPlaceEdit"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  Reusable panel style for demo borders  -->
+        <Style x:Key="DemoPanelBorderStyle" TargetType="Border">
+            <!--  Padding changed to 16 to align with 4‑epx guideline  -->
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Background" Value="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+    </Page.Resources>
+
+    <Grid>
+        <ScrollViewer>
+            <StackPanel
+                Margin="20"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Spacing="20">
+
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="NumberBox demos" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <controls:NumberBox Label="Basic NumberBox" NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                </Border>
+
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <controls:NumberBox
+                        HorizontalLabelAlignment="Stretch"
+                        Label="Negative Only, -###.##"
+                        Mask="-###.##"
+                        NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+                </Border>
+
+                <!--  Comprehensive NumberBox Control Panel  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="NumberBox Control Panel (All Configuration Options)" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel Spacing="15">
+                        <!--  Label Position Selection  -->
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="Bold" Text="Label Position:" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <RadioButton
+                                    Checked="LabelPosition_Changed"
+                                    Content="Left"
+                                    GroupName="LabelPos"
+                                    Tag="Left" />
+                                <RadioButton
+                                    Checked="LabelPosition_Changed"
+                                    Content="Right"
+                                    GroupName="LabelPos"
+                                    Tag="Right" />
+                                <RadioButton
+                                    Checked="LabelPosition_Changed"
+                                    Content="Top"
+                                    GroupName="LabelPos"
+                                    Tag="Top" />
+                                <RadioButton
+                                    Checked="LabelPosition_Changed"
+                                    Content="Bottom"
+                                    GroupName="LabelPos"
+                                    Tag="Bottom" />
+                                <RadioButton
+                                    Checked="LabelPosition_Changed"
+                                    Content="None"
+                                    GroupName="LabelPos"
+                                    IsChecked="True"
+                                    Tag="None" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!--  Mask Selection  -->
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="Bold" Text="Mask:" />
+                            <ComboBox x:Name="MaskComboBox" SelectionChanged="Mask_Changed">
+                                <ComboBoxItem>~.#</ComboBoxItem>
+                                <ComboBoxItem>~.##</ComboBoxItem>
+                                <ComboBoxItem>###.##</ComboBoxItem>
+                                <ComboBoxItem>###.#°</ComboBoxItem>
+                                <ComboBoxItem>-###.##</ComboBoxItem>
+                                <ComboBoxItem>±###.#</ComboBoxItem>
+                            </ComboBox>
+                        </StackPanel>
+
+                        <!--  Multiplier  -->
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="Bold" Text="Multiplier:" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <RadioButton
+                                    Checked="Multiplier_Changed"
+                                    Content="1"
+                                    GroupName="Multiplier"
+                                    IsChecked="True"
+                                    Tag="1" />
+                                <RadioButton
+                                    Checked="Multiplier_Changed"
+                                    Content="5"
+                                    GroupName="Multiplier"
+                                    Tag="5" />
+                                <RadioButton
+                                    Checked="Multiplier_Changed"
+                                    Content="10"
+                                    GroupName="Multiplier"
+                                    Tag="10" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!--  Value Alignment  -->
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="Bold" Text="Value Alignment:" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <RadioButton
+                                    Checked="ValueAlignment_Changed"
+                                    Content="Left"
+                                    GroupName="ValueAlign"
+                                    Tag="Left" />
+                                <RadioButton
+                                    Checked="ValueAlignment_Changed"
+                                    Content="Center"
+                                    GroupName="ValueAlign"
+                                    IsChecked="True"
+                                    Tag="Center" />
+                                <RadioButton
+                                    Checked="ValueAlignment_Changed"
+                                    Content="Right"
+                                    GroupName="ValueAlign"
+                                    Tag="Right" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!--  The NumberBox  -->
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="Bold" Text="Preview:" />
+                            <controls:NumberBox
+                                x:Name="ConfigurableNumberBox"
+                                HorizontalValueAlignment="Center"
+                                Label="Configurable"
+                                LabelPosition="None"
+                                Mask="~.##"
+                                Multiplier="1" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!--  Indeterminate demo  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Indeterminate demo" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Orientation="Vertical"
+                        Spacing="15">
+                        <controls:NumberBox
+                            x:Name="IndeterminateDemoBox"
+                            IndeterminateDisplayText="-.-"
+                            IsIndeterminate="{x:Bind ViewModel.DemoIsIndeterminate, Mode=TwoWay}"
+                            Label="May be Indeterminate"
+                            LabelPosition="Top"
+                            Mask="~.##"
+                            NumberValue="{x:Bind ViewModel.NumberValue, Mode=TwoWay}" />
+
+                        <StackPanel
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="10">
+                            <ToggleSwitch Header="Indeterminate" IsOn="{x:Bind ViewModel.DemoIsIndeterminate, Mode=TwoWay}" />
+                            <TextBlock VerticalAlignment="Center" Text="Underlying value:" />
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.NumberValue, Mode=OneWay}" />
+                            <TextBlock VerticalAlignment="Center" Text="ViewModel value:" />
+                            <TextBlock VerticalAlignment="Center" Text="{x:Bind ViewModel.DemoNullableValue, Mode=OneWay}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

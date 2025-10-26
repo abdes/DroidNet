@@ -13,23 +13,32 @@ public partial class TransformViewModel : ComponentPropertyEditor
     ///     Gets or sets the X position of the game object in the scene. The position can be abosulte
     ///     (relative to the scene) or relative to the parent object.
     /// </summary>
-    [ObservableProperty] private float? positionX;
+    [ObservableProperty]
+    public partial float? PositionX { get; set; }
 
-    [ObservableProperty] private float? positionY;
+    [ObservableProperty]
+    public partial float? PositionY { get; set; }
 
-    [ObservableProperty] private float? positionZ;
+    [ObservableProperty]
+    public partial float? PositionZ { get; set; }
 
-    [ObservableProperty] private float? rotationX;
+    [ObservableProperty]
+    public partial float? RotationX { get; set; }
 
-    [ObservableProperty] private float? rotationY;
+    [ObservableProperty]
+    public partial float? RotationY { get; set; }
 
-    [ObservableProperty] private float? rotationZ;
+    [ObservableProperty]
+    public partial float? RotationZ { get; set; }
 
-    [ObservableProperty] private float? scaleX;
+    [ObservableProperty]
+    public partial float? ScaleX { get; set; }
 
-    [ObservableProperty] private float? scaleY;
+    [ObservableProperty]
+    public partial float? ScaleY { get; set; }
 
-    [ObservableProperty] private float? scaleZ;
+    [ObservableProperty]
+    public partial float? ScaleZ { get; set; }
 
     /// <inheritdoc />
     public override string Header => "Transform";
