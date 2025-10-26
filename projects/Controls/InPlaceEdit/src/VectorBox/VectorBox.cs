@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -84,6 +85,7 @@ public partial class VectorBox : Control
     private NumberBox? numberBoxX;
     private NumberBox? numberBoxY;
     private NumberBox? numberBoxZ;
+    private ILogger? logger;
 
     private bool isSyncingValues;
     private Dictionary<string, string>? componentMasks;
@@ -115,6 +117,7 @@ public partial class VectorBox : Control
     /// <param name="preserveIndeterminate">Whether to preserve indeterminate flags.</param>
     public void SetValues(float x, float y, float z, bool preserveIndeterminate)
     {
+        this.LogSetValues(x, y, z, preserveIndeterminate);
         try
         {
             this.isSyncingValues = true;
@@ -131,6 +134,11 @@ public partial class VectorBox : Control
             }
 
             this.UpdateVectorValue();
+        }
+        catch (Exception ex)
+        {
+            this.LogException(ex);
+            throw;
         }
         finally
         {
@@ -179,64 +187,93 @@ public partial class VectorBox : Control
 
     private void SetupNumberBoxParts()
     {
-        // Disconnect old event handlers
-        if (this.numberBoxX != null)
-        {
-            this.numberBoxX.Validate -= this.OnNumberBoxValidate;
-        }
+        SetupX();
+        SetupY();
+        SetupZ();
 
-        if (this.numberBoxY != null)
+        void SetupZ()
         {
-            this.numberBoxY.Validate -= this.OnNumberBoxValidate;
-        }
-
-        if (this.numberBoxZ != null)
-        {
-            this.numberBoxZ.Validate -= this.OnNumberBoxValidate;
-        }
-
-        // Retrieve new NumberBox instances
-        this.numberBoxX = this.GetTemplateChild(NumberBoxXPartName) as NumberBox;
-        this.numberBoxY = this.GetTemplateChild(NumberBoxYPartName) as NumberBox;
-        this.numberBoxZ = this.GetTemplateChild(NumberBoxZPartName) as NumberBox;
-
-        // Set up X component
-        if (this.numberBoxX != null)
-        {
-            this.numberBoxX.Validate += this.OnNumberBoxValidate;
-            this.ApplyComponentProperties(this.numberBoxX, "X");
-            this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.NumberValueProperty, nameof(this.XValue));
-            this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.IsIndeterminateProperty, nameof(this.XIsIndeterminate));
-        }
-
-        // Set up Y component
-        if (this.numberBoxY != null)
-        {
-            this.numberBoxY.Validate += this.OnNumberBoxValidate;
-            this.ApplyComponentProperties(this.numberBoxY, "Y");
-            this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.NumberValueProperty, nameof(this.YValue));
-            this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.IsIndeterminateProperty, nameof(this.YIsIndeterminate));
-        }
-
-        // Set up Z component (only if dimension is 3)
-        if (this.numberBoxZ != null)
-        {
-            if (this.Dimension == 3)
+            if (this.numberBoxZ != null)
             {
-                this.numberBoxZ.Validate += this.OnNumberBoxValidate;
-                this.ApplyComponentProperties(this.numberBoxZ, "Z");
-                this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.NumberValueProperty, nameof(this.ZValue));
-                this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.IsIndeterminateProperty, nameof(this.ZIsIndeterminate));
-                this.numberBoxZ.Visibility = Visibility.Visible;
+                this.numberBoxZ.Validate -= this.OnNumberBoxValidate;
             }
-            else
+
+            this.numberBoxZ = this.GetTemplateChild(NumberBoxZPartName) as NumberBox;
+
+            // Set up Z component (only if dimension is 3)
+            if (this.numberBoxZ != null)
             {
-                this.numberBoxZ.Visibility = Visibility.Collapsed;
+                if (this.Dimension == 3)
+                {
+                    this.numberBoxZ.Validate += this.OnNumberBoxValidate;
+
+                    // Propagate logger factory to child NumberBox
+                    this.numberBoxZ.LoggerFactory = this.LoggerFactory;
+                    this.LogNumberBoxAttached("Z");
+                    this.ApplyComponentProperties(this.numberBoxZ, "Z");
+                    this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.NumberValueProperty, nameof(this.ZValue));
+                    this.SetupNumberBoxBinding(this.numberBoxZ, NumberBox.IsIndeterminateProperty, nameof(this.ZIsIndeterminate));
+                    this.numberBoxZ.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    this.numberBoxZ.Visibility = Visibility.Collapsed;
+                }
+            }
+
+            // Hide/show Z label based on dimension
+            _ = this.labelZ?.Visibility = this.Dimension == 3 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        void SetupX()
+        {
+            // Disconnect old event handlers
+            if (this.numberBoxX != null)
+            {
+                this.numberBoxX.Validate -= this.OnNumberBoxValidate;
+            }
+
+            // Retrieve new NumberBox instances
+            this.numberBoxX = this.GetTemplateChild(NumberBoxXPartName) as NumberBox;
+
+            // Set up X component
+            if (this.numberBoxX != null)
+            {
+                this.numberBoxX.Validate += this.OnNumberBoxValidate;
+
+                // Propagate logger factory to child NumberBox
+                this.numberBoxX.LoggerFactory = this.LoggerFactory;
+                this.LogNumberBoxAttached("X");
+                this.ApplyComponentProperties(this.numberBoxX, "X");
+                this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.NumberValueProperty, nameof(this.XValue));
+                this.SetupNumberBoxBinding(this.numberBoxX, NumberBox.IsIndeterminateProperty, nameof(this.XIsIndeterminate));
             }
         }
 
-        // Hide/show Z label based on dimension
-        _ = this.labelZ?.Visibility = this.Dimension == 3 ? Visibility.Visible : Visibility.Collapsed;
+        void SetupY()
+        {
+            // Disconnect old event handlers
+            if (this.numberBoxY != null)
+            {
+                this.numberBoxY.Validate -= this.OnNumberBoxValidate;
+            }
+
+            // Retrieve new NumberBox instances
+            this.numberBoxY = this.GetTemplateChild(NumberBoxYPartName) as NumberBox;
+
+            // Set up Y component
+            if (this.numberBoxY != null)
+            {
+                this.numberBoxY.Validate += this.OnNumberBoxValidate;
+
+                // Propagate logger factory to child NumberBox
+                this.numberBoxY.LoggerFactory = this.LoggerFactory;
+                this.LogNumberBoxAttached("Y");
+                this.ApplyComponentProperties(this.numberBoxY, "Y");
+                this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.NumberValueProperty, nameof(this.YValue));
+                this.SetupNumberBoxBinding(this.numberBoxY, NumberBox.IsIndeterminateProperty, nameof(this.YIsIndeterminate));
+            }
+        }
     }
 
     private void SetupNumberBoxBinding(NumberBox numberBox, DependencyProperty numberBoxProperty, string vectorBoxPropertyName)
@@ -279,6 +316,7 @@ public partial class VectorBox : Control
             return;
         }
 
+        this.LogSyncStart();
         try
         {
             this.isSyncingValues = true;
@@ -301,9 +339,15 @@ public partial class VectorBox : Control
                 this.numberBoxZ.IsIndeterminate = this.ZIsIndeterminate;
             }
         }
+        catch (Exception ex)
+        {
+            this.LogException(ex);
+            throw;
+        }
         finally
         {
             this.isSyncingValues = false;
+            this.LogSyncEnd();
         }
     }
 
@@ -329,6 +373,10 @@ public partial class VectorBox : Control
 
         // Relay the validation event to consumers
         this.OnValidate(e);
+
+        // Log the relayed validation result
+        var comp = target?.ToString() ?? "__NULL__";
+        this.LogValidationRelayed(comp, e.OldValue, e.NewValue, e.IsValid);
     }
 
     // Short-circuit to the correct state based on pointer hover.
@@ -423,6 +471,7 @@ public partial class VectorBox : Control
             this.SetValue(XIsIndeterminateProperty, value: false);
 
             // Update vector
+            this.LogComponentChanged("X", oldValue, newValue);
             this.UpdateVectorValue();
         }
         finally
@@ -462,6 +511,7 @@ public partial class VectorBox : Control
             this.SetValue(YIsIndeterminateProperty, value: false);
 
             // Update vector
+            this.LogComponentChanged("Y", oldValue, newValue);
             this.UpdateVectorValue();
         }
         finally
@@ -501,6 +551,7 @@ public partial class VectorBox : Control
             this.SetValue(ZIsIndeterminateProperty, value: false);
 
             // Update vector
+            this.LogComponentChanged("Z", oldValue, newValue);
             this.UpdateVectorValue();
         }
         finally
