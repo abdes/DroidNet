@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls;
 
@@ -184,6 +185,16 @@ public partial class VectorBox
             new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
+    ///     <see cref="ILoggerFactory" /> to enable logging for VectorBox and its inner NumberBox components.
+    /// </summary>
+    public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
+        nameof(LoggerFactory),
+        typeof(ILoggerFactory),
+        typeof(VectorBox),
+        new PropertyMetadata(defaultValue: null, (d, e) => ((VectorBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>
     ///     Gets or sets the aggregate numeric vector value.
     /// </summary>
     public Vector3 VectorValue
@@ -348,6 +359,15 @@ public partial class VectorBox
     public IDictionary<string, LabelPosition> ComponentLabelPositions =>
         this.componentLabelPositions ??= new Dictionary<string, LabelPosition>(StringComparer.Ordinal);
 
+    /// <summary>
+    ///     Gets or sets the <see cref="ILoggerFactory" /> used to create loggers for this control and children.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory
+    {
+        get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
+        set => this.SetValue(LoggerFactoryProperty, value);
+    }
+
     private static void OnVectorValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is VectorBox vectorBox)
@@ -466,5 +486,17 @@ public partial class VectorBox
         {
             vectorBox.OnHorizontalValueAlignmentChanged();
         }
+    }
+
+    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
+    {
+        // Initialize the logger for this VectorBox and propagate the factory to child NumberBox instances.
+        this.logger = loggerFactory?.CreateLogger<VectorBox>() ?? NullLoggerFactory.Instance.CreateLogger<VectorBox>();
+        this.LogLoggerFactoryChanged(loggerFactory is not null);
+
+        // Propagate to children if they exist
+        _ = this.numberBoxX?.LoggerFactory = loggerFactory;
+        _ = this.numberBoxY?.LoggerFactory = loggerFactory;
+        _ = this.numberBoxZ?.LoggerFactory = loggerFactory;
     }
 }
