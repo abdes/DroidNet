@@ -12,6 +12,7 @@ namespace DroidNet.Controls.Demo.InPlaceEdit;
 /// A demo page for the <see cref="VectorBox" /> control, showcasing various use cases and features.
 /// </summary>
 [ViewModel(typeof(VectorBoxDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Views wityh injectable ViewModel must be public")]
 public sealed partial class VectorBoxDemoView
 {
     /// <summary>
