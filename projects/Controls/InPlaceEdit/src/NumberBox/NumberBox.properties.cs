@@ -102,6 +102,26 @@ public partial class NumberBox
             new PropertyMetadata(defaultValue: false, OnWithPaddingPropertyChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="IsIndeterminate" /> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty IsIndeterminateProperty =
+        DependencyProperty.Register(
+            nameof(IsIndeterminate),
+            typeof(bool),
+            typeof(NumberBox),
+            new PropertyMetadata(false, OnIsIndeterminatePropertyChanged));
+
+    /// <summary>
+    ///     Identifies the <see cref="IndeterminateDisplayText" /> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty IndeterminateDisplayTextProperty =
+        DependencyProperty.Register(
+            nameof(IndeterminateDisplayText),
+            typeof(string),
+            typeof(NumberBox),
+            new PropertyMetadata(DefaultIndeterminateDisplayText, OnIndeterminateDisplayTextPropertyChanged));
+
+    /// <summary>
     ///     Gets or sets the numeric value of the <see cref="NumberBox" />.
     /// </summary>
     public float NumberValue
@@ -183,6 +203,24 @@ public partial class NumberBox
         set => this.SetValue(WithPaddingProperty, value);
     }
 
+    /// <summary>
+    ///     Gets or sets a value indicating whether the control is in an indeterminate state.
+    /// </summary>
+    public bool IsIndeterminate
+    {
+        get => (bool)this.GetValue(IsIndeterminateProperty);
+        set => this.SetValue(IsIndeterminateProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets the text displayed when the value is indeterminate.
+    /// </summary>
+    public string IndeterminateDisplayText
+    {
+        get => (string)this.GetValue(IndeterminateDisplayTextProperty);
+        set => this.SetValue(IndeterminateDisplayTextProperty, value);
+    }
+
     private static void OnValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is NumberBox numberBox)
@@ -212,6 +250,22 @@ public partial class NumberBox
         if (d is NumberBox numberBox)
         {
             numberBox.OnWithPaddingChanged();
+        }
+    }
+
+    private static void OnIsIndeterminatePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnIsIndeterminateChanged();
+        }
+    }
+
+    private static void OnIndeterminateDisplayTextPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnIndeterminateDisplayTextChanged();
         }
     }
 }

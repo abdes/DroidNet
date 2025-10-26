@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
+using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
@@ -33,5 +34,16 @@ public sealed partial class InPlaceEditDemoView
             this.RotationY.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
             this.RotationZ.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
         };
+    }
+
+    private void ToggleIndeterminate_Click(object sender, RoutedEventArgs args)
+    {
+        _ = sender; // Unused
+        _ = args;   // Unused
+
+        if (this.ViewModel is InPlaceEditDemoViewModel vm)
+        {
+            vm.DemoIsIndeterminate = !vm.DemoIsIndeterminate;
+        }
     }
 }

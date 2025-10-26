@@ -17,20 +17,36 @@ namespace DroidNet.Controls;
 ///     Represents a control that allows the user to input and display numeric values.
 /// </summary>
 /// <remarks>
-///     The <see cref="NumberBox" /> control provides a way for users to input numeric values with
-///     optional formatting and validation. It supports various features such as custom masks, value
-///     clamping, and label positioning. The numeric value can be changed by using the mouse scroll
-///     wheel or dragging the mouse left or right.
+///     The <see cref="NumberBox" /> control provides numeric input with optional formatting and
+///     validation (masking, clamping, label positioning, mouse drag/wheel increments, etc.).
 ///     <para>
-///         Multiple scenarios can be implemented using the mask format. You can limit the number of digits
-///         before or after the decimal point `.` with masks like `#.##` or `##.#`. You can also leave the
-///         digits before the decimal point unbounded with `~`, such as in "~.##". You can also totally
-///         suppress the fractional part (value will be rounded) with "~." . You can also limit the values to
-///         negative or positive values by using the mask "-#.##" or "+#.##".
+///     Important note about "indeterminate" state and ViewModel patterns:
+///     - When <see cref="IsIndeterminate" /> is true the control displays <see cref="IndeterminateDisplayText" />
+///       (default "-.-") instead of the formatted <see cref="NumberValue" />. This presentation flag is
+///       separate from the numeric backing value: the control keeps a numeric <see cref="NumberValue" /> at
+///       all times and does not clear or null it when switching to indeterminate.
+///     - User edits (typing, pointer drag, wheel) will clear <see cref="IsIndeterminate" /> and operate on the
+///       existing <see cref="NumberValue" />. Likewise, externally setting <see cref="NumberValue" /> does
+///       not implicitly toggle <see cref="IsIndeterminate" />. The two properties are independent and must be
+///       coordinated by the host (ViewModel or code-behind) when a nullable or optional representation is
+///       required.
 ///     </para>
 ///     <para>
-///         You can also replace any missing digits with '0' to have a fixed size formatting of the number
-///         value. This behavior is enabled through the <see cref="WithPadding" /> property.
+///     A suggested model for handling the <see cref="IsIndeterminate" /> is to provide a <see cref="Nullable"/> value
+///     from the <c>ViewModel</c> (see the demo app for an example): expose a nullable ViewModel property that maps to
+///     the control's two pieces of state. For example, the demo ViewModel implements:
+///     - A numeric property `NumberValue` (float) and a boolean `DemoIsIndeterminate` (bound to
+///       <see cref="IsIndeterminate" />).
+///     - A derived nullable property `DemoNullableValue` that returns `null` when `DemoIsIndeterminate` is
+///       true, otherwise returns the numeric `NumberValue`. Setting `DemoNullableValue` to a non-null value
+///       sets `NumberValue` and clears the indeterminate flag; setting it to null sets the indeterminate
+///       flag but intentionally preserves the last numeric value. This preserves the numeric backing value
+///       while allowing the UI to show an indeterminate presentation.
+///     </para>
+///     <para>
+///     In short: the control presents an indeterminate state for UI purposes but keeps a numeric value
+///     internally; if you need a nullable model, map the two states in your ViewModel (the demo shows a
+///     simple, practical pattern to do this safely).
 ///     </para>
 /// </remarks>
 /// <example>
@@ -38,18 +54,18 @@ namespace DroidNet.Controls;
 ///         <strong>Example Usage</strong>
 ///     </para>
 ///     <code lang="xaml"><![CDATA[
-/// <controls:NumberBox
-///     x:Name="numberBox"
-///     Value="123.45"
-///     Label="Amount"
-///     LabelPosition="Top"
-///     ShowLabel="True"
-///     Multiplier="10"
-///     Mask="~.##"
-///     HorizontalValueAlignment="Center"
-///     HorizontalLabelAlignment="Left"
-///     Validate="NumberBox_Validate" />
-/// ]]></code>
+///     <controls:NumberBox
+///         x:Name="numberBox"
+///         Value="123.45"
+///         Label="Amount"
+///         LabelPosition="Top"
+///         ShowLabel="True"
+///         Multiplier="10"
+///         Mask="~.##"
+///         HorizontalValueAlignment="Center"
+///         HorizontalLabelAlignment="Left"
+///         Validate="NumberBox_Validate" />
+///     ]]></code>
 ///     This example demonstrates how to use the <see cref="NumberBox" /> control in XAML with various
 ///     properties set. The control is configured to display a numeric value with a label positioned at
 ///     the top, and it uses a custom mask for formatting.
@@ -84,6 +100,8 @@ public partial class NumberBox : Control
     private const string ShowingInvalidValueStateName = "ShowingInvalidValue";
     private const string EditingValidValueStateName = "EditingValidValue";
     private const string EditingInvalidValueStateName = "EditingInvalidValue";
+
+    private const string DefaultIndeterminateDisplayText = "-.-";
 
     private readonly InputSystemCursor defaultCursor;
     private readonly InputSystemCursor dragCursor;
@@ -261,6 +279,12 @@ public partial class NumberBox : Control
         // Round delta up to the nearest integer
         delta = Math.Ceiling(delta);
 
+        // If currently indeterminate, leave the stored NumberValue intact but switch presentation to determinate
+        if (this.IsIndeterminate)
+        {
+            this.IsIndeterminate = false;
+        }
+
         // Calculate the increment
         var increment = this.CalculateIncrement(delta, e.KeyModifiers);
         var newValue = this.NumberValue + increment;
@@ -278,6 +302,13 @@ public partial class NumberBox : Control
         }
 
         var delta = properties.MouseWheelDelta;
+
+        // If currently indeterminate, switch presentation to determinate without resetting the underlying value
+        if (this.IsIndeterminate)
+        {
+            this.IsIndeterminate = false;
+        }
+
         var increment = this.CalculateIncrement(Math.Sign(delta) * 10, e.KeyModifiers);
         var newValue = this.NumberValue + increment;
 
@@ -357,25 +388,49 @@ public partial class NumberBox : Control
             return;
         }
 
+        // Leaving indeterminate for editing: do not reset NumberValue, only switch presentation
+        this.IsIndeterminate = false;
+
         this.originalValue = this.NumberValue.ToString(CultureInfo.CurrentCulture);
         this.isEditing = true;
 
         this.UpdateVisualState();
 
         this.editTextBox.MinWidth = this.valueTextBlock.ActualWidth;
+        this.editTextBox.Text = this.originalValue ?? string.Empty;
         _ = this.editTextBox.Focus(FocusState.Programmatic);
     }
 
     private void CommitEdit()
     {
         Debug.Assert(this.valueIsValid, "commit only when newValueIsValid is true");
-        this.NumberValue = float.Parse(this.editTextBox!.Text, CultureInfo.CurrentCulture);
+
+        var text = this.editTextBox!.Text?.Trim();
+        if (string.IsNullOrEmpty(text))
+        {
+            // user left the field empty -> treat as indeterminate
+            this.IsIndeterminate = true;
+        }
+        else
+        {
+            this.NumberValue = float.Parse(text!, CultureInfo.CurrentCulture);
+            this.IsIndeterminate = false;
+        }
+
         this.EndEdit();
     }
 
     private void CancelEdit()
     {
-        this.editTextBox!.Text = this.originalValue;
+        if (this.IsIndeterminate)
+        {
+            this.editTextBox!.Text = string.Empty;
+        }
+        else
+        {
+            this.editTextBox!.Text = this.originalValue;
+        }
+
         this.EndEdit();
     }
 
@@ -467,6 +522,7 @@ public partial class NumberBox : Control
 
     private void OnValueChanged()
     {
+        // external numeric assignment does not by itself clear the indeterminate presentation
         this.ValidateValue(this.NumberValue);
         this.UpdateDisplayText();
         this.UpdateVisualState();
@@ -474,7 +530,16 @@ public partial class NumberBox : Control
 
     private void OnLabelPositionChanged() => this.UpdateLabelPosition();
 
-    private void UpdateDisplayText() => this.DisplayText = this.maskParser.FormatValue(this.NumberValue);
+    private void UpdateDisplayText()
+    {
+        if (this.IsIndeterminate)
+        {
+            this.DisplayText = this.IndeterminateDisplayText ?? DefaultIndeterminateDisplayText;
+            return;
+        }
+
+        this.DisplayText = this.maskParser.FormatValue(this.NumberValue);
+    }
 
     private void UpdateLabelPosition()
     {
@@ -592,4 +657,17 @@ public partial class NumberBox : Control
     }
 
     private void OnWithPaddingChanged() => this.UpdateDisplayText();
+
+    private void OnIsIndeterminateChanged()
+    {
+        // indeterminate is considered valid
+        this.valueIsValid = true;
+        this.UpdateDisplayText();
+        this.UpdateVisualState();
+    }
+
+    private void OnIndeterminateDisplayTextChanged()
+    {
+        this.UpdateDisplayText();
+    }
 }
