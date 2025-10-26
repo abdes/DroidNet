@@ -65,6 +65,8 @@
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
 
+    <!-- Include demo-specific helper files located outside the project folder -->
+
     <!-- Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging Tools extension to be
     activated for this project even if the Windows App SDK Nuget package has not yet been restored. -->
     <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
