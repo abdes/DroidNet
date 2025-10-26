@@ -461,23 +461,68 @@ public sealed partial class OutputConsoleView
             return;
         }
 
-        // First try standard item-based scroll
-        this.List.ScrollIntoView(last);
-
-        // Schedule another attempt after layout/realization
-        _ = this.DispatcherQueue.TryEnqueue(() => this.List.ScrollIntoView(last));
-
-        // Also try directly scrolling the underlying ScrollViewer
-        this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
-        if (this.scrollViewer is not null)
+        // A single, conservative strategy:
+        // 1) Hint with ListView.ScrollIntoView (non-throwing in normal cases).
+        // 2) Resolve the inner ScrollViewer (cached) and schedule one asynchronous
+        //    attempt to call ChangeView after layout has completed. This avoids
+        //    performing view changes during a layout pass which can cause
+        //    re-entrant layout exceptions in WinUI.
+        try
         {
-            // Jump to bottom; disable animation to make it deterministic
-            _ = this.scrollViewer.ChangeView(
-                horizontalOffset: null,
-                this.scrollViewer.ScrollableHeight,
-                zoomFactor: null,
-                disableAnimation: true);
+            this.List.ScrollIntoView(last);
         }
+        catch (Exception ex)
+        {
+            // Don't let a ScrollIntoView failure crash the control; surface to debug only.
+            System.Diagnostics.Debug.WriteLine($"List.ScrollIntoView threw: {ex}");
+        }
+
+        // Ensure we have the ScrollViewer reference; try to find and cache it.
+        this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+
+        // Schedule a single safe attempt on the dispatcher so we don't call ChangeView
+        // during layout/measure. Wrapping in try/catch prevents exceptions from
+        // bubbling into native layout code.
+        _ = this.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                // Resolve again in case it wasn't available earlier
+                this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+                if (this.scrollViewer is null)
+                {
+                    // No ScrollViewer available; nothing else to do.
+                    return;
+                }
+
+                // If there's no scrollable area yet, fallback to item-based scroll
+                // (ScrollIntoView is harmless). Otherwise jump to bottom deterministically.
+                if (this.scrollViewer.ScrollableHeight <= 0)
+                {
+                    try
+                    {
+                        this.List.ScrollIntoView(last);
+                    }
+                    catch (Exception inner)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Fallback ScrollIntoView failed: {inner}");
+                    }
+
+                    return;
+                }
+
+                _ = this.scrollViewer.ChangeView(
+                    horizontalOffset: null,
+                    verticalOffset: this.scrollViewer.ScrollableHeight,
+                    zoomFactor: null,
+                    disableAnimation: true);
+            }
+            catch (Exception ex)
+            {
+                // Swallow to avoid native re-entrancy crashes; surface for diagnostics.
+                System.Diagnostics.Debug.WriteLine($"ScrollToBottom ChangeView failed: {ex}");
+            }
+        });
     }
 
     private bool IsNearBottom()
