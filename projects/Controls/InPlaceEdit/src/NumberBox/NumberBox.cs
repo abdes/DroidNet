@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -105,6 +106,7 @@ public partial class NumberBox : Control
 
     private readonly InputSystemCursor defaultCursor;
     private readonly InputSystemCursor dragCursor;
+
     private InputCursor? originalCursor;
     private MaskParser maskParser;
 
@@ -118,6 +120,8 @@ public partial class NumberBox : Control
     private bool valueIsValid = true;
     private bool isEditing;
     private string? originalValue;
+
+    private ILogger? logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="NumberBox" /> class.
@@ -238,12 +242,14 @@ public partial class NumberBox : Control
 
     private void OnValueTextBlockPointerEntered(object sender, PointerRoutedEventArgs e)
     {
+        this.LogPointerEvent("Entered");
         this.isPointerOver = true;
         this.UpdateVisualState();
     }
 
     private void OnValueTextBlockPointerExited(object sender, PointerRoutedEventArgs e)
     {
+        this.LogPointerEvent("Exited");
         if (!this.IsMouseCaptured && this.originalCursor is not null && this.rootGrid is not null)
         {
             this.rootGrid.InputCursor = this.originalCursor;
@@ -255,6 +261,7 @@ public partial class NumberBox : Control
 
     private void OnValueTextBlockPointerPressed(object sender, PointerRoutedEventArgs e)
     {
+        this.LogPointerEvent("Pressed");
         if (this.valueTextBlock?.CapturePointer(e.Pointer) != true)
         {
             return;
@@ -268,6 +275,7 @@ public partial class NumberBox : Control
 
     private void OnValueTextBlockPointerMoved(object sender, PointerRoutedEventArgs e)
     {
+        this.LogPointerEvent("Moved");
         if (this.capturePoint is null)
         {
             return;
@@ -296,6 +304,7 @@ public partial class NumberBox : Control
     private void OnValueTextBlockPointerWheelChanged(object sender, PointerRoutedEventArgs e)
     {
         var properties = e.GetCurrentPoint(this.valueTextBlock).Properties;
+        this.LogPointerWheel(properties.MouseWheelDelta, properties.IsHorizontalMouseWheel);
         if (properties.IsHorizontalMouseWheel)
         {
             return;
@@ -346,6 +355,7 @@ public partial class NumberBox : Control
 
     private void OnValueTextBlockPointerReleased(object sender, PointerRoutedEventArgs e)
     {
+        this.LogPointerEvent("Released");
         if (this.valueTextBlock is null || !this.IsMouseCaptured)
         {
             return;
@@ -369,6 +379,7 @@ public partial class NumberBox : Control
         {
             this.originalCursor ??= this.rootGrid.InputCursor ?? this.defaultCursor;
             this.rootGrid.InputCursor = this.dragCursor;
+            this.LogCursorChanged("Drag");
             return;
         }
 
@@ -379,6 +390,7 @@ public partial class NumberBox : Control
 
         this.rootGrid.InputCursor = this.originalCursor;
         this.originalCursor = null;
+        this.LogCursorChanged("Default");
     }
 
     private void StartEdit()
@@ -387,6 +399,8 @@ public partial class NumberBox : Control
         {
             return;
         }
+
+        this.LogEditStarted(this.IsIndeterminate);
 
         // Leaving indeterminate for editing: do not reset NumberValue, only switch presentation
         this.IsIndeterminate = false;
@@ -408,13 +422,25 @@ public partial class NumberBox : Control
         var text = this.editTextBox!.Text?.Trim();
         if (string.IsNullOrEmpty(text))
         {
+            this.LogEditCommitted(this.NumberValue);
+
             // user left the field empty -> treat as indeterminate
+            // Treat committing to indeterminate as a commit action (no numeric value)
             this.IsIndeterminate = true;
         }
         else
         {
-            this.NumberValue = float.Parse(text!, CultureInfo.CurrentCulture);
-            this.IsIndeterminate = false;
+            try
+            {
+                this.NumberValue = float.Parse(text!, CultureInfo.CurrentCulture);
+                this.IsIndeterminate = false;
+                this.LogEditCommitted(this.NumberValue);
+            }
+            catch (Exception ex)
+            {
+                this.LogCommitFailed(ex);
+                throw;
+            }
         }
 
         this.EndEdit();
@@ -422,6 +448,7 @@ public partial class NumberBox : Control
 
     private void CancelEdit()
     {
+        var wasIndeterminate = this.IsIndeterminate;
         if (this.IsIndeterminate)
         {
             this.editTextBox!.Text = string.Empty;
@@ -432,6 +459,8 @@ public partial class NumberBox : Control
         }
 
         this.EndEdit();
+
+        this.LogEditCanceled(wasIndeterminate);
     }
 
     private void OnTextChanged(object sender, TextChangedEventArgs textChangedEventArgs)
@@ -462,9 +491,12 @@ public partial class NumberBox : Control
 
     private void ValidateValue(string value)
     {
+        var oldIsValid = this.valueIsValid;
         this.valueIsValid = float.TryParse(value, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsedValue);
         if (!this.valueIsValid)
         {
+            this.LogValidation(oldIsValid, this.valueIsValid);
+
             return;
         }
 
@@ -473,20 +505,25 @@ public partial class NumberBox : Control
 
     private void ValidateValue(float value)
     {
+        var oldIsValid = this.valueIsValid;
         if (!this.maskParser.IsValidValue(value))
         {
             this.valueIsValid = false;
+            this.LogValidation(oldIsValid, this.valueIsValid);
             return;
         }
 
         var args = new ValidationEventArgs<float>(this.NumberValue, value);
         this.OnValidate(args);
         Debug.Assert(this.valueIsValid == args.IsValid, "should be updated by the OnValidate method");
+
+        this.LogValidation(oldIsValid, this.valueIsValid);
     }
 
     private void OnEditBoxKeyDown(object sender, KeyRoutedEventArgs e)
     {
-        // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
+        this.LogKeyEvent(e.Key, "KeyDown");
+
         switch (e.Key)
         {
             case VirtualKey.Enter when !this.valueIsValid:
@@ -510,7 +547,19 @@ public partial class NumberBox : Control
     private void OnValueTextBlockTapped(object sender, TappedRoutedEventArgs e)
     {
         e.Handled = true;
+        this.LogPointerEvent("Tapped");
         this.StartEdit();
+    }
+
+    private void OnValueChanged(float oldValue, float newValue)
+    {
+        // Log the value change
+        this.LogValueChanged(oldValue, newValue);
+
+        // external numeric assignment does not by itself clear the indeterminate presentation
+        this.ValidateValue(this.NumberValue);
+        this.UpdateDisplayText();
+        this.UpdateVisualState();
     }
 
     private void OnMaskChanged()
