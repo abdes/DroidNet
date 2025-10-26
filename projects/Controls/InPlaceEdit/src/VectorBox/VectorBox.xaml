@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -7,6 +7,17 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/NumberBox/NumberBox.xaml" />
     </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Brush used for the VectorBox pointer-over background.
+        Client apps can override this by defining a resource with the same key
+        (e.g. in App.xaml or a page/resource dictionary) to change hover styling.
+    -->
+    <!--
+        Use the WinUI ListViewItem hover brush so the control follows platform styling.
+        Map our local key to the platform resource like DynamicTreeItem.xaml does.
+    -->
+    <StaticResource x:Key="VectorBoxPointerOverBackground" ResourceKey="ListViewItemBackgroundPointerOver" />
 
     <Style BasedOn="{StaticResource DefaultVectorBoxStyle}" TargetType="local:VectorBox" />
 
@@ -126,7 +137,8 @@
                                 <!--  Use the WinUI List item hover brush so the control follows platform styling  -->
                                 <VisualState x:Name="Hover">
                                     <VisualState.Setters>
-                                        <Setter Target="PartBackgroundBorder.Background" Value="{ThemeResource ListViewItemBackgroundPointerOver}" />
+                                        <!--  Use a named resource so clients can override the hover brush  -->
+                                        <Setter Target="PartBackgroundBorder.Background" Value="{ThemeResource VectorBoxPointerOverBackground}" />
                                     </VisualState.Setters>
                                 </VisualState>
                                 <VisualState x:Name="Pressed" />
