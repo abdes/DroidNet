@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls;
@@ -122,6 +124,16 @@ public partial class NumberBox
             new PropertyMetadata(DefaultIndeterminateDisplayText, OnIndeterminateDisplayTextPropertyChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
+    ///     <see cref="ILoggerFactory" /> to enable logging for NumberBox instances.
+    /// </summary>
+    public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
+        nameof(LoggerFactory),
+        typeof(ILoggerFactory),
+        typeof(NumberBox),
+        new PropertyMetadata(defaultValue: null, (d, e) => ((NumberBox)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>
     ///     Gets or sets the numeric value of the <see cref="NumberBox" />.
     /// </summary>
     public float NumberValue
@@ -221,11 +233,24 @@ public partial class NumberBox
         set => this.SetValue(IndeterminateDisplayTextProperty, value);
     }
 
+    /// <summary>
+    ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
+    ///     Assigning the factory will initialize the internal logger to a non-null logger instance
+    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    /// </summary>
+    public ILoggerFactory? LoggerFactory
+    {
+        get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
+        set => this.SetValue(LoggerFactoryProperty, value);
+    }
+
     private static void OnValuePropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is NumberBox numberBox)
         {
-            numberBox.OnValueChanged();
+            var oldValue = e.OldValue is float fOld ? fOld : 0f;
+            var newValue = e.NewValue is float fNew ? fNew : 0f;
+            numberBox.OnValueChanged(oldValue, newValue);
         }
     }
 
@@ -276,4 +301,8 @@ public partial class NumberBox
             numberBox.OnHorizontalValueAlignmentChanged();
         }
     }
+
+    // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
+    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
+        this.logger = loggerFactory?.CreateLogger<NumberBox>() ?? NullLoggerFactory.Instance.CreateLogger<NumberBox>();
 }
