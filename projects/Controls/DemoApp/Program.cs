@@ -166,6 +166,10 @@ public static partial class Program
         container.Register<ProjectLayoutViewModel>(Reuse.Transient);
         container.Register<InPlaceEditDemoView>(Reuse.Transient);
         container.Register<InPlaceEditDemoViewModel>(Reuse.Transient);
+        container.Register<NumberBoxDemoView>(Reuse.Transient);
+        container.Register<NumberBoxDemoViewModel>(Reuse.Transient);
+        container.Register<VectorBoxDemoView>(Reuse.Transient);
+        container.Register<VectorBoxDemoViewModel>(Reuse.Transient);
         container.Register<MenuBarDemoView>(Reuse.Transient);
         container.Register<MenuBarDemoViewModel>(Reuse.Transient);
         container.Register<MenuFlyoutDemoView>(Reuse.Transient);
@@ -174,6 +178,7 @@ public static partial class Program
         container.Register<MenuItemDemoViewModel>(Reuse.Transient);
     }
 
+    [SuppressMessage("Design", "MA0051:Method is too long", Justification = "methoid gains in clarity iof all routes are together")]
     private static Routes MakeRoutes() => new(
     [
         new Route
@@ -207,6 +212,16 @@ public static partial class Program
                         {
                             Path = "in-place",
                             ViewModelType = typeof(InPlaceEditDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "numberbox",
+                            ViewModelType = typeof(NumberBoxDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "vectorbox",
+                            ViewModelType = typeof(VectorBoxDemoViewModel),
                         },
                         new Route()
                         {

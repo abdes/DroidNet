@@ -543,7 +543,7 @@ public partial class NumberBox : Control
 
     private void UpdateLabelPosition()
     {
-        if (this.rootGrid == null || this.labelTextBlock == null || this.valueTextBlock == null)
+        if (this.rootGrid == null || this.labelTextBlock == null || this.valueTextBlock == null || this.backgroundBorder == null)
         {
             return;
         }
@@ -565,12 +565,21 @@ public partial class NumberBox : Control
                 LayoutVertically();
                 break;
             default:
-                // No label
                 this.labelTextBlock.Visibility = Visibility.Collapsed;
+                LayoutNoLabel();
                 break;
         }
 
         return;
+
+        void LayoutNoLabel()
+        {
+            this.rootGrid.ColumnDefinitions.Add(
+                new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MinWidth = valueWidth });
+
+            Grid.SetColumn(this.labelTextBlock, 0);
+            Grid.SetColumn(this.backgroundBorder, 0);
+        }
 
         void LayoutHorizontally()
         {
@@ -666,8 +675,22 @@ public partial class NumberBox : Control
         this.UpdateVisualState();
     }
 
-    private void OnIndeterminateDisplayTextChanged()
+    private void OnIndeterminateDisplayTextChanged() => this.UpdateDisplayText();
+
+    private void OnHorizontalValueAlignmentChanged()
     {
-        this.UpdateDisplayText();
+        if (this.editTextBox is not null)
+        {
+            this.editTextBox.TextAlignment = this.HorizontalValueAlignment;
+            this.valueTextBlock?.InvalidateMeasure();
+            this.valueTextBlock?.UpdateLayout();
+        }
+
+        if (this.valueTextBlock is not null)
+        {
+            this.valueTextBlock.HorizontalTextAlignment = this.HorizontalValueAlignment;
+            this.valueTextBlock.InvalidateMeasure();
+            this.valueTextBlock.UpdateLayout();
+        }
     }
 }

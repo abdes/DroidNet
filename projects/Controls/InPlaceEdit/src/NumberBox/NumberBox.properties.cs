@@ -79,7 +79,7 @@ public partial class NumberBox
             nameof(HorizontalValueAlignment),
             typeof(TextAlignment),
             typeof(NumberBox),
-            new PropertyMetadata(TextAlignment.Center));
+            new PropertyMetadata(TextAlignment.Center, OnHorizontalValueAlignmentChanged));
 
     /// <summary>
     ///     Identifies the <see cref="HorizontalLabelAlignment" /> dependency property.
@@ -266,6 +266,14 @@ public partial class NumberBox
         if (d is NumberBox numberBox)
         {
             numberBox.OnIndeterminateDisplayTextChanged();
+        }
+    }
+
+    private static void OnHorizontalValueAlignmentChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is NumberBox numberBox)
+        {
+            numberBox.OnHorizontalValueAlignmentChanged();
         }
     }
 }

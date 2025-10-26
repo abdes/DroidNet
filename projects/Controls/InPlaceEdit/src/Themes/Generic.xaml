@@ -6,6 +6,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/Label/InPlaceEditableLabel.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/NumberBox/NumberBox.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.InPLaceEdit/VectorBox/VectorBox.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

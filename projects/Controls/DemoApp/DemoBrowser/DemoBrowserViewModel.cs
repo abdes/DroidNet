@@ -56,6 +56,8 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     public IList<NavigationItem> NavigationItems { get; } =
     [
         new("in-place", "In-Place Edit", typeof(InPlaceEditDemoViewModel)),
+        new("numberbox", "Number Box", typeof(NumberBoxDemoViewModel)),
+        new("vectorbox", "VectorBox", typeof(VectorBoxDemoViewModel)),
         new("output-log", "Output Log", typeof(OutputLogDemoViewModel)),
         new("output-console", "Output Console", typeof(OutputConsoleDemoViewModel)),
         new("dynamic-tree", "Dynamic Tree", typeof(ProjectLayoutViewModel)),

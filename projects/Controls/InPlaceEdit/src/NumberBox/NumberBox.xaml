@@ -10,10 +10,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:NumberBox">
-                    <local:CustomGrid x:Name="PartRootGrid">
+                    <local:CustomGrid
+                        x:Name="PartRootGrid"
+                        ColumnSpacing="5"
+                        RowSpacing="5">
                         <TextBlock
                             x:Name="PartLabelTextBlock"
-                            Margin="0,0,5,0"
                             HorizontalAlignment="{TemplateBinding HorizontalLabelAlignment}"
                             VerticalAlignment="Center"
                             Text="{TemplateBinding Label}"
@@ -34,8 +36,8 @@
                                     HorizontalAlignment="Stretch"
                                     VerticalAlignment="Center"
                                     FontSize="14"
-                                    HorizontalTextAlignment="{TemplateBinding HorizontalValueAlignment}"
-                                    Text="{TemplateBinding DisplayText}" />
+                                    HorizontalTextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
+                                    Text="{Binding Path=DisplayText, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}" />
                                 <TextBox
                                     x:Name="PartEditBox"
                                     MinHeight="26"
@@ -50,7 +52,7 @@
                                     IsSpellCheckEnabled="False"
                                     IsTextPredictionEnabled="False"
                                     Text="{Binding Path=NumberValue, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=TwoWay}"
-                                    TextAlignment="{TemplateBinding HorizontalValueAlignment}"
+                                    TextAlignment="{Binding Path=HorizontalValueAlignment, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}"
                                     TextWrapping="Wrap"
                                     Visibility="Collapsed" />
                             </Grid>

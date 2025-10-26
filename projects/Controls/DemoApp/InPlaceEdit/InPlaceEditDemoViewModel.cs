@@ -16,10 +16,6 @@ public partial class InPlaceEditDemoViewModel : ObservableObject
     public partial string Label { get; set; } = "Hello World!";
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DemoNullableValue))]
-    public partial float NumberValue { get; set; } = -20.0f;
-
-    [ObservableProperty]
     public partial float RotationX { get; set; } = 0.0f;
 
     [ObservableProperty]
@@ -29,31 +25,5 @@ public partial class InPlaceEditDemoViewModel : ObservableObject
     public partial float RotationZ { get; set; } = 0.0f;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(DemoNullableValue))]
     public partial bool DemoIsIndeterminate { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets derived nullable value: null when indeterminate, otherwise the numeric value.
-    /// Setting this keeps the other mapped properties in sync.
-    /// </summary>
-    public float? DemoNullableValue
-    {
-        get => this.DemoIsIndeterminate ? null : this.NumberValue;
-        set
-        {
-            if (value.HasValue)
-            {
-                // set numeric and clear indeterminate
-                this.NumberValue = value.Value;
-                this.DemoIsIndeterminate = false;
-            }
-            else
-            {
-                // set indeterminate; do not modifiy numeric value
-                this.DemoIsIndeterminate = true;
-            }
-
-            this.OnPropertyChanged(nameof(this.DemoNullableValue));
-        }
-    }
 }

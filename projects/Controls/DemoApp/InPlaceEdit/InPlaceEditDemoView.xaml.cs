@@ -4,6 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.InPlaceEdit;
 
@@ -21,7 +22,6 @@ public sealed partial class InPlaceEditDemoView
         this.InitializeComponent();
 
         this.Loaded += (_, _) =>
-        {
             this.ValidatedInput.Validate += (_, e) =>
             {
                 if (e.NewValue?.Contains('a', StringComparison.OrdinalIgnoreCase) == true)
@@ -29,21 +29,11 @@ public sealed partial class InPlaceEditDemoView
                     e.IsValid = false;
                 }
             };
-
-            this.RotationX.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
-            this.RotationY.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
-            this.RotationZ.Validate += (_, e) => e.IsValid = e.NewValue is <= 180.0f and >= -180.0f;
-        };
     }
 
     private void ToggleIndeterminate_Click(object sender, RoutedEventArgs args)
     {
         _ = sender; // Unused
         _ = args;   // Unused
-
-        if (this.ViewModel is InPlaceEditDemoViewModel vm)
-        {
-            vm.DemoIsIndeterminate = !vm.DemoIsIndeterminate;
-        }
     }
 }

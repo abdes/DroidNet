@@ -35,4 +35,9 @@ public class ValidationEventArgs<T> : EventArgs
     ///     Gets or sets a value indicating whether the new value is valid.
     /// </summary>
     public bool IsValid { get; set; } = true;
+
+    /// <summary>
+    ///     Gets or sets an optional target object for discrimination (e.g., a <see cref="Component" /> enum value).
+    /// </summary>
+    public object? Target { get; set; }
 }
