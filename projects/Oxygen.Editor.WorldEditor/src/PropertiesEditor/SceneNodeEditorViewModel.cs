@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.Messages;
 
@@ -14,28 +17,32 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private static readonly IDictionary<Type, IPropertyEditor<SceneNode>> AllPropertyEditors =
         new Dictionary<Type, IPropertyEditor<SceneNode>> { { typeof(Transform), new TransformViewModel() } };
 
+    private readonly ILogger logger;
+
     private readonly IMessenger messenger;
     private bool isDisposed;
 
     private ICollection<SceneNode> items;
 
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="SceneNodeEditorViewModel" /> class.
-    /// </summary>
-    /// <param name="vmToViewConverter"></param>
-    /// <param name="messenger"></param>
-    public SceneNodeEditorViewModel(ViewModelToView vmToViewConverter, IMessenger messenger)
+    public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ILoggerFactory? loggerFactory = null)
+        : base(loggerFactory)
     {
+        this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
+
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.UpdateItemsCollection(this.items);
+        this.LogConstructed(this.items.Count);
+
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
-        {
-            this.items = message.SelectedEntities;
-            this.UpdateItemsCollection(this.items);
-        });
+            hosting.Dispatcher.TryEnqueue(() =>
+            {
+                this.items = message.SelectedEntities;
+                this.LogSelectionChanged(this.items.Count);
+                this.UpdateItemsCollection(this.items);
+            }));
     }
 
     /// <summary>
@@ -54,6 +61,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.messenger.UnregisterAll(this);
+        this.LogDisposed();
 
         this.isDisposed = true;
     }
@@ -74,6 +82,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 _ = keysToCheck.Remove(key);
             }
         }
+
+        var before = AllPropertyEditors.Count;
+        var after = filteredEditors.Count;
+        this.LogFiltered(before, after);
 
         return filteredEditors.Values;
     }
