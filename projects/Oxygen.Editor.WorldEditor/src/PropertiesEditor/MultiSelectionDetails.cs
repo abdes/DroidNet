@@ -5,6 +5,8 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
@@ -18,9 +20,15 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 /// It includes properties and methods for managing the collection of items, updating property editors, and
 /// propagating changes to the items.
 /// </remarks>
-public abstract partial class MultiSelectionDetails<T> : ObservableObject
+/// <remarks>
+/// Base constructor that accepts an optional <see cref="ILoggerFactory"/> for constructor injection.
+/// Derived view models should call this base constructor to initialize logging.
+/// </remarks>
+/// <param name="loggerFactory">Optional logger factory from DI.</param>
+public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFactory = null) : ObservableObject
     where T : GameObject
 {
+    private readonly ILogger logger = loggerFactory?.CreateLogger<MultiSelectionDetails<T>>() ?? NullLoggerFactory.Instance.CreateLogger<MultiSelectionDetails<T>>();
     private readonly ICollection<T> items = [];
 
     /// <summary>
@@ -105,10 +113,13 @@ public abstract partial class MultiSelectionDetails<T> : ObservableObject
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasItems)));
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasMultipleItems)));
 
-        this.RefreshOwnProperties();
-        this.UpdatePropertyEditors();
-        this.UpdatePropertyEditorsValues();
-        return;
+    this.RefreshOwnProperties();
+    this.UpdatePropertyEditors();
+    this.UpdatePropertyEditorsValues();
+
+    // Log the collection update
+    this.LogItemsCollectionUpdated();
+    return;
 
         void OnItemPropertyExternallyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -125,13 +136,16 @@ public abstract partial class MultiSelectionDetails<T> : ObservableObject
     /// </remarks>
     protected virtual void RefreshOwnProperties()
     {
-        this.doNotPropagateRename = true;
-        this.Name = MixedValues.GetMixedValue(this.items, e => e.Name);
-        this.doNotPropagateRename = false;
+    this.doNotPropagateRename = true;
+    this.Name = MixedValues.GetMixedValue(this.items, e => e.Name);
+    this.doNotPropagateRename = false;
 
-        this.OnPropertyChanged(nameof(this.ItemsCount));
-        this.OnPropertyChanged(nameof(this.HasItems));
-        this.OnPropertyChanged(nameof(this.HasMultipleItems));
+    this.OnPropertyChanged(nameof(this.ItemsCount));
+    this.OnPropertyChanged(nameof(this.HasItems));
+    this.OnPropertyChanged(nameof(this.HasMultipleItems));
+
+    // Log refreshed properties (include mixed name if available)
+    this.LogRefreshedProperties(this.Name);
     }
 
     private void UpdatePropertyEditors()
@@ -162,6 +176,9 @@ public abstract partial class MultiSelectionDetails<T> : ObservableObject
         {
             editor.UpdateValues(this.items);
         }
+
+        // Log that property editor values were updated
+        this.LogPropertyEditorsValuesUpdated();
     }
 
     /// <summary>
@@ -178,6 +195,9 @@ public abstract partial class MultiSelectionDetails<T> : ObservableObject
         {
             return;
         }
+
+        // Log the propagation before applying
+        this.LogNamePropagated(value);
 
         foreach (var entity in this.items)
         {

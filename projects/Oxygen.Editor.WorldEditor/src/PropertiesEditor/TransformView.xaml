@@ -1,8 +1,9 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.PropertiesEditor.TransformView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.WorldEditor.PropertiesEditor"
@@ -11,8 +12,23 @@
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
-        <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+        <ResourceDictionary>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+            <!--
+                Override VectorBox pointer-over background for this view to be transparent.
+                Place the override in ThemeDictionaries so ThemeResource lookup in the control
+                will find this view-local theme resource.
+            -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="VectorBoxPointerOverBackground" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="VectorBoxPointerOverBackground" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <local:PropertiesExpander
@@ -33,86 +49,48 @@
                 IsEnabled="{x:Bind ViewModel.PositionProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Position"
                 Visibility="{x:Bind ViewModel.PositionProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox
-                        Grid.Column="0"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        FontWeight="Light"
-                        Text="{x:Bind ViewModel.PositionX, Mode=OneWay}" />
-                    <TextBox
-                        Grid.Column="1"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="{x:Bind ViewModel.PositionY, Mode=OneWay}" />
-                    <TextBox
-                        Grid.Column="2"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="{x:Bind ViewModel.PositionZ, Mode=OneWay}" />
-                </Grid>
+                <controls:VectorBox
+                    ComponentLabelPosition="Left"
+                    Dimension="3"
+                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                    XIsIndeterminate="{x:Bind ViewModel.PositionXIsIndeterminate, Mode=TwoWay}"
+                    XValue="{x:Bind ViewModel.PositionX, Mode=TwoWay}"
+                    YIsIndeterminate="{x:Bind ViewModel.PositionYIsIndeterminate, Mode=TwoWay}"
+                    YValue="{x:Bind ViewModel.PositionY, Mode=TwoWay}"
+                    ZIsIndeterminate="{x:Bind ViewModel.PositionZIsIndeterminate, Mode=TwoWay}"
+                    ZValue="{x:Bind ViewModel.PositionZ, Mode=TwoWay}" />
             </local:PropertyCard>
             <local:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.RotationProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Rotation"
                 Visibility="{x:Bind ViewModel.RotationProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox
-                        Grid.Column="0"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                    <TextBox
-                        Grid.Column="1"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                    <TextBox
-                        Grid.Column="2"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                </Grid>
+                <controls:VectorBox
+                    ComponentLabelPosition="Left"
+                    Dimension="3"
+                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                    XIsIndeterminate="{x:Bind ViewModel.RotationXIsIndeterminate, Mode=TwoWay}"
+                    XValue="{x:Bind ViewModel.RotationX, Mode=TwoWay}"
+                    YIsIndeterminate="{x:Bind ViewModel.RotationYIsIndeterminate, Mode=TwoWay}"
+                    YValue="{x:Bind ViewModel.RotationY, Mode=TwoWay}"
+                    ZIsIndeterminate="{x:Bind ViewModel.RotationZIsIndeterminate, Mode=TwoWay}"
+                    ZValue="{x:Bind ViewModel.RotationZ, Mode=TwoWay}" />
             </local:PropertyCard>
             <local:PropertyCard
                 HorizontalContentAlignment="Stretch"
                 IsEnabled="{x:Bind ViewModel.ScaleProperty.IsEnabled, Mode=OneWay}"
                 PropertyName="Scale"
                 Visibility="{x:Bind ViewModel.ScaleProperty.IsVisible, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                        <ColumnDefinition Width="1*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBox
-                        Grid.Column="0"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                    <TextBox
-                        Grid.Column="1"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                    <TextBox
-                        Grid.Column="2"
-                        Margin="2,0,2,4"
-                        VerticalAlignment="Center"
-                        Text="0.0" />
-                </Grid>
+                <controls:VectorBox
+                    ComponentLabelPosition="Left"
+                    Dimension="3"
+                    LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                    XIsIndeterminate="{x:Bind ViewModel.ScaleXIsIndeterminate, Mode=TwoWay}"
+                    XValue="{x:Bind ViewModel.ScaleX, Mode=TwoWay}"
+                    YIsIndeterminate="{x:Bind ViewModel.ScaleYIsIndeterminate, Mode=TwoWay}"
+                    YValue="{x:Bind ViewModel.ScaleY, Mode=TwoWay}"
+                    ZIsIndeterminate="{x:Bind ViewModel.ScaleZIsIndeterminate, Mode=TwoWay}"
+                    ZValue="{x:Bind ViewModel.ScaleZ, Mode=TwoWay}" />
             </local:PropertyCard>
         </local:PropertiesExpander.Items>
     </local:PropertiesExpander>
