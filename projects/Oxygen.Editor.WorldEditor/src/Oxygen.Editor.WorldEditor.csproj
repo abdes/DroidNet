@@ -9,17 +9,6 @@
         <RootNamespace>Oxygen.Editor.WorldEditor</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
-    <ItemGroup>
-      <Compile Remove="NewFolder\**" />
-      <Content Remove="NewFolder\**" />
-      <EmbeddedResource Remove="NewFolder\**" />
-      <None Remove="NewFolder\**" />
-      <Page Remove="NewFolder\**" />
-      <PRIResource Remove="NewFolder\**" />
-    </ItemGroup>
-    <ItemGroup>
-      <None Remove="InPlaceEditableLabel.xaml" />
-    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
@@ -55,11 +44,4 @@
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
     </ItemGroup>
-
-    <ItemGroup>
-      <Page Update="InPlaceEditableLabel.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
-    </ItemGroup>
-
 </Project>
