@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
@@ -67,9 +66,9 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
             return;
         }
 
-    // Check if project root is selected (empty path or '.' means root)
-    var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty)
-                     || contentBrowserState.SelectedFolders.Contains(".");
+        // Check if project root is selected (empty path or '.' means root)
+        var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty)
+                         || contentBrowserState.SelectedFolders.Contains(".");
 
         if (isProjectRootSelected)
         {
