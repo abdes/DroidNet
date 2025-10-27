@@ -7,7 +7,7 @@ namespace Oxygen.Editor.WorldEditor;
 /// <summary>
 /// Constants for the debugger application.
 /// </summary>
-public static class WorldEditorConstants
+public static class Constants
 {
     ///// <summary>
     ///// The name of the application outlet.

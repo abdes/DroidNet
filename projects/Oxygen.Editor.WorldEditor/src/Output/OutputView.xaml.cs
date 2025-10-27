@@ -5,15 +5,14 @@
 using DroidNet.Controls.OutputConsole;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.WorldEditor.ViewModels;
 
-namespace Oxygen.Editor.WorldEditor.Views;
+namespace Oxygen.Editor.WorldEditor.Output;
 
 /// <summary>
 ///     Represents the view for displaying logs in the World Editor.
 /// </summary>
-[ViewModel(typeof(LogsViewModel))]
-public sealed partial class LogsView
+[ViewModel(typeof(OutputViewModel))]
+public sealed partial class OutputView
 {
     private long followTailToken = -1;
     private long isPausedToken = -1;
@@ -24,9 +23,9 @@ public sealed partial class LogsView
     private long wordWrapToken = -1;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="LogsView" /> class.
+    ///     Initializes a new instance of the <see cref="OutputView" /> class.
     /// </summary>
-    public LogsView()
+    public OutputView()
     {
         this.InitializeComponent();
         this.Loaded += this.OnLoaded;
@@ -36,7 +35,7 @@ public sealed partial class LogsView
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         // Ensure persisted settings are applied AFTER the control's own OnLoaded logic runs.
-        if (this.ViewModel is LogsViewModel vm)
+        if (this.ViewModel is OutputViewModel vm)
         {
             // Reapply LevelFilter if control mutated it (e.g., replaced All with subset).
             if (vm.LevelFilter != this.OutputConsole.LevelFilter)
@@ -117,7 +116,7 @@ public sealed partial class LogsView
 
     private void OnConsolePropertyChanged(DependencyObject sender, DependencyProperty dp)
     {
-        if (this.DataContext is not LogsViewModel vm)
+        if (this.DataContext is not OutputViewModel vm)
         {
             return;
         }
