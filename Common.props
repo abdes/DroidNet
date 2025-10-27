@@ -143,6 +143,12 @@
         </Content>
     </ItemGroup>
 
+    <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
+    <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
+    <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
+        <Compile Include="$(IntermediateOutputPath)\**\*.cs" AutoGen="True" />
+    </ItemGroup>
+
     <ItemDefinitionGroup>
         <!-- We always want MSBuild properties generated that point at the restored location of each package. -->
         <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#generatepathproperty -->
