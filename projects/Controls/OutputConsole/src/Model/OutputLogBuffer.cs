@@ -18,7 +18,7 @@ namespace DroidNet.Controls.OutputConsole.Model;
 public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
 {
     private const string IndexerPropertyName = "Item[]";
-
+    private readonly Lock syncLock = new();
     private bool paused;
 
     /// <summary>
@@ -77,7 +77,13 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     /// <summary>
     ///     Clears all entries from the buffer.
     /// </summary>
-    public new void Clear() => this.ClearItems();
+    public new void Clear()
+    {
+        lock (this.syncLock)
+        {
+            this.ClearItems();
+        }
+    }
 
     /// <summary>
     ///     Inserts an item into the buffer. The buffer always appends items to the end
@@ -87,9 +93,21 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     /// <inheritdoc />
     protected override void InsertItem(int index, OutputLogEntry item)
     {
-        // Always append to the end; ignore index for ring semantics
-        base.InsertItem(this.Count, item);
-        this.TrimIfNeeded();
+        lock (this.syncLock)
+        {
+            // Always append to the end; ignore index for ring semantics
+            base.InsertItem(this.Count, item);
+            this.TrimIfNeeded();
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void RemoveItem(int index)
+    {
+        lock (this.syncLock)
+        {
+            base.RemoveItem(index);
+        }
     }
 
     /// <summary>
@@ -103,7 +121,11 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
         // Always notify Reset (e.g., Clear) even when paused so UIs can resync immediately.
         if (!this.paused || e.Action == NotifyCollectionChangedAction.Reset)
         {
-            base.OnCollectionChanged(e);
+            // Block reentrancy to prevent nested collection changes during event handling
+            using (this.BlockReentrancy())
+            {
+                base.OnCollectionChanged(e);
+            }
         }
     }
 
@@ -114,7 +136,8 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     /// <inheritdoc />
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
-        if (!this.paused || string.Equals(e.PropertyName, nameof(this.Count), StringComparison.Ordinal) ||
+        if (!this.paused ||
+            string.Equals(e.PropertyName, nameof(this.Count), StringComparison.Ordinal) ||
             string.Equals(e.PropertyName, IndexerPropertyName, StringComparison.Ordinal))
         {
             base.OnPropertyChanged(e);
