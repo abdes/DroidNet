@@ -58,6 +58,13 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.logger = this.ViewModel?.LoggerFactory?.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
             this.LogLoaded();
 
+            // Adjust height of the title bar row
+            var singleRowHeight = this.ViewModel?.Context?.Decorations?.TitleBar.Height ?? 32.0;
+            var withDocumentTabs = this.ViewModel?.Context?.Decorations?.TitleBar.WithDocumentTabs == true;
+            this.TitleBarRow.Height = new GridLength(singleRowHeight);
+            this.DocumentTabsRow.Height = withDocumentTabs ? new GridLength(singleRowHeight) : new GridLength(0);
+            this.AppIcon.Margin = withDocumentTabs ? new Thickness(8, 8, 12, 8) : new Thickness(4, 4, 8, 4);
+
             // ViewModel is now properly set up; Update the logger if the ViewModel changes for consistency
             this.ViewModelChanged -= this.InitializeLogger; // Should not be needed, but ensure no duplicates
             this.ViewModelChanged += this.InitializeLogger;
