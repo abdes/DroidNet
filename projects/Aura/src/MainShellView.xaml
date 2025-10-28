@@ -90,7 +90,7 @@
                 VerticalAlignment="Top"
                 Background="Transparent"
                 Orientation="Horizontal"
-                Visibility="Collapsed">
+                Visibility="Visible">
                 <cm:MenuButton
                     Chrome="Transparent"
                     CornerRadius="5"
@@ -112,17 +112,5 @@
                 Outlet=""
                 ViewModel="{x:Bind ViewModel.ContentViewModel, Mode=OneWay}" />
         </Grid>
-        <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="WindowWidthStates">
-                <VisualState x:Name="NormalState">
-                    <VisualState.StateTriggers>
-                        <AdaptiveTrigger MinWindowWidth="{x:Bind MinWindowWidth, Mode=OneWay}" />
-                    </VisualState.StateTriggers>
-                    <VisualState.Setters>
-                        <Setter Target="SecondaryCommands.Visibility" Value="Visible" />
-                    </VisualState.Setters>
-                </VisualState>
-            </VisualStateGroup>
-        </VisualStateManager.VisualStateGroups>
     </Grid>
 </UserControl>
