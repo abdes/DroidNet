@@ -79,6 +79,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
             hostingContext.Dispatcher is not null,
             "DispatcherQueue in hosting context is not null when UI thread has been started");
         this.logger = loggerFactory?.CreateLogger<MainShellViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<MainShellViewModel>();
+        this.LoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.pathFinder = pathFinder;
 
@@ -164,6 +165,11 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the content view model for the primary outlet.
     /// </summary>
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
+
+    /// <summary>
+    ///     Gets the <see cref="ILoggerFactory" /> instance. Exposed for use by the View, which is not created via DI."/>.
+    /// </summary>
+    internal ILoggerFactory LoggerFactory { get; }
 
     /// <summary>
     /// Gets the appearance settings (the service implements IAppearanceSettings).
@@ -400,12 +406,14 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
         // Only extend content into title bar if chrome is enabled
         var chromeEnabled = this.Context?.Decorations?.ChromeEnabled ?? true;
-        this.Window.ExtendsContentIntoTitleBar = chromeEnabled;
 
         if (chromeEnabled)
         {
+            this.Window.ExtendsContentIntoTitleBar = chromeEnabled;
             this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
         }
+
+        this.LogWindowTitleBarSetup(chromeEnabled);
     }
 
     /// <summary>

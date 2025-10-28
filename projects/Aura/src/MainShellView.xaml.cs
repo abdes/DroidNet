@@ -4,28 +4,44 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Reactive;
 using System.Reactive.Linq;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Input;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
+using Windows.Graphics;
 using WinUIEx;
 using GridLength = Microsoft.UI.Xaml.GridLength;
 
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Represents the main shell view of the application, providing the main user interface and handling window-related events.
+///     Represents the main shell view of the application, providing the main user interface and
+///     handling window-related events.
 /// </summary>
 /// <remarks>
-/// This class is responsible for initializing the main shell view, setting up the custom title bar, and managing the minimum window width.
-/// It decorates the window with a custom title bar, an application icon, and provides a collapsible main menu and a flyout menu for settings and theme selection.
+///     This class is responsible for initializing the main shell view, setting up the custom title
+///     bar, and managing the minimum window width. It decorates the window with a custom title bar,
+///     an icon, an optional main menu and a flyout menu for settings and theme selection.
 /// </remarks>
 [ViewModel(typeof(MainShellViewModel))]
 public sealed partial class MainShellView : INotifyPropertyChanged
 {
+    // Epsilon (in device-independent pixels) used when comparing GridLength widths
+    private const double WidthEpsilon = 0.5;
+
+    private ILogger logger = NullLogger<MainShellView>.Instance;
     private double minWindowWidth;
+
+    // Holds the subscription for titlebar/layout observables so we can dispose it on Unloaded
+    private IDisposable? titlebarSubscription;
+
+    // Last applied passthrough regions (device pixels). Used to avoid re-applying identical regions.
+    private RectInt32[]? lastAppliedPassthroughRegions;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShellView"/> class.
@@ -37,46 +53,26 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         var uiContext = SynchronizationContext.Current
             ?? throw new InvalidOperationException("SynchronizationContext.Current is null; ensure constructor runs on UI thread.");
 
-        // Convert Loaded and SizeChanged events to observables
-        var loadedObservable = Observable.FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
-            h => this.CustomTitleBar.Loaded += h,
-            h => this.CustomTitleBar.Loaded -= h)
-            .Select(_ => Unit.Default);
-
-        var sizeChangedObservable = Observable.FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
-            h => this.CustomTitleBar.SizeChanged += h,
-            h => this.CustomTitleBar.SizeChanged -= h)
-            .Select(_ => Unit.Default);
-
-        var primaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
-                h => this.PrimaryCommands.LayoutUpdated += h,
-                h => this.PrimaryCommands.LayoutUpdated -= h)
-            .Select(_ => Unit.Default);
-
-        var secondaryCommandsLayoutObservable = Observable.FromEventPattern<EventHandler<object>, object>(
-                h => this.SecondaryCommands.LayoutUpdated += h,
-                h => this.SecondaryCommands.LayoutUpdated -= h)
-            .Select(_ => Unit.Default);
-
-        // Merge the observables and throttle the events
-        var throttledObservable = loadedObservable
-            .Merge(sizeChangedObservable)
-            .Merge(primaryCommandsLayoutObservable)
-            .Merge(secondaryCommandsLayoutObservable)
-            .Throttle(TimeSpan.FromMilliseconds(100))
-            .ObserveOn(uiContext);
-
-        // Subscribe to the throttled observable to call SetupCustomTitleBar
-        _ = throttledObservable.Subscribe(_ =>
+        this.Loaded += (_, _) =>
         {
-            // Skip scheduling when the title bar has already been unloaded (window closing).
-            if (!this.IsLoaded)
-            {
-                return;
-            }
+            this.logger = this.ViewModel?.LoggerFactory?.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
+            this.LogLoaded();
 
-            this.SetupCustomTitleBar();
-        });
+            // ViewModel is now properly set up; Update the logger if the ViewModel changes for consistency
+            this.ViewModelChanged -= this.InitializeLogger; // Should not be needed, but ensure no duplicates
+            this.ViewModelChanged += this.InitializeLogger;
+
+            this.ObserveTitleBar(uiContext);
+        };
+
+        this.Unloaded += (_, _) =>
+        {
+            this.ViewModelChanged -= this.InitializeLogger;
+
+            this.ForgetTitleBar();
+
+            this.LogUnloaded();
+        };
     }
 
     /// <inheritdoc/>
@@ -98,40 +94,107 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.minWindowWidth = value;
             this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.MinWindowWidth)));
 
-            if (this.ViewModel?.Window is WindowEx window && window.MinWidth < this.MinWindowWidth)
+            // Ensure the host window enforces the computed minimum width.
+            // Assign unconditionally to avoid cases where the window's MinWidth was never
+            // updated (or updated with an incompatible unit) and the user can resize below
+            // the intended minimum. The operation is cheap and idempotent from the app's
+            // perspective; the platform will clamp it if necessary.
+            if (this.ViewModel?.Window is WindowEx wnd)
             {
-                window.MinWidth = this.MinWindowWidth;
+                // Use a ceiling to avoid fractional DIP rounding issues that the host
+                // windowing subsystem might ignore; enforce an integer DIP minimum.
+                wnd.MinWidth = Math.Ceiling(this.MinWindowWidth);
             }
         }
     }
 
-    /// <summary>
-    /// Converts a <see cref="Rect"/> to a <see cref="Windows.Graphics.RectInt32"/> based on the specified scale.
-    /// </summary>
-    /// <param name="bounds">The bounds to convert.</param>
-    /// <param name="scale">The scale factor to apply.</param>
-    /// <returns>A <see cref="Windows.Graphics.RectInt32"/> representing the scaled bounds.</returns>
-    private static Windows.Graphics.RectInt32 GetRect(Rect bounds, double scale) => new(
-        _X: (int)Math.Round(bounds.X * scale),
-        _Y: (int)Math.Round(bounds.Y * scale),
-        _Width: (int)Math.Round(bounds.Width * scale),
-        _Height: (int)Math.Round(bounds.Height * scale));
-
-    private static void AddPassthroughRegion(
-        FrameworkElement element,
-        double scaleAdjustment,
-        List<Windows.Graphics.RectInt32> regions)
+    private void InitializeLogger(object? sender, ViewModelChangedEventArgs<MainShellViewModel> args)
     {
-        if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
+        _ = sender; // unused
+        _ = args; // unused
+
+        this.logger = this.ViewModel?.LoggerFactory.CreateLogger<MainShellView>() ?? NullLogger<MainShellView>.Instance;
+
+        // Log that the instance logger was replaced (this helps track log sinks/lifetimes)
+        this.LogLoggerInitialized();
+    }
+
+    private void ObserveTitleBar(SynchronizationContext uiContext)
+    {
+        IObservable<string> ObserveWindowSize()
         {
-            return;
+            var window = this.ViewModel?.Window;
+            Debug.Assert(window is not null, "expecting a properly setup ViewModel when loaded");
+            return Observable
+                .FromEventPattern<TypedEventHandler<object, WindowSizeChangedEventArgs>, WindowSizeChangedEventArgs>(
+                h => h.Invoke,
+                h => window.SizeChanged += h,
+                h => window.SizeChanged -= h)
+                .Select(_ => "Window.SizeChanged");
         }
 
-        var transform = element.TransformToVisual(visual: null);
-        var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        IObservable<string> ObserveTitleBarLoaded() => Observable
+            .FromEventPattern<RoutedEventHandler, RoutedEventArgs>(
+                h => this.CustomTitleBar.Loaded += h,
+                h => this.CustomTitleBar.Loaded -= h)
+            .Select(_ => "CustomTitleBar.Loaded");
 
-        var scaledRect = GetRect(bounds, scaleAdjustment);
-        regions.Add(scaledRect);
+        IObservable<string> ObserveTitleBarSize() => Observable
+            .FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
+                h => this.CustomTitleBar.SizeChanged += h,
+                h => this.CustomTitleBar.SizeChanged -= h)
+            .Select(_ => "CustomTitleBar.SizeChanged");
+
+        IObservable<string> ObservePrimaryCommandsSize() => Observable
+            .FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
+                h => this.PrimaryCommands.SizeChanged += h,
+                h => this.PrimaryCommands.SizeChanged -= h)
+            .Select(_ => "PrimaryCommands.SizeChanged");
+
+        IObservable<string> ObserveSecondaryCommandsSize() => Observable
+            .FromEventPattern<SizeChangedEventHandler, SizeChangedEventArgs>(
+                h => this.SecondaryCommands.SizeChanged += h,
+                h => this.SecondaryCommands.SizeChanged -= h)
+            .Select(_ => "SecondaryCommands.SizeChanged");
+
+        // Merge the observables and throttle the events
+        // Compute a lightweight key representing the current passthrough geometry and only
+        // emit when that key changes. This short-circuits layout noise that doesn't affect
+        // the regions we apply for non-client input.
+        var throttledObservable =
+            ObserveWindowSize()
+            .Merge(ObserveTitleBarLoaded())
+            .Merge(ObserveTitleBarSize())
+            .Merge(ObservePrimaryCommandsSize())
+            .Merge(ObserveSecondaryCommandsSize())
+            .Throttle(TimeSpan.FromMilliseconds(10))
+            .ObserveOn(uiContext)
+            .Select(evt => evt);
+
+        // Subscribe to the throttled observable to call SetupCustomTitleBar
+        this.LogObservablesSubscribed();
+
+        // Dispose any previous subscription before creating a new one (defensive)
+        this.titlebarSubscription?.Dispose();
+        this.titlebarSubscription = throttledObservable.Subscribe(eventType =>
+        {
+            this.LogThrottledTitlebarEvent(eventType);
+
+            if (!this.IsLoaded)
+            {
+                return; // Skip scheduling when the title bar has already been unloaded (window closing).
+            }
+
+            this.SetupCustomTitleBar();
+            this.SetWindowMinWidth();
+            this.UpdateSecondaryCommandsVisibilityWithHysteresis();
+        });
+    }
+
+    private void ForgetTitleBar()
+    {
+        this.titlebarSubscription?.Dispose();
+        this.titlebarSubscription = null;
     }
 
     /// <summary>
@@ -174,80 +237,160 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// </remarks>
     private void SetupCustomTitleBar()
     {
-        if (!this.IsLoaded)
-        {
-            return;
-        }
+        Debug.Assert(this.IsLoaded, "SetupCustomTitleBar should only be called when the view is loaded.");
+        Debug.Assert(this.ViewModel?.Window is not null, "expecting a properly setup ViewModel when loaded");
 
-        Debug.Assert(
-            this.ViewModel?.Window is not null,
-            "expecting a properly setup ViewModel when loaded");
-
-        if (this.ViewModel?.Window is null)
-        {
-            return;
-        }
-
-        if (this.CustomTitleBar.XamlRoot is null)
-        {
-            return;
-        }
+        this.LogSetupCustomTitleBarInvoked();
 
         var appWindow = this.ViewModel.Window.AppWindow;
         var scaleAdjustment = this.CustomTitleBar.XamlRoot.RasterizationScale;
 
-        // Note: Height is now controlled by XAML binding to Context.Decorations.TitleBar.Height
-        // Configure system insets for caption buttons
-        // The system insets tell us how much space Windows needs for the caption buttons.
-        // We must reserve this full space with empty padding columns.
-        var rightInset = appWindow.TitleBar.RightInset / scaleAdjustment;
-
-        this.SystemReservedRight.Width = new GridLength(rightInset);
-
-        // Force Grid to recalculate layout with the new SystemReservedRight width
-        this.CustomTitleBar.UpdateLayout();
+        UpdateSystemReservedWidthIfChanged();
 
         // Configure passthrough regions for interactive elements
         // Pass the system right inset in device pixels so we can clamp passthrough regions
-        this.ConfigurePassthroughRegions(appWindow.Id, scaleAdjustment, appWindow.TitleBar.RightInset);
+        this.ConfigurePassthroughRegions(appWindow, scaleAdjustment);
 
-        // Calculate minimum window width
+        void UpdateSystemReservedWidthIfChanged()
+        {
+            // The system insets tell us how much space Windows needs for the caption buttons.
+            // We must reserve this full space with empty padding columns.
+            var rightInset = appWindow.TitleBar.RightInset / scaleAdjustment;
+            var previousReserved = this.SystemReservedRight.Width.Value;
+
+            // Only update the reserved width when the numeric value meaningfully changed. Re-assigning
+            // the same GridLength can provoke layout; guard with an epsilon compare to reduce churn.
+            if (double.IsNaN(previousReserved) || Math.Abs(previousReserved - rightInset) > WidthEpsilon)
+            {
+                this.SystemReservedRight.Width = new GridLength(rightInset);
+                this.CustomTitleBar.UpdateLayout(); // Force layout recalculation
+                this.LogCustomTitleBarLayout(scaleAdjustment, rightInset);
+            }
+            else
+            {
+                this.LogSystemReservedWidthUnchanged(previousReserved, rightInset);
+            }
+        }
+    }
+
+    private void SetWindowMinWidth()
+    {
         this.MinWindowWidth = this.IconColumn.ActualWidth +
-                              this.PrimaryCommands.ActualWidth + this.DragColumn.MinWidth +
-                              this.SecondaryCommands.ActualWidth +
-                              this.SystemReservedRight.Width.Value;
+                      this.PrimaryCommands.ActualWidth + this.DragColumn.MinWidth +
+                      this.SecondaryCommands.ActualWidth +
+                      this.SystemReservedRight.Width.Value;
+        this.LogSetWindowMinWidth();
     }
 
     /// <summary>
-    /// Configures passthrough regions for interactive elements in the title bar.
+    /// Update the visibility of the SecondaryCommands panel with hysteresis around
+    /// the computed MinWindowWidth threshold. This breaks the circular dependency
+    /// between the VisualState system and MinWindowWidth that caused layout churn.
     /// </summary>
-    /// <param name="windowId">The window ID.</param>
-    /// <param name="scaleAdjustment">The DPI scale adjustment factor.</param>
-    /// <param name="systemRightInsetDevice">The system right inset in device pixels.</param>
-    private void ConfigurePassthroughRegions(Microsoft.UI.WindowId windowId, double scaleAdjustment, int systemRightInsetDevice)
+    private void UpdateSecondaryCommandsVisibilityWithHysteresis()
     {
-        // NOTE: Passthrough regions must be calculated relative to the window.
-        // When we use TransformToVisual(null), the element's position already includes
-        // the CustomTitleBar margin, so we don't need to add it separately.
-        var passthroughRegions = new List<Windows.Graphics.RectInt32>();
+        var scaleAdjustment = this.CustomTitleBar?.XamlRoot?.RasterizationScale ?? 1.0;
+        var deviceWindowWidth = this.ViewModel?.Window?.AppWindow.Size.Width ?? 0;
+        var windowWidth = deviceWindowWidth / scaleAdjustment;
+        if (double.IsNaN(windowWidth) || windowWidth <= 0.0)
+        {
+            return;
+        }
 
+        // Threshold that must be satisfied before secondary can be shown
+        var thresholdWithoutSecondary =
+            this.IconColumn.ActualWidth +
+            this.PrimaryCommands.ActualWidth +
+            this.DragColumn.MinWidth +
+            this.SystemReservedRight.Width.Value;
+
+        // Latest measurement and remembered width (for when collapsed)
+        var secondaryWidth = this.SecondaryCommands.ActualWidth;
+
+        var currentlyVisible = this.SecondaryCommands.Visibility is Visibility.Visible;
+        var requiredWidthToShowSecondary = thresholdWithoutSecondary + secondaryWidth;
+
+        var targetVisible = secondaryWidth > 0.0 && windowWidth >= requiredWidthToShowSecondary;
+
+        // Apply decision once
+        var newVisibility = targetVisible ? Visibility.Visible : Visibility.Collapsed;
+
+        // Apply only if it changed
+        if (this.SecondaryCommands.Visibility != newVisibility)
+        {
+            this.SecondaryCommands.Visibility = newVisibility;
+        }
+
+        // Single log statement with all relevant info
+        this.LogSecondaryCommandsInfo(newVisibility, currentlyVisible, windowWidth, requiredWidthToShowSecondary);
+    }
+
+    private void ConfigurePassthroughRegions(AppWindow window, double scaleAdjustment)
+    {
+        var newRegions = this.ComputeClampedPassthroughRegions(scaleAdjustment, window.TitleBar.RightInset);
+
+        if (RegionsEqual(this.lastAppliedPassthroughRegions, newRegions))
+        {
+            this.LogPassthroughRegionsIdentical();
+            return;
+        }
+
+        var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(window.Id);
+        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. newRegions]);
+        this.LogPassthroughRegionsSet(newRegions.Length);
+
+        // Store for later comparison
+        this.lastAppliedPassthroughRegions = newRegions;
+
+        static bool RegionsEqual(Windows.Graphics.RectInt32[]? a, Windows.Graphics.RectInt32[]? b)
+        {
+            if (ReferenceEquals(a, b))
+            {
+                return true;
+            }
+
+            if (a is null && b is null)
+            {
+                return true;
+            }
+
+            if (a is null || b is null)
+            {
+                return false;
+            }
+
+            if (a.Length != b.Length)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < a.Length; ++i)
+            {
+                var x = a[i];
+                var y = b[i];
+                if (x.X != y.X || x.Y != y.Y || x.Width != y.Width || x.Height != y.Height)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+    }
+
+    private Windows.Graphics.RectInt32[] ComputeClampedPassthroughRegions(double scaleAdjustment, int systemRightInsetDevice)
+    {
+        var passthroughRegions = new List<Windows.Graphics.RectInt32>();
         AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions);
         AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions);
 
-        // Clamp regions so they never touch or overlap the system caption area on the right.
-        // Work in device pixels.
-        var clampedRegions = new List<Windows.Graphics.RectInt32>();
-
-        // Compute device window width from logical width and rasterization scale
+        var clamped = new List<Windows.Graphics.RectInt32>();
         var deviceWindowWidth = (int)Math.Round(this.ActualWidth * scaleAdjustment);
-
-        // Leave a small gap between passthrough regions and system area.
         var gap = Math.Max(2, (int)this.SecondaryCommands.Margin.Right);
         var allowedMaxX = deviceWindowWidth - systemRightInsetDevice - gap;
 
         foreach (var r in passthroughRegions)
         {
-            // If region starts beyond allowed area, skip
             if (r.X >= allowedMaxX)
             {
                 continue;
@@ -262,12 +405,42 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
             if (clampedWidth > 0)
             {
-                clampedRegions.Add(new Windows.Graphics.RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height));
+                var cr = new Windows.Graphics.RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height);
+                clamped.Add(cr);
             }
         }
 
-        // Set passthrough regions (use empty array to clear if none)
-        var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(windowId);
-        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. clampedRegions]);
+        this.LogComputedPassthroughRegions(passthroughRegions.Count, clamped);
+
+        return [.. clamped];
+
+        void AddPassthroughRegion(
+           FrameworkElement element,
+           double scaleAdjustment,
+           List<Windows.Graphics.RectInt32> regions)
+        {
+            if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
+            {
+                // Report skipped interactive element for troubleshooting
+                this.LogPassthroughElementSkipped(element.Name ?? element.GetType().Name);
+                return;
+            }
+
+            var transform = element.TransformToVisual(visual: null);
+            var bounds = transform.TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+
+            var scaledRect = MakeScaledPassthroughRegion(bounds, scaleAdjustment);
+            regions.Add(scaledRect);
+
+            // Converts a <see cref="Rect"/> to a <see cref="Windows.Graphics.RectInt32"/> based on the specified scale.
+            static RectInt32 MakeScaledPassthroughRegion(Rect bounds, double scale)
+               => new()
+               {
+                   X = (int)Math.Round(bounds.X * scale),
+                   Y = (int)Math.Round(bounds.Y * scale),
+                   Width = (int)Math.Round(bounds.Width * scale),
+                   Height = (int)Math.Round(bounds.Height * scale),
+               };
+        }
     }
 }

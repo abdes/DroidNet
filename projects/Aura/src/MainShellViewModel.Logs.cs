@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura;
 
@@ -45,5 +46,33 @@ public partial class MainShellViewModel
         {
             LogIconNotFound(this.logger, isPackaged ? "Packaged" : "Unpackaged", relativePath);
         }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Custom title bar setup for window '{Window} with height '{TitleBarHeight}")]
+    private static partial void LogWindowTitleBarSetup(ILogger logger, string window, TitleBarHeightOption titleBarHeight);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Not setting up custom title bar for window '{Window}', because it's not using Aura chrome")]
+    private static partial void LogNoWindowTitleBarSetup(ILogger logger, string window);
+
+    [Conditional("DEBUG")]
+    private void LogWindowTitleBarSetup(bool chromeEnabled)
+    {
+        Debug.Assert(this.Window is not null, "Window should not be null when logging title bar setup.");
+        var windowTitle = this.Window.Title;
+
+        if (!chromeEnabled)
+        {
+            LogNoWindowTitleBarSetup(this.logger, windowTitle);
+            return;
+        }
+
+        var titleBarHeight = this.Window.AppWindow.TitleBar.PreferredHeightOption;
+        LogWindowTitleBarSetup(this.logger, windowTitle, titleBarHeight);
     }
 }
