@@ -23,12 +23,10 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// </summary>
 /// <param name="projectManager">The project manager service.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
-/// <param name="router">The router service for navigation.</param>
 /// <param name="loggerFactory">The logger factory to create loggers.</param>
 public partial class ProjectLayoutViewModel(
     IProjectManagerService projectManager,
     ContentBrowserState contentBrowserState,
-    IRouter router,
     ILoggerFactory? loggerFactory)
     : DynamicTreeViewModel, IRoutingAware, IDisposable
 {

@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.WindowManagement;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -54,10 +55,11 @@ public partial class App
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
-        PersistentState dbContext,
-        IWindowManagerService windowManager)
+        IWindowManagerService windowManager,
+        WindowBackdropService backdropService)
     {
         _ = windowManager; // Unused; injected only for early initialization
+        _ = backdropService; // Unused; injected only for early initialization
 
         // Create the DispatcherScheduler for the UI thread
         this.hostingContext = hostingContext;

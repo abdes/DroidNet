@@ -7,12 +7,11 @@ using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
+using Oxygen.Editor.WorldEditor.Editors;
+using Oxygen.Editor.WorldEditor.Output;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
-using Oxygen.Editor.WorldEditor.ViewModels;
-using Oxygen.Editor.WorldEditor.Views;
-using SceneExplorerView = Oxygen.Editor.WorldEditor.SceneExplorer.SceneExplorerView;
-using SceneExplorerViewModel = Oxygen.Editor.WorldEditor.SceneExplorer.SceneExplorerViewModel;
+using Oxygen.Editor.WorldEditor.SceneExplorer;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
@@ -46,7 +45,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
             Path = string.Empty,
             Children = new Routes(
             [
-                new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(RendererViewModel) },
+                new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentHostViewModel) },
                 new Route
                 {
                     Outlet = "se",
@@ -70,7 +69,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
                 },
                 new Route
                 {
-                    Outlet = "log", Path = "log", MatchMethod = PathMatch.Full, ViewModelType = typeof(LogsViewModel),
+                    Outlet = "log", Path = "log", MatchMethod = PathMatch.Full, ViewModelType = typeof(OutputViewModel),
                 },
             ]),
         },
@@ -84,14 +83,14 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     {
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
-        childContainer.Register<RendererViewModel>(Reuse.Transient);
-        childContainer.Register<RendererView>(Reuse.Singleton);
+        childContainer.Register<DocumentHostViewModel>(Reuse.Transient);
+        childContainer.Register<TabbedDocumentView>(Reuse.Singleton);
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
-        childContainer.Register<LogsViewModel>(Reuse.Singleton);
-        childContainer.Register<LogsView>(Reuse.Transient);
+        childContainer.Register<OutputViewModel>(Reuse.Singleton);
+        childContainer.Register<OutputView>(Reuse.Transient);
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);

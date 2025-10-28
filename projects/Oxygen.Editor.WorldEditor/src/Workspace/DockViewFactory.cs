@@ -12,8 +12,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.WorldEditor.ViewModels;
-using Oxygen.Editor.WorldEditor.Views;
+using Oxygen.Editor.WorldEditor.Editors;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
@@ -27,7 +26,7 @@ internal sealed class DockViewFactory(IResolver container) : IDockViewFactory
     /// <inheritdoc/>
     public UIElement CreateViewForDock(IDock dock)
         => dock is CenterDock
-            ? new RendererView() { ViewModel = container.Resolve<RendererViewModel>(), }
+            ? new TabbedDocumentView() { ViewModel = container.Resolve<DocumentHostViewModel>(), }
             : new Border()
             {
                 BorderThickness = new Thickness(0.5),
