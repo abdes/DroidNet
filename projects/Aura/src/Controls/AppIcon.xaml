@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Aura.Controls">
+
+    <Style BasedOn="{StaticResource DefaultAppIconStyle}" TargetType="local:AppIcon" />
+
+    <Style x:Key="DefaultAppIconStyle" TargetType="local:AppIcon">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="local:AppIcon">
+                    <Grid Width="{TemplateBinding Width}" Height="{TemplateBinding Height}">
+                        <Viewbox>
+                            <IconSourceElement IconSource="{TemplateBinding IconSource}" />
+                        </Viewbox>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

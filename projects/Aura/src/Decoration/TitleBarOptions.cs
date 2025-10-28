@@ -63,6 +63,8 @@ public sealed record TitleBarOptions
     /// </value>
     public bool ShowIcon { get; init; } = true;
 
+    public bool WithDocumentTabs { get; init; } = false;
+
     /// <summary>
     /// Gets the relative path to the window icon file, resolved at runtime by looking for an asset
     /// under the application's `Assets` directory, or in Aura's assembly Assets.

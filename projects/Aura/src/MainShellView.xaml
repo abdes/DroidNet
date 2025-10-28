@@ -4,6 +4,7 @@
     x:Class="DroidNet.Aura.MainShellView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:auraControls="using:DroidNet.Aura.Controls"
     xmlns:cm="using:DroidNet.Controls.Menus"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -44,9 +45,12 @@
         <!--  Custom TitleBar  -->
         <Grid
             x:Name="CustomTitleBar"
-            Height="{x:Bind ViewModel.Context.Decorations.TitleBar.Height, Mode=OneWay, FallbackValue=32}"
             Background="Transparent"
             Visibility="{x:Bind ViewModel.Context.Decorations.ChromeEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
+            <Grid.RowDefinitions>
+                <RowDefinition x:Name="TitleBarRow" />
+                <RowDefinition x:Name="DocumentTabsRow" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="IconColumn" Width="Auto" />
                 <ColumnDefinition x:Name="PrimaryCommandsColumn" Width="Auto" />
@@ -57,10 +61,10 @@
                 <ColumnDefinition x:Name="SecondaryCommandsColumn" Width="Auto" />
                 <ColumnDefinition x:Name="SystemReservedRight" Width="0" />
             </Grid.ColumnDefinitions>
-            <IconSourceElement
+            <auraControls:AppIcon
+                x:Name="AppIcon"
+                Grid.RowSpan="2"
                 Grid.Column="0"
-                Height="20"
-                Margin="4"
                 VerticalAlignment="Center"
                 IconSource="{x:Bind ViewModel.IconSource, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.ShowIcon, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}" />
@@ -92,6 +96,7 @@
                 Orientation="Horizontal"
                 Visibility="Visible">
                 <cm:MenuButton
+                    Height="{x:Bind ViewModel.Context.Decorations.TitleBar.Height, Mode=OneWay, FallbackValue=32}"
                     Chrome="Transparent"
                     CornerRadius="5"
                     MenuSource="{x:Bind ViewModel.SettingsMenu, Mode=OneWay}">
