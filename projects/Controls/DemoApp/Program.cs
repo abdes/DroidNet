@@ -15,6 +15,7 @@ using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
+using DroidNet.Controls.Demo.TabStrip;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -176,6 +177,8 @@ public static partial class Program
         container.Register<MenuFlyoutDemoViewModel>(Reuse.Transient);
         container.Register<MenuItemDemoView>(Reuse.Transient);
         container.Register<MenuItemDemoViewModel>(Reuse.Transient);
+        container.Register<TabStripDemoView>(Reuse.Transient);
+        container.Register<TabStripDemoViewModel>(Reuse.Transient);
     }
 
     [SuppressMessage("Design", "MA0051:Method is too long", Justification = "methoid gains in clarity iof all routes are together")]
@@ -242,6 +245,11 @@ public static partial class Program
                         {
                             Path = "menuitem",
                             ViewModelType = typeof(MenuItemDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "tabstrip",
+                            ViewModelType = typeof(TabStripDemoViewModel),
                         },
                     ]),
                 },

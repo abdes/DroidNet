@@ -40,6 +40,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\TabStrip\src\Controls.TabStrip.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj">
             <Private>True</Private>
