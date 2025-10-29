@@ -13,7 +13,7 @@
     Version="1.0.0.0" />
 
   <Properties>
-    <DisplayName>DroidNet In-Place Editable Controls UI Tests</DisplayName>
+    <DisplayName>DroidNet Menu Controls UI Tests</DisplayName>
     <PublisherDisplayName>abdes</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
