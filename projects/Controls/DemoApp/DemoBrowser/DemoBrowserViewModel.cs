@@ -10,6 +10,7 @@ using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
+using DroidNet.Controls.Demo.TabStrip;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -64,6 +65,7 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
         new("menubar", "MenuBar Demo", typeof(MenuBarDemoViewModel)),
         new("menuflyout", "MenuFlyout Demo", typeof(MenuFlyoutDemoViewModel)),
         new("menuitem", "MenuItem Demo", typeof(MenuItemDemoViewModel)),
+        new("tabstrip", "TabStrip Demo", typeof(TabStripDemoViewModel)),
     ];
 
     /// <summary>

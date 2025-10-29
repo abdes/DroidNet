@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls">
+
+    <!--  CommunityToolkit converters  -->
+
+    <Style BasedOn="{StaticResource DefaultTabStripStyle}" TargetType="controls:TabStrip" />
+
+    <!--  TabStrip default style  -->
+    <Style x:Key="DefaultTabStripStyle" TargetType="controls:TabStrip">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:TabStrip">
+                    <Grid
+                        x:Name="PartRootGrid"
+                        Background="{TemplateBinding Background}"
+                        ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!--  Pinned tabs  -->
+                        <ItemsRepeater
+                            x:Name="PartPinnedItemsRepeater"
+                            Grid.Column="0"
+                            ItemsSource="{TemplateBinding PinnedItemsView}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout Orientation="Horizontal" Spacing="4" />
+                            </ItemsRepeater.Layout>
+                            <ItemsRepeater.ItemTemplate>
+                                <DataTemplate>
+                                    <controls:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
+                                </DataTemplate>
+                            </ItemsRepeater.ItemTemplate>
+                        </ItemsRepeater>
+
+                        <!--  Regular tabs with overlay buttons  -->
+                        <Grid Grid.Column="1">
+                            <!--  Scrollable host  -->
+                            <ScrollViewer
+                                x:Name="PartScrollHost"
+                                HorizontalScrollBarVisibility="Hidden"
+                                VerticalScrollBarVisibility="Disabled"
+                                VerticalScrollMode="Disabled"
+                                ZoomMode="Disabled">
+                                <ItemsRepeater x:Name="PartRegularItemsRepeater" ItemsSource="{TemplateBinding RegularItemsView}">
+                                    <ItemsRepeater.Layout>
+                                        <StackLayout Orientation="Horizontal" Spacing="4" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate>
+                                            <controls:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </ScrollViewer>
+
+                            <!--  Left overflow overlay  -->
+                            <Border
+                                Width="12"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Stretch"
+                                Background="{ThemeResource SystemControlBackgroundChromeMediumBrush}"
+                                Visibility="{Binding Visibility, ElementName=PartOverflowLeftButton}">
+                                <RepeatButton
+                                    x:Name="PartOverflowLeftButton"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    BorderThickness="0"
+                                    Content="&#xF08D;"
+                                    CornerRadius="0"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="10"
+                                    Visibility="Collapsed" />
+                            </Border>
+
+                            <!--  Right overflow overlay  -->
+                            <Border
+                                Width="12"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Stretch"
+                                Background="{ThemeResource SystemControlBackgroundChromeMediumBrush}"
+                                Visibility="{Binding Visibility, ElementName=PartOverflowRightButton}">
+                                <RepeatButton
+                                    x:Name="PartOverflowRightButton"
+                                    Padding="0"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Stretch"
+                                    BorderThickness="0"
+                                    Content="&#xF08F;"
+                                    CornerRadius="0"
+                                    FontFamily="Segoe MDL2 Assets"
+                                    FontSize="10"
+                                    Visibility="Collapsed" />
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

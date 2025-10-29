@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.TabStrip.TabStripDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:DroidNet.Controls.Demo.TabStrip"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="8" RowSpacing="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox
+                Width="200"
+                PlaceholderText="Tab header"
+                Text="{x:Bind ViewModel.NewItemHeader, Mode=TwoWay}" />
+            <ComboBox
+                Width="140"
+                ItemsSource="{x:Bind local:TabStripDemoView.AvailableIconSymbols}"
+                PlaceholderText="Icon (optional)"
+                SelectedItem="{x:Bind ViewModel.NewItemIconSymbol, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="controls:Symbol">
+                        <controls:SymbolIcon Symbol="{x:Bind}" />
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+            <CheckBox Content="Pinned" IsChecked="{x:Bind ViewModel.NewItemIsPinned, Mode=TwoWay}" />
+            <CheckBox Content="Closable" IsChecked="{x:Bind ViewModel.NewItemIsClosable, Mode=TwoWay}" />
+            <Button Click="AddTab_Click" Content="Add Tab" />
+        </StackPanel>
+
+        <StackPanel
+            Grid.Row="1"
+            Orientation="Horizontal"
+            Spacing="16">
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock Text="Max Item Width" />
+                <Slider
+                    Width="200"
+                    Maximum="400"
+                    Minimum="50"
+                    StepFrequency="10"
+                    Value="{x:Bind ViewModel.MaxItemWidth, Mode=TwoWay}" />
+                <TextBlock Text="{x:Bind ViewModel.MaxItemWidth, Mode=OneWay}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock Text="Preferred Item Width" />
+                <Slider
+                    Width="200"
+                    Maximum="400"
+                    Minimum="50"
+                    StepFrequency="10"
+                    Value="{x:Bind ViewModel.PreferredItemWidth, Mode=TwoWay}" />
+                <TextBlock Text="{x:Bind ViewModel.PreferredItemWidth, Mode=OneWay}" />
+            </StackPanel>
+
+            <StackPanel Orientation="Vertical" Spacing="4">
+                <TextBlock Text="Tab Width Policy" />
+                <ComboBox
+                    Width="120"
+                    ItemsSource="{x:Bind local:TabStripDemoView.TabWidthPolicyNames}"
+                    SelectedItem="{x:Bind ViewModel.TabWidthPolicyName, Mode=TwoWay}" />
+            </StackPanel>
+
+            <CheckBox
+                VerticalAlignment="Center"
+                Content="Scroll on Wheel"
+                IsChecked="{x:Bind ViewModel.ScrollOnWheel, Mode=TwoWay}" />
+        </StackPanel>
+
+        <Border
+            Grid.Row="2"
+            Height="32"
+            Margin="20"
+            Background="{ThemeResource LayerFillColorDefaultBrush}">
+            <dnc:TabStrip
+                x:Name="DemoTabStrip"
+                LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
+                MaxItemWidth="{x:Bind ViewModel.MaxItemWidth, Mode=OneWay}"
+                PreferredItemWidth="{x:Bind ViewModel.PreferredItemWidth, Mode=OneWay}"
+                ScrollOnWheel="{x:Bind ViewModel.ScrollOnWheel, Mode=OneWay}"
+                TabWidthPolicy="{x:Bind ViewModel.TabWidthPolicy, Mode=OneWay}" />
+        </Border>
+    </Grid>
+</Page>
