@@ -12,7 +12,7 @@
     <PackageVersion Include="DryIoc.dll" Version="6.0.0-preview-07" />
     <PackageVersion Include="DryIoc.Microsoft.DependencyInjection" Version="8.0.0-preview-02" />
     <PackageVersion Include="Microsoft.WindowsAppSDK" Version="1.8.251003001" />
-    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6584" />
+    <PackageVersion Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.6901" />
     <PackageVersion Include="Serilog" Version="4.1.0" />
     <PackageVersion Include="Serilog.Expressions" Version="5.0.0" />
     <PackageVersion Include="Serilog.Extensions.Hosting" Version="9.0.0" />
@@ -70,7 +70,7 @@
     <PackageVersion Include="Roslynator.Analyzers" Version="4.14.1" />
     <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.14.1" />
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.14.1" />
-    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.234" />
+    <PackageVersion Include="Meziantou.Analyzer" Version="2.0.239" />
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
@@ -84,7 +84,7 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.1.0" />
     <PackageVersion Include="Moq" Version="4.20.72" />
     <PackageVersion Include="Verify.DiffPlex" Version="3.1.2" />
-    <PackageVersion Include="Verify.MSTest" Version="31.0.4" />
+    <PackageVersion Include="Verify.MSTest" Version="31.2.0" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.5.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.8.3" />
     <PackageVersion Include="Testably.Abstractions.Testing" Version="4.3.9" />
