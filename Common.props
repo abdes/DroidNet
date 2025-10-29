@@ -133,16 +133,6 @@
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
-    <ItemGroup>
-        <!-- Include all assets as Content -->
-        <Content Include="Assets\**\*">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <Pack>true</Pack>
-            <PackagePath>contentFiles\any\any\Assets</PackagePath>
-            <BuildAction>Content</BuildAction>
-        </Content>
-    </ItemGroup>
-
     <!-- Workaround for the stupid intellisense in vscode not seeing the generated files for XAML -->
     <!-- Only include for design-time builds (IntelliSense), not for actual compilation -->
     <ItemGroup Condition="'$(BuildingInsideVisualStudio)' != 'True' AND '$(DesignTimeBuild)' == 'True'">
