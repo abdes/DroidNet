@@ -65,12 +65,13 @@ public partial class TabStripItem : ContentControl
     /// </summary>
     internal const int MinDragWidth = 40;
 
-    private Grid? rootGrid;
+    // Required parts will not be nulll after OnApplyTemplate is called
+    private StackPanel buttonsContainer = null!;
+    private Button pinButton = null!;
+    private Button closeButton = null!;
+
     private ContentPresenter? iconPart;
     private TextBlock? headerPart;
-    private StackPanel? buttonsContainer;
-    private Button? pinButton;
-    private Button? closeButton;
     private ILogger? logger;
     private bool isPointerOver;
 
@@ -83,132 +84,215 @@ public partial class TabStripItem : ContentControl
     }
 
     /// <summary>
-    /// Applies the control template and sets up template parts.
+    ///     Applies the control template and sets up required and optional template parts.
     /// </summary>
+    /// <exception cref="InvalidOperationException">Thrown if a required template part is missing or of the wrong type.</exception>
+    [MemberNotNull(nameof(buttonsContainer), nameof(pinButton), nameof(closeButton))]
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
-        this.rootGrid = this.GetTemplateChild(RootGridPartName) as Grid;
-        this.iconPart = this.GetTemplateChild(IconPartName) as ContentPresenter;
-        this.headerPart = this.GetTemplateChild(HeaderPartName) as TextBlock;
-        this.buttonsContainer = this.GetTemplateChild(ButtonsContainerPartName) as StackPanel;
-        this.pinButton = this.GetTemplateChild(PinButtonPartName) as Button;
-        this.closeButton = this.GetTemplateChild(CloseButtonPartName) as Button;
 
-        if (this.pinButton is not null)
+        this.LogApplyingTemplate();
+
+        T? GetTemplatePart<T>(string name, bool isRequired = false)
+            where T : DependencyObject
         {
-            this.pinButton.Click += this.PinButton_Click;
+            var part = this.GetTemplateChild(name) as T;
+            if (part is null)
+            {
+                var expectedType = typeof(T);
+                this.LogTemplatePartNotFound(name, expectedType, isRequired);
+                if (isRequired)
+                {
+                    throw new InvalidOperationException($"The required template part '{name}' is missing or is not of type '{expectedType}'.");
+                }
+            }
+
+            return part;
         }
 
-        if (this.closeButton is not null)
-        {
-            this.closeButton.Click += this.CloseButton_Click;
-        }
+        T GetRequiredTemplatePart<T>(string name)
+            where T : DependencyObject
+            => GetTemplatePart<T>(name, isRequired: true)!;
 
-        if (this.rootGrid is not null)
-        {
-            this.rootGrid.PointerEntered -= this.OnRootGridPointerEntered;
-            this.rootGrid.PointerExited -= this.OnRootGridPointerExited;
-            this.rootGrid.PointerEntered += this.OnRootGridPointerEntered;
-            this.rootGrid.PointerExited += this.OnRootGridPointerExited;
-        }
+        // Required parts
+        this.buttonsContainer = GetRequiredTemplatePart<StackPanel>(ButtonsContainerPartName);
+        this.pinButton = GetRequiredTemplatePart<Button>(PinButtonPartName);
+        this.closeButton = GetRequiredTemplatePart<Button>(CloseButtonPartName);
 
-        this.UpdateLayoutForCompactMode();
+        // Optional parts
+        this.iconPart = GetTemplatePart<ContentPresenter>(IconPartName);
+        this.headerPart = GetTemplatePart<TextBlock>(HeaderPartName);
+
+        // Attach button click events for the tool buttons
+        this.pinButton.Click -= PinButton_Click;
+        this.pinButton.Click += PinButton_Click;
+        this.closeButton.Click -= CloseButton_Click;
+        this.closeButton.Click += CloseButton_Click;
+
+        this.UpdateToolBarVisibility();
         this.UpdateMinWidth();
-        this.UpdatePinGlyph();
-        this.UpdateVisualState(useTransitions: false);
+        this.UpdateVisualStates(useTransitions: false);
+
+        void PinButton_Click(object sender, RoutedEventArgs e) => this.OnPinClicked();
+        void CloseButton_Click(object sender, RoutedEventArgs e) => this.OnCloseClicked();
     }
 
-    private void OnRootGridPointerEntered(object sender, PointerRoutedEventArgs e)
+    /// <summary>
+    ///     Handles pointer entered events and updates visual state.
+    /// </summary>
+    /// <param name="e">Pointer event data.</param>
+    protected override void OnPointerEntered(PointerRoutedEventArgs e)
+    {
+        base.OnPointerEntered(e);
+        this.LogPointerEntered(e);
+        this.OnPointerEntered();
+    }
+
+    /// <summary>
+    ///     Called when the pointer enters the control. Updates state and toolbar visibility.
+    /// </summary>
+    protected virtual void OnPointerEntered()
     {
         this.isPointerOver = true;
-        this.UpdateVisualState(useTransitions: true);
+        this.UpdateVisualStates(useTransitions: true);
 
         // Show buttons in compact mode on hover
-        if (this.IsCompact && this.buttonsContainer is not null)
+        if (this.IsCompact)
         {
             this.buttonsContainer.Visibility = Visibility.Visible;
         }
     }
 
-    private void OnRootGridPointerExited(object sender, PointerRoutedEventArgs e)
+    /// <summary>
+    ///     Handles pointer exited events and updates visual state.
+    /// </summary>
+    /// <param name="e">Pointer event data.</param>
+    protected override void OnPointerExited(PointerRoutedEventArgs e)
+    {
+        base.OnPointerExited(e);
+        this.LogPointerExited();
+        this.OnPointerExited();
+    }
+
+    /// <summary>
+    ///     Called when the pointer exits the control. Updates state and toolbar visibility.
+    /// </summary>
+    protected virtual void OnPointerExited()
     {
         this.isPointerOver = false;
-        this.UpdateVisualState(useTransitions: true);
+        this.UpdateVisualStates(useTransitions: true);
 
         // Hide buttons in compact mode on exit
-        if (this.IsCompact && this.buttonsContainer is not null)
+        if (this.IsCompact)
         {
             this.buttonsContainer.Visibility = Visibility.Collapsed;
         }
     }
 
+    /// <summary>
+    ///     Called when the pin button is clicked. Toggles the pinned state.
+    /// </summary>
+    protected virtual void OnPinClicked()
+    {
+        if (this.Item is null)
+        {
+            return;
+        }
+
+        this.Item.IsPinned = !this.Item.IsPinned;
+        this.LogPinClicked();
+    }
+
+    /// <summary>
+    ///     Called when the close button is clicked. Raises the close requested event.
+    /// </summary>
+    protected virtual void OnCloseClicked()
+    {
+        if (this.Item is null)
+        {
+            return;
+        }
+
+        this.CloseRequested?.Invoke(this, new TabCloseRequestedEventArgs { Item = this.Item });
+        this.LogCloseRequested();
+    }
+
+    /// <summary>
+    ///     Handles changes to the Item property and updates bindings and state.
+    /// </summary>
+    /// <param name="e">Dependency property change event data.</param>
     private void OnItemChanged(DependencyPropertyChangedEventArgs e)
     {
-        this.DataContext = e.NewValue;
+        this.LogItemChanged(e);
+
+        this.DataContext = e.NewValue; // For bindings
         this.Content = e.NewValue; // For ContentPresenter if needed
+
         if (e.OldValue is TabItem oldItem)
         {
             oldItem.PropertyChanged -= this.TabItem_OnPropertyChanged;
         }
 
-        if (e.NewValue is TabItem newItem)
+        if (e.NewValue is not TabItem newItem)
         {
-            newItem.PropertyChanged += this.TabItem_OnPropertyChanged;
+            // With no Item, the control is useless
+            this.IsEnabled = false;
+            this.LogEnabledOrDisabled();
+            return;
         }
 
-        this.UpdatePinGlyph();
-        this.UpdateVisualState(useTransitions: false);
+        this.IsEnabled = true;
+        this.LogEnabledOrDisabled();
+        newItem.PropertyChanged += this.TabItem_OnPropertyChanged;
+        this.UpdateVisualStates(useTransitions: false);
     }
 
+    /// <summary>
+    ///     Handles property changes on the bound TabItem and updates visual state as needed.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="e">Property changed event data.</param>
     private void TabItem_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(TabItem.IsSelected), System.StringComparison.Ordinal))
         {
-            this.UpdateVisualState(useTransitions: true);
+            this.LogItemPropertyChanged(e);
+            this.UpdateVisualStates(useTransitions: true);
         }
         else if (string.Equals(e.PropertyName, nameof(TabItem.IsPinned), System.StringComparison.Ordinal))
         {
-            this.UpdatePinGlyph();
+            this.LogItemPropertyChanged(e);
+            this.UpdateVisualStates(useTransitions: true);
         }
     }
 
-    private void UpdateVisualState(bool useTransitions)
+    /// <summary>
+    ///     Updates the visual states of the control based on selection and pointer state.
+    /// </summary>
+    /// <param name="useTransitions">Whether to use visual transitions.</param>
+    private void UpdateVisualStates(bool useTransitions)
     {
-        string state;
-        if (this.Item is { IsSelected: true })
+        if (this.Item is null)
         {
-            state = this.isPointerOver ? SelectedPointerOverVisualState : SelectedVisualState;
-        }
-        else
-        {
-            state = this.isPointerOver ? PointerOverVisualState : NormalVisualState;
+            // An item being recycled may temporarily have no Item
+            return;
         }
 
-        _ = VisualStateManager.GoToState(this, state, useTransitions);
+        var basicState = this.Item.IsSelected
+            ? this.isPointerOver ? SelectedPointerOverVisualState : SelectedVisualState
+            : this.isPointerOver ? PointerOverVisualState : NormalVisualState;
+
+        this.LogVisualState(basicState);
+        _ = VisualStateManager.GoToState(this, basicState, useTransitions);
+
+        var pinState = this.Item?.IsPinned == true ? "Pinned" : "Unpinned";
+        _ = VisualStateManager.GoToState(this, pinState, useTransitions: false);
     }
 
-    private void PinButton_Click(object? sender, RoutedEventArgs e)
-    {
-        this.Item?.IsPinned = !this.Item.IsPinned;
-    }
-
-    private void CloseButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (this.Item is not null)
-        {
-            this.CloseRequested?.Invoke(this, new TabCloseRequestedEventArgs { Item = this.Item });
-        }
-    }
-
-    private void UpdatePinGlyph()
-    {
-        if (this.pinButton?.Content is FontIcon fi)
-        {
-            fi.Glyph = this.Item?.IsPinned == true ? "\uE77A" : "\uE718";
-        }
-    }
-
+    /// <summary>
+    ///     Updates the minimum width of the tab item based on button and margin sizes.
+    /// </summary>
     private void UpdateMinWidth()
     {
         var marginLeft = this.buttonsContainer?.Margin.Left ?? 0;
@@ -217,15 +301,25 @@ public partial class TabStripItem : ContentControl
         var closeWidth = this.closeButton?.Width ?? 0;
         var spacing = (pinWidth > 0 && closeWidth > 0) ? this.buttonsContainer?.Spacing ?? 0 : 0;
         this.MinWidth = MinDragWidth + marginLeft + pinWidth + closeWidth + spacing + marginRight;
+        this.LogMinWidthUpdated();
     }
 
-    private void UpdateLayoutForCompactMode()
+    /// <summary>
+    ///     Updates the visibility of the toolbar based on compact mode and pointer state.
+    /// </summary>
+    private void UpdateToolBarVisibility()
+        => this.buttonsContainer?.Visibility = this.IsCompact && !this.isPointerOver
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+
+    /// <summary>
+    ///     Handles changes to the IsCompact property and updates toolbar visibility.
+    /// </summary>
+    /// <param name="oldValue">Previous value of IsCompact.</param>
+    /// <param name="newValue">New value of IsCompact.</param>
+    private void OnIsCompactChanged(bool oldValue, bool newValue)
     {
-        if (this.buttonsContainer is not null)
-        {
-            Grid.SetColumn(this.buttonsContainer, 2);
-            this.buttonsContainer.HorizontalAlignment = HorizontalAlignment.Right;
-            this.buttonsContainer.Visibility = this.IsCompact ? Visibility.Collapsed : Visibility.Visible;
-        }
+        this.LogCompactModeChanged(oldValue, newValue);
+        this.UpdateToolBarVisibility();
     }
 }

@@ -77,13 +77,7 @@ public partial class TabStripItem
         => ((TabStripItem)d).OnItemChanged(e);
 
     private static void OnIsCompactChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-    {
-        if (d is TabStripItem tsi)
-        {
-            tsi.UpdateLayoutForCompactMode();
-            tsi.UpdateMinWidth();
-        }
-    }
+        => ((TabStripItem)d).OnIsCompactChanged(e.OldValue is bool oldValue && oldValue, e.NewValue is bool newValue && newValue);
 
     private static void OnLoggerFactoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStripItem)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue);

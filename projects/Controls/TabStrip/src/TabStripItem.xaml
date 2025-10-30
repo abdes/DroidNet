@@ -254,6 +254,23 @@
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>
+                            <!--  New group for pin glyph states  -->
+                            <VisualStateGroup x:Name="PinStates">
+                                <VisualState x:Name="Unpinned">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="(Button.Content).(FontIcon.Glyph)">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="&#xE718;" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Pinned">
+                                    <Storyboard>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="(Button.Content).(FontIcon.Glyph)">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="&#xE77A;" />
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
                         </VisualStateManager.VisualStateGroups>
                     </Grid>
                 </ControlTemplate>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<tests:VisualUserInterfaceTestsApp
+    x:Class="DroidNet.Controls.Tests.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Controls.Tabs.Tests"
+    xmlns:tests="using:DroidNet.Tests">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <!--
+                    We are explicitly merging the controls Generic.xaml dictionary to get access
+                    to its resources, so that we can define "forwarding" styles for the derived
+                    testable controls.
+                -->
+                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.TabStrip/Themes/Generic.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <!--
+                Forwarding styles for the testable controls, so that they pick up the same
+                styling and control template as the original controls.
+            -->
+            <Style BasedOn="{StaticResource DefaultTabStripItemStyle}" TargetType="local:TestableTabStripItem" />
+            <Style BasedOn="{StaticResource DefaultTabStripStyle}" TargetType="local:TestableTabStrip" />
+        </ResourceDictionary>
+    </Application.Resources>
+</tests:VisualUserInterfaceTestsApp>
