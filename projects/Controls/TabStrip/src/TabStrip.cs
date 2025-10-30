@@ -43,7 +43,7 @@ public partial class TabStrip : Control
     private readonly DispatcherCollectionProxy<TabItem>? regularProxy;
     private bool proxiesDisposed;
 
-    // Guard to coalesce compact sizing enqueues per-spec (prevent layout thrash)
+    // Guard to coalesce compacting sizing enqueues per-spec (prevent layout thrash)
     private bool compactSizingEnqueued;
 
     // Suppress handling when we programmatically move/modify the Items collection to avoid reentrancy
@@ -65,10 +65,10 @@ public partial class TabStrip : Control
     {
         this.DefaultStyleKey = typeof(TabStrip);
 
-        // Ensure Items exists (Items never changes for this control instance)
+        // Setup the Items collection, which is created internally and exposed
+        // as a read-only property. The `Items` collection object never changes
+        // for this control; only its contents change.
         var items = new ObservableCollection<TabItem>();
-
-        // Log when items are added to help diagnose runtime additions
         items.CollectionChanged += this.Items_CollectionChanged;
         this.SetValue(ItemsProperty, items);
 
@@ -91,10 +91,6 @@ public partial class TabStrip : Control
             return false;
         }
 
-        // Dispose proxies when the control is unloaded to break event handler chains
-        // and allow sources and proxies to be reclaimed.
-        this.Unloaded += this.TabStrip_Unloaded;
-
         // Create dispatcher-backed read-only proxies so we continue exposing ReadOnlyObservableCollection<TabItem>
         // (this also guarantees collection-changed handling occurs on the control's dispatcher).
         this.pinnedProxy = new DispatcherCollectionProxy<TabItem>(pinnedView, pinnedView, Enqueue);
@@ -102,128 +98,354 @@ public partial class TabStrip : Control
 
         this.SetValue(PinnedItemsViewProperty, this.pinnedProxy);
         this.SetValue(RegularItemsViewProperty, this.regularProxy);
-    }
 
-    // Filtered views and dispatcher-backed proxies created in constructor. The FilteredObservableCollection
-    // instances keep themselves in sync with the Items source; the DispatcherReadOnlyObservableCollection
-    // forwards changes to the UI dispatcher and exposes a ReadOnlyObservableCollection<TabItem> surface.
+        // Handle Unloaded to dispose of disposable fields
+        this.Unloaded += this.TabStrip_Unloaded;
+    }
 
     /// <inheritdoc />
     protected override void OnApplyTemplate()
     {
         base.OnApplyTemplate();
 
-        void DetachPreviousHandlers()
+        this.LogApplyingTemplate();
+
+        T? GetTemplatePart<T>(string name, bool isRequired = false)
+            where T : DependencyObject
+        {
+            var part = this.GetTemplateChild(name) as T;
+            if (part is null)
+            {
+                var expectedType = typeof(T);
+                this.LogTemplatePartNotFound(name, expectedType, isRequired);
+                if (isRequired)
+                {
+                    throw new InvalidOperationException($"The required template part '{name}' is missing or is not of type '{expectedType}'.");
+                }
+            }
+
+            return part;
+        }
+
+        T GetRequiredTemplatePart<T>(string name)
+            where T : DependencyObject
+            => GetTemplatePart<T>(name, isRequired: true)!;
+
+        void SetupRootGrid()
+        {
+            if (this.rootGrid is not null)
+            {
+                this.rootGrid.SizeChanged -= this.OnTabStripSizeChanged;
+            }
+
+            this.rootGrid = GetRequiredTemplatePart<Grid>(RootGridPartName);
+            this.rootGrid.SizeChanged += this.OnTabStripSizeChanged;
+        }
+
+        void SetupOverflowLeftButton()
         {
             if (this.overflowLeftButton is not null)
             {
                 this.overflowLeftButton.Click -= this.OverflowLeftButton_Click;
             }
 
+            this.overflowLeftButton = GetTemplatePart<RepeatButton>(PartOverflowLeftButtonName);
+            this.overflowLeftButton?.Click += this.OverflowLeftButton_Click;
+        }
+
+        void SetupOverflowRightButton()
+        {
             if (this.overflowRightButton is not null)
             {
                 this.overflowRightButton.Click -= this.OverflowRightButton_Click;
             }
 
+            this.overflowRightButton = GetTemplatePart<RepeatButton>(PartOverflowRightButtonName);
+            this.overflowRightButton?.Click += this.OverflowRightButton_Click;
+        }
+
+        void SetupPinnedItemsRepeater()
+        {
             if (this.pinnedItemsRepeater is not null)
             {
                 this.pinnedItemsRepeater.ElementPrepared -= this.ItemsRepeater_ElementPrepared;
                 this.pinnedItemsRepeater.ElementClearing -= this.ItemsRepeater_ElementClearing;
             }
 
+            this.pinnedItemsRepeater = GetRequiredTemplatePart<ItemsRepeater>(PartPinnedItemsRepeaterName);
+            this.pinnedItemsRepeater.ElementPrepared += this.ItemsRepeater_ElementPrepared;
+            this.pinnedItemsRepeater.ElementClearing += this.ItemsRepeater_ElementClearing;
+            this.pinnedItemsRepeater.ItemsSource = this.PinnedItemsView;
+        }
+
+        void SetupRegularItemsRepeater()
+        {
             if (this.regularItemsRepeater is not null)
             {
                 this.regularItemsRepeater.ElementPrepared -= this.ItemsRepeater_ElementPrepared;
                 this.regularItemsRepeater.ElementClearing -= this.ItemsRepeater_ElementClearing;
             }
 
+            this.regularItemsRepeater = GetRequiredTemplatePart<ItemsRepeater>(PartRegularItemsRepeaterName);
+            this.regularItemsRepeater.ElementPrepared += this.ItemsRepeater_ElementPrepared;
+            this.regularItemsRepeater.ElementClearing += this.ItemsRepeater_ElementClearing;
+            this.regularItemsRepeater.ItemsSource = this.RegularItemsView;
+        }
+
+        void SetupScrollHost()
+        {
             if (this.scrollHost is not null)
             {
                 this.scrollHost.ViewChanged -= this.ScrollHost_ViewChanged;
-            }
-
-            this.PointerWheelChanged -= this.ScrollHost_PointerWheelChanged;
-        }
-
-        void RetrieveTemplateParts()
-        {
-            T? TryGetPart<T>(string name)
-                where T : DependencyObject
-            {
-                var part = this.GetTemplateChild(name) as T;
-                if (part is null)
-                {
-                    this.LogTemplatePartNotFound(name);
-                }
-
-                return part;
-            }
-
-            this.rootGrid = TryGetPart<Grid>(RootGridPartName);
-            this.overflowLeftButton = TryGetPart<RepeatButton>(PartOverflowLeftButtonName);
-            this.overflowRightButton = TryGetPart<RepeatButton>(PartOverflowRightButtonName);
-            this.pinnedItemsRepeater = TryGetPart<ItemsRepeater>(PartPinnedItemsRepeaterName);
-            this.regularItemsRepeater = TryGetPart<ItemsRepeater>(PartRegularItemsRepeaterName);
-            this.scrollHost = TryGetPart<ScrollViewer>(PartScrollHostName);
-        }
-
-        void WireHandlers()
-        {
-            if (this.overflowLeftButton is not null)
-            {
-                this.overflowLeftButton.Click += this.OverflowLeftButton_Click;
-            }
-
-            if (this.overflowRightButton is not null)
-            {
-                this.overflowRightButton.Click += this.OverflowRightButton_Click;
-            }
-
-            if (this.pinnedItemsRepeater is not null)
-            {
-                this.pinnedItemsRepeater.ElementPrepared += this.ItemsRepeater_ElementPrepared;
-                this.pinnedItemsRepeater.ElementClearing += this.ItemsRepeater_ElementClearing;
-                this.pinnedItemsRepeater.ItemsSource = this.PinnedItemsView;
-            }
-
-            if (this.regularItemsRepeater is not null)
-            {
-                this.regularItemsRepeater.ElementPrepared += this.ItemsRepeater_ElementPrepared;
-                this.regularItemsRepeater.ElementClearing += this.ItemsRepeater_ElementClearing;
-                this.regularItemsRepeater.ItemsSource = this.RegularItemsView;
-            }
-
-            this.OnScrollOnWheelChanged(this.ScrollOnWheel);
-        }
-
-        void SetupSizeChangedHandlers()
-        {
-            if (this.scrollHost is not null)
-            {
                 this.scrollHost.SizeChanged -= this.OnTabStripSizeChanged;
-                this.scrollHost.SizeChanged += this.OnTabStripSizeChanged;
-                this.scrollHost.ViewChanged -= this.ScrollHost_ViewChanged;
-                this.scrollHost.ViewChanged += this.ScrollHost_ViewChanged;
             }
 
-            if (this.rootGrid is not null)
-            {
-                this.rootGrid.SizeChanged -= this.OnTabStripSizeChanged;
-                this.rootGrid.SizeChanged += this.OnTabStripSizeChanged;
-            }
+            this.scrollHost = GetRequiredTemplatePart<ScrollViewer>(PartScrollHostName);
+            this.scrollHost.ViewChanged += this.ScrollHost_ViewChanged;
+            this.scrollHost.SizeChanged += this.OnTabStripSizeChanged;
         }
 
-        DetachPreviousHandlers();
-        RetrieveTemplateParts();
-        WireHandlers();
-        SetupSizeChangedHandlers();
-        this.UpdateOverflowButtonVisibility();
+        // Setup each part
+        SetupRootGrid();
+        SetupOverflowLeftButton();
+        SetupOverflowRightButton();
+        SetupPinnedItemsRepeater();
+        SetupRegularItemsRepeater();
+        SetupScrollHost();
 
-        // Ensure initial compact sizing run after template applied (deferred/coalesced)
+        // Apply behaviors based on current property values
+        this.OnScrollOnWheelChanged(this.ScrollOnWheel);
+        this.UpdateOverflowButtonVisibility();
         if (this.TabWidthPolicy == TabWidthPolicy.Compact)
         {
             this.EnqueueCompactSizing();
         }
+    }
+
+    /// <summary>
+    ///     Handles the Tapped event for a tab element. Executes the associated command, selects the
+    ///     tab, and raises the <see cref="TabInvoked"/> event.
+    /// </summary>
+    /// <param name="sender">
+    ///     The source of the event, expected to be a <see cref="FrameworkElement"/> with a
+    ///     <see cref="TabItem"/> as its DataContext.
+    /// </param>
+    /// <param name="e">The event data for the tap event.</param>
+    protected virtual void OnTabElementTapped(object? sender, TappedRoutedEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.DataContext is TabItem ti)
+        {
+            // Invoke command if present
+            ti.Command?.Execute(ti.CommandParameter);
+
+            // Select the tab (centralized logic)
+            this.SelectedItem = ti;  // This triggers OnSelectedItemChanged
+
+            // Raise TabInvoked event
+            this.TabInvoked?.Invoke(this, new TabInvokedEventArgs { Item = ti, Index = this.SelectedIndex, Parameter = ti.CommandParameter });
+            this.LogTabInvoked(ti);
+        }
+    }
+
+    private void ItemsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
+    {
+        Debug.Assert(args.Element is FrameworkElement { DataContext: TabItem }, "control expects DataContext to be set with a TabIte, on each of its TabStrip items");
+
+        if (args.Element is not TabStripItem { DataContext: TabItem ti } tsi)
+        {
+            this.LogBadItem(sender, args.Element);
+            return;
+        }
+
+        var pinned = sender == this.pinnedItemsRepeater;
+        var compacting = (this.TabWidthPolicy == TabWidthPolicy.Compact) && (sender == this.regularItemsRepeater);
+
+        this.LogSetupPreparedItem(ti, compacting, pinned);
+
+        tsi.SetValue(AutomationProperties.NameProperty, ti.Header);
+        ti.IsSelected = this.SelectedItem == ti;
+        tsi.LoggerFactory = this.LoggerFactory;
+        tsi.IsCompact = compacting;
+
+        // Ensure TabStripItem.MinWidth is clamped to TabStrip.MaxItemWidth per spec.
+        var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
+        if (tsi.MinWidth != effectiveMin)
+        {
+            tsi.MinWidth = effectiveMin;
+        }
+
+        tsi.Tapped -= this.OnTabElementTapped; // for safety
+        tsi.Tapped += this.OnTabElementTapped;
+        tsi.CloseRequested -= this.OnTabCloseRequested; // for safety
+        tsi.CloseRequested += this.OnTabCloseRequested;
+
+        this.ApplyTabSizingPolicy(tsi, sender);
+
+        // If we're in Compact policy and this is a regular item, ensure we run the
+        // compacting-sizing pass after the container is prepared so newly-prepared
+        // items are included in the calculation.
+        if (compacting)
+        {
+            this.EnqueueCompactSizing();
+        }
+    }
+
+    private void ItemsRepeater_ElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
+    {
+        Debug.Assert(args.Element is TabStripItem, "control expects each of its TabStrip items to be a TabStripItem");
+
+        if (args.Element is not TabStripItem tsi)
+        {
+            this.LogBadItem(sender, args.Element);
+            return;
+        }
+
+        this.LogClearElement(tsi);
+
+        tsi.Tapped -= this.OnTabElementTapped;
+        tsi.CloseRequested -= this.OnTabCloseRequested;
+    }
+
+    private void TabStrip_Unloaded(object? sender, RoutedEventArgs e)
+    {
+        // Unsubscribe immediately and dispose proxies so we do not hold onto
+        // event handlers or dispatcher closures longer than necessary.
+        this.Unloaded -= this.TabStrip_Unloaded;
+
+        if (this.proxiesDisposed)
+        {
+            return;
+        }
+
+        this.pinnedProxy?.Dispose();
+        this.regularProxy?.Dispose();
+        this.proxiesDisposed = true;
+
+        // Log unloading for troubleshooting
+        this.LogUnloaded();
+    }
+
+    private void OnTabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
+        => this.TabCloseRequested?.Invoke(this, e);
+
+    private void OnScrollOnWheelChanged(bool newValue)
+    {
+        this.PointerWheelChanged -= this.ScrollHost_PointerWheelChanged;
+        if (newValue)
+        {
+            this.PointerWheelChanged += this.ScrollHost_PointerWheelChanged;
+        }
+    }
+
+    private void OnSelectedItemChanged(TabItem? oldItem, TabItem? newItem)
+    {
+        // If the selected item hasn't changed, do nothing
+        if (ReferenceEquals(oldItem, newItem))
+        {
+            return;
+        }
+
+        var items = this.Items;
+
+        // Update IsSelected flags: deselect old item and select new item
+        _ = oldItem?.IsSelected = false;
+        _ = newItem?.IsSelected = true;
+
+        var oldIndex = oldItem is not null ? items.IndexOf(oldItem) : -1;
+        var newIndex = newItem is not null ? items.IndexOf(newItem) : -1;
+
+        this.SelectedIndex = newIndex;
+
+        this.LogSelectionChanged(oldItem, newItem, oldIndex, newIndex);
+        this.SelectionChanged?.Invoke(this, new TabSelectionChangedEventArgs
+        {
+            OldItem = oldItem,
+            NewItem = newItem,
+            OldIndex = oldIndex,
+            NewIndex = newIndex,
+        });
+    }
+
+    // Called from the TabWidthPolicy dependency property change callback. We defer the
+    // actual update to the dispatcher so prepared container elements (ItemsRepeater
+    // containers) are available when we enumerate them in UpdateTabWidths.
+    private void OnTabWidthPolicyChanged(TabWidthPolicy newPolicy)
+    {
+        // Defer so visual tree and repeater preparations occur first.
+        _ = this.DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                this.UpdateTabWidths();
+
+                // If switching into Compact, ensure we run the compacting sizing pass too.
+                if (newPolicy == TabWidthPolicy.Compact)
+                {
+                    this.EnqueueCompactSizing();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"OnTabWidthPolicyChanged: deferred update failed: {ex}");
+            }
+        });
+    }
+
+    private void OverflowLeftButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var target = Math.Max(0, (int)(this.scrollHost.HorizontalOffset - 100));
+        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
+        this.LogOverflowLeftClicked();
+    }
+
+    private void OverflowRightButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var target = (int)(this.scrollHost.HorizontalOffset + 100);
+        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
+        this.LogOverflowRightClicked();
+    }
+
+    private void ScrollHost_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+    {
+        this.UpdateOverflowButtonVisibility();
+    }
+
+    private void ScrollHost_PointerWheelChanged(object? sender, PointerRoutedEventArgs e)
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+        var scrollAmount = delta > 0 ? -50 : 50; // negative delta is up/left
+        var target = Math.Max(0, Math.Min(this.scrollHost.ScrollableWidth, this.scrollHost.HorizontalOffset + scrollAmount));
+        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
+        e.Handled = true;
+    }
+
+    private void UpdateOverflowButtonVisibility()
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var canScrollLeft = this.scrollHost.HorizontalOffset > ScrollEpsilon;
+        var canScrollRight = this.scrollHost.HorizontalOffset < this.scrollHost.ScrollableWidth - ScrollEpsilon;
+
+        _ = this.overflowLeftButton?.Visibility = canScrollLeft ? Visibility.Visible : Visibility.Collapsed;
+        _ = this.overflowRightButton?.Visibility = canScrollRight ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void ApplyTabSizingPolicy(FrameworkElement fe, ItemsRepeater sender)
@@ -289,159 +511,6 @@ public partial class TabStrip : Control
         this.LogTabSizing(this.TabWidthPolicy, calculatedWidth, maxWidth, tabCount, availableWidth);
     }
 
-    private void ItemsRepeater_ElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
-    {
-        // Wire up Tapped event for selection logic and apply sizing policy.
-        if (args.Element is FrameworkElement fe && fe.DataContext is TabItem ti)
-        {
-            fe.SetValue(AutomationProperties.NameProperty, ti.Header);
-            ti.IsSelected = this.SelectedItem == ti;
-
-            // Remove previous handler to avoid duplicate subscriptions
-            fe.Tapped -= this.OnTabElementTapped;
-            fe.Tapped += this.OnTabElementTapped;
-
-            this.ApplyTabSizingPolicy(fe, sender);
-        }
-
-        // Set IsCompact on TabStripItem based on TabWidthPolicy and repeater
-        if (args.Element is TabStripItem tsi)
-        {
-            var isCompact = (this.TabWidthPolicy == TabWidthPolicy.Compact) && (sender == this.regularItemsRepeater);
-            tsi.IsCompact = isCompact;
-            Debug.WriteLine($"ItemsRepeater_ElementPrepared: Set IsCompact={isCompact} for {(sender == this.regularItemsRepeater ? "regular" : "pinned")} item");
-
-            // Ensure TabStripItem.MinWidth is clamped to TabStrip.MaxItemWidth per spec.
-            var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
-            if (tsi.MinWidth != effectiveMin)
-            {
-                tsi.MinWidth = effectiveMin;
-            }
-
-            // Register for close requested event
-            tsi.CloseRequested += this.OnTabCloseRequested;
-
-            // If we're in Compact policy and this is a regular item, ensure we run the
-            // compact-sizing pass after the container is prepared so newly-prepared
-            // items are included in the calculation.
-            if (isCompact)
-            {
-                this.EnqueueCompactSizing();
-            }
-        }
-    }
-
-    private void ItemsRepeater_ElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
-    {
-        // Unwire Tapped event to prevent memory leaks.
-        if (args.Element is FrameworkElement fe)
-        {
-            fe.Tapped -= this.OnTabElementTapped;
-        }
-
-        // Unwire CloseRequested event
-        if (args.Element is TabStripItem tsi)
-        {
-            tsi.CloseRequested -= this.OnTabCloseRequested;
-        }
-    }
-
-    private void OnTabElementTapped(object? sender, TappedRoutedEventArgs e)
-    {
-        if (sender is FrameworkElement fe && fe.DataContext is TabItem ti)
-        {
-            // Invoke command if present
-            ti.Command?.Execute(ti.CommandParameter);
-
-            // Set SelectedItem from the full Items collection
-            var index = -1;
-            if (this.Items is ObservableCollection<TabItem> items)
-            {
-                index = items.IndexOf(ti);
-                if (index >= 0)
-                {
-                    this.SelectedIndex = index;
-                    this.SelectedItem = ti;
-                }
-            }
-
-            // Raise TabInvoked event
-            this.TabInvoked?.Invoke(this, new TabInvokedEventArgs { Item = ti, Index = index, Parameter = ti.CommandParameter });
-            this.LogTabInvoked(ti, index);
-        }
-    }
-
-    private void OnSelectedItemChanged(TabItem? oldItem, TabItem? newItem)
-    {
-        // Update IsSelected flags on all items from the full Items collection
-        if (this.Items is ObservableCollection<TabItem> items)
-        {
-            var oldIndex = -1;
-            var newIndex = -1;
-            if (oldItem is not null)
-            {
-                oldIndex = items.IndexOf(oldItem);
-            }
-
-            if (newItem is not null)
-            {
-                newIndex = items.IndexOf(newItem);
-            }
-
-            foreach (var t in items)
-            {
-                t.IsSelected = ReferenceEquals(t, newItem);
-            }
-
-            this.SelectedIndex = newIndex;
-            this.SelectionChanged?.Invoke(this, new TabSelectionChangedEventArgs { OldItem = oldItem, NewItem = newItem, OldIndex = oldIndex, NewIndex = newIndex });
-            this.LogSelectionChanged(oldItem, newItem, oldIndex, newIndex);
-        }
-    }
-
-    private void OnTabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
-    {
-        this.TabCloseRequested?.Invoke(this, e);
-    }
-
-    private void OverflowLeftButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var target = Math.Max(0, (int)(this.scrollHost.HorizontalOffset - 100));
-        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
-        this.LogOverflowLeftClicked();
-    }
-
-    private void OverflowRightButton_Click(object? sender, RoutedEventArgs e)
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var target = (int)(this.scrollHost.HorizontalOffset + 100);
-        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
-        this.LogOverflowRightClicked();
-    }
-
-    private void UpdateOverflowButtonVisibility()
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var canScrollLeft = this.scrollHost.HorizontalOffset > ScrollEpsilon;
-        var canScrollRight = this.scrollHost.HorizontalOffset < this.scrollHost.ScrollableWidth - ScrollEpsilon;
-
-        _ = this.overflowLeftButton?.Visibility = canScrollLeft ? Visibility.Visible : Visibility.Collapsed;
-        _ = this.overflowRightButton?.Visibility = canScrollRight ? Visibility.Visible : Visibility.Collapsed;
-    }
-
     private void CheckAndApplyCompactSizing()
     {
         Debug.WriteLine("CheckAndApplyCompactSizing: Starting");
@@ -474,7 +543,7 @@ public partial class TabStrip : Control
         // items (common when some containers are not prepared/virtualized), also
         // enumerate the repeater's visual children and include any TabStripItem
         // containers we didn't already collect. This ensures prepared containers
-        // are included in the compact-sizing pass even when TryGetElement is
+        // are included in the compacting-sizing pass even when TryGetElement is
         // partially supported or only returns some indices.
         if (items.Count == 0 || items.Count < regularCount)
         {
@@ -628,7 +697,7 @@ public partial class TabStrip : Control
         // Scrolling will be enabled automatically if needed
     }
 
-    // Coalesced enqueue for compact sizing per-spec to avoid layout thrash.
+    // Coalesced enqueue for compacting sizing per-spec to avoid layout thrash.
     private void EnqueueCompactSizing()
     {
         if (this.compactSizingEnqueued)
@@ -638,7 +707,7 @@ public partial class TabStrip : Control
 
         this.compactSizingEnqueued = true;
 
-        // Run compact sizing at a lower dispatcher priority so the item's template
+        // Run compacting sizing at a lower dispatcher priority so the item's template
         // parts (button widths, etc.) have a chance to measure and stabilize
         // before we capture intrinsic widths and enforce Min/Max. This reduces
         // jumpy UI where the item later updates its own MinWidth.
@@ -653,44 +722,6 @@ public partial class TabStrip : Control
                     this.compactSizingEnqueued = false;
                 }
             });
-    }
-
-    private void ScrollHost_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-    {
-        this.UpdateOverflowButtonVisibility();
-    }
-
-    private void ScrollHost_PointerWheelChanged(object? sender, PointerRoutedEventArgs e)
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
-        var scrollAmount = delta > 0 ? -50 : 50; // negative delta is up/left
-        var target = Math.Max(0, Math.Min(this.scrollHost.ScrollableWidth, this.scrollHost.HorizontalOffset + scrollAmount));
-        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
-        e.Handled = true;
-    }
-
-    private void TabStrip_Unloaded(object? sender, RoutedEventArgs e)
-    {
-        // Unsubscribe immediately and dispose proxies so we do not hold onto
-        // event handlers or dispatcher closures longer than necessary.
-        this.Unloaded -= this.TabStrip_Unloaded;
-
-        if (this.proxiesDisposed)
-        {
-            return;
-        }
-
-        this.pinnedProxy?.Dispose();
-        this.regularProxy?.Dispose();
-        this.proxiesDisposed = true;
-
-        // Log unloading for troubleshooting
-        this.LogUnloaded();
     }
 
     private void UpdateTabWidths()
@@ -740,31 +771,6 @@ public partial class TabStrip : Control
 
         UpdateRepeater(this.pinnedItemsRepeater);
         UpdateRepeater(this.regularItemsRepeater);
-    }
-
-    // Called from the TabWidthPolicy dependency property change callback. We defer the
-    // actual update to the dispatcher so prepared container elements (ItemsRepeater
-    // containers) are available when we enumerate them in UpdateTabWidths.
-    private void OnTabWidthPolicyChanged(TabWidthPolicy newPolicy)
-    {
-        // Defer so visual tree and repeater preparations occur first.
-        _ = this.DispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                this.UpdateTabWidths();
-
-                // If switching into Compact, ensure we run the compact sizing pass too.
-                if (newPolicy == TabWidthPolicy.Compact)
-                {
-                    this.EnqueueCompactSizing();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"OnTabWidthPolicyChanged: deferred update failed: {ex}");
-            }
-        });
     }
 
     private void Items_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -935,33 +941,5 @@ public partial class TabStrip : Control
 
         // Log size change for troubleshooting
         this.LogSizeChanged(e.NewSize.Width, e.NewSize.Height);
-    }
-
-    private T? FindDescendantByName<T>(DependencyObject? root, string name)
-        where T : DependencyObject
-    {
-        if (root is null)
-        {
-            return null;
-        }
-
-        var childCount = VisualTreeHelper.GetChildrenCount(root);
-        for (var i = 0; i < childCount; i++)
-        {
-            var child = VisualTreeHelper.GetChild(root, i);
-
-            if (child is FrameworkElement fe && string.Equals(fe.Name, name, StringComparison.Ordinal) && child is T t)
-            {
-                return t;
-            }
-
-            var found = this.FindDescendantByName<T>(child, name);
-            if (found is not null)
-            {
-                return found;
-            }
-        }
-
-        return null;
     }
 }

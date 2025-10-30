@@ -216,15 +216,6 @@ public partial class TabStrip
     private static void OnWidthPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStrip)d).UpdateTabWidths();
 
-    private void OnScrollOnWheelChanged(bool newValue)
-    {
-        this.PointerWheelChanged -= this.ScrollHost_PointerWheelChanged;
-        if (newValue)
-        {
-            this.PointerWheelChanged += this.ScrollHost_PointerWheelChanged;
-        }
-    }
-
     // Initializes the logger for this TabStrip. Uses the TabStrip type as the category.
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
         this.logger = loggerFactory?.CreateLogger<TabStrip>() ??

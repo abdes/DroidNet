@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls;
 
@@ -14,6 +15,35 @@ namespace DroidNet.Controls;
 /// </summary>
 public partial class TabStrip
 {
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Applying template...")]
+    private static partial void LogApplyingTemplate(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogApplyingTemplate()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyingTemplate(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Template part '{PartName}' (required={IsRequired}) of type '{ExpectedType}' not found.")]
+    private static partial void LogTemplatePartNotFound(ILogger logger, string partName, string expectedType, bool isRequired);
+
+    private void LogTemplatePartNotFound(string partName, Type expectedType, bool isRequired)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTemplatePartNotFound(logger, partName, expectedType.Name, isRequired);
+        }
+    }
+
     // Logs pointer entered on a tab item
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -54,11 +84,11 @@ public partial class TabStrip
     private static partial void LogTabInvoked(ILogger logger, string? Header, int Index);
 
     [Conditional("DEBUG")]
-    private void LogTabInvoked(TabItem? item, int index)
+    private void LogTabInvoked(TabItem? item)
     {
         if (this.logger is ILogger logger && item is not null)
         {
-            LogTabInvoked(logger, item.Header, index);
+            LogTabInvoked(logger, item.Header, this.SelectedIndex);
         }
     }
 
@@ -201,6 +231,57 @@ public partial class TabStrip
         if (this.logger is ILogger logger)
         {
             LogUnloaded(logger);
+        }
+    }
+
+    // Logs bad item prepared
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Element prepared is not a valid TabStripItem: ElementType={ElementType}, DataContextType={DataContextType}")]
+    private static partial void LogBadItem(ILogger logger, string ElementType, string DataContextType);
+
+    [Conditional("DEBUG")]
+    private void LogBadItem(ItemsRepeater sender, object element)
+    {
+        if (this.logger is ILogger logger)
+        {
+            var elementType = element?.GetType().Name ?? "null";
+            var dataContextType = (element as FrameworkElement)?.DataContext?.GetType().Name ?? "null";
+            LogBadItem(logger, elementType, dataContextType);
+        }
+    }
+
+    // Logs setup prepared item
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Setting up prepared item: Header='{Header}', IsPinned={IsPinned}, Compacting={Compacting}, Bucket={Bucket}")]
+    private static partial void LogSetupPreparedItem(ILogger logger, string Header, bool IsPinned, bool Compacting, string Bucket);
+
+    [Conditional("DEBUG")]
+    private void LogSetupPreparedItem(TabItem ti, bool compacting, bool pinned)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogSetupPreparedItem(logger, ti.Header ?? "<null>", ti.IsPinned, compacting, pinned ? "pinned" : "regular");
+        }
+    }
+
+    // Logs clearing element
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Clearing element: Header='{Header}'")]
+    private static partial void LogClearElement(ILogger logger, string Header);
+
+    [Conditional("DEBUG")]
+    private void LogClearElement(TabStripItem tsi)
+    {
+        if (this.logger is ILogger logger)
+        {
+            var header = (tsi.DataContext as TabItem)?.Header ?? "<null>";
+            LogClearElement(logger, header);
         }
     }
 }
