@@ -17,37 +17,37 @@ public partial class TabStripItem
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Applying template...")]
-    private static partial void LogApplyingTemplate(ILogger logger);
+        Message = "[{Header}] Applying template...")]
+    private static partial void LogApplyingTemplate(ILogger logger, string header);
 
     [Conditional("DEBUG")]
     private void LogApplyingTemplate()
     {
         if (this.logger is ILogger logger)
         {
-            LogApplyingTemplate(logger);
+            LogApplyingTemplate(logger, this.Item?.Header ?? "<null>");
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Template part '{PartName}' (required={IsRequired}) of type '{ExpectedType}' not found.")]
-    private static partial void LogTemplatePartNotFound(ILogger logger, string partName, string expectedType, bool isRequired);
+        Message = "[{Header}] Template part '{PartName}' (required={IsRequired}) of type '{ExpectedType}' not found.")]
+    private static partial void LogTemplatePartNotFound(ILogger logger, string header, string partName, string expectedType, bool isRequired);
 
     private void LogTemplatePartNotFound(string partName, Type expectedType, bool isRequired)
     {
         if (this.logger is ILogger logger)
         {
-            LogTemplatePartNotFound(logger, partName, expectedType.Name, isRequired);
+            LogTemplatePartNotFound(logger, this.Item?.Header ?? "<null>", partName, expectedType.Name, isRequired);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "{State}{Detail}")]
-    private static partial void LogEnabledState(ILogger logger, string state, string detail);
+        Message = "[{Header}] {State}{Detail}")]
+    private static partial void LogEnabledState(ILogger logger, string header, string state, string detail);
 
     [Conditional("DEBUG")]
     private void LogEnabledOrDisabled()
@@ -56,6 +56,7 @@ public partial class TabStripItem
         {
             LogEnabledState(
                 logger,
+                this.Item?.Header ?? "<null>",
                 this.IsEnabled ? "Enabled" : "Disabled",
                 this.Item is null ? " because TabItem is null" : $", TabItem is set with '{this.Item.Header}'");
         }
@@ -64,8 +65,8 @@ public partial class TabStripItem
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Pointer entered at '{{X={X}, Y={Y}}}', (IsCompact={IsCompact})")]
-    private static partial void LogPointerEntered(ILogger logger, double x, double y, bool isCompact);
+        Message = "[{Header}] Pointer entered at '{{X={X}, Y={Y}}}', (IsCompact={IsCompact})")]
+    private static partial void LogPointerEntered(ILogger logger, string header, double x, double y, bool isCompact);
 
     [Conditional("DEBUG")]
     private void LogPointerEntered(PointerRoutedEventArgs e)
@@ -73,45 +74,45 @@ public partial class TabStripItem
         if (this.logger is ILogger logger)
         {
             var pos = e.GetCurrentPoint(this).Position;
-            LogPointerEntered(logger, pos.X, pos.Y, this.IsCompact);
+            LogPointerEntered(logger, this.Item?.Header ?? "<null>", pos.X, pos.Y, this.IsCompact);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Pointer exited, (IsCompact={IsCompact})")]
-    private static partial void LogPointerExited(ILogger logger, bool isCompact);
+        Message = "[{Header}] Pointer exited, (IsCompact={IsCompact})")]
+    private static partial void LogPointerExited(ILogger logger, string header, bool isCompact);
 
     [Conditional("DEBUG")]
     private void LogPointerExited()
     {
         if (this.logger is ILogger logger)
         {
-            LogPointerExited(logger, this.IsCompact);
+            LogPointerExited(logger, this.Item?.Header ?? "<null>", this.IsCompact);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Visual state changed to '{State}' (IsCompact={IsCompact}, PointerOver={PointerOver}, IsSelected={Selected}, IsPinned={Pinned})")]
-    private static partial void LogVisualState(ILogger logger, string state, bool isCompact, bool pointerOver, bool selected, bool pinned);
+        Message = "[{Header}] Visual state changed to '{State}' (IsCompact={IsCompact}, PointerOver={PointerOver}, IsSelected={Selected}, IsPinned={Pinned})")]
+    private static partial void LogVisualState(ILogger logger, string header, string state, bool isCompact, bool pointerOver, bool selected, bool pinned);
 
     [Conditional("DEBUG")]
     private void LogVisualState(string state)
     {
         if (this.logger is ILogger logger && this.Item is { } item)
         {
-            LogVisualState(logger, state, this.IsCompact, this.isPointerOver, item.IsSelected, item.IsPinned);
+            LogVisualState(logger, this.Item?.Header ?? "<null>", state, this.IsCompact, this.isPointerOver, item.IsSelected, item.IsPinned);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Item changed from '{OldValue}' to '{NewValue}'")]
-    private static partial void LogItemChanged(ILogger logger, string oldValue, string newValue);
+        Message = "[{Header}] Item changed from '{OldValue}' to '{NewValue}'")]
+    private static partial void LogItemChanged(ILogger logger, string header, string oldValue, string newValue);
 
     [Conditional("DEBUG")]
     private void LogItemChanged(DependencyPropertyChangedEventArgs e)
@@ -120,15 +121,15 @@ public partial class TabStripItem
         {
             var oldValueStr = e.OldValue is TabItem oldTab ? oldTab.Header ?? "null" : "null";
             var newValueStr = e.NewValue is TabItem newTab ? newTab.Header ?? "null" : "null";
-            LogItemChanged(logger, oldValueStr, newValueStr);
+            LogItemChanged(logger, newValueStr, oldValueStr, newValueStr);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "TabItem property '{PropertyName}' changed to '{NewValue}'")]
-    private static partial void LogItemPropertyChanged(ILogger logger, string propertyName, object newValue);
+        Message = "[{Header}] TabItem property '{PropertyName}' changed to '{NewValue}'")]
+    private static partial void LogItemPropertyChanged(ILogger logger, string header, string propertyName, object newValue);
 
     [Conditional("DEBUG")]
     private void LogItemPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
@@ -137,30 +138,30 @@ public partial class TabStripItem
         {
             var property = item.GetType().GetProperty(e.PropertyName!);
             var newValue = property?.GetValue(item) ?? (object)"null";
-            LogItemPropertyChanged(logger, e.PropertyName!, newValue);
+            LogItemPropertyChanged(logger, this.Item?.Header ?? "<null>", e.PropertyName!, newValue);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Pin button clicked, item is now {Pinned}")]
-    private static partial void LogPinClicked(ILogger logger, string pinned);
+        Message = "[{Header}] Pin button clicked, item is now {Pinned}")]
+    private static partial void LogPinClicked(ILogger logger, string header, string pinned);
 
     [Conditional("DEBUG")]
     private void LogPinClicked()
     {
         if (this.logger is ILogger logger)
         {
-            LogPinClicked(logger, this.Item is { IsPinned: true } ? "pinned" : "unpinned");
+            LogPinClicked(logger, this.Item?.Header ?? "<null>", this.Item is { IsPinned: true } ? "pinned" : "unpinned");
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Close button clicked, event CloseRequested invoked for item '{ItemHeader}'")]
-    private static partial void LogCloseRequested(ILogger logger, string itemHeader);
+        Message = "[{Header}] Close button clicked, event CloseRequested invoked")]
+    private static partial void LogCloseRequested(ILogger logger, string header);
 
     [Conditional("DEBUG")]
     private void LogCloseRequested()
@@ -174,30 +175,30 @@ public partial class TabStripItem
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "MinWidth updated to {MinWidth}")]
-    private static partial void LogMinWidthUpdated(ILogger logger, double minWidth);
+        Message = "[{Header}] MinWidth updated to {MinWidth}")]
+    private static partial void LogMinWidthUpdated(ILogger logger, string header, double minWidth);
 
     [Conditional("DEBUG")]
     private void LogMinWidthUpdated()
     {
         if (this.logger is ILogger logger)
         {
-            LogMinWidthUpdated(logger, this.MinWidth);
+            LogMinWidthUpdated(logger, this.Item?.Header ?? "<null>", this.MinWidth);
         }
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Compact mode changed from {OldValue} to {NewValue}")]
-    private static partial void LogCompactModeChanged(ILogger logger, bool oldValue, bool newValue);
+        Message = "[{Header}] Compact mode changed from {OldValue} to {NewValue}")]
+    private static partial void LogCompactModeChanged(ILogger logger, string header, bool oldValue, bool newValue);
 
     [Conditional("DEBUG")]
     private void LogCompactModeChanged(bool oldValue, bool newValue)
     {
         if (this.logger is ILogger logger)
         {
-            LogCompactModeChanged(logger, oldValue, newValue);
+            LogCompactModeChanged(logger, this.Item?.Header ?? "<null>", oldValue, newValue);
         }
     }
 }

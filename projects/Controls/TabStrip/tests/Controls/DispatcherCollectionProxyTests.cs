@@ -11,7 +11,6 @@ namespace DroidNet.Controls.Tabs.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("DispatcherCollectionProxyTests")]
 [TestCategory("UITest")]
 public class DispatcherCollectionProxyTests
 {

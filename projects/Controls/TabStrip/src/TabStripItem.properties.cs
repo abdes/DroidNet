@@ -63,9 +63,9 @@ public partial class TabStripItem
     }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether this tab item is in compact mode. In compact
-    ///     mode, the tool buttons (such as close or pin) are overlaid over the item instead of
-    ///     being placed alongside the header.
+    ///     Gets or sets a value indicating whether this tab item is in compact mode. This may
+    ///     trigger specific layout management in the control, such as compacting the header,
+    ///     overlaying the tool buttons, etc.
     /// </summary>
     public bool IsCompact
     {

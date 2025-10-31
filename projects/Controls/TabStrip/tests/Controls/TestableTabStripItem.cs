@@ -2,11 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
+
 namespace DroidNet.Controls.Tabs.Tests;
 
 /// <summary>
 ///     A testable subclass of <see cref="TabStripItem" /> that exposes protected members for testing.
 /// </summary>
+[ExcludeFromCodeCoverage]
 public sealed partial class TestableTabStripItem : TabStripItem
 {
     public new void OnPinClicked() => base.OnPinClicked();
