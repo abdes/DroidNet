@@ -80,6 +80,25 @@ public sealed partial class OutputConsoleView
         return null;
     }
 
+    // Return a new brush that visually dims the provided brush by applying
+    // opacity. For SolidColorBrush we create a new instance so we don't
+    // mutate shared theme resources.
+    private static Brush DimBrush(Brush brush)
+    {
+        if (brush is SolidColorBrush scb)
+        {
+            // Prefer a modest dim amount that still preserves legibility.
+            const double dimOpacity = 0.5;
+            return new SolidColorBrush(scb.Color)
+            {
+                Opacity = scb.Opacity * dimOpacity,
+            };
+        }
+
+        // Non-solid brushes: fall back to returning the original brush.
+        return brush;
+    }
+
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         this.InitializeLoadedState();
@@ -603,9 +622,16 @@ public sealed partial class OutputConsoleView
             });
         }
 
-        // For Verbose/Debug, gray-out the entire message text
+        // For Verbose/Debug, gray-out the entire message text by using the
+        // normal text color but applying opacity (dim). This keeps the same
+        // hue on both Light and Dark themes while making verbose/debug less
+        // visually prominent.
+        // For dimming verbose/debug we should base the dim on the actual
+        // rendered foreground (defaultBrush) so that the hue matches the
+        // current theme. Using `tertiary` here could be a theme resource
+        // that doesn't match the control foreground in all cases.
         var messageBaseBrush = item.Level is LogEventLevel.Verbose or LogEventLevel.Debug
-            ? tertiary
+            ? DimBrush(defaultBrush)
             : defaultBrush;
 
         if (string.IsNullOrEmpty(filter))
@@ -680,8 +706,8 @@ public sealed partial class OutputConsoleView
         {
             return item1.Level switch
             {
-                LogEventLevel.Verbose => tertiary,
-                LogEventLevel.Debug => tertiary,
+                LogEventLevel.Verbose => DimBrush(defaultBrush),
+                LogEventLevel.Debug => DimBrush(defaultBrush),
                 LogEventLevel.Information => defaultBrush,
                 LogEventLevel.Warning => warning,
                 LogEventLevel.Error => error,
@@ -703,7 +729,10 @@ public sealed partial class OutputConsoleView
             return;
         }
 
-        this.tertiaryBrush = TryGet("TextFillColorTertiaryBrush");
+        // Use the primary text fill as the base for "tertiary" readable text
+        // and apply opacity when rendering verbose/debug messages. This keeps
+        // the hue identical across themes while allowing dimming via Opacity.
+        this.tertiaryBrush = TryGet("TextFillColorPrimaryBrush");
         this.warningBrush = TryGet("SystemFillColorCautionBrush");
         this.errorBrush = TryGet("SystemFillColorCriticalBrush");
         this.accentBrush = TryGet("AccentTextFillColorPrimaryBrush");
