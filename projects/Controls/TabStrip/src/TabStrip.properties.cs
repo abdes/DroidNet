@@ -214,10 +214,12 @@ public partial class TabStrip
         => ((TabStrip)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue);
 
     private static void OnWidthPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
-        => ((TabStrip)d).UpdateTabWidths();
+        => ((TabStrip)d).RecalculateAndApplyTabWidths();
 
-    // Initializes the logger for this TabStrip. Uses the TabStrip type as the category.
-    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
+    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
+    {
         this.logger = loggerFactory?.CreateLogger<TabStrip>() ??
                       NullLoggerFactory.Instance.CreateLogger<TabStrip>();
+        this.LayoutManager.LoggerFactory = loggerFactory;
+    }
 }

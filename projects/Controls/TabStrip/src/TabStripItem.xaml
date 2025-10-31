@@ -108,6 +108,7 @@
                         -->
                         <Grid
                             x:Name="OverlayPanel"
+                            Margin="2"
                             Padding="4"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Stretch"

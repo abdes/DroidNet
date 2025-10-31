@@ -155,7 +155,7 @@ public partial class TabStripItem : ContentControl
     /// <summary>
     ///     Minimum space that must remain for dragging the tab, even when the tool buttons are overlayed.
     /// </summary>
-    internal const int MinDragWidth = 40;
+    internal const int MinDragWidth = 60;
 
     // Required parts will not be nulll after OnApplyTemplate is called
     private StackPanel buttonsContainer = null!;

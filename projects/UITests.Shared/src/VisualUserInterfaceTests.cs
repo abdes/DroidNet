@@ -66,6 +66,7 @@ namespace DroidNet.Tests;
 /// }
 /// ]]>
 /// </example>
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "a test suite class")]
 public class VisualUserInterfaceTests
 {
     /// <summary>
