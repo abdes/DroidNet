@@ -3,12 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
+using System.Reflection;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls.Tabs.Tests;
 
@@ -37,12 +40,12 @@ public class TabStripTests : VisualUserInterfaceTests
         var tabStrip = await SetupTabStrip().ConfigureAwait(true);
 
         // Assert - Verify all required template parts are present
-        CheckPartIsThere(tabStrip, "PartRootGrid");
-        CheckPartIsThere(tabStrip, "PartOverflowLeftButton");
-        CheckPartIsThere(tabStrip, "PartOverflowRightButton");
-        CheckPartIsThere(tabStrip, "PartPinnedItemsRepeater");
-        CheckPartIsThere(tabStrip, "PartRegularItemsRepeater");
-        CheckPartIsThere(tabStrip, "PartScrollHost");
+        CheckPartIsThere(tabStrip, TabStrip.RootGridPartName);
+        CheckPartIsThere(tabStrip, TabStrip.PartOverflowLeftButtonName);
+        CheckPartIsThere(tabStrip, TabStrip.PartOverflowRightButtonName);
+        CheckPartIsThere(tabStrip, TabStrip.PartPinnedItemsRepeaterName);
+        CheckPartIsThere(tabStrip, TabStrip.PartRegularItemsRepeaterName);
+        CheckPartIsThere(tabStrip, TabStrip.PartScrollHostName);
     });
 
     [TestMethod]
@@ -169,6 +172,73 @@ public class TabStripTests : VisualUserInterfaceTests
 
         // Assert
         _ = tabStrip.TabWidthPolicy.Should().Be(TabWidthPolicy.Equal);
+    });
+
+    [TestMethod]
+    public Task OverflowButtons_ShowAndHide_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = await SetupTabStrip().ConfigureAwait(true);
+        tabStrip.TabWidthPolicy = TabWidthPolicy.Equal;
+
+        // Add many items so the regular repeater will overflow
+        for (var i = 0; i < 20; i++)
+        {
+            tabStrip.Items.Add(new TabItem { Header = string.Format(CultureInfo.InvariantCulture, "Tab {0}", i) });
+        }
+
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Find the scroll host and overflow buttons
+        var scroll = tabStrip.FindDescendant<ScrollViewer>(e => string.Equals(e.Name, TabStrip.PartScrollHostName, StringComparison.Ordinal));
+        _ = scroll.Should().NotBeNull();
+
+        var leftBtn = tabStrip.FindDescendant<RepeatButton>(e => string.Equals(e.Name, TabStrip.PartOverflowLeftButtonName, StringComparison.Ordinal));
+        var rightBtn = tabStrip.FindDescendant<RepeatButton>(e => string.Equals(e.Name, TabStrip.PartOverflowRightButtonName, StringComparison.Ordinal));
+        _ = leftBtn.Should().NotBeNull();
+        _ = rightBtn.Should().NotBeNull();
+
+        // Act - scroll to the right (large offset) to reveal left overflow
+        // Disable animation to make the ChangeView take effect synchronously in tests
+        _ = scroll!.ChangeView(1000, verticalOffset: null, zoomFactor: null, disableAnimation: true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - left overflow becomes visible
+        _ = leftBtn!.Visibility.Should().Be(Visibility.Visible);
+
+        // Act - scroll back to the left-most position (disable animation for determinism)
+        _ = scroll.ChangeView(0, verticalOffset: null, zoomFactor: null, disableAnimation: true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - left overflow hidden again
+        _ = leftBtn.Visibility.Should().Be(Visibility.Collapsed);
+    });
+
+    [TestMethod]
+    public Task TabCloseRequested_ForwardsEvent_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = await SetupTabStrip().ConfigureAwait(true);
+        var tabItem = new TabItem { Header = "Close Me" };
+        tabStrip.Items.Add(tabItem);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Find the generated TabStripItem and invoke its protected OnCloseClicked via reflection
+        var tsi = tabStrip.FindDescendant<TabStripItem>(e => e.DataContext == tabItem);
+        _ = tsi.Should().NotBeNull();
+
+        TabCloseRequestedEventArgs? received = null;
+        tabStrip.TabCloseRequested += (s, e) => received = e;
+
+        // Act - call the protected OnCloseClicked method via reflection on the TabStripItem
+        var onClose = tsi!.GetType().GetMethod("OnCloseClicked", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+        _ = onClose.Should().NotBeNull("TabStripItem should expose a protected OnCloseClicked method");
+        _ = onClose!.Invoke(tsi, []);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - TabStrip forwarded the close request
+        _ = received.Should().NotBeNull();
+        _ = received!.Item.Should().Be(tabItem);
     });
 
     [TestMethod]

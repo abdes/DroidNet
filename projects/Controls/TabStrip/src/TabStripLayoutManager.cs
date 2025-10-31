@@ -2,13 +2,32 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Implementation of the TabStrip layout manager.
+///     Implementation of the TabStrip layout manager.
 /// </summary>
-public class TabStripLayoutManager : ITabStripLayoutManager
+public partial class TabStripLayoutManager : ITabStripLayoutManager
 {
+    private ILogger logger = NullLoggerFactory.Instance.CreateLogger<TabStripLayoutManager>();
+
+    /// <summary>
+    /// Gets or sets the logger factory used to create the logger for this layout manager.
+    /// Setting this property will reset the internal logger to one created from the provided factory.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory
+    {
+        get => field;
+        set
+        {
+            field = value;
+            this.logger = field?.CreateLogger<TabStripLayoutManager>() ?? NullLoggerFactory.Instance.CreateLogger<TabStripLayoutManager>();
+        }
+    }
+
     /// <inheritdoc />
     public double MaxItemWidth { get; set; }
 
@@ -94,23 +113,23 @@ public class TabStripLayoutManager : ITabStripLayoutManager
         // First, compute pinned widths (Auto)
         var pinnedItems = request.Items.Where(i => i.IsPinned).ToList();
         var regularItems = request.Items.Where(i => !i.IsPinned).ToList();
-
-        System.Diagnostics.Debug.WriteLine($"[LayoutManager] ComputeCompact: availableWidth={request.AvailableWidth}, pinnedCount={pinnedItems.Count}, regularCount={regularItems.Count}");
+        this.LogComputeCompact(request.AvailableWidth, pinnedItems.Count, regularItems.Count);
 
         foreach (var item in pinnedItems)
         {
             var minEffective = Math.Min(item.MinWidth, this.MaxItemWidth);
             var width = Math.Max(minEffective, Math.Min(this.MaxItemWidth, item.DesiredWidth));
-            outputs.Add(new LayoutPerItemOutput(item.Index, width, true));
+            outputs.Add(new LayoutPerItemOutput(item.Index, width, IsPinned: true));
             sumPinned += width;
-            System.Diagnostics.Debug.WriteLine($"[LayoutManager] Pinned: idx={item.Index}, min={minEffective}, desired={item.DesiredWidth}, width={width}");
+            this.LogPinnedItem(item.Index, minEffective, item.DesiredWidth, width);
         }
 
         // Now, compute regular widths
-        var (regularOutputs, sumRegular, needsScrolling) = this.ComputeCompactRegular(regularItems.ToList(), request.AvailableWidth);
+        var (regularOutputs, sumRegular, needsScrolling)
+            = this.ComputeCompactRegular([.. regularItems], request.AvailableWidth);
         outputs.AddRange(regularOutputs);
 
-        System.Diagnostics.Debug.WriteLine($"[LayoutManager] ComputeCompact: sumPinned={sumPinned}, sumRegular={sumRegular}, needsScrolling={needsScrolling}");
+        this.LogComputeCompactResult(sumPinned, sumRegular, needsScrolling);
 
         return new LayoutResult(outputs, sumPinned, sumRegular, needsScrolling);
     }
@@ -118,41 +137,76 @@ public class TabStripLayoutManager : ITabStripLayoutManager
     private (List<LayoutPerItemOutput> outputs, double sum, bool needsScrolling) ComputeCompactRegular(
         List<LayoutPerItemInput> regularItems, double availableWidth)
     {
+        // Orchestrates measurement, optional fast-path assignment, and iterative shrinking.
         var outputs = new List<LayoutPerItemOutput>();
-        var desiredWidths = new List<double>();
-        var minWidths = new List<double>();
 
-        System.Diagnostics.Debug.WriteLine($"[LayoutManager] ComputeCompactRegular: availableWidth={availableWidth}, itemCount={regularItems.Count}");
+        this.LogComputeCompactRegularStart(availableWidth, regularItems.Count);
 
-        for (int i = 0; i < regularItems.Count; i++)
+        this.BuildDesiredAndMinWidths(regularItems, out var desiredWidths, out var minWidths);
+
+        if (this.TryAssignIfFits(desiredWidths, availableWidth, regularItems, outputs, out var sumDesired))
+        {
+            return (outputs, sumDesired, false);
+        }
+
+        var (currentWidths, finalSum) = this.ShrinkToFit(desiredWidths, minWidths, availableWidth, regularItems);
+
+        var needsScrolling = finalSum > availableWidth;
+
+        for (var i = 0; i < regularItems.Count; i++)
+        {
+            var isCompact = currentWidths[i] < desiredWidths[i];
+            outputs.Add(new LayoutPerItemOutput(regularItems[i].Index, currentWidths[i], IsPinned: false));
+            this.LogFinalAssign(regularItems[i].Index, currentWidths[i], isCompact);
+        }
+
+        return (outputs, finalSum, needsScrolling);
+    }
+
+    private void BuildDesiredAndMinWidths(List<LayoutPerItemInput> regularItems, out List<double> desiredWidths, out List<double> minWidths)
+    {
+        desiredWidths = new List<double>(regularItems.Count);
+        minWidths = new List<double>(regularItems.Count);
+
+        for (var i = 0; i < regularItems.Count; i++)
         {
             var item = regularItems[i];
             var minEffective = Math.Min(item.MinWidth, this.MaxItemWidth);
             var desired = Math.Max(minEffective, Math.Min(this.MaxItemWidth, item.DesiredWidth));
             desiredWidths.Add(desired);
             minWidths.Add(minEffective);
-            System.Diagnostics.Debug.WriteLine($"[LayoutManager] Item idx={item.Index}, min={minEffective}, desired={item.DesiredWidth}, clampedDesired={desired}");
+            this.LogRegularItemDesired(item.Index, minEffective, item.DesiredWidth, desired);
         }
+    }
 
-        var sumDesired = desiredWidths.Sum();
-        System.Diagnostics.Debug.WriteLine($"[LayoutManager] ComputeCompactRegular: sumDesired={sumDesired}");
+    private bool TryAssignIfFits(List<double> desiredWidths, double availableWidth, List<LayoutPerItemInput> regularItems, List<LayoutPerItemOutput> outputs, out double sumDesired)
+    {
+        sumDesired = desiredWidths.Sum();
+        this.LogComputeCompactRegularSumDesired(sumDesired);
+
         if (sumDesired <= availableWidth)
         {
-            System.Diagnostics.Debug.WriteLine($"[LayoutManager] All items fit, no shrink needed.");
+            this.LogAllItemsFit();
             for (var i = 0; i < regularItems.Count; i++)
             {
-                outputs.Add(new LayoutPerItemOutput(regularItems[i].Index, desiredWidths[i], false));
-                System.Diagnostics.Debug.WriteLine($"[LayoutManager] Assign idx={regularItems[i].Index}, width={desiredWidths[i]}");
+                outputs.Add(new LayoutPerItemOutput(regularItems[i].Index, desiredWidths[i], IsPinned: false));
+                this.LogAssignItem(regularItems[i].Index, desiredWidths[i]);
             }
-            return (outputs, sumDesired, false);
+
+            return true;
         }
 
-        // Iterative shrinking
+        return false;
+    }
+
+    private (List<double> currentWidths, double finalSum) ShrinkToFit(List<double> desiredWidths, List<double> minWidths, double availableWidth, List<LayoutPerItemInput> regularItems)
+    {
         var currentWidths = new List<double>(desiredWidths);
         var remainingIndices = Enumerable.Range(0, regularItems.Count).ToList();
 
-        var deficit = sumDesired - availableWidth;
-        System.Diagnostics.Debug.WriteLine($"[LayoutManager] Shrinking needed: deficit={deficit}");
+        var deficit = desiredWidths.Sum() - availableWidth;
+        this.LogShrinkingNeeded(deficit);
+
         while (deficit > 0 && remainingIndices.Count > 0)
         {
             var shrinkPerItem = deficit / remainingIndices.Count;
@@ -162,7 +216,7 @@ public class TabStripLayoutManager : ITabStripLayoutManager
             {
                 var newWidth = currentWidths[idx] - shrinkPerItem;
                 var clamped = Math.Max(minWidths[idx], newWidth);
-                System.Diagnostics.Debug.WriteLine($"[LayoutManager] Shrink idx={regularItems[idx].Index}, old={currentWidths[idx]}, shrinkBy={shrinkPerItem}, new={newWidth}, clamped={clamped}");
+                this.LogShrinkStep(regularItems[idx].Index, currentWidths[idx], shrinkPerItem, newWidth, clamped);
                 currentWidths[idx] = clamped;
                 if (clamped > minWidths[idx])
                 {
@@ -172,20 +226,11 @@ public class TabStripLayoutManager : ITabStripLayoutManager
 
             var newSum = currentWidths.Sum();
             deficit = Math.Max(0, newSum - availableWidth);
-            System.Diagnostics.Debug.WriteLine($"[LayoutManager] After shrink: newSum={newSum}, deficit={deficit}, remaining={newRemaining.Count}");
+            this.LogAfterShrink(newSum, deficit, newRemaining.Count);
             remainingIndices = newRemaining;
         }
 
         var finalSum = currentWidths.Sum();
-        var needsScrolling = finalSum > availableWidth;
-
-        for (var i = 0; i < regularItems.Count; i++)
-        {
-            var isCompact = currentWidths[i] < desiredWidths[i];
-            outputs.Add(new LayoutPerItemOutput(regularItems[i].Index, currentWidths[i], false));
-            System.Diagnostics.Debug.WriteLine($"[LayoutManager] Final assign idx={regularItems[i].Index}, width={currentWidths[i]}, compacted={isCompact}");
-        }
-
-        return (outputs, finalSum, needsScrolling);
+        return (currentWidths, finalSum);
     }
 }

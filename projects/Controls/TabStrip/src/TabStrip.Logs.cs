@@ -17,11 +17,10 @@ public partial class TabStrip
 {
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Information,
         Message = "Applying template...")]
     private static partial void LogApplyingTemplate(ILogger logger);
 
-    [Conditional("DEBUG")]
     private void LogApplyingTemplate()
     {
         if (this.logger is ILogger logger)
@@ -99,7 +98,6 @@ public partial class TabStrip
         Message = "Tab selection changed: OldHeader='{OldHeader}', NewHeader='{NewHeader}', OldIndex={OldIndex}, NewIndex={NewIndex}")]
     private static partial void LogSelectionChanged(ILogger logger, string? OldHeader, string? NewHeader, int OldIndex, int NewIndex);
 
-    [Conditional("DEBUG")]
     private void LogSelectionChanged(TabItem? oldItem, TabItem? newItem, int oldIndex, int newIndex)
     {
         if (this.logger is ILogger logger)
@@ -157,11 +155,10 @@ public partial class TabStrip
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Information,
         Message = "Tab item added: Header='{Header}', IsPinned={IsPinned}, IsClosable={IsClosable}, NewCount={Count}")]
     private static partial void LogItemAdded(ILogger logger, string Header, bool IsPinned, bool IsClosable, int Count);
 
-    [Conditional("DEBUG")]
     private void LogItemAdded(TabItem? item, int count)
     {
         if (this.logger is ILogger logger && item is not null)
@@ -177,7 +174,6 @@ public partial class TabStrip
         Message = "Template part not found: {PartName}")]
     private static partial void LogTemplatePartNotFound(ILogger logger, string PartName);
 
-    [Conditional("DEBUG")]
     private void LogTemplatePartNotFound(string partName)
     {
         if (this.logger is ILogger logger)
@@ -241,7 +237,6 @@ public partial class TabStrip
         Message = "Element prepared is not a valid TabStripItem: ElementType={ElementType}, DataContextType={DataContextType}")]
     private static partial void LogBadItem(ILogger logger, string ElementType, string DataContextType);
 
-    [Conditional("DEBUG")]
     private void LogBadItem(ItemsRepeater sender, object element)
     {
         if (this.logger is ILogger logger)
@@ -255,7 +250,7 @@ public partial class TabStrip
     // Logs setup prepared item
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Trace,
         Message = "Setting up prepared item: Header='{Header}', IsPinned={IsPinned}, Compacting={Compacting}, Bucket={Bucket}")]
     private static partial void LogSetupPreparedItem(ILogger logger, string Header, bool IsPinned, bool Compacting, string Bucket);
 
@@ -271,7 +266,7 @@ public partial class TabStrip
     // Logs clearing element
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Trace,
         Message = "Clearing element: Header='{Header}'")]
     private static partial void LogClearElement(ILogger logger, string Header);
 
@@ -282,6 +277,156 @@ public partial class TabStrip
         {
             var header = (tsi.DataContext as TabItem)?.Header ?? "<null>";
             LogClearElement(logger, header);
+        }
+    }
+
+    // Logs when the TabWidthPolicy changes
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "TabWidthPolicy changed: {Policy}")]
+    private static partial void LogTabWidthPolicyChanged(ILogger logger, TabWidthPolicy Policy);
+
+    private void LogTabWidthPolicyChanged(TabWidthPolicy policy)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTabWidthPolicyChanged(logger, policy);
+        }
+    }
+
+    // Recompute lifecycle logs
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Recomputing tab widths...")]
+    private static partial void LogRecomputeStart(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogRecomputeStart()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogRecomputeStart(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Recompute found no prepared containers")]
+    private static partial void LogRecomputeNoContainers(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogRecomputeNoContainers()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogRecomputeNoContainers(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Recompute completed")]
+    private static partial void LogRecomputeCompleted(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogRecomputeCompleted()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogRecomputeCompleted(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Collected prepared containers: {Count}")]
+    private static partial void LogCollectPreparedContainers(ILogger logger, int Count);
+
+    [Conditional("DEBUG")]
+    private void LogCollectPreparedContainers(int count)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCollectPreparedContainers(logger, count);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "MeasureDesiredWidths: policy not Compact, skipping")]
+    private static partial void LogMeasurePolicyNotCompact(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogMeasurePolicyNotCompact()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogMeasurePolicyNotCompact(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Measured desired widths for {Count} items")]
+    private static partial void LogMeasuredDesiredWidths(ILogger logger, int Count);
+
+    [Conditional("DEBUG")]
+    private void LogMeasuredDesiredWidths(int count)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogMeasuredDesiredWidths(logger, count);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Built layout inputs: {Count} items")]
+    private static partial void LogBuildLayoutInputs(ILogger logger, int Count);
+
+    [Conditional("DEBUG")]
+    private void LogBuildLayoutInputs(int count)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogBuildLayoutInputs(logger, count);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "ComputeLayout: availableWidth={AvailableWidth}, inputs={InputCount}")]
+    private static partial void LogComputeLayout(ILogger logger, double AvailableWidth, int InputCount);
+
+    [Conditional("DEBUG")]
+    private void LogComputeLayout(double availableWidth, int inputCount)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogComputeLayout(logger, availableWidth, inputCount);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "No prepared container found for index {Index}")]
+    private static partial void LogNoContainerForIndex(ILogger logger, int Index);
+
+    private void LogNoContainerForIndex(int index)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogNoContainerForIndex(logger, index);
         }
     }
 }
