@@ -806,13 +806,15 @@ public sealed partial class OutputConsoleView
     private string GetHighestSelectedLevelName() =>
         this.LevelFilter switch
         {
-            // Highest severity first
-            var f when (f & LevelMask.Fatal) == LevelMask.Fatal => "Fatal",
-            var f when (f & LevelMask.Error) == LevelMask.Error => "Error",
-            var f when (f & LevelMask.Warning) == LevelMask.Warning => "Warning",
-            var f when (f & LevelMask.Information) == LevelMask.Information => "Information",
-            var f when (f & LevelMask.Debug) == LevelMask.Debug => "Debug",
+            // Prefer the most verbose enabled level (lowest severity) so the
+            // UI shows the "most verbose" selection when multiple levels are
+            // enabled. Order: Verbose -> Debug -> Information -> Warning -> Error -> Fatal
             var f when (f & LevelMask.Verbose) == LevelMask.Verbose => "Verbose",
+            var f when (f & LevelMask.Debug) == LevelMask.Debug => "Debug",
+            var f when (f & LevelMask.Information) == LevelMask.Information => "Information",
+            var f when (f & LevelMask.Warning) == LevelMask.Warning => "Warning",
+            var f when (f & LevelMask.Error) == LevelMask.Error => "Error",
+            var f when (f & LevelMask.Fatal) == LevelMask.Fatal => "Fatal",
             _ => "None",
         };
 
