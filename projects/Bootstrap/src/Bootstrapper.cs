@@ -82,6 +82,7 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     private IContainer? finalContainer;
     private IHost? host;
     private bool isDisposed;
+    private IConfigurationRoot? loggingConfiguration;
 
     /// <summary>
     ///     Gets the service that resolves application-specific file paths.
@@ -585,12 +586,11 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     {
         Debug.Assert(this.PathFinderService is not null, "PathFinderService must be initialized before creating the logger");
 
-        IConfigurationRoot? configuration = null;
         try
         {
             Directory.CreateDirectory(this.PathFinderService.LocalAppData);
 
-            configuration = new ConfigurationBuilder()
+            this.loggingConfiguration = new ConfigurationBuilder()
                .SetBasePath(this.PathFinderService.LocalAppData)
                .AddJsonFile("logging.json", optional: true, reloadOnChange: true)
                .AddJsonFile($"logging.{this.PathFinderService.Mode}.json", optional: true, reloadOnChange: true)
@@ -603,9 +603,9 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         }
 #pragma warning restore CA1031 // Do not catch general exception types
 
-        if (configuration is not null)
+        if (this.loggingConfiguration is not null)
         {
-            _ = loggerConfig.ReadFrom.Configuration(configuration);
+            _ = loggerConfig.ReadFrom.Configuration(this.loggingConfiguration);
             if (Debugger.IsAttached)
             {
                 _ = loggerConfig
