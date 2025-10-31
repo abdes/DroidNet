@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -11,24 +12,91 @@ using Microsoft.UI.Xaml.Input;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents a single tab item in a TabStrip control.
+///     Represents the visual container for a single logical tab displayed in a <c>TabStrip</c>.
 /// </summary>
+/// <remarks>
+///     <c>TabStripItem</c> is a lightweight <see cref="ContentControl"/> that renders a single
+///     <see cref="TabItem"/> data model inside a templatable control. It is intended to be used
+///     as the item container within a <c>TabStrip</c> or an <c>ItemsRepeater</c>-based tab
+///     strip. The control exposes an <see cref="Item"/> property which should be set to the
+///     corresponding <see cref="TabItem"/> instance. The template provides an area for an
+///     optional icon, header text, a pinned indicator and an overlayed toolbar with pin/close
+///     buttons.
+///     <para>
+///     The control relies on template parts and visual states to implement its behaviour.
+///     Template part names are declared via <see cref="TemplatePartAttribute"/> on the
+///     class; the available parts include (names shown as literal strings):
+///     </para>
+///     <list type="bullet">
+///         <item><description><c>"PartRootGrid"</c> — root element used for visual state management.</description></item>
+///         <item><description><c>"PartContentRootGrid"</c> — measured content grid containing icon, header and indicator.</description></item>
+///         <item><description><c>"PartIcon"</c> — optional icon element bound to <c>TabItem.Icon</c>.</description></item>
+///         <item><description><c>"PartHeader"</c> — text element bound to <c>TabItem.Header</c>.</description></item>
+///         <item><description><c>"ButtonsContainer"</c> — container for the tool buttons.</description></item>
+///         <item><description><c>"PartPinButton"</c> and <c>"PartCloseButton"</c> — the pin and close buttons.</description></item>
+///         <item><description><c>"PartPinnedIndicator"</c> — visual indicator shown when the item is pinned.</description></item>
+///     </list>
+///     <para>
+///     Visual states are grouped to represent common pointer/selection states and overlay
+///     visibility. Key visual state groups include <c>CommonStates</c>, <c>PinStates</c> and
+///     <c>OverlayStates</c>, and states such as <c>Normal</c>, <c>PointerOver</c>,
+///     <c>Selected</c>, <c>Pinned</c> and <c>OverlayVisible</c> are used by the control
+///     template to animate appearance changes.
+///     </para>
+///     <para>
+///     The control exposes the following important dependency properties:
+///     </para>
+///     <list type="bullet">
+///         <item><description><see cref="Item"/> — the <see cref="TabItem"/> data model.</description></item>
+///         <item><description><see cref="IsCompact"/> — when <see langword="true"/>, tool buttons are overlayed rather than occupying layout space.</description></item>
+///         <item><description><see cref="LoggerFactory"/> — optional factory used to create an <c>ILogger</c> for diagnostics.</description></item>
+///     </list>
+///     <para>
+///     The control raises the <see cref="CloseRequested"/> event when the user requests that a tab
+///     be closed (for example, by clicking the close button). Templates should bind the pin/close
+///     button commands or wire up the <c>Click</c> handlers to the provided template parts. The
+///     control will also toggle the pinned indicator when the pin button is used.
+///     </para>
+///     <para>
+///     Lifetime and threading: like all XAML UI elements, <c>TabStripItem</c> must be accessed on
+///     the UI thread. The control detaches event handlers and cleans up disposable proxies during
+///     the <c>Unloaded</c> handler to avoid leaking resources from recycled containers.
+///     </para>
+/// </remarks>
+/// <example>
+///     <code language="xml"><![CDATA[
+///     <controls:TabStrip>
+///       <controls:TabStripItem Item="{Binding MyTabItem}" />
+///     </controls:TabStrip>
+///     ]]></code>
+/// </example>
+/// <seealso cref="TabItem"/>
+/// <seealso cref="CloseRequested"/>
 [TemplatePart(Name = RootGridPartName, Type = typeof(Grid))]
-[TemplatePart(Name = IconPartName, Type = typeof(ContentPresenter))]
+[TemplatePart(Name = ContentRootGridPartName, Type = typeof(Grid))]
+[TemplatePart(Name = IconPartName, Type = typeof(IconSourceElement))]
 [TemplatePart(Name = HeaderPartName, Type = typeof(TextBlock))]
 [TemplatePart(Name = ButtonsContainerPartName, Type = typeof(StackPanel))]
 [TemplatePart(Name = PinButtonPartName, Type = typeof(Button))]
 [TemplatePart(Name = CloseButtonPartName, Type = typeof(Button))]
+[TemplatePart(Name = PinnedIndicatorPartName, Type = typeof(UIElement))]
 [TemplateVisualState(Name = NormalVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = PointerOverVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = SelectedVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = SelectedPointerOverVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = UnpinnedVisualState, GroupName = PinVisualStates)]
+[TemplateVisualState(Name = PinnedVisualState, GroupName = PinVisualStates)]
+[TemplateVisualState(Name = OverlayHiddenVisualState, GroupName = OverlayVisualStates)]
+[TemplateVisualState(Name = OverlayVisibleVisualState, GroupName = OverlayVisualStates)]
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Dispatcher-backed proxy fields are disposed in the Unloaded handler to align with control lifetime.")]
 
 public partial class TabStripItem : ContentControl
 {
-    /// <summary>The name of the root grid template part.</summary>
+    /// <summary>The name of the root grid template part used for visual state management.</summary>
     public const string RootGridPartName = "PartRootGrid";
+
+    /// <summary>The name of the root grid template part.</summary>
+    public const string ContentRootGridPartName = "PartContentRootGrid";
 
     /// <summary>The name of the icon template part.</summary>
     public const string IconPartName = "PartIcon";
@@ -39,14 +107,26 @@ public partial class TabStripItem : ContentControl
     /// <summary>The name of the buttons container template part.</summary>
     public const string ButtonsContainerPartName = "ButtonsContainer";
 
+    /// <summary>The name of the overlay panel template part.</summary>
+    public const string OverlayPanelPartName = "OverlayPanel";
+
     /// <summary>The name of the pin button template part.</summary>
     public const string PinButtonPartName = "PartPinButton";
 
     /// <summary>The name of the close button template part.</summary>
     public const string CloseButtonPartName = "PartCloseButton";
 
+    /// <summary>The name of the pinned indicator template part.</summary>
+    public const string PinnedIndicatorPartName = "PartPinnedIndicator";
+
     /// <summary>The name of the common visual states group.</summary>
     public const string CommonVisualStates = "CommonStates";
+
+    /// <summary>The name of the pin visual states group.</summary>
+    public const string PinVisualStates = "PinStates";
+
+    /// <summary>The name of the overlay visual states group.</summary>
+    public const string OverlayVisualStates = "OverlayStates";
 
     /// <summary>The name of the normal visual state.</summary>
     public const string NormalVisualState = "Normal";
@@ -60,6 +140,18 @@ public partial class TabStripItem : ContentControl
     /// <summary>The name of the selected pointer over visual state.</summary>
     public const string SelectedPointerOverVisualState = "SelectedPointerOver";
 
+    /// <summary>The name of the unpinned visual state.</summary>
+    public const string UnpinnedVisualState = "Unpinned";
+
+    /// <summary>The name of the pinned visual state.</summary>
+    public const string PinnedVisualState = "Pinned";
+
+    /// <summary>The name of the overlay hidden visual state.</summary>
+    public const string OverlayHiddenVisualState = "OverlayHidden";
+
+    /// <summary>The name of the overlay visible visual state.</summary>
+    public const string OverlayVisibleVisualState = "OverlayVisible";
+
     /// <summary>
     ///     Minimum space that must remain for dragging the tab, even when the tool buttons are overlayed.
     /// </summary>
@@ -70,9 +162,13 @@ public partial class TabStripItem : ContentControl
     private Button pinButton = null!;
     private Button closeButton = null!;
 
-    private ContentPresenter? iconPart;
+    // Optional parts we manage in code behind
+    private UIElement? pinnedIndicator;
+    private IconSourceElement? iconPart;
     private TextBlock? headerPart;
     private ILogger? logger;
+
+    // Keeps track of whether the pointer is currently over the control
     private bool isPointerOver;
 
     /// <summary>
@@ -81,6 +177,11 @@ public partial class TabStripItem : ContentControl
     public TabStripItem()
     {
         this.DefaultStyleKey = typeof(TabStripItem);
+
+        // Ensure we clean up subscriptions when the control is unloaded to avoid
+        // leaking references from recycled containers (ItemsRepeater) or when
+        // templates are removed.
+        this.Unloaded += this.TabStripItem_Unloaded;
     }
 
     /// <summary>
@@ -119,10 +220,20 @@ public partial class TabStripItem : ContentControl
         this.buttonsContainer = GetRequiredTemplatePart<StackPanel>(ButtonsContainerPartName);
         this.pinButton = GetRequiredTemplatePart<Button>(PinButtonPartName);
         this.closeButton = GetRequiredTemplatePart<Button>(CloseButtonPartName);
+        _ = GetRequiredTemplatePart<Grid>(RootGridPartName); // required to exist for VSM
 
-        // Optional parts
-        this.iconPart = GetTemplatePart<ContentPresenter>(IconPartName);
+        // Optional parts, that we managed in code behind
+        this.iconPart = GetTemplatePart<IconSourceElement>(IconPartName);
         this.headerPart = GetTemplatePart<TextBlock>(HeaderPartName);
+        this.pinnedIndicator = GetTemplatePart<UIElement>(PinnedIndicatorPartName);
+
+        // Work around template/data context initialization order: if we already have an Item,
+        // manually update all critical visual elements that depend on bindings, since ItemsRepeater
+        // recycling or template application order may cause bindings to be lost or not updated.
+        if (this.Item is not null)
+        {
+            this.ApplyItemProperties();
+        }
 
         // Attach button click events for the tool buttons
         this.pinButton.Click -= PinButton_Click;
@@ -154,14 +265,14 @@ public partial class TabStripItem : ContentControl
     /// </summary>
     protected virtual void OnPointerEntered()
     {
-        this.isPointerOver = true;
-        this.UpdateVisualStates(useTransitions: true);
-
-        // Show buttons in compact mode on hover
-        if (this.IsCompact)
+        if (!this.IsEnabled)
         {
-            this.buttonsContainer.Visibility = Visibility.Visible;
+            return;
         }
+
+        this.isPointerOver = true;
+        this.UpdateToolBarVisibility();
+        this.UpdateVisualStates(useTransitions: true);
     }
 
     /// <summary>
@@ -181,13 +292,14 @@ public partial class TabStripItem : ContentControl
     protected virtual void OnPointerExited()
     {
         this.isPointerOver = false;
-        this.UpdateVisualStates(useTransitions: true);
 
-        // Hide buttons in compact mode on exit
-        if (this.IsCompact)
+        if (!this.IsEnabled)
         {
-            this.buttonsContainer.Visibility = Visibility.Collapsed;
+            return;
         }
+
+        this.UpdateToolBarVisibility();
+        this.UpdateVisualStates(useTransitions: true);
     }
 
     /// <summary>
@@ -195,10 +307,12 @@ public partial class TabStripItem : ContentControl
     /// </summary>
     protected virtual void OnPinClicked()
     {
-        if (this.Item is null)
+        if (!this.IsEnabled)
         {
             return;
         }
+
+        Debug.Assert(this.Item is not null, "a control with a null Item must be disabled");
 
         this.Item.IsPinned = !this.Item.IsPinned;
         this.LogPinClicked();
@@ -209,13 +323,44 @@ public partial class TabStripItem : ContentControl
     /// </summary>
     protected virtual void OnCloseClicked()
     {
-        if (this.Item is null)
+        if (!this.IsEnabled)
         {
             return;
         }
 
+        Debug.Assert(this.Item is not null, "a control with a null Item must be disabled");
+
         this.CloseRequested?.Invoke(this, new TabCloseRequestedEventArgs { Item = this.Item });
         this.LogCloseRequested();
+    }
+
+    private void TabStripItem_Unloaded(object? sender, RoutedEventArgs e)
+    {
+        // If we still have an item subscribed, unsubscribe to avoid leaking
+        // event handlers when the container is recycled.
+        if (this.Item is TabItem item)
+        {
+            item.PropertyChanged -= this.TabItem_OnPropertyChanged;
+        }
+
+        // Clear logger reference; the factory is owned by the app and should
+        // not be retained by long-lived references on recycled visuals.
+        this.logger = null;
+    }
+
+    private void ApplyItemProperties()
+    {
+        Debug.Assert(this.Item is not null, "ApplyItemProperties should only be called when Item is not null.");
+
+        if (this.iconPart is not null)
+        {
+            this.iconPart.IconSource = this.Item.Icon;
+            this.iconPart.Visibility = this.Item.Icon is not null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        _ = this.headerPart?.Text = this.Item.Header;
+
+        _ = this.pinnedIndicator?.Visibility = this.Item.IsPinned ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -226,7 +371,11 @@ public partial class TabStripItem : ContentControl
     {
         this.LogItemChanged(e);
 
-        this.DataContext = e.NewValue; // For bindings
+        // Do NOT set DataContext here: the control template sets DataContext via
+        // DataContext="{TemplateBinding Item}" on the root grid. Setting the
+        // control-level DataContext interferes with template bindings when
+        // containers are recycled by ItemsRepeater. Only set Content for any
+        // ContentPresenters that may rely on it.
         this.Content = e.NewValue; // For ContentPresenter if needed
 
         if (e.OldValue is TabItem oldItem)
@@ -243,8 +392,10 @@ public partial class TabStripItem : ContentControl
         }
 
         this.IsEnabled = true;
+        this.ApplyItemProperties();
         this.LogEnabledOrDisabled();
         newItem.PropertyChanged += this.TabItem_OnPropertyChanged;
+
         this.UpdateVisualStates(useTransitions: false);
     }
 
@@ -286,7 +437,7 @@ public partial class TabStripItem : ContentControl
         this.LogVisualState(basicState);
         _ = VisualStateManager.GoToState(this, basicState, useTransitions);
 
-        var pinState = this.Item?.IsPinned == true ? "Pinned" : "Unpinned";
+        var pinState = this.Item?.IsPinned == true ? PinnedVisualState : UnpinnedVisualState;
         _ = VisualStateManager.GoToState(this, pinState, useTransitions: false);
     }
 
@@ -301,6 +452,7 @@ public partial class TabStripItem : ContentControl
         var closeWidth = this.closeButton?.Width ?? 0;
         var spacing = (pinWidth > 0 && closeWidth > 0) ? this.buttonsContainer?.Spacing ?? 0 : 0;
         this.MinWidth = MinDragWidth + marginLeft + pinWidth + closeWidth + spacing + marginRight;
+
         this.LogMinWidthUpdated();
     }
 
@@ -308,9 +460,11 @@ public partial class TabStripItem : ContentControl
     ///     Updates the visibility of the toolbar based on compact mode and pointer state.
     /// </summary>
     private void UpdateToolBarVisibility()
-        => this.buttonsContainer?.Visibility = this.IsCompact && !this.isPointerOver
-            ? Visibility.Collapsed
-            : Visibility.Visible;
+    {
+        // Drive the overlay visibility via visual states instead of directly mutating Opacity/Visibility here.
+        var overlayState = this.isPointerOver ? OverlayVisibleVisualState : OverlayHiddenVisualState;
+        _ = VisualStateManager.GoToState(this, overlayState, useTransitions: true);
+    }
 
     /// <summary>
     ///     Handles changes to the IsCompact property and updates toolbar visibility.

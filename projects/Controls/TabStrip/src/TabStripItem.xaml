@@ -7,6 +7,34 @@
     xmlns:ctk="using:CommunityToolkit.WinUI.Converters"
     xmlns:cvt="using:DroidNet.Converters">
 
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush
+                x:Key="TabStripItemOverlayBrush"
+                Opacity="0.85"
+                Color="#D3D3D3" />
+            <SolidColorBrush
+                x:Key="TabStripItemButtonBrush"
+                Opacity="0.1"
+                Color="#FFFFFF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush
+                x:Key="TabStripItemOverlayBrush"
+                Opacity="0.85"
+                Color="#2C2C2C" />
+            <SolidColorBrush
+                x:Key="TabStripItemButtonBrush"
+                Opacity="0.01"
+                Color="#FFFFFF" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="HighContrast">
+            <!--  High contrast: fully opaque black so system foreground remains readable  -->
+            <SolidColorBrush x:Key="TabStripItemOverlayBrush" Color="#FF000000" />
+            <SolidColorBrush x:Key="TabStripItemButtonBrush" Color="#FF000000" />
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+
     <ctk:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     <cvt:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
 
@@ -17,96 +45,130 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:TabStripItem">
-                    <Grid
-                        x:Name="PartRootGrid"
-                        Height="32"
-                        Background="Transparent"
-                        ColumnSpacing="8"
-                        DataContext="{TemplateBinding Item}">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <!--  Highlight background rectangle  -->
+                    <!--
+                        Outer grid: holds the measured content grid (PartRootGrid) and a sibling overlay layer for tool buttons.
+                        Keeping the overlay as a sibling ensures the measured PartRootGrid does not include tool buttons in its desired size.
+                    -->
+                    <Grid x:Name="PartRootGrid">
+                        <!--  Highlight background rectangle (spans full width)  -->
                         <Border
                             x:Name="HighlightRect"
-                            Grid.Column="0"
-                            Grid.ColumnSpan="3"
                             Background="Transparent"
                             CornerRadius="4,4,0,0"
                             IsHitTestVisible="False"
                             Opacity="0" />
-                        <!--  Icon  -->
-                        <IconSourceElement
-                            x:Name="PartIcon"
-                            Grid.Column="0"
-                            Margin="8,0,0,0"
-                            VerticalAlignment="Center"
-                            IconSource="{Binding Icon, Mode=OneWay}"
-                            Visibility="{Binding Icon, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
-                        <!--  Header  -->
-                        <TextBlock
-                            x:Name="PartHeader"
-                            Grid.Column="1"
-                            VerticalAlignment="Center"
-                            Text="{Binding Header, Mode=OneWay}"
-                            TextTrimming="CharacterEllipsis" />
-                        <!--  Overlay buttons  -->
-                        <StackPanel
-                            x:Name="ButtonsContainer"
-                            Grid.Column="2"
-                            Margin="8,0"
+
+                        <!--  Main measured layout grid (this is the grid the control code measures)  -->
+                        <Grid
+                            x:Name="PartContentRootGrid"
+                            Height="32"
+                            Background="Transparent"
+                            ColumnSpacing="8"
+                            DataContext="{TemplateBinding Item}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!--  Icon  -->
+                            <IconSourceElement
+                                x:Name="PartIcon"
+                                Grid.Column="0"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                IconSource="{Binding Icon, Mode=OneWay}"
+                                Visibility="{Binding Icon, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
+
+                            <!--  Header  -->
+                            <TextBlock
+                                x:Name="PartHeader"
+                                Grid.Column="1"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Text="{Binding Header, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+
+                            <!--  Pinned indicator circle  -->
+                            <Ellipse
+                                x:Name="PartPinnedIndicator"
+                                Grid.Column="0"
+                                Width="4"
+                                Height="4"
+                                Margin="1,1,0,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Fill="{ThemeResource AccentFillColorDefaultBrush}"
+                                Visibility="{Binding IsPinned, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </Grid>
+
+                        <!--
+                            Overlay sibling: sizes to its content (anchored right), stretches vertically so content can be centered.
+                            Bind DataContext to the templated Item so inner button bindings resolve.
+                        -->
+                        <Grid
+                            x:Name="OverlayPanel"
+                            Padding="4"
                             HorizontalAlignment="Right"
-                            VerticalAlignment="Center"
-                            Orientation="Horizontal"
-                            Spacing="4">
-                            <!--  Pin button  -->
-                            <Button
-                                x:Name="PartPinButton"
-                                Width="20"
-                                Height="20"
-                                Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                IsHitTestVisible="False"
-                                Opacity="0">
-                                <Button.Content>
-                                    <FontIcon FontFamily="{ThemeResource SymbolThemeFontFamily}" FontSize="10" />
-                                </Button.Content>
-                            </Button>
-                            <!--  Close button  -->
-                            <Button
-                                x:Name="PartCloseButton"
-                                Width="20"
-                                Height="20"
-                                Padding="0"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                Command="{Binding Command}"
-                                CommandParameter="{Binding CommandParameter}"
-                                IsHitTestVisible="False"
-                                Opacity="0"
-                                Visibility="{Binding IsClosable, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                                <Button.Content>
-                                    <FontIcon
-                                        FontFamily="{ThemeResource SymbolThemeFontFamily}"
-                                        FontSize="10"
-                                        Glyph="&#xE8BB;" />
-                                </Button.Content>
-                            </Button>
-                        </StackPanel>
-                        <!--  Pinned indicator circle  -->
-                        <Ellipse
-                            x:Name="PinnedIndicator"
-                            Grid.Column="0"
-                            Width="4"
-                            Height="4"
-                            Margin="1,1,0,0"
-                            HorizontalAlignment="Left"
-                            VerticalAlignment="Top"
-                            Fill="{ThemeResource AccentFillColorDefaultBrush}"
-                            Visibility="{Binding IsPinned, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            VerticalAlignment="Stretch"
+                            Background="{ThemeResource TabStripItemOverlayBrush}"
+                            CornerRadius="4"
+                            DataContext="{TemplateBinding Item}"
+                            IsHitTestVisible="False"
+                            Opacity="0">
+                            <StackPanel
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="4">
+                                <!--  Buttons container is inside overlay so buttons overlay the item; overlay is sibling to the measured PartRootGrid  -->
+                                <StackPanel
+                                    x:Name="ButtonsContainer"
+                                    Margin="0"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="4">
+                                    <!--  Pin button  -->
+                                    <Button
+                                        x:Name="PartPinButton"
+                                        Width="20"
+                                        Height="20"
+                                        Padding="0"
+                                        Background="{ThemeResource TabStripItemButtonBrush}"
+                                        BorderThickness="0"
+                                        IsHitTestVisible="False">
+                                        <Button.Content>
+                                            <FontIcon
+                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}" />
+                                        </Button.Content>
+                                    </Button>
+                                    <!--  Close button  -->
+                                    <Button
+                                        x:Name="PartCloseButton"
+                                        Width="20"
+                                        Height="20"
+                                        Padding="0"
+                                        Background="{ThemeResource TabStripItemButtonBrush}"
+                                        BorderThickness="0"
+                                        Command="{Binding Command}"
+                                        CommandParameter="{Binding CommandParameter}"
+                                        IsHitTestVisible="False"
+                                        Visibility="{Binding IsClosable, Converter={StaticResource BoolToVisibilityConverter}}">
+                                        <Button.Content>
+                                            <FontIcon
+                                                FontFamily="{ThemeResource SymbolThemeFontFamily}"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}"
+                                                Glyph="&#xE8BB;" />
+                                        </Button.Content>
+                                    </Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal">
@@ -119,58 +181,11 @@
                                             Storyboard.TargetProperty="Opacity"
                                             To="0"
                                             Duration="0:0:0.1" />
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartPinButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0"
-                                            Duration="0:0:0.1" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>False</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartCloseButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0"
-                                            Duration="0:0:0.1" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>False</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
+
                                 <VisualState x:Name="PointerOver">
                                     <Storyboard>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartPinButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"
-                                            Duration="0:0:0.2" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>True</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartCloseButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"
-                                            Duration="0:0:0.2" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>True</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HighlightRect" Storyboard.TargetProperty="Background">
                                             <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="{ThemeResource ListViewItemBackgroundPointerOver}" />
                                         </ObjectAnimationUsingKeyFrames>
@@ -181,6 +196,7 @@
                                             Duration="0:0:0.1" />
                                     </Storyboard>
                                 </VisualState>
+
                                 <VisualState x:Name="Selected">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HighlightRect" Storyboard.TargetProperty="Background">
@@ -191,32 +207,9 @@
                                             Storyboard.TargetProperty="Opacity"
                                             To="1"
                                             Duration="0:0:0.1" />
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartPinButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0"
-                                            Duration="0:0:0.1" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>False</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartCloseButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="0"
-                                            Duration="0:0:0.1" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>False</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
+
                                 <VisualState x:Name="SelectedPointerOver">
                                     <Storyboard>
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="HighlightRect" Storyboard.TargetProperty="Background">
@@ -227,30 +220,6 @@
                                             Storyboard.TargetProperty="Opacity"
                                             To="1"
                                             Duration="0:0:0.1" />
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartPinButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"
-                                            Duration="0:0:0.2" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>True</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
-                                        <DoubleAnimation
-                                            Storyboard.TargetName="PartCloseButton"
-                                            Storyboard.TargetProperty="Opacity"
-                                            To="1"
-                                            Duration="0:0:0.2" />
-                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
-                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
-                                                <DiscreteObjectKeyFrame.Value>
-                                                    <x:Boolean>True</x:Boolean>
-                                                </DiscreteObjectKeyFrame.Value>
-                                            </DiscreteObjectKeyFrame>
-                                        </ObjectAnimationUsingKeyFrames>
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>
@@ -268,6 +237,106 @@
                                         <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="(Button.Content).(FontIcon.Glyph)">
                                             <DiscreteObjectKeyFrame KeyTime="0:0:0" Value="&#xE77A;" />
                                         </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <!--
+                                Overlay visibility group: toggles Visibility and animates Opacity so the overlay
+                                is added/removed from the visual tree but still fades in/out.
+                            -->
+                            <VisualStateGroup x:Name="OverlayStates">
+                                <VisualState x:Name="OverlayHidden">
+                                    <Storyboard>
+                                        <!--  Fade overlay out (buttons will follow visually via overlay)  -->
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="OverlayPanel"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="0"
+                                            Duration="0:0:0.12" />
+
+                                        <!--  After fade completes, collapse and disable hit testing for overlay and buttons  -->
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="OverlayPanel" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="OverlayPanel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>Collapsed</DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="OverlayVisible">
+                                    <Storyboard>
+                                        <!--  Make visible immediately so fade is seen; keep hit testing off until fade completes  -->
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="OverlayPanel" Storyboard.TargetProperty="Visibility">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
+                                                <DiscreteObjectKeyFrame.Value>Visible</DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <!--  ensure buttons and overlay start non-interactive until fade ends  -->
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="OverlayPanel" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>True</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartPinButton" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>True</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+                                        <ObjectAnimationUsingKeyFrames Storyboard.TargetName="PartCloseButton" Storyboard.TargetProperty="IsHitTestVisible">
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>False</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                            <DiscreteObjectKeyFrame KeyTime="0:0:0.12">
+                                                <DiscreteObjectKeyFrame.Value>
+                                                    <x:Boolean>True</x:Boolean>
+                                                </DiscreteObjectKeyFrame.Value>
+                                            </DiscreteObjectKeyFrame>
+                                        </ObjectAnimationUsingKeyFrames>
+
+                                        <!--  Fade in overlay (buttons will be visible as overlay fades in)  -->
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="OverlayPanel"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="1"
+                                            Duration="0:0:0.12" />
+
+                                        <!--  hit-testing is enabled via the combined keyframes above after fade completes  -->
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>

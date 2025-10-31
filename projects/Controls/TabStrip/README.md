@@ -6,7 +6,7 @@ space, content, and constraints. The layout is re-evaluated whenever the tab
 items collection changes or the TabStrip's size changes (triggering invalidation
 and re-measurement).
 
-BOTE: This specification impacts only the layout algorithm, the control template
+NOTE: This specification impacts only the layout algorithm, the control template
 and the scrolling indicators etc, are all already implemented.
 
 ## General contracts
@@ -38,7 +38,7 @@ and the scrolling indicators etc, are all already implemented.
     property is `Compact`.
 - **Fallback**:
   - When not enough space in the unpinned items scroll host (the ScrollViewer
-    named PartScrollHost in the XAML template) to accomodate all unpinned items,
+    named PartScrollHost in the XAML template) to accommodate all unpinned items,
     scrolling is enabled.
 
 REMINDER: calculated width is always clamped between each item's `MinWidth` and
@@ -52,7 +52,7 @@ REMINDER: calculated width is always clamped between each item's `MinWidth` and
 - **When Used**: When the TabStrip control's `TabWidthPolicy` property is
   `Equal`. Applies to all items, including pinned and unpinned.
 - **Fallback**: If not enough space in the regular items scroll host to
-  accomodate all items in the unpinned bucket, scrolling is enabled.
+  accommodate all items in the unpinned bucket, scrolling is enabled.
 
 ## 3. Compact Policy
 
@@ -63,7 +63,7 @@ REMINDER: calculated width is always clamped between each item's `MinWidth` and
     `Width` of unpinned items towards their `MinWidth` (each item has the
     property). The amount by which they are shrinked should be calculated by
     dividing the space deficit by the number of unpinned items.
-  - If still not enough space to accomodate all unpinned items, at `MinWidth`,
+  - If still not enough space to accommodate all unpinned items, at `MinWidth`,
     scrolling is enabled.
 
   - Progressive shrink (iterative algorithm): implement shrinking using an

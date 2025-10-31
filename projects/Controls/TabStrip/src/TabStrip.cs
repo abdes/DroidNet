@@ -43,9 +43,6 @@ public partial class TabStrip : Control
     private readonly DispatcherCollectionProxy<TabItem>? regularProxy;
     private bool proxiesDisposed;
 
-    // Guard to coalesce compacting sizing enqueues per-spec (prevent layout thrash)
-    private bool compactSizingEnqueued;
-
     // Suppress handling when we programmatically move/modify the Items collection to avoid reentrancy
     private bool suppressCollectionChangeHandling;
 
@@ -57,6 +54,11 @@ public partial class TabStrip : Control
     private ScrollViewer? scrollHost;
 
     private ILogger? logger;
+
+    private ITabStripLayoutManager LayoutManager { get; } = new TabStripLayoutManager();
+    // Cache of the last computed layout result to allow applying authoritative
+    // widths to containers as they are prepared (prevents visual flicker).
+    private LayoutResult? _lastLayoutResult;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TabStrip" /> class.
@@ -98,6 +100,11 @@ public partial class TabStrip : Control
 
         this.SetValue(PinnedItemsViewProperty, this.pinnedProxy);
         this.SetValue(RegularItemsViewProperty, this.regularProxy);
+
+        // Initialize layout manager with current DP values
+        this.LayoutManager.MaxItemWidth = this.MaxItemWidth;
+        this.LayoutManager.PreferredItemWidth = this.PreferredItemWidth;
+        this.LayoutManager.Policy = this.TabWidthPolicy;
 
         // Handle Unloaded to dispose of disposable fields
         this.Unloaded += this.TabStrip_Unloaded;
@@ -216,10 +223,6 @@ public partial class TabStrip : Control
         // Apply behaviors based on current property values
         this.OnScrollOnWheelChanged(this.ScrollOnWheel);
         this.UpdateOverflowButtonVisibility();
-        if (this.TabWidthPolicy == TabWidthPolicy.Compact)
-        {
-            this.EnqueueCompactSizing();
-        }
     }
 
     /// <summary>
@@ -258,14 +261,13 @@ public partial class TabStrip : Control
         }
 
         var pinned = sender == this.pinnedItemsRepeater;
-        var compacting = (this.TabWidthPolicy == TabWidthPolicy.Compact) && (sender == this.regularItemsRepeater);
 
-        this.LogSetupPreparedItem(ti, compacting, pinned);
+        this.LogSetupPreparedItem(ti, this.TabWidthPolicy == TabWidthPolicy.Compact && !pinned, pinned);
 
         tsi.SetValue(AutomationProperties.NameProperty, ti.Header);
         ti.IsSelected = this.SelectedItem == ti;
         tsi.LoggerFactory = this.LoggerFactory;
-        tsi.IsCompact = compacting;
+        tsi.IsCompact = this.TabWidthPolicy == TabWidthPolicy.Compact && !pinned;
 
         // Ensure TabStripItem.MinWidth is clamped to TabStrip.MaxItemWidth per spec.
         var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
@@ -278,16 +280,13 @@ public partial class TabStrip : Control
         tsi.Tapped += this.OnTabElementTapped;
         tsi.CloseRequested -= this.OnTabCloseRequested; // for safety
         tsi.CloseRequested += this.OnTabCloseRequested;
+        // Do NOT set Width/MaxWidth here. Wait until ApplyLayoutResults after all measurements are done.
 
-        this.ApplyTabSizingPolicy(tsi, sender);
-
-        // If we're in Compact policy and this is a regular item, ensure we run the
-        // compacting-sizing pass after the container is prepared so newly-prepared
-        // items are included in the calculation.
-        if (compacting)
-        {
-            this.EnqueueCompactSizing();
-        }
+        // Recompute and apply tab widths after an element is prepared. This covers
+        // the case where an item was just pinned/unpinned and moved between the
+        // repeaters. Defer to the DispatcherQueue to avoid running during
+        // repeater preparation (prevents reentrancy).
+        _ = this.DispatcherQueue.TryEnqueue(() => this.UpdateTabWidths());
     }
 
     private void ItemsRepeater_ElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
@@ -366,29 +365,29 @@ public partial class TabStrip : Control
         });
     }
 
-    // Called from the TabWidthPolicy dependency property change callback. We defer the
-    // actual update to the dispatcher so prepared container elements (ItemsRepeater
-    // containers) are available when we enumerate them in UpdateTabWidths.
+    // Called from the TabWidthPolicy dependency property change callback.
     private void OnTabWidthPolicyChanged(TabWidthPolicy newPolicy)
     {
-        // Defer so visual tree and repeater preparations occur first.
-        _ = this.DispatcherQueue.TryEnqueue(() =>
-        {
-            try
-            {
-                this.UpdateTabWidths();
+        Debug.WriteLine($"OnTabWidthPolicyChanged: Policy changed to {newPolicy}");
 
-                // If switching into Compact, ensure we run the compacting sizing pass too.
-                if (newPolicy == TabWidthPolicy.Compact)
-                {
-                    this.EnqueueCompactSizing();
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"OnTabWidthPolicyChanged: deferred update failed: {ex}");
-            }
-        });
+        // Sync to layout manager
+        this.LayoutManager.Policy = newPolicy;
+
+        // Update IsCompact on prepared items first, so MinWidth is updated before layout
+        var containers = this.CollectPreparedContainers();
+        Debug.WriteLine($"OnTabWidthPolicyChanged: Updating IsCompact on {containers.Count} prepared containers");
+        foreach (var kvp in containers)
+        {
+            var tsi = kvp.Value;
+            var ti = (TabItem)tsi.DataContext;
+            var pinned = ti.IsPinned;
+            var newIsCompact = newPolicy == TabWidthPolicy.Compact && !pinned;
+            Debug.WriteLine($"OnTabWidthPolicyChanged: Setting IsCompact={newIsCompact} on {ti.Header} (pinned={pinned})");
+            tsi.IsCompact = newIsCompact;
+        }
+
+        Debug.WriteLine("OnTabWidthPolicyChanged: Calling UpdateTabWidths");
+        this.UpdateTabWidths();
     }
 
     private void OverflowLeftButton_Click(object? sender, RoutedEventArgs e)
@@ -448,329 +447,229 @@ public partial class TabStrip : Control
         _ = this.overflowRightButton?.Visibility = canScrollRight ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void ApplyTabSizingPolicy(FrameworkElement fe, ItemsRepeater sender)
-    {
-        if (fe is not TabStripItem tsi)
-        {
-            return;
-        }
-
-        var maxWidth = this.MaxItemWidth;
-        var preferredWidth = this.PreferredItemWidth;
-        var minWidth = tsi.MinWidth;
-
-        // Clamp minWidth to maxWidth as per specs
-        minWidth = Math.Min(minWidth, maxWidth);
-
-        // Enforce the spec: the effective MinWidth for the item must be clamped to MaxItemWidth
-        if (tsi.MinWidth != minWidth)
-        {
-            tsi.MinWidth = minWidth;
-        }
-
-        int tabCount;
-        double availableWidth;
-        var isPinned = sender == this.pinnedItemsRepeater;
-
-        if (isPinned)
-        {
-            tabCount = this.PinnedItemsView?.Count ?? 0;
-
-            // Prefer the pinned repeater's available width for per-repeater Equal calculations.
-            availableWidth = this.pinnedItemsRepeater?.ActualWidth ?? this.rootGrid?.ActualWidth ?? 0;
-        }
-        else
-        {
-            tabCount = this.RegularItemsView?.Count ?? 0;
-            availableWidth = this.scrollHost?.ActualWidth ?? 0;
-        }
-
-        Debug.WriteLine($"ApplyTabSizingPolicy: Policy={this.TabWidthPolicy}, IsPinned={isPinned}, TabCount={tabCount}, AvailableWidth={availableWidth}, MaxWidth={maxWidth}, PreferredWidth={preferredWidth}");
-
-        double? calculatedWidth = this.TabWidthPolicy switch
-        {
-            TabWidthPolicy.Equal => preferredWidth,
-            TabWidthPolicy.Compact => null, // Auto
-            _ => null,
-        };
-
-        if (calculatedWidth.HasValue)
-        {
-            fe.Width = Math.Max(minWidth, Math.Min(maxWidth, calculatedWidth.Value));
-            fe.MaxWidth = maxWidth;
-            Debug.WriteLine($"ApplyTabSizingPolicy: Set Width={fe.Width}, MaxWidth={fe.MaxWidth}");
-        }
-        else
-        {
-            fe.ClearValue(FrameworkElement.WidthProperty);
-            fe.MaxWidth = maxWidth;
-            Debug.WriteLine($"ApplyTabSizingPolicy: Cleared Width, Set MaxWidth={fe.MaxWidth}");
-        }
-
-        // Log sizing for troubleshooting
-        this.LogTabSizing(this.TabWidthPolicy, calculatedWidth, maxWidth, tabCount, availableWidth);
-    }
-
-    private void CheckAndApplyCompactSizing()
-    {
-        Debug.WriteLine("CheckAndApplyCompactSizing: Starting");
-
-        if (this.scrollHost is null || this.regularItemsRepeater is null)
-        {
-            Debug.WriteLine("CheckAndApplyCompactSizing: Early exit - scrollHost or regularItemsRepeater null");
-            return;
-        }
-
-        // Ensure the repeater's layout is updated
-        this.regularItemsRepeater.UpdateLayout();
-
-        Debug.WriteLine($"CheckAndApplyCompactSizing: regularItemsRepeater children count = {VisualTreeHelper.GetChildrenCount(this.regularItemsRepeater)}");
-
-        var items = new List<TabStripItem>();
-
-        // Prefer enumerating prepared elements by index via TryGetElement so we get the container for each logical item.
-        var regularCount = this.RegularItemsView?.Count ?? 0;
-        for (var i = 0; i < regularCount; i++)
-        {
-            var element = this.regularItemsRepeater.TryGetElement(i) as TabStripItem;
-            if (element is not null)
-            {
-                items.Add(element);
-            }
-        }
-
-        // Fallback: if TryGetElement returned none OR only a subset of logical
-        // items (common when some containers are not prepared/virtualized), also
-        // enumerate the repeater's visual children and include any TabStripItem
-        // containers we didn't already collect. This ensures prepared containers
-        // are included in the compacting-sizing pass even when TryGetElement is
-        // partially supported or only returns some indices.
-        if (items.Count == 0 || items.Count < regularCount)
-        {
-            for (var i = 0; i < VisualTreeHelper.GetChildrenCount(this.regularItemsRepeater); i++)
-            {
-                var child = VisualTreeHelper.GetChild(this.regularItemsRepeater, i);
-                Debug.WriteLine($"CheckAndApplyCompactSizing: child {i} type = {child.GetType().Name}");
-                if (child is TabStripItem tsi && !items.Contains(tsi))
-                {
-                    items.Add(tsi);
-                }
-            }
-        }
-
-        Debug.WriteLine($"CheckAndApplyCompactSizing: collected {items.Count} TabStripItem");
-
-        if (items.Count == 0)
-        {
-            Debug.WriteLine("CheckAndApplyCompactSizing: no items");
-            return;
-        }
-
-        // Step 1: Compute desiredWidths, minWidths, availableWidth, maxWidth
-        var desiredWidths = new List<double>();
-        var minWidths = new List<double>();
-        var availableWidth = this.scrollHost.ActualWidth;
-        var maxWidth = this.MaxItemWidth;
-
-        foreach (var item in items)
-        {
-            // Ensure the item's template parts are applied and measured so that
-            // TabStripItem.UpdateMinWidth (which relies on template children)
-            // has had a chance to run. This avoids a race where TabStrip captures
-            // a smaller min and the item later increases its MinWidth, causing
-            // a visible jump.
-            try
-            {
-                _ = item.ApplyTemplate();
-                item.UpdateLayout();
-            }
-            catch
-            {
-                // Ignore failures - we'll still attempt to measure what is available.
-            }
-
-            // Clear any explicit Width so we can read the intrinsic desired size (Auto measure)
-            item.ClearValue(FrameworkElement.WidthProperty);
-
-            // Temporarily relax MaxWidth to allow an unconstrained measure so we capture the
-            // intrinsic single-line desired width (per spec). Restore MaxWidth afterwards.
-            double desired;
-            var origMax = item.MaxWidth;
-            try
-            {
-                item.MaxWidth = double.PositiveInfinity;
-
-                // Measure with infinite available size to get intrinsic width
-                item.Measure(new global::Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
-                desired = item.DesiredSize.Width;
-            }
-            finally
-            {
-                // Restore original MaxWidth
-                item.MaxWidth = origMax;
-            }
-
-            // Ensure we use a MinWidth clamped to MaxItemWidth per spec
-            var effectiveMin = Math.Min(item.MinWidth, maxWidth);
-            var clampedDesired = Math.Min(maxWidth, Math.Max(effectiveMin, desired));
-            desiredWidths.Add(clampedDesired);
-            minWidths.Add(effectiveMin);
-            Debug.WriteLine($"CheckAndApplyCompactSizing: Item desired={desired}, clamped={clampedDesired}, min={effectiveMin}");
-        }
-
-        // Step 2: Compute sumDesired
-        var sumDesired = desiredWidths.Sum();
-        Debug.WriteLine($"CheckAndApplyCompactSizing: SumDesired={sumDesired}");
-
-        if (sumDesired <= availableWidth)
-        {
-            // Use desired sizes
-            Debug.WriteLine("CheckAndApplyCompactSizing: Using desired sizes");
-            for (var i = 0; i < items.Count; i++)
-            {
-                items[i].MinWidth = minWidths[i];
-                items[i].Width = desiredWidths[i];
-                items[i].MaxWidth = maxWidth;
-                Debug.WriteLine($"CheckAndApplyCompactSizing: Set item {i} Width={desiredWidths[i]}");
-            }
-
-            return;
-        }
-
-        // Step 3: Iterative shrinking
-        Debug.WriteLine("CheckAndApplyCompactSizing: Starting iterative shrinking");
-        var currentWidths = new List<double>(desiredWidths);
-        var remainingIndices = new List<int>();
-        for (var i = 0; i < items.Count; i++)
-        {
-            remainingIndices.Add(i);
-        }
-
-        var deficit = sumDesired - availableWidth;
-        Debug.WriteLine($"CheckAndApplyCompactSizing: Initial deficit={deficit}");
-
-        while (deficit > 0 && remainingIndices.Count > 0)
-        {
-            // Step 4: Compute shrinkPerItem
-            var shrinkPerItem = deficit / remainingIndices.Count;
-            Debug.WriteLine($"CheckAndApplyCompactSizing: ShrinkPerItem={shrinkPerItem}, Remaining={remainingIndices.Count}");
-
-            // Attempt to shrink
-            var newRemaining = new List<int>();
-
-            foreach (var idx in remainingIndices)
-            {
-                var newWidth = currentWidths[idx] - shrinkPerItem;
-                var clampedWidth = Math.Max(minWidths[idx], newWidth);
-                Debug.WriteLine($"CheckAndApplyCompactSizing: Item {idx}: current={currentWidths[idx]}, new={newWidth}, clamped={clampedWidth}");
-                currentWidths[idx] = clampedWidth;
-
-                if (clampedWidth > minWidths[idx])
-                {
-                    newRemaining.Add(idx);
-                }
-                else
-                {
-                    // Clamped to min
-                }
-            }
-
-            // Recompute sum and deficit
-            var newSum = currentWidths.Sum();
-            var newDeficit = Math.Max(0, newSum - availableWidth);
-            Debug.WriteLine($"CheckAndApplyCompactSizing: NewSum={newSum}, NewDeficit={newDeficit}");
-
-            remainingIndices = newRemaining;
-            deficit = newDeficit;
-        }
-
-        // Set the final widths
-        Debug.WriteLine("CheckAndApplyCompactSizing: Setting final widths");
-        for (var i = 0; i < items.Count; i++)
-        {
-            items[i].MinWidth = minWidths[i];
-            items[i].Width = currentWidths[i];
-            items[i].MaxWidth = maxWidth;
-            Debug.WriteLine($"CheckAndApplyCompactSizing: Final item {i} Width={currentWidths[i]}");
-        }
-
-        // Scrolling will be enabled automatically if needed
-    }
-
-    // Coalesced enqueue for compacting sizing per-spec to avoid layout thrash.
-    private void EnqueueCompactSizing()
-    {
-        if (this.compactSizingEnqueued)
-        {
-            return;
-        }
-
-        this.compactSizingEnqueued = true;
-
-        // Run compacting sizing at a lower dispatcher priority so the item's template
-        // parts (button widths, etc.) have a chance to measure and stabilize
-        // before we capture intrinsic widths and enforce Min/Max. This reduces
-        // jumpy UI where the item later updates its own MinWidth.
-        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                try
-                {
-                    this.CheckAndApplyCompactSizing();
-                }
-                finally
-                {
-                    this.compactSizingEnqueued = false;
-                }
-            });
-    }
-
     private void UpdateTabWidths()
     {
-        void UpdateRepeater(ItemsRepeater? repeater)
+        Debug.WriteLine("UpdateTabWidths: Starting");
+
+        // Sync width properties to layout manager
+        this.LayoutManager.MaxItemWidth = this.MaxItemWidth;
+        this.LayoutManager.PreferredItemWidth = this.PreferredItemWidth;
+
+        var containers = this.CollectPreparedContainers();
+        Debug.WriteLine($"UpdateTabWidths: Collected {containers.Count} prepared containers");
+        if (containers.Count == 0)
+        {
+            Debug.WriteLine("UpdateTabWidths: No containers, exiting");
+            return;
+        }
+
+        var desiredWidths = this.MeasureDesiredWidthsIfNeeded(containers);
+        var inputs = this.BuildLayoutInputs(containers, desiredWidths);
+        var result = this.ComputeLayout(inputs);
+        // Cache the computed layout so newly prepared containers can apply the
+        // authoritative width immediately and avoid visual flicker.
+        this._lastLayoutResult = result;
+        this.ApplyLayoutResults(result, containers);
+
+        Debug.WriteLine("UpdateTabWidths: Completed");
+    }
+
+    private Dictionary<int, TabStripItem> CollectPreparedContainers()
+    {
+        Debug.WriteLine("CollectPreparedContainers: Starting");
+
+        var indexToContainer = new Dictionary<int, TabStripItem>();
+
+        void CollectFromRepeater(ItemsRepeater? repeater, bool isPinned)
         {
             if (repeater == null)
             {
                 return;
             }
 
-            // Prefer enumerating prepared container elements via TryGetElement(index) when available.
             var sourceCount = (repeater.ItemsSource as System.Collections.ICollection)?.Count ?? -1;
             if (sourceCount > 0)
             {
                 for (var i = 0; i < sourceCount; i++)
                 {
                     var tsi = repeater.TryGetElement(i) as TabStripItem;
-                    if (tsi is not null)
+                    if (tsi is not null && tsi.DataContext is TabItem ti)
                     {
-                        // Apply sizing policy to the prepared element
-                        this.ApplyTabSizingPolicy(tsi, repeater);
-                        tsi.IsCompact = (this.TabWidthPolicy == TabWidthPolicy.Compact) && (repeater == this.regularItemsRepeater);
+                        var index = this.Items.IndexOf(ti);
+                        indexToContainer[index] = tsi;
                     }
                 }
             }
             else
             {
-                // Fallback: enumerate visual children (older platform or no ItemsSource count available)
+                // Fallback
                 var count = VisualTreeHelper.GetChildrenCount(repeater);
                 for (var i = 0; i < count; i++)
                 {
                     var child = VisualTreeHelper.GetChild(repeater, i);
-                    if (child is FrameworkElement fe && fe.DataContext is TabItem)
+                    if (child is TabStripItem tsi && tsi.DataContext is TabItem ti)
                     {
-                        this.ApplyTabSizingPolicy(fe, repeater);
-                    }
-
-                    // Update IsCompact on TabStripItem
-                    if (child is TabStripItem tsi)
-                    {
-                        tsi.IsCompact = (this.TabWidthPolicy == TabWidthPolicy.Compact) && (repeater == this.regularItemsRepeater);
+                        var index = this.Items.IndexOf(ti);
+                        indexToContainer[index] = tsi;
                     }
                 }
             }
         }
 
-        UpdateRepeater(this.pinnedItemsRepeater);
-        UpdateRepeater(this.regularItemsRepeater);
+        CollectFromRepeater(this.pinnedItemsRepeater, true);
+        CollectFromRepeater(this.regularItemsRepeater, false);
+
+        Debug.WriteLine($"CollectPreparedContainers: Returning {indexToContainer.Count} containers");
+
+        return indexToContainer;
+    }
+
+    private Dictionary<TabStripItem, double> MeasureDesiredWidthsIfNeeded(Dictionary<int, TabStripItem> containers)
+    {
+        Debug.WriteLine("MeasureDesiredWidthsIfNeeded: Starting");
+
+        var desiredWidths = new Dictionary<TabStripItem, double>();
+        if (this.TabWidthPolicy != TabWidthPolicy.Compact)
+        {
+            Debug.WriteLine("MeasureDesiredWidthsIfNeeded: Policy not Compact, returning empty");
+            return desiredWidths;
+        }
+
+
+        foreach (var tsi in containers.Values)
+        {
+            // Save and clear width constraints to measure natural content width
+            var origWidth = tsi.ReadLocalValue(FrameworkElement.WidthProperty);
+            var origMax = tsi.ReadLocalValue(FrameworkElement.MaxWidthProperty);
+            var origMin = tsi.ReadLocalValue(FrameworkElement.MinWidthProperty);
+            tsi.ClearValue(FrameworkElement.WidthProperty);
+            tsi.ClearValue(FrameworkElement.MaxWidthProperty);
+            tsi.ClearValue(FrameworkElement.MinWidthProperty);
+
+            tsi.Measure(new global::Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            var desired = tsi.DesiredSize.Width;
+            var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
+            Debug.WriteLine($"[MeasureDesiredWidthsIfNeeded] Tab '{((tsi.DataContext as TabItem)?.Header ?? "<null>")}', measured desired={desired}, effectiveMin={effectiveMin}, result={Math.Min(this.MaxItemWidth, Math.Max(effectiveMin, desired))}");
+            desiredWidths[tsi] = Math.Min(this.MaxItemWidth, Math.Max(effectiveMin, desired));
+
+            // Restore original values
+            if (origWidth != DependencyProperty.UnsetValue) tsi.SetValue(FrameworkElement.WidthProperty, origWidth);
+            if (origMax != DependencyProperty.UnsetValue) tsi.SetValue(FrameworkElement.MaxWidthProperty, origMax);
+            if (origMin != DependencyProperty.UnsetValue) tsi.SetValue(FrameworkElement.MinWidthProperty, origMin);
+        }
+
+        Debug.WriteLine($"MeasureDesiredWidthsIfNeeded: Measured {desiredWidths.Count} desired widths");
+
+        return desiredWidths;
+    }
+
+    private List<LayoutPerItemInput> BuildLayoutInputs(Dictionary<int, TabStripItem> containers, Dictionary<TabStripItem, double> desiredWidths)
+    {
+        Debug.WriteLine("BuildLayoutInputs: Starting");
+
+        var inputs = new List<LayoutPerItemInput>();
+        foreach (var kvp in containers)
+        {
+            var index = kvp.Key;
+            var tsi = kvp.Value;
+            var ti = (TabItem)tsi.DataContext;
+            var isPinned = ti.IsPinned;
+            var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
+            var desired = desiredWidths.TryGetValue(tsi, out var d) ? d : effectiveMin;
+            inputs.Add(new LayoutPerItemInput(index, isPinned, effectiveMin, desired));
+        }
+
+        Debug.WriteLine($"BuildLayoutInputs: Built {inputs.Count} inputs");
+
+        return inputs;
+    }
+
+    private LayoutResult ComputeLayout(List<LayoutPerItemInput> inputs)
+    {
+        Debug.WriteLine("ComputeLayout: Starting");
+
+        // Calculate precise available width for tabs inside the ScrollViewer
+        double availableWidth = this.scrollHost?.ActualWidth ?? 0;
+        // The ItemsRepeater for regular tabs is the only child of the ScrollViewer
+        // The StackLayout for ItemsRepeater may have a variable Spacing; read it at runtime
+        // We do NOT subtract overflow button widths, as they are overlaid
+        // We do NOT subtract vertical scrollbar width, as vertical scroll is disabled
+        // Add a small fudge factor to avoid rounding errors
+        const double fudge = 1.0;
+
+        // Always try to subtract tab spacing if we have a StackLayout and more than one tab
+        StackLayout? stackLayout = this.regularItemsRepeater?.Layout as StackLayout;
+        if (stackLayout != null && inputs.Count > 1)
+        {
+            int count = inputs.Count;
+            double spacing = stackLayout.Spacing * (count - 1);
+            availableWidth -= spacing;
+            Debug.WriteLine($"ComputeLayout: Subtracting tab spacing: {spacing} (Spacing={stackLayout.Spacing}) for {count} tabs");
+        }
+
+        availableWidth = Math.Max(0, availableWidth - fudge);
+        Debug.WriteLine($"ComputeLayout: Final available width {availableWidth}, inputs count {inputs.Count}");
+
+        var request = new LayoutRequest(availableWidth, inputs);
+        var result = this.LayoutManager.ComputeLayout(request);
+
+        Debug.WriteLine($"ComputeLayout: Result has {result.Items.Count} items");
+
+        return result;
+    }
+
+    private void ApplyLayoutResults(LayoutResult result, Dictionary<int, TabStripItem> containers)
+    {
+        Debug.WriteLine($"ApplyLayoutResults: Applying {result.Items.Count} results");
+
+        foreach (var output in result.Items)
+        {
+            if (!containers.TryGetValue(output.Index, out var container))
+            {
+                Debug.WriteLine($"[ApplyLayoutResults] No container for index {output.Index}");
+                continue;
+            }
+
+            var ti = container.DataContext as TabItem;
+            var header = ti?.Header ?? $"<idx={output.Index}>";
+            var prevWidth = container.Width;
+            var prevMax = container.MaxWidth;
+            var prevMin = container.MinWidth;
+
+            container.MinWidth = Math.Min(container.MinWidth, this.MaxItemWidth);
+
+            if (this.TabWidthPolicy == TabWidthPolicy.Equal)
+            {
+                container.Width = output.Width;
+                container.MaxWidth = this.MaxItemWidth;
+                Debug.WriteLine($"[ApplyLayoutResults] (Equal) Tab '{header}' idx={output.Index}: Width set to {output.Width}, MaxWidth={this.MaxItemWidth}, MinWidth={container.MinWidth}");
+            }
+            else if (this.TabWidthPolicy == TabWidthPolicy.Compact)
+            {
+                container.Width = output.Width;
+                container.MaxWidth = this.MaxItemWidth;
+                Debug.WriteLine($"[ApplyLayoutResults] (Compact) Tab '{header}' idx={output.Index}: Width set to {output.Width}, MaxWidth={this.MaxItemWidth}, MinWidth={container.MinWidth}");
+            }
+            else
+            {
+                container.ClearValue(FrameworkElement.WidthProperty);
+                container.MaxWidth = this.MaxItemWidth;
+                Debug.WriteLine($"[ApplyLayoutResults] (Other) Tab '{header}' idx={output.Index}: Width cleared, MaxWidth={this.MaxItemWidth}, MinWidth={container.MinWidth}");
+            }
+
+            container.IsCompact = this.TabWidthPolicy == TabWidthPolicy.Compact && !output.IsPinned;
+        }
+
+        Debug.WriteLine("ApplyLayoutResults: Completed");
+
+        // Force ItemsRepeater to re-measure after widths are set, to avoid oversizing
+        if (this.regularItemsRepeater != null)
+        {
+            this.regularItemsRepeater.InvalidateMeasure();
+            Debug.WriteLine($"[ApplyLayoutResults] Called InvalidateMeasure on regularItemsRepeater");
+            this.regularItemsRepeater.UpdateLayout();
+            Debug.WriteLine($"[ApplyLayoutResults] After UpdateLayout: regularItemsRepeater.ActualWidth={this.regularItemsRepeater.ActualWidth}, scrollHost.ActualWidth={this.scrollHost?.ActualWidth ?? -1}");
+        }
     }
 
     private void Items_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -843,10 +742,6 @@ public partial class TabStrip : Control
                         this.pinnedItemsRepeater?.InvalidateMeasure();
                         this.regularItemsRepeater?.InvalidateMeasure();
                         this.UpdateLayout();
-                        if (this.TabWidthPolicy == TabWidthPolicy.Compact)
-                        {
-                            this.EnqueueCompactSizing();
-                        }
 
                         this.DispatcherQueue.TryEnqueue(() => this.UpdateOverflowButtonVisibility());
                     });
@@ -875,11 +770,6 @@ public partial class TabStrip : Control
 
         // Force layout to update DesiredSize
         this.UpdateLayout();
-
-        if (this.TabWidthPolicy == TabWidthPolicy.Compact)
-        {
-            this.EnqueueCompactSizing();
-        }
 
         // If items were removed and the previously selected item is no longer present,
         // choose the previous item if available, otherwise the next item. If the
@@ -923,23 +813,13 @@ public partial class TabStrip : Control
 
     private void OnTabStripSizeChanged(object? sender, SizeChangedEventArgs e)
     {
-        Debug.WriteLine($"OnTabStripSizeChanged: NewSize={e.NewSize}, Policy={this.TabWidthPolicy}");
+    Debug.WriteLine($"OnTabStripSizeChanged: NewSize={e.NewSize}, Policy={this.TabWidthPolicy}");
 
-        // Force ItemsRepeater to re-prepare items so widths are recalculated
-        this.pinnedItemsRepeater?.InvalidateMeasure();
-        this.regularItemsRepeater?.InvalidateMeasure();
+    // Recompute and apply tab widths for new size
+    this.UpdateTabWidths();
+    this.UpdateOverflowButtonVisibility();
 
-        // Force layout to update DesiredSize
-        this.UpdateLayout();
-
-        this.UpdateOverflowButtonVisibility();
-
-        if (this.TabWidthPolicy == TabWidthPolicy.Compact)
-        {
-            this.EnqueueCompactSizing();
-        }
-
-        // Log size change for troubleshooting
-        this.LogSizeChanged(e.NewSize.Width, e.NewSize.Height);
+    // Log size change for troubleshooting
+    this.LogSizeChanged(e.NewSize.Width, e.NewSize.Height);
     }
 }

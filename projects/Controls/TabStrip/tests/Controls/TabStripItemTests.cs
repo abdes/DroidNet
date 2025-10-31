@@ -14,7 +14,6 @@ namespace DroidNet.Controls.Tabs.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[TestCategory("TabStripItemTests")]
 [TestCategory("UITest")]
 public class TabStripItemTests : VisualUserInterfaceTests
 {
@@ -31,14 +30,16 @@ public class TabStripItemTests : VisualUserInterfaceTests
         }).ConfigureAwait(true);
 
         // Assert - Verify all required template parts are present
-        CheckPartIsThere(tabStripItem, TabStripItem.RootGridPartName);
+        CheckPartIsThere(tabStripItem, TabStripItem.ContentRootGridPartName);
         CheckPartIsThere(tabStripItem, TabStripItem.IconPartName);
         CheckPartIsThere(tabStripItem, TabStripItem.HeaderPartName);
         CheckPartIsThere(tabStripItem, TabStripItem.ButtonsContainerPartName);
         CheckPartIsThere(tabStripItem, TabStripItem.PinButtonPartName);
         CheckPartIsThere(tabStripItem, TabStripItem.CloseButtonPartName);
+        CheckPartIsThere(tabStripItem, TabStripItem.PinnedIndicatorPartName);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenDeselected_TransitionsToNormalVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -57,6 +58,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.NormalVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenSelected_TransitionsToSelectedVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -75,6 +77,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.SelectedVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenPointerOver_TransitionsToPointerOverVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -93,6 +96,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.PointerOverVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenSelectedAndPointerOver_TransitionsToSelectedPointerOverVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -111,6 +115,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.SelectedPointerOverVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenPointerExits_TransitionsOutOfPointerOverStates_Async() => EnqueueAsync(async () =>
     {
@@ -134,6 +139,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.NormalVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenPinned_TransitionsToPinnedVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -149,9 +155,10 @@ public class TabStripItemTests : VisualUserInterfaceTests
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain(["Pinned"]);
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.PinnedVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task WhenUnpinned_TransitionsToUnpinnedVisualState_Async() => EnqueueAsync(async () =>
     {
@@ -167,9 +174,10 @@ public class TabStripItemTests : VisualUserInterfaceTests
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain(["Unpinned"]);
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.UnpinnedVisualState]);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
     public Task CombinedVisualStates_SelectedAndPinned_Async() => EnqueueAsync(async () =>
     {
@@ -187,7 +195,70 @@ public class TabStripItemTests : VisualUserInterfaceTests
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert - Should be in Selected and Pinned states
-        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.SelectedVisualState, "Pinned"]);
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.SelectedVisualState, TabStripItem.PinnedVisualState]);
+    });
+
+    [TestMethod]
+    public Task DoesNotRespondToOldItemPropertyChanges_AfterItemReplaced_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - initial item is not selected
+        var oldItem = new TabItem
+        {
+            Header = "Old Tab",
+            IsSelected = false,
+        };
+
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(oldItem).ConfigureAwait(true);
+
+        // Act - replace the Item with a new TabItem
+        var newItem = new TabItem
+        {
+            Header = "New Tab",
+            IsSelected = false,
+        };
+
+        tabStripItem.Item = newItem;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Mutate the old item - since the control should have unsubscribed, this must not affect visual state
+        oldItem.IsSelected = true;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - the control should not transition to Selected because it's bound to the new item
+        _ = vsm.GetCurrentStates(tabStripItem).Should().NotContain([TabStripItem.SelectedVisualState]);
+    });
+
+    [TestMethod]
+    public Task DisabledControl_IsNotInteractive_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Disabled Tab",
+            IsSelected = false,
+        }).ConfigureAwait(true);
+
+        // Disable the control
+        tabStripItem.IsEnabled = false;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Act - simulate pointer enter
+        tabStripItem.OnPointerEntered();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        tabStripItem.OnPointerExited();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        tabStripItem.OnPinClicked();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        var closeRequested = false;
+        tabStripItem.CloseRequested += (s, e) => closeRequested = true;
+
+        tabStripItem.OnCloseClicked();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - no visual state transitions, and no event raised
+        _ = vsm.GetCurrentStates(tabStripItem).Should().BeEmpty();
+        _ = closeRequested.Should().BeFalse();
     });
 
     [TestMethod]
@@ -204,45 +275,72 @@ public class TabStripItemTests : VisualUserInterfaceTests
         tabStripItem.IsCompact = true;
         await WaitForRenderCompletion().ConfigureAwait(true);
 
-        // Assert - Buttons should be overlaid (Grid.Column=2, HorizontalAlignment=Right)
+        // Assert - Buttons should be overlaid with correct alignment
         var buttonsContainer = tabStripItem.FindDescendant<StackPanel>(e => string.Equals(e.Name, TabStripItem.ButtonsContainerPartName, StringComparison.Ordinal));
         _ = buttonsContainer.Should().NotBeNull();
-        _ = Grid.GetColumn(buttonsContainer!).Should().Be(2);
         _ = buttonsContainer!.HorizontalAlignment.Should().Be(HorizontalAlignment.Right);
     });
 
+    [TestCategory("VisualStates")]
     [TestMethod]
-    public Task ToolbarVisibilityInCompactMode_Async() => EnqueueAsync(async () =>
+    public Task WhenPointerOver_TransitionsToOverlayVisibleVisualState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(new TabItem
         {
-            Header = "Compact Visibility Tab",
-            IsClosable = true,
+            Header = "Overlay PointerOver Tab",
+            IsSelected = false,
         }).ConfigureAwait(true);
 
-        // Act - Set compact mode
-        tabStripItem.IsCompact = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
-
-        // Assert - Buttons should be collapsed initially
-        var buttonsContainer = tabStripItem.FindDescendant<StackPanel>(e => string.Equals(e.Name, TabStripItem.ButtonsContainerPartName, StringComparison.Ordinal));
-        _ = buttonsContainer.Should().NotBeNull();
-        _ = buttonsContainer!.Visibility.Should().Be(Visibility.Collapsed);
-
-        // Act - Pointer enter
+        // Act - Simulate pointer over by calling OnPointerEntered after template is applied
         tabStripItem.OnPointerEntered();
         await WaitForRenderCompletion().ConfigureAwait(true);
 
-        // Assert - Buttons should be visible
-        _ = buttonsContainer.Visibility.Should().Be(Visibility.Visible);
+        // Assert - Overlay visual state should be active
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.OverlayVisibleVisualState]);
+    });
 
-        // Act - Pointer exit
+    [TestCategory("VisualStates")]
+    [TestMethod]
+    public Task WhenPointerExits_TransitionsToOverlayHiddenVisualState_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Overlay PointerExit Tab",
+            IsSelected = false,
+        }).ConfigureAwait(true);
+
+        // Act - Enter pointer over to make overlay visible first
+        tabStripItem.OnPointerEntered();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.OverlayVisibleVisualState]);
+
+        // Act - Exit pointer
         tabStripItem.OnPointerExited();
         await WaitForRenderCompletion().ConfigureAwait(true);
 
-        // Assert - Buttons should be collapsed again
-        _ = buttonsContainer.Visibility.Should().Be(Visibility.Collapsed);
+        // Assert - Overlay should be hidden
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.OverlayHiddenVisualState]);
+    });
+
+    [TestCategory("VisualStates")]
+    [TestMethod]
+    public Task WhenSelectedAndPointerOver_OverlayVisibleAndSelectedPointerOverVisualStates_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - start selected
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Selected Overlay Tab",
+            IsSelected = true,
+        }).ConfigureAwait(true);
+
+        // Act - Simulate pointer over
+        tabStripItem.OnPointerEntered();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - Should have both SelectedPointerOver and OverlayVisible states
+        _ = vsm.GetCurrentStates(tabStripItem).Should().Contain([TabStripItem.SelectedPointerOverVisualState, TabStripItem.OverlayVisibleVisualState]);
     });
 
     [TestMethod]
@@ -381,6 +479,38 @@ public class TabStripItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task ShowsPinnedIndicatorWhenPinned_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Pinned Tab",
+            IsPinned = true,
+        }).ConfigureAwait(true);
+
+        // Assert
+        var pinnedIndicator = tabStripItem.FindDescendant<FrameworkElement>(e => string.Equals(e.Name, TabStripItem.PinnedIndicatorPartName, StringComparison.Ordinal));
+        _ = pinnedIndicator.Should().NotBeNull();
+        _ = pinnedIndicator!.Visibility.Should().Be(Visibility.Visible);
+    });
+
+    [TestMethod]
+    public Task HidesPinnedIndicatorWhenNotPinned_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Unpinned Tab",
+            IsPinned = false,
+        }).ConfigureAwait(true);
+
+        // Assert
+        var pinnedIndicator = tabStripItem.FindDescendant<FrameworkElement>(e => string.Equals(e.Name, TabStripItem.PinnedIndicatorPartName, StringComparison.Ordinal));
+        _ = pinnedIndicator.Should().NotBeNull();
+        _ = pinnedIndicator!.Visibility.Should().Be(Visibility.Collapsed);
+    });
+
+    [TestMethod]
     public Task HandlesItemPropertySetToNull_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -396,7 +526,33 @@ public class TabStripItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task SetsLoggerFactoryCorrectly_Async() => EnqueueAsync(async () =>
+    public Task ItemSetToNull_DisablesControl_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - start with a valid item
+        var (tabStripItem, vsm) = await SetupTabStripItemWithData(new TabItem { Header = "Nullable Tab", IsSelected = false }).ConfigureAwait(true);
+
+        // Precondition - control should be enabled when bound to an item
+        _ = tabStripItem.IsEnabled.Should().BeTrue();
+
+        // Act - set Item to null
+        tabStripItem.Item = null;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - control should be disabled and visual states cleared
+        _ = tabStripItem.IsEnabled.Should().BeFalse();
+
+        // Act - restore a non-null item
+        var restored = new TabItem { Header = "Restored Tab", IsSelected = false };
+        tabStripItem.Item = restored;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - control should be enabled again and bound to the restored item
+        _ = tabStripItem.IsEnabled.Should().BeTrue();
+        _ = tabStripItem.Item.Should().Be(restored);
+    });
+
+    [TestMethod]
+    public Task SetsLoggerFactoryCorrectly_Async() => EnqueueAsync(() =>
     {
         // Arrange
         var tabStripItem = new TestableTabStripItem();
@@ -407,6 +563,83 @@ public class TabStripItemTests : VisualUserInterfaceTests
 
         // Assert
         _ = tabStripItem.LoggerFactory.Should().Be(loggerFactory);
+    });
+
+    [TestMethod]
+    public Task RecycledContainer_PinnedIconBinding_Rebinds_Async() => EnqueueAsync(async () =>
+    {
+        // This test reproduces the recycling/order-of-operations issue where a
+        // container is reused and the template binding for the icon can end up
+        // invalid. We simulate reuse by setting Item=null and then restoring the
+        // original TabItem. The test asserts the PartIcon is present and has a
+        // non-null IconSource and visible when the item is pinned.
+        var tabItem = new TabItem
+        {
+            Header = "Recycled Tab",
+            Icon = new SymbolIconSource { Symbol = Symbol.Document },
+            IsPinned = true,
+        };
+
+        var (tabStripItem, _) = await SetupTabStripItemWithData(tabItem).ConfigureAwait(true);
+
+        // Ensure initial state: icon part exists and should be visible
+        var icon = tabStripItem.FindDescendant<IconSourceElement>(e => string.Equals(e.Name, TabStripItem.IconPartName, StringComparison.Ordinal));
+        _ = icon.Should().NotBeNull();
+        _ = icon!.IconSource.Should().NotBeNull();
+        _ = icon.Visibility.Should().Be(Visibility.Visible);
+
+        // Simulate recycling: clear the Item (container reused by ItemsRepeater)
+        tabStripItem.Item = null;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Now restore the same item - this is where pre-fix code could leave the
+        // icon binding invalid and the icon not visible for pinned items.
+        tabStripItem.Item = tabItem;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert the icon part is still present and bound/shown.
+        icon = tabStripItem.FindDescendant<IconSourceElement>(e => string.Equals(e.Name, TabStripItem.IconPartName, StringComparison.Ordinal));
+        _ = icon.Should().NotBeNull();
+        _ = icon!.IconSource.Should().NotBeNull();
+        _ = icon.Visibility.Should().Be(Visibility.Visible);
+    });
+
+    [TestMethod]
+    public Task PinUnpin_Repeated_TogglesIconVisibility_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - item starts unpinned with an icon
+        var tabItem = new TabItem
+        {
+            Header = "Toggle Pin Tab",
+            Icon = new SymbolIconSource { Symbol = Symbol.Document },
+            IsPinned = false,
+        };
+
+        var (tabStripItem, _) = await SetupTabStripItemWithData(tabItem).ConfigureAwait(true);
+
+        var icon = tabStripItem.FindDescendant<IconSourceElement>(e => string.Equals(e.Name, TabStripItem.IconPartName, StringComparison.Ordinal));
+        _ = icon.Should().NotBeNull();
+
+        // Define a helper to assert icon visible
+        async Task AssertIconVisible()
+        {
+            await WaitForRenderCompletion().ConfigureAwait(true);
+            _ = icon!.IconSource.Should().NotBeNull();
+            _ = icon.Visibility.Should().Be(Visibility.Visible);
+        }
+
+        // Pin -> Unpin -> Pin -> Unpin
+        tabStripItem.Item!.IsPinned = true;
+        await AssertIconVisible().ConfigureAwait(true);
+
+        tabStripItem.Item.IsPinned = false;
+        await AssertIconVisible().ConfigureAwait(true);
+
+        tabStripItem.Item.IsPinned = true;
+        await AssertIconVisible().ConfigureAwait(true);
+
+        tabStripItem.Item.IsPinned = false;
+        await AssertIconVisible().ConfigureAwait(true);
     });
 
     internal static async Task<(TestableTabStripItem item, TestVisualStateManager vsm)> SetupTabStripItemWithData(TabItem tabItem)
@@ -427,10 +660,10 @@ public class TabStripItemTests : VisualUserInterfaceTests
         // We can only install the custom VSM after loading the template, and
         // so, we need to trigger the desired visual state explicitly by setting
         // the right property to the right value after the control is loaded.
-        var vsmTarget = tabStripItem.FindDescendant<Grid>(e => string.Equals(e.Name, TabStripItem.RootGridPartName, StringComparison.Ordinal));
-        _ = vsmTarget.Should().NotBeNull();
+        var rootGrid = tabStripItem.FindDescendant<Grid>(e => string.Equals(e.Name, TabStripItem.RootGridPartName, StringComparison.Ordinal));
+        _ = rootGrid.Should().NotBeNull();
         var vsm = new TestVisualStateManager();
-        VisualStateManager.SetCustomVisualStateManager(vsmTarget, vsm);
+        VisualStateManager.SetCustomVisualStateManager(rootGrid, vsm);
 
         return (tabStripItem, vsm);
     }
