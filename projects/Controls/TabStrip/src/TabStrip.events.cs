@@ -26,6 +26,14 @@ public partial class TabStrip
     ///     selection mode, only one tab can be selected at a time. In multiple selection mode,
     ///     users can select multiple tabs using modifier keys (e.g. Ctrl, Shift).
     ///     </para>
+    ///     <para>
+    ///     During a drag operation, any multi-selection is cleared and only the dragged tab remains
+    ///     selected. When a hidden placeholder is inserted into a destination <see
+    ///     cref="TabStrip"/> during a drag, the control performs a layout pass, restores
+    ///     visibility, and raises <c>SelectionChanged</c> followed by <c>TabActivated</c>.
+    ///     Handlers should treat these events as informational during an active drag and avoid
+    ///     mutating the strip's collection or drag state.
+    ///     </para>
     ///     <para><b>Note:</b> Selection does not automatically activate the tab. See <see
     ///     cref="TabActivated"/> for more information.</para>
     /// </remarks>
@@ -61,4 +69,58 @@ public partial class TabStrip
     ///     nothing more than raise this event.
     /// </remarks>
     public event EventHandler<TabCloseRequestedEventArgs>? TabCloseRequested;
+
+    /// <summary>
+    ///     Occurs when a drag session needs a lightweight preview image for the dragged <see
+    ///     cref="TabItem"/>. Handlers may synchronously set <see
+    ///     cref="TabDragImageRequestEventArgs.PreviewImage"/> to customize the overlay.
+    /// </summary>
+    /// <remarks>
+    ///     Raised on the UI thread when the dragged tab leaves its originating <see
+    ///     cref="TabStrip"/> (tear-out begins). Handlers must be fast and avoid blocking I/O.
+    ///     Prefer a ready-to-render <see cref="Microsoft.UI.Xaml.Media.ImageSource"/> (for example,
+    ///     a cached <c>BitmapImage</c>) set synchronously. If no preview is provided, the control
+    ///     renders a compact fallback visual. After this event, the control raises
+    ///     <c>TabCloseRequested</c> to signal tear-out has begun.
+    ///     <para>
+    ///     Exceptions thrown by handlers are caught; faulty previews are ignored and the drag
+    ///     continues with the fallback visual. See <see cref="TabDragComplete"/> for completion
+    ///     semantics.
+    ///     </para>
+    /// </remarks>
+    public event EventHandler<TabDragImageRequestEventArgs>? TabDragImageRequest;
+
+    /// <summary>
+    ///     Occurs when a drag operation completes.
+    /// </summary>
+    /// <remarks>
+    ///     Reports the final placement of the dragged <see cref="TabItem"/>. If the item was not
+    ///     inserted into a destination <see cref="TabStrip"/> (for example, dropped outside any
+    ///     strip or the drag failed), both <see cref="TabDragCompleteEventArgs.DestinationStrip"/>
+    ///     and <see cref="TabDragCompleteEventArgs.NewIndex"/> will be <see langword="null"/>.
+    ///     <para>
+    ///     Raised after layout passes and placeholder insertion/removal. Handlers should be fast
+    ///     and avoid long-running work on the UI thread.
+    ///     </para>
+    ///     <para>
+    ///     Exceptions thrown by handlers are caught and will not prevent the control from
+    ///     completing the drag and surfacing the final state.
+    ///     </para>
+    /// </remarks>
+    public event EventHandler<TabDragCompleteEventArgs>? TabDragComplete;
+
+    /// <summary>
+    ///     Raised when the user drops a tab outside any <see cref="TabStrip"/>.
+    /// </summary>
+    /// <remarks>
+    ///     The application is expected to create a new top-level window and host the <see
+    ///     cref="TabItem"/>. The <see cref="TabTearOutRequestedEventArgs.ScreenDropPoint"/> provides
+    ///     the drop point in screen coordinates and may be used as the initial position for the new
+    ///     window.
+    ///     <para>
+    ///     Raised on the UI thread. If a handler throws, the control catches the exception and
+    ///     completes the drag; handlers should avoid relying on exceptions for control flow.
+    ///     </para>
+    /// </remarks>
+    public event EventHandler<TabTearOutRequestedEventArgs>? TabTearOutRequested;
 }
