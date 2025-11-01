@@ -1,13 +1,16 @@
 # TabStrip Layout
 
-The TabStrip control supports three Layout policies: **Auto**, **Equal**, and
-**Compact**. Each policy determines how tab items are sized based on available
-space, content, and constraints. The layout is re-evaluated whenever the tab
-items collection changes or the TabStrip's size changes (triggering invalidation
-and re-measurement).
+The `TabStrip` manages two cuckets of `TabStripItem` items, one for pinned tabs,
+and the other for unpinned tabs. Tabs within each bucket are laid out in
+accordance with three Layout policies: **Auto**, **Equal**, and **Compact**.
+Each policy determines how tab items are sized based on available space,
+content, and constraints. The layout is re-evaluated whenever the tab items
+collection changes or the TabStrip's size changes (triggering invalidation and
+re-measurement).
 
 NOTE: This specification impacts only the layout algorithm, the control template
-and the scrolling indicators etc, are all already implemented.
+and the scrolling indicators etc, are all considered to be available and
+implemented.
 
 ## General contracts
 
@@ -28,35 +31,36 @@ and the scrolling indicators etc, are all already implemented.
 - **Behavior**: Each tab sizes to fit its content naturally, subject to the
   TabStrip control's `MaxItemWidth` and each TabStripItem's `MinWidth`
   properties.
-- **Implementation**: No explicit `Width` is set on tab items . The layout
-  system measures each item with infinite available width to determine its
-  desired size, then constrains it between `MinWidth` and `MaxItemWidth`.
 - **When Used**:
   - Applied to both pinned and unpinned items, When the TabStrip control's
     `TabWidthPolicy` property is `Auto`.
   - Applied only to pinned items when the TabStrip control's `TabWidthPolicy`
     property is `Compact`.
+- **Implementation**: No explicit `Width` is set on tab items . The layout
+  system measures each item with infinite available width to determine its
+  desired size, then constrains it between `MinWidth` and `MaxItemWidth`.
 - **Fallback**:
   - When not enough space in the unpinned items scroll host (the ScrollViewer
-    named PartScrollHost in the XAML template) to accommodate all unpinned items,
-    scrolling is enabled.
-
-REMINDER: calculated width is always clamped between each item's `MinWidth` and
-`MaxItemWidth`
+    named `PartScrollHost` in the XAML template) to accommodate all unpinned
+    items, scrolling is enabled.
 
 ## 2. Equal Policy
 
 - **Behavior**: All tabs use the same width specified by `PreferredItemWidth`
   property of `TabStrip`.
-- **Implementation**: Sets `calculatedWidth = PreferredItemWidth` on each tab item.
 - **When Used**: When the TabStrip control's `TabWidthPolicy` property is
   `Equal`. Applies to all items, including pinned and unpinned.
+- **Implementation**: Sets `calculatedWidth = PreferredItemWidth` on each tab
+  item.
 - **Fallback**: If not enough space in the regular items scroll host to
   accommodate all items in the unpinned bucket, scrolling is enabled.
 
 ## 3. Compact Policy
 
 - **Behavior**: Prioritizes fitting all tabs without scrolling if possible.
+- **When Used**: When the TabStrip control's `TabWidthPolicy` property is
+  `Compact`. Compacting only applied to unpinned items when space is not
+  sufficient. Pinned items use `Auto` policy.
 - **Implementation**:
   - Starts with Auto sizing; if the total desired widths exceed available space,
     switches to Auto layout for pinned items, and progressively shrinks the
@@ -92,9 +96,6 @@ REMINDER: calculated width is always clamped between each item's `MinWidth` and
     leftover is acceptable. If the sum exceeds available space, the algorithm
     must enable scrolling (no further redistribution to absorb fractional pixels
     is required).
-- **When Used**: When the TabStrip control's `TabWidthPolicy` property is
-  `Compact`. Compacting only applied to unpinned items when space is not
-  sufficient. Pinned items use `Auto` policy.
 
 ## General Notes
 
