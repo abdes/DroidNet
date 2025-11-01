@@ -125,7 +125,7 @@ public partial class TabStrip : Control
     }
 
     /// <summary>
-    ///    Layout manager used to compute tab widths and layout decisions.
+    ///    Gets or sets layout manager used to compute tab widths and layout decisions.
     /// </summary>
     /// <remarks>
     ///    The property is protected so tests can inject a deterministic or stub implementation.
@@ -168,7 +168,7 @@ public partial class TabStrip : Control
 
     /// <summary>
     ///    Handles the Tapped event for a tab element. Executes the associated command, selects the
-    ///    tab, and raises the <see cref="TabInvoked"/> event.
+    ///    tab, and raises the <see cref="TabActivated"/> event.
     /// </summary>
     /// <param name="sender">
     ///     The source of the event, expected to be a <see cref="FrameworkElement"/> with a <see
@@ -192,7 +192,7 @@ public partial class TabStrip : Control
             this.SelectedItem = ti;  // This triggers OnSelectedItemChanged
 
             // Raise TabInvoked event
-            this.TabInvoked?.Invoke(this, new TabInvokedEventArgs { Item = ti, Index = this.SelectedIndex, Parameter = ti.CommandParameter });
+            this.TabActivated?.Invoke(this, new TabActivatedEventArgs { Item = ti, Index = this.SelectedIndex, Parameter = ti.CommandParameter });
             this.LogTabInvoked(ti);
         }
     }

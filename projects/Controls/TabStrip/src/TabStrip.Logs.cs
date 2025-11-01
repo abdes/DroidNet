@@ -234,8 +234,8 @@ public partial class TabStrip
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
-        Message = "Element prepared is not a valid TabStripItem: ElementType={ElementType}, DataContextType={DataContextType}")]
-    private static partial void LogBadItem(ILogger logger, string ElementType, string DataContextType);
+        Message = "Element prepared is not a valid TabStripItem in {RepeaterType} repeater: ElementType={ElementType}, DataContextType={DataContextType}")]
+    private static partial void LogBadItem(ILogger logger, string RepeaterType, string ElementType, string DataContextType);
 
     private void LogBadItem(ItemsRepeater sender, object element)
     {
@@ -243,7 +243,8 @@ public partial class TabStrip
         {
             var elementType = element?.GetType().Name ?? "null";
             var dataContextType = (element as FrameworkElement)?.DataContext?.GetType().Name ?? "null";
-            LogBadItem(logger, elementType, dataContextType);
+            var repeaterType = sender == this.pinnedItemsRepeater ? "pinned" : "regular";
+            LogBadItem(logger, repeaterType, elementType, dataContextType);
         }
     }
 

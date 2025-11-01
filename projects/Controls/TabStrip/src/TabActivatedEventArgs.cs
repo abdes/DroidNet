@@ -5,9 +5,9 @@
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Provides data for the <see cref="TabStrip.TabInvoked"/> event.
+///     Provides data for the <see cref="TabStrip.TabActivated"/> event.
 /// </summary>
-public sealed class TabInvokedEventArgs : EventArgs
+public sealed class TabActivatedEventArgs : EventArgs
 {
     /// <summary>
     ///     Gets the tab item that was invoked.

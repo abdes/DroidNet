@@ -483,6 +483,7 @@ public class TabStripLayoutManagerTests
 
         // Assert
         result.Items.Should().HaveCount(2);
+
         // Both should be set to PreferredItemWidth = 120, regardless of pinned status
         result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
         result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
@@ -513,6 +514,7 @@ public class TabStripLayoutManagerTests
 
         // Assert
         result.Items.Should().HaveCount(2);
+
         // Both should be set to PreferredItemWidth = 120, even if pinned has higher desired
         result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
         result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
@@ -558,7 +560,7 @@ public class TabStripLayoutManagerTests
             Policy = TabWidthPolicy.Auto,
         };
         var items = new List<LayoutPerItemInput>();
-        for (int i = 0; i < 1000; i++)
+        for (var i = 0; i < 1000; i++)
         {
             items.Add(new LayoutPerItemInput(i, false, 5, 10));
         }
