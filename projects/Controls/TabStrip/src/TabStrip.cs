@@ -359,7 +359,7 @@ public partial class TabStrip : Control
             }
             else
             {
-                tsi.ClearValue(FrameworkElement.WidthProperty);
+                tsi.ClearValue(WidthProperty);
                 tsi.MaxWidth = this.MaxItemWidth;
             }
 
@@ -631,14 +631,14 @@ public partial class TabStrip : Control
         foreach (var tsi in containers.Values)
         {
             // Save and clear width constraints to measure natural content width
-            var origWidth = tsi.ReadLocalValue(FrameworkElement.WidthProperty);
-            var origMax = tsi.ReadLocalValue(FrameworkElement.MaxWidthProperty);
-            var origMin = tsi.ReadLocalValue(FrameworkElement.MinWidthProperty);
-            tsi.ClearValue(FrameworkElement.WidthProperty);
-            tsi.ClearValue(FrameworkElement.MaxWidthProperty);
-            tsi.ClearValue(FrameworkElement.MinWidthProperty);
+            var origWidth = tsi.ReadLocalValue(WidthProperty);
+            var origMax = tsi.ReadLocalValue(MaxWidthProperty);
+            var origMin = tsi.ReadLocalValue(MinWidthProperty);
+            tsi.ClearValue(WidthProperty);
+            tsi.ClearValue(MaxWidthProperty);
+            tsi.ClearValue(MinWidthProperty);
 
-            tsi.Measure(new global::Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            tsi.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
             var desired = tsi.DesiredSize.Width;
             var effectiveMin = Math.Min(tsi.MinWidth, this.MaxItemWidth);
 
@@ -648,17 +648,17 @@ public partial class TabStrip : Control
             // Restore original values
             if (origWidth != DependencyProperty.UnsetValue)
             {
-                tsi.SetValue(FrameworkElement.WidthProperty, origWidth);
+                tsi.SetValue(WidthProperty, origWidth);
             }
 
             if (origMax != DependencyProperty.UnsetValue)
             {
-                tsi.SetValue(FrameworkElement.MaxWidthProperty, origMax);
+                tsi.SetValue(MaxWidthProperty, origMax);
             }
 
             if (origMin != DependencyProperty.UnsetValue)
             {
-                tsi.SetValue(FrameworkElement.MinWidthProperty, origMin);
+                tsi.SetValue(MinWidthProperty, origMin);
             }
         }
 
@@ -748,7 +748,7 @@ public partial class TabStrip : Control
             }
             else
             {
-                container.ClearValue(FrameworkElement.WidthProperty);
+                container.ClearValue(WidthProperty);
                 container.MaxWidth = this.MaxItemWidth;
 
                 // Cleared explicit width for container (other policy)

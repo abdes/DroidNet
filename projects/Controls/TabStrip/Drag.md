@@ -327,7 +327,7 @@ stateDiagram-v2
   the `TabStrip`, it goes through the same lifecycle as an item that was dragged
   out.
 
-- **TabDragCoordinator**: An internal, static class that maintains the active
+- **TabDragCoordinator**: An internal class registered as a singleton in the DI container that maintains the active
   drag state across all `TabStrip` instances in the same application process.
 
   Design:
@@ -338,6 +338,9 @@ stateDiagram-v2
     must be from UI thread).
   - Resilience: Survives source window closure during cross-window drag by polling
     the global cursor and driving the overlay.
+  - The `TabStrip` control should expose dependency properties for injecting the
+    `TabDragCoordinator`, similar to how `ILoggerFactory` can be injected into
+    layout managers.
   - Lifecycle: Owns the `IDragVisualService` session and terminates it on successful
     drop, abort, error, or when the coordinator is disposed.
   - Notification: Notifies all `TabStrip` instances in the process of enter/leave/drop
