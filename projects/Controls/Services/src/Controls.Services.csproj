@@ -5,15 +5,15 @@
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <RootNamespace>$(RootNamespace).Controls</RootNamespace>
-        <AssemblyName>DroidNet.Controls.TabStrip</AssemblyName>
+        <AssemblyName>DroidNet.Controls.Services</AssemblyName>
 
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <UseWinUI>true</UseWinUI>
 
         <Title>In-place editable controls</Title>
-        <Description>Custom controls to facilitate editing in-place, such as editing a label to rename an item with InPlaceEditableLabel.</Description>
+        <Description>Services needed for the coordination of application wide UI operations such as drag and drop.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageTags>winui;controls;tree;custom</PackageTags>
+        <PackageTags>winui;controls;services;custom</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
@@ -26,16 +26,9 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    </ItemGroup>
-
-    <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Controls\Services\src\Controls.Services.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
     </ItemGroup>
 
 </Project>
