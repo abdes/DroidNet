@@ -13,44 +13,27 @@ namespace DroidNet.Controls;
 /// </summary>
 public sealed partial class DragVisualDescriptor : ObservableObject
 {
-    private ImageSource? headerImage;
-    private ImageSource? previewImage;
-    private Windows.Foundation.Size requestedSize;
-    private string? title;
-
     /// <summary>
     ///     Gets or sets the header image to display in the drag overlay (required).
     /// </summary>
-    public ImageSource? HeaderImage
-    {
-        get => this.headerImage;
-        set => this.SetProperty(ref this.headerImage, value);
-    }
+    [ObservableProperty]
+    public partial ImageSource? HeaderImage { get; set; }
 
     /// <summary>
     ///     Gets or sets the optional preview image to display in the drag overlay.
     /// </summary>
-    public ImageSource? PreviewImage
-    {
-        get => this.previewImage;
-        set => this.SetProperty(ref this.previewImage, value);
-    }
+    [ObservableProperty]
+    public partial ImageSource? PreviewImage { get; set; }
 
     /// <summary>
     ///     Gets or sets the requested size for the overlay.
     /// </summary>
-    public Windows.Foundation.Size RequestedSize
-    {
-        get => this.requestedSize;
-        set => this.SetProperty(ref this.requestedSize, value);
-    }
+    [ObservableProperty]
+    public partial Windows.Foundation.Size RequestedSize { get; set; }
 
     /// <summary>
     ///     Gets or sets an optional title string displayed in the overlay.
     /// </summary>
-    public string? Title
-    {
-        get => this.title;
-        set => this.SetProperty(ref this.title, value);
-    }
+    [ObservableProperty]
+    public partial string? Title { get; set; }
 }

@@ -117,6 +117,16 @@ public partial class TabStrip
             new PropertyMetadata(defaultValue: null, OnLoggerFactoryPropertyChanged));
 
     /// <summary>
+    ///     Identifies the <see cref="DragCoordinator"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty DragCoordinatorProperty =
+        DependencyProperty.Register(
+            nameof(DragCoordinator),
+            typeof(TabDragCoordinator),
+            typeof(TabStrip),
+            new PropertyMetadata(defaultValue: null, OnDragCoordinatorPropertyChanged));
+
+    /// <summary>
     ///     Gets the collection of <see cref="TabItem"/> objects displayed in the strip.
     /// </summary>
     public ObservableCollection<TabItem> Items
@@ -201,6 +211,17 @@ public partial class TabStrip
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
+    /// <summary>
+    ///     Gets or sets the <see cref="TabDragCoordinator"/> that manages drag lifecycle for this strip.
+    ///     This is typically set once during control initialization to the process-wide singleton coordinator.
+    ///     Setting this property manages subscription to coordinator events automatically.
+    /// </summary>
+    public TabDragCoordinator? DragCoordinator
+    {
+        get => (TabDragCoordinator?)this.GetValue(DragCoordinatorProperty);
+        set => this.SetValue(DragCoordinatorProperty, value);
+    }
+
     private static void OnTabWidthPolicyPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStrip)d).OnTabWidthPolicyChanged((TabWidthPolicy)e.NewValue);
 
@@ -212,6 +233,9 @@ public partial class TabStrip
 
     private static void OnLoggerFactoryPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStrip)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue);
+
+    private static void OnDragCoordinatorPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((TabStrip)d).OnDragCoordinatorChanged((TabDragCoordinator?)e.OldValue, (TabDragCoordinator?)e.NewValue);
 
     private static void OnWidthPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStrip)d).RecalculateAndApplyTabWidths();

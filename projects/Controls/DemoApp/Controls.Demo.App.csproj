@@ -35,6 +35,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\Services\src\Controls.Services.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />

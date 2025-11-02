@@ -50,6 +50,9 @@
                         Keeping the overlay as a sibling ensures the measured PartRootGrid does not include tool buttons in its desired size.
                     -->
                     <Grid x:Name="PartRootGrid">
+                        <Grid.RenderTransform>
+                            <ScaleTransform />
+                        </Grid.RenderTransform>
                         <!--  Highlight background rectangle (spans full width)  -->
                         <Border
                             x:Name="HighlightRect"
@@ -338,6 +341,50 @@
                                             Duration="0:0:0.12" />
 
                                         <!--  hit-testing is enabled via the combined keyframes above after fade completes  -->
+                                    </Storyboard>
+                                </VisualState>
+                            </VisualStateGroup>
+                            <!--
+                                Dragging states: when IsDragging is true, the tab is slightly scaled down and
+                                reduced in opacity to provide visual feedback that it is being dragged.
+                            -->
+                            <VisualStateGroup x:Name="DraggingStates">
+                                <VisualState x:Name="NotDragging">
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="1"
+                                            Duration="0:0:0.1" />
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                            To="1"
+                                            Duration="0:0:0.1" />
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                            To="1"
+                                            Duration="0:0:0.1" />
+                                    </Storyboard>
+                                </VisualState>
+                                <VisualState x:Name="Dragging">
+                                    <Storyboard>
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="Opacity"
+                                            To="0.7"
+                                            Duration="0:0:0.1" />
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)"
+                                            To="0.95"
+                                            Duration="0:0:0.1" />
+                                        <DoubleAnimation
+                                            Storyboard.TargetName="PartRootGrid"
+                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)"
+                                            To="0.95"
+                                            Duration="0:0:0.1" />
                                     </Storyboard>
                                 </VisualState>
                             </VisualStateGroup>

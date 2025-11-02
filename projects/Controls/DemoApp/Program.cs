@@ -142,6 +142,9 @@ public static partial class Program
             .WithChromeService()
             .WithThemeModeService());
 
+        container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
+        container.Register<TabDragCoordinator>(Reuse.Singleton);
+
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the
          * requested url. The target name is the key used when registering the window type.

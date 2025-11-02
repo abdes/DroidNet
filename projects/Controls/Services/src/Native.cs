@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Runtime.InteropServices;
-using Windows.Graphics;
 
 namespace DroidNet.Controls;
 
@@ -496,6 +494,16 @@ public static partial class Native
         return (int)Math.Round(logical * dpi / StandardDpi);
     }
 
+    /// <summary>Converts physical pixels to logical (DIP) coordinates using the specified DPI.</summary>
+    /// <param name="physical">Physical pixel value.</param>
+    /// <param name="dpi">DPI value (e.g., 96 for 100% scaling, 144 for 150%).</param>
+    /// <returns>Logical coordinate value.</returns>
+    public static double PhysicalToLogical(int physical, uint dpi)
+    {
+        const uint StandardDpi = 96;
+        return physical * StandardDpi / (double)dpi;
+    }
+
     /// <summary>Gets the DPI for the monitor containing the specified point.</summary>
     /// <param name="screenPoint">Screen point in logical pixels.</param>
     /// <returns>DPI value, or 96 (100% scaling) if retrieval fails.</returns>
@@ -522,6 +530,13 @@ public static partial class Native
     /// <returns>Physical point.</returns>
     public static POINT LogicalToPhysicalPoint(Windows.Foundation.Point logicalPoint, uint dpi)
         => new(LogicalToPhysical(logicalPoint.X, dpi), LogicalToPhysical(logicalPoint.Y, dpi));
+
+    /// <summary>Converts a POINT from physical to logical coordinates.</summary>
+    /// <param name="physicalPoint">Physical point.</param>
+    /// <param name="dpi">DPI value.</param>
+    /// <returns>Logical point as WinRT Point.</returns>
+    public static Windows.Foundation.Point PhysicalToLogicalPoint(POINT physicalPoint, uint dpi)
+        => new(PhysicalToLogical(physicalPoint.X, dpi), PhysicalToLogical(physicalPoint.Y, dpi));
 
     /// <summary>Converts a WinRT Size from logical to physical coordinates.</summary>
     /// <param name="logicalSize">Logical size.</param>

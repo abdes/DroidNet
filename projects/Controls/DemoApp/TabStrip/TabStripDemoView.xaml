@@ -85,6 +85,7 @@
             Background="{ThemeResource LayerFillColorDefaultBrush}">
             <dnc:TabStrip
                 x:Name="DemoTabStrip"
+                DragCoordinator="{x:Bind ViewModel.DragCoordinator}"
                 LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
                 MaxItemWidth="{x:Bind ViewModel.MaxItemWidth, Mode=OneWay}"
                 PreferredItemWidth="{x:Bind ViewModel.PreferredItemWidth, Mode=OneWay}"
