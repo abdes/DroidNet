@@ -4,7 +4,7 @@ The drag-and-drop behavior in the `TabStrip` control enables intuitive, direct
 manipulation of `TabStripItem` items within and across tab strips, including
 tab strips in other windows.
 
-Its purpose is to support reordering, detachment (tear-out), and reattachment of
+Its purpose is to support reordering, detachment (TearOut), and reattachment of
 tabs through pointer gestures, while preserving logical identity and user
 context.
 
@@ -16,17 +16,31 @@ coordination.
 
 This specification uses the following terms consistently:
 
-- **Tab** or **tab item** (informal): Generic user-facing concept describing an item in a tab strip.
-- **`TabItem`** (model): The logical data model representing a tab's content and metadata (see `TabItem.cs`).
-  All EventArgs use `TabItem` to allow application handlers to work with the model rather than visual controls.
-- **`TabStripItem`** (visual control): The visual UI control that renders a single `TabItem` within a `TabStrip`.
-- **`TabStrip`** (container): The control that hosts zero or more `TabStripItem` instances.
-
-Throughout this document:
-
-- "Drag a tab" or "the tab being dragged" refers to user-facing description.
-- "`TabItem`" is used in technical sections, event signatures, and application contracts.
-- "`TabStripItem`" is used when discussing visual control behavior, layout, or visibility.
+- **Tab** (informal): Generic user-facing concept describing an item in a tab
+  strip. In a visual context, this corresponds to a `TabStripItem` in one of the
+  `ItemsRepeater` in a `TabStrip`. In a non-visual context, this corresponds to
+  a `TabItem` in the `Items` collection of a `TabStrip`.
+- **`TabItem`** (model): The logical data model representing a tab's content and
+  metadata (see `TabItem.cs`). All EventArgs use `TabItem` to allow application
+  handlers to work with the model rather than visual controls.
+- **`TabStripItem`** (visual control): The visual UI control that renders a
+  single `TabItem` within a `TabStrip`.
+- **`TabStrip`** (container): The control that hosts zero or more `TabStripItem`
+  instances.
+- **Pinned Tab** (informal): Refers to a `Tab` (informal) that has the
+  `IsPinned` property set to `true`.
+- **Unpinned Tab** or **Regular Tab** (informal): Refers to a `Tab` (informal)
+  that has the `IsPinned` property set to `true`.
+- **Pinned bucket** (informal): Refers to the `ItemsRepeater` in a `TabStrip`
+  that holds the "pinned Tabs".
+- **Unpinned bucket** (informal): Refers to the `ItemsRepeater` in a `TabStrip`
+  that holds the "unpinned/regular Tabs".
+- **Drag threshold**: Refers to the number of pixels by which the pointer needs
+  to move after the intention to drag is confirmed (e.g. click and hold) to
+  initiate a drag operation.
+- **TearOut threshold**: Refers to the number of pixels by which the pointer
+  needs to be out of a `TabStrip` to consider that the drag should now switch
+  from "Reorder" to "TearOut" mode.
 
 ## Behaviors
 
@@ -58,94 +72,172 @@ than managing a selection set.
 
 ## Drag/Drop
 
-From a user experience point of view, here is what happens during a drag/drop
-operation:
+> **NOTE**:
+>
+> - Pinned tabs cannot be dragged.
+> - Dragging a tab into the pinned bucket, does not impact that bucket, and
+>   should be visually indicated with a special pointer cursor that represents a
+>   'forbidden/stop/no-way` sign.
+> - Dropping a tab into the pinned bucket, is not allowed. If the drag is in
+>   "Reordering" mode, the tab is dropped at last valid position. If the drag
+>   is in "TearOut" mode, the tab is dropped as if it were out of any
+>   `TabStrip`.
+
+We can think of the Drag/Drop operation as two distinct types of interactions:
+
+1. **Reordering**: starts as soon as the tab is dragged within the threshold
+   drag initiation, and stop as soon as the pointer leaves the bounds of the
+   `TabStrip` by the TearOut threshold (see TearOut below), or the drag
+   completes (successfull drop or not).
+
+   The visual experience is tailored to give the user a feeling of sliding the
+   dragged tab into position, and animations are used to show that things slide
+   and fit into place as the drag is ongoing and as the drop finally happens.
+
+2. **TearOut**: starts as soon as the tab is dragged out of the `TabStrip`
+   bounds by more than the TearOut threshold, and stops as soon as the pointer
+   is within the bounds of a `TabStrip` (the original one or another one in a
+   different application window), or the drag completes (successfull drop or
+   not). When in "TearOut" mode, entering the legal drop bounds (unpinned
+   bucket) of a `TabStrip` should immediately (no threshold) act as if the tab
+   was dropped in the `TabStrip`, and switch the mode to "Reordering".
+
+   The visual experience is tailored to give the use a feeling of extracting the
+   tab out of its location, freely moving it together with a visual of its
+   content (optional), and then dropping it in a new host strip or an existing
+   one. The emphasis is on 'extract' 'free movement' and 'drop'.
+
+A guideline for the implementation is to think `Strategy` pattern, and automatic
+switching between `ReorderStrategy` and a `TearOutStrategy` as the conditions to
+enter/exit the mode become true.
+
+### Esc or Errors during drag/drop
+
+  From the control's perspective, a drag or a drop is always completed — the
+  gesture ends, and the pointer is captured/released. `Esc` does not cancel the
+  operation, but instead is interpreted as a drop. It is the application's
+  responsibility to handle errors appropriately when they occur inside the
+  application. Unrecoverable errors inside the control will abort the operation,
+  the pointer will be released, if captured, and the `TabDragComplete` will be
+  triggered even with no target `TabStrip` or `NewIndex`. Whenever possible, the
+  control will try to leave its items in a consistent state, but does not
+  guarantee that.
+
+### Reordering Flow
+
+From a user experience point of view, here is what happens during a "Reordering"
+drag/drop operation:
 
 - **Initial state**: a `TabStripItem` was clicked, is activated and is selected.
+  The item remains active and selected through the Reordering flow. We assume
+  the implementation is keeping track of which `TabStrip` is currently the
+  subject of this Reordering, and what the index of the placeholder item.
 
-- **Drag initiated**: the `TabStripItem` is hidden, a snapshot of the tab header
-  is attached as the drag image. If the application responds to
-  `TabDragImageRequest`, a preview of the tab’s document content may be layered
-  beneath the header. The space previously allocated for the tab being dragged,
-  is still allocated but looks empty.
+- **Drag initiated**: when the drag crosses the drag threshold. Results in the
+  following sequence of actions:
+  - Insert a temporary lightweight placeholder item at the dragged item's
+    original position. The placeholder has a minimal template (no content parts)
+    and represents the space where the dragged item will be dropped.
+  - The dragged item stays in the visual tree at its original position, and a
+    `TranslateTransform.X` gets applied to it to position it under the cursor.
+  - The dragged item remains active and selected throughout the drag (so the
+    document content doesn't change during reordering).
 
-- **Drag within the `TabStrip`**: While the pointer remains inside the `TabStrip`,
-  the dragged `TabStripItem` moves with the pointer. When it crosses the threshold
-  of an adjacent item, their positions swap. The dragged item's original space
-  remains allocated but appears empty during the operation. On drop, the item
-  settles in its new position. **Note**: The item remains active throughout; it
-  is not re-activated on drop.
+- **Drag within the `TabStrip`**:
+  - The dragged `TabStripItem` follows the cursor, positioned via
+    `TranslateTransform.X` so that the **hotspot** (the point where the user
+    clicked) stays under the cursor. This creates the visual effect of "holding"
+    the item at the grab point.
+  - As the cursor moves horizontally, when it crosses **more than half** of an
+    adjacent item's width, the **placeholder swaps positions** with that adjacent
+    item, using smooth ease animations. This creates the impression that items
+    are being pushed aside to make space for the dragged item.
+  - The placeholder always indicates where the item will land when dropped.
+  - If the cursor moves outside the unpinned bucket bounds, no swapping happens,
+    and the current position of the placeholder is considered to be the potential
+    drop position.
 
 - **Drag out of the `TabStrip`**: at any point in time during the drag
   operation, the item being dragged can leave the `TabStrip` bounds. When this
-  occurs, the control executes the following sequence:
+  occurs, it will result in a switch from "Reordering" mode to "TearOut" mode.
+  The control executes the following sequence:
 
-  1. `TabDragImageRequest` is raised. The application may provide a document
-     preview via the event args; this is used to enhance the drag visual.
-  2. `TabCloseRequested` is raised. The application **must** remove the tab's
-     `TabItem` from its model/collection; the control does not remove it.
-  3. If both handlers complete successfully, the hidden item space becomes
-     invalid for subsequent drop operations within this `TabStrip`.
+  1. Any `TranslateTransform.X` applied to the dragged item is removed.
+  2. The placeholder lightweight item is removed (naturally the dragged item
+     will take its place).
+  3. `TabCloseRequested` is raised. The application is **expected to** remove
+     the tab's `TabItem` from its model/collection; the control does not remove
+     it.
+  4. If both handlers complete successfully, the drag continues in "TearOut"
+     mode. If either handler throws or causes an unrecoverable error, the drag
+     aborts, and `TabDragComplete` is raised with `DestinationStrip` = current
+     strip, `NewIndex` = index at which the item was slotted (last placeholder
+     position).
 
-  If either handler throws or causes an unrecoverable error, the drag aborts,
-  and `TabDragComplete` is raised with `DestinationStrip = null`.
+- **Drop**: dropping the item over a strip will always happen
+  after the chain of events of "**Drag over a `TabStrip`**" has completed. It
+  will:
+  1. Any `TranslateTransform.X` applied to the dragged item is removed.
+  2. The placeholder lightweight item is removed (naturally the dragged item
+     will take its place).
+  3. Release the pointer.
+  4. Complete the drag operation and trigger the `TabDragComplete` with
+     `DestinationStrip` = current strip, `NewIndex` = index at which the item
+     was slotted (last placeholder position).
 
-- **Drag over a `TabStrip`**: at any point in time during the drag operation,
-  the item being dragged can enter the bounds of a `TabStrip` control, in any
-  same application window. When that happens, the following chain of events will
-  be triggered:
+> **NOTE
+>
+> - In this mode, pointer events are still the way the controls reacts to
+>   movement. As soon as the pointer exits the control's regular bucket, the
+>   strategy switches to TearOut and polling for cursor position becomes the
+>   method used for positioning.
 
+### TearOut Flow
+
+From a user experience point of view, here is what happens during a "TearOut"
+drag/drop operation:
+
+- **Initial state**: a `TabStripItem` has been dragged out of the bounds of its
+  `TabStrip`, and now we only have the corresponding `TabItem`.
+
+- **Drag initiated**: when the drag crosses the TearOut threshold. Results in
+  the following sequence of actions:
+  - Make a `HeaderImage` snapshot of how the `TabStripItem` would render,
+  - Raise a `TabDragImageRequest`event to request a `PreviewImage` of the tab
+     content. The application may provide a preview via the event args; this is
+     used to enhance the drag visual.
+  - Start a new drag session with the `DragVisualService` and keep the
+    `DragSessionToken`.
+
+- **Drag over the Unpinned Bucket of a `TabStrip`**: at any point in time during
+  the drag operation, the item being dragged can enter the bounds of a
+  `TabStrip` control, in any same application window. If the position of the
+  pointer is over the "Unpinned bucket" of the `TabStrip, the following actions
+  will take place:
+
+  - The drag visual session is ended, and the drag visual disappears.
   - A new `TabStripItem` will be added to the `TabStrip`, using the same
-    `TabItem` data as the item being dragged, but will be hidden. Space in the
-    `TabStrip` for the newly added item is allocated, but appears empty. The
-    position of the new item is determined based on where the item being dragged
-    is currently positioned within the `TabStrip`.
+    `TabItem` data as the item being dragged. The position of the new item is
+    determined based on where the pointer is currently positioned within the
+    `TabStrip`.
   - Once the new item is inserted, it is explicitly activated and selected.
     Activation events are triggered only after layout and visibility are valid.
     Events related to selection change and activation are triggered as usual.
-  - The drag operation continues as if it were "**Drag within the `TabStrip`**`.
+  - The drag operation continues in "Reorderinde Mode", from Initiation, and the
+    pointer is still captured.
 
-- **Drop over a `TabStrip`**: dropping the item over a strip will always happen
-  after the chain of events of "**Drag over a `TabStrip`**" has completed. It
-  will:
-  - Stop attaching a drag image to the pointer.
-  - Release the pointer.
-  - Complete the drag operation and trigger the `TabDragComplete`.
-
-- **Drop out of any `TabStrip`**: dropping the item outside of any `TabStrip` in
-  any application window, should be considered as a request to create a new
-  window and host the dropped tab in a new `TabStrip` in that window. This is a
-  complex operation that really does not make sense to be handled by a
-  `TabStrip` control. Instead, the control:
+- **Drop**: because of the two modes of operation, this drop will only happen if
+  the pointer is not over the unpinned bucket of any `TabStrip` in the
+  application. It should be considered as a request to create a new window and
+  host the dropped tab in a new `TabStrip` in that window. This is a complex
+  operation that really does not make sense to be handled by a `TabStrip`
+  control. Instead, the control:
   - triggers the `TabTearOutRequested` event, and lets the application easily
     handle the new window creation, and the rest of the operations needed to
-    create a `TabStrip`, add the item to it and activate it.
-  - Complete the drag operation and trigger the `TabDragComplete`.
-
-- **Esc or Errors during drag/drop**: From the control's perspective, a drag or
-  a drop is always completed — the gesture ends, and the pointer is
-  captured/released. `Esc` does not cancel the operation, but instead is
-  interpreted as a drop. It is the application's responsibility to handle errors
-  appropriately when they occur inside the application. Unrecoverable errors
-  inside the control will abort the operation, the pointer will be released, if
-  captured, and the `TabDragComplete` will be triggered even with no target
-  `TabStrip` or `NewIndex`.
-
-## Activation & Selection Event Timing
-
-When a hidden `TabStripItem` is inserted over another `TabStrip` during drag:
-
-1. The item is added to the `TabStrip`'s collection but not yet visible.
-2. The control performs a layout pass (Measure + Arrange phases).
-3. The item is made visible (visibility restored).
-4. Selection and activation events are raised in the standard order:
-   - `SelectionChanged` (if using `ItemsControl` patterns)
-   - Any `TabActivated` or equivalent event
-
-**Important**: Handlers of these events must not modify the `TabStrip`'s collection
-or drag state. Such modifications may cause undefined behavior or abort the drag
-operation. The application should treat these events as informational during an
-active drag, and defer model changes until `TabDragComplete` is raised.
+    create a `TabStrip`, add the item to it and let it be activated and selected
+    by the control.
+  - Complete the drag operation and trigger the `TabDragComplete` with the new
+    `TabStrip` and index `0`.
 
 ## Pointer Capture & Cross-Window Resilience
 
@@ -165,9 +257,9 @@ active drag, and defer model changes until `TabDragComplete` is raised.
 ## Application Recommendations on TearOut
 
 - Handle `TabCloseRequested` properly from a tabbed document point of view, but
-  in all scenarios, the tab item must be removed from the `TabStrip`. There is
-  no cancellation of a tear-out, and it is not a destructive operation as long
-  as the tab document data model is properly handled by the application.
+  in all scenarios, the Tab be removed from the `TabStrip`. There is no
+  cancellation of a TearOut, and it is not a destructive operation as long as
+  the tab document data model is properly handled by the application.
 
 - Consider closing the window (if it makes sense for the application, and in
   most cases it will) when the last item is removed from the `TabStrip` (i.e.
@@ -181,8 +273,8 @@ important properties each EventArgs should carry.
 
 | Event | When raised | Suggested EventArgs type | Key EventArgs properties |
 |---|---|---:|---|
-| `TabDragImageRequest` | When the dragged tab leaves its originating `TabStrip` and the control requests a document preview for the drag image | `TabDragImageRequestEventArgs` | `TabItem Item` · `Windows.Foundation.Size RequestedSize` · `Microsoft.UI.Xaml.Media.ImageSource? PreviewImage` (set by handler) |
-| `TabCloseRequested` | When a tab is dragged out of its originating `TabStrip` (tear-out begins). The application is expected to remove the tab from its model/collection. | `TabCloseRequestedEventArgs` | `TabItem Item` |
+| `TabDragImageRequest` | When the drag crosses the TearOut threshold and enters TearOut mode. The control requests a document preview to enhance the drag visual. | `TabDragImageRequestEventArgs` | `TabItem Item` · `Windows.Foundation.Size RequestedSize` · `Microsoft.UI.Xaml.Media.ImageSource? PreviewImage` (set by handler) |
+| `TabCloseRequested` | When the drag crosses the TearOut threshold (switching from Reordering to TearOut mode). The application is expected to remove the tab from its model/collection. | `TabCloseRequestedEventArgs` | `TabItem Item` |
 | `TabDragComplete` | After a drop into a `TabStrip`, or out completes successfully or not — indicates the drag operation finished and the item is "eventually" attached to the destination. | `TabDragCompleteEventArgs` | `TabItem Item` · `TabStrip? DestinationStrip` · `int? NewIndex` |
 | `TabTearOutRequested` | When a tab is dropped outside any `TabStrip` — the application should create a new window and host the tab there. | `TabTearOutRequestedEventArgs` | `TabItem Item` · `Windows.Foundation.Point ScreenDropPoint` |
 
@@ -220,14 +312,14 @@ and host the dropped `TabItem` there.
   its original `TabStrip` or discarding it).
 - **Persistence**: Once `TabTearOutRequested` is raised, the original `TabItem` has been
   removed from its source `TabStrip` (via `TabCloseRequested`). The application must not
-  re-add it to the source strip after tear-out failure; instead, create a new `TabItem`
+  re-add it to the source strip after TearOut failure; instead, create a new `TabItem`
   or implement a recovery strategy suitable for the application.
 
 ## State machine diagram
 
 Below is a visual state machine for the TabStrip drag/drop flow. It covers
 pointer activation, dragging inside the originating strip, dragging out
-of the strip (tear-out path), entering another `TabStrip`, drops, and
+of the strip (TearOut path), entering another `TabStrip`, drops, and
 failure/cancel paths. Event names that the control raises (or expects the
 application to handle) are shown on the transitions where they occur.
 
@@ -236,71 +328,50 @@ stateDiagram-v2
     [*] --> Idle
 
     Idle --> PointerDown : pointer click / activate & select
-    PointerDown --> DragInitiated : pointer move (drag threshold)
+    PointerDown --> ReorderInitiated : pointer move (drag threshold)
 
-    DragInitiated --> DragWithinStrip : pointer inside origin TabStrip
-    DragWithinStrip --> DragWithinStrip : cross-adjacent-threshold / swap
-    DragWithinStrip --> DragOutOfStrip : pointer leaves origin bounds
+    %% Reordering Mode: within threshold of origin TabStrip
+    ReorderInitiated --> ReorderMode : insert placeholder, apply TranslateTransform.X
+    ReorderMode --> ReorderMode : cross-adjacent-threshold / swap placeholder & items
+    ReorderMode --> TearOutThreshold : pointer leaves TabStrip by TearOut threshold
+    ReorderMode --> ReorderDrop : pointer release (within TabStrip bounds)
 
-    DragOutOfStrip --> RequestDragImage : raise TabDragImageRequest
-    DragOutOfStrip --> TabCloseRequested : raise TabCloseRequested (app removes item)
+    ReorderDrop --> ReorderComplete : remove TranslateTransform.X, remove placeholder\nraise TabDragComplete
 
-    DragOutOfStrip --> DragOverOtherStrip : pointer enters another TabStrip
-    DragOverOtherStrip --> InsertHiddenItem : insert hidden item (allocate space)
-    InsertHiddenItem --> ActivateNewItem : selection/activation events
-    ActivateNewItem --> DragWithinStrip : continue drag inside destination
+    %% Transition from Reordering to TearOut
+    TearOutThreshold --> TearOutInitiated : remove TranslateTransform.X, remove placeholder\nraise TabCloseRequested, TabDragImageRequest\nstart DragVisualService session
 
-    DragWithinStrip --> DropOverStrip : pointer release inside TabStrip
-    DropOverStrip --> TabDragComplete : raise TabDragComplete
-    TabDragComplete --> Completed
+    %% TearOut Mode: visual overlay, can reenter TabStrip
+    TearOutInitiated --> TearOutDrag : drag visual active
+    TearOutDrag --> TearOutDrag : pointer moves (visual updates)
+    TearOutDrag --> ReenterTabStrip : pointer enters unpinned bucket of a TabStrip
 
-  DragOutOfStrip --> DropOutside : pointer release outside any TabStrip
-  DropOutside --> TabTearOutRequested : raise TabTearOutRequested (app creates window)
-  %% Tear-out requests are immediately followed by drag completion from the control's perspective
-  TabTearOutRequested --> TabDragComplete : app handles new window; control completes drag
+    ReenterTabStrip --> InsertInTabStrip : end drag visual session, insert new TabStripItem
+    InsertInTabStrip --> ActivateItem : selection/activation events
+    ActivateItem --> ReorderMode : switch to Reordering Mode, from Initiation
 
-  %% Esc does NOT cancel; it is interpreted as a drop at the current pointer location.
-  %% Model this as two possible drop transitions depending on pointer location.
-  DragInitiated --> DropOverStrip : Esc (interpreted as drop if pointer over TabStrip)
-  DragInitiated --> DropOutside : Esc (interpreted as drop if pointer outside any TabStrip)
+    %% TearOut Drop scenarios
+    TearOutDrag --> DropOutside : pointer release (outside any TabStrip)
+    DropOutside --> TearOutRequested : raise TabTearOutRequested (app creates window)
+    TearOutRequested --> TearOutComplete : raise TabDragComplete
 
-  %% Unrecoverable internal control errors abort the drag and surface a TabDragComplete
-  %% with no target (no "DestinationStrip / NewIndex). Application-level errors
-  %% should be handled by the application and do not change the control's
-  %% responsibility to complete the drag gesture. The note on the right indicates
-  %% that such errors can occur from any state.
-  %% Unrecoverable internal errors can occur from any state.
-  %% When they do, the control aborts the drag and raises `TabDragComplete`
-  %% with no `DestinationStrip`/`NewIndex` (application should handle cleanup).
+    %% Esc during Reordering
+    ReorderMode --> ReorderDrop : Esc (drop at current position)
 
+    %% Esc during TearOut
+    TearOutDrag --> DropOutside : Esc (drop outside any TabStrip)
+
+    ReorderComplete --> Completed
+    TearOutComplete --> Completed
     Completed --> [*]
 
-  %% Notes as pseudo-states to clarify events
-  %% Use unique substate names so Mermaid doesn't coalesce identical substate ids
-    state RequestDragImage_wait {
-      [*] --> waiting_request
-      waiting_request --> [*]
-    }
-    state TabCloseRequested_event {
-      [*] --> tabclose_signaled
-      tabclose_signaled --> [*]
-    }
-
-    state TabDragComplete_event {
-      [*] --> dragcomplete_signaled
-      dragcomplete_signaled --> [*]
-    }
-
-    state TabTearOutRequested_event {
-      [*] --> tearout_signaled
-      tearout_signaled --> [*]
-    }
-
-    %% Side note: unrecoverable internal errors can occur from any state
+    %% Error handling from any state
     note right of Idle
-      Unrecoverable internal errors may occur in any state.
+      Unrecoverable errors may occur in any state.
       When they do, the control aborts the drag and raises `TabDragComplete`
-      with no `DestinationStrip`/`NewIndex` (application should handle cleanup).
+      with no `DestinationStrip`/`NewIndex`. The drag overlay (if active) disappears.
+      Item state is restored to be consistent (e.g., placeholder removed,
+      TranslateTransform cleared, visibility restored).
     end note
 ```
 
@@ -308,26 +379,44 @@ stateDiagram-v2
 
 - Idle — no pointer interaction.
 - PointerDown — tab clicked; becomes active and selected. Multi-selection resets to the dragged tab.
-- DragInitiated — pointer moved beyond drag threshold; drag image attached, tab header hidden in origin.
-- DragWithinStrip — pointer remains inside a TabStrip; crossing adjacent thresholds causes visual swapping (reordering).
-- DragOutOfStrip — pointer leaves a TabStrip; control requests `TabDragImageRequest` and raises `TabCloseRequested` for origin.
-- DragOverOtherStrip / InsertHiddenItem / ActivateNewItem — entering another TabStrip inserts a hidden item, allocates space, and activates it; dragging continues.
-- DropOverStrip — release inside a TabStrip; raises `TabDragComplete`, stops attaching drag image, releases pointer.
-- DropOutside — release outside any TabStrip; raises `TabTearOutRequested` so the app can create a new window and host the tab.
-- Unrecoverable internal errors — internal control error aborts the operation; the pointer is released and `TabDragComplete` is raised with no `DestinationStrip`/`NewIndex`.
-- Application errors — application handlers should manage recoverable errors; the control expects handlers to perform appropriate cleanup. The control will still complete the gesture from its perspective.
-- Completed — final state after cleanup and events.
+- ReorderInitiated — pointer moved beyond drag threshold; enters **Reordering Mode**.
+- ReorderMode — pointer remains within TearOut threshold of origin TabStrip. Uses placeholder item and `TranslateTransform.X` for visual feedback. Crossing adjacent items swaps placeholder and items with animation. No drag visual overlay.
+- TearOutThreshold — pointer leaves TabStrip by more than TearOut threshold; switches from **Reordering Mode** to **TearOut Mode**. Removes placeholder and TranslateTransform, raises `TabCloseRequested` and `TabDragImageRequest`, starts `DragVisualService` session.
+- TearOutInitiated — TearOut mode activated; drag visual overlay (header + optional preview) now follows pointer.
+- TearOutDrag — drag visual continues; pointer can enter/leave TabStrip bounds. Entering unpinned bucket immediately transitions to Reordering Mode.
+- ReenterTabStrip — pointer enters unpinned bucket of a TabStrip during TearOut; ends drag visual session, inserts hidden item, triggers selection/activation events.
+- InsertInTabStrip / ActivateItem — new TabStripItem added to destination strip, explicitly activated and selected.
+- ReorderDrop — pointer released while in Reordering Mode (within TabStrip); removes TranslateTransform and placeholder, raises `TabDragComplete`.
+- DropOutside — pointer released while in TearOut Mode (outside any TabStrip); raises `TabTearOutRequested` so app creates window.
+- Completed — final state; drag operation finished, all resources cleaned up.
+- Unrecoverable errors — can occur from any state; drag aborts, overlay disappears, `TabDragComplete` raised with no `DestinationStrip`/`NewIndex`.
 
 ## Implementation Notes
 
-- During drag over a `TabStrip`, the inserted (but to be confirmed)
-  `TabStripItem` is a fully working item, selected and activated like any other
-  item added to the `TabStrip`, but simply not yet permanent, and is hidden as
-  if it were dragged. Once the drop is done, it is confirmed. If the drag leaves
-  the `TabStrip`, it goes through the same lifecycle as an item that was dragged
-  out.
+- **Two-Mode Strategy Pattern**: The implementation should use a strategy pattern with automatic
+  switching between `ReorderStrategy` and `TearOutStrategy`:
+  - **Reordering Mode** (within threshold): Uses placeholder items and `TranslateTransform.X` for lightweight,
+    in-place visual feedback. No overlay; dragging stays contained within the source `TabStrip`.
+  - **TearOut Mode** (exceeding threshold): Uses `IDragVisualService` to display a floating overlay with
+    header and optional preview images. Allows free movement and cross-window drag/drop.
 
-- **TabDragCoordinator**: An internal class registered as a singleton in the DI container that maintains the active
+- **Placeholder Management** (Reordering Mode):
+  - Insert placeholder left/right of dragged item based on drag direction.
+  - Swap placeholder with adjacent items when threshold is crossed.
+  - Remove placeholder and restore item position when transitioning to TearOut or on drop.
+
+- **Drag Visual Service Session** (TearOut Mode):
+  - Session starts when TearOut threshold is exceeded.
+  - Session ends when pointer re-enters unpinned bucket of any `TabStrip`.
+  - Session must be properly disposed on drop or error.
+
+- **Mode Transition from TearOut to Reordering**:
+  - When pointer enters unpinned bucket of a `TabStrip` during TearOut, end the drag visual session.
+  - Insert new `TabStripItem` into the destination `TabStrip`.
+  - Trigger selection/activation events.
+  - Continue in Reordering Mode from Initiation (not from the new item's current state).
+
+- **TabDragCoordinator**: An internal singleton class in the DI container that maintains active
   drag state across all `TabStrip` instances in the same application process.
 
   Design:
@@ -367,10 +456,11 @@ stateDiagram-v2
 Errors originating within the `TabStrip` control or `TabDragCoordinator` that prevent
 drag completion (e.g., out of memory, catastrophic service failure):
 
-- **Visual Feedback**: The drag overlay disappears immediately.
+- **Visual Feedback**:
+  - In **Reordering Mode**: Placeholder is removed, `TranslateTransform.X` is cleared.
+  - In **TearOut Mode**: Drag visual overlay disappears immediately.
 - **Pointer State**: Pointer capture is released.
-- **Item State**: The originally dragged `TabStripItem` remains in its original position
-  (it was hidden; the control restores visibility).
+- **Item State**: The originally dragged `TabStripItem` is restored to be visible in its original position.
 - **Event Raised**: `TabDragComplete` is raised with `DestinationStrip = null` and `NewIndex = null`.
 - **Application Recovery**: The application may detect this state via the null `DestinationStrip`
   and implement error logging, retry, or rollback logic as appropriate.
@@ -498,52 +588,170 @@ public sealed class DragVisualDescriptor : ObservableObject
 The drag visual system uses **three coordinate spaces**:
 
 1. **XAML Logical Pixels (DIPs)**: WinUI control-relative coordinates (e.g., pointer position within TabStrip)
-2. **Screen Logical Pixels**: Display-independent screen coordinates (96 DPI baseline)
-3. **Screen Physical Pixels**: Device-dependent screen coordinates (actual monitor pixels)
+2. **Screen Logical Pixels**: Desktop-relative logical coordinates (96 DPI baseline, returned by `TransformToVisual(null)`)
+3. **Screen Physical Pixels**: Device-dependent screen coordinates (actual monitor pixels, returned by Win32 `GetCursorPos`)
 
-**Ownership & Conversion Rules:**
+#### Coordinate System Ownership (The Contract)
+
+**TabStrip (XAML Logical Space)**:
+
+- **Owns**: All XAML control-relative coordinates from pointer events (`PointerPressed`, `PointerMoved`, `PointerReleased`)
+- **Receives**: `PointerRoutedEventArgs.GetCurrentPoint(this)` returns control-relative logical pixels
+- **Produces**:
+  - Hotspot offset (logical pixels, calculated via `TransformToVisual` between header and TabStrip)
+  - Screen-relative logical coordinates via `TransformToVisual(null)` which returns **desktop-relative DIPs**
+- **Conversions**:
+  - `OnPreviewPointerReleased`: Converts screen logical → screen physical using `Native.LogicalToPhysicalPoint(logicalScreenPoint, dpi)`
+  - **CRITICAL**: Must convert to physical before passing to `TabDragCoordinator.EndDrag()` because coordinator only accepts physical coordinates
+
+**TabDragCoordinator (Physical Screen Space)**:
+
+- **Owns**: All cross-window, monitor-aware drag coordination in **physical screen pixels**
+- **Receives**: Physical screen coordinates from:
+  - `StartDrag(hotspot in logical, cursor in physical from GetCursorPos)`
+  - `EndDrag(cursor in physical)` — caller MUST convert from logical to physical first
+  - Polling timer calls `GetCursorPos()` → physical screen pixels
+- **Stores**:
+  - `dragStartCursor_` in physical pixels
+  - Hotspot in logical pixels (passed to `DragVisualService` which performs its own conversions)
+- **Conversions**:
+  - `IsWithinTearOutThreshold`: Converts **screen logical** strip bounds (from `TransformToVisual(null)`) to **physical** using cursor DPI heuristic
+  - **HEURISTIC LIMITATION**: Uses `GetDpiForPoint(physicalCursor)` to convert strip bounds because:
+    1. `TransformToVisual(null)` returns **logical** coordinates (not physical)
+    2. We need monitor DPI to convert logical → physical
+    3. `GetDpiForPoint` requires **physical** coordinates to detect monitor
+    4. We use cursor's physical position as proxy to detect "current monitor DPI"
+    5. **Works correctly when strip and cursor are on same monitor** (common case)
+    6. **May fail when strip is on different monitor than cursor** (rare edge case during cross-monitor drag)
+- **Guarantees**: All threshold checks happen in physical pixels for consistent behavior across monitors
+
+**DragVisualService (Mixed: Receives Physical, Outputs Physical, Uses Logical Internally)**:
+
+- **Owns**: Overlay positioning in physical screen pixels for Win32 `SetWindowPos`
+- **Receives**:
+  - `StartSession(descriptor, hotspot)`: Hotspot in **logical pixels** (XAML coordinate space)
+  - `UpdatePosition(token, screenPoint)`: Cursor in **physical screen pixels** (from `GetCursorPos`)
+- **Stores**:
+  - Hotspot in logical pixels (never converted during session)
+  - Overlay position computed in physical pixels
+- **Conversions** (all internal):
+  - On **every** `UpdatePosition` call:
+    1. `GetDpiForPoint(physicalCursor)` → detect current monitor DPI
+    2. `PhysicalToLogicalPoint(physicalCursor, currentDpi)` → cursor in logical
+    3. `PhysicalToLogicalPoint(hotspotPhysical, currentDpi)` → hotspot in logical (if stored as physical)
+    4. OR keep hotspot in logical throughout (simpler)
+    5. Compute overlay position: `logicalCursor - logicalHotspot`
+    6. `LogicalToPhysicalPoint(overlayLogical, currentDpi)` → physical for Win32
+- **Guarantees**: Overlay stays pixel-perfect aligned with cursor across monitors with different DPI scaling
+
+#### Data Flow Diagram
 
 ```mermaid
 graph TD
-    A[TabStrip: XAML Logical] -->|TransformToVisual| B[TabStrip: Compute hotspot in XAML logical pixels]
-    B -->|No conversion| C[Coordinator.StartDrag: hotspot in logical pixels]
+    A[TabStrip.OnPreviewPointerPressed] -->|XAML Logical control-relative| B[Calculate hotspot via TransformToVisual]
+    B -->|XAML Logical hotspot offset| C[GetCursorPos: Physical Pixels]
+    C -->|Physical screen cursor| D[Coordinator.StartDrag hotspot logical, cursor physical]
 
-    D[Win32 GetCursorPos] -->|Returns| E[Physical Screen Pixels]
-    E -->|No conversion| F[Coordinator: Store & poll physical pixels]
-    F -->|Pass physical| G[DragVisualService.UpdatePosition]
+    E[TabStrip.OnPreviewPointerMoved] -->|XAML Logical control-relative| F[Ignored during drag]
 
-    G -->|GetDpiForPoint current cursor| H[Service: Get current DPI]
-    H -->|PhysicalToLogical| I[Service: Convert cursor to logical]
-    H -->|PhysicalToLogical| J[Service: Convert hotspot to logical once at StartSession]
-    I -->|Subtract logical hotspot| K[Service: Compute overlay position logical]
-    K -->|LogicalToPhysical current DPI| L[Service: Convert to physical for SetWindowPos]
+    G[Coordinator Polling Timer] -->|GetCursorPos| H[Physical screen cursor]
+    H -->|Physical| I[IsWithinTearOutThreshold]
+    I -->|TransformToVisual null: Screen Logical| J[Strip bounds in LOGICAL]
+    J -->|GetDpiForPoint physicalCursor| K[Detect cursor monitor DPI HEURISTIC]
+    K -->|LogicalToPhysicalPoint strip bounds, cursor DPI| L[Strip bounds in PHYSICAL]
+    L -->|Physical threshold check| M[Switch modes if needed]
+
+    N[TabStrip.OnPreviewPointerReleased] -->|GetCurrentPoint null: Screen Logical| O[Logical screen coordinates]
+    O -->|GetDpiForPoint| P[Detect monitor DPI]
+    P -->|LogicalToPhysicalPoint| Q[Physical screen coordinates]
+    Q -->|Physical| R[Coordinator.EndDrag physical cursor]
+
+    D -->|Physical cursor| S[DragVisualService.UpdatePosition]
+    H -->|Physical cursor| S
+    S -->|GetDpiForPoint physicalCursor| T[Detect current monitor DPI]
+    T -->|PhysicalToLogical cursor| U[Cursor in logical]
+    T -->|Keep hotspot in logical| V[Hotspot in logical from StartSession]
+    U -->|Subtract logical hotspot| W[Overlay position logical]
+    W -->|LogicalToPhysical current DPI| X[SetWindowPos: Physical]
 
     style A fill:#e1f5ff
-    style E fill:#ffe1e1
-    style G fill:#e1ffe1
-    style L fill:#ffe1e1
+    style C fill:#ffe1e1
+    style H fill:#ffe1e1
+    style K fill:#fff3cd
+    style Q fill:#ffe1e1
+    style S fill:#e1ffe1
+    style X fill:#ffe1e1
 ```
 
-**Critical Rule**: Only `DragVisualService` performs DPI conversions. It receives:
+**Legend**:
 
-- **Hotspot** in logical pixels (XAML coordinate space, DPI-agnostic)
-- **Cursor position** in physical pixels (from `GetCursorPos`, DPI-agnostic screen coordinates)
+- 🔵 Blue: XAML Logical Space (TabStrip)
+- 🔴 Red: Physical Screen Space (Win32, GetCursorPos)
+- 🟢 Green: DragVisualService (receives physical, converts internally)
+- 🟡 Yellow: Heuristic/Approximation (cursor DPI proxy)
 
-**Why this design?**
+#### Critical Conversion Points
 
-- **Cross-monitor support**: Service detects DPI changes by calling `GetDpiForPoint(currentCursor)` on every update
-- **Single source of truth**: Service owns all physical↔logical conversions based on current monitor DPI
-- **Coordinator simplicity**: Coordinator just polls `GetCursorPos` and passes raw physical pixels
-- **Hotspot stability**: Hotspot is in logical pixels (matches XAML coordinate space where it was calculated)
+| Location | Input | Output | Method | Notes |
+|----------|-------|--------|--------|-------|
+| `TabStrip.OnPreviewPointerReleased` | Screen logical (from `GetCurrentPoint(null)`) | Screen physical | `Native.LogicalToPhysicalPoint(point, dpi)` | **MUST** convert before calling `EndDrag`. Use `GetDpiForPoint` on logical point to detect monitor DPI. |
+| `TabDragCoordinator.IsWithinTearOutThreshold` | Screen logical strip bounds (from `TransformToVisual(null)`) | Screen physical | `Native.LogicalToPhysicalPoint(point, cursorDpi)` | **HEURISTIC**: Uses cursor DPI to convert strip bounds. Works when strip and cursor are on same monitor. |
+| `DragVisualService.UpdatePosition` | Screen physical cursor (from `GetCursorPos`) | Screen physical overlay position | Internal: `PhysicalToLogical` → compute → `LogicalToPhysical` | Service detects current monitor DPI via `GetDpiForPoint(physicalCursor)` and performs all conversions. |
 
-**Cross-Monitor Scenario:**
+#### Multi-Monitor Behavior & Limitations
 
-1. Drag starts on 100% DPI monitor (96 DPI)
-2. Cursor moves to 175% DPI monitor (168 DPI)
-3. Coordinator continues passing physical pixels (no conversion)
-4. Service detects new DPI via `GetDpiForPoint(physicalCursor)`
-5. Service converts **both** cursor and hotspot using **current** DPI
-6. Overlay stays aligned with cursor across monitors ✓
+**Scenario 1: Drag within single monitor** ✅
+
+- Strip on Monitor A (150% DPI)
+- Cursor stays on Monitor A
+- Result: All conversions use Monitor A's DPI → **Works perfectly**
+
+**Scenario 2: Drag from Monitor A to Monitor B (cursor moves)** ✅
+
+- Strip on Monitor A (150% DPI), cursor moves to Monitor B (100% DPI)
+- `DragVisualService` detects DPI change via `GetDpiForPoint(physicalCursor)` on each update
+- Overlay re-scales smoothly to match new monitor → **Works perfectly**
+
+**Scenario 3: Strip spans monitors or strip on different monitor than cursor** ⚠️
+
+- Strip on Monitor A (150% DPI), cursor on Monitor B (100% DPI)
+- `IsWithinTearOutThreshold` uses cursor DPI (100%) to convert strip bounds
+- Strip bounds calculated with wrong DPI → threshold check may fail
+- Result: May incorrectly switch to TearOut mode → **Heuristic limitation**
+- **Workaround**: Use `MonitorFromWindow(stripHwnd)` + `GetDpiForMonitor` to get true strip monitor DPI
+- **Current Status**: Accepted limitation; rare edge case in practice
+
+
+#### Design Rationale
+
+**Why TabDragCoordinator uses physical pixels:**
+
+- Must poll `GetCursorPos()` when pointer capture is lost (cross-window drag, source window closes)
+- Win32 `GetCursorPos` returns physical pixels
+- Threshold checks must be DPI-aware and consistent across monitors
+- Physical pixels provide ground truth for cross-monitor scenarios
+
+**Why hotspot stays in logical pixels:**
+
+- Hotspot is calculated in XAML coordinate space (control-relative)
+- `TransformToVisual` returns logical offsets
+- Passing logical hotspot to service defers DPI conversion to the component that knows the current monitor DPI
+- Service converts hotspot to physical **once** at `StartSession` using initial monitor DPI
+
+**Why TransformToVisual(null) returns logical, not physical:**
+
+- WinUI 3 design: XAML always works in logical pixels (DIPs) for layout consistency
+- `TransformToVisual(null)` transforms to root visual space, which is still logical
+- Applications must explicitly call Win32 APIs (`LogicalToPhysicalPoint`) to convert to physical
+- This separation ensures XAML layout is DPI-agnostic
+
+**Why cursor DPI heuristic is acceptable:**
+
+- **Common case**: During active drag, cursor is typically near or over the strip → same monitor
+- **Performance**: Avoids HWND lookup and `MonitorFromWindow` API calls on every threshold check
+- **Simplicity**: No need to track window handles or monitor topology changes
+- **Failure mode**: Rare edge case (strip and cursor on different monitors) may cause premature mode switch
+- **Future enhancement**: Can add true monitor detection if needed without breaking contract
 
 ### Implementation Notes
 

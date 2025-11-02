@@ -48,7 +48,7 @@ public partial class DragVisualService : IDragVisualService
     }
 
     /// <inheritdoc/>
-    public DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point hotspot)
+    public DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point logicalHotspot)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         this.AssertUIThread();
@@ -64,7 +64,7 @@ public partial class DragVisualService : IDragVisualService
             var token = new DragSessionToken { Id = Guid.NewGuid() };
             this.activeToken = token;
             this.activeDescriptor = descriptor;
-            this.hotspot = hotspot;
+            this.hotspot = logicalHotspot;
 
             // Subscribe to descriptor changes
             this.activeDescriptor.PropertyChanged += this.OnDescriptorPropertyChanged;
@@ -79,7 +79,7 @@ public partial class DragVisualService : IDragVisualService
     }
 
     /// <inheritdoc/>
-    public void UpdatePosition(DragSessionToken token, Windows.Foundation.Point screenPoint)
+    public void UpdatePosition(DragSessionToken token, Windows.Foundation.Point physicalScreenPoint)
     {
         this.AssertUIThread();
 
@@ -97,31 +97,31 @@ public partial class DragVisualService : IDragVisualService
                 return;
             }
 
-            // screenPoint is in physical screen pixels (from GetCursorPos).
+            // physicalScreenPoint is in PHYSICAL screen pixels (from GetCursorPos).
             // Get DPI for the CURRENT cursor position to handle cross-monitor scenarios.
-            var dpi = Native.GetDpiForPoint(screenPoint);
+            var dpi = Native.GetDpiForPhysicalPoint(physicalScreenPoint);
 
-            // Convert cursor from physical to logical using current monitor DPI
-            var cursorLogical = Native.PhysicalToLogicalPoint(
-                new Native.POINT((int)screenPoint.X, (int)screenPoint.Y),
+            // Convert cursor from PHYSICAL to LOGICAL using current monitor DPI
+            var logicalCursor = Native.GetLogicalPointFromPhysical(
+                new Native.POINT((int)physicalScreenPoint.X, (int)physicalScreenPoint.Y),
                 dpi);
 
-            // Subtract hotspot (already in logical pixels) to get window position
-            var windowLogical = new Windows.Foundation.Point(
-                cursorLogical.X - this.hotspot.X,
-                cursorLogical.Y - this.hotspot.Y);
+            // Subtract hotspot (already in LOGICAL pixels) to get window position in LOGICAL
+            var logicalWindowPosition = new Windows.Foundation.Point(
+                logicalCursor.X - this.hotspot.X,
+                logicalCursor.Y - this.hotspot.Y);
 
-            // Convert window position back to physical for Win32 SetWindowPos
-            var physicalPos = Native.LogicalToPhysicalPoint(windowLogical, dpi);
+            // Convert window position from LOGICAL to PHYSICAL for Win32 SetWindowPos
+            var physicalWindowPosition = Native.GetPhysicalPointFromLogical(logicalWindowPosition, dpi);
 
-            this.LogPositionUpdated(screenPoint, dpi, physicalPos);
+            this.LogPositionUpdated(physicalScreenPoint, dpi, physicalWindowPosition);
 
-            // Update window position using physical coordinates
+            // Update window position using PHYSICAL coordinates
             _ = Native.SetWindowPos(
                 this.overlayWindow,
                 Native.HWND_TOPMOST,
-                physicalPos.X,
-                physicalPos.Y,
+                physicalWindowPosition.X,
+                physicalWindowPosition.Y,
                 0,
                 0,
                 Native.SetWindowPosFlags.SWP_NOSIZE | Native.SetWindowPosFlags.SWP_NOACTIVATE | Native.SetWindowPosFlags.SWP_SHOWWINDOW);
@@ -205,7 +205,7 @@ public partial class DragVisualService : IDragVisualService
 
         // Use default DPI for initial creation
         const uint defaultDpi = 96;
-        var physicalSize = Native.LogicalToPhysicalSize(requestedSize, defaultDpi);
+        var physicalSize = Native.GetPhysicalSizeFromLogical(requestedSize, defaultDpi);
 
         this.overlayWidth = Math.Max(1, physicalSize.Width);
         this.overlayHeight = Math.Max(1, physicalSize.Height);

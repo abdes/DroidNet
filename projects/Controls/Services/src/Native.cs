@@ -303,6 +303,11 @@ public static partial class Native
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetCursorPos(out POINT lpPoint);
 
+    [LibraryImport(User32, SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static partial bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
     [LibraryImport(User32, SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     public static partial IntPtr CreateWindowExW(
@@ -485,34 +490,34 @@ public static partial class Native
     public static readonly IntPtr HWND_TOPMOST = new(-1);
 
     /// <summary>Converts logical (DIP) coordinates to physical pixels using the specified DPI.</summary>
-    /// <param name="logical">Logical coordinate value.</param>
+    /// <param name="logicalValue">Logical coordinate value in DIPs.</param>
     /// <param name="dpi">DPI value (e.g., 96 for 100% scaling, 144 for 150%).</param>
     /// <returns>Physical pixel value.</returns>
-    public static int LogicalToPhysical(double logical, uint dpi)
+    public static int LogicalToPhysical(double logicalValue, uint dpi)
     {
         const uint StandardDpi = 96;
-        return (int)Math.Round(logical * dpi / StandardDpi);
+        return (int)Math.Round(logicalValue * dpi / StandardDpi);
     }
 
     /// <summary>Converts physical pixels to logical (DIP) coordinates using the specified DPI.</summary>
-    /// <param name="physical">Physical pixel value.</param>
+    /// <param name="physicalValue">Physical pixel value.</param>
     /// <param name="dpi">DPI value (e.g., 96 for 100% scaling, 144 for 150%).</param>
-    /// <returns>Logical coordinate value.</returns>
-    public static double PhysicalToLogical(int physical, uint dpi)
+    /// <returns>Logical coordinate value in DIPs.</returns>
+    public static double PhysicalToLogical(int physicalValue, uint dpi)
     {
         const uint StandardDpi = 96;
-        return physical * StandardDpi / (double)dpi;
+        return physicalValue * StandardDpi / (double)dpi;
     }
 
     /// <summary>Gets the DPI for the monitor containing the specified point.</summary>
-    /// <param name="screenPoint">Screen point in logical pixels.</param>
+    /// <param name="physicalScreenPoint">Screen point in **PHYSICAL PIXELS** (e.g., from GetCursorPos).</param>
     /// <returns>DPI value, or 96 (100% scaling) if retrieval fails.</returns>
-    public static uint GetDpiForPoint(Windows.Foundation.Point screenPoint)
+    public static uint GetDpiForPhysicalPoint(Windows.Foundation.Point physicalScreenPoint)
     {
         const uint DefaultDpi = 96;
         const uint MONITOR_DEFAULTTONEAREST = 2;
 
-        var pt = new POINT((int)screenPoint.X, (int)screenPoint.Y);
+        var pt = new POINT((int)physicalScreenPoint.X, (int)physicalScreenPoint.Y);
         var hMonitor = MonitorFromPoint(pt, MONITOR_DEFAULTTONEAREST);
 
         if (hMonitor == IntPtr.Zero)
@@ -524,24 +529,262 @@ public static partial class Native
         return hr == 0 ? dpiX : DefaultDpi;
     }
 
-    /// <summary>Converts a WinRT Point from logical to physical coordinates.</summary>
-    /// <param name="logicalPoint">Logical point.</param>
+    /// <summary>Converts a WinRT Point from logical DIPs to physical screen pixels.</summary>
+    /// <param name="logicalPoint">Logical point in DIPs.</param>
     /// <param name="dpi">DPI value.</param>
-    /// <returns>Physical point.</returns>
-    public static POINT LogicalToPhysicalPoint(Windows.Foundation.Point logicalPoint, uint dpi)
+    /// <returns>Physical point in screen pixels.</returns>
+    public static POINT GetPhysicalPointFromLogical(Windows.Foundation.Point logicalPoint, uint dpi)
         => new(LogicalToPhysical(logicalPoint.X, dpi), LogicalToPhysical(logicalPoint.Y, dpi));
 
-    /// <summary>Converts a POINT from physical to logical coordinates.</summary>
-    /// <param name="physicalPoint">Physical point.</param>
+    /// <summary>Converts a logical screen point to physical screen pixels using the correct monitor DPI.</summary>
+    /// <param name="logicalScreenPoint">Logical screen point in DIPs.</param>
+    /// <returns>Physical point in screen pixels.</returns>
+    /// <remarks>
+    /// For multi-monitor setups with different DPIs, this method finds the monitor containing
+    /// the logical point and uses that monitor's DPI for the conversion.
+    /// </remarks>
+    public static Windows.Foundation.Point GetPhysicalScreenPointFromLogical(Windows.Foundation.Point logicalScreenPoint)
+    {
+        // First, convert using default DPI to get approximate physical location
+        const uint DefaultDpi = 96;
+        var approxPhysicalPoint = GetPhysicalPointFromLogical(logicalScreenPoint, DefaultDpi);
+
+        // Find the monitor at this location and get its actual DPI
+        var actualDpi = GetDpiForPhysicalPoint(new Windows.Foundation.Point(approxPhysicalPoint.X, approxPhysicalPoint.Y));
+
+        // Convert again using the correct DPI
+        var correctPhysicalPoint = GetPhysicalPointFromLogical(logicalScreenPoint, actualDpi);
+        return new Windows.Foundation.Point(correctPhysicalPoint.X, correctPhysicalPoint.Y);
+    }
+
+    /// <summary>Converts a POINT from physical screen pixels to logical DIPs.</summary>
+    /// <param name="physicalPoint">Physical point in screen pixels.</param>
     /// <param name="dpi">DPI value.</param>
-    /// <returns>Logical point as WinRT Point.</returns>
-    public static Windows.Foundation.Point PhysicalToLogicalPoint(POINT physicalPoint, uint dpi)
+    /// <returns>Logical point in DIPs as WinRT Point.</returns>
+    public static Windows.Foundation.Point GetLogicalPointFromPhysical(POINT physicalPoint, uint dpi)
         => new(PhysicalToLogical(physicalPoint.X, dpi), PhysicalToLogical(physicalPoint.Y, dpi));
 
-    /// <summary>Converts a WinRT Size from logical to physical coordinates.</summary>
-    /// <param name="logicalSize">Logical size.</param>
+    /// <summary>Converts a WinRT Size from logical DIPs to physical screen pixels.</summary>
+    /// <param name="logicalSize">Logical size in DIPs.</param>
     /// <param name="dpi">DPI value.</param>
-    /// <returns>Physical size.</returns>
-    public static SIZE LogicalToPhysicalSize(Windows.Foundation.Size logicalSize, uint dpi)
+    /// <returns>Physical size in screen pixels.</returns>
+    public static SIZE GetPhysicalSizeFromLogical(Windows.Foundation.Size logicalSize, uint dpi)
         => new(LogicalToPhysical(logicalSize.Width, dpi), LogicalToPhysical(logicalSize.Height, dpi));
+
+    /// <summary>
+    /// Represents a rectangle in physical screen pixels.
+    /// </summary>
+    /// <param name="Left">The x-coordinate of the left edge.</param>
+    /// <param name="Top">The y-coordinate of the top edge.</param>
+    /// <param name="Right">The x-coordinate of the right edge.</param>
+    /// <param name="Bottom">The y-coordinate of the bottom edge.</param>
+    [StructLayout(LayoutKind.Sequential)]
+    public readonly record struct PhysicalRect(int Left, int Top, int Right, int Bottom)
+    {
+        /// <summary>Gets the width of the rectangle in physical pixels.</summary>
+        public int Width => this.Right - this.Left;
+
+        /// <summary>Gets the height of the rectangle in physical pixels.</summary>
+        public int Height => this.Bottom - this.Top;
+
+        /// <summary>
+        /// Checks if a physical point is within this rectangle.
+        /// </summary>
+        /// <param name="physicalPoint">Point in physical screen pixels.</param>
+        /// <returns>True if the point is within the rectangle bounds.</returns>
+        public bool Contains(Windows.Foundation.Point physicalPoint)
+            => physicalPoint.X >= this.Left && physicalPoint.X <= this.Right &&
+               physicalPoint.Y >= this.Top && physicalPoint.Y <= this.Bottom;
+    }
+
+    /// <summary>
+    /// Gets the DPI value from a WinUI XamlRoot's RasterizationScale.
+    /// </summary>
+    /// <param name="xamlRoot">The XamlRoot to get DPI from.</param>
+    /// <returns>DPI value (e.g., 96 for 100%, 168 for 175%).</returns>
+    public static uint GetDpiFromXamlRoot(Microsoft.UI.Xaml.XamlRoot? xamlRoot)
+    {
+        const uint DefaultDpi = 96;
+        return xamlRoot == null ? DefaultDpi : (uint)(xamlRoot.RasterizationScale * 96);
+    }
+
+    /// <summary>
+    /// Gets the Window containing the specified UI element using the XamlRoot's AppWindowId.
+    /// </summary>
+    /// <param name="element">The UI element to find the window for.</param>
+    /// <returns>The Window containing the element, or null if not found or no XamlRoot.</returns>
+    /// <remarks>
+    /// This method uses XamlRoot.ContentIslandEnvironment.AppWindowId to get the WindowId,
+    /// then converts it back to an HWND to find the matching Window. This works even when
+    /// XamlRoot.Content is a custom type like RouterOutlet.
+    /// </remarks>
+    public static Microsoft.UI.Xaml.Window? GetWindowForElement(Microsoft.UI.Xaml.FrameworkElement element)
+    {
+        if (element.XamlRoot?.ContentIslandEnvironment == null)
+        {
+            return null;
+        }
+
+        var windowId = element.XamlRoot.ContentIslandEnvironment.AppWindowId;
+        var hwnd = Microsoft.UI.Win32Interop.GetWindowFromWindowId(windowId);
+
+        if (hwnd == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        // Unfortunately, there's no direct API to get Window from HWND in WinUI 3
+        // The app must track windows themselves using a Dictionary<WindowId, Window>
+        // For now, return null - callers should pass Window reference directly
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the HWND (window handle) for the window containing the specified UI element.
+    /// </summary>
+    /// <param name="element">The UI element to find the window handle for.</param>
+    /// <returns>The HWND of the window, or IntPtr.Zero if not found.</returns>
+    public static IntPtr GetHwndForElement(Microsoft.UI.Xaml.FrameworkElement element)
+    {
+        if (element.XamlRoot?.ContentIslandEnvironment == null)
+        {
+            return IntPtr.Zero;
+        }
+
+        var windowId = element.XamlRoot.ContentIslandEnvironment.AppWindowId;
+        return Microsoft.UI.Win32Interop.GetWindowFromWindowId(windowId);
+    }
+
+    /// <summary>
+    /// Gets the physical screen bounds of a UI element using the element's XamlRoot to calculate
+    /// logical-to-physical conversion. This method uses TransformToVisual(null) which may have
+    /// coordinate system issues in multi-monitor setups with different DPI scales.
+    /// </summary>
+    /// <param name="element">The UI element to get bounds for.</param>
+    /// <returns>Physical rectangle in screen pixels, or null if the element has no XamlRoot.</returns>
+    /// <remarks>
+    /// IMPORTANT: This method has known accuracy issues in multi-monitor setups where the window
+    /// extends content into the titlebar. TransformToVisual(null) returns coordinates in a
+    /// DPI-virtualized space that doesn't properly map to physical screen coordinates from GetCursorPos.
+    /// For accurate bounds, use GetPhysicalScreenBoundsUsingWindowRect instead.
+    /// </remarks>
+    public static PhysicalRect? GetPhysicalScreenBounds(Microsoft.UI.Xaml.FrameworkElement element)
+    {
+        if (element.XamlRoot == null)
+        {
+            return null;
+        }
+
+        var dpi = GetDpiFromXamlRoot(element.XamlRoot);
+
+        // Get element's position in screen coordinates (LOGICAL, desktop-relative DIPs)
+        // Note: This may not account properly for multi-monitor DPI differences
+        var transform = element.TransformToVisual(visual: null);
+        var logicalTopLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+        var logicalBottomRight = transform.TransformPoint(new Windows.Foundation.Point(element.ActualWidth, element.ActualHeight));
+
+        // Convert from LOGICAL to PHYSICAL using the element's DPI
+        return new PhysicalRect(
+            Left: LogicalToPhysical(logicalTopLeft.X, dpi),
+            Top: LogicalToPhysical(logicalTopLeft.Y, dpi),
+            Right: LogicalToPhysical(logicalBottomRight.X, dpi),
+            Bottom: LogicalToPhysical(logicalBottomRight.Y, dpi));
+    }
+
+    /// <summary>
+    /// Gets the physical screen bounds of a UI element using Win32 GetWindowRect for accurate positioning.
+    /// This method uses the element's XamlRoot to get the window HWND directly, avoiding the need
+    /// for a Window reference.
+    /// </summary>
+    /// <param name="element">The UI element to get bounds for.</param>
+    /// <returns>Physical rectangle in screen pixels, or null on failure.</returns>
+    /// <remarks>
+    /// This is the ACCURATE method for getting physical screen bounds in multi-monitor setups.
+    /// It uses Win32 GetWindowRect to get the window's physical position, then transforms the
+    /// element's position relative to the window content, avoiding WinUI's DPI virtualization issues.
+    /// </remarks>
+    public static PhysicalRect? GetPhysicalScreenBoundsUsingWindowRect(Microsoft.UI.Xaml.FrameworkElement element)
+    {
+        var hwnd = GetHwndForElement(element);
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var windowRect))
+        {
+            return null;
+        }
+
+        if (element.XamlRoot?.Content == null)
+        {
+            return null;
+        }
+
+        var dpi = GetDpiForWindow(hwnd);
+
+        // Get element's position within its window (LOGICAL window-relative coordinates)
+        var transformToWindow = element.TransformToVisual(element.XamlRoot.Content);
+        var logicalTopLeftInWindow = transformToWindow.TransformPoint(new Windows.Foundation.Point(0, 0));
+        var logicalBottomRightInWindow = transformToWindow.TransformPoint(new Windows.Foundation.Point(element.ActualWidth, element.ActualHeight));
+
+        // Convert element's window-relative position from LOGICAL to PHYSICAL
+        var physicalLeftInWindow = LogicalToPhysical(logicalTopLeftInWindow.X, dpi);
+        var physicalTopInWindow = LogicalToPhysical(logicalTopLeftInWindow.Y, dpi);
+        var physicalRightInWindow = LogicalToPhysical(logicalBottomRightInWindow.X, dpi);
+        var physicalBottomInWindow = LogicalToPhysical(logicalBottomRightInWindow.Y, dpi);
+
+        // Calculate element's absolute PHYSICAL screen bounds
+        return new PhysicalRect(
+            Left: windowRect.Left + physicalLeftInWindow,
+            Top: windowRect.Top + physicalTopInWindow,
+            Right: windowRect.Left + physicalRightInWindow,
+            Bottom: windowRect.Top + physicalBottomInWindow);
+    }
+
+    /// <summary>
+    /// Gets the physical screen bounds of a UI element using Win32 GetWindowRect for accurate positioning.
+    /// This method requires a Window instance to get the HWND.
+    /// </summary>
+    /// <param name="element">The UI element to get bounds for.</param>
+    /// <param name="window">The Window containing the element.</param>
+    /// <returns>Physical rectangle in screen pixels, or null on failure.</returns>
+    [Obsolete("Use GetPhysicalScreenBoundsUsingWindowRect() instead - it doesn't require a Window parameter")]
+    public static PhysicalRect? GetPhysicalScreenBoundsFromWindow(Microsoft.UI.Xaml.FrameworkElement element, Microsoft.UI.Xaml.Window window)
+    {
+        if (window?.Content == null)
+        {
+            return null;
+        }
+
+        IntPtr hwnd;
+        try
+        {
+            hwnd = WinRT.Interop.WindowNative.GetWindowHandle(window);
+        }
+        catch (InvalidCastException)
+        {
+            return null;
+        }
+
+        if (hwnd == IntPtr.Zero || !GetWindowRect(hwnd, out var windowRect))
+        {
+            return null;
+        }
+
+        var dpi = GetDpiForWindow(hwnd);
+
+        // Get element's position within its window (LOGICAL window-relative coordinates)
+        var transformToWindow = element.TransformToVisual(window.Content);
+        var logicalTopLeftInWindow = transformToWindow.TransformPoint(new Windows.Foundation.Point(0, 0));
+        var logicalBottomRightInWindow = transformToWindow.TransformPoint(new Windows.Foundation.Point(element.ActualWidth, element.ActualHeight));
+
+        // Convert element's window-relative position from LOGICAL to PHYSICAL
+        var physicalLeftInWindow = LogicalToPhysical(logicalTopLeftInWindow.X, dpi);
+        var physicalTopInWindow = LogicalToPhysical(logicalTopLeftInWindow.Y, dpi);
+        var physicalRightInWindow = LogicalToPhysical(logicalBottomRightInWindow.X, dpi);
+        var physicalBottomInWindow = LogicalToPhysical(logicalBottomRightInWindow.Y, dpi);
+
+        // Calculate element's absolute PHYSICAL screen bounds
+        return new PhysicalRect(
+            Left: windowRect.Left + physicalLeftInWindow,
+            Top: windowRect.Top + physicalTopInWindow,
+            Right: windowRect.Left + physicalRightInWindow,
+            Bottom: windowRect.Top + physicalBottomInWindow);
+    }
 }

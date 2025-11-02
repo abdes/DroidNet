@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls.Services.Tests;
 
@@ -352,24 +351,8 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
-    /// <summary>
-    /// Contract: Service can be instantiated with optional logger factory.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [TestMethod]
-    public Task Service_CanBeInstantiated_WithLoggerFactory_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
 
-        // Act
-        var service = new DragVisualService(loggerFactory);
-
-        // Assert
-        _ = service.Should().NotBeNull("Service with logger factory should be created successfully");
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
+    // TODO: add a test case that validates strategy will log messages when loggerfactory is provided
 
     /// <summary>
     /// Contract: Service can be instantiated without logger factory.

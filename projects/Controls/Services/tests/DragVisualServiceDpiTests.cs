@@ -74,7 +74,7 @@ public class DragVisualServiceDpiTests
 
         // Act: Simulate service logic
         // 1. Convert cursor from physical to logical
-        var cursorLogical = Native.PhysicalToLogicalPoint(cursorPhysical, dpi);
+        var cursorLogical = Native.GetLogicalPointFromPhysical(cursorPhysical, dpi);
 
         // 2. Subtract logical hotspot
         var windowLogical = new Windows.Foundation.Point(
@@ -82,7 +82,7 @@ public class DragVisualServiceDpiTests
             cursorLogical.Y - hotspotLogical.Y);
 
         // 3. Convert back to physical for window positioning
-        var windowPhysical = Native.LogicalToPhysicalPoint(windowLogical, dpi);
+        var windowPhysical = Native.GetPhysicalPointFromLogical(windowLogical, dpi);
 
         // Assert: Window position should match expected physical coordinates
         const int tolerance = 1; // Allow 1 pixel rounding error
@@ -104,7 +104,7 @@ public class DragVisualServiceDpiTests
         const uint dpi1 = 96;
         var cursor1Physical = new Native.POINT(100, 100);
 
-        var cursor1Logical = Native.PhysicalToLogicalPoint(cursor1Physical, dpi1);
+        var cursor1Logical = Native.GetLogicalPointFromPhysical(cursor1Physical, dpi1);
         var window1Logical = new Windows.Foundation.Point(
             cursor1Logical.X - hotspotLogical.X,
             cursor1Logical.Y - hotspotLogical.Y);
@@ -113,7 +113,7 @@ public class DragVisualServiceDpiTests
         const uint dpi2 = 144;
         var cursor2Physical = new Native.POINT(150, 150);
 
-        var cursor2Logical = Native.PhysicalToLogicalPoint(cursor2Physical, dpi2);
+        var cursor2Logical = Native.GetLogicalPointFromPhysical(cursor2Physical, dpi2);
         var window2Logical = new Windows.Foundation.Point(
             cursor2Logical.X - hotspotLogical.X,
             cursor2Logical.Y - hotspotLogical.Y);
@@ -145,7 +145,7 @@ public class DragVisualServiceDpiTests
         var screenPoint = new Windows.Foundation.Point(960, 540);
 
         // Act
-        var dpi = Native.GetDpiForPoint(screenPoint);
+        var dpi = Native.GetDpiForPhysicalPoint(screenPoint);
 
         // Assert: DPI should be in valid range (96-384 covers 100%-400% scaling)
         _ = dpi.Should().BeInRange(96u, 384u, "DPI should be within standard Windows scaling range");
@@ -168,11 +168,11 @@ public class DragVisualServiceDpiTests
         var cursorPhysical = new Native.POINT(cursorX, cursorY);
 
         // Act
-        var cursorLogical = Native.PhysicalToLogicalPoint(cursorPhysical, dpi);
+        var cursorLogical = Native.GetLogicalPointFromPhysical(cursorPhysical, dpi);
         var windowLogical = new Windows.Foundation.Point(
             cursorLogical.X - hotspotLogical.X,
             cursorLogical.Y - hotspotLogical.Y);
-        var windowPhysical = Native.LogicalToPhysicalPoint(windowLogical, dpi);
+        var windowPhysical = Native.GetPhysicalPointFromLogical(windowLogical, dpi);
 
         // Assert: Window should be at cursor position
         const int tolerance = 1;
@@ -192,11 +192,11 @@ public class DragVisualServiceDpiTests
         const uint dpi = 144; // 150% scaling
 
         // Act
-        var cursorLogical = Native.PhysicalToLogicalPoint(cursorPhysical, dpi);
+        var cursorLogical = Native.GetLogicalPointFromPhysical(cursorPhysical, dpi);
         var windowLogical = new Windows.Foundation.Point(
             cursorLogical.X - hotspotLogical.X,
             cursorLogical.Y - hotspotLogical.Y);
-        var windowPhysical = Native.LogicalToPhysicalPoint(windowLogical, dpi);
+        var windowPhysical = Native.GetPhysicalPointFromLogical(windowLogical, dpi);
 
         // Assert: Window position should be offset by scaled hotspot
         // At 150% DPI: cursor logical = (333.33, 200), window logical = (133.33, 100), window physical ≈ (200, 150)

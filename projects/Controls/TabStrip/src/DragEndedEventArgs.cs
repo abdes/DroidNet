@@ -6,28 +6,38 @@ using System;
 
 namespace DroidNet.Controls;
 
+/// <summary>
+/// Event args for drag end notifications.
+/// </summary>
+public sealed class DragEndedEventArgs : EventArgs
+{
     /// <summary>
-    /// Event args for drag end notifications.
+    /// Gets the screen point where the drop occurred.
     /// </summary>
-    public sealed class DragEndedEventArgs : EventArgs
-    {
-        /// <summary>
-        /// Gets the screen point where the drop occurred.
-        /// </summary>
-        public Windows.Foundation.Point ScreenPoint { get; init; }
+    public Windows.Foundation.Point ScreenPoint { get; init; }
 
-        /// <summary>
-        /// Gets a value indicating whether the drop occurred over a TabStrip.
-        /// </summary>
-        public bool DroppedOverStrip { get; init; }
+    /// <summary>
+    /// Gets the TabItem that was dragged.
+    /// </summary>
+    public required TabItem Item { get; init; }
 
-        /// <summary>
-        /// Gets the destination TabStrip if applicable; otherwise null.
-        /// </summary>
-        public TabStrip? Destination { get; init; }
+    /// <summary>
+    /// Gets a value indicating whether the drag ended while in Reorder mode.
+    /// </summary>
+    public bool IsInReorderMode { get; init; }
 
-        /// <summary>
-        /// Gets the index at which the item was inserted into the destination, or null.
-        /// </summary>
-        public int? NewIndex { get; init; }
-    }
+    /// <summary>
+    /// Gets a value indicating whether the drop occurred over a TabStrip.
+    /// </summary>
+    public bool DroppedOverStrip { get; init; }
+
+    /// <summary>
+    /// Gets the destination TabStrip if applicable; otherwise null.
+    /// </summary>
+    public TabStrip? Destination { get; init; }
+
+    /// <summary>
+    /// Gets the index at which the item was inserted into the destination, or null.
+    /// </summary>
+    public int? NewIndex { get; init; }
+}
