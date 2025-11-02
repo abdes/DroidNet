@@ -1,13 +1,30 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:DroidNet.Controls">
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Converters">
 
-    <!--  CommunityToolkit converters  -->
+    <ctk:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+    <ctk:BoolToVisibilityConverter
+        x:Key="InverseBoolToVisibilityConverter"
+        FalseValue="Visible"
+        TrueValue="Collapsed" />
 
     <Style BasedOn="{StaticResource DefaultTabStripStyle}" TargetType="controls:TabStrip" />
+
+    <!--  Lightweight placeholder used during reorder drags inside the ItemsRepeater  -->
+    <DataTemplate x:Key="TabStripPlaceholderItemTemplate">
+        <Border
+            Height="32"
+            MinWidth="60"
+            Background="Transparent"
+            BorderBrush="{ThemeResource SystemControlHighlightBaseMediumLowBrush}"
+            BorderThickness="1"
+            CornerRadius="4,4,0,0"
+            Opacity="0.35" />
+    </DataTemplate>
 
     <!--  TabStrip default style  -->
     <Style x:Key="DefaultTabStripStyle" TargetType="controls:TabStrip">
@@ -34,7 +51,14 @@
                             </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate>
-                                    <controls:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
+                                    <!--
+                                        Wrap TabStripItem in a Grid for consistency with regular items.
+                                        Pinned items don't use transform (not draggable), but wrapper
+                                        ensures ElementPrepared/Clearing handlers work uniformly.
+                                    -->
+                                    <Grid>
+                                        <controls:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsRepeater.ItemTemplate>
                         </ItemsRepeater>
@@ -54,11 +78,49 @@
                                     </ItemsRepeater.Layout>
                                     <ItemsRepeater.ItemTemplate>
                                         <DataTemplate>
-                                            <controls:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
+                                            <!--
+                                                Wrap TabStripItem in a Grid to isolate transform from ItemsRepeater layout.
+                                                The TranslateTransform on this Grid is used during reorder drag to slide
+                                                the item visually without affecting ItemsRepeater's layout of other items.
+                                                
+                                                If the item is a placeholder (IsPlaceholder=true), render a lightweight
+                                                Border instead of the full TabStripItem. Placeholders are temporary items
+                                                inserted during drag-and-drop reordering to show the drop zone.
+                                            -->
+                                            <Grid>
+                                                <Grid.RenderTransform>
+                                                    <TranslateTransform />
+                                                </Grid.RenderTransform>
+
+                                                <!--  Lightweight placeholder template (minimal visual, no content)  -->
+                                                <Border
+                                                    Width="120"
+                                                    Height="32"
+                                                    Margin="0,0,4,0"
+                                                    Background="{ThemeResource SubtleFillColorTransparentBrush}"
+                                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="4"
+                                                    Opacity="0.5"
+                                                    Visibility="{Binding IsPlaceholder, Converter={StaticResource BoolToVisibilityConverter}}" />
+
+                                                <!--  Full TabStripItem (only visible when NOT a placeholder)  -->
+                                                <controls:TabStripItem
+                                                    Item="{Binding}"
+                                                    LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}"
+                                                    Visibility="{Binding IsPlaceholder, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                            </Grid>
                                         </DataTemplate>
                                     </ItemsRepeater.ItemTemplate>
                                 </ItemsRepeater>
                             </ScrollViewer>
+
+                            <!--  Reorder overlay canvas for placeholder visuals during in-strip dragging  -->
+                            <Canvas
+                                x:Name="PartReorderOverlay"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                IsHitTestVisible="False" />
 
                             <!--  Left overflow overlay  -->
                             <Border
