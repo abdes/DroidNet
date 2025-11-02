@@ -68,6 +68,11 @@ public partial class TabStrip : Control
     // widths to containers as they are prepared (prevents visual flicker).
     private LayoutResult? lastLayoutResult;
 
+    // Stored pointer event handlers for proper cleanup
+    private PointerEventHandler? pointerPressedHandler;
+    private PointerEventHandler? pointerMovedHandler;
+    private PointerEventHandler? pointerReleasedHandler;
+
     /// <summary>
     ///    Initializes a new instance of the <see cref="TabStrip" /> class.
     /// </summary>
@@ -159,6 +164,9 @@ public partial class TabStrip : Control
         this.InitializePinnedItemsRepeaterPart();
         this.InitializeRegularItemsRepeaterPart();
         this.InitializeScrollHostPart();
+
+        // Wire up drag detection after template is applied
+        this.InstallDragPointerHandlers();
 
         // Apply behaviors based on current property values and ensure the
         // freshly-applied template reflects any properties that were set
@@ -390,6 +398,9 @@ public partial class TabStrip : Control
         // event handlers or dispatcher closures longer than necessary.
         this.Unloaded -= this.TabStrip_Unloaded;
 
+        // Uninstall drag detection handlers
+        this.UninstallDragPointerHandlers();
+
         if (this.proxiesDisposed)
         {
             return;
@@ -401,6 +412,43 @@ public partial class TabStrip : Control
 
         // Log unloading for troubleshooting
         this.LogUnloaded();
+    }
+
+    private void InstallDragPointerHandlers()
+    {
+        // Wire up preview (tunneling) pointer events for drag detection after template is applied.
+        // Using tunneling events with handledEventsToo: true ensures we receive pointer events
+        // even when TabStripItem children handle them, allowing us to detect drag gestures.
+        // Store handlers as fields for proper cleanup in Unloaded.
+        this.pointerPressedHandler = new PointerEventHandler(this.OnPreviewPointerPressed);
+        this.pointerMovedHandler = new PointerEventHandler(this.OnPreviewPointerMoved);
+        this.pointerReleasedHandler = new PointerEventHandler(this.OnPreviewPointerReleased);
+
+        this.AddHandler(PointerPressedEvent, this.pointerPressedHandler, handledEventsToo: true);
+        this.AddHandler(PointerMovedEvent, this.pointerMovedHandler, handledEventsToo: true);
+        this.AddHandler(PointerReleasedEvent, this.pointerReleasedHandler, handledEventsToo: true);
+    }
+
+    private void UninstallDragPointerHandlers()
+    {
+        // Remove pointer event handlers that were installed in OnApplyTemplate
+        if (this.pointerPressedHandler is not null)
+        {
+            this.RemoveHandler(PointerPressedEvent, this.pointerPressedHandler);
+            this.pointerPressedHandler = null;
+        }
+
+        if (this.pointerMovedHandler is not null)
+        {
+            this.RemoveHandler(PointerMovedEvent, this.pointerMovedHandler);
+            this.pointerMovedHandler = null;
+        }
+
+        if (this.pointerReleasedHandler is not null)
+        {
+            this.RemoveHandler(PointerReleasedEvent, this.pointerReleasedHandler);
+            this.pointerReleasedHandler = null;
+        }
     }
 
     private void OnTabCloseRequested(object? sender, TabCloseRequestedEventArgs e)

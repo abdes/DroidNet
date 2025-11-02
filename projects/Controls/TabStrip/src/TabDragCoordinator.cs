@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -16,6 +15,8 @@ namespace DroidNet.Controls;
 /// </summary>
 public partial class TabDragCoordinator
 {
+    private const double PollingIntervalMs = 1000.0 / 60.0;
+
     private readonly ILogger logger;
 
     private readonly Lock syncLock = new();
@@ -76,6 +77,7 @@ public partial class TabDragCoordinator
         {
             if (this.isActive)
             {
+                this.LogDragAlreadyActive();
                 throw new InvalidOperationException("A drag is already active in this process.");
             }
 
@@ -88,17 +90,20 @@ public partial class TabDragCoordinator
             // Start the visual session via the service
             this.sessionToken = this.dragService.StartSession(visualDescriptor, hotspot);
 
-            // Get initial cursor position
+            // Get initial cursor position (GetCursorPos returns physical pixels)
             if (Native.GetCursorPos(out var cursorPos))
             {
+                // Store physical position for tracking
                 this.lastCursorPosition = new Windows.Foundation.Point(cursorPos.X, cursorPos.Y);
 
-                // Update overlay to initial position
+                // Pass physical pixels directly to service (service handles DPI conversion)
                 this.dragService.UpdatePosition(this.sessionToken.Value, this.lastCursorPosition);
             }
 
-            // Start polling timer at 30Hz (approximately every 33ms)
+            // Start polling timer at 60Hz (approximately every 16.67ms)
             this.StartPollingTimer();
+
+            this.LogDragStarted();
         }
     }
 
@@ -114,13 +119,25 @@ public partial class TabDragCoordinator
         {
             if (!this.isActive || !this.sessionToken.HasValue)
             {
+                this.LogDragMoveIgnored();
                 return;
             }
 
+            // Check if position changed
+            if (Math.Abs(screenPoint.X - this.lastCursorPosition.X) < 0.5
+                && Math.Abs(screenPoint.Y - this.lastCursorPosition.Y) < 0.5)
+            {
+                this.LogDragMoveIgnoredNoChange();
+                return;
+            }
+
+            var previousPosition = this.lastCursorPosition;
             this.lastCursorPosition = screenPoint;
 
             // Update overlay position
             this.dragService.UpdatePosition(this.sessionToken.Value, screenPoint);
+
+            this.LogDragMoved(screenPoint, previousPosition);
 
             // Raise DragMoved event for subscribers (TabStrip instances will subscribe in Phase 3).
             this.DragMoved?.Invoke(this, new DragMovedEventArgs { ScreenPoint = screenPoint });
@@ -141,11 +158,14 @@ public partial class TabDragCoordinator
         {
             if (!this.isActive)
             {
+                this.LogDragEndedIgnored();
                 return;
             }
 
             // Stop polling timer
             this.StopPollingTimer();
+
+            this.LogDragEnded(screenPoint, droppedOverStrip, destination, newIndex);
 
             // Notify subscribers that the drag ended so they can finalize insertion/removal.
             this.DragEnded?.Invoke(
@@ -178,11 +198,14 @@ public partial class TabDragCoordinator
         {
             if (!this.isActive)
             {
+                this.LogDragAbortIgnored();
                 return;
             }
 
             // Stop polling timer
             this.StopPollingTimer();
+
+            this.LogDragAborted();
 
             if (this.sessionToken.HasValue)
             {
@@ -198,14 +221,17 @@ public partial class TabDragCoordinator
         var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
         if (dispatcherQueue is null)
         {
+            this.LogPollingTimerNoDispatcher();
             return;
         }
 
         this.pollingTimer = dispatcherQueue.CreateTimer();
-        this.pollingTimer.Interval = TimeSpan.FromMilliseconds(33); // ~30Hz
+        this.pollingTimer.Interval = TimeSpan.FromMilliseconds(PollingIntervalMs); // ~60Hz
         this.pollingTimer.IsRepeating = true;
         this.pollingTimer.Tick += this.OnPollingTimerTick;
         this.pollingTimer.Start();
+
+        this.LogPollingTimerStarted();
     }
 
     private void StopPollingTimer()
@@ -215,6 +241,8 @@ public partial class TabDragCoordinator
             this.pollingTimer.Stop();
             this.pollingTimer.Tick -= this.OnPollingTimerTick;
             this.pollingTimer = null;
+
+            this.LogPollingTimerStopped();
         }
     }
 
@@ -224,26 +252,33 @@ public partial class TabDragCoordinator
         {
             if (!this.isActive || !this.sessionToken.HasValue)
             {
+                this.LogPollingTimerTickIgnored();
                 return;
             }
 
-            // Poll global cursor position
-            if (Native.GetCursorPos(out var cursorPos))
+            // Poll global cursor position (returns physical pixels)
+            if (!Native.GetCursorPos(out var cursorPos))
             {
-                var newPosition = new Windows.Foundation.Point(cursorPos.X, cursorPos.Y);
+                this.LogGetCursorPosFailed();
+                return;
+            }
 
-                // Check if position changed
-                if (Math.Abs(newPosition.X - this.lastCursorPosition.X) > 0.5
-                    || Math.Abs(newPosition.Y - this.lastCursorPosition.Y) > 0.5)
-                {
-                    this.lastCursorPosition = newPosition;
+            var newPosition = new Windows.Foundation.Point(cursorPos.X, cursorPos.Y);
 
-                    // Update overlay position
-                    this.dragService.UpdatePosition(this.sessionToken.Value, newPosition);
+            // Check if position changed (compare physical pixels)
+            if (Math.Abs(newPosition.X - this.lastCursorPosition.X) > 0.5
+                || Math.Abs(newPosition.Y - this.lastCursorPosition.Y) > 0.5)
+            {
+                var previousPosition = this.lastCursorPosition;
+                this.lastCursorPosition = newPosition;
 
-                    // Raise DragMoved event
-                    this.DragMoved?.Invoke(this, new DragMovedEventArgs { ScreenPoint = newPosition });
-                }
+                // Pass physical pixels directly to service (service handles DPI conversion)
+                this.dragService.UpdatePosition(this.sessionToken.Value, newPosition);
+
+                this.LogDragMoved(newPosition, previousPosition);
+
+                // Raise DragMoved event (consumers get physical screen coordinates)
+                this.DragMoved?.Invoke(this, new DragMovedEventArgs { ScreenPoint = newPosition });
             }
         }
     }

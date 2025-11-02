@@ -2,14 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Graphics.Imaging;
-using Windows.Storage.Streams;
 
 namespace DroidNet.Controls;
 
@@ -60,6 +57,7 @@ public partial class DragVisualService : IDragVisualService
         {
             if (this.activeToken.HasValue)
             {
+                this.LogSessionAlreadyActive();
                 throw new InvalidOperationException("A drag visual session is already active.");
             }
 
@@ -74,6 +72,8 @@ public partial class DragVisualService : IDragVisualService
             // Create the layered overlay window
             this.CreateLayeredWindow();
 
+            this.LogSessionStarted();
+
             return token;
         }
     }
@@ -87,27 +87,36 @@ public partial class DragVisualService : IDragVisualService
         {
             if (!this.activeToken.HasValue || this.activeToken.Value != token)
             {
+                this.LogTokenMismatchUpdatePosition(token);
                 return;
             }
 
             if (this.overlayWindow == IntPtr.Zero)
             {
+                this.LogOverlayWindowNotInitialized();
                 return;
             }
 
-            // Get DPI for the screen point
+            // screenPoint is in physical screen pixels (from GetCursorPos).
+            // Get DPI for the CURRENT cursor position to handle cross-monitor scenarios.
             var dpi = Native.GetDpiForPoint(screenPoint);
 
-            // Calculate window position (apply hotspot offset)
-            var windowX = (int)(screenPoint.X - this.hotspot.X);
-            var windowY = (int)(screenPoint.Y - this.hotspot.Y);
-
-            // Convert to physical coordinates
-            var physicalPos = Native.LogicalToPhysicalPoint(
-                new Windows.Foundation.Point(windowX, windowY),
+            // Convert cursor from physical to logical using current monitor DPI
+            var cursorLogical = Native.PhysicalToLogicalPoint(
+                new Native.POINT((int)screenPoint.X, (int)screenPoint.Y),
                 dpi);
 
-            // Update window position
+            // Subtract hotspot (already in logical pixels) to get window position
+            var windowLogical = new Windows.Foundation.Point(
+                cursorLogical.X - this.hotspot.X,
+                cursorLogical.Y - this.hotspot.Y);
+
+            // Convert window position back to physical for Win32 SetWindowPos
+            var physicalPos = Native.LogicalToPhysicalPoint(windowLogical, dpi);
+
+            this.LogPositionUpdated(screenPoint, dpi, physicalPos);
+
+            // Update window position using physical coordinates
             _ = Native.SetWindowPos(
                 this.overlayWindow,
                 Native.HWND_TOPMOST,
@@ -128,6 +137,7 @@ public partial class DragVisualService : IDragVisualService
         {
             if (!this.activeToken.HasValue || this.activeToken.Value != token)
             {
+                this.LogTokenMismatchEndSession(token);
                 return;
             }
 
@@ -137,6 +147,8 @@ public partial class DragVisualService : IDragVisualService
             }
 
             this.DestroyLayeredWindow();
+
+            this.LogSessionEnded();
 
             this.activeDescriptor = null;
             this.activeToken = null;
@@ -149,12 +161,9 @@ public partial class DragVisualService : IDragVisualService
     {
         lock (this.syncLock)
         {
-            if (!this.activeToken.HasValue || this.activeToken.Value != token)
-            {
-                return null;
-            }
-
-            return this.activeDescriptor;
+            return !this.activeToken.HasValue || this.activeToken.Value != token
+                ? null
+                : this.activeDescriptor;
         }
     }
 
@@ -222,8 +231,12 @@ public partial class DragVisualService : IDragVisualService
 
         if (this.overlayWindow == IntPtr.Zero)
         {
-            throw new InvalidOperationException($"Failed to create layered window. Error: {Marshal.GetLastWin32Error()}");
+            var errorCode = Marshal.GetLastWin32Error();
+            this.LogCreateLayeredWindowFailed(errorCode);
+            throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Failed to create layered window. Error: {errorCode}"));
         }
+
+        this.LogLayeredWindowCreated();
 
         // Create DIB section for rendering
         this.CreateDIBSection();
@@ -258,9 +271,16 @@ public partial class DragVisualService : IDragVisualService
 
         if (this.overlayDC == IntPtr.Zero)
         {
+            this.LogCreateCompatibleDcFailed();
             throw new InvalidOperationException("Failed to create compatible DC.");
         }
 
+        this.CreateDibBitmap();
+        this.LogDibSectionCreated();
+    }
+
+    private void CreateDibBitmap()
+    {
         // Create DIB section with 32-bit BGRA.
         // Note: biHeight is set to negative value to create a top-down DIB, which simplifies pixel access:
         // - Pixel (0,0) is at the top-left, matching screen coordinates.
@@ -290,6 +310,7 @@ public partial class DragVisualService : IDragVisualService
 
         if (this.overlayBitmap == IntPtr.Zero)
         {
+            this.LogCreateDibSectionFailed();
             throw new InvalidOperationException("Failed to create DIB section.");
         }
 
@@ -314,10 +335,8 @@ public partial class DragVisualService : IDragVisualService
             }
         }
 
-        // Render header image and preview image if available.
-        // PHASE 2 NOTE: Currently renders a placeholder blue rectangle with border.
-        // Full ImageSource → BGRA decoding and composition is deferred to Phase 3.
-        // This placeholder allows drag visualization and hotspot testing in Phase 2.
+        // TODO: Phase 4 - Render HeaderImage and PreviewImage from descriptor when available.
+        // Currently renders a placeholder blue rectangle for testing and drag visualization.
         this.RenderPlaceholderContent();
 
         // Update the layered window with the new bitmap
@@ -326,9 +345,9 @@ public partial class DragVisualService : IDragVisualService
 
     private void RenderPlaceholderContent()
     {
-        // Render a simple semi-transparent blue rectangle as a placeholder
-        // In production, this would composite the actual HeaderImage and PreviewImage
-        var bgColor = 0x80_00_80_FF; // Semi-transparent blue (ARGB)
+        // Placeholder rendering for testing and when HeaderImage/PreviewImage are not set.
+        // Renders a semi-transparent blue rectangle with black border (like "missing material" purple in game engines).
+        const uint bgColor = 0x80_00_80_FF; // Semi-transparent blue (ARGB)
         var pixelCount = this.overlayWidth * this.overlayHeight;
 
         unsafe
@@ -414,13 +433,14 @@ public partial class DragVisualService : IDragVisualService
             this.overlayWindow = IntPtr.Zero;
         }
 
+        this.LogLayeredWindowDestroyed();
+
         this.overlayWidth = 0;
         this.overlayHeight = 0;
     }
 
-    private void OnDescriptorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
-    {
-        // Queue render update on UI thread
+    // Queue render update on UI thread
+    private void OnDescriptorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
         _ = this.dispatcherQueue.TryEnqueue(() =>
         {
             lock (this.syncLock)
@@ -437,10 +457,12 @@ public partial class DragVisualService : IDragVisualService
                     case var name when string.Equals(name, nameof(DragVisualDescriptor.HeaderImage), StringComparison.Ordinal)
                         || string.Equals(name, nameof(DragVisualDescriptor.PreviewImage), StringComparison.Ordinal)
                         || string.Equals(name, nameof(DragVisualDescriptor.Title), StringComparison.Ordinal):
+                        this.LogDescriptorPropertyChanged(name ?? "Unknown", "rendering");
                         this.RenderOverlayContent();
                         break;
                     case var name when string.Equals(name, nameof(DragVisualDescriptor.RequestedSize), StringComparison.Ordinal):
                         // Size change requires recreating the window
+                        this.LogDescriptorPropertyChanged(name ?? "Unknown", "recreating window");
                         var token = this.activeToken;
                         if (token.HasValue)
                         {
@@ -451,5 +473,4 @@ public partial class DragVisualService : IDragVisualService
                 }
             }
         });
-    }
 }

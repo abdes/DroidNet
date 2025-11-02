@@ -45,7 +45,17 @@ public partial class TabStripItem
             new PropertyMetadata(defaultValue: false, OnIsCompactChanged));
 
     /// <summary>
-    ///     Gets or sets the TabItem data model for this visual tab.
+    ///     Identifies the <see cref="IsDragging"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty IsDraggingProperty =
+        DependencyProperty.Register(
+            nameof(IsDragging),
+            typeof(bool),
+            typeof(TabStripItem),
+            new PropertyMetadata(defaultValue: false, OnIsDraggingChanged));
+
+    /// <summary>
+    ///     Gets or sets identifies the <see cref="IsCompact"/> dependency property.
     /// </summary>
     public TabItem? Item
     {
@@ -73,6 +83,19 @@ public partial class TabStripItem
         set => this.SetValue(IsCompactProperty, value);
     }
 
+    /// <summary>
+    ///     Gets a value indicating whether this tab item is currently being dragged. When a drag
+    ///     begins, this property is set to <see langword="true"/>, and templates can bind to it to
+    ///     show drag visual feedback. The property is reset to <see langword="false"/> when the
+    ///     drag ends. This property is typically set only by the <see cref="TabStrip"/> during drag
+    ///     lifecycle operations and should not be set directly by external code.
+    /// </summary>
+    public bool IsDragging
+    {
+        get => (bool)this.GetValue(IsDraggingProperty);
+        internal set => this.SetValue(IsDraggingProperty, value);
+    }
+
     private static void OnItemChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStripItem)d).OnItemChanged(e);
 
@@ -81,6 +104,9 @@ public partial class TabStripItem
 
     private static void OnLoggerFactoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStripItem)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue);
+
+    private static void OnIsDraggingChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((TabStripItem)d).UpdateVisualStates(useTransitions: true);
 
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
         => this.logger = loggerFactory?.CreateLogger<TabStripItem>();

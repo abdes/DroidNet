@@ -428,16 +428,20 @@ public interface IDragVisualService
   /// Starts a new drag visual session. Throws InvalidOperationException if a session is already active.
   /// </summary>
   /// <param name="descriptor">Descriptor containing header and optional preview images.</param>
-  /// <param name="hotspot">Point within the header image (image-local coordinates) to align under the pointer.</param>
+  /// <param name="hotspot">Hotspot offset in logical pixels (XAML/DIP coordinate space) from the top-left
+  /// of the header image to align under the pointer. Service converts this to physical pixels once at
+  /// session start.</param>
   /// <returns>Opaque token for session operations.</returns>
   /// <exception cref="InvalidOperationException">Thrown if a session is already active.</exception>
   DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point hotspot);
 
   /// <summary>
-  /// Updates the overlay position for the given session.
+  /// Updates the overlay position for the given session. Service performs all DPI conversions internally
+  /// based on the current monitor DPI detected via GetDpiForPoint(screenPoint).
   /// </summary>
   /// <param name="token">Session token.</param>
-  /// <param name="screenPoint">Cursor location in screen physical pixels.</param>
+  /// <param name="screenPoint">Cursor location in physical screen pixels (as returned by Win32 GetCursorPos).
+  /// Service converts to logical pixels using current monitor DPI to handle cross-monitor scenarios.</param>
   void UpdatePosition(DragSessionToken token, Windows.Foundation.Point screenPoint);
 
   /// <summary>
@@ -481,7 +485,7 @@ public sealed class DragVisualDescriptor : ObservableObject
 | 1 | **Single Active Session** | Only one session per process. `StartSession` throws `InvalidOperationException` if a session exists. |
 | 2 | **Session Ownership & Lifecycle** | Service owns all resources; caller holds only the token. Call `EndSession(token)` to complete. Service disposal terminates any active session. |
 | 3 | **UI-Thread Affinity** | All API calls must be from the UI thread. Implementations may assume this and avoid internal marshalling. |
-| 4 | **Pointer Tracking** | Caller drives overlay via `UpdatePosition(token, screenPoint)` as pointer moves. `screenPoint` is always in screen physical pixels. |
+| 4 | **Pointer Tracking & Coordinate Contract** | Caller drives overlay via `UpdatePosition(token, screenPoint)` as pointer moves. `screenPoint` is always in **physical screen pixels** (from `GetCursorPos`). Service performs all DPI conversions internally using `GetDpiForPoint(screenPoint)` to detect current monitor DPI, ensuring correct behavior when cursor crosses monitors with different scaling. |
 | 5 | **Descriptor Mutability** | Live descriptor obtained via `GetDescriptor(token)` is valid only for session lifetime. Mutations from UI thread auto-update the overlay. |
 | 6 | **Click-Through Overlay** | Set `WS_EX_NOACTIVATE` and `WS_EX_TRANSPARENT` on the overlay HWND (via P/Invoke to `SetWindowLongPtr`). Alternatively, set XAML root's `IsHitTestVisible = false` (but may not provide full OS-level click-through). |
 | 7 | **Pointer Delivery Resilience** | Do not rely on originating window for pointer events. If events stop (e.g., source window closes), poll global cursor and continue calling `UpdatePosition` until drag completes. |
@@ -489,11 +493,69 @@ public sealed class DragVisualDescriptor : ObservableObject
 | 9 | **Layout** | Service measures and arranges overlay: `Width = max(header width, preview width)`, `Height = header height + preview height` (or implementer's choice). |
 | 10 | **Cleanup & Resource Management** | Unsubscribe from descriptor notifications and free all resources when `EndSession(token)` is called or service is disposed. |
 
+### Coordinate System & DPI Scaling Architecture
+
+The drag visual system uses **three coordinate spaces**:
+
+1. **XAML Logical Pixels (DIPs)**: WinUI control-relative coordinates (e.g., pointer position within TabStrip)
+2. **Screen Logical Pixels**: Display-independent screen coordinates (96 DPI baseline)
+3. **Screen Physical Pixels**: Device-dependent screen coordinates (actual monitor pixels)
+
+**Ownership & Conversion Rules:**
+
+```mermaid
+graph TD
+    A[TabStrip: XAML Logical] -->|TransformToVisual| B[TabStrip: Compute hotspot in XAML logical pixels]
+    B -->|No conversion| C[Coordinator.StartDrag: hotspot in logical pixels]
+
+    D[Win32 GetCursorPos] -->|Returns| E[Physical Screen Pixels]
+    E -->|No conversion| F[Coordinator: Store & poll physical pixels]
+    F -->|Pass physical| G[DragVisualService.UpdatePosition]
+
+    G -->|GetDpiForPoint current cursor| H[Service: Get current DPI]
+    H -->|PhysicalToLogical| I[Service: Convert cursor to logical]
+    H -->|PhysicalToLogical| J[Service: Convert hotspot to logical once at StartSession]
+    I -->|Subtract logical hotspot| K[Service: Compute overlay position logical]
+    K -->|LogicalToPhysical current DPI| L[Service: Convert to physical for SetWindowPos]
+
+    style A fill:#e1f5ff
+    style E fill:#ffe1e1
+    style G fill:#e1ffe1
+    style L fill:#ffe1e1
+```
+
+**Critical Rule**: Only `DragVisualService` performs DPI conversions. It receives:
+
+- **Hotspot** in logical pixels (XAML coordinate space, DPI-agnostic)
+- **Cursor position** in physical pixels (from `GetCursorPos`, DPI-agnostic screen coordinates)
+
+**Why this design?**
+
+- **Cross-monitor support**: Service detects DPI changes by calling `GetDpiForPoint(currentCursor)` on every update
+- **Single source of truth**: Service owns all physical↔logical conversions based on current monitor DPI
+- **Coordinator simplicity**: Coordinator just polls `GetCursorPos` and passes raw physical pixels
+- **Hotspot stability**: Hotspot is in logical pixels (matches XAML coordinate space where it was calculated)
+
+**Cross-Monitor Scenario:**
+
+1. Drag starts on 100% DPI monitor (96 DPI)
+2. Cursor moves to 175% DPI monitor (168 DPI)
+3. Coordinator continues passing physical pixels (no conversion)
+4. Service detects new DPI via `GetDpiForPoint(physicalCursor)`
+5. Service converts **both** cursor and hotspot using **current** DPI
+6. Overlay stays aligned with cursor across monitors ✓
+
 ### Implementation Notes
 
-- **Overlay Creation**: Implement the overlay as a lightweight, frameless AppWindow
-  (Windows App SDK / WinUI 3) to ensure correct composition, DPI handling, and
-  process ownership. The overlay must survive source-window teardown.
-- **Coordinate System**: Always use physical screen pixels (from `GetCursorPos`)
-  for `UpdatePosition`. The service maps these to AppWindow placement and XAML
-  DIPs internally, avoiding ambiguous DPI conversions in the coordinator.
+- **Overlay Creation**: Implement the overlay as a lightweight, frameless layered window
+  using Win32 `CreateWindowExW` with `WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT`
+  to ensure correct composition, click-through, and per-monitor DPI handling. The overlay
+  must survive source-window teardown.
+
+- **Coordinate System Contract**:
+  - `StartSession(descriptor, hotspot)`: `hotspot` is in **logical pixels** (XAML/DIP space)
+  - `UpdatePosition(token, screenPoint)`: `screenPoint` is in **physical pixels** (Win32 screen coordinates)
+  - Service internally converts using `GetDpiForPoint(screenPoint)` to get **current** monitor DPI
+  - Service converts hotspot from logical → physical **once** at session start using initial DPI
+  - Service re-converts cursor position from physical → logical on **every** update using current DPI
+  - This ensures correct behavior when cursor crosses monitors with different DPI scaling

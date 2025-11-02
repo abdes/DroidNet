@@ -88,6 +88,8 @@ namespace DroidNet.Controls;
 [TemplateVisualState(Name = PinnedVisualState, GroupName = PinVisualStates)]
 [TemplateVisualState(Name = OverlayHiddenVisualState, GroupName = OverlayVisualStates)]
 [TemplateVisualState(Name = OverlayVisibleVisualState, GroupName = OverlayVisualStates)]
+[TemplateVisualState(Name = NotDraggingVisualState, GroupName = DraggingVisualStates)]
+[TemplateVisualState(Name = DraggingVisualState, GroupName = DraggingVisualStates)]
 [SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "Dispatcher-backed proxy fields are disposed in the Unloaded handler to align with control lifetime.")]
 
 public partial class TabStripItem : ContentControl
@@ -151,6 +153,15 @@ public partial class TabStripItem : ContentControl
 
     /// <summary>The name of the overlay visible visual state.</summary>
     public const string OverlayVisibleVisualState = "OverlayVisible";
+
+    /// <summary>The name of the dragging visual states group.</summary>
+    public const string DraggingVisualStates = "DraggingStates";
+
+    /// <summary>The name of the not dragging visual state.</summary>
+    public const string NotDraggingVisualState = "NotDragging";
+
+    /// <summary>The name of the dragging visual state.</summary>
+    public const string DraggingVisualState = "Dragging";
 
     /// <summary>
     ///     Minimum space that must remain for dragging the tab, even when the tool buttons are overlayed.
@@ -241,7 +252,6 @@ public partial class TabStripItem : ContentControl
         this.closeButton.Click -= CloseButton_Click;
         this.closeButton.Click += CloseButton_Click;
 
-        this.UpdateToolBarVisibility();
         this.UpdateMinWidth();
         this.UpdateVisualStates(useTransitions: false);
 
@@ -271,8 +281,7 @@ public partial class TabStripItem : ContentControl
         }
 
         this.isPointerOver = true;
-        this.UpdateToolBarVisibility();
-        this.UpdateVisualStates(useTransitions: true);
+        this.UpdateVisualStates();
     }
 
     /// <summary>
@@ -298,8 +307,7 @@ public partial class TabStripItem : ContentControl
             return;
         }
 
-        this.UpdateToolBarVisibility();
-        this.UpdateVisualStates(useTransitions: true);
+        this.UpdateVisualStates();
     }
 
     /// <summary>
@@ -396,7 +404,7 @@ public partial class TabStripItem : ContentControl
         this.LogEnabledOrDisabled();
         newItem.PropertyChanged += this.TabItem_OnPropertyChanged;
 
-        this.UpdateVisualStates(useTransitions: false);
+        this.UpdateVisualStates();
     }
 
     /// <summary>
@@ -409,12 +417,12 @@ public partial class TabStripItem : ContentControl
         if (string.Equals(e.PropertyName, nameof(TabItem.IsSelected), System.StringComparison.Ordinal))
         {
             this.LogItemPropertyChanged(e);
-            this.UpdateVisualStates(useTransitions: true);
+            this.UpdateVisualStates();
         }
         else if (string.Equals(e.PropertyName, nameof(TabItem.IsPinned), System.StringComparison.Ordinal))
         {
             this.LogItemPropertyChanged(e);
-            this.UpdateVisualStates(useTransitions: true);
+            this.UpdateVisualStates();
         }
     }
 
@@ -422,7 +430,7 @@ public partial class TabStripItem : ContentControl
     ///     Updates the visual states of the control based on selection and pointer state.
     /// </summary>
     /// <param name="useTransitions">Whether to use visual transitions.</param>
-    private void UpdateVisualStates(bool useTransitions)
+    private void UpdateVisualStates(bool useTransitions = true)
     {
         if (this.Item is null)
         {
@@ -438,7 +446,16 @@ public partial class TabStripItem : ContentControl
         _ = VisualStateManager.GoToState(this, basicState, useTransitions);
 
         var pinState = this.Item?.IsPinned == true ? PinnedVisualState : UnpinnedVisualState;
+        this.LogVisualState(pinState);
         _ = VisualStateManager.GoToState(this, pinState, useTransitions: false);
+
+        var draggingState = this.IsDragging ? DraggingVisualState : NotDraggingVisualState;
+        this.LogVisualState(draggingState);
+        _ = VisualStateManager.GoToState(this, draggingState, useTransitions: false);
+
+        var overlayState = this.isPointerOver ? OverlayVisibleVisualState : OverlayHiddenVisualState;
+        this.LogVisualState(overlayState);
+        _ = VisualStateManager.GoToState(this, overlayState, useTransitions);
     }
 
     /// <summary>
@@ -457,23 +474,13 @@ public partial class TabStripItem : ContentControl
     }
 
     /// <summary>
-    ///     Updates the visibility of the toolbar based on compact mode and pointer state.
-    /// </summary>
-    private void UpdateToolBarVisibility()
-    {
-        // Drive the overlay visibility via visual states instead of directly mutating Opacity/Visibility here.
-        var overlayState = this.isPointerOver ? OverlayVisibleVisualState : OverlayHiddenVisualState;
-        _ = VisualStateManager.GoToState(this, overlayState, useTransitions: true);
-    }
-
-    /// <summary>
     ///     Handles changes to the IsCompact property and updates toolbar visibility.
     /// </summary>
     /// <param name="oldValue">Previous value of IsCompact.</param>
     /// <param name="newValue">New value of IsCompact.</param>
-    private void OnIsCompactChanged(bool oldValue, bool newValue)
-    {
+    /// <remarks>
+    ///     In the current implementation, IsCompact has no effect on the layout of the control.
+    /// </remarks>
+    private void OnIsCompactChanged(bool oldValue, bool newValue) =>
         this.LogCompactModeChanged(oldValue, newValue);
-        this.UpdateToolBarVisibility();
-    }
 }
