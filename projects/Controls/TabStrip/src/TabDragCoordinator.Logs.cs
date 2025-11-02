@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls;
@@ -42,14 +41,15 @@ public partial class TabDragCoordinator
             return;
         }
 
-        var itemHeader = this.draggedItem?.Header ?? "Unknown";
-        var sourceStripName = this.sourceStrip?.Name ?? "Unknown";
+        var itemHeader = this.dragContext?.DraggedItem.Header ?? "Unknown";
+        var sourceStripName = this.dragContext?.SourceStrip.Name ?? "Unknown";
+        var hotspot = this.dragContext?.Hotspot ?? default;
         LogDragStarted(
             this.logger,
             itemHeader,
             sourceStripName,
-            this.hotspot.X,
-            this.hotspot.Y,
+            hotspot.X,
+            hotspot.Y,
             (int)this.lastCursorPosition.X,
             (int)this.lastCursorPosition.Y);
     }
@@ -60,10 +60,7 @@ public partial class TabDragCoordinator
         Message = "Attempt to start drag failed: Drag already active")]
     private static partial void LogDragAlreadyActive(ILogger logger);
 
-    private void LogDragAlreadyActive()
-    {
-        LogDragAlreadyActive(this.logger);
-    }
+    private void LogDragAlreadyActive() => LogDragAlreadyActive(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -240,10 +237,7 @@ public partial class TabDragCoordinator
         Message = "Cannot start polling timer: No DispatcherQueue available")]
     private static partial void LogPollingTimerNoDispatcher(ILogger logger);
 
-    private void LogPollingTimerNoDispatcher()
-    {
-        LogPollingTimerNoDispatcher(this.logger);
-    }
+    private void LogPollingTimerNoDispatcher() => LogPollingTimerNoDispatcher(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -267,8 +261,19 @@ public partial class TabDragCoordinator
         Message = "Polling timer tick: Failed to get cursor position")]
     private static partial void LogGetCursorPosFailed(ILogger logger);
 
-    private void LogGetCursorPosFailed()
-    {
-        LogGetCursorPosFailed(this.logger);
-    }
+    private void LogGetCursorPosFailed() => LogGetCursorPosFailed(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "TearOut threshold check: Cursor=({CursorX}, {CursorY}), StripBounds=[({Left}, {Top}), ({Right}, {Bottom})], Threshold={Threshold}, IsWithin={IsWithin}")]
+    private partial void LogTearOutThresholdCheck(
+        double cursorX,
+        double cursorY,
+        double left,
+        double top,
+        double right,
+        double bottom,
+        double threshold,
+        bool isWithin);
 }

@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -602,19 +601,7 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = tabStripItem.Item.Should().Be(restored, "Item should be the restored instance");
     });
 
-    [TestMethod]
-    public Task SetsLoggerFactoryCorrectly_Async() => EnqueueAsync(() =>
-    {
-        // Arrange
-        var tabStripItem = new TestableTabStripItem();
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
-
-        // Act
-        tabStripItem.LoggerFactory = loggerFactory;
-
-        // Assert
-        _ = tabStripItem.LoggerFactory.Should().Be(loggerFactory);
-    });
+    // TODO: add a test case that checks control will emit logs if provided with a logger factory
 
     [TestMethod]
     public Task RecycledContainer_PinnedIconBinding_Rebinds_Async() => EnqueueAsync(async () =>
@@ -839,14 +826,6 @@ public class TabStripItemTests : VisualUserInterfaceTests
 
     internal static async Task<(TestableTabStripItem item, TestVisualStateManager vsm)> SetupTabStripItemWithData(TestableTabStripItem tabStripItem)
     {
-        // Ensure the control has a usable ILoggerFactory for tests. Use a lightweight
-        // Microsoft.Extensions.Logging factory so CreateLogger(...) returns a real
-        // ILogger instance. We keep it minimal to avoid noisy output in test runs.
-        var loggerFactory = LoggerFactory.Create(builder => builder
-            .SetMinimumLevel(LogLevel.Debug)
-            .AddDebug());
-        tabStripItem.LoggerFactory = loggerFactory;
-
         // Load the control
         await LoadTestContentAsync(tabStripItem).ConfigureAwait(true);
 

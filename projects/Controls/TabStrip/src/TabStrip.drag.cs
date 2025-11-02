@@ -26,6 +26,11 @@ public partial class TabStrip
     private bool isDragThresholdExceeded;
 
     /// <summary>
+    ///     Gets the currently dragged item for testing purposes.
+    /// </summary>
+    protected TabStripItem? DraggedItem => this.draggedItem;
+
+    /// <summary>
     ///     Testable implementation of pointer pressed logic. Extracts position data
     ///     and performs drag detection initialization.
     /// </summary>
@@ -38,6 +43,13 @@ public partial class TabStrip
     {
         if (hitItem != null)
         {
+            // Enforce pinned tab constraint: pinned tabs cannot be dragged
+            if (hitItem.Item?.IsPinned == true)
+            {
+                this.LogPointerPressed(hitItem, position);
+                return;
+            }
+
             this.draggedItem = hitItem;
             this.dragStartPoint = position;
             this.isDragThresholdExceeded = false;
@@ -46,8 +58,8 @@ public partial class TabStrip
     }
 
     /// <summary>
-    ///     Testable implementation of pointer moved logic. Tracks displacement and checks
-    ///     if the drag threshold has been exceeded.
+    ///     Testable implementation of pointer moved logic. Tracks displacement, checks
+    ///     if the drag threshold has been exceeded, and updates the active drag position.
     /// </summary>
     /// <param name="currentPoint">The current pointer position relative to this control.</param>
     /// <returns>True if the event should be marked as handled, false otherwise.</returns>
@@ -56,11 +68,21 @@ public partial class TabStrip
     /// </remarks>
     protected virtual bool HandlePointerMoved(Windows.Foundation.Point currentPoint)
     {
-        if (this.draggedItem == null || this.isDragThresholdExceeded)
+        if (this.draggedItem == null)
         {
             return false;
         }
 
+        // If drag is already active, update the coordinator with the new position
+        if (this.isDragThresholdExceeded && this.DragCoordinator != null)
+        {
+            // Convert control-relative point to screen coordinates (physical pixels)
+            var screenPoint = this.StripToScreen(currentPoint);
+            this.DragCoordinator.UpdateDragPosition(screenPoint);
+            return true;
+        }
+
+        // Otherwise, check if we've exceeded the drag threshold
         var deltaX = Math.Abs(currentPoint.X - this.dragStartPoint.X);
         var deltaY = Math.Abs(currentPoint.Y - this.dragStartPoint.Y);
         var delta = Math.Sqrt((deltaX * deltaX) + (deltaY * deltaY));
@@ -71,7 +93,10 @@ public partial class TabStrip
         {
             this.isDragThresholdExceeded = true;
             this.LogThresholdExceeded(delta, DragThresholdPixels);
-            this.BeginDrag(this.draggedItem);
+
+            // Convert to screen coordinates at the point of threshold crossing
+            var screenPoint = this.StripToScreen(currentPoint);
+            this.BeginDrag(this.draggedItem, screenPoint);
             return true;
         }
 
@@ -98,7 +123,16 @@ public partial class TabStrip
             // If drag was active, end it.
             if (this.isDragThresholdExceeded && this.DragCoordinator != null)
             {
-                this.DragCoordinator.EndDrag(screenPoint, droppedOverStrip: false, destination: null, newIndex: null);
+                // Convert screen point to strip coordinates to check if dropped over this strip
+                var stripPoint = this.ScreenToStrip(screenPoint);
+                var isOverStrip = stripPoint.X >= 0 && stripPoint.X <= this.ActualWidth &&
+                                  stripPoint.Y >= 0 && stripPoint.Y <= this.ActualHeight;
+
+                // If dropped over this strip, it's the destination; otherwise, let coordinator handle TearOut
+                var destination = isOverStrip ? this : null;
+
+                // The coordinator will call the active strategy's OnDrop, which will determine the final index
+                this.DragCoordinator.EndDrag(screenPoint, droppedOverStrip: isOverStrip, destination: destination, newIndex: null);
                 handled = true;
             }
 
@@ -134,12 +168,13 @@ public partial class TabStrip
     ///     item as dragging, and initiates the coordinator session.
     /// </summary>
     /// <param name="item">The TabStripItem being dragged.</param>
+    /// <param name="initialScreenPoint">Initial screen position where drag threshold was exceeded. If not provided, will use GetCursorPos.</param>
     /// <remarks>
     ///     This method is protected virtual to allow tests to verify drag initiation logic
     ///     independently. Tests can override this method to inject custom drag behavior or
     ///     verify hotspot calculation, selection clearing, and coordinator interaction.
     /// </remarks>
-    protected virtual void BeginDrag(TabStripItem item)
+    protected virtual void BeginDrag(TabStripItem item, Windows.Foundation.Point? initialScreenPoint = null)
     {
         ArgumentNullException.ThrowIfNull(item);
         this.AssertUIThread();
@@ -173,14 +208,15 @@ public partial class TabStrip
         // This ensures the drag image appears aligned with the cursor at the point where the user grabbed it.
         // The hotspot is in logical pixels (WinRT convention).
         var itemCoords = item.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
-        var hotspot = new Windows.Foundation.Point(
+        var hotspotPoint = new Windows.Foundation.Point(
             this.dragStartPoint.X - itemCoords.X,
             this.dragStartPoint.Y - itemCoords.Y);
+        var hotspot = new SpatialPoint(hotspotPoint, CoordinateSpace.Element, item);
 
         // Start the drag session via coordinator
         try
         {
-            this.DragCoordinator.StartDrag(item.Item, this, descriptor, hotspot);
+            this.DragCoordinator.StartDrag(item.Item, this, item, descriptor, hotspot, initialScreenPoint);
             this.LogDragSessionStarted();
         }
         catch (InvalidOperationException ex)
@@ -224,7 +260,7 @@ public partial class TabStrip
         ArgumentNullException.ThrowIfNull(e);
         this.AssertUIThread();
 
-        if (this.draggedItem == null || this.isDragThresholdExceeded)
+        if (this.draggedItem == null)
         {
             return;
         }
@@ -239,9 +275,15 @@ public partial class TabStrip
         ArgumentNullException.ThrowIfNull(e);
         this.AssertUIThread();
 
-        var screenPoint = e.GetCurrentPoint(relativeTo: null).Position;
+        // Get pointer position in LOGICAL screen coordinates (desktop-relative DIPs)
+        var logicalScreenPoint = e.GetCurrentPoint(relativeTo: null).Position;
 
-        var handled = this.HandlePointerReleased(screenPoint);
+        // Convert to PHYSICAL screen coordinates for the coordinator
+        // The coordinator expects physical pixels (from GetCursorPos) to match its internal state
+        // Use the correct monitor DPI for multi-monitor setups with different scaling
+        var physicalScreenPoint = Native.GetPhysicalScreenPointFromLogical(logicalScreenPoint);
+
+        var handled = this.HandlePointerReleased(physicalScreenPoint);
         e.Handled = handled;
 
         // Release pointer capture if drag was active
@@ -267,6 +309,7 @@ public partial class TabStrip
         {
             oldCoordinator.DragMoved -= this.OnCoordinatorDragMoved;
             oldCoordinator.DragEnded -= this.OnCoordinatorDragEnded;
+            oldCoordinator.UnregisterTabStrip(this);
             this.LogCoordinatorUnsubscribed();
         }
 
@@ -275,6 +318,7 @@ public partial class TabStrip
         {
             newCoordinator.DragMoved += this.OnCoordinatorDragMoved;
             newCoordinator.DragEnded += this.OnCoordinatorDragEnded;
+            newCoordinator.RegisterTabStrip(this);
             this.LogCoordinatorSubscribed();
         }
     }
@@ -316,8 +360,8 @@ public partial class TabStrip
 
                 if (e.DroppedOverStrip && e.Destination != null && draggedTabItem != null)
                 {
-                    // Drop over a TabStrip: finalize insertion and raise completion event
-                    // Phase 4: Implement insertion logic here
+                    // Drop over a TabStrip: strategy has already committed any local reorder.
+                    // Raise completion event for app coordination.
                     this.RaiseTabDragComplete(draggedTabItem, e.Destination, e.NewIndex);
                 }
                 else if (draggedTabItem != null)
@@ -344,20 +388,32 @@ public partial class TabStrip
 
     /// <summary>
     ///     Raises the TabDragImageRequest event to allow the application to supply a preview image.
+    ///     Updates the descriptor with the preview image if provided by the handler.
     /// </summary>
     /// <param name="item">The TabItem being dragged.</param>
     /// <param name="descriptor">The drag visual descriptor to populate.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage(category: "Design", "CA1031:Do not catch general exception types", Justification = "by design, drag/drop operation will always complete")]
-    private void RaiseTabDragImageRequest(TabItem item, DragVisualDescriptor descriptor)
+    internal void RaiseTabDragImageRequest(TabItem item, DragVisualDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(descriptor);
 
         try
         {
-            this.TabDragImageRequest?.Invoke(
-                this,
-                new TabDragImageRequestEventArgs { Item = item, RequestedSize = descriptor.RequestedSize });
+            var eventArgs = new TabDragImageRequestEventArgs
+            {
+                Item = item,
+                RequestedSize = descriptor.RequestedSize,
+                PreviewImage = null,
+            };
+
+            this.TabDragImageRequest?.Invoke(this, eventArgs);
+
+            // If the handler set a preview image, update the descriptor
+            if (eventArgs.PreviewImage is not null)
+            {
+                descriptor.PreviewImage = eventArgs.PreviewImage;
+            }
         }
         catch (Exception ex)
         {

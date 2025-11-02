@@ -26,26 +26,56 @@ internal sealed class MockDragVisualService : IDragVisualService
     /// </summary>
     public Windows.Foundation.Point? StartSessionHotspot { get; private set; }
 
+    /// <summary>
+    /// Gets the number of times StartSession was called.
+    /// </summary>
+    public int StartSessionCallCount { get; private set; }
+
+    /// <summary>
+    /// Gets the number of times UpdatePosition was called.
+    /// </summary>
+    public int UpdatePositionCallCount => this.updatePositionCalls.Count;
+
+    /// <summary>
+    /// Gets the number of times EndSession was called.
+    /// </summary>
+    public int EndSessionCallCount { get; private set; }
+
+    /// <summary>
+    /// Gets the last descriptor passed to StartSession.
+    /// </summary>
+    public DragVisualDescriptor? LastDescriptor { get; private set; }
+
+    /// <summary>
+    /// Gets the last position passed to UpdatePosition.
+    /// </summary>
+    public Windows.Foundation.Point LastUpdatePosition { get; private set; }
+
     /// <inheritdoc/>
     public DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point hotspot)
     {
+        this.StartSessionCallCount++;
         this.StartSessionHotspot = hotspot;
+        this.LastDescriptor = descriptor;
         return new DragSessionToken { Id = Guid.NewGuid() };
     }
 
     /// <inheritdoc/>
     public void UpdatePosition(DragSessionToken token, Windows.Foundation.Point screenPoint)
-        => this.updatePositionCalls.Add(screenPoint); // Track all position updates - these should be physical pixels
+    {
+        this.updatePositionCalls.Add(screenPoint); // Track all position updates - these should be physical pixels
+        this.LastUpdatePosition = screenPoint;
+    }
 
     /// <inheritdoc/>
     public void EndSession(DragSessionToken token)
     {
-        // Mock implementation - no-op
+        this.EndSessionCallCount++;
     }
 
     /// <inheritdoc/>
     public DragVisualDescriptor? GetDescriptor(DragSessionToken token)
-        => null; // Mock implementation
+        => this.LastDescriptor; // Return last descriptor for testing
 
     /// <summary>
     /// Resets call tracking for test isolation.
@@ -54,5 +84,9 @@ internal sealed class MockDragVisualService : IDragVisualService
     {
         this.updatePositionCalls.Clear();
         this.StartSessionHotspot = null;
+        this.StartSessionCallCount = 0;
+        this.EndSessionCallCount = 0;
+        this.LastDescriptor = null;
+        this.LastUpdatePosition = default;
     }
 }

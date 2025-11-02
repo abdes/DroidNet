@@ -8,7 +8,6 @@ using System.Reflection;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -46,6 +45,7 @@ public class TabStripTests : VisualUserInterfaceTests
         CheckPartIsThere(tabStrip, TabStrip.PartPinnedItemsRepeaterName);
         CheckPartIsThere(tabStrip, TabStrip.PartRegularItemsRepeaterName);
         CheckPartIsThere(tabStrip, TabStrip.PartScrollHostName);
+        CheckPartIsThere(tabStrip, TabStrip.PartReorderOverlayName);
     });
 
     [TestMethod]
@@ -303,14 +303,6 @@ public class TabStripTests : VisualUserInterfaceTests
     internal static async Task<TestableTabStrip> SetupTabStrip()
     {
         var tabStrip = new TestableTabStrip();
-
-        // Ensure the control has a usable ILoggerFactory for tests. Use a lightweight
-        // Microsoft.Extensions.Logging factory so CreateLogger(...) returns a real
-        // ILogger instance. We keep it minimal to avoid noisy output in test runs.
-        var loggerFactory = LoggerFactory.Create(builder => builder
-            .SetMinimumLevel(LogLevel.Debug)
-            .AddDebug());
-        tabStrip.LoggerFactory = loggerFactory;
 
         // Load the control
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);

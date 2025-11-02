@@ -42,6 +42,12 @@
 
     <!--  TabStrip default style  -->
     <Style x:Key="DefaultTabStripItemStyle" TargetType="controls:TabStripItem">
+        <!--  Provide a default translate transform at the container level so drag strategies can adjust X translation during reorder mode  -->
+        <Setter Property="RenderTransform">
+            <Setter.Value>
+                <TranslateTransform />
+            </Setter.Value>
+        </Setter>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="controls:TabStripItem">

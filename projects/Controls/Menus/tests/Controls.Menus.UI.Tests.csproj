@@ -19,6 +19,7 @@
     <ItemGroup>
         <PackageReference Include="Moq" />
         <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     </ItemGroup>
 
 </Project>

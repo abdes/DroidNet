@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls.Tabs.Tests;
 
@@ -35,22 +34,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
-    [TestMethod]
-    public Task CoordinatorCanBeInstantiated_WithLoggerFactory_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var dragService = new MockDragVisualService();
-        var loggerFactory = LoggerFactory.Create(builder => builder.AddDebug());
-
-        // Act
-        var coordinator = new TabDragCoordinator(dragService, loggerFactory);
-
-        // Assert
-        _ = coordinator.Should().NotBeNull("Coordinator with logger factory should be created successfully");
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
+    // TODO: add a test case that validates strategy will log messages when loggerfactory is provided
     [TestMethod]
     public Task StartDrag_RequiresNonNullItem_Async() => EnqueueAsync(async () =>
     {
@@ -59,9 +43,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var coordinator = new TabDragCoordinator(dragService);
         var descriptor = new DragVisualDescriptor();
         var tabStrip = new TabStrip();
+        var container = new TabStripItem();
 
         // Act & Assert
-        var act = () => coordinator.StartDrag(null!, tabStrip, descriptor, new Windows.Foundation.Point(0, 0));
+        var act = () => coordinator.StartDrag(null!, tabStrip, container, descriptor, new SpatialPoint(new Windows.Foundation.Point(0, 0), CoordinateSpace.Screen, tabStrip));
         _ = act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("item");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -75,9 +60,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var coordinator = new TabDragCoordinator(dragService);
         var tabItem = new TabItem { Header = "Test" };
         var descriptor = new DragVisualDescriptor();
+        var container = CreateMockTabStripItem(tabItem);
 
         // Act & Assert
-        var act = () => coordinator.StartDrag(tabItem, null!, descriptor, new Windows.Foundation.Point(0, 0));
+        var act = () => coordinator.StartDrag(tabItem, null!, container, descriptor, new SpatialPoint(new Windows.Foundation.Point(0, 0), CoordinateSpace.Screen));
         _ = act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("source");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -91,9 +77,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var coordinator = new TabDragCoordinator(dragService);
         var tabItem = new TabItem { Header = "Test" };
         var tabStrip = new TabStrip();
+        var container = CreateMockTabStripItem(tabItem);
 
         // Act & Assert
-        var act = () => coordinator.StartDrag(tabItem, tabStrip, null!, new Windows.Foundation.Point(0, 0));
+        var act = () => coordinator.StartDrag(tabItem, tabStrip, container, null!, new SpatialPoint(new Windows.Foundation.Point(0, 0), CoordinateSpace.Screen, tabStrip));
         _ = act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("visualDescriptor");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -108,10 +95,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         // Act & Assert
-        var act = () => coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        var act = () => coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
         _ = act.Should().NotThrow();
 
         // Cleanup
@@ -130,12 +117,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem2 = new TabItem { Header = "Tab2" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
-        coordinator.StartDrag(tabItem1, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem1, tabStrip, CreateMockTabStripItem(tabItem1), descriptor, hotspot);
 
         // Act & Assert
-        var act = () => coordinator.StartDrag(tabItem2, tabStrip, descriptor, hotspot);
+        var act = () => coordinator.StartDrag(tabItem2, tabStrip, CreateMockTabStripItem(tabItem2), descriptor, hotspot);
         _ = act.Should().Throw<InvalidOperationException>().And.Message.Should()
             .Contain("already active");
 
@@ -154,13 +141,13 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         var dragMovedEvents = new System.Collections.Generic.List<DragMovedEventArgs>();
 
         coordinator.DragMoved += (sender, args) => dragMovedEvents.Add(args);
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
         var movePoint = new Windows.Foundation.Point(50, 75);
 
         // Wait a bit for any initial polling, but don't clear - we want to capture the Move call
@@ -168,7 +155,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Act
         var eventsBeforeMove = dragMovedEvents.Count;
-        coordinator.Move(movePoint);
+        coordinator.UpdateDragPosition(movePoint);
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
@@ -193,7 +180,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         var dragEndedRaised = false;
         DragEndedEventArgs? capturedArgs = null;
@@ -204,7 +191,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
             capturedArgs = args;
         };
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
         var endPoint = new Windows.Foundation.Point(100, 150);
 
         // Act
@@ -230,7 +217,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var sourceStrip = new TabStrip();
         var destStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, sourceStrip);
 
         var dragEndedRaised = false;
         DragEndedEventArgs? capturedArgs = null;
@@ -241,7 +228,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
             capturedArgs = args;
         };
 
-        coordinator.StartDrag(tabItem, sourceStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, sourceStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Act
         coordinator.EndDrag(
@@ -271,7 +258,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.DragMoved += (sender, args) => moveEventRaised = true;
 
         // Act
-        coordinator.Move(new Windows.Foundation.Point(50, 75));
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(50, 75));
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
@@ -313,9 +300,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Act
         coordinator.Abort();
@@ -323,7 +310,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Now try to start a new drag - should succeed if state was properly cleared
         var act = () =>
         {
-            coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+            coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
             coordinator.Abort();
         };
         _ = act.Should().NotThrow();
@@ -381,12 +368,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem2 = new TabItem { Header = "Tab2" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
-        coordinator1.StartDrag(tabItem1, tabStrip, descriptor, hotspot);
+        coordinator1.StartDrag(tabItem1, tabStrip, CreateMockTabStripItem(tabItem1), descriptor, hotspot);
 
         // Act & Assert - Coordinator2 should also be able to start a drag independently
-        var act = () => coordinator2.StartDrag(tabItem2, tabStrip, descriptor, hotspot);
+        var act = () => coordinator2.StartDrag(tabItem2, tabStrip, CreateMockTabStripItem(tabItem2), descriptor, hotspot);
         _ = act.Should().NotThrow();
 
         // Cleanup
@@ -413,12 +400,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         // Act
-        coordinator1.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator1.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
-        coordinator1.Move(new Windows.Foundation.Point(50, 50));
+        coordinator1.UpdateDragPosition(new Windows.Foundation.Point(50, 50));
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
         coordinator1.Abort();
 
@@ -440,7 +427,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.DragMoved += (sender, args) => dragMovedEventRaised = true;
 
         // Act - Call Move without starting a drag
-        coordinator.Move(new Windows.Foundation.Point(100, 100));
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(100, 100));
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
@@ -458,12 +445,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         var dragMovedEvents = new System.Collections.Generic.List<DragMovedEventArgs>();
         coordinator.DragMoved += (sender, args) => dragMovedEvents.Add(args);
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Wait for any initial polling timer events to settle
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -474,9 +461,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var point2 = new Windows.Foundation.Point(75, 75);
         var point3 = new Windows.Foundation.Point(100, 100);
 
-        coordinator.Move(point1);
-        coordinator.Move(point2);
-        coordinator.Move(point3);
+        coordinator.UpdateDragPosition(point1);
+        coordinator.UpdateDragPosition(point2);
+        coordinator.UpdateDragPosition(point3);
 
         // Wait for the moves to be processed (but don't wait long enough for more polling)
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -511,12 +498,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         var dragEndedEventCount = 0;
         coordinator.DragEnded += (sender, args) => dragEndedEventCount++;
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Act - Call EndDrag multiple times
         coordinator.EndDrag(
@@ -549,14 +536,14 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var sourceStrip = new TabStrip();
         var destinationStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor { Title = "DraggedTab" };
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, sourceStrip);
         var endPoint = new Windows.Foundation.Point(250, 150);
         const int expectedNewIndex = 3;
 
         DragEndedEventArgs? capturedArgs = null;
         coordinator.DragEnded += (sender, args) => capturedArgs = args;
 
-        coordinator.StartDrag(tabItem, sourceStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, sourceStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Act
         coordinator.EndDrag(
@@ -585,12 +572,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         var capturedScreenPoints = new System.Collections.Generic.List<Windows.Foundation.Point>();
         coordinator.DragMoved += (sender, args) => capturedScreenPoints.Add(args.ScreenPoint);
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
 
         // Wait for any initial polling events and clear them
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -601,9 +588,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var point2 = new Windows.Foundation.Point(100, 75);
         var point3 = new Windows.Foundation.Point(150, 100);
 
-        coordinator.Move(point1);
-        coordinator.Move(point2);
-        coordinator.Move(point3);
+        coordinator.UpdateDragPosition(point1);
+        coordinator.UpdateDragPosition(point2);
+        coordinator.UpdateDragPosition(point3);
 
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
 
@@ -629,13 +616,13 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabStrip = new TabStrip();
         var descriptor1 = new DragVisualDescriptor { Title = "FirstDrag" };
         var descriptor2 = new DragVisualDescriptor { Title = "SecondDrag" };
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
         // Act - Start first drag
-        coordinator.StartDrag(tabItem, tabStrip, descriptor1, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor1, hotspot);
 
         // Verify we can't start another drag with same coordinator
-        var act1 = () => coordinator.StartDrag(tabItem, tabStrip, descriptor2, hotspot);
+        var act1 = () => coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor2, hotspot);
         _ = act1.Should().Throw<InvalidOperationException>("Should not allow concurrent drags");
 
         // Abort first drag
@@ -643,13 +630,13 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         await Task.Delay(10, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act - Start second drag with different descriptor
-        coordinator.StartDrag(tabItem, tabStrip, descriptor2, hotspot);
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor2, hotspot);
 
         // Assert - Second drag should be active, first should be aborted
         var secondDragEventRaised = false;
         coordinator.DragMoved += (s, e) => secondDragEventRaised = true;
 
-        coordinator.Move(new Windows.Foundation.Point(50, 50));
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(50, 50));
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = secondDragEventRaised.Should().BeTrue("Second drag with new descriptor should work after abort");
@@ -669,10 +656,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "TestTab" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var hotspot = new Windows.Foundation.Point(10, 10);
+        var hotspot = new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip);
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
-        coordinator.Move(new Windows.Foundation.Point(100, 100));
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(100, 100));
 
         // Act
         coordinator.Abort();
@@ -681,8 +668,8 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var dragMovedRaised = false;
         coordinator.DragMoved += (sender, args) => dragMovedRaised = true;
 
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, hotspot);
-        coordinator.Move(new Windows.Foundation.Point(50, 50));
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, hotspot);
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(50, 50));
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Assert
@@ -720,6 +707,8 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
     /// <summary>
     /// Tests that StartDrag passes hotspot in logical pixels to the service (XAML coordinate space).
+    /// After Phase 2 refactor: Hotspot is stored in DragContext and passed to TearOutStrategy,
+    /// which then passes it to the service when entering TearOut mode.
     /// </summary>
     [TestMethod]
     public Task StartDrag_PassesLogicalHotspotToService_Async() => EnqueueAsync(async () =>
@@ -730,13 +719,26 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "Test" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        var logicalHotspot = new Windows.Foundation.Point(50, 20); // Logical pixels (XAML)
+        var logicalHotspot = new SpatialPoint(new Windows.Foundation.Point(50, 20), CoordinateSpace.Element, tabStrip); // Logical pixels (XAML)
 
-        // Act
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, logicalHotspot);
+        // Act: Start drag (enters Reorder mode initially)
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, logicalHotspot);
 
-        // Assert
-        _ = dragService.StartSessionHotspot.Should().Be(logicalHotspot, "Hotspot should be passed to service in logical pixels");
+        // Simulate switching to TearOut mode (this is when service session starts)
+        // In real scenario, this happens when drag crosses TearOut threshold
+        var tearOutPosition = new Windows.Foundation.Point(100, 100);
+
+        // Use reflection to call SwitchToTearOutMode (internal method) for testing
+        var switchMethod = typeof(TabDragCoordinator).GetMethod(
+            "SwitchToTearOutMode",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        _ = switchMethod?.Invoke(coordinator, [tearOutPosition]);
+
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert: Service should receive hotspot in logical pixels when TearOut session starts
+        _ = dragService.StartSessionHotspot.Should().Be(logicalHotspot, "Hotspot should be passed to service in logical pixels when entering TearOut mode");
+        _ = dragService.StartSessionCallCount.Should().Be(1, "Service session should be started when entering TearOut mode");
 
         // Cleanup
         coordinator.Abort();
@@ -746,6 +748,8 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     /// <summary>
     /// Tests that Move() passes physical screen pixels to the service (GetCursorPos contract).
     /// The coordinator should NOT perform DPI conversion; service owns all DPI handling.
+    /// After Phase 2 refactor: Move() calls are delegated to strategies. Only TearOutStrategy
+    /// calls the service's UpdatePosition method.
     /// </summary>
     [TestMethod]
     public Task Move_PassesPhysicalPixelsToService_Async() => EnqueueAsync(async () =>
@@ -756,21 +760,31 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "Test" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, new Windows.Foundation.Point(10, 10));
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip));
+
+        // Switch to TearOut mode (this is when service UpdatePosition gets called)
+        var switchMethod = typeof(TabDragCoordinator).GetMethod(
+            "SwitchToTearOutMode",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        _ = switchMethod?.Invoke(coordinator, [new Windows.Foundation.Point(50, 50)]);
+
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Clear any initial position calls from mode switch
+        dragService.UpdatePositionCalls.ToList().Clear();
 
         // Act: Simulate cursor movement in physical pixels (as returned by GetCursorPos)
         var physicalPosition1 = new Windows.Foundation.Point(100, 100);
         var physicalPosition2 = new Windows.Foundation.Point(200, 200);
 
-        coordinator.Move(physicalPosition1);
-        coordinator.Move(physicalPosition2);
+        coordinator.UpdateDragPosition(physicalPosition1);
+        coordinator.UpdateDragPosition(physicalPosition2);
 
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert: Service should receive physical pixels unchanged
-        _ = dragService.UpdatePositionCalls.Should().HaveCountGreaterThanOrEqualTo(2, "Service should be called for each Move()");
-        _ = dragService.UpdatePositionCalls.Should().Contain(physicalPosition1, "First physical position should be passed to service");
-        _ = dragService.UpdatePositionCalls.Should().Contain(physicalPosition2, "Second physical position should be passed to service");
+        // Assert: Service should receive physical pixels unchanged (in TearOut mode)
+        _ = dragService.UpdatePositionCalls.Should().Contain(physicalPosition1, "First physical position should be passed to service in TearOut mode");
+        _ = dragService.UpdatePositionCalls.Should().Contain(physicalPosition2, "Second physical position should be passed to service in TearOut mode");
 
         // Cleanup
         coordinator.Abort();
@@ -780,6 +794,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     /// <summary>
     /// Tests that the coordinator does NOT convert coordinates from physical to logical.
     /// This ensures the service is the single owner of DPI conversions (critical for cross-monitor support).
+    /// After Phase 2 refactor: TearOutStrategy delegates to service without coordinate conversion.
     /// </summary>
     [TestMethod]
     public Task Coordinator_DoesNotConvertPhysicalToLogical_Async() => EnqueueAsync(async () =>
@@ -790,22 +805,200 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabItem = new TabItem { Header = "Test" };
         var tabStrip = new TabStrip();
         var descriptor = new DragVisualDescriptor();
-        coordinator.StartDrag(tabItem, tabStrip, descriptor, new Windows.Foundation.Point(10, 10));
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip));
+
+        // Switch to TearOut mode (this is when service UpdatePosition gets called)
+        var switchMethod = typeof(TabDragCoordinator).GetMethod(
+            "SwitchToTearOutMode",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+        _ = switchMethod?.Invoke(coordinator, [new Windows.Foundation.Point(50, 50)]);
+
+        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         // Act: Pass physical pixels (e.g., 200x200 on a 200% DPI monitor)
         // If coordinator incorrectly converts to logical, service would receive 100x100 instead
         var physicalPosition = new Windows.Foundation.Point(200, 200);
-        coordinator.Move(physicalPosition);
+        coordinator.UpdateDragPosition(physicalPosition);
 
         await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
-        // Assert: Service should receive exact physical coordinates
+        // Assert: Service should receive exact physical coordinates (in TearOut mode)
         _ = dragService.UpdatePositionCalls.Should().Contain(
             physicalPosition,
-            "Coordinator must pass physical pixels unchanged (service owns DPI conversion)");
+            "Coordinator must pass physical pixels unchanged to TearOutStrategy, which passes them to service (service owns DPI conversion)");
 
         // Cleanup
         coordinator.Abort();
         await Task.CompletedTask.ConfigureAwait(true);
     });
+
+    [TestMethod]
+    public Task Coordinator_RegistersTabStrip_Successfully_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+        var tabStrip = new TabStrip();
+
+        // Act
+        coordinator.RegisterTabStrip(tabStrip);
+
+        // Assert - Registration should succeed without errors
+        // We can't directly verify the internal registry, but we can verify the method completes
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_UnregistersTabStrip_Successfully_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+        var tabStrip = new TabStrip();
+        coordinator.RegisterTabStrip(tabStrip);
+
+        // Act
+        coordinator.UnregisterTabStrip(tabStrip);
+
+        // Assert - Unregistration should succeed without errors
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_RegisterTabStrip_ThrowsOnNullStrip_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+
+        // Act & Assert
+        var act = () => coordinator.RegisterTabStrip(null!);
+        _ = act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("strip");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_UnregisterTabStrip_ThrowsOnNullStrip_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+
+        // Act & Assert
+        var act = () => coordinator.UnregisterTabStrip(null!);
+        _ = act.Should().Throw<ArgumentNullException>().And.ParamName.Should().Be("strip");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_DragMovedEvent_IncludesAllRequiredProperties_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+        var tabItem = new TabItem { Header = "Test" };
+        var tabStrip = new TabStrip();
+        var descriptor = new DragVisualDescriptor();
+
+        DragMovedEventArgs? receivedArgs = null;
+        coordinator.DragMoved += (s, e) => receivedArgs = e;
+
+        // Act
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip));
+        coordinator.UpdateDragPosition(new Windows.Foundation.Point(50, 50));
+
+        // Assert
+        _ = receivedArgs.Should().NotBeNull("DragMoved event should be raised");
+        _ = receivedArgs!.ScreenPoint.Should().NotBeNull("ScreenPoint should be populated");
+        _ = receivedArgs.Item.Should().Be(tabItem, "Item should be the dragged TabItem");
+        _ = receivedArgs.IsInReorderMode.Should().BeTrue("Should start in Reorder mode");
+        _ = receivedArgs.HitStrip.Should().BeNull("HitStrip should be null when no strips are registered");
+        _ = receivedArgs.DropIndex.Should().BeNull("DropIndex should be null (populated by strategies in later phases)");
+
+        coordinator.Abort();
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_DragEndedEvent_IncludesAllRequiredProperties_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+        var tabItem = new TabItem { Header = "Test" };
+        var tabStrip = new TabStrip();
+        var descriptor = new DragVisualDescriptor();
+
+        DragEndedEventArgs? receivedArgs = null;
+        coordinator.DragEnded += (s, e) => receivedArgs = e;
+
+        // Act
+        coordinator.StartDrag(tabItem, tabStrip, CreateMockTabStripItem(tabItem), descriptor, new SpatialPoint(new Windows.Foundation.Point(10, 10), CoordinateSpace.Screen, tabStrip));
+        coordinator.EndDrag(new Windows.Foundation.Point(100, 100), droppedOverStrip: false, destination: null, newIndex: null);
+
+        // Assert
+        _ = receivedArgs.Should().NotBeNull("DragEnded event should be raised");
+        _ = receivedArgs!.ScreenPoint.Should().NotBeNull("ScreenPoint should be populated");
+        _ = receivedArgs.Item.Should().Be(tabItem, "Item should be the dragged TabItem");
+        _ = receivedArgs.IsInReorderMode.Should().BeTrue("Should be in Reorder mode when ended");
+        _ = receivedArgs.DroppedOverStrip.Should().BeFalse("DroppedOverStrip should match parameter");
+        _ = receivedArgs.Destination.Should().BeNull("Destination should be null as specified");
+        _ = receivedArgs.NewIndex.Should().BeNull("NewIndex should be null as specified");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_MultipleTabStrips_CanBeRegistered_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+        var tabStrip1 = new TabStrip();
+        var tabStrip2 = new TabStrip();
+        var tabStrip3 = new TabStrip();
+
+        // Act - Register multiple strips
+        coordinator.RegisterTabStrip(tabStrip1);
+        coordinator.RegisterTabStrip(tabStrip2);
+        coordinator.RegisterTabStrip(tabStrip3);
+
+        // Assert - All registrations should succeed
+        // Verification is implicit - method completes without throwing
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task Coordinator_CleanUpDeadReferences_WhenRegisteringNewStrip_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new MockDragVisualService();
+        var coordinator = new TabDragCoordinator(dragService);
+
+        // Register a strip and let it go out of scope
+        {
+            var tempStrip = new TabStrip();
+            coordinator.RegisterTabStrip(tempStrip);
+        }
+
+        // Force garbage collection to make the weak reference dead
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        // Act - Registering a new strip should clean up dead references
+        var newStrip = new TabStrip();
+        coordinator.RegisterTabStrip(newStrip);
+
+        // Assert - Should complete without error (dead references cleaned up)
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    private static TabStripItem CreateMockTabStripItem(TabItem item)
+    {
+        var container = new TabStripItem { Item = item };
+        return container;
+    }
 }

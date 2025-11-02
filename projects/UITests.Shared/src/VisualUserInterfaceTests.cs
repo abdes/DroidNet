@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.WinUI;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Tests;
@@ -69,6 +70,10 @@ namespace DroidNet.Tests;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "a test suite class")]
 public class VisualUserInterfaceTests
 {
+    protected ILoggerFactory LoggerFactory { get; } =
+        Microsoft.Extensions.Logging.LoggerFactory.Create(
+        builder => builder.AddDebug().SetMinimumLevel(LogLevel.Debug));
+
     /// <summary>
     /// Initializes the test environment before each test method is run.
     /// </summary>
