@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+	<PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>$(RootNamespace).Coordinates</RootNamespace>
+        <AssemblyName>DroidNet.Coordinates</AssemblyName>
+		<UseWinUI>true</UseWinUI>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+        <Title>DroidNet coordinate system types and mappers.</Title>
+		<Description>DroidNet.Coordinates is a type-safe spatial mapping library for WinUI 3 that abstracts coordinate transformations across element, window, and screen spaces with DPI and multi-monitor awareness. It provides generic spatial point types tagged by coordinate space, fluent conversion APIs, and context-aware services that integrate cleanly with dependency injection. Designed for precision-critical scenarios like input simulation, layout validation, and UI automation, DroidNet.Coordinates ensures predictable, reproducible spatial behavior with compile-time safety and ergonomic usage.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageTags>winui;coordinates;screen;dpi;mappers</PackageTags>
+		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<None Include="..\README.md">
+			<Pack>True</Pack>
+			<PackagePath>\</PackagePath>
+		</None>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="DryIoc.dll" />
+		<PackageReference Include="Microsoft.WindowsAppSDK" />
+		<PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+	</ItemGroup>
+
+</Project>
