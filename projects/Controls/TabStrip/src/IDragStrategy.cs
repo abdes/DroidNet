@@ -2,41 +2,71 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Coordinates;
+
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Defines the contract for drag strategies that handle different modes of tab dragging.
-///     Strategies implement the Strategy pattern to encapsulate mode-specific drag logic.
+///     Defines the contract for drag strategies that manage the complete lifecycle of tab dragging
+///     within or out of a <see cref="TabStrip"/>.
 /// </summary>
+/// <remarks>
+///     A drag operation begins when the user initiates a drag, causing <see cref="InitiateDrag"/>
+///     to be called. The strategy prepares any required visual state and context for the operation.
+///     As the pointer moves, <see cref="OnDragPositionChanged"/> is invoked, allowing the strategy
+///     to update visual feedback and internal state in real time. The operation concludes with a
+///     call to <see cref="CompleteDrag"/>, at which point the strategy finalizes changes and resets
+///     its state, ready for subsequent drags. Implementations may tailor these stages to support a
+///     variety of drag-and-drop behaviors.
+/// </remarks>
 internal interface IDragStrategy
 {
     /// <summary>
-    ///     Gets a value indicating whether this strategy is currently active and managing a drag operation.
+    ///     Begins a new drag operation using this strategy. This method initializes any required
+    ///     visual state and prepares the strategy to track pointer movement.
     /// </summary>
-    public bool IsActive { get; }
+    /// <param name="context">
+    ///     The contextual information for the drag operation. This object is valid only for the
+    ///     duration of the drag, from the invocation of <see cref="InitiateDrag"/> until <see
+    ///     cref="CompleteDrag"/> returns.
+    /// </param>
+    /// <param name="position">
+    ///     The initial pointer position, represented as a <see cref="SpatialPoint{TSpace}"/> in screen space.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    ///     Thrown if a drag operation is already in progress and has not yet been completed.
+    /// </exception>
+    /// <exception cref="ArgumentNullException">
+    ///     Thrown if <paramref name="context"/> is <see langword="null"/>.
+    /// </exception>
+    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> position);
 
     /// <summary>
-    ///     Initiates a drag operation with this strategy.
-    ///     The strategy should initialize any necessary visual state and prepare for drag position updates.
+    ///     Updates the drag operation in response to pointer movement. This method should be called
+    ///     whenever the pointer moves during an active drag, allowing the strategy to update visual
+    ///     feedback and internal state.
     /// </summary>
-    /// <param name="context">The context information for the drag operation.</param>
-    /// <param name="initialPoint">The initial pointer position as a SpatialPoint with explicit coordinate space.</param>
-    public void InitiateDrag(DragContext context, SpatialPoint initialPoint);
+    /// <param name="position">
+    ///     The current pointer position, represented as a <see cref="SpatialPoint{TSpace}"/> in screen space.
+    /// </param>
+    /// <remarks>
+    ///     This method has no effect if a drag operation is not currently in progress.
+    /// </remarks>
+    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> position);
 
     /// <summary>
-    ///     Reacts to pointer movement during an active drag operation.
-    ///     The strategy should update visual feedback based on the new pointer position.
+    ///     Finalizes the drag operation and applies any resulting changes. Drag operations cannot
+    ///     be cancelled and must always be completed. For every call to <see cref="InitiateDrag"/>,
+    ///     there must be a corresponding call to <see cref="CompleteDrag"/>.
     /// </summary>
-    /// <param name="currentPoint">The current pointer position as a SpatialPoint with explicit coordinate space.</param>
-    public void OnDragPositionChanged(SpatialPoint currentPoint);
-
-    /// <summary>
-    ///     Completes the drag operation and finalizes any changes.
-    ///     This is the only way to properly finish a drag - there is no separate "drop" event.
-    /// </summary>
-    /// <param name="finalPoint">The final pointer position as a SpatialPoint with explicit coordinate space.</param>
-    /// <param name="targetStrip">The target TabStrip if dropping over one; otherwise null.</param>
-    /// <param name="targetIndex">The target insertion index if applicable; otherwise null.</param>
-    /// <returns>True if the drag was completed successfully; false if it was cancelled or failed.</returns>
-    public bool CompleteDrag(SpatialPoint finalPoint, TabStrip? targetStrip, int? targetIndex);
+    /// <returns>
+    ///     <see langword="true"/> if the drag was completed successfully; otherwise, <see
+    ///     langword="false"/> if the operation failed.
+    /// </returns>
+    /// <remarks>
+    ///     The specific behavior upon completion may vary depending on the strategy and context.
+    ///     After completion, further calls to <see cref="OnDragPositionChanged"/> or <see
+    ///     cref="CompleteDrag"/> have no effect until a new drag is initiated.
+    /// </remarks>
+    public bool CompleteDrag();
 }

@@ -22,12 +22,10 @@ public delegate ISpatialMapper SpatialMapperFactory(FrameworkElement element, Wi
 /// </summary>
 /// <param name="element">The framework element used as reference for element space mappings.</param>
 /// <param name="window">The window containing the element, used for window space mappings.</param>
-public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMapper
+public class SpatialMapper(FrameworkElement element, Window? window = null) : ISpatialMapper
 {
-    private const uint DefaultDpi = 96;
-
     private readonly FrameworkElement element = element ?? throw new ArgumentNullException(nameof(element));
-    private readonly Window window = window ?? throw new ArgumentNullException(nameof(window));
+    private readonly Window? window = window;
 
     private IntPtr cachedHwnd;
 
@@ -94,6 +92,29 @@ public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMa
     private static int RoundToInt(double value)
         => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 
+    private static uint GetWindowDpi(IntPtr hwnd)
+    {
+        var dpi = Native.GetDpiForWindow(hwnd);
+        if (dpi == 0)
+        {
+            throw new InvalidOperationException("GetDpiForWindow returned 0 for the associated window.");
+        }
+
+        return dpi;
+    }
+
+    private static IntPtr GetWindowHandleViaWindow(Window owningWindow)
+    {
+        try
+        {
+            return WindowNative.GetWindowHandle(owningWindow);
+        }
+        catch (InvalidCastException ex)
+        {
+            throw new InvalidOperationException("WindowNative.GetWindowHandle failed for the provided Window instance.", ex);
+        }
+    }
+
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
     private Point ToScreenPoint<TSource>(SpatialPoint<TSource> point)
     {
@@ -118,164 +139,78 @@ public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMa
     }
 
     private Point ElementToScreen(Point elementPoint)
-        => this.TryElementToWindow(elementPoint, out var windowPoint)
-            ? this.WindowToScreen(windowPoint)
-            : this.FallbackElementToScreen(elementPoint);
+    {
+        var windowPoint = this.ElementToWindow(elementPoint);
+        return this.WindowToScreen(windowPoint);
+    }
 
     private Point WindowToScreen(Point windowPoint)
     {
-        if (this.TryGetWindowMetrics(out _, out var windowRect, out var dpiWindow))
-        {
-            // Convert window-relative logical coordinates to physical pixels for DPI-aware projection.
-            var physicalX = windowRect.Left + Native.LogicalToPhysical(windowPoint.X, dpiWindow);
-            var physicalY = windowRect.Top + Native.LogicalToPhysical(windowPoint.Y, dpiWindow);
+        var hwnd = this.EnsureWindowHandle();
+        var dpi = GetWindowDpi(hwnd);
 
-            var monitorDpi = Native.GetDpiForPhysicalPoint(new Point(physicalX, physicalY));
-            return Native.GetLogicalPointFromPhysical(new Native.POINT(physicalX, physicalY), monitorDpi);
+        var physicalPoint = Native.GetPhysicalPointFromLogical(windowPoint, dpi);
+        if (!Native.ClientToScreen(hwnd, ref physicalPoint))
+        {
+            throw new InvalidOperationException("ClientToScreen failed for the associated window.");
         }
 
-        return this.FallbackWindowToScreen(windowPoint);
+        var monitorDpi = Native.GetDpiForPhysicalPoint(new Point(physicalPoint.X, physicalPoint.Y));
+        return Native.GetLogicalPointFromPhysical(physicalPoint, monitorDpi);
     }
 
     private Point ScreenToWindow(Point screenPoint)
     {
-        if (this.TryGetWindowMetrics(out _, out var windowRect, out var dpiWindow))
+        var hwnd = this.EnsureWindowHandle();
+        var dpi = GetWindowDpi(hwnd);
+
+        var physicalScreenPoint = Native.GetPhysicalScreenPointFromLogical(screenPoint);
+        var physicalPoint = new Native.POINT(RoundToInt(physicalScreenPoint.X), RoundToInt(physicalScreenPoint.Y));
+
+        if (!Native.ScreenToClient(hwnd, ref physicalPoint))
         {
-            var physical = Native.GetPhysicalScreenPointFromLogical(screenPoint);
-            var physicalX = RoundToInt(physical.X) - windowRect.Left;
-            var physicalY = RoundToInt(physical.Y) - windowRect.Top;
-
-            var logicalX = Native.PhysicalToLogical(physicalX, dpiWindow);
-            var logicalY = Native.PhysicalToLogical(physicalY, dpiWindow);
-
-            return new Point(logicalX, logicalY);
+            throw new InvalidOperationException("ScreenToClient failed for the associated window.");
         }
 
-        return this.FallbackScreenToWindow(screenPoint);
+        var logicalX = Native.PhysicalToLogical(physicalPoint.X, dpi);
+        var logicalY = Native.PhysicalToLogical(physicalPoint.Y, dpi);
+        return new Point(logicalX, logicalY);
     }
 
     private Point ScreenToElement(Point screenPoint)
     {
         var windowPoint = this.ScreenToWindow(screenPoint);
-        return this.TryWindowToElement(windowPoint, out var elementPoint)
-            ? elementPoint
-            : this.FallbackScreenToElement(screenPoint);
+        return this.WindowToElement(windowPoint);
     }
 
-    private bool TryElementToWindow(Point elementPoint, out Point windowPoint)
+    private Point ElementToWindow(Point elementPoint)
     {
-        windowPoint = default;
-
-        if (this.element.XamlRoot?.Content is UIElement root)
-        {
-#pragma warning disable CA1031 // Do not catch general exception types
-            try
-            {
-                var transform = this.element.TransformToVisual(root);
-                windowPoint = transform.TransformPoint(elementPoint);
-                return true;
-            }
-            catch
-            {
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-        }
-
-        return false;
-    }
-
-    private bool TryWindowToElement(Point windowPoint, out Point elementPoint)
-    {
-        elementPoint = default;
-
-        if (this.element.XamlRoot?.Content is UIElement root)
-        {
-#pragma warning disable CA1031 // Do not catch general exception types
-            try
-            {
-                var transform = this.element.TransformToVisual(root);
-                var inverse = transform.Inverse;
-                if (inverse != null)
-                {
-                    elementPoint = inverse.TransformPoint(windowPoint);
-                    return true;
-                }
-            }
-            catch
-            {
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-        }
-
-        return false;
-    }
-
-    private Point FallbackElementToScreen(Point elementPoint)
-    {
-        var transform = this.element.TransformToVisual(visual: null);
+        var root = this.GetRootVisual();
+        var transform = this.element.TransformToVisual(root);
         return transform.TransformPoint(elementPoint);
     }
 
-    private Point FallbackWindowToScreen(Point windowPoint)
+    private Point WindowToElement(Point windowPoint)
     {
-        if (this.window.Content is UIElement content)
-        {
-            var transform = content.TransformToVisual(visual: null);
-            return transform.TransformPoint(windowPoint);
-        }
-
-        throw new InvalidOperationException("Window content is not available for screen projection.");
-    }
-
-    private Point FallbackScreenToWindow(Point screenPoint)
-    {
-        if (this.window.Content is UIElement content)
-        {
-            var transform = content.TransformToVisual(visual: null);
-            var inverse = transform.Inverse ?? throw new InvalidOperationException("Unable to invert window transform.");
-            return inverse.TransformPoint(screenPoint);
-        }
-
-        throw new InvalidOperationException("Window content is not available for screen projection.");
-    }
-
-    private Point FallbackScreenToElement(Point screenPoint)
-    {
-        var transform = this.element.TransformToVisual(visual: null);
+        var root = this.GetRootVisual();
+        var transform = this.element.TransformToVisual(root);
         var inverse = transform.Inverse ?? throw new InvalidOperationException("Unable to invert element transform.");
-        return inverse.TransformPoint(screenPoint);
+        return inverse.TransformPoint(windowPoint);
     }
 
-    private bool TryGetWindowMetrics(out IntPtr hwnd, out Native.RECT windowRect, out uint dpi)
+    private UIElement GetRootVisual()
     {
-        hwnd = this.EnsureWindowHandle();
-        windowRect = default;
-        dpi = DefaultDpi;
-
-        if (hwnd == IntPtr.Zero)
+        if (this.window?.Content is UIElement windowContent)
         {
-            return false;
+            return windowContent;
         }
 
-        if (!Native.GetWindowRect(hwnd, out windowRect))
+        if (this.element.XamlRoot?.Content is UIElement xamlRootContent)
         {
-            return false;
+            return xamlRootContent;
         }
 
-        var windowDpi = Native.GetDpiForWindow(hwnd);
-        if (windowDpi != 0)
-        {
-            dpi = windowDpi;
-            return true;
-        }
-
-        var xamlDpi = Native.GetDpiFromXamlRoot(this.element.XamlRoot);
-        if (xamlDpi != 0)
-        {
-            dpi = xamlDpi;
-        }
-
-        return true;
+        throw new InvalidOperationException("Element is not associated with a visual tree.");
     }
 
     private IntPtr EnsureWindowHandle()
@@ -285,27 +220,23 @@ public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMa
             return this.cachedHwnd;
         }
 
-        var handle = this.TryGetWindowHandleViaWindow();
-        if (handle == IntPtr.Zero)
+        IntPtr handle;
+
+        if (this.window != null)
+        {
+            handle = GetWindowHandleViaWindow(this.window);
+        }
+        else
         {
             handle = Native.GetHwndForElement(this.element);
         }
 
+        if (handle == IntPtr.Zero)
+        {
+            throw new InvalidOperationException("Unable to resolve the HWND for the associated element.");
+        }
+
         this.cachedHwnd = handle;
         return handle;
-    }
-
-    private IntPtr TryGetWindowHandleViaWindow()
-    {
-#pragma warning disable CA1031 // Do not catch general exception types
-        try
-        {
-            return WindowNative.GetWindowHandle(this.window);
-        }
-        catch
-        {
-            return IntPtr.Zero;
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
     }
 }
