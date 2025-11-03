@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
-using System.Linq;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using Windows.Foundation;
 
 namespace DroidNet.Controls;
 
@@ -17,23 +18,15 @@ namespace DroidNet.Controls;
 ///     This strategy manages reordering within TabStrip bounds using transforms to slide content
 ///     between shells, with a stack tracking pushed items for reversibility.
 /// </summary>
-internal sealed partial class ReorderStrategy : IDragStrategy
+internal partial class ReorderStrategy : IDragStrategy
 {
     private readonly ILogger logger;
 
-    private bool isActive;
     private DragContext? context;
 
     // Item tracking
-    private int draggedItemIndex;        // Index in Items of the dragged tab
-    private int dropIndex;                // Current target drop index in Items
-    private double hotspotX;              // X offset from dragged item's left edge to pointer grab point
+    private ReorderLayout? layout;
 
-    // Stack of pushed items (for reversibility)
-    private Stack<PushedItemInfo> pushedItemsStack = new();
-
-    // Pointer tracking (for midpoint crossing detection)
-    private double lastPointerX;          // Previous frame's pointer X in strip coords
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="ReorderStrategy"/> class.
@@ -45,228 +38,209 @@ internal sealed partial class ReorderStrategy : IDragStrategy
         this.LogCreated();
     }
 
-    /// <inheritdoc/>
-    public bool IsActive => this.isActive;
+    internal IReadOnlyList<SnapshotItem> LayoutItems => this.layout?.Items ?? ImmutableList<SnapshotItem>.Empty;
+
+    protected bool IsActive => this.context is not null;
 
     /// <inheritdoc/>
-    public void InitiateDrag(DragContext context, SpatialPoint initialPoint)
+    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> position)
     {
         ArgumentNullException.ThrowIfNull(context);
+        Debug.Assert(context.TabStrip is not null, "TabStrip must be set in DragContext");
 
-        if (this.isActive)
+        if (this.IsActive)
         {
             this.LogAlreadyActive();
             throw new InvalidOperationException("ReorderStrategy is already active");
         }
 
+        var localPosition = context.SpatialMapper.ToElement(position);
+        this.LogEnterReorderMode(position, localPosition);
+
         this.context = context;
-        this.isActive = true;
 
-        // Store the dragged item index
-        this.draggedItemIndex = context.SourceStrip.Items.IndexOf(context.DraggedItem);
-        this.dropIndex = this.draggedItemIndex;  // Initially, drop index = original index
+        // During re-order, we are confined to the TabStrip that initiated the drag, and it is not
+        // realistic or expected to have tabs changed. Therefore, we take a visual snapshot of the strip's
+        // regular items, and work with it for as long as we are re-ordering and not tearing out.
+        this.layout = new(context, localPosition);
 
-        // Store the hotspot offset (where user clicked within the item)
-        this.hotspotX = context.Hotspot.X;
+        this.LogReorderInitiated(this.layout.DraggedItemVisualIndex);
 
-        // Convert to TabStrip element coordinates
-        var stripPoint = initialPoint.To(CoordinateSpace.Element, context.SourceStrip);
+    }
 
-        // Initialize stack and pointer tracking
-        this.pushedItemsStack.Clear();
-        this.lastPointerX = stripPoint.X;
+    internal class SnapshotItem
+    {
+        public required int ItemIndex { get; init; } // Index in Items collection
 
-        this.LogEnterReorderMode(stripPoint.Point);
+        public required SpatialPoint<ElementSpace> LayoutOrigin { get; init; } // Original top left corner of the item in the TabStrip coordinates space
+
+        public required double Width { get; init; } // Actual rendered Width of the item
+
+        public double Offset { get; set; } // Current horizontal translation offset
+    }
+
+    private sealed class ReorderLayout
+    {
+        private readonly List<SnapshotItem> items;
+        private readonly int draggedItemVisualIndex;
+        private int lastDropTargetVisualIndex;
+        private double grabOffsetX = 0;
+
+        public int DraggedItemVisualIndex => this.draggedItemVisualIndex;
+
+        public IReadOnlyList<SnapshotItem> Items => this.items.AsReadOnly();
+
+        public ReorderLayout(DragContext context, SpatialPoint<ElementSpace> grabPoint)
+        {
+            Debug.Assert(context is { TabStrip: { } }, message: "Context must be set to take snapshot");
+
+            this.items = TakeTabStripSnapshot(context);
+
+            // Record the index of the dragged item in the snapshot (visual index)
+            this.draggedItemVisualIndex = this.items.FindIndex(i => ReferenceEquals(context.TabStrip.Items[i.ItemIndex], context.DraggedItem));
+            Debug.Assert(this.draggedItemVisualIndex >= 0, "Dragged item must be found in TabStrip items");
+            this.lastDropTargetVisualIndex = this.draggedItemVisualIndex;
+            Debug.WriteLine("Dragged item visual index: " + this.draggedItemVisualIndex);
+
+            var draggedItem = this.items[this.draggedItemVisualIndex];
+            this.grabOffsetX = grabPoint.Point.X - draggedItem.LayoutOrigin.Point.X;
+            Debug.WriteLine("Grab offset X: " + this.grabOffsetX);
+        }
+
+        public (SnapshotItem?, string) UpdateDrag(SpatialPoint<ElementSpace> pointer)
+        {
+            var draggedItem = items[draggedItemVisualIndex];
+            Debug.WriteLine($"Pointer: {pointer}");
+            Debug.WriteLine($"Dragged item logical index: {draggedItem.ItemIndex}");
+
+            // Compute offset from original layout position
+            double originalX = draggedItem.LayoutOrigin.Point.X;
+            draggedItem.Offset = pointer.Point.X - originalX;
+            Debug.WriteLine($"Dragged item offset: {draggedItem.Offset}");
+
+            for (var i = 0; i < this.items.Count; i++)
+            {
+                if (i == this.draggedItemVisualIndex)
+                {
+                    Debug.WriteLine($"Skipping dragged item at index {i}");
+                    continue;
+                }
+
+                var item = this.items[i];
+                var renderedStart = item.LayoutOrigin.Point.X + item.Offset;
+                var renderedEnd = renderedStart + item.Width;
+                Debug.WriteLine($"Checking item {i} (logical {item.ItemIndex}): renderedStart={renderedStart}, renderedEnd={renderedEnd}, pointer.X={pointer.Point.X}");
+
+                if (pointer.Point.X >= renderedStart && pointer.Point.X < renderedEnd)
+                {
+                    var localX = pointer.Point.X - renderedStart;
+                    Debug.WriteLine($"Pointer inside item {i}, localX={localX}, halfWidth={item.Width / 2}");
+                    if (localX > item.Width / 2)
+                    {
+                        double direction = i < this.draggedItemVisualIndex ? -1 : 1;
+                        string dir = direction < 0 ? "left" : "right";
+                        item.Offset += direction * item.Width;
+                        this.lastDropTargetVisualIndex = i;
+                        Debug.WriteLine($"Displacing item {i} to the {dir}, new offset={item.Offset}");
+
+                        // Return the displayed item index
+                        return (item, dir);
+                    }
+                    else
+                    {
+                        Debug.WriteLine($"Pointer in left half of item {i}, no displacement");
+                    }
+                }
+            }
+
+            Debug.WriteLine("No displacement detected");
+            return (null, "");
+        }
+
+        public (int dragIndex, int dropIndex) GetCommittedIndices()
+        {
+            var dragIndex = this.items[this.draggedItemVisualIndex].ItemIndex;
+            var dropIndex = this.items[this.lastDropTargetVisualIndex].ItemIndex;
+            return (dragIndex, dragIndex);
+        }
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "not good for clarity")]
+        private static List<SnapshotItem> TakeTabStripSnapshot(DragContext context)
+        {
+            Debug.Assert(context is { TabStrip: { } }, message: "Context must be set to take snapshot");
+
+            var strip = context.TabStrip;
+            return strip
+                .GetRealizedRegularElements()
+                .Select(el
+                    => new SnapshotItem()
+                    {
+                        ItemIndex = el.index,
+                        LayoutOrigin = el.element.TransformToVisual(strip).TransformPoint(new Point(0, 0)).AsElement(),
+                        Width = el.element.RenderSize.Width,
+                    })
+                .OrderBy(i => i.LayoutOrigin.ToPoint().X)
+                .ToList();
+        }
     }
 
     /// <inheritdoc/>
-    public void OnDragPositionChanged(SpatialPoint currentPoint)
+    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> position)
     {
-        if (!this.isActive || this.context is null)
+        if (!this.IsActive)
         {
             this.LogMoveIgnored();
             return;
         }
 
-        // Convert to TabStrip element coordinates
-        var stripPoint = currentPoint.To(CoordinateSpace.Element, this.context.SourceStrip);
-        var pointerX = stripPoint.X;
-
-        // Update dragged item transform to follow pointer
-        // The transform should position the item so the hotspot aligns with the pointer
-        var itemLeft = this.GetItemLeftPosition(this.draggedItemIndex);
-        var draggedItemTransform = this.GetContentTransform(this.draggedItemIndex);
-        if (draggedItemTransform is not null)
+        Debug.Assert(this.layout is not null, "Layout must be initialized during active drag");
+        var elementPosition = this.context!.SpatialMapper.ToElement(position);
+        var (displacedItem, direction) = this.layout.UpdateDrag(elementPosition);
+        if (displacedItem is not null)
         {
-            // Transform.X moves the item so the hotspot point aligns with the pointer
-            // If item shell is at itemLeft, and we want hotspot (at itemLeft + hotspotX) to be at pointerX:
-            // itemLeft + hotspotX + transform.X = pointerX
-            // Therefore: transform.X = pointerX - (itemLeft + hotspotX)
-            var transformX = pointerX - (itemLeft + this.hotspotX);
-            draggedItemTransform.X = transformX;
-
-            this.logger.LogTrace(
-                "Dragged item transform: pointerX={PointerX:F2}, itemLeft={ItemLeft:F2}, hotspotX={HotspotX:F2}, transform.X={TransformX:F2}",
-                pointerX,
-                itemLeft,
-                this.hotspotX,
-                transformX);
+            this.LogItemDisplaced(displacedItem.ItemIndex, direction);
+            var transform = this.GetContentTransform(displacedItem.ItemIndex);
+            _ = transform?.X = displacedItem.Offset;
         }
-
-        // Hit-test to find target item under pointer
-        var targetItemIndex = this.HitTestItemAtX(pointerX);
-
-        // Detect midpoint crossing and update stack
-        if (this.IsCrossingMidpointForward(pointerX, targetItemIndex))
-        {
-            // Forward crossing - push the item at dropIndex + 1
-            var pushedItemIndex = this.dropIndex + 1;
-            var pushedInfo = new PushedItemInfo
-            {
-                ItemIndex = pushedItemIndex,
-                OriginalLeft = this.GetItemLeftPosition(pushedItemIndex),
-                Direction = PushDirection.Forward,
-            };
-            this.pushedItemsStack.Push(pushedInfo);
-
-            // Translate pushed item to cover the shell at the current dropIndex
-            // This creates a cascading effect:
-            // - First push (dropIndex = draggedItemIndex): Tab3 slides to Tab2's shell
-            // - Second push (dropIndex = 3 after first push): Tab4 slides to Tab3's shell
-            var targetShellLeft = this.GetItemLeftPosition(this.dropIndex);
-            var pushedItemTransform = this.GetContentTransform(pushedItemIndex);
-            if (pushedItemTransform is not null)
-            {
-                var offset = targetShellLeft - pushedInfo.OriginalLeft;
-                pushedItemTransform.X = offset;
-
-                this.logger.LogTrace(
-                    "Push transform: pushedIndex={PushedIndex}, targetIndex={TargetIndex}, targetShellLeft={TargetLeft:F2}, originalLeft={OriginalLeft:F2}, offset={Offset:F2}",
-                    pushedItemIndex,
-                    this.dropIndex,
-                    targetShellLeft,
-                    pushedInfo.OriginalLeft,
-                    offset);
-            }
-
-            // Update dropIndex to the pushed item's index
-            this.dropIndex = pushedItemIndex;
-
-            this.LogItemPushed(pushedItemIndex, PushDirection.Forward);
-        }
-        else if (this.IsCrossingMidpointBackward(pointerX))
-        {
-            // Backward crossing - pop the top item from stack and restore it
-            var poppedInfo = this.pushedItemsStack.Pop();
-            var poppedItemTransform = this.GetContentTransform(poppedInfo.ItemIndex);
-            if (poppedItemTransform is not null)
-            {
-                poppedItemTransform.X = 0; // Restore popped item to its own shell
-            }
-
-            // Update dropIndex - remaining items on stack stay in their positions
-            this.dropIndex = this.pushedItemsStack.Count > 0
-                ? this.pushedItemsStack.Peek().ItemIndex
-                : this.draggedItemIndex;
-
-            this.LogItemPopped(poppedInfo.ItemIndex);
-        }
-
-        // Store current pointer position for next frame
-        this.lastPointerX = pointerX;
-
-        this.LogMove(stripPoint.Point);
     }
 
     /// <inheritdoc/>
-    public bool CompleteDrag(SpatialPoint finalPoint, TabStrip? targetStrip, int? targetIndex)
+    public bool CompleteDrag()
     {
-        if (!this.isActive || this.context is null)
+        if (!this.IsActive || this.context is null)
         {
             this.LogDropIgnored();
             return false;
         }
 
-        // Convert to TabStrip element coordinates
-        var stripPoint = finalPoint.To(CoordinateSpace.Element, this.context.SourceStrip);
+        Debug.Assert(this.layout is not null, "Layout must be initialized during active drag");
 
-        this.LogDrop(stripPoint.Point, targetStrip, targetIndex);
+        var (dragIndex, dropIndex) = this.layout.GetCommittedIndices();
 
-        // If dropping on the same strip, commit reorder
-        if (targetStrip == this.context.SourceStrip)
+        this.LogCommittedIndices(dragIndex, dropIndex);
+        this.LogDrop(dragIndex, dropIndex);
+
+        // Delete the dragged item, and add it at the drop index
+        Debug.Assert(this.context.TabStrip is not null, "TabStrip must be set in DragContext");
+        this.context.TabStrip.Items.RemoveAt(dragIndex);
+        this.context.TabStrip.Items.Insert(dropIndex, this.context.DraggedItem);
+
+        // Reset all transforms
+        for (var i = 0; i < this.context.TabStrip.Items.Count; i++)
         {
-            var strip = this.context.SourceStrip;
-
-            // Commit the move (single Items.Move)
-            if (this.dropIndex != this.draggedItemIndex && this.dropIndex >= 0)
+            if (this.GetContentTransform(i) is { } transform)
             {
-                strip.Items.Move(this.draggedItemIndex, this.dropIndex);
-            }
-
-            // Unwind stack and clear all transforms
-            while (this.pushedItemsStack.Count > 0)
-            {
-                var poppedInfo = this.pushedItemsStack.Pop();
-                var poppedItemTransform = this.GetContentTransform(poppedInfo.ItemIndex);
-                if (poppedItemTransform is not null)
-                {
-                    poppedItemTransform.X = 0;
-                }
-            }
-
-            var draggedItemTransform = this.GetContentTransform(this.draggedItemIndex);
-            if (draggedItemTransform is not null)
-            {
-                draggedItemTransform.X = 0;
-            }
-
-            // Restore visual state
-            if (this.context.SourceVisualItem is not null)
-            {
-                this.context.SourceVisualItem.IsDragging = false;
-            }
-
-            // Reset state
-            this.isActive = false;
-            this.context = null;
-            this.draggedItemIndex = -1;
-            this.dropIndex = -1;
-            this.pushedItemsStack.Clear();
-
-            this.LogDropSuccess(this.dropIndex);
-            return true;
-        }
-
-        // Cross-strip drop - cleanup and return false
-        // Unwind stack and clear transforms
-        while (this.pushedItemsStack.Count > 0)
-        {
-            var poppedInfo = this.pushedItemsStack.Pop();
-            var poppedItemTransform = this.GetContentTransform(poppedInfo.ItemIndex);
-            if (poppedItemTransform is not null)
-            {
-                poppedItemTransform.X = 0;
+                transform.X = 0;
             }
         }
 
-        var draggedTransform = this.GetContentTransform(this.draggedItemIndex);
-        if (draggedTransform is not null)
-        {
-            draggedTransform.X = 0;
-        }
+        this.LogDropSuccess(dropIndex);
 
-        if (this.context.SourceVisualItem is not null)
-        {
-            this.context.SourceVisualItem.IsDragging = false;
-        }
-
-        this.isActive = false;
+        // Reset state
         this.context = null;
-        this.draggedItemIndex = -1;
-        this.dropIndex = -1;
-        this.pushedItemsStack.Clear();
+        this.layout = null;
 
-        return false;
+        return true;
     }
 
     /// <summary>
@@ -276,13 +250,13 @@ internal sealed partial class ReorderStrategy : IDragStrategy
     /// <returns>The TranslateTransform for the wrapper Grid, or null if not available.</returns>
     private TranslateTransform? GetContentTransform(int itemIndex)
     {
-        if (this.context?.SourceStrip is null || itemIndex < 0 || itemIndex >= this.context.SourceStrip.Items.Count)
+        if (this.context?.TabStrip is null || itemIndex < 0 || itemIndex >= this.context.TabStrip.Items.Count)
         {
             return null;
         }
 
-        var item = this.context.SourceStrip.Items[itemIndex];
-        var repeater = this.context.SourceStrip.GetRegularItemsRepeater();
+        var item = this.context.TabStrip.Items[itemIndex];
+        var repeater = this.context.TabStrip.GetRegularItemsRepeater();
         if (repeater is null)
         {
             return null;
@@ -326,261 +300,5 @@ internal sealed partial class ReorderStrategy : IDragStrategy
         }
 
         return null;
-    }
-
-    /// <summary>
-    ///     Gets the left position of an item's shell in strip-relative coordinates.
-    ///     This returns the LAYOUT position (shell), not the visual position (which includes transforms).
-    /// </summary>
-    /// <param name="itemIndex">Index in Items collection.</param>
-    /// <returns>The left edge position in logical DIPs relative to the TabStrip.</returns>
-    private double GetItemLeftPosition(int itemIndex)
-    {
-        if (this.context?.SourceStrip is null || itemIndex < 0 || itemIndex >= this.context.SourceStrip.Items.Count)
-        {
-            return 0;
-        }
-
-        var item = this.context.SourceStrip.Items[itemIndex];
-        var repeater = this.context.SourceStrip.GetRegularItemsRepeater();
-        if (repeater is null)
-        {
-            return this.ComputeLeftFromLayout(itemIndex);
-        }
-
-        var wrapperGrid = this.FindWrapperGridForItem(repeater, item);
-        if (wrapperGrid is null)
-        {
-            // Fallback: compute from layout
-            return this.ComputeLeftFromLayout(itemIndex);
-        }
-
-        // Get the repeater's position in the TabStrip
-        var repeaterTransform = repeater.TransformToVisual(this.context.SourceStrip);
-        var repeaterOrigin = repeaterTransform.TransformPoint(new Windows.Foundation.Point(0, 0));
-
-        // Get the wrapper Grid's ActualOffset within the repeater (layout position, ignores RenderTransform)
-        var itemOffsetInRepeater = wrapperGrid.ActualOffset;
-
-        // Combine to get strip-relative position
-        return repeaterOrigin.X + itemOffsetInRepeater.X;
-    }
-
-    /// <summary>
-    ///     Gets the width of an item.
-    /// </summary>
-    /// <param name="itemIndex">Index in Items collection.</param>
-    /// <returns>The item width in logical DIPs.</returns>
-    private double GetItemWidth(int itemIndex)
-    {
-        if (this.context?.SourceStrip is null || itemIndex < 0 || itemIndex >= this.context.SourceStrip.Items.Count)
-        {
-            return 0;
-        }
-
-        var item = this.context.SourceStrip.Items[itemIndex];
-        var repeater = this.context.SourceStrip.GetRegularItemsRepeater();
-        if (repeater is null)
-        {
-            return this.context.SourceStrip.PreferredItemWidth;
-        }
-
-        var wrapperGrid = this.FindWrapperGridForItem(repeater, item);
-        if (wrapperGrid is null)
-        {
-            // Fallback: use preferred item width from layout manager
-            this.logger.LogTrace("GetItemWidth({Index}): Container not realized, using PreferredItemWidth={Width:F2}", itemIndex, this.context.SourceStrip.PreferredItemWidth);
-            return this.context.SourceStrip.PreferredItemWidth;
-        }
-
-        this.logger.LogTrace("GetItemWidth({Index}): ActualWidth={Width:F2}", itemIndex, wrapperGrid.ActualWidth);
-        return wrapperGrid.ActualWidth;
-    }
-
-    /// <summary>
-    ///     Hit-tests to find the Items index of the item under the given X coordinate.
-    /// </summary>
-    /// <param name="pointerX">X coordinate in strip-relative logical DIPs.</param>
-    /// <returns>The Items index of the item under the pointer, or -1 if none.</returns>
-    private int HitTestItemAtX(double pointerX)
-    {
-        if (this.context?.SourceStrip is null)
-        {
-            return -1;
-        }
-
-        // Iterate regular (unpinned) items in the Items collection
-        var regularItems = this.context.SourceStrip.Items.Where(t => !t.IsPinned).ToList();
-
-        for (var i = 0; i < regularItems.Count; i++)
-        {
-            var item = regularItems[i];
-            var itemIndex = this.context.SourceStrip.Items.IndexOf(item);
-
-            var left = this.GetItemLeftPosition(itemIndex);
-            var width = this.GetItemWidth(itemIndex);
-            var right = left + width;
-
-            if (pointerX >= left && pointerX < right)
-            {
-                return itemIndex;
-            }
-        }
-
-        return -1; // Not over any item
-    }
-
-    /// <summary>
-    ///     Checks if pointer is crossing a midpoint forward (moving right).
-    /// </summary>
-    /// <param name="pointerX">Current pointer X position.</param>
-    /// <param name="targetItemIndex">The item index under the pointer.</param>
-    /// <returns>True if crossing forward, false otherwise.</returns>
-    private bool IsCrossingMidpointForward(double pointerX, int targetItemIndex)
-    {
-        if (targetItemIndex != this.dropIndex + 1)
-        {
-            return false; // Not the next item to the right
-        }
-
-        var targetLeft = this.GetItemLeftPosition(targetItemIndex);
-        var targetWidth = this.GetItemWidth(targetItemIndex);
-        var midpoint = targetLeft + (targetWidth / 2.0);
-
-        var wasLeftOfMidpoint = this.lastPointerX < midpoint;
-        var nowRightOfMidpoint = pointerX >= midpoint;
-
-        return wasLeftOfMidpoint && nowRightOfMidpoint;
-    }
-
-    /// <summary>
-    ///     Checks if pointer is crossing a midpoint backward (moving left, reversing).
-    /// </summary>
-    /// <param name="pointerX">Current pointer X position.</param>
-    /// <returns>True if crossing backward, false otherwise.</returns>
-    private bool IsCrossingMidpointBackward(double pointerX)
-    {
-        if (this.pushedItemsStack.Count == 0)
-        {
-            return false;
-        }
-
-        var topPushedItem = this.pushedItemsStack.Peek();
-        var itemIndex = topPushedItem.ItemIndex;
-
-        var itemLeft = this.GetItemLeftPosition(itemIndex);
-        var itemWidth = this.GetItemWidth(itemIndex);
-        var midpoint = itemLeft + (itemWidth / 2.0);
-
-        var wasRightOfMidpoint = this.lastPointerX >= midpoint;
-        var nowLeftOfMidpoint = pointerX < midpoint;
-
-        return wasRightOfMidpoint && nowLeftOfMidpoint;
-    }
-
-    /// <summary>
-    ///     Maps an Items index to a repeater index by skipping pinned items.
-    /// </summary>
-    /// <param name="itemIndex">Index in Items collection.</param>
-    /// <returns>The corresponding repeater index.</returns>
-    private int MapItemsIndexToRepeaterIndex(int itemIndex)
-    {
-        if (this.context?.SourceStrip is null || itemIndex < 0)
-        {
-            return -1;
-        }
-
-        var repeaterIndex = 0;
-        for (var i = 0; i < itemIndex; i++)
-        {
-            if (!this.context.SourceStrip.Items[i].IsPinned)
-            {
-                repeaterIndex++;
-            }
-        }
-
-        return repeaterIndex;
-    }
-
-    /// <summary>
-    ///     Computes the left position from layout when container is not realized.
-    /// </summary>
-    /// <param name="itemIndex">Index in Items collection.</param>
-    /// <returns>Estimated left position in logical DIPs.</returns>
-    private double ComputeLeftFromLayout(int itemIndex)
-    {
-        if (this.context?.SourceStrip is null)
-        {
-            return 0;
-        }
-
-        var repeater = this.context.SourceStrip.GetRegularItemsRepeater();
-        if (repeater?.Layout is not StackLayout layout)
-        {
-            return 0;
-        }
-
-        var spacing = layout.Spacing;
-
-        // Sum up the actual widths of all previous regular items plus spacing between them
-        var position = 0.0;
-        var regularItems = this.context.SourceStrip.Items.Where(t => !t.IsPinned).ToList();
-
-        for (var i = 0; i < regularItems.Count; i++)
-        {
-            var currentItem = regularItems[i];
-            var currentItemIndex = this.context.SourceStrip.Items.IndexOf(currentItem);
-
-            if (currentItemIndex == itemIndex)
-            {
-                // Found our target item
-                break;
-            }
-
-            // Add spacing before this item (except for the first item)
-            if (i > 0)
-            {
-                position += spacing;
-            }
-
-            // Add this item's width
-            var width = this.GetItemWidth(currentItemIndex);
-            position += width;
-        }
-
-        return position;
-    }
-
-    /// <summary>
-    ///     Converts a physical screen point to strip-relative coordinates.
-    /// </summary>
-    /// <param name="screenPoint">Physical screen point.</param>
-    /// <returns>Strip-relative point in logical DIPs.</returns>
-
-    /// <summary>
-    ///     Struct to track pushed items on the stack.
-    /// </summary>
-    private struct PushedItemInfo
-    {
-        /// <summary>Gets the index in Items collection.</summary>
-        public int ItemIndex { get; init; }
-
-        /// <summary>Gets the item's left position before push (strip coords).</summary>
-        public double OriginalLeft { get; init; }
-
-        /// <summary>Gets the direction the item was pushed.</summary>
-        public PushDirection Direction { get; init; }
-    }
-
-    /// <summary>
-    ///     Direction an item was pushed.
-    /// </summary>
-    private enum PushDirection
-    {
-        /// <summary>Item pushed to the right (covering dragged shell to its right).</summary>
-        Forward,
-
-        /// <summary>Item pushed to the left (covering dragged shell to its left).</summary>
-        Backward,
     }
 }

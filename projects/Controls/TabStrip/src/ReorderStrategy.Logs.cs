@@ -2,12 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Logging methods for the stack-based ReorderStrategy.
+///     Logging methods for the ReorderStrategy.
 /// </summary>
 internal sealed partial class ReorderStrategy
 {
@@ -21,42 +22,31 @@ internal sealed partial class ReorderStrategy
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Enter reorder mode at strip point ({X}, {Y})")]
-    private partial void LogEnterReorderMode(double x, double y);
+        Message = "Enter reorder mode at strip point ({ScreenPos}, {LocalPos})")]
+    private static partial void LogEnterReorderMode(ILogger logger, SpatialPoint<ScreenSpace> screenPos, SpatialPoint<ElementSpace> localPos);
 
-    private void LogEnterReorderMode(Windows.Foundation.Point point) =>
-        this.LogEnterReorderMode(point.X, point.Y);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Exit reorder mode")]
-    private partial void LogExitReorderMode();
-
-    [LoggerMessage(
-        Level = LogLevel.Trace,
-        Message = "Move in reorder mode: strip=({X}, {Y})")]
-    private partial void LogMove(double x, double y);
-
-    private void LogMove(Windows.Foundation.Point stripPoint) =>
-        this.LogMove(stripPoint.X, stripPoint.Y);
+    private void LogEnterReorderMode(SpatialPoint<ScreenSpace> screenPos, SpatialPoint<ElementSpace> localPos)
+        => LogEnterReorderMode(this.logger, screenPos, localPos);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Drop in reorder mode at ({X}, {Y}), target={TargetName}, index={Index}")]
-    private partial void LogDrop(double x, double y, string? targetName, int? index);
-
-    private void LogDrop(Windows.Foundation.Point point, TabStrip? target, int? index) =>
-        this.LogDrop(point.X, point.Y, target?.Name ?? "null", index);
+        Message = "Drop in reorder mode: dragIndex={DragIndex}, dropIndex={DropIndex}")]
+    private partial void LogDrop(int dragIndex, int dropIndex);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Item pushed onto stack: index={ItemIndex}, direction={Direction}")]
-    private partial void LogItemPushed(int itemIndex, PushDirection direction);
+        Message = "Item displaced: index={ItemIndex}, direction={Direction}")]
+    private partial void LogItemDisplaced(int itemIndex, string direction);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
-        Message = "Item popped from stack: index={ItemIndex}")]
-    private partial void LogItemPopped(int itemIndex);
+        Message = "Reorder initiated: draggedItemVisualIndex={Index}")]
+    private partial void LogReorderInitiated(int index);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Committed indices: drag={DragIndex}, drop={DropIndex}")]
+    private partial void LogCommittedIndices(int dragIndex, int dropIndex);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
@@ -76,5 +66,5 @@ internal sealed partial class ReorderStrategy
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Drop successful at final index {Index}")]
-    private partial void LogDropSuccess(int? index);
+    private partial void LogDropSuccess(int index);
 }

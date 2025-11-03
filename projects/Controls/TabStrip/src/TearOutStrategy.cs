@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace DroidNet.Controls;
@@ -41,7 +43,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
     public bool IsActive => this.isActive;
 
     /// <inheritdoc/>
-    public void InitiateDrag(DragContext context, SpatialPoint initialPoint)
+    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> initialPoint)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -54,10 +56,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         this.context = context;
         this.isActive = true;
 
-        // Convert to Screen coordinates (TearOutStrategy works in screen space for the overlay)
-        var screenPoint = initialPoint.To(CoordinateSpace.Screen, context.SourceStrip);
-
-        this.LogEnterTearOutMode(screenPoint.Point);
+        this.LogEnterTearOutMode(initialPoint.Point);
 
         // Capture header image from the source visual item
         var headerImage = this.CaptureHeaderImage();
@@ -74,14 +73,14 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         this.RequestPreviewImage();
 
         // Start the drag visual session with the correct logical hotspot from context
-        this.sessionToken = this.dragService.StartSession(this.descriptor, context.Hotspot.Point);
+        this.sessionToken = this.dragService.StartSession(this.descriptor, initialPoint.Point);
 
         // Update initial position
-        this.dragService.UpdatePosition(this.sessionToken.Value, screenPoint.Point);
+        this.dragService.UpdatePosition(this.sessionToken.Value, initialPoint.Point);
     }
 
     /// <inheritdoc/>
-    public void OnDragPositionChanged(SpatialPoint currentPoint)
+    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> currentPoint)
     {
         if (!this.isActive || !this.sessionToken.HasValue)
         {
@@ -89,17 +88,14 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             return;
         }
 
-        // Convert to Screen coordinates
-        var screenPoint = currentPoint.To(CoordinateSpace.Screen, this.context!.SourceStrip);
-
         // Update overlay position
-        this.dragService.UpdatePosition(this.sessionToken.Value, screenPoint.Point);
+        this.dragService.UpdatePosition(this.sessionToken.Value, currentPoint.Point);
 
-        this.LogMove(screenPoint.Point);
+        this.LogMove(currentPoint.Point);
     }
 
     /// <inheritdoc/>
-    public bool CompleteDrag(SpatialPoint finalPoint, TabStrip? targetStrip, int? targetIndex)
+    public bool CompleteDrag()
     {
         if (!this.isActive)
         {
@@ -107,10 +103,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             return false;
         }
 
-        // Convert to Screen coordinates for logging
-        var screenPoint = finalPoint.To(CoordinateSpace.Screen, this.context!.SourceStrip);
-
-        this.LogDrop(screenPoint.Point, targetStrip, targetIndex);
+        // this.LogDrop(finalPoint.Point, targetStrip, targetIndex);
 
         // End visual session first
         if (this.sessionToken.HasValue)
@@ -124,30 +117,27 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         this.context = null;
         this.descriptor = null;
 
-        // If dropping over a TabStrip, it should handle the insertion
-        if (targetStrip is not null && targetIndex.HasValue)
-        {
-            this.LogDropOnTabStrip(targetStrip, targetIndex.Value);
-            return true;
-        }
-
         // Drop outside any TabStrip - this should trigger TearOut event
-        this.LogDropOutside(screenPoint.Point);
         return false; // Let coordinator handle TearOut event
     }
 
     private RenderTargetBitmap? CaptureHeaderImage()
     {
-        if (this.context?.SourceVisualItem is null)
+        if (this.context is not { TabStrip: { } strip })
         {
-            this.LogHeaderCaptureFailed("no source visual item");
+            this.LogHeaderCaptureFailed("no context");
+            return null;
+        }
+
+        var tabStripItem = strip.GetTabStripItemForItem(this.context.DraggedItem);
+        if (tabStripItem is null)
+        {
+            this.LogHeaderCaptureFailed("no visual container");
             return null;
         }
 
         try
         {
-            var tabStripItem = this.context.SourceVisualItem;
-
             // Ensure the visual is loaded and has a valid size
             if (tabStripItem.ActualWidth <= 0 || tabStripItem.ActualHeight <= 0)
             {

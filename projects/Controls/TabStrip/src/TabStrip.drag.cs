@@ -211,12 +211,11 @@ public partial class TabStrip
         var hotspotPoint = new Windows.Foundation.Point(
             this.dragStartPoint.X - itemCoords.X,
             this.dragStartPoint.Y - itemCoords.Y);
-        var hotspot = new SpatialPoint(hotspotPoint, CoordinateSpace.Element, item);
 
         // Start the drag session via coordinator
         try
         {
-            this.DragCoordinator.StartDrag(item.Item, this, item, descriptor, hotspot, initialScreenPoint);
+            this.DragCoordinator.StartDrag(item.Item, this, item, descriptor, initialScreenPoint);
             this.LogDragSessionStarted();
         }
         catch (InvalidOperationException ex)

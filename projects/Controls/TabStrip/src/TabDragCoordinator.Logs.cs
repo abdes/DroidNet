@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls;
@@ -24,32 +25,28 @@ public partial class TabDragCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Drag started: Item={ItemContent}, Source={SourceStripName}, Hotspot=({HotspotX}, {HotspotY}), InitialCursorX={InitialCursorX}, InitialCursorY={InitialCursorY}")]
+        Message = "Drag started: Item={ItemContent}, Source={SourceStripName}, InitialCursorX={InitialCursorX}, InitialCursorY={InitialCursorY}")]
     private static partial void LogDragStarted(
         ILogger logger,
         string itemContent,
         string sourceStripName,
-        double hotspotX,
-        double hotspotY,
         int initialCursorX,
         int initialCursorY);
 
+    [Conditional("DEBUG")]
     private void LogDragStarted()
     {
-        if (!this.logger.IsEnabled(LogLevel.Debug))
+        if (this.dragContext is not { TabStrip: { } strip } context)
         {
             return;
         }
 
-        var itemHeader = this.dragContext?.DraggedItem.Header ?? "Unknown";
-        var sourceStripName = this.dragContext?.SourceStrip.Name ?? "Unknown";
-        var hotspot = this.dragContext?.Hotspot ?? default;
+        var itemHeader = context.DraggedItem.Header ?? "Unknown";
+        var sourceStripName = strip.Name ?? "Unknown";
         LogDragStarted(
             this.logger,
             itemHeader,
             sourceStripName,
-            hotspot.X,
-            hotspot.Y,
             (int)this.lastCursorPosition.X,
             (int)this.lastCursorPosition.Y);
     }

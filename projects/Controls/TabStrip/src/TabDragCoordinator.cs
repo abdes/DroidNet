@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -66,14 +67,12 @@ public partial class TabDragCoordinator
     /// <param name="source">Source TabStrip.</param>
     /// <param name="visualContainer">Visual TabStripItem container for the dragged item.</param>
     /// <param name="visualDescriptor">Descriptor describing the drag visual overlay.</param>
-    /// <param name="hotspot">Hotspot offset from the top-left of the overlay where the cursor should align.</param>
     /// <param name="initialScreenPoint">Optional initial cursor position in screen coordinates. If null, will use GetCursorPos().</param>
     public void StartDrag(
         TabItem item,
         TabStrip source,
         TabStripItem visualContainer,
         DragVisualDescriptor visualDescriptor,
-        SpatialPoint hotspot,
         Windows.Foundation.Point? initialScreenPoint = null)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -91,8 +90,12 @@ public partial class TabDragCoordinator
 
             this.isActive = true;
 
+            // Create spatial mapper
+            var window = Native.GetWindowForElement(source);
+            var spatialMapper = new SpatialMapper(source, window);
+
             // Store hotspot in context for use by strategies (esp. TearOutStrategy)
-            this.dragContext = new DragContext(item, source, visualContainer, hotspot);
+            this.dragContext = new DragContext(source, item, spatialMapper);
             this.lastCursorPosition = initialScreenPoint ?? GetInitialCursorPosition();
             this.SwitchToReorderMode(this.lastCursorPosition);
 
@@ -171,7 +174,7 @@ public partial class TabDragCoordinator
             // Delegate to current strategy (pass screen coordinates, strategy will convert)
             if (this.dragContext is not null)
             {
-                var spatialPoint = new SpatialPoint(screenPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
+                var spatialPoint = new SpatialPoint<ScreenSpace>(screenPoint);
                 this.currentStrategy.OnDragPositionChanged(spatialPoint);
 
                 this.LogDragMoved(screenPoint, previousPosition);
@@ -223,8 +226,8 @@ public partial class TabDragCoordinator
             if (this.currentStrategy is not null)
             {
                 // Pass screen coordinates - strategy will convert to its preferred space
-                var spatialPoint = new SpatialPoint(screenPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
-                dropHandled = this.currentStrategy.CompleteDrag(spatialPoint, destination, newIndex);
+                var spatialPoint = new SpatialPoint<ScreenSpace>(screenPoint);
+                dropHandled = this.currentStrategy.CompleteDrag();
             }
 
             // Notify subscribers that the drag ended so they can finalize insertion/removal.
@@ -261,7 +264,7 @@ public partial class TabDragCoordinator
             this.LogDragAborted();
 
             // Complete the drag with no target (abort)
-            this.currentStrategy?.CompleteDrag(new SpatialPoint(new Windows.Foundation.Point(0, 0), CoordinateSpace.Screen), targetStrip: null, targetIndex: null);
+            this.currentStrategy?.CompleteDrag();
 
             this.CleanupState();
         }
@@ -284,7 +287,7 @@ public partial class TabDragCoordinator
         {
             // Ask the source TabStrip to raise its TabDragImageRequest event
             // This allows the application to handle the event and provide a custom preview
-            this.dragContext.SourceStrip.RaiseTabDragImageRequest(this.dragContext.DraggedItem, descriptor);
+            this.dragContext.TabStrip?.RaiseTabDragImageRequest(this.dragContext.DraggedItem, descriptor);
         }
         catch (Exception ex)
         {
@@ -306,7 +309,7 @@ public partial class TabDragCoordinator
 
         try
         {
-            context.SourceStrip.RaiseTabDragImageRequest(context.DraggedItem, descriptor);
+            context.TabStrip?.RaiseTabDragImageRequest(context.DraggedItem, descriptor);
         }
         catch (Exception ex)
         {
@@ -431,15 +434,15 @@ public partial class TabDragCoordinator
         // Complete current strategy (abort if switching modes)
         if (this.currentStrategy is not null && this.dragContext is not null)
         {
-            var spatialPoint = new SpatialPoint(startPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
-            this.currentStrategy.CompleteDrag(spatialPoint, targetStrip: null, targetIndex: null);
+            var spatialPoint = new SpatialPoint<ScreenSpace>(startPoint);
+            this.currentStrategy.CompleteDrag();
         }
 
         this.currentStrategy = this.reorderStrategy;
         if (this.dragContext is not null)
         {
             // Pass screen coordinates - strategy will convert to its preferred space
-            var spatialPoint = new SpatialPoint(startPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
+            var spatialPoint = new SpatialPoint<ScreenSpace>(startPoint);
             this.currentStrategy.InitiateDrag(this.dragContext, spatialPoint);
         }
 
@@ -452,15 +455,15 @@ public partial class TabDragCoordinator
         // Complete current strategy (abort if switching modes)
         if (this.currentStrategy is not null && this.dragContext is not null)
         {
-            var spatialPoint = new SpatialPoint(startPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
-            this.currentStrategy.CompleteDrag(spatialPoint, targetStrip: null, targetIndex: null);
+            var spatialPoint = new SpatialPoint<ScreenSpace>(startPoint);
+            this.currentStrategy.CompleteDrag();
         }
 
         this.currentStrategy = this.tearOutStrategy;
         if (this.dragContext is not null)
         {
             // Pass screen coordinates - strategy will convert to its preferred space
-            var spatialPoint = new SpatialPoint(startPoint, CoordinateSpace.Screen, this.dragContext.SourceStrip);
+            var spatialPoint = new SpatialPoint<ScreenSpace>(startPoint);
             this.currentStrategy.InitiateDrag(this.dragContext, spatialPoint);
         }
 
@@ -531,7 +534,7 @@ public partial class TabDragCoordinator
                 // Delegate to current strategy (pass screen coordinates, strategy will convert)
                 if (this.dragContext is not null)
                 {
-                    var spatialPoint = new SpatialPoint(newPosition, CoordinateSpace.Screen, this.dragContext.SourceStrip);
+                    var spatialPoint = new SpatialPoint<ScreenSpace>(newPosition);
                     this.currentStrategy.OnDragPositionChanged(spatialPoint);
 
                     this.LogDragMoved(newPosition, previousPosition);
@@ -558,13 +561,13 @@ public partial class TabDragCoordinator
 
     private void CheckAndHandleModeTransitions(Windows.Foundation.Point cursor)
     {
-        if (this.dragContext is null)
+        if (this.dragContext is not { TabStrip: { } })
         {
             return;
         }
 
         var isCurrentlyInReorder = this.currentStrategy == this.reorderStrategy;
-        var isWithinSourceThreshold = this.IsWithinTearOutThreshold(cursor, this.dragContext.SourceStrip);
+        var isWithinSourceThreshold = this.IsWithinTearOutThreshold(cursor, this.dragContext.TabStrip);
 
         if (isCurrentlyInReorder && !isWithinSourceThreshold)
         {

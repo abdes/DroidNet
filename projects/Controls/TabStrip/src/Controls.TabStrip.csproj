@@ -35,6 +35,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Controls\Services\src\Controls.Services.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Coordinates\src\Coordinates.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
     </ItemGroup>

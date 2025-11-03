@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -13,18 +13,6 @@
         TrueValue="Collapsed" />
 
     <Style BasedOn="{StaticResource DefaultTabStripStyle}" TargetType="controls:TabStrip" />
-
-    <!--  Lightweight placeholder used during reorder drags inside the ItemsRepeater  -->
-    <DataTemplate x:Key="TabStripPlaceholderItemTemplate">
-        <Border
-            Height="32"
-            MinWidth="60"
-            Background="Transparent"
-            BorderBrush="{ThemeResource SystemControlHighlightBaseMediumLowBrush}"
-            BorderThickness="1"
-            CornerRadius="4,4,0,0"
-            Opacity="0.35" />
-    </DataTemplate>
 
     <!--  TabStrip default style  -->
     <Style x:Key="DefaultTabStripStyle" TargetType="controls:TabStrip">
@@ -82,10 +70,6 @@
                                                 Wrap TabStripItem in a Grid to isolate transform from ItemsRepeater layout.
                                                 The TranslateTransform on this Grid is used during reorder drag to slide
                                                 the item visually without affecting ItemsRepeater's layout of other items.
-                                                
-                                                If the item is a placeholder (IsPlaceholder=true), render a lightweight
-                                                Border instead of the full TabStripItem. Placeholders are temporary items
-                                                inserted during drag-and-drop reordering to show the drop zone.
                                             -->
                                             <Grid>
                                                 <Grid.RenderTransform>

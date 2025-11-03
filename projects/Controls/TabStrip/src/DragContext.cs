@@ -2,48 +2,37 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Coordinates;
+
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Represents the context information passed to drag strategies during their lifecycle.
-///     Contains references to the drag participants and state needed for strategy execution.
+///     Holds the contextual information about a drag operation, shared between the <see
+///     cref="TabDragCoordinator"/> and the drag strategies during their lifecycle.
 /// </summary>
-public sealed class DragContext
+/// <param name="tabStrip">The <see cref="Controls.TabStrip"/>, in which the drag is currently happening.</param>
+/// <param name="draggedItem">The item being dragged. Cannot be null.</param>
+/// <param name="spatialMapper">
+///     The spatialMapper spatialMapper, to be used when transforming coordinates from one space to another.
+///     Created and maintained by the <see cref="TabDragCoordinator"/>, and kept in-sync to always
+///     use the currently active <see cref="WindowSpace"/> and <see cref="ElementSpace"/> of the
+///     drag operation.
+/// </param>
+public sealed class DragContext(TabStrip tabStrip, TabItem draggedItem, ISpatialMapper spatialMapper)
 {
     /// <summary>
-    ///     Initializes a new instance of the <see cref="DragContext"/> class.
+    /// Gets or sets the TabStrip that initiated the drag operation.
+    /// Must be non-null at initialization, but can be set to null later.
     /// </summary>
-    /// <param name="draggedItem">The logical TabItem being dragged.</param>
-    /// <param name="sourceStrip">The source TabStrip that initiated the drag.</param>
-    /// <param name="sourceVisualItem">The visual TabStripItem container being dragged (may be null for TearOut mode).</param>
-    /// <param name="hotspot">The logical hotspot offset for overlay alignment.</param>
-    public DragContext(TabItem draggedItem, TabStrip sourceStrip, TabStripItem? sourceVisualItem, SpatialPoint hotspot)
-    {
-        this.DraggedItem = draggedItem ?? throw new ArgumentNullException(nameof(draggedItem));
-        this.SourceStrip = sourceStrip ?? throw new ArgumentNullException(nameof(sourceStrip));
-        this.SourceVisualItem = sourceVisualItem;
-        this.Hotspot = hotspot;
-    }
+    public TabStrip? TabStrip { get; set; } = tabStrip ?? throw new ArgumentNullException(nameof(tabStrip));
 
     /// <summary>
-    ///     Gets the logical TabItem being dragged.
+    /// Gets the dragged item. Required and immutable.
     /// </summary>
-    public TabItem DraggedItem { get; }
+    public TabItem DraggedItem { get; } = draggedItem ?? throw new ArgumentNullException(nameof(draggedItem));
 
     /// <summary>
-    ///     Gets the source TabStrip that initiated the drag operation.
+    /// Gets the spatial mapper. Required and immutable.
     /// </summary>
-    public TabStrip SourceStrip { get; }
-
-    /// <summary>
-    ///     Gets the visual TabStripItem container being dragged.
-    ///     This may be null during TearOut mode when the item has been removed from the visual tree.
-    /// </summary>
-    public TabStripItem? SourceVisualItem { get; }
-
-    /// <summary>
-    ///     Gets the logical hotspot offset for overlay alignment.
-    ///     This value is passed to the drag visual service to ensure correct cursor-to-overlay alignment.
-    /// </summary>
-    public SpatialPoint Hotspot { get; }
+    public ISpatialMapper SpatialMapper { get; } = spatialMapper ?? throw new ArgumentNullException(nameof(spatialMapper));
 }
