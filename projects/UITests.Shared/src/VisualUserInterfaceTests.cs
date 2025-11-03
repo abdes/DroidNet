@@ -70,6 +70,12 @@ namespace DroidNet.Tests;
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "a test suite class")]
 public class VisualUserInterfaceTests
 {
+    /// <summary>
+    /// Gets the logger factory used to create logger instances for diagnostic and tracing purposes.
+    /// </summary>
+    /// <remarks>The logger factory is configured to output debug-level logs and can be used to create loggers
+    /// for various categories within the application. This property is intended for use by derived classes to enable
+    /// consistent logging behavior.</remarks>
     protected ILoggerFactory LoggerFactory { get; } =
         Microsoft.Extensions.Logging.LoggerFactory.Create(
         builder => builder.AddDebug().SetMinimumLevel(LogLevel.Debug));
