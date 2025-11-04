@@ -71,7 +71,7 @@
             <StackPanel
                 x:Name="PrimaryCommands"
                 Grid.Column="1"
-                VerticalAlignment="Top"
+                VerticalAlignment="Stretch"
                 Background="Transparent"
                 Orientation="Horizontal"
                 Spacing="12"
@@ -83,7 +83,7 @@
                     Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsNotCompactToVis}, FallbackValue=Visible}" />
                 <!--  Compact expandable menu (when IsCompact=true)  -->
                 <cm:ExpandableMenuBar
-                    VerticalAlignment="Top"
+                    VerticalAlignment="Bottom"
                     MenuSource="{x:Bind ViewModel.MainMenu, Mode=OneWay}"
                     Visibility="{x:Bind ViewModel.Context.Decorations.Menu.IsCompact, Mode=OneWay, Converter={StaticResource IsCompactToVis}, FallbackValue=Collapsed}" />
             </StackPanel>
