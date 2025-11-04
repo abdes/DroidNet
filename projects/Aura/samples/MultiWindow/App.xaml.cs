@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -35,6 +36,7 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter.</param>
     /// <param name="windowManager">The window manager service for multi-window support.</param>
+    /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
     /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
     /// <param name="chromeService">The chrome service for automatic chrome application.</param>
     public App(
@@ -43,6 +45,7 @@ public partial class App
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
         IWindowManagerService windowManager,
+        IAppThemeModeService themeModeService,
         WindowBackdropService backdropService,
         WindowChromeService chromeService)
     {

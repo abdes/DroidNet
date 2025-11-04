@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -30,6 +31,7 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter used to set the content inside the content control.</param>
     /// <param name="windowManager">Window manager service - injected to force early initialization before navigation.</param>
+    /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service
@@ -43,11 +45,13 @@ public partial class App
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
-        IWindowManagerService windowManager)
+        IWindowManagerService windowManager,
+        IAppThemeModeService themeModeService)
     {
         // Force WindowManagerService initialization BEFORE navigation starts
         // This ensures it subscribes to router events before the main window is created
         _ = windowManager;
+        _ = themeModeService;
 
         this.lifetime = lifetime;
         this.router = router;

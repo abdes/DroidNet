@@ -16,5 +16,5 @@ public interface IAppThemeModeService
     /// </summary>
     /// <param name="window">A window instance to set application theme mode.</param>
     /// <param name="requestedThemeMode">A theme mode to set.</param>
-    public void ApplyThemeMode(Window window, ElementTheme requestedThemeMode);
+    public void ApplyThemeToWindow(Window window, ElementTheme requestedThemeMode);
 }

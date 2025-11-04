@@ -3,12 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
-using System.ComponentModel;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.Theming;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -34,8 +32,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
 {
     private readonly ILogger<WindowManagerService> logger;
     private readonly IWindowContextFactory windowContextFactory;
-    private readonly IAppThemeModeService? themeModeService;
-    private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
     private readonly ISettingsService<IWindowDecorationSettings>? decorationSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
@@ -53,16 +49,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="windowContextFactory">Factory responsible for creating <see cref="WindowContext"/> instances.</param>
     /// <param name="hostingContext">Provides access to the application dispatcher and related WinUI services.</param>
     /// <param name="loggerFactory">Optional logger factory used to create a category logger.</param>
-    /// <param name="themeModeService">Optional theme service applied to newly registered windows.</param>
-    /// <param name="appearanceSettingsService">Optional appearance settings service that drives theme updates.</param>
     /// <param name="router">Optional router used to auto-register windows created via navigation.</param>
     /// <param name="decorationSettingsService">Optional service resolving decoration metadata by window category.</param>
     public WindowManagerService(
         IWindowContextFactory windowContextFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
-        IAppThemeModeService? themeModeService = null,
-        ISettingsService<IAppearanceSettings>? appearanceSettingsService = null,
         IRouter? router = null,
         ISettingsService<IWindowDecorationSettings>? decorationSettingsService = null)
     {
@@ -73,14 +65,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
         this.windowContextFactory = windowContextFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
-        this.themeModeService = themeModeService;
-        this.appearanceSettingsService = appearanceSettingsService;
         this.decorationSettingsService = decorationSettingsService;
-
-        if (this.themeModeService is not null && this.appearanceSettingsService is not null)
-        {
-            this.appearanceSettingsService.PropertyChanged += this.AppearanceSettings_OnPropertyChanged;
-        }
 
         // Integrate with router if available to track router-created windows
         if (router is not null)
@@ -145,9 +130,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 var resolvedDecoration = this.ResolveDecoration(windowId, category);
 
                 context = this.windowContextFactory.Create(window, category, resolvedDecoration, metadata);
-
-                // Apply theme if services are available
-                this.ApplyTheme(context);
 
                 // Register window events
                 this.RegisterWindowEvents(context);
@@ -307,11 +289,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.windowEventsSubject.OnCompleted();
         this.windowEventsSubject.Dispose();
         this.windows.Clear();
-
-        if (this.appearanceSettingsService is not null)
-        {
-            this.appearanceSettingsService.PropertyChanged -= this.AppearanceSettings_OnPropertyChanged;
-        }
 
         this.routerContextCreatedSubscription?.Dispose();
         this.routerContextDestroyedSubscription?.Dispose();
@@ -487,83 +464,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         // Tier 3: No decoration available
         this.LogNoDecorationResolved(windowId);
         return null;
-    }
-
-    /// <summary>
-    ///     Reacts to appearance-setting changes that require theme re-application.
-    /// </summary>
-    /// <param name="sender">The event sender.</param>
-    /// <param name="args">Event arguments.</param>
-    private void AppearanceSettings_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (!string.Equals(args.PropertyName, nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal))
-        {
-            return;
-        }
-
-        // Apply theme to all windows in a single dispatcher operation for immediate synchronization
-        this.ApplyThemeToAllWindows();
-    }
-
-    /// <summary>
-    ///     Applies the current theme to every tracked window.
-    /// </summary>
-    private void ApplyThemeToAllWindows()
-    {
-        if (this.themeModeService is null || this.appearanceSettingsService is null)
-        {
-            return;
-        }
-
-        var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
-        var windowSnapshot = this.GetWindowSnapshot();
-
-        void ApplyTheme()
-        {
-#pragma warning disable CA1031 // Theme application failures should be logged, not thrown
-            foreach (var context in windowSnapshot)
-            {
-                try
-                {
-                    this.themeModeService.ApplyThemeMode(context.Window, currentTheme);
-                }
-                catch (Exception ex)
-                {
-                    this.LogThemeApplyFailed(ex, context.Id);
-                }
-            }
-#pragma warning restore CA1031 // Theme application failures should be logged, not thrown
-        }
-
-        _ = !this.dispatcherQueue.TryEnqueue(ApplyTheme);
-    }
-
-    /// <summary>
-    ///     Applies the current appearance theme to a single window context.
-    /// </summary>
-    /// <param name="context">The window context that should receive the theme.</param>
-    private void ApplyTheme(WindowContext? context)
-    {
-        if (context is null || this.themeModeService is null || this.appearanceSettingsService is null)
-        {
-            return;
-        }
-
-        var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
-
-        _ = this.dispatcherQueue.TryEnqueue(() =>
-        {
-#pragma warning disable CA1031 // Theme application failures should be logged, not thrown
-            try
-            {
-                this.themeModeService.ApplyThemeMode(context.Window, currentTheme);
-            }
-            catch (Exception ex)
-            {
-                this.LogThemeApplyFailed(ex, context.Id);
-            }
-#pragma warning restore CA1031 // Theme application failures should be logged, not thrown
-        });
     }
 
     /// <summary>

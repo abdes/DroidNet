@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Aura.Settings;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
+using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
@@ -11,6 +13,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI;
+using Windows.UI.ViewManagement;
 
 namespace DroidNet.Aura.Theming;
 
@@ -23,26 +26,42 @@ namespace DroidNet.Aura.Theming;
 /// </remarks>
 public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposable
 {
-    private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
     private readonly ILogger<AppThemeModeService> logger;
+    private readonly HostingContext hosting;
+    private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
+    private readonly IWindowManagerService windowManager;
+    private readonly UISettings uiSettings;
+    private readonly IDisposable? windowEventsSubscription;
     private bool isDisposed;
+    private ElementTheme? lastAppliedSystemTheme;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="AppThemeModeService"/> class.
     /// </summary>
+    /// <param name="hosting">The hosting context providing access to the dispatcher and application.</param>
     /// <param name="appearanceSettings">The appearance settings service used to manage theme settings.</param>
+    /// <param name="windowManager">The window manager service to listen for new windows and apply themes.</param>
     /// <param name="loggerFactory">The logger factory for creating loggers.</param>
-    public AppThemeModeService(ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
+    public AppThemeModeService(HostingContext hosting, ISettingsService<IAppearanceSettings> appearanceSettings, IWindowManagerService windowManager, ILoggerFactory? loggerFactory = null)
     {
+        this.hosting = hosting;
         this.appearanceSettings = appearanceSettings;
+        this.windowManager = windowManager;
         this.logger = loggerFactory?.CreateLogger<AppThemeModeService>() ?? NullLogger<AppThemeModeService>.Instance;
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
+        this.uiSettings = new UISettings();
+        this.uiSettings.ColorValuesChanged += this.UiSettings_ColorValuesChanged;
+
+        // Subscribe to window lifecycle events to apply theme to all windows
+        this.windowEventsSubscription = this.windowManager.WindowEvents.Subscribe(this.OnWindowLifecycleEvent);
     }
 
     /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "no fatal exceptions and nothing more to do than just logging")]
-    public void ApplyThemeMode(Window window, ElementTheme requestedThemeMode)
+    public void ApplyThemeToWindow(Window window, ElementTheme requestedThemeMode)
     {
+        this.LogApplyingThemeToWindow(window, requestedThemeMode);
+
         var contentElement = window.Content as FrameworkElement ?? throw new ArgumentException(
             $"window content element is not {nameof(FrameworkElement)}",
             nameof(window));
@@ -101,6 +120,27 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
         }
     }
 
+    /// <summary>
+    ///     Applies the specified theme to all open windows on the UI thread.
+    /// </summary>
+    /// <param name="theme">The theme to apply to all windows.</param>
+    public void ApplyThemeToAllWindows(ElementTheme theme)
+    {
+        this.LogApplyingThemeToAllWindows(theme);
+
+        // Capture a snapshot to avoid issues if collection mutates during iteration
+        var windowSnapshot = this.windowManager.OpenWindows.ToList();
+
+        // Marshal to UI thread for theme application
+        _ = this.hosting.Dispatcher.TryEnqueue(() =>
+        {
+            foreach (var windowContext in windowSnapshot)
+            {
+                this.ApplyThemeToWindow(windowContext.Window, theme);
+            }
+        });
+    }
+
     /// <inheritdoc/>
     public void Dispose()
     {
@@ -111,6 +151,8 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
 
         this.isDisposed = true;
         this.appearanceSettings.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
+        this.uiSettings.ColorValuesChanged -= this.UiSettings_ColorValuesChanged;
+        this.windowEventsSubscription?.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -197,6 +239,59 @@ public sealed partial class AppThemeModeService : IAppThemeModeService, IDisposa
         if (args.PropertyName?.Equals(nameof(IAppearanceSettings.AppThemeMode), StringComparison.Ordinal) == true)
         {
             this.LogThemeModeSettingChanged();
+
+            // Apply the new theme to all open windows
+            var currentTheme = this.appearanceSettings.Settings.AppThemeMode;
+            this.ApplyThemeToAllWindows(currentTheme);
+        }
+    }
+
+    /// <summary>
+    ///     Handles window lifecycle events to apply the current theme to newly created windows.
+    /// </summary>
+    /// <param name="lifecycleEvent">The window lifecycle event.</param>
+    private void OnWindowLifecycleEvent(WindowLifecycleEvent lifecycleEvent)
+    {
+        if (lifecycleEvent.EventType == WindowLifecycleEventType.Created)
+        {
+            // Get the current appearance setting or determine from system if using default
+            var appearanceSetting = this.appearanceSettings.Settings;
+            var theme = appearanceSetting.AppThemeMode == ElementTheme.Default
+                ? (Application.Current.RequestedTheme == ApplicationTheme.Light ? ElementTheme.Light : ElementTheme.Dark)
+                : appearanceSetting.AppThemeMode;
+
+            _ = this.hosting.Dispatcher.TryEnqueue(() =>
+                this.ApplyThemeToWindow(lifecycleEvent.Context.Window, theme));
+        }
+    }
+
+    /// <summary>
+    ///     Handles system theme changes via UISettings.ColorValuesChanged event.
+    /// </summary>
+    private void UiSettings_ColorValuesChanged(UISettings sender, object args)
+    {
+        // Determine system theme by inspecting background color
+        var bgColor = this.uiSettings.GetColorValue(UIColorType.Background);
+        var theme = (bgColor.R + bgColor.G + bgColor.B) > 382 // 255*3/2
+            ? ElementTheme.Light
+            : ElementTheme.Dark;
+
+        if (this.lastAppliedSystemTheme is not null && this.lastAppliedSystemTheme == theme)
+        {
+            return; // No change in system theme (we get the event two times due to shit code in WinUI)
+        }
+
+        this.lastAppliedSystemTheme = theme;
+        this.LogSystemThemeChanged(theme);
+
+        // Change the theme using the appearance settings service, unless it is already following system
+        if (this.appearanceSettings.Settings.AppThemeMode != ElementTheme.Default)
+        {
+            _ = this.hosting.Dispatcher.TryEnqueue(() => this.appearanceSettings.Settings.AppThemeMode = theme);
+        }
+        else
+        {
+            this.ApplyThemeToAllWindows(theme);
         }
     }
 }
