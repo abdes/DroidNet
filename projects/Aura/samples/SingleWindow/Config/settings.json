@@ -1,0 +1,16 @@
+{
+  "$meta": {
+    "version": 37,
+    "writtenAt": "2025-11-04T20:55:03.9851125+00:00",
+    "writtenBy": "DroidNet.Config"
+  },
+  "AppearanceSettings": {
+    "$meta": {
+      "schemaVersion": "20251022",
+      "service": "DroidNet.Aura.Settings.AppearanceSettingsService"
+    },
+    "appThemeMode": "Dark",
+    "appThemeBackgroundColor": "#00000000",
+    "appThemeFontFamily": "Segoe UI Variable"
+  }
+}
