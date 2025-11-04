@@ -56,6 +56,24 @@ public sealed record WindowDecorationOptions
     public bool WithBorder { get; init; } = true;
 
     /// <summary>
+    ///     Gets a value indicating whether the winbdow will have rounded corners.
+    /// </summary>
+    /// <value>
+    ///     <see langword="true"/> to enable rounded corners; otherwise, <see langword="false"/>. Default is
+    ///     <see langword="true"/>.
+    /// </value>
+    public bool RoundedCorners { get; init; } = true;
+
+    /// <summary>
+    ///     Gets a value indicating whether the window can be resized by the user.
+    /// </summary>
+    /// <value>
+    ///     <see langword="true"/> if the window is resizable; otherwise, <see langword="false"/>.
+    ///     Default is <see langword="true"/>.
+    /// </value>
+    public bool IsResizable { get; init; } = true;
+
+    /// <summary>
     ///     Gets the title bar configuration options.
     /// </summary>
     /// <value>

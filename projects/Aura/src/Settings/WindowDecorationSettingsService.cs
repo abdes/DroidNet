@@ -57,6 +57,17 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
             Buttons = WindowButtonsOptions.Default,
             Backdrop = BackdropKind.Mica,
         },
+        [WindowCategory.Frameless] = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Frameless,
+            ChromeEnabled = true,
+            TitleBar = null,
+            WithBorder = true, // WinUI 3 will not honor `false` and the border will show a White border anyway
+            RoundedCorners = false,
+            IsResizable = false,
+            Buttons = new() { ShowMaximize = false, ShowMinimize = false },
+            Backdrop = BackdropKind.Mica,
+        },
         [WindowCategory.System] = new WindowDecorationOptions
         {
             Category = WindowCategory.System,
