@@ -1,0 +1,62 @@
+{
+  "$meta": {
+    "version": 15,
+    "writtenAt": "2025-10-22T19:36:52.0760079+00:00",
+    "writtenBy": "DroidNet.Config"
+  },
+  "WindowDecorationSettings": {
+    "$meta": {
+      "schemaVersion": "20251022",
+      "service": "DroidNet.Aura.Settings.WindowDecorationSettingsService"
+    },
+    "categoryOverrides": {
+      "main": {
+        "category": "main",
+        "chromeEnabled": true,
+        "titleBar": {
+          "height": 32,
+          "showTitle": true,
+          "showIcon": true,
+          "withDocumentTabs": true,
+          "iconPath": "DroidNet.png",
+          "dragBehavior": "Default"
+        },
+        "buttons": {
+          "showMinimize": true,
+          "showMaximize": true
+        },
+        "menu": {
+          "menuProviderId": "App.MainMenu",
+          "isCompact": true
+        },
+        "backdrop": "Mica"
+      },
+      "document": {
+        "category": "document",
+        "chromeEnabled": true,
+        "titleBar": {
+          "height": 32,
+          "showTitle": true,
+          "showIcon": true,
+          "withDocumentTabs": false,
+          "iconPath": "DroidNet.png",
+          "dragBehavior": "Default"
+        },
+        "buttons": {
+          "showMinimize": true,
+          "showMaximize": true
+        },
+        "menu": {
+          "menuProviderId": "App.MainMenu",
+          "isCompact": false
+        },
+        "backdrop": "Mica"
+      },
+      "tool": {
+        "category": "tool",
+        "chromeEnabled": true,
+        "backdrop": "Mica"
+      }
+    }
+  }
+}
