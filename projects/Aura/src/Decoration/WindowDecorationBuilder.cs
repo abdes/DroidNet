@@ -5,41 +5,32 @@
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
-/// Fluent builder for creating <see cref="WindowDecorationOptions"/> with preset factory methods
-/// and customization capabilities.
+///     Fluent builder for creating <see cref="WindowDecorationOptions"/> with preset factory
+///     methods and customization capabilities.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The builder provides preset factory methods for common window types (Primary, Document, Tool,
-/// Secondary, SystemChrome) that configure sensible defaults suitable for 90% of use cases.
-/// Each preset can be further customized using fluent methods before calling <see cref="Build"/>
-/// to create an immutable <see cref="WindowDecorationOptions"/> instance.
-/// </para>
-/// <para>
-/// All fluent methods return the same builder instance to enable method chaining. The
-/// <see cref="Build"/> method validates the configuration and throws
-/// <see cref="ValidationException"/> if invalid combinations are detected.
-/// </para>
+///     The builder provides preset factory methods for common window types (Main, Document, Tool,
+///     Secondary, System) that configure sensible defaults suitable for most use cases. Each preset
+///     can be further customized using fluent methods before calling <see cref="Build"/> to create
+///     an immutable <see cref="WindowDecorationOptions"/> instance.
+///     <para>
+///     All fluent methods return the same builder instance to enable method chaining. The <see
+///     cref="Build"/> method validates the configuration and throws <see
+///     cref="ValidationException"/> if invalid combinations are detected.
+///     </para>
 /// </remarks>
 /// <example>
-/// <code>
-/// // Use a preset with default settings
-/// var primaryDecoration = WindowDecorationBuilder.ForMainWindow().Build();
+///     <code><![CDATA[
+///     // Use a preset with default settings var primaryDecoration =
+///     WindowDecorationBuilder.ForMainWindow().Build();
 ///
-/// // Customize a preset
-/// var customTool = WindowDecorationBuilder.ForToolWindow()
-///     .WithTitleBarHeight(40.0)
-///     .WithMenu("App.ToolMenu", isCompact: true)
-///     .Build();
+///     // Customize a preset var customTool = WindowDecorationBuilder.ForToolWindow()
+///     .WithTitleBarHeight(40.0) .WithMenu("App.ToolMenu", isCompact: true) .Build();
 ///
-/// // Build from scratch
-/// var custom = new WindowDecorationBuilder()
-///     .WithCategory("Custom")
-///     .WithChrome(true)
-///     .WithBackdrop(BackdropKind.Mica)
-///     .WithMenu("App.MainMenu")
-///     .Build();
-/// </code>
+///     // Build from scratch var custom = new WindowDecorationBuilder()
+///     .WithCategory(WindowCategory.Main) .WithChrome(true) .WithBackdrop(BackdropKind.Mica)
+///     .WithMenu("App.MainMenu") .Build();
+///     ]]></code>
 /// </example>
 public sealed class WindowDecorationBuilder
 {
@@ -72,30 +63,28 @@ public sealed class WindowDecorationBuilder
     private WindowButtonsOptions buttons = WindowButtonsOptions.Default;
     private MenuOptions? menu;
     private BackdropKind backdrop = BackdropKind.None;
-    private bool enableSystemTitleBarOverlay;
+    private bool withBorder;
 
     /// <summary>
-    /// Creates a builder for a primary application window.
+    ///     Creates a builder for a main application window.
     /// </summary>
-    /// <returns>A builder configured with primary window defaults.</returns>
+    /// <returns>A builder configured with sensible defaults for main application windows.</returns>
     /// <remarks>
-    /// <para>
-    /// Primary windows are the main application windows and are configured with:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Category: "Primary"</description></item>
-    /// <item><description>Chrome: Enabled</description></item>
-    /// <item><description>Title bar height: 40px</description></item>
-    /// <item><description>All buttons: Visible (minimize, maximize, close)</description></item>
-    /// <item><description>Backdrop: MicaAlt for modern appearance</description></item>
-    /// </list>
+    ///     Main windows are the application's primary top-level windows and are configured with:
+    ///     <list type="bullet">
+    ///     <item><description>Category: <see cref="WindowCategory.Main"/> (main application window)</description></item>
+    ///     <item><description>Chrome: Enabled</description></item>
+    ///     <item><description>Title bar height: 40px</description></item>
+    ///     <item><description>All buttons: Visible (minimize, maximize, close)</description></item>
+    ///     <item><description>Backdrop: <see cref="BackdropKind.Mica"/> (subtle, modern surface)</description></item>
+    ///     </list>
     /// </remarks>
     /// <example>
-    /// <code>
-    /// var decoration = WindowDecorationBuilder.ForMainWindow()
-    ///     .WithMenu("App.MainMenu")
-    ///     .Build();
-    /// </code>
+    ///     <code><![CDATA[
+    ///     var decoration = WindowDecorationBuilder.ForMainWindow()
+    ///         .WithMenu("App.MainMenu")
+    ///         .Build();
+    ///     ]]></code>
     /// </example>
     public static WindowDecorationBuilder ForMainWindow()
         => new()
@@ -108,27 +97,25 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Creates a builder for a document window.
+    ///     Creates a builder for a document window.
     /// </summary>
     /// <returns>A builder configured with document window defaults.</returns>
     /// <remarks>
-    /// <para>
-    /// Document windows are used for editing content and are configured with:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Category: "Document"</description></item>
-    /// <item><description>Chrome: Enabled</description></item>
-    /// <item><description>Title bar: Standard height (32px)</description></item>
-    /// <item><description>All buttons: Visible</description></item>
-    /// <item><description>Backdrop: Mica for subtle appearance</description></item>
-    /// </list>
+    ///     Document windows are used for editing content and are configured with:
+    ///     <list type="bullet">
+    ///     <item><description>Category: "Document"</description></item>
+    ///     <item><description>Chrome: Enabled</description></item>
+    ///     <item><description>Title bar: Standard height (32px)</description></item>
+    ///     <item><description>All buttons: Visible</description></item>
+    ///     <item><description>Backdrop: Mica for subtle appearance</description></item>
+    ///     </list>
     /// </remarks>
     /// <example>
-    /// <code>
-    /// var decoration = WindowDecorationBuilder.ForDocumentWindow()
-    ///     .WithMenu("App.DocumentMenu")
-    ///     .Build();
-    /// </code>
+    ///     <code><![CDATA[
+    ///     var decoration = WindowDecorationBuilder.ForDocumentWindow()
+    ///         .WithMenu("App.DocumentMenu")
+    ///         .Build();
+    ///     ]]></code>
     /// </example>
     public static WindowDecorationBuilder ForDocumentWindow()
         => new()
@@ -141,32 +128,30 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Creates a builder for a tool window.
+    ///     Creates a builder for a tool window.
     /// </summary>
     /// <returns>A builder configured with tool window defaults.</returns>
     /// <remarks>
-    /// <para>
-    /// Tool windows are lightweight auxiliary windows like palettes and toolboxes, configured with:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Category: "Tool"</description></item>
-    /// <item><description>Chrome: Disabled (uses custom compact title bar instead)</description></item>
-    /// <item><description>Title bar height: 24px (compact for utility windows)</description></item>
-    /// <item><description>No system buttons (custom close button in title bar)</description></item>
-    /// <item><description>Backdrop: MicaAlt (uses application-wide default)</description></item>
-    /// </list>
-    /// <para>
-    /// Tool windows use a custom compact title bar with a small close button. The title bar
-    /// is draggable and shows the window title in a compact font (10pt). Close functionality
-    /// is typically accessed via keyboard shortcuts or menu commands.
-    /// </para>
+    ///     Tool windows are lightweight auxiliary windows like palettes and toolboxes, configured with:
+    ///     <list type="bullet">
+    ///     <item><description>Category: "Tool"</description></item>
+    ///     <item><description>Chrome: Disabled (uses custom compact title bar instead)</description></item>
+    ///     <item><description>Title bar height: 24px (compact for utility windows)</description></item>
+    ///     <item><description>No system buttons (custom close button in title bar)</description></item>
+    ///     <item><description>Backdrop: MicaAlt (uses application-wide default)</description></item>
+    ///     </list>
+    ///     <para>
+    ///     Tool windows use a custom compact title bar with a small close button. The title bar
+    ///     is draggable and shows the window title in a compact font (10pt). Close functionality
+    ///     is typically accessed via keyboard shortcuts or menu commands.
+    ///     </para>
     /// </remarks>
     /// <example>
-    /// <code>
-    /// var decoration = WindowDecorationBuilder.ForToolWindow()
-    ///     .WithMenu("App.ToolMenu", isCompact: true)
-    ///     .Build();
-    /// </code>
+    ///     <code><![CDATA[
+    ///     var decoration = WindowDecorationBuilder.ForToolWindow()
+    ///         .WithMenu("App.ToolMenu", isCompact: true)
+    ///         .Build();
+    ///     ]]></code>
     /// </example>
     public static WindowDecorationBuilder ForToolWindow()
         => new()
@@ -179,27 +164,25 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Creates a builder for a secondary window.
+    ///     Creates a builder for a secondary window.
     /// </summary>
     /// <returns>A builder configured with secondary window defaults.</returns>
     /// <remarks>
-    /// <para>
-    /// Secondary windows are additional content windows, configured with:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Category: "Secondary"</description></item>
-    /// <item><description>Chrome: Enabled</description></item>
-    /// <item><description>Title bar: Standard height</description></item>
-    /// <item><description>All buttons: Visible</description></item>
-    /// <item><description>Backdrop: null (uses application-wide default)</description></item>
-    /// </list>
+    ///     Secondary windows host additional content (utility or auxiliary windows) and are configured with:
+    ///     <list type="bullet">
+    ///     <item><description>Category: <see cref="WindowCategory.Secondary"/></description></item>
+    ///     <item><description>Chrome: Enabled</description></item>
+    ///     <item><description>Title bar: Standard height</description></item>
+    ///     <item><description>All buttons: Visible</description></item>
+    ///     <item><description>Backdrop: <see cref="BackdropKind.MicaAlt"/> (contrasting surface for secondary windows)</description></item>
+    ///     </list>
     /// </remarks>
     /// <example>
-    /// <code>
-    /// var decoration = WindowDecorationBuilder.ForSecondaryWindow()
-    ///     .WithBackdrop(BackdropKind.Acrylic)
-    ///     .Build();
-    /// </code>
+    ///     <code><![CDATA[
+    ///     var decoration = WindowDecorationBuilder.ForSecondaryWindow()
+    ///         .WithBackdrop(BackdropKind.Acrylic)
+    ///         .Build();
+    ///     ]]></code>
     /// </example>
     public static WindowDecorationBuilder ForSecondaryWindow()
         => new()
@@ -212,12 +195,12 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Creates a builder for a transient window.
+    ///     Creates a builder for a transient window.
     /// </summary>
     /// <returns>A builder configured with transient window defaults.</returns>
     /// <remarks>
-    /// Transient windows are short-lived floating UI such as inspectors or popups and are
-    /// configured to use a lightweight backdrop and standard titlebar.
+    ///     Transient windows are short-lived floating UI such as inspectors or popups and are
+    ///     configured to use a lightweight backdrop and standard titlebar.
     /// </remarks>
     public static WindowDecorationBuilder ForTransientWindow()
         => new()
@@ -230,12 +213,12 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Creates a builder for a modal window.
+    ///     Creates a builder for a modal window.
     /// </summary>
     /// <returns>A builder configured with modal window defaults.</returns>
     /// <remarks>
-    /// Modal windows block interaction with other windows; they typically use acrylic
-    /// to emphasize focus and may hide maximize controls.
+    ///     Modal windows block interaction with other windows; they typically use acrylic to
+    ///     emphasize focus and may hide maximize controls.
     /// </remarks>
     public static WindowDecorationBuilder ForModalWindow()
         => new()
@@ -248,11 +231,13 @@ public sealed class WindowDecorationBuilder
         };
 
     /// <summary>
-    /// Sets the window category.
+    ///     Sets the window category.
     /// </summary>
-    /// <param name="category">The category identifier (e.g., "Primary", "Tool", "Document").</param>
+    /// <param name="category">
+    ///     The window category (for example, <see cref="WindowCategory.Main"/>, <see
+    ///     cref="WindowCategory.Tool"/>, or <see cref="WindowCategory.Document"/>).
+    /// </param>
     /// <returns>This builder instance for method chaining.</returns>
-    /// <exception cref="ArgumentException">Thrown if category is null or empty.</exception>
     public WindowDecorationBuilder WithCategory(WindowCategory category)
     {
         this.category = category;
@@ -260,7 +245,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets whether Aura chrome is enabled.
+    ///     Sets whether Aura chrome is enabled.
     /// </summary>
     /// <param name="enabled">True to enable Aura chrome, false to use system chrome.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -271,7 +256,18 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the title bar options.
+    ///     Enables or disables a visible border for the window decoration.
+    /// </summary>
+    /// <param name="enabled">True to render a border around the window; false to disable it.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public WindowDecorationBuilder WithBorder(bool enabled)
+    {
+        this.withBorder = enabled;
+        return this;
+    }
+
+    /// <summary>
+    ///     Sets the title bar options.
     /// </summary>
     /// <param name="titleBar">The title bar configuration.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -283,7 +279,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the window buttons options.
+    ///     Sets the window buttons options.
     /// </summary>
     /// <param name="buttons">The buttons configuration.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -295,7 +291,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the menu options.
+    ///     Sets the menu options.
     /// </summary>
     /// <param name="menu">The menu configuration, or null to display no menu.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -306,7 +302,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the menu options using a provider ID.
+    ///     Sets the menu options using a provider ID.
     /// </summary>
     /// <param name="providerId">The menu provider identifier.</param>
     /// <param name="isCompact">Whether to use compact menu mode.</param>
@@ -324,7 +320,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets the backdrop kind as a window-specific override.
+    ///     Sets the backdrop kind as a window-specific override.
     /// </summary>
     /// <param name="backdrop">The backdrop material to apply to this window, overriding the window category default.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -335,18 +331,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Sets whether system title bar overlay is enabled.
-    /// </summary>
-    /// <param name="enabled">True to enable system title bar overlay.</param>
-    /// <returns>This builder instance for method chaining.</returns>
-    public WindowDecorationBuilder WithSystemTitleBarOverlay(bool enabled)
-    {
-        this.enableSystemTitleBarOverlay = enabled;
-        return this;
-    }
-
-    /// <summary>
-    /// Sets the title bar height.
+    ///     Sets the title bar height.
     /// </summary>
     /// <param name="height">The title bar height in pixels.</param>
     /// <returns>This builder instance for method chaining.</returns>
@@ -363,7 +348,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Hides the maximize button.
+    ///     Hides the maximize button.
     /// </summary>
     /// <returns>This builder instance for method chaining.</returns>
     public WindowDecorationBuilder NoMaximize()
@@ -373,7 +358,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Hides the minimize button.
+    ///     Hides the minimize button.
     /// </summary>
     /// <returns>This builder instance for method chaining.</returns>
     public WindowDecorationBuilder NoMinimize()
@@ -383,7 +368,7 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Explicitly disables the backdrop effect for this window.
+    ///     Explicitly disables the backdrop effect for this window.
     /// </summary>
     /// <returns>This builder instance for method chaining.</returns>
     public WindowDecorationBuilder NoBackdrop()
@@ -393,12 +378,12 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    /// Builds and validates the window decoration options.
+    ///     Builds and validates the window decoration options.
     /// </summary>
     /// <returns>An immutable <see cref="WindowDecorationOptions"/> instance.</returns>
     /// <exception cref="ValidationException">
-    /// Thrown if the configuration is invalid (e.g., chrome disabled with menu specified,
-    /// primary window without close button).
+    ///     Thrown if the configuration is invalid (e.g., chrome disabled with menu specified,
+    ///     primary window without close button).
     /// </exception>
     public WindowDecorationOptions Build()
     {
@@ -410,7 +395,7 @@ public sealed class WindowDecorationBuilder
             Buttons = this.buttons,
             Menu = this.menu,
             Backdrop = this.backdrop,
-            EnableSystemTitleBarOverlay = this.enableSystemTitleBarOverlay,
+            WithBorder = this.withBorder,
         };
 
         options.Validate();

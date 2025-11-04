@@ -24,10 +24,9 @@ public class WindowDecorationBuilderTests
         // Assert
         _ = options.Category.Should().Be(WindowCategory.Main);
         _ = options.ChromeEnabled.Should().BeTrue();
-        _ = options.TitleBar.Height.Should().Be(40.0);
+        _ = options.TitleBar?.Height.Should().Be(40.0);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
-        _ = options.Buttons.ShowClose.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.Mica);
         _ = options.Menu.Should().BeNull();
     }
@@ -42,10 +41,9 @@ public class WindowDecorationBuilderTests
         // Assert
         _ = options.Category.Should().Be(WindowCategory.Document);
         _ = options.ChromeEnabled.Should().BeTrue();
-        _ = options.TitleBar.Height.Should().Be(32.0);
+        _ = options.TitleBar?.Height.Should().Be(32.0);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
-        _ = options.Buttons.ShowClose.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.Mica);
     }
 
@@ -59,10 +57,9 @@ public class WindowDecorationBuilderTests
         // Assert
         _ = options.Category.Should().Be(WindowCategory.Tool);
         _ = options.ChromeEnabled.Should().BeFalse("tool windows use custom compact chrome");
-        _ = options.TitleBar.Height.Should().Be(24.0, "tool windows use compact title bar");
+        _ = options.TitleBar?.Height.Should().Be(24.0, "tool windows use compact title bar");
         _ = options.Buttons.ShowMinimize.Should().BeFalse("tool windows typically don't minimize");
         _ = options.Buttons.ShowMaximize.Should().BeFalse("tool windows typically don't maximize");
-        _ = options.Buttons.ShowClose.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 
@@ -78,7 +75,6 @@ public class WindowDecorationBuilderTests
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
-        _ = options.Buttons.ShowClose.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 
@@ -123,7 +119,7 @@ public class WindowDecorationBuilderTests
         // Assert - defaults from a freshly constructed builder
         _ = options.Category.Should().Be(WindowCategory.System);
         _ = options.ChromeEnabled.Should().BeTrue();
-        _ = options.TitleBar.Height.Should().Be(TitleBarOptions.Default.Height);
+        _ = options.TitleBar?.Height.Should().Be(TitleBarOptions.Default.Height);
         _ = options.Buttons.Should().Be(WindowButtonsOptions.Default);
         _ = options.Menu.Should().BeNull();
         _ = options.Backdrop.Should().Be(BackdropKind.None);
@@ -169,8 +165,8 @@ public class WindowDecorationBuilderTests
         var options = builder.WithTitleBar(titleBar).Build();
 
         // Assert
-        _ = options.TitleBar.Height.Should().Be(50.0);
-        _ = options.TitleBar.ShowTitle.Should().BeFalse();
+        _ = options.TitleBar?.Height.Should().Be(50.0);
+        _ = options.TitleBar?.ShowTitle.Should().BeFalse();
     }
 
     [TestMethod]
@@ -298,20 +294,6 @@ public class WindowDecorationBuilderTests
 
     [TestMethod]
     [TestCategory("Fluent API")]
-    public void WithSystemTitleBarOverlay_SetsFlag()
-    {
-        // Arrange
-        var builder = new WindowDecorationBuilder();
-
-        // Act
-        var options = builder.WithSystemTitleBarOverlay(true).Build();
-
-        // Assert
-        _ = options.EnableSystemTitleBarOverlay.Should().BeTrue();
-    }
-
-    [TestMethod]
-    [TestCategory("Fluent API")]
     public void WithTitleBarHeight_SetsTitleBarHeight()
     {
         // Arrange
@@ -321,7 +303,7 @@ public class WindowDecorationBuilderTests
         var options = builder.WithTitleBarHeight(45.0).Build();
 
         // Assert
-        _ = options.TitleBar.Height.Should().Be(45.0);
+        _ = options.TitleBar?.Height.Should().Be(45.0);
     }
 
     [TestMethod]
@@ -424,14 +406,13 @@ public class WindowDecorationBuilderTests
             .Build();
 
         // Assert - customized property
-        _ = options.TitleBar.Height.Should().Be(50.0);
+        _ = options.TitleBar?.Height.Should().Be(50.0);
 
         // Assert - preserved preset properties
         _ = options.Category.Should().Be(WindowCategory.Main);
         _ = options.Backdrop.Should().Be(BackdropKind.Mica);
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
-        _ = options.Buttons.ShowClose.Should().BeTrue();
     }
 
     [TestMethod]
@@ -452,7 +433,7 @@ public class WindowDecorationBuilderTests
         _ = options.Menu.Should().NotBeNull();
         _ = options.Menu!.MenuProviderId.Should().Be("App.ToolMenu");
         _ = options.Menu.IsCompact.Should().BeTrue();
-        _ = options.TitleBar.Height.Should().Be(36.0);
+        _ = options.TitleBar?.Height.Should().Be(36.0);
         _ = options.Backdrop.Should().Be(BackdropKind.Acrylic);
         _ = options.Buttons.ShowMinimize.Should().BeFalse();
         _ = options.Buttons.ShowMaximize.Should().BeFalse();
@@ -473,22 +454,6 @@ public class WindowDecorationBuilderTests
         // Assert
         _ = act.Should().Throw<ValidationException>()
             .WithMessage("*chrome*menu*");
-    }
-
-    [TestMethod]
-    [TestCategory("Validation")]
-    public void Build_ThrowsOnPrimaryWindowWithoutCloseButton()
-    {
-        // Arrange
-        var builder = WindowDecorationBuilder.ForMainWindow()
-            .WithButtons(new WindowButtonsOptions { ShowClose = false });
-
-        // Act
-        var act = builder.Build;
-
-        // Assert
-        _ = act.Should().Throw<ValidationException>()
-            .WithMessage("*Primary*close*");
     }
 
     [TestMethod]

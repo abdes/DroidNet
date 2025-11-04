@@ -59,8 +59,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.LogLoaded();
 
             // Adjust height of the title bar row
-            var singleRowHeight = this.ViewModel?.Context?.Decorations?.TitleBar.Height ?? 32.0;
-            var withDocumentTabs = this.ViewModel?.Context?.Decorations?.TitleBar.WithDocumentTabs == true;
+            var singleRowHeight = this.ViewModel?.Context?.Decorations?.TitleBar?.Height ?? 32.0;
+            var withDocumentTabs = this.ViewModel?.Context?.Decorations?.TitleBar?.WithDocumentTabs == true;
             this.TitleBarRow.Height = new GridLength(singleRowHeight);
             this.DocumentTabsRow.Height = withDocumentTabs ? new GridLength(singleRowHeight) : new GridLength(0);
             this.AppIcon.Margin = withDocumentTabs ? new Thickness(8, 8, 12, 8) : new Thickness(4, 4, 8, 4);

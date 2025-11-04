@@ -4,10 +4,10 @@
 
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Aura.WindowManagement;
+namespace DroidNet.Aura.Windowing;
 
 /// <summary>
-/// Factory for creating <see cref="WindowContext"/> instances with proper dependency injection.
+///     Factory for creating instances of <see cref="WindowContext"/> with proper dependency injection.
 /// </summary>
 /// <remarks>
 /// This factory pattern avoids the service locator anti-pattern by injecting dependencies
@@ -17,18 +17,16 @@ namespace DroidNet.Aura.WindowManagement;
 public interface IWindowContextFactory
 {
     /// <summary>
-    /// Creates a new <see cref="WindowContext"/> for a given window.
+    ///     Creates a new <see cref="WindowContext"/> for a given window.
     /// </summary>
     /// <param name="window">The window to wrap.</param>
     /// <param name="category">The category of the window. Use constants from <see cref="WindowCategory"/>.</param>
-    /// <param name="title">The window title.</param>
     /// <param name="decoration">Optional decoration options for the window.</param>
     /// <param name="metadata">Optional metadata.</param>
     /// <returns>A new <see cref="WindowContext"/> instance.</returns>
     public WindowContext Create(
         Window window,
         WindowCategory category,
-        string? title = null,
         Decoration.WindowDecorationOptions? decoration = null,
         IReadOnlyDictionary<string, object>? metadata = null);
 }

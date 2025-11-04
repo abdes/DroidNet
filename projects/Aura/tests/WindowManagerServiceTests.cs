@@ -5,9 +5,11 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
+using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Theming;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
@@ -30,7 +32,6 @@ namespace DroidNet.Aura.Tests;
 [ExcludeFromCodeCoverage]
 public class WindowManagerServiceTests : VisualUserInterfaceTests
 {
-    private Mock<IWindowFactory> mockFactory = null!;
     private Mock<IWindowContextFactory> mockWindowContextFactory = null!;
     private Mock<IAppThemeModeService> mockThemeService = null!;
     private Mock<IAppearanceSettings> mockAppearanceSettings = null!;
@@ -54,7 +55,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         };
 
         // Setup mocks
-        this.mockFactory = new Mock<IWindowFactory>();
         this.mockWindowContextFactory = new Mock<IWindowContextFactory>();
         this.mockThemeService = new Mock<IAppThemeModeService>();
         this.mockAppearanceSettings = new Mock<IAppearanceSettings>();
@@ -74,16 +74,14 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             .Setup(f => f.Create(
                 It.IsAny<Window>(),
                 It.IsAny<WindowCategory>(),
-                It.IsAny<string>(),
-                It.IsAny<WindowDecorationOptions>(),
-                It.IsAny<IReadOnlyDictionary<string, object>>()))
-            .Returns<Window, WindowCategory, string?, WindowDecorationOptions?, IReadOnlyDictionary<string, object>?>(
-                (window, category, title, decoration, metadata) => new WindowContext
+                It.IsAny<WindowDecorationOptions?>(),
+                It.IsAny<IReadOnlyDictionary<string, object>?>()))
+            .Returns<Window, WindowCategory, WindowDecorationOptions?, IReadOnlyDictionary<string, object>?>(
+                (window, category, decoration, metadata) => new WindowContext
                 {
-                    Id = Guid.NewGuid(),
+                    Id = window.AppWindow.Id,
                     Window = window,
                     Category = category,
-                    Title = title ?? window.Title ?? $"Untitled {category} Window",
                     CreatedAt = DateTimeOffset.UtcNow,
                     Decorations = decoration,
                     Metadata = metadata,
@@ -91,26 +89,25 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WithValidType_CreatesAndRegistersWindow_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WithValidWindow_RegistersContext_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow("Test Window");
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                title: "Test Window").ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(
+                testWindow,
+                new("Test")).ConfigureAwait(true);
 
             // Assert
             _ = context.Should().NotBeNull();
             _ = context.Category.Should().Be(new WindowCategory("Test"));
-            _ = context.Title.Should().Be("Test Window");
             _ = context.Window.Should().Be(testWindow);
+            _ = context.Id.Should().Be(testWindow.AppWindow.Id);
             _ = sut.OpenWindows.Should().ContainSingle();
             _ = sut.OpenWindows.First().Id.Should().Be(context.Id);
         }
@@ -122,18 +119,18 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_AppliesThemeToNewWindow_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_AppliesThemeToNewWindow_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow("Test Window");
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
             // Act
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - Theme service should be called
             this.mockThemeService.Verify(
@@ -148,11 +145,10 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_PublishesCreatedEvent_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_PublishesCreatedEvent_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow("Test Window");
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -161,8 +157,8 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow event to propagate
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - Should have Created event as first event
             _ = events.Should().Contain(e => e.EventType == WindowLifecycleEventType.Created);
@@ -177,20 +173,19 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WhenActivateTrue_ActivatesWindow_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WhenWindowActivates_TracksActiveWindow_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow("Test Window");
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                activateWindow: true).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            testWindow.Activate();
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert
             _ = sut.ActiveWindow.Should().NotBeNull();
@@ -204,25 +199,22 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WhenActivateFalse_DoesNotActivateWindow_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WhenWindowAlreadyRegistered_Throws_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow("Test Window");
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
             // Act
-            _ = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                activateWindow: false).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow any async operations
+            var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
-            // Assert - Window should NOT be activated when activateWindow=false
-            _ = sut.ActiveWindow.Should().BeNull();
+            // Assert
+            _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(true);
         }
         finally
         {
@@ -232,11 +224,10 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WithMetadata_StoresMetadataInContext_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WithMetadata_StoresMetadataInContext_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var metadata = new Dictionary<string, object>(StringComparer.Ordinal)
         {
@@ -249,9 +240,10 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                metadata: metadata).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(
+                testWindow,
+                new("Test"),
+                metadata).ConfigureAwait(true);
 
             // Assert
             _ = context.Metadata.Should().NotBeNull();
@@ -267,36 +259,46 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WhenFactoryFails_ThrowsInvalidOperationException_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WhenContextFactoryFails_ThrowsInvalidOperationException_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>())
-            .Returns((Window)null!);
+        _ = this.mockWindowContextFactory
+            .Setup(f => f.Create(
+                It.IsAny<Window>(),
+                It.IsAny<WindowCategory>(),
+                It.IsAny<WindowDecorationOptions?>(),
+                It.IsAny<IReadOnlyDictionary<string, object>?>()))
+            .Throws(new InvalidOperationException("Factory failure"));
 
         var sut = this.CreateService();
+        var testWindow = MakeSmallWindow();
 
         try
         {
             // Act & Assert
-            var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(true);
         }
         finally
         {
+            testWindow.Close();
             sut.Dispose();
         }
     });
 
     [TestMethod]
-    public Task CreateWindowAsync_WhenDisposed_ThrowsObjectDisposedException_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindowAsync_WhenDisposed_ThrowsObjectDisposedException_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var sut = this.CreateService();
         sut.Dispose();
+        var testWindow = MakeSmallWindow();
 
         // Act & Assert
-        var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+        var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
         _ = await act.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(true);
+
+        testWindow.Close();
     });
 
     [TestMethod]
@@ -304,13 +306,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
             // Act
             var result = await sut.CloseWindowAsync(context.Id).ConfigureAwait(true);
@@ -329,13 +330,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             _ = sut.OpenWindows.Should().ContainSingle();
 
             // Act
@@ -356,7 +356,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -364,7 +363,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             events.Clear(); // Clear the Created event
 
             // Act
@@ -389,7 +388,11 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var result = await sut.CloseWindowAsync(Guid.NewGuid()).ConfigureAwait(true);
+            var otherWindow = MakeSmallWindow();
+            var missingId = otherWindow.AppWindow.Id;
+            otherWindow.Close();
+
+            var result = await sut.CloseWindowAsync(missingId).ConfigureAwait(true);
 
             // Assert
             _ = result.Should().BeFalse();
@@ -408,18 +411,13 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window2 = MakeSmallWindow();
         var window3 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2)
-            .Returns(window3);
-
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test3")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window3, new("Test3")).ConfigureAwait(true);
 
             _ = sut.OpenWindows.Should().HaveCount(3);
 
@@ -441,10 +439,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var windows = Enumerable.Range(0, 5).Select(_ => MakeSmallWindow()).ToList();
-        var index = 0;
-
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>())
-            .Returns(() => windows[index++]);
 
         var sut = this.CreateService();
 
@@ -453,7 +447,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             // Create multiple windows
             for (var i = 0; i < windows.Count; i++)
             {
-                _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+                _ = await sut.RegisterDecoratedWindowAsync(windows[i], new("Test")).ConfigureAwait(true);
             }
 
             _ = sut.OpenWindows.Should().HaveCount(5);
@@ -476,19 +470,16 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                activateWindow: false).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
             // Act
             sut.ActivateWindow(context.Id);
-            await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert
             _ = sut.ActiveWindow.Should().NotBeNull();
@@ -506,7 +497,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -514,16 +504,14 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                activateWindow: false).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Wait for initial window.Activate() event
+            await WaitForRenderAsync().ConfigureAwait(true);
             events.Clear(); // Clear the initial activation event
 
             // Act - Activate explicitly
             sut.ActivateWindow(context.Id);
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert
             _ = events.Should().Contain(e => e.EventType == WindowLifecycleEventType.Activated);
@@ -542,28 +530,25 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window1 = MakeSmallWindow();
         var window2 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2);
-
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
         _ = sut.WindowEvents.Subscribe(events.Add);
 
         try
         {
-            var context1 = await sut.CreateWindowAsync<Window>(
-                category: new("Test1"),
-                activateWindow: true).ConfigureAwait(true);
-            var context2 = await sut.CreateWindowAsync<Window>(
-                category: new("Test2"),
-                activateWindow: false).ConfigureAwait(true);
+            var context1 = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            sut.ActivateWindow(context1.Id);
+            await WaitForRenderAsync().ConfigureAwait(true);
+
+            var context2 = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             events.Clear();
 
             // Act
             sut.ActivateWindow(context2.Id);
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - Should have both Deactivated and Activated events
             _ = events.Should().Contain(e =>
@@ -588,29 +573,21 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window1 = MakeSmallWindow();
         var window2 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2);
-
         var sut = this.CreateService();
 
         try
         {
-            var context1 = await sut.CreateWindowAsync<Window>(
-                category: new("Test1"),
-                activateWindow: true).ConfigureAwait(true);
+            var context1 = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            sut.ActivateWindow(context1.Id);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
-            await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow activation to complete
-
-            var context2 = await sut.CreateWindowAsync<Window>(
-                category: new("Test2"),
-                activateWindow: false).ConfigureAwait(true);
-
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true); // Ensure measurable time difference
+            var context2 = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Act - Activate the second window
             sut.ActivateWindow(context2.Id);
-            await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - Verify that different windows maintain distinct state
             var updatedContext1 = sut.GetWindow(context1.Id);
@@ -645,7 +622,11 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act & Assert - Should not throw
-            var act = () => sut.ActivateWindow(Guid.NewGuid());
+            var tempWindow = MakeSmallWindow();
+            var missingId = tempWindow.AppWindow.Id;
+            tempWindow.Close();
+
+            var act = () => sut.ActivateWindow(missingId);
             _ = act.Should().NotThrow();
         }
         finally
@@ -663,16 +644,13 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window1 = MakeSmallWindow();
         var window2 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2);
-
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             this.mockThemeService.Invocations.Clear();
 
@@ -681,8 +659,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             this.mockSettingsService.Raise(
                 s => s.PropertyChanged += null,
                 new PropertyChangedEventArgs(nameof(IAppearanceSettings.AppThemeMode)));
-
-            await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow theme application
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - TEST-001: Theme should be reapplied to all windows
             this.mockThemeService.Verify(
@@ -702,13 +679,13 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
             this.mockThemeService.Invocations.Clear();
 
             // Act - Change a different property
@@ -716,7 +693,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
                 s => s.PropertyChanged += null,
                 new PropertyChangedEventArgs(nameof(IAppearanceSettings.AppThemeBackgroundColor)));
 
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert - Theme should NOT be reapplied
             this.mockThemeService.Verify(
@@ -731,14 +708,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CreateWindow_WithoutThemeService_DoesNotFail_Async() => EnqueueAsync(async () =>
+    public Task RegisterWindow_WithoutThemeService_DoesNotFail_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = new WindowManagerService(
-            this.mockFactory.Object,
             this.mockWindowContextFactory.Object,
             this.hostingContext,
             this.mockLoggerFactory.Object,
@@ -749,7 +724,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act & Assert - Should not throw
-            var act = async () => await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             _ = await act.Should().NotThrowAsync().ConfigureAwait(true);
         }
         finally
@@ -764,7 +739,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -773,7 +747,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
 
             // Assert
@@ -792,7 +766,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -800,15 +773,14 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(
-                category: new("Test"),
-                activateWindow: false).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             events.Clear(); // Clear the Created event
 
             // Act - Explicitly activate
             sut.ActivateWindow(context.Id);
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert
             _ = events.Should().ContainSingle(e => e.EventType == WindowLifecycleEventType.Activated);
@@ -827,27 +799,24 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window1 = MakeSmallWindow();
         var window2 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2);
-
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
         _ = sut.WindowEvents.Subscribe(events.Add);
 
         try
         {
-            var context1 = await sut.CreateWindowAsync<Window>(
-                category: new("Test1"),
-                activateWindow: true).ConfigureAwait(true);
-            var context2 = await sut.CreateWindowAsync<Window>(
-                category: new("Test2"),
-                activateWindow: false).ConfigureAwait(true);
+            var context1 = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            sut.ActivateWindow(context1.Id);
+            await WaitForRenderAsync().ConfigureAwait(true);
+
+            var context2 = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
             events.Clear();
 
             // Act
             sut.ActivateWindow(context2.Id);
-            await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             // Assert
             _ = events.Should().Contain(e =>
@@ -867,7 +836,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
         var events = new List<WindowLifecycleEvent>();
@@ -875,7 +843,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             events.Clear();
 
             // Act
@@ -896,13 +864,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            var context = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
 
             // Act
             var result = sut.GetWindow(context.Id);
@@ -927,7 +894,11 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         try
         {
             // Act
-            var result = sut.GetWindow(Guid.NewGuid());
+            var tempWindow = MakeSmallWindow();
+            var missingId = tempWindow.AppWindow.Id;
+            tempWindow.Close();
+
+            var result = sut.GetWindow(missingId);
 
             // Assert
             _ = result.Should().BeNull();
@@ -948,18 +919,13 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window2 = MakeSmallWindow();
         var window3 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2)
-            .Returns(window3);
-
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Tool).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Document).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: WindowCategory.Tool).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window1, WindowCategory.Tool).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window2, WindowCategory.Document).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window3, WindowCategory.Tool).ConfigureAwait(true);
 
             // Act
             var toolWindows = sut.GetWindowsByCategory(WindowCategory.Tool);
@@ -984,16 +950,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         var window1 = MakeSmallWindow();
         var window2 = MakeSmallWindow();
 
-        _ = this.mockFactory.SetupSequence(f => f.CreateWindow<Window>())
-            .Returns(window1)
-            .Returns(window2);
-
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test1")).ConfigureAwait(true);
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test2")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
 
             // Act
             var allWindows = sut.OpenWindows;
@@ -1054,13 +1016,12 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     {
         // Arrange
         var testWindow = MakeSmallWindow();
-        _ = this.mockFactory.Setup(f => f.CreateWindow<Window>()).Returns(testWindow);
 
         var sut = this.CreateService();
 
         try
         {
-            _ = await sut.CreateWindowAsync<Window>(category: new("Test")).ConfigureAwait(true);
+            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
             _ = sut.OpenWindows.Should().ContainSingle();
 
             // Act
@@ -1088,13 +1049,15 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         return window;
     }
 
+    private static async Task WaitForRenderAsync() =>
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { })
+            .ConfigureAwait(true);
+
     private WindowManagerService CreateService()
         => new(
-            this.mockFactory.Object,
             this.mockWindowContextFactory.Object,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             this.mockThemeService.Object,
-            this.mockSettingsService.Object,
-            router: null);
+            this.mockSettingsService.Object);
 }

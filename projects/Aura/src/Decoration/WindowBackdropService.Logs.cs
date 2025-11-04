@@ -15,18 +15,18 @@ namespace DroidNet.Aura.Decoration;
 public sealed partial class WindowBackdropService
 {
     [LoggerMessage(
-        EventId = 4200,
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "[WindowBackdrop] applying {Backdrop} backdrop to window")]
+        Message = "Applying {Backdrop} backdrop to window.")]
     private static partial void LogApplyingBackdrop(ILogger logger, BackdropKind backdrop);
 
     private void LogApplyingBackdrop(BackdropKind backdrop)
         => LogApplyingBackdrop(this.logger, backdrop);
 
     [LoggerMessage(
-        EventId = 4201,
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "[WindowBackdrop] backdrop is None; skipping application")]
+        Message = "Backdrop is None; skipping application.")]
     private static partial void LogSkippingNoneBackdrop(ILogger logger);
 
     [Conditional("DEBUG")]
@@ -34,9 +34,9 @@ public sealed partial class WindowBackdropService
         => LogSkippingNoneBackdrop(this.logger);
 
     [LoggerMessage(
-        EventId = 4202,
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "[WindowBackdrop] successfully applied {Backdrop} backdrop")]
+        Message = "Successfully applied {Backdrop} backdrop.")]
     private static partial void LogBackdropApplied(ILogger logger, BackdropKind backdrop);
 
     [Conditional("DEBUG")]
@@ -44,18 +44,18 @@ public sealed partial class WindowBackdropService
         => LogBackdropApplied(this.logger, backdrop);
 
     [LoggerMessage(
-        EventId = 4203,
+        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
-        Message = "[WindowBackdrop] failed to apply {Backdrop} backdrop; window will continue without backdrop")]
+        Message = "Failed to apply {Backdrop} backdrop; window will continue without a backdrop.")]
     private static partial void LogBackdropApplicationFailed(ILogger logger, Exception exception, BackdropKind backdrop);
 
     private void LogBackdropApplicationFailed(Exception exception, BackdropKind backdrop)
         => LogBackdropApplicationFailed(this.logger, exception, backdrop);
 
     [LoggerMessage(
-        EventId = 4204,
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "[WindowBackdrop] applying backdrops to matching windows")]
+        Message = "Applying backdrops to matching windows.")]
     private static partial void LogApplyingBackdropsToWindows(ILogger logger);
 
     private void LogApplyingBackdropsToWindows()

@@ -8,7 +8,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;
 using DroidNet.Hosting.WinUI;
@@ -158,7 +158,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public IconSource IconSource => new BitmapIconSource()
     {
         ShowAsMonochrome = false,
-        UriSource = this.GetAssetUri(this.Context?.Decorations?.TitleBar.IconPath ?? "DroidNet.png"),
+        UriSource = this.GetAssetUri(this.Context?.Decorations?.TitleBar?.IconPath ?? "DroidNet.png"),
     };
 
     /// <summary>

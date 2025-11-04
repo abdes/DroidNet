@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
@@ -41,7 +41,6 @@ namespace DroidNet.Aura.Tests.WindowManagement;
 public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 {
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
-    private Mock<IWindowFactory> mockWindowFactory = null!;
     private IWindowContextFactory windowContextFactory = null!;
     private HostingContext hostingContext = null!;
 
@@ -60,12 +59,6 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(Mock.Of<ILogger>());
 
-        // Setup window factory
-        this.mockWindowFactory = new Mock<IWindowFactory>();
-        _ = this.mockWindowFactory
-            .Setup(f => f.CreateWindow<Window>())
-            .Returns(() => MakeSmallWindow());
-
         // Create real context factory (no mocking, we need real menu provider resolution)
         this.windowContextFactory = new WindowContextFactory(
             Mock.Of<ILogger<WindowContextFactory>>(),
@@ -83,52 +76,6 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     });
 
     /// <summary>
-    /// Tests that explicit decoration parameter takes precedence over settings registry.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [TestMethod]
-    public Task CreateWindow_ExplicitDecoration_TakesPrecedence_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var explicitDecoration = WindowDecorationBuilder.ForToolWindow().Build();
-        var settingsService = CreateMockSettingsService(WindowCategory.Main);
-
-        var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
-            this.windowContextFactory,
-            this.hostingContext,
-            this.mockLoggerFactory.Object,
-            decorationSettingsService: settingsService.Object);
-
-        WindowContext? context = null;
-
-        try
-        {
-            // Act - Category says "Main" but explicit says "Tool"
-            context = await windowManager.CreateWindowAsync<Window>(
-                WindowCategory.Main,
-                decoration: explicitDecoration).ConfigureAwait(true);
-
-            // Assert
-            _ = context.Should().NotBeNull();
-            _ = context.Decorations.Should().NotBeNull();
-            _ = context.Decorations.Should().Be(explicitDecoration);
-            _ = context.Decorations.Category.Should().Be(WindowCategory.Tool); // Tool preset
-            _ = context.Decorations.Buttons.ShowMaximize.Should().BeFalse(); // Tool characteristic
-        }
-        finally
-        {
-            if (context != null)
-            {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
-            }
-
-            windowManager.Dispose();
-            await Task.CompletedTask.ConfigureAwait(true);
-        }
-    });
-
-    /// <summary>
     /// Tests that settings registry provides decoration when no explicit parameter.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
@@ -139,18 +86,18 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
+        var window = MakeSmallWindow();
         WindowContext? context = null;
 
         try
         {
             // Act - No explicit decoration
-            context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Tool).ConfigureAwait(true);
+            context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Tool).ConfigureAwait(true);
 
             // Assert
             _ = context.Should().NotBeNull();
@@ -163,6 +110,10 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             if (context != null)
             {
                 _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+            }
+            else
+            {
+                window.Close();
             }
 
             windowManager.Dispose();
@@ -179,18 +130,18 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     {
         // Arrange - No decoration settings service
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: null); // No service
 
+        var window = MakeSmallWindow();
         WindowContext? context = null;
 
         try
         {
             // Act
-            context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Main).ConfigureAwait(true);
+            context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Main).ConfigureAwait(true);
 
             // Assert
             _ = context.Should().NotBeNull();
@@ -201,6 +152,10 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             if (context != null)
             {
                 _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+            }
+            else
+            {
+                window.Close();
             }
 
             windowManager.Dispose();
@@ -220,23 +175,29 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var createdContexts = new ConcurrentBag<WindowContext>();
+        var createdWindows = new List<Window>();
 
         try
         {
-            // Act - Create multiple windows concurrently
+            // Act - Register multiple windows concurrently
             var tasks = Enumerable.Range(0, ConcurrentCallCount)
                 .Select(async i =>
                 {
-                    var ctx = await windowManager.CreateWindowAsync<Window>(
-                        WindowCategory.Tool,
-                        title: string.Create(CultureInfo.InvariantCulture, $"Window {i}")).ConfigureAwait(true);
+                    var win = MakeSmallWindow(string.Create(CultureInfo.InvariantCulture, $"Window {i}"));
+                    lock (createdWindows)
+                    {
+                        createdWindows.Add(win);
+                    }
+
+                    var ctx = await windowManager.RegisterDecoratedWindowAsync(
+                        win,
+                        WindowCategory.Tool).ConfigureAwait(true);
                     createdContexts.Add(ctx);
                 })
                 .ToArray();
@@ -266,39 +227,33 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     });
 
     /// <summary>
-    /// Tests RegisterWindowAsync respects decoration resolution.
+    /// Tests that Main category windows get Main-specific default decoration.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
-    public Task RegisterWindow_RespectsDecorationResolution_Async() => EnqueueAsync(async () =>
+    public Task CreateWindow_MainCategory_GetsMainDefault_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var window = MakeSmallWindow("Registered Window");
-        var explicitDecoration = WindowDecorationBuilder.ForMainWindow().Build();
-        var settingsService = CreateMockSettingsService(WindowCategory.Tool);
+        var settingsService = CreateMockSettingsService(WindowCategory.Main);
 
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
+        var window = MakeSmallWindow();
         WindowContext? context = null;
 
         try
         {
-            // Act - Category says "Tool" but explicit says "Main"
-            context = await windowManager.RegisterWindowAsync(
-                window,
-                WindowCategory.Tool,
-                decoration: explicitDecoration).ConfigureAwait(true);
+            // Act
+            context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Main).ConfigureAwait(true);
 
             // Assert
-            _ = context.Should().NotBeNull();
             _ = context.Decorations.Should().NotBeNull();
-            _ = context.Decorations.Should().Be(explicitDecoration);
-            _ = context.Decorations.Category.Should().Be(WindowCategory.Main); // Main preset
+            _ = context.Decorations.Category.Should().Be(WindowCategory.Main);
+            _ = context.Decorations.TitleBar?.Height.Should().Be(40.0); // Main characteristic
         }
         finally
         {
@@ -317,95 +272,6 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     });
 
     /// <summary>
-    /// Tests CreateWindowAsync with string typename respects decoration resolution.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [TestMethod]
-    public Task CreateWindowByTypeName_RespectsDecorationResolution_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        _ = this.mockWindowFactory
-            .Setup(f => f.CreateWindow(It.IsAny<string>()))
-            .Returns(() => MakeSmallWindow());
-
-        var settingsService = CreateMockSettingsService(WindowCategory.Document);
-
-        var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
-            this.windowContextFactory,
-            this.hostingContext,
-            this.mockLoggerFactory.Object,
-            decorationSettingsService: settingsService.Object);
-
-        WindowContext? context = null;
-
-        try
-        {
-            // Act
-            context = await windowManager.CreateWindowAsync(
-                "Microsoft.UI.Xaml.Window",
-                WindowCategory.Document).ConfigureAwait(true);
-
-            // Assert
-            _ = context.Should().NotBeNull();
-            _ = context.Decorations.Should().NotBeNull();
-            _ = context.Decorations.Category.Should().Be(WindowCategory.Document);
-            _ = context.Decorations.Backdrop.Should().Be(BackdropKind.Mica); // Document default
-        }
-        finally
-        {
-            if (context != null)
-            {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
-            }
-
-            windowManager.Dispose();
-            await Task.CompletedTask.ConfigureAwait(true);
-        }
-    });
-
-    /// <summary>
-    /// Tests that Main category windows get Main-specific default decoration.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
-    [TestMethod]
-    public Task CreateWindow_MainCategory_GetsMainDefault_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var settingsService = CreateMockSettingsService(WindowCategory.Main);
-
-        var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
-            this.windowContextFactory,
-            this.hostingContext,
-            this.mockLoggerFactory.Object,
-            decorationSettingsService: settingsService.Object);
-
-        WindowContext? context = null;
-
-        try
-        {
-            // Act
-            context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Main).ConfigureAwait(true);
-
-            // Assert
-            _ = context.Decorations.Should().NotBeNull();
-            _ = context.Decorations.Category.Should().Be(WindowCategory.Main);
-            _ = context.Decorations.TitleBar.Height.Should().Be(40.0); // Main characteristic
-        }
-        finally
-        {
-            if (context != null)
-            {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
-            }
-
-            windowManager.Dispose();
-            await Task.CompletedTask.ConfigureAwait(true);
-        }
-    });
-
-    /// <summary>
     /// Tests that Tool category windows get Tool-specific default decoration.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
@@ -416,18 +282,18 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
+        var window = MakeSmallWindow();
         WindowContext? context = null;
 
         try
         {
             // Act
-            context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Tool).ConfigureAwait(true);
+            context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Tool).ConfigureAwait(true);
 
             // Assert
             _ = context.Decorations.Should().NotBeNull();
@@ -439,6 +305,10 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             if (context != null)
             {
                 _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+            }
+            else
+            {
+                window.Close();
             }
 
             windowManager.Dispose();
@@ -457,18 +327,18 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Document);
 
         var windowManager = new WindowManagerService(
-            this.mockWindowFactory.Object,
             this.windowContextFactory,
             this.hostingContext,
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
+        var window = MakeSmallWindow();
         WindowContext? context = null;
 
         try
         {
             // Act
-            context = await windowManager.CreateWindowAsync<Window>(WindowCategory.Document).ConfigureAwait(true);
+            context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Document).ConfigureAwait(true);
 
             // Assert
             _ = context.Decorations.Should().NotBeNull();
@@ -480,6 +350,10 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             if (context != null)
             {
                 _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+            }
+            else
+            {
+                window.Close();
             }
 
             windowManager.Dispose();

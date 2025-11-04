@@ -5,7 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Controls.Menus;
 using DroidNet.Tests;
 using FluentAssertions;
@@ -59,47 +59,17 @@ public class WindowContextFactoryTests : VisualUserInterfaceTests
             // Act
             var context = factory.Create(
                 window,
-                new WindowCategory("Test"),
-                "My Test Window");
+                new WindowCategory("Test"));
 
             // Assert
             _ = context.Should().NotBeNull();
-            _ = context.Id.Should().NotBeEmpty();
+            _ = context.Id.Value.Should().BeGreaterThan(0);
             _ = context.Window.Should().Be(window);
             _ = context.Category.Should().Be(new WindowCategory("Test"));
-            _ = context.Title.Should().Be("My Test Window");
             _ = context.CreatedAt.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromSeconds(1));
             _ = context.Decorations.Should().BeNull();
             _ = context.Metadata.Should().BeNull();
             _ = context.MenuSource.Should().BeNull();
-        }
-        finally
-        {
-            window.Close();
-            await Task.CompletedTask.ConfigureAwait(true);
-        }
-    });
-
-    [TestMethod]
-    public Task Create_WithNullTitle_UsesWindowTitle_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var window = MakeSmallWindow("Window Title");
-        var factory = new WindowContextFactory(
-            this.mockLogger.Object,
-            this.mockLoggerFactory.Object,
-            []);
-
-        try
-        {
-            // Act
-            var context = factory.Create(
-                window,
-                new WindowCategory("Test"),
-                title: null);
-
-            // Assert
-            _ = context.Title.Should().Be("Window Title");
         }
         finally
         {

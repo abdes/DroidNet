@@ -10,7 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -33,6 +33,7 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public sealed partial class WindowManagerShellViewModel : AbstractOutletContainer
 {
+    private readonly IWindowFactory windowFactory;
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly IDisposable windowEventsSubscription;
@@ -44,14 +45,17 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     /// </summary>
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher information.</param>
+    /// <param name="windowFactory">The window factory for creating new windows.</param>
     /// <param name="windowManager">The window manager service.</param>
     public WindowManagerShellViewModel(
         IRouter router,
         HostingContext hostingContext,
+        IWindowFactory windowFactory,
         IWindowManagerService windowManager)
     {
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
 
+        this.windowFactory = windowFactory;
         this.windowManager = windowManager;
         this.dispatcherQueue = hostingContext.Dispatcher;
 
@@ -140,17 +144,10 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            // Build tool window decoration with selected backdrop
-            // Note: Tool windows use custom chrome (ChromeEnabled=false) and cannot have menus
-            var decoration = WindowDecorationBuilder.ForToolWindow()
-                .WithBackdrop(this.SelectedBackdrop)
-                .Build();
-
-            var context = await this.windowManager.CreateWindowAsync<ToolWindow>(
-                category: WindowCategory.Tool,
-                title: string.Create(CultureInfo.InvariantCulture, $"Tool Window {this.WindowCount + 1}"),
-                decoration: decoration)
-                .ConfigureAwait(true);
+            var window = await this.windowFactory.CreateDecoratedWindow<ToolWindow>(
+                category: WindowCategory.Tool).ConfigureAwait(true);
+            window.AppWindow.Title = string.Create(CultureInfo.InvariantCulture, $"Tool Window {window.AppWindow.Id.Value}");
+            window.Activate();
         }
         catch (Exception ex)
         {
@@ -166,17 +163,10 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            // Build document window decoration with selected backdrop
-            // Note: Document windows use toolbar UI instead of menus
-            var decoration = WindowDecorationBuilder.ForDocumentWindow()
-                .WithBackdrop(this.SelectedBackdrop)
-                .Build();
-
-            var context = await this.windowManager.CreateWindowAsync<DocumentWindow>(
-                category: WindowCategory.Document,
-                title: string.Create(CultureInfo.InvariantCulture, $"Document {this.WindowCount + 1}"),
-                decoration: decoration)
-                .ConfigureAwait(true);
+            var window = await this.windowFactory.CreateDecoratedWindow<DocumentWindow>(
+                category: WindowCategory.Document).ConfigureAwait(true);
+            window.AppWindow.Title = string.Create(CultureInfo.InvariantCulture, $"Document Window {window.AppWindow.Id.Value}");
+            window.Activate();
         }
         catch (Exception ex)
         {
@@ -268,7 +258,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             this.OpenWindows.Add(new WindowInfo
             {
                 Id = context.Id,
-                Title = context.Title,
+                Title = context.Window.Title,
                 Category = context.Category,
                 IsActive = context.IsActive,
                 CreatedAt = context.CreatedAt.ToLocalTime(),
@@ -286,7 +276,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         var activeWindow = this.windowManager.ActiveWindow;
         this.ActiveWindowInfo = activeWindow is not null
-            ? string.Create(CultureInfo.InvariantCulture, $"{activeWindow.Title} ({activeWindow.Category})")
+            ? string.Create(CultureInfo.InvariantCulture, $"{activeWindow.Window.Title} ({activeWindow.Category})")
             : "None";
     }
 }

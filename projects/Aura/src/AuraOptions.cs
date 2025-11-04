@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Aura.Settings;
+using DroidNet.Aura.Windowing;
 
 namespace DroidNet.Aura;
 
@@ -17,9 +18,9 @@ namespace DroidNet.Aura;
 /// <para>
 /// <strong>Mandatory Services (Always Registered):</strong>
 /// <list type="bullet">
-/// <item><description><see cref="WindowManagement.IWindowFactory"/> - Factory for creating window instances</description></item>
-/// <item><description><see cref="WindowManagement.IWindowContextFactory"/> - Factory for creating window contexts with menu provider resolution</description></item>
-/// <item><description><see cref="WindowManagement.IWindowManagerService"/> - Core window management service</description></item>
+/// <item><description><see cref="Windowing.IWindowFactory"/> - Factory for creating window instances</description></item>
+/// <item><description><see cref="Windowing.IWindowContextFactory"/> - Factory for creating window contexts with menu provider resolution</description></item>
+/// <item><description><see cref="Windowing.IWindowManagerService"/> - Core window management service</description></item>
 /// </list>
 /// </para>
 /// <para>
@@ -179,11 +180,11 @@ public sealed class AuraOptions
     /// <summary>
     /// Registers a custom window factory implementation.
     /// </summary>
-    /// <typeparam name="TFactory">The custom window factory type implementing <see cref="WindowManagement.IWindowFactory"/>.</typeparam>
+    /// <typeparam name="TFactory">The custom window factory type implementing <see cref="Windowing.IWindowFactory"/>.</typeparam>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
     /// Use this method to replace the default window factory with a custom implementation.
-    /// The custom factory must implement <see cref="WindowManagement.IWindowFactory"/> and will be
+    /// The custom factory must implement <see cref="Windowing.IWindowFactory"/> and will be
     /// registered as a singleton.
     /// </remarks>
     /// <example>
@@ -194,7 +195,7 @@ public sealed class AuraOptions
     /// </code>
     /// </example>
     public AuraOptions WithCustomWindowFactory<TFactory>()
-        where TFactory : class, WindowManagement.IWindowFactory
+        where TFactory : class, IWindowFactory
     {
         this.CustomWindowFactoryType = typeof(TFactory);
         return this;

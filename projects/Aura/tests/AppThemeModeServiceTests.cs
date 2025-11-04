@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Settings;
+using DroidNet.Aura.Theming;
 using DroidNet.Config;
 using DroidNet.Tests;
 using FluentAssertions;

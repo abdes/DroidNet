@@ -5,19 +5,21 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
+using Microsoft.UI;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
 /// Display model for window information.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ObservableObject")]
 public sealed partial class WindowInfo : ObservableObject
 {
     /// <summary>
     /// Gets or sets the window unique identifier.
     /// </summary>
     [ObservableProperty]
-    public partial Guid Id { get; set; }
+    public partial WindowId Id { get; set; }
 
     /// <summary>
     /// Gets or sets the window title.
@@ -29,7 +31,7 @@ public sealed partial class WindowInfo : ObservableObject
     /// Gets or sets the window type.
     /// </summary>
     [ObservableProperty]
-    public partial WindowCategory Category { get; set; }
+    public partial WindowCategory? Category { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the window is active.

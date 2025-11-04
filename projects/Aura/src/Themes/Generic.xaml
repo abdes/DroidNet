@@ -4,7 +4,7 @@
 
     <!--  ReSharper disable Xaml.PathError  -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/AppIcon.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/AppIcon/AppIcon.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

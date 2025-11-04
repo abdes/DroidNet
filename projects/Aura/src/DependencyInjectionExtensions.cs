@@ -4,7 +4,8 @@
 
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Theming;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DryIoc;
 
