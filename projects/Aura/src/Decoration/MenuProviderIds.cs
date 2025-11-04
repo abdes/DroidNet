@@ -11,7 +11,7 @@ namespace DroidNet.Aura.Decoration;
 ///     Use these constants when registering and referencing menu providers to ensure
 ///     consistency across your application.
 /// </remarks>
-public static class MenuProviderIds
+public static class MenuProviderIds // TODO: remove this?
 {
     /// <summary>
     ///     Identifier for the main application menu (typically for primary windows).
