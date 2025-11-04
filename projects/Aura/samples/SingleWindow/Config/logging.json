@@ -1,0 +1,25 @@
+{
+  "Serilog": {
+    "Using": [ "Serilog.Sinks.Console", "Serilog.Sinks.File" ],
+    "MinimumLevel": {
+      "Default": "Verbose",
+      "Override": {
+        "DroidNet.Controls.Menus.Misc": "Debug",
+        "DroidNet.Controls.Menus.Visual": "Debug"
+      }
+    },
+    "WriteTo": [
+      {
+        "Name": "File",
+        "Args": {
+          "path": "G:/Logs/log.txt",
+          "shared": true
+        }
+      }
+    ],
+    "Enrich": [ "FromLogContext", "WithThreadId" ],
+    "Properties": {
+      "Application": "DemoApp"
+    }
+  }
+}

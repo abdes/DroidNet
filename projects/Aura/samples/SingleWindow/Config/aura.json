@@ -1,0 +1,36 @@
+{
+  "$meta": {
+    "version": 18,
+    "writtenAt": "2025-10-23T11:56:48.8298589+00:00",
+    "writtenBy": "DroidNet.Config"
+  },
+  "WindowDecorationSettings": {
+    "$meta": {
+      "schemaVersion": "20251022",
+      "service": "DroidNet.Aura.Settings.WindowDecorationSettingsService"
+    },
+    "CategoryOverrides": {
+      "main": {
+        "category": "main",
+        "chromeEnabled": true,
+        "titleBar": {
+          "height": 32,
+          "showTitle": true,
+          "showIcon": true,
+          "withDocumentTabs": false,
+          "iconPath": "DroidNet.png",
+          "dragBehavior": "Default"
+        },
+        "buttons": {
+          "showMinimize": true,
+          "showMaximize": true
+        },
+        "menu": {
+          "menuProviderId": "App.MainMenu",
+          "isCompact": false
+        },
+        "backdrop": "Mica"
+      }
+    }
+  }
+}
