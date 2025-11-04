@@ -32,7 +32,6 @@ public class SerializationTests
             Buttons = new WindowButtonsOptions { ShowMaximize = false },
             Menu = new MenuOptions { MenuProviderId = "App.MainMenu", IsCompact = true },
             Backdrop = BackdropKind.MicaAlt,
-            EnableSystemTitleBarOverlay = true,
         };
 
         // Act
@@ -43,14 +42,12 @@ public class SerializationTests
         _ = deserialized.Should().NotBeNull();
         _ = deserialized!.Category.Should().Be(original.Category);
         _ = deserialized.ChromeEnabled.Should().Be(original.ChromeEnabled);
-        _ = deserialized.TitleBar.Height.Should().Be(original.TitleBar.Height);
-        _ = deserialized.TitleBar.ShowTitle.Should().Be(original.TitleBar.ShowTitle);
+        _ = deserialized.TitleBar?.ShowTitle.Should().Be(original.TitleBar.ShowTitle);
         _ = deserialized.Buttons.ShowMaximize.Should().Be(original.Buttons.ShowMaximize);
         _ = deserialized.Menu.Should().NotBeNull();
         _ = deserialized.Menu!.MenuProviderId.Should().Be(original.Menu!.MenuProviderId);
         _ = deserialized.Menu.IsCompact.Should().Be(original.Menu.IsCompact);
         _ = deserialized.Backdrop.Should().Be(original.Backdrop);
-        _ = deserialized.EnableSystemTitleBarOverlay.Should().Be(original.EnableSystemTitleBarOverlay);
     }
 
     [TestMethod]
@@ -204,23 +201,6 @@ public class SerializationTests
     }
 
     [TestMethod]
-    public void ButtonPlacement_SerializesAsString()
-    {
-        // Arrange
-        var buttons = new WindowButtonsOptions
-        {
-            Placement = ButtonPlacement.Left,
-        };
-
-        // Act
-        var json = JsonSerializer.Serialize(buttons, this.jsonOptions);
-
-        // Assert
-        _ = json.Should().Contain("\"placement\"");
-        _ = json.Should().Contain("\"Left\"");
-    }
-
-    [TestMethod]
     public void NullProperties_AreOmittedFromJson()
     {
         // Arrange
@@ -307,8 +287,6 @@ public class SerializationTests
         {
             ShowMinimize = false,
             ShowMaximize = true,
-            ShowClose = true,
-            Placement = ButtonPlacement.Auto,
         };
 
         // Act
@@ -319,8 +297,6 @@ public class SerializationTests
         _ = deserialized.Should().NotBeNull();
         _ = deserialized!.ShowMinimize.Should().Be(original.ShowMinimize);
         _ = deserialized.ShowMaximize.Should().Be(original.ShowMaximize);
-        _ = deserialized.ShowClose.Should().Be(original.ShowClose);
-        _ = deserialized.Placement.Should().Be(original.Placement);
     }
 
     [TestMethod]

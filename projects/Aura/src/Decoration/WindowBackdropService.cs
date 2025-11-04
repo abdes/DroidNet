@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Composition.SystemBackdrops;
@@ -12,26 +12,24 @@ using Microsoft.UI.Xaml.Media;
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
-/// Service that manages backdrop application for windows based on their decoration settings.
+///     Service that manages backdrop application for windows based on their decoration settings.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The service observes window lifecycle events and automatically applies backdrops when windows are created,
-/// using the backdrop specified in each window's <see cref="WindowDecorationOptions"/>.
-/// </para>
-/// <para>
-/// Backdrops are applied using WinUI 3's <see cref="Window.SystemBackdrop"/> property with:
-/// </para>
-/// <list type="bullet">
-/// <item><see cref="MicaBackdrop"/> for <see cref="BackdropKind.Mica"/></item>
-/// <item><see cref="MicaBackdrop"/> with <see cref="MicaKind.BaseAlt"/> for <see cref="BackdropKind.MicaAlt"/></item>
-/// <item><see cref="DesktopAcrylicBackdrop"/> for <see cref="BackdropKind.Acrylic"/></item>
-/// <item>null for <see cref="BackdropKind.None"/> or when no backdrop is specified</item>
-/// </list>
-/// <para>
-/// All backdrop applications are wrapped in exception handling. Errors are logged at Warning level
-/// without throwing, allowing windows to function normally without backdrops.
-/// </para>
+///     The service observes window lifecycle events and automatically applies backdrops when windows are created,
+///     using the backdrop specified in each window's <see cref="WindowDecorationOptions"/>.
+///     <para>
+///     Backdrops are applied using WinUI 3's <see cref="Window.SystemBackdrop"/> property with:
+///     </para>
+///     <list type="bullet">
+///     <item><see cref="MicaBackdrop"/> for <see cref="BackdropKind.Mica"/></item>
+///     <item><see cref="MicaBackdrop"/> with <see cref="MicaKind.BaseAlt"/> for <see cref="BackdropKind.MicaAlt"/></item>
+///     <item><see cref="DesktopAcrylicBackdrop"/> for <see cref="BackdropKind.Acrylic"/></item>
+///     <item>null for <see cref="BackdropKind.None"/> or when no backdrop is specified</item>
+///     </list>
+///     <para>
+///     All backdrop applications are wrapped in exception handling. Errors are logged at Warning level
+///     without throwing, allowing windows to function normally without backdrops.
+///     </para>
 /// </remarks>
 public sealed partial class WindowBackdropService : IDisposable
 {
@@ -41,12 +39,12 @@ public sealed partial class WindowBackdropService : IDisposable
     private bool disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WindowBackdropService"/> class.
+    ///     Initializes a new instance of the <see cref="WindowBackdropService"/> class.
     /// </summary>
     /// <param name="windowManager">The window manager service for observing window lifecycle events.</param>
     /// <param name="loggerFactory">
-    /// Optional logger factory used to create a service logger. If <see langword="null"/>,
-    /// a <see cref="NullLogger{T}"/> is used.
+    ///     Optional logger factory used to create a service logger. If <see langword="null"/>,
+    ///     a <see cref="NullLogger{T}"/> is used.
     /// </param>
     public WindowBackdropService(
         IWindowManagerService windowManager,
@@ -62,7 +60,7 @@ public sealed partial class WindowBackdropService : IDisposable
     }
 
     /// <summary>
-    /// Releases resources used by the backdrop service.
+    ///     Releases resources used by the backdrop service.
     /// </summary>
     public void Dispose()
     {
@@ -76,7 +74,7 @@ public sealed partial class WindowBackdropService : IDisposable
     }
 
     /// <summary>
-    /// Applies backdrop to a single window context.
+    ///     Applies backdrop to a single window context.
     /// </summary>
     /// <param name="context">The window context to apply backdrop to.</param>
     public void ApplyBackdrop(WindowContext context)
@@ -115,12 +113,12 @@ public sealed partial class WindowBackdropService : IDisposable
     }
 
     /// <summary>
-    /// Applies backdrops to all open windows.
+    ///     Applies backdrops to all open windows.
     /// </summary>
     public void ApplyBackdrop() => this.ApplyBackdrop(_ => true);
 
     /// <summary>
-    /// Applies backdrops to windows matching a predicate.
+    ///     Applies backdrops to windows matching a predicate.
     /// </summary>
     /// <param name="predicate">Predicate to filter which windows should have backdrops applied.</param>
     public void ApplyBackdrop(Func<WindowContext, bool> predicate)
@@ -136,7 +134,7 @@ public sealed partial class WindowBackdropService : IDisposable
     }
 
     /// <summary>
-    /// Creates a WinUI 3 SystemBackdrop instance for the specified backdrop kind.
+    ///     Creates a WinUI 3 SystemBackdrop instance for the specified backdrop kind.
     /// </summary>
     /// <param name="backdropKind">The backdrop kind to create.</param>
     /// <returns>A SystemBackdrop instance, or null for BackdropKind.None.</returns>
@@ -154,7 +152,7 @@ public sealed partial class WindowBackdropService : IDisposable
         };
 
     /// <summary>
-    /// Applies backdrops to windows of a specific category.
+    ///     Applies backdrops to windows of a specific category.
     /// </summary>
     /// <param name="category">The window category.</param>
     private void ApplyBackdropToCategory(string category)
@@ -167,7 +165,7 @@ public sealed partial class WindowBackdropService : IDisposable
     }
 
     /// <summary>
-    /// Handles window lifecycle events to automatically apply backdrops to newly created windows.
+    ///     Handles window lifecycle events to automatically apply backdrops to newly created windows.
     /// </summary>
     /// <param name="evt">The window lifecycle event.</param>
     private void OnWindowEvent(WindowLifecycleEvent evt)

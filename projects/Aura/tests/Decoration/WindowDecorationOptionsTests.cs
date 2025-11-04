@@ -57,26 +57,6 @@ public class WindowDecorationOptionsTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void Validate_PrimaryWindowWithoutCloseButton_ShouldThrow()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = WindowCategory.Main,
-            ChromeEnabled = true,
-            Buttons = WindowButtonsOptions.Default with { ShowClose = false },
-        };
-
-        // Act
-        var act = options.Validate;
-
-        // Assert
-        _ = act.Should().Throw<ValidationException>()
-            .WithMessage("*Primary windows must have the Close button enabled*");
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithZeroTitleBarHeight_ShouldThrow()
     {
         // Arrange
@@ -155,25 +135,6 @@ public class WindowDecorationOptionsTests
 
     [TestMethod]
     [TestCategory("Unit")]
-    public void Validate_NonPrimaryWindowWithoutCloseButton_ShouldNotThrow()
-    {
-        // Arrange
-        var options = new WindowDecorationOptions
-        {
-            Category = WindowCategory.Tool,
-            ChromeEnabled = true,
-            Buttons = WindowButtonsOptions.Default with { ShowClose = false },
-        };
-
-        // Act
-        var act = options.Validate;
-
-        // Assert
-        _ = act.Should().NotThrow("Tool windows can omit the Close button");
-    }
-
-    [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithChromeDisabledAndNoMenu_ShouldNotThrow()
     {
         // Arrange
@@ -246,10 +207,9 @@ public class WindowDecorationOptionsTests
         // Assert
         _ = options.Category.Should().Be(new WindowCategory("Test"), "Category should be set to the provided value");
         _ = options.ChromeEnabled.Should().BeTrue("ChromeEnabled defaults to true");
-        _ = options.TitleBar.Should().Be(TitleBarOptions.Default, "TitleBar defaults to TitleBarOptions.Default");
+        _ = options.TitleBar.Should().BeNull("TitleBar defaults to no title bar");
         _ = options.Buttons.Should().Be(WindowButtonsOptions.Default, "Buttons defaults to WindowButtonsOptions.Default");
         _ = options.Menu.Should().BeNull("Menu defaults to null");
         _ = options.Backdrop.Should().Be(BackdropKind.None, "Backdrop defaults to None");
-        _ = options.EnableSystemTitleBarOverlay.Should().BeFalse("EnableSystemTitleBarOverlay defaults to false");
     }
 }

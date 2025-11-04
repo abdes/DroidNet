@@ -38,46 +38,25 @@ namespace DroidNet.Aura.Decoration;
 public sealed record WindowButtonsOptions
 {
     /// <summary>
-    /// Gets the default window button options with all buttons visible and right-aligned.
+    ///     Gets the default window button options with all buttons visible and right-aligned.
     /// </summary>
     public static readonly WindowButtonsOptions Default = new();
 
     /// <summary>
-    /// Gets a value indicating whether the minimize button is displayed.
+    ///     Gets a value indicating whether the minimize button is displayed.
     /// </summary>
     /// <value>
-    /// <see langword="true"/> to show the minimize button; otherwise, <see langword="false"/>.
-    /// Default is <see langword="true"/>.
+    ///     <see langword="true"/> to show the minimize button; otherwise, <see langword="false"/>.
+    ///     Default is <see langword="true"/>.
     /// </value>
     public bool ShowMinimize { get; init; } = true;
 
     /// <summary>
-    /// Gets a value indicating whether the maximize/restore button is displayed.
+    ///     Gets a value indicating whether the maximize/restore button is displayed.
     /// </summary>
     /// <value>
-    /// <see langword="true"/> to show the maximize button; otherwise, <see langword="false"/>.
-    /// Default is <see langword="true"/>.
+    ///     <see langword="true"/> to show the maximize button; otherwise, <see langword="false"/>.
+    ///     Default is <see langword="true"/>.
     /// </value>
     public bool ShowMaximize { get; init; } = true;
-
-    /// <summary>
-    /// Gets a value indicating whether the close button is displayed.
-    /// </summary>
-    /// <value>
-    /// <see langword="true"/> to show the close button; otherwise, <see langword="false"/>.
-    /// Default is <see langword="true"/>.
-    /// </value>
-    /// <remarks>
-    /// Primary windows should always have a close button to ensure proper application shutdown.
-    /// The validation logic enforces this constraint.
-    /// </remarks>
-    public bool ShowClose { get; init; } = true;
-
-    /// <summary>
-    /// Gets the horizontal placement of the window buttons within the title bar.
-    /// </summary>
-    /// <value>
-    /// A <see cref="ButtonPlacement"/> value. Default is <see cref="ButtonPlacement.Right"/>.
-    /// </value>
-    public ButtonPlacement Placement { get; init; } = ButtonPlacement.Right;
 }

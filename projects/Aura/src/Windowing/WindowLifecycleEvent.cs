@@ -2,36 +2,36 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Aura.WindowManagement;
+namespace DroidNet.Aura.Windowing;
 
 /// <summary>
-/// Represents the type of window lifecycle event.
+///     Represents the type of window lifecycle event.
 /// </summary>
 public enum WindowLifecycleEventType
 {
     /// <summary>
-    /// Window was created and is about to be shown.
+    ///     Window was created and is about to be shown.
     /// </summary>
     Created,
 
     /// <summary>
-    /// Window was activated (brought to foreground).
+    ///     Window was activated (brought to foreground).
     /// </summary>
     Activated,
 
     /// <summary>
-    /// Window was deactivated (lost focus).
+    ///     Window was deactivated (lost focus).
     /// </summary>
     Deactivated,
 
     /// <summary>
-    /// Window was closed.
+    ///     Window was closed.
     /// </summary>
     Closed,
 }
 
 /// <summary>
-/// Represents an event in a window's lifecycle.
+///     Represents an event in a window's lifecycle.
 /// </summary>
 /// <param name="EventType">The type of lifecycle event.</param>
 /// <param name="Context">The window context associated with the event.</param>
@@ -42,7 +42,7 @@ public sealed record WindowLifecycleEvent(
     DateTimeOffset Timestamp)
 {
     /// <summary>
-    /// Creates a new lifecycle event for the current time.
+    ///     Creates a new lifecycle event for the current time.
     /// </summary>
     /// <param name="eventType">The type of event.</param>
     /// <param name="context">The window context.</param>

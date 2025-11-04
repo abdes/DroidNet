@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -292,19 +292,17 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
 
         var context1 = new WindowContext
         {
-            Id = Guid.NewGuid(),
+            Id = new Microsoft.UI.WindowId(1),
             Window = window1,
             Category = WindowCategory.Main,
-            Title = "Window 1",
             CreatedAt = DateTimeOffset.UtcNow,
             Decorations = decoration1,
         };
         var context2 = new WindowContext
         {
-            Id = Guid.NewGuid(),
+            Id = new Microsoft.UI.WindowId(2),
             Window = window2,
             Category = WindowCategory.Tool,
-            Title = "Window 2",
             CreatedAt = DateTimeOffset.UtcNow,
             Decorations = decoration2,
         };
@@ -469,10 +467,9 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
     private static WindowContext CreateWindowContext(Window window, WindowDecorationOptions? decoration)
         => new()
         {
-            Id = Guid.NewGuid(),
+            Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
             Window = window,
             Category = new WindowCategory("Test"),
-            Title = window.Title ?? "Test Window",
             CreatedAt = DateTimeOffset.UtcNow,
             Decorations = decoration,
         };

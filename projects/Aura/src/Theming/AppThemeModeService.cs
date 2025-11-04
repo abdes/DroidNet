@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using Microsoft.Extensions.Logging;
@@ -13,7 +12,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Animation;
 using Windows.UI;
 
-namespace DroidNet.Aura;
+namespace DroidNet.Aura.Theming;
 
 /// <summary>
 ///     Provides an implementation of the <see cref="IAppThemeModeService"/> interface to manage and apply theme modes to application windows.

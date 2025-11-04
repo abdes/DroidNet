@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace DroidNet.Aura;
+namespace DroidNet.Aura.Theming;
 
 /// <summary>
 ///     Provides an implementation of the <see cref="IAppThemeModeService"/> interface to manage and apply theme modes to application windows.

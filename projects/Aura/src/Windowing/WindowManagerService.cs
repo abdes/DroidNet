@@ -8,36 +8,38 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Settings;
+using DroidNet.Aura.Theming;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Aura.WindowManagement;
+namespace DroidNet.Aura.Windowing;
 
 /// <summary>
-/// Manages the lifecycle of multiple windows in a WinUI 3 application.
+///     Coordinates Aura-managed windows within a WinUI 3 host.
 /// </summary>
 /// <remarks>
-/// This service provides centralized management of window creation, activation, and closure.
-/// It publishes window lifecycle events through a reactive stream and ensures proper cleanup
-/// of window resources. The service is thread-safe and integrates with the Aura theme system.
+///     The service tracks windows supplied by the application, decorates them using configured
+///     settings, applies appearance updates, and publishes lifecycle events. While it wires up
+///     activation/closure handlers and offers helpers for closing or requesting activation, showing
+///     the window remains an application decision.
 /// </remarks>
 public sealed partial class WindowManagerService : IWindowManagerService
 {
     private readonly ILogger<WindowManagerService> logger;
-    private readonly IWindowFactory windowFactory;
     private readonly IWindowContextFactory windowContextFactory;
     private readonly IAppThemeModeService? themeModeService;
     private readonly ISettingsService<IAppearanceSettings>? appearanceSettingsService;
     private readonly ISettingsService<IWindowDecorationSettings>? decorationSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
-    private readonly ConcurrentDictionary<Guid, WindowContext> windows = new();
+    private readonly ConcurrentDictionary<WindowId, WindowContext> windows = new();
     private readonly Subject<WindowLifecycleEvent> windowEventsSubject = new();
     private readonly IDisposable? routerContextCreatedSubscription;
     private readonly IDisposable? routerContextDestroyedSubscription;
@@ -46,18 +48,16 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WindowManagerService"/> class.
+    ///     Initializes a new instance of the <see cref="WindowManagerService"/> class.
     /// </summary>
-    /// <param name="windowFactory">Factory for creating window instances.</param>
-    /// <param name="windowContextFactory">Factory for creating window contexts with proper dependency injection.</param>
-    /// <param name="hostingContext">The hosting context containing the UI dispatcher queue.</param>
-    /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
-    /// <param name="themeModeService">Optional theme service for applying themes to new windows.</param>
-    /// <param name="appearanceSettingsService">Optional appearance settings service for theme properties and change notifications.</param>
-    /// <param name="router">Optional router for integrating with routing-based window creation.</param>
-    /// <param name="decorationSettingsService">Optional decoration settings service for resolving window decorations by category.</param>
+    /// <param name="windowContextFactory">Factory responsible for creating <see cref="WindowContext"/> instances.</param>
+    /// <param name="hostingContext">Provides access to the application dispatcher and related WinUI services.</param>
+    /// <param name="loggerFactory">Optional logger factory used to create a category logger.</param>
+    /// <param name="themeModeService">Optional theme service applied to newly registered windows.</param>
+    /// <param name="appearanceSettingsService">Optional appearance settings service that drives theme updates.</param>
+    /// <param name="router">Optional router used to auto-register windows created via navigation.</param>
+    /// <param name="decorationSettingsService">Optional service resolving decoration metadata by window category.</param>
     public WindowManagerService(
-        IWindowFactory windowFactory,
         IWindowContextFactory windowContextFactory,
         HostingContext hostingContext,
         ILoggerFactory? loggerFactory = null,
@@ -66,13 +66,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
         IRouter? router = null,
         ISettingsService<IWindowDecorationSettings>? decorationSettingsService = null)
     {
-        ArgumentNullException.ThrowIfNull(windowFactory);
         ArgumentNullException.ThrowIfNull(windowContextFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
 
         this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
-        this.windowFactory = windowFactory;
         this.windowContextFactory = windowContextFactory;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.themeModeService = themeModeService;
@@ -105,43 +103,48 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.LogServiceInitialized();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IObservable<WindowLifecycleEvent> WindowEvents => this.windowEventsSubject.AsObservable();
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public WindowContext? ActiveWindow => this.activeWindow;
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyCollection<WindowContext> OpenWindows => this.windows.Values.ToList().AsReadOnly();
 
-    /// <inheritdoc/>
-    public async Task<WindowContext> CreateWindowAsync<TWindow>(
+    /// <inheritdoc />
+    public async Task<WindowContext> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null)
+        => await this.RegisterDecoratedWindowAsync(
+            window,
+            WindowCategory.System,
+            metadata).ConfigureAwait(false);
+
+    /// <inheritdoc />
+    public async Task<WindowContext> RegisterDecoratedWindowAsync(
+        Window window,
         WindowCategory category,
-        string? title = null,
-        IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true,
-        Decoration.WindowDecorationOptions? decoration = null)
-        where TWindow : Window
+        IReadOnlyDictionary<string, object>? metadata = null)
     {
+        ArgumentNullException.ThrowIfNull(window);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        WindowContext? context = null;
-        var requestedWindowType = typeof(TWindow).Name;
+        // Check if window is already registered
+        if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
+        {
+            throw new InvalidOperationException("Window is already registered with the window manager");
+        }
 
-        // Create window on UI thread
+        WindowContext? context = null;
+
         await this.dispatcherQueue.EnqueueAsync(() =>
         {
             try
             {
-                this.LogCreatingWindow(requestedWindowType);
-
-                var window = this.windowFactory.CreateWindow<TWindow>();
-
-                // Resolve decoration using 3-tier priority system
+                // Resolve decoration using the configured priority system.
                 var windowId = Guid.NewGuid();
-                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
+                var resolvedDecoration = this.ResolveDecoration(windowId, category);
 
-                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
+                context = this.windowContextFactory.Create(window, category, resolvedDecoration, metadata);
 
                 // Apply theme if services are available
                 this.ApplyTheme(context);
@@ -152,102 +155,32 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 // Add to collection
                 if (!this.windows.TryAdd(context.Id, context))
                 {
-                    throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
+                    throw new InvalidOperationException($"Failed to register window with ID {context.Id.Value}");
                 }
 
-                this.LogWindowCreated(context.Id, category.ToString(), context.Title);
+                this.LogWindowRegistered(context.Id, category);
 
-                // Publish event - services like ChromeService will apply settings here
+                // Publish event
                 this.PublishEvent(WindowLifecycleEventType.Created, context);
 
-                // CRITICAL: Apply chrome settings BEFORE showing window
-                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work
+                // Ensure chrome settings are in place before the application decides to show the window.
+                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work.
                 if (resolvedDecoration?.ChromeEnabled == true)
                 {
                     window.ExtendsContentIntoTitleBar = true;
                 }
-
-                // Show window with proper activation control
-                // Use AppWindow.Show(bool) instead of Window.Activate() to respect activateWindow parameter
-                window.AppWindow.Show(activateWindow);
             }
             catch (Exception ex)
             {
-                this.LogWindowCreateFailed(ex, requestedWindowType);
-                throw new InvalidOperationException($"Failed to create window of type {requestedWindowType}", ex);
+                this.LogRegisterWindowFailed(ex, window.GetType().Name);
+                throw new InvalidOperationException($"Failed to register window of type {window.GetType().Name}", ex);
             }
         }).ConfigureAwait(true);
 
-        return context ?? throw new InvalidOperationException("Window creation failed");
+        return context ?? throw new InvalidOperationException("Window registration failed");
     }
 
-    /// <inheritdoc/>
-    public async Task<WindowContext> CreateWindowAsync(
-        string windowTypeName,
-        WindowCategory category,
-        string? title = null,
-        IReadOnlyDictionary<string, object>? metadata = null,
-        bool activateWindow = true,
-        Decoration.WindowDecorationOptions? decoration = null)
-    {
-        ObjectDisposedException.ThrowIf(this.isDisposed, this);
-        ArgumentException.ThrowIfNullOrWhiteSpace(windowTypeName);
-
-        WindowContext? context = null;
-
-        await this.dispatcherQueue.EnqueueAsync(() =>
-        {
-            try
-            {
-                this.LogCreatingWindow(windowTypeName);
-
-                var window = this.windowFactory.CreateWindow(windowTypeName);
-
-                // Resolve decoration using 3-tier priority system
-                var windowId = Guid.NewGuid();
-                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
-
-                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
-
-                this.ApplyTheme(context);
-
-                this.RegisterWindowEvents(context);
-
-                if (!this.windows.TryAdd(context.Id, context))
-                {
-                    throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
-                }
-
-                this.LogWindowCreated(context.Id, category.ToString(), context.Title);
-
-                // Publish event - services like ChromeService will apply settings here
-                this.PublishEvent(WindowLifecycleEventType.Created, context);
-
-                // CRITICAL: Apply chrome settings BEFORE showing window
-                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work
-                if (resolvedDecoration?.ChromeEnabled == true)
-                {
-                    window.ExtendsContentIntoTitleBar = true;
-                }
-
-                window.Activate();
-
-                if (activateWindow)
-                {
-                    this.ActivateWindow(context);
-                }
-            }
-            catch (Exception ex)
-            {
-                this.LogWindowCreateFailed(ex, windowTypeName);
-                throw new InvalidOperationException($"Failed to create window of type {windowTypeName}", ex);
-            }
-        }).ConfigureAwait(true);
-
-        return context ?? throw new InvalidOperationException("Window creation failed");
-    }
-
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public async Task<bool> CloseWindowAsync(WindowContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -256,8 +189,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         return await this.CloseWindowAsync(context.Id).ConfigureAwait(true);
     }
 
-    /// <inheritdoc/>
-    public async Task<bool> CloseWindowAsync(Guid windowId)
+    /// <inheritdoc />
+    public async Task<bool> CloseWindowAsync(WindowId windowId)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
@@ -288,7 +221,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         return result;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void ActivateWindow(WindowContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -297,8 +230,8 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.ActivateWindow(context.Id);
     }
 
-    /// <inheritdoc/>
-    public void ActivateWindow(Guid windowId)
+    /// <inheritdoc />
+    public void ActivateWindow(WindowId windowId)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
@@ -329,14 +262,14 @@ public sealed partial class WindowManagerService : IWindowManagerService
 #pragma warning restore CA1031 // Window activation errors should be logged, not thrown
     }
 
-    /// <inheritdoc/>
-    public WindowContext? GetWindow(Guid windowId)
+    /// <inheritdoc />
+    public WindowContext? GetWindow(WindowId windowId)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
         return this.windows.TryGetValue(windowId, out var context) ? context : null;
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public IReadOnlyCollection<WindowContext> GetWindowsByCategory(WindowCategory category)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
@@ -347,7 +280,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             .AsReadOnly();
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public async Task CloseAllWindowsAsync()
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
@@ -361,65 +294,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         _ = await Task.WhenAll(closeTasks).ConfigureAwait(true);
     }
 
-    /// <inheritdoc/>
-    public async Task<WindowContext> RegisterWindowAsync(
-        Window window,
-        WindowCategory category,
-        string? title = null,
-        IReadOnlyDictionary<string, object>? metadata = null,
-        Decoration.WindowDecorationOptions? decoration = null)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-        // Check if window is already registered
-        if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
-        {
-            throw new InvalidOperationException("Window is already registered with the window manager");
-        }
-
-        WindowContext? context = null;
-
-        await this.dispatcherQueue.EnqueueAsync(() =>
-        {
-            try
-            {
-                this.LogRegisteringWindow(window.GetType().Name);
-
-                // Resolve decoration using 3-tier priority system
-                var windowId = Guid.NewGuid();
-                var resolvedDecoration = this.ResolveDecoration(windowId, category, decoration);
-
-                context = this.windowContextFactory.Create(window, category, title, resolvedDecoration, metadata);
-
-                // Apply theme if services are available
-                this.ApplyTheme(context);
-
-                // Register window events
-                this.RegisterWindowEvents(context);
-
-                // Add to collection
-                if (!this.windows.TryAdd(context.Id, context))
-                {
-                    throw new InvalidOperationException($"Failed to register window with ID {context.Id}");
-                }
-
-                this.LogWindowRegistered(context.Id, category.ToString(), context.Title);
-
-                // Publish event
-                this.PublishEvent(WindowLifecycleEventType.Created, context);
-            }
-            catch (Exception ex)
-            {
-                this.LogRegisterWindowFailed(ex, window.GetType().Name);
-                throw new InvalidOperationException($"Failed to register window of type {window.GetType().Name}", ex);
-            }
-        }).ConfigureAwait(true);
-
-        return context ?? throw new InvalidOperationException("Window registration failed");
-    }
-
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.isDisposed)
@@ -445,9 +320,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Handles router context creation events to track router-created windows.
+    ///     Handles router context creation events by registering the routed window.
     /// </summary>
-    /// <param name="evt">The context created event.</param>
+    /// <param name="evt">Details about the navigation context that was created.</param>
     private void OnRouterContextCreated(ContextCreated evt)
     {
         // Only handle window-based navigation contexts
@@ -466,7 +341,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         var targetName = evt.Context.NavigationTargetKey.Name;
 
         // TODO: revise the router target type to ensure consistency with window management
-        var windowType = evt.Context.NavigationTargetKey.IsMain ? WindowCategory.Main : WindowCategory.Secondary;
+        var windowCategory = evt.Context.NavigationTargetKey.IsMain ? WindowCategory.Main : WindowCategory.Secondary;
 
         this.LogTrackingRouterWindow(targetName);
 
@@ -478,7 +353,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         };
 
 #pragma warning disable CA1031 // Router window tracking failures should be logged, not thrown
-        _ = this.RegisterWindowAsync(window, windowType, title: null, metadata)
+        _ = this.RegisterDecoratedWindowAsync(window, windowCategory, metadata)
             .ContinueWith(
                 task =>
                 {
@@ -492,9 +367,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Handles router context destruction events.
+    ///     Handles router context destruction events.
     /// </summary>
-    /// <param name="evt">The context destroyed event.</param>
+    /// <param name="evt">Details about the navigation context that was destroyed.</param>
     private void OnRouterContextDestroyed(ContextDestroyed evt)
     {
         // The window.Closed event handler will have already removed it from tracking
@@ -505,9 +380,9 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Registers event handlers for window lifecycle events.
+    ///     Hooks up activation and closure handlers for a newly registered window.
     /// </summary>
-    /// <param name="context">The window context to register events for.</param>
+    /// <param name="context">The window context to watch.</param>
     private void RegisterWindowEvents(WindowContext context)
     {
         var window = context.Window;
@@ -518,10 +393,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Handles window activation.
+    ///     Updates tracked state and publishes notifications when a window becomes active.
     /// </summary>
     /// <param name="windowId">The identifier of the activated window.</param>
-    private void OnWindowActivated(Guid windowId)
+    private void OnWindowActivated(WindowId windowId)
     {
         while (true)
         {
@@ -560,17 +435,17 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Handles window closure.
+    ///     Removes a closed window from the tracking dictionary and emits lifecycle events.
     /// </summary>
     /// <param name="windowId">The identifier of the closed window.</param>
-    private void OnWindowClosed(Guid windowId)
+    private void OnWindowClosed(WindowId windowId)
     {
         if (!this.windows.TryRemove(windowId, out var context))
         {
             return;
         }
 
-        this.LogWindowClosed(context.Id, context.Title ?? string.Empty);
+        this.LogWindowClosed(context.Id);
 
         if (this.activeWindow?.Id == windowId)
         {
@@ -581,10 +456,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Publishes a window lifecycle event to subscribers.
+    ///     Raises the specified window lifecycle event for observers.
     /// </summary>
-    /// <param name="eventType">The type of event.</param>
-    /// <param name="context">The window context.</param>
+    /// <param name="eventType">The event to publish.</param>
+    /// <param name="context">The window context tied to the event.</param>
     private void PublishEvent(WindowLifecycleEventType eventType, WindowContext context)
     {
         var lifecycleEvent = WindowLifecycleEvent.Create(eventType, context);
@@ -592,52 +467,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Resolves the effective window decoration options using a 3-tier priority system.
+    ///     Resolves decoration instructions using the configured priority system.
     /// </summary>
-    /// <param name="windowId">The window identifier for logging purposes.</param>
-    /// <param name="category">The window category used for settings lookup.</param>
-    /// <param name="explicitDecoration">Optional explicit decoration provided by caller.</param>
-    /// <returns>
-    /// The resolved <see cref="Decoration.WindowDecorationOptions"/>, or null if no decoration is available.
-    /// </returns>
-    /// <remarks>
-    /// <para>
-    /// Resolution priority (first match wins):
-    /// </para>
-    /// <list type="number">
-    /// <item>
-    /// <term>Explicit Parameter</term>
-    /// <description>If <paramref name="explicitDecoration"/> is not null, it is returned immediately.
-    /// This allows per-window customization that overrides all other sources.</description>
-    /// </item>
-    /// <item>
-    /// <term>Settings Registry</term>
-    /// <description>If a decoration settings service is available, calls
-    /// <see cref="IWindowDecorationSettings.GetEffectiveDecoration"/> which internally implements:
-    /// (a) persisted user override, (b) code-defined category default, (c) System category fallback.
-    /// </description>
-    /// </item>
-    /// <item>
-    /// <term>No Decorations</term>
-    /// <description>If no settings service is registered, returns null (window gets no Aura chrome).</description>
-    /// </item>
-    /// </list>
-    /// <para>
-    /// This method is stateless and thread-safe. The settings service is a singleton with immutable reads.
-    /// </para>
-    /// </remarks>
+    /// <param name="windowId">The window identifier used for logging purposes.</param>
+    /// <param name="category">The window category to look up.</param>
+    /// <returns>The resolved <see cref="Decoration.WindowDecorationOptions"/>, or null when no decoration applies.</returns>
     private Decoration.WindowDecorationOptions? ResolveDecoration(
         Guid windowId,
-        WindowCategory category,
-        Decoration.WindowDecorationOptions? explicitDecoration)
+        WindowCategory category)
     {
-        // Tier 1: Explicit parameter wins (highest priority)
-        if (explicitDecoration is not null)
-        {
-            this.LogDecorationResolvedExplicit(windowId);
-            return explicitDecoration;
-        }
-
         // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
         if (this.decorationSettingsService is not null)
         {
@@ -652,7 +490,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Handles appearance settings changes related to theme updates.
+    ///     Reacts to appearance-setting changes that require theme re-application.
     /// </summary>
     /// <param name="sender">The event sender.</param>
     /// <param name="args">Event arguments.</param>
@@ -668,7 +506,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <summary>
-    /// Applies the current theme to all tracked windows.
+    ///     Applies the current theme to every tracked window.
     /// </summary>
     private void ApplyThemeToAllWindows()
     {
@@ -680,7 +518,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
         var windowSnapshot = this.GetWindowSnapshot();
 
-        void ApplyThemeToAllCore()
+        void ApplyTheme()
         {
 #pragma warning disable CA1031 // Theme application failures should be logged, not thrown
             foreach (var context in windowSnapshot)
@@ -697,20 +535,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
 #pragma warning restore CA1031 // Theme application failures should be logged, not thrown
         }
 
-        if (this.dispatcherQueue.HasThreadAccess)
-        {
-            ApplyThemeToAllCore();
-            return;
-        }
-
-        if (!this.dispatcherQueue.TryEnqueue(ApplyThemeToAllCore))
-        {
-            this.LogThemeApplyEnqueueFailed(Guid.Empty);
-        }
+        _ = !this.dispatcherQueue.TryEnqueue(ApplyTheme);
     }
 
     /// <summary>
-    /// Applies the active appearance theme to the specified window context.
+    ///     Applies the current appearance theme to a single window context.
     /// </summary>
     /// <param name="context">The window context that should receive the theme.</param>
     private void ApplyTheme(WindowContext? context)
@@ -722,7 +551,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         var currentTheme = this.appearanceSettingsService.Settings.AppThemeMode;
 
-        void ApplyThemeCore()
+        _ = this.dispatcherQueue.TryEnqueue(() =>
         {
 #pragma warning disable CA1031 // Theme application failures should be logged, not thrown
             try
@@ -734,22 +563,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogThemeApplyFailed(ex, context.Id);
             }
 #pragma warning restore CA1031 // Theme application failures should be logged, not thrown
-        }
-
-        if (this.dispatcherQueue.HasThreadAccess)
-        {
-            ApplyThemeCore();
-            return;
-        }
-
-        if (!this.dispatcherQueue.TryEnqueue(ApplyThemeCore))
-        {
-            this.LogThemeApplyEnqueueFailed(context.Id);
-        }
+        });
     }
 
     /// <summary>
-    /// Returns a snapshot of the current window contexts.
+    ///     Returns an immutable snapshot of the current window contexts.
     /// </summary>
     /// <returns>An immutable list of tracked window contexts.</returns>
     private WindowContext[] GetWindowSnapshot() => [.. this.windows.Values];

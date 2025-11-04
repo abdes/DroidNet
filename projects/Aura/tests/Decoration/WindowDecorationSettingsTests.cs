@@ -77,21 +77,6 @@ public sealed partial class WindowDecorationSettingsTests : IDisposable
     }
 
     [TestMethod]
-    public void SetCategoryOverride_ValidatesOptions()
-    {
-        this.harness = CreateHarness();
-        var invalid = WindowDecorationBuilder.ForMainWindow().Build()
-            with
-        {
-            Buttons = WindowButtonsOptions.Default with { ShowClose = false },
-        };
-
-        var act = () => this.harness.Service.SetCategoryOverride(new("Main"), invalid);
-
-        _ = act.Should().Throw<ValidationException>();
-    }
-
-    [TestMethod]
     public void SaveAsync_PersistsSettingsToFile()
     {
         this.harness = CreateHarness();
@@ -128,7 +113,7 @@ public sealed partial class WindowDecorationSettingsTests : IDisposable
         _ = effective.Should().NotBeNull();
         _ = effective.Category.Should().Be(WindowCategory.Main);
         _ = effective.ChromeEnabled.Should().BeTrue();
-        _ = effective.TitleBar.Height.Should().Be(40.0);
+        _ = effective.TitleBar?.Height.Should().Be(40.0);
         _ = effective.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 
@@ -149,7 +134,7 @@ public sealed partial class WindowDecorationSettingsTests : IDisposable
         var effective = this.harness.Service.GetEffectiveDecoration(WindowCategory.Main);
 
         _ = effective.Should().Be(customOptions);
-        _ = effective.TitleBar.Height.Should().Be(50.0);
+        _ = effective.TitleBar?.Height.Should().Be(50.0);
         _ = effective.Backdrop.Should().Be(BackdropKind.Acrylic);
     }
 

@@ -5,26 +5,26 @@
 namespace DroidNet.Aura.Decoration;
 
 /// <summary>
-/// Common menu provider identifiers for standard application menus.
+///     Common menu provider identifiers for standard application menus.
 /// </summary>
 /// <remarks>
-/// Use these constants when registering and referencing menu providers to ensure
-/// consistency across your application.
+///     Use these constants when registering and referencing menu providers to ensure
+///     consistency across your application.
 /// </remarks>
 public static class MenuProviderIds
 {
     /// <summary>
-    /// Identifier for the main application menu (typically for primary windows).
+    ///     Identifier for the main application menu (typically for primary windows).
     /// </summary>
     public const string MainMenu = "App.MainMenu";
 
     /// <summary>
-    /// Identifier for context menus.
+    ///     Identifier for context menus.
     /// </summary>
     public const string ContextMenu = "App.ContextMenu";
 
     /// <summary>
-    /// Identifier for tool window menus.
+    ///     Identifier for tool window menus.
     /// </summary>
     public const string ToolMenu = "App.ToolMenu";
 }

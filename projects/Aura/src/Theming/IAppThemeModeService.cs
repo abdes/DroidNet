@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace DroidNet.Aura;
+namespace DroidNet.Aura.Theming;
 
 /// <summary>
 /// Provides functionality to set the application theme mode for the main window or a specific window.
