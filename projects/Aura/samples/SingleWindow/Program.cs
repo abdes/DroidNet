@@ -9,6 +9,7 @@ using DroidNet.Aura;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Routing;
+using DroidNet.Samples.Aura.MultiWindow;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
@@ -140,6 +141,9 @@ public static partial class Program
             .WithBackdropService()
             .WithChromeService()
             .WithThemeModeService());
+
+        // Register menu providers using standard DI patterns
+        _ = container.RegisterMenus();
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the
