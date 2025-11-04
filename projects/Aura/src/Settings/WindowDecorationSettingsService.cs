@@ -29,7 +29,7 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
         {
             Category = WindowCategory.Main,
             ChromeEnabled = true,
-            TitleBar = TitleBarOptions.Default with { Height = 40.0 },
+            TitleBar = TitleBarOptions.Default,
             Buttons = WindowButtonsOptions.Default,
             Backdrop = BackdropKind.MicaAlt,
         },
@@ -45,7 +45,7 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
         {
             Category = WindowCategory.Tool,
             ChromeEnabled = true,
-            TitleBar = TitleBarOptions.Default,
+            TitleBar = null,
             Buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
             Backdrop = BackdropKind.None,
         },
@@ -60,8 +60,8 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
         [WindowCategory.System] = new WindowDecorationOptions
         {
             Category = WindowCategory.System,
-            ChromeEnabled = true,
-            TitleBar = TitleBarOptions.Default,
+            ChromeEnabled = false,
+            TitleBar = null,
             Buttons = WindowButtonsOptions.Default,
             Backdrop = BackdropKind.None,
         },
