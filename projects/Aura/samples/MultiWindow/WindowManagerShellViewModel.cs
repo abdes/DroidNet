@@ -15,8 +15,13 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
@@ -171,6 +176,42 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         catch (Exception ex)
         {
             Debug.WriteLine($"Failed to create document window: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Command to create a new frameless window with the DroidNet logo.
+    /// </summary>
+    [RelayCommand]
+    private async Task CreateFramelessWindowAsync()
+    {
+        try
+        {
+            var window = await this.windowFactory.CreateDecoratedWindow<Window>(
+                category: WindowCategory.Frameless).ConfigureAwait(true);
+
+            window.AppWindow.Resize(new SizeInt32(400, 400));
+
+            // Set content
+            var grid = new Grid
+            {
+                Background = new SolidColorBrush(Colors.Transparent),
+                Children =
+                {
+                    new Image
+                    {
+                        Stretch = Stretch.Uniform,
+                        Source = new BitmapImage(new Uri("ms-appx:///DroidNet.Aura/Assets/DroidNet.png")),
+                    },
+                },
+            };
+
+            window.Content = grid;
+            window.Activate();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to create frameless window: {ex.Message}");
         }
     }
 

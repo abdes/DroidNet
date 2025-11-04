@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using System.Runtime.InteropServices;
 using DroidNet.Aura.Windowing;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using WinRT.Interop;
 
 namespace DroidNet.Aura.Decoration;
 
@@ -103,6 +105,10 @@ public sealed partial class WindowChromeService
         }
     }
 
+    [LibraryImport("dwmapi.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int DwmSetWindowAttribute(nint hwnd, int attribute, ref int pvAttribute, int cbAttribute);
+
     private void ApplyStandardChrome(Window window, WindowDecorationOptions? decoration, bool chromeEnabled, WindowId windowId)
     {
         // Set ExtendsContentIntoTitleBar based on chrome settings
@@ -130,23 +136,33 @@ public sealed partial class WindowChromeService
         }
 
         // Setup border and title bar presence
-        presenter?.SetBorderAndTitleBar(hasBorder: decoration?.WithBorder ?? true, hasTitleBar: decoration?.TitleBar is not null);
+        var hasBorder = decoration?.WithBorder == true;
+        var hasTitleBar = decoration?.TitleBar is not null;
 
-        // Apply title bar height if specified
-        var titleBarHeight = decoration?.TitleBar?.Height;
-        if (titleBarHeight.HasValue)
+        presenter?.SetBorderAndTitleBar(hasBorder: hasBorder, hasTitleBar: hasTitleBar);
+
+        var isResizable = decoration?.IsResizable ?? false;
+        _ = presenter?.IsResizable = false;
+
+        if (decoration?.TitleBar is { Height: { } titleBarHeight })
         {
             // WinUI doesn't support arbitrary height, only predefined options
             // Map height to closest standard option
-            window.AppWindow.TitleBar.PreferredHeightOption = titleBarHeight.Value switch
+            window.AppWindow.TitleBar.PreferredHeightOption = titleBarHeight switch
             {
                 >= 40.0 => TitleBarHeightOption.Tall,
                 _ => TitleBarHeightOption.Standard,
             };
         }
-        else
+
+        // Do this last after the rest of the window is setup
+        if (decoration?.RoundedCorners == false)
         {
-            window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+            // Disable rounded corners
+            const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+            var dwmwcpDoNotRound = 1;
+            var hwnd = WindowNative.GetWindowHandle(window);
+            _ = DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref dwmwcpDoNotRound, sizeof(int));
         }
 
         this.LogChromeApplied(windowId);

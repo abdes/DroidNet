@@ -73,6 +73,15 @@ public readonly record struct WindowCategory
     public static readonly WindowCategory Modal = new("modal");
 
     /// <summary>
+    ///     Represents a window with no border and no title bar.
+    /// </summary>
+    /// <remarks>
+    ///     Frameless windows are typically used for immersive applications or when a minimalistic
+    ///     design is desired. They are still fully fledged windows, that can have XAML content.
+    /// </remarks>
+    public static readonly WindowCategory Frameless = new("frameless");
+
+    /// <summary>
     ///     Represents the category of windows, that are not decorated by Aura.
     /// </summary>
     /// <remarks>

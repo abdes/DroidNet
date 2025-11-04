@@ -63,7 +63,8 @@ public sealed class WindowDecorationBuilder
     private WindowButtonsOptions buttons = WindowButtonsOptions.Default;
     private MenuOptions? menu;
     private BackdropKind backdrop = BackdropKind.None;
-    private bool withBorder;
+    private bool withBorder = true;
+    private bool isResizable = true;
 
     /// <summary>
     ///     Creates a builder for a main application window.
@@ -256,13 +257,22 @@ public sealed class WindowDecorationBuilder
     }
 
     /// <summary>
-    ///     Enables or disables a visible border for the window decoration.
+    ///     Disables a visible border for the window decoration (by default the window is built with a border).
     /// </summary>
-    /// <param name="enabled">True to render a border around the window; false to disable it.</param>
     /// <returns>This builder instance for method chaining.</returns>
-    public WindowDecorationBuilder WithBorder(bool enabled)
+    public WindowDecorationBuilder WithoutBorder()
     {
-        this.withBorder = enabled;
+        this.withBorder = false;
+        return this;
+    }
+
+    /// <summary>
+    ///     Disables resizing for the window (by default the window is built resizable).
+    /// </summary>
+    /// <returns>This builder instance for method chaining.</returns>
+    public WindowDecorationBuilder NotResizable()
+    {
+        this.isResizable = false;
         return this;
     }
 
@@ -396,6 +406,7 @@ public sealed class WindowDecorationBuilder
             Menu = this.menu,
             Backdrop = this.backdrop,
             WithBorder = this.withBorder,
+            IsResizable = this.isResizable,
         };
 
         options.Validate();

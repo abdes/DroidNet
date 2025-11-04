@@ -119,6 +119,12 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
+                <Button Command="{x:Bind ViewModel.CreateFramelessWindowCommand}" Content="New Frameless Window">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="F" Modifiers="Control,Shift" />
+                    </Button.KeyboardAccelerators>
+                </Button>
+
                 <Button
                     Command="{x:Bind ViewModel.CloseAllWindowsCommand}"
                     Content="Close All"

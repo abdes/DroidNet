@@ -149,6 +149,7 @@ public static partial class Program
         _ = container.RegisterMenus();
 
         // Register secondary window types as transient (Main window is singleton)
+        _ = container.AddWindow<Window>();
         _ = container.AddWindow<ToolWindow>();
         _ = container.AddWindow<DocumentWindow>();
 
