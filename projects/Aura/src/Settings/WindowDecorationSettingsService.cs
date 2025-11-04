@@ -47,7 +47,7 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
             ChromeEnabled = true,
             TitleBar = null,
             Buttons = WindowButtonsOptions.Default with { ShowMaximize = false },
-            Backdrop = BackdropKind.None,
+            Backdrop = BackdropKind.Mica,
         },
         [WindowCategory.Document] = new WindowDecorationOptions
         {
