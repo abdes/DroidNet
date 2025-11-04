@@ -136,13 +136,13 @@ public sealed partial class WindowChromeService
         }
 
         // Setup border and title bar presence
-        var hasBorder = decoration?.WithBorder == true;
+        var hasBorder = decoration?.WithBorder ?? true;
         var hasTitleBar = decoration?.TitleBar is not null;
 
         presenter?.SetBorderAndTitleBar(hasBorder: hasBorder, hasTitleBar: hasTitleBar);
 
-        var isResizable = decoration?.IsResizable ?? false;
-        _ = presenter?.IsResizable = false;
+        // Setup resizing - default is true
+        _ = presenter?.IsResizable = decoration?.IsResizable ?? true;
 
         if (decoration?.TitleBar is { Height: { } titleBarHeight })
         {
