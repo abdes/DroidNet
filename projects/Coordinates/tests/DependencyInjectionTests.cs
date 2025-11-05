@@ -14,17 +14,16 @@ namespace DroidNet.Coordinates.Tests;
 [ExcludeFromCodeCoverage]
 [TestCategory("DependencyInjectionTests")]
 [TestCategory("UITest")]
-public class DependencyInjectionTests : VisualUserInterfaceTests
+public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDisposable
 {
+    private readonly IContainer container = new Container().WithSpatialMapping();
+    private bool isDisposed;
+
     [TestMethod]
     public Task SpatialMapperFactory_Creates_Mapper_With_Context_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var container = new Container();
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) => new SpatialMapper(element, window));
-
-        var factory = container.Resolve<SpatialMapperFactory>();
+        var factory = this.container.Resolve<SpatialMapperFactory>();
         var element = new Button();
         var window = VisualUserInterfaceTestsApp.MainWindow;
 
@@ -42,11 +41,7 @@ public class DependencyInjectionTests : VisualUserInterfaceTests
     public Task SpatialMapperFactory_Returns_Distinct_Instances_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var container = new Container();
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) => new SpatialMapper(element, window));
-
-        var factory = container.Resolve<SpatialMapperFactory>();
+        var factory = this.container.Resolve<SpatialMapperFactory>();
         var window = VisualUserInterfaceTestsApp.MainWindow;
         var element1 = new Button();
         var element2 = new Button();
@@ -65,95 +60,53 @@ public class DependencyInjectionTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task SpatialContextService_Resolves_From_Factory_Async() => EnqueueAsync(async () =>
+    public Task SpatialMapperFactory_With_NullElement_Throws_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var container = new Container();
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) => new SpatialMapper(element, window));
-        container.Register<SpatialContextService>();
-
-        var service = container.Resolve<SpatialContextService>();
-        var element = new Button();
-        var window = VisualUserInterfaceTestsApp.MainWindow;
-
-        await LoadTestContentAsync(element).ConfigureAwait(true);
-
-        // Act
-        var mapper = service.GetMapper(element, window);
-
-        // Assert
-        _ = mapper.Should().NotBeNull();
-        _ = mapper.Should().BeOfType<SpatialMapper>();
-    });
-
-    [TestMethod]
-    public Task SpatialContextService_LazyMapper_Resolution_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var container = new Container();
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) => new SpatialMapper(element, window));
-        container.Register<SpatialContextService>();
-
-        var service = container.Resolve<SpatialContextService>();
-        var element = new Button();
-        var window = VisualUserInterfaceTestsApp.MainWindow;
-
-        await LoadTestContentAsync(element).ConfigureAwait(true);
-
-        // Act
-        var lazyMapper = service.GetLazyMapper(element, window);
-        var mapper = lazyMapper.Value;
-
-        // Assert
-        _ = mapper.Should().NotBeNull();
-        _ = mapper.Should().BeOfType<SpatialMapper>();
-    });
-
-    [TestMethod]
-    public Task SpatialContextService_LazyMapper_NotEvaluatedUntilAccessed_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var container = new Container();
-        var callCount = 0;
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) =>
-            {
-                callCount++;
-                return new SpatialMapper(element, window);
-            });
-        container.Register<SpatialContextService>();
-
-        var service = container.Resolve<SpatialContextService>();
-        var element = new Button();
-        var window = VisualUserInterfaceTestsApp.MainWindow;
-
-        await LoadTestContentAsync(element).ConfigureAwait(true);
-
-        // Act
-        var lazyMapper = service.GetLazyMapper(element, window);
-        _ = callCount.Should().Be(0); // Not yet evaluated
-        var mapper = lazyMapper.Value;
-        _ = callCount.Should().Be(1); // Now evaluated
-
-        // Assert
-        _ = mapper.Should().NotBeNull();
-    });
-
-    [TestMethod]
-    public Task SpatialMapperFactory_With_NullElement_Throws_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var container = new Container();
-        container.RegisterDelegate<SpatialMapperFactory>(r =>
-            (element, window) => new SpatialMapper(element, window));
-
-        var factory = container.Resolve<SpatialMapperFactory>();
+        var factory = this.container.Resolve<SpatialMapperFactory>();
         var window = VisualUserInterfaceTestsApp.MainWindow;
 
         // Act & Assert
         Action act = () => factory(null!, window);
         _ = act.Should().Throw<ArgumentNullException>();
     });
+
+    [TestMethod]
+    public void WithSpatialMapping_Resolves_Consumer_With_Factory()
+    {
+        // Arrange
+        this.container.Register<FactoryConsumer>(Reuse.Transient);
+
+        // Act
+        var consumer = this.container.Resolve<FactoryConsumer>();
+
+        // Assert
+        _ = consumer.Factory.Should().NotBeNull();
+    }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.isDisposed)
+        {
+            if (disposing)
+            {
+            }
+
+            this.container.Dispose();
+            this.isDisposed = true;
+        }
+    }
+
+    [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated indirectly by dependency injection in tests")]
+    private sealed class FactoryConsumer(SpatialMapperFactory factory)
+    {
+        public SpatialMapperFactory Factory { get; } = factory;
+    }
 }

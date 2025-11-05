@@ -8,16 +8,23 @@
 namespace DroidNet.Coordinates;
 
 /// <summary>
-///     Represents the coordinate space relative to a UI element.
+///     Marker type for element-local coordinates (logical DIPs, 1 DIP = 1/96″).
 /// </summary>
 public sealed class ElementSpace;
 
 /// <summary>
-///     Represents the coordinate space relative to the application window.
+///     Marker type for window client-area coordinates (logical DIPs, 1 DIP = 1/96″).
 /// </summary>
 public sealed class WindowSpace;
 
 /// <summary>
-///     Represents the absolute screen coordinate space.
+///     Marker type for desktop-global coordinates (logical DIPs, per-monitor DPI aware).
+///     Prefer this over <see cref="PhysicalScreenSpace"/> for UI math; convert at Win32 boundaries.
 /// </summary>
 public sealed class ScreenSpace;
+
+/// <summary>
+///     Marker type for physical screen pixels (hardware pixels).
+///     Use only for Win32 interop (GetCursorPos, SetWindowPos, GetWindowRect, etc.).
+/// </summary>
+public sealed class PhysicalScreenSpace;

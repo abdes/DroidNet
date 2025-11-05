@@ -123,4 +123,18 @@ public class SpatialPointExtensionsTests
         // Assert
         _ = spatial.Point.Should().Be(point);
     }
+
+    [TestMethod]
+    public void Point_AsPhysicalScreen_Returns_PhysicalScreenSpacePoint()
+    {
+        // Arrange
+        var point = new Point(100, 200);
+
+        // Act
+        var spatial = point.AsPhysicalScreen();
+
+        // Assert
+        _ = spatial.Point.Should().Be(point);
+        _ = spatial.ToString().Should().Contain("PhysicalScreenSpace");
+    }
 }

@@ -7,37 +7,38 @@ using Windows.Foundation;
 namespace DroidNet.Coordinates;
 
 /// <summary>
-///     Provides extension methods for converting between <see cref="SpatialPoint{TSpace}"/>
-///     instances and <see cref="Point"/> instances.
+///     Conversions between <see cref="SpatialPoint{TSpace}"/> and untyped <see cref="Point"/>.
 /// </summary>
 public static class SpatialPointExtensions
 {
     /// <summary>
-    ///     Extracts the underlying <see cref="Point"/> from a <see cref="SpatialPoint{TSpace}"/>.
+    ///     Extracts the underlying untyped point.
     /// </summary>
-    /// <typeparam name="TSpace">The type representing the spatial coordinate system.</typeparam>
-    /// <param name="spatial">The spatial point to extract from.</param>
-    /// <returns>The underlying point coordinates.</returns>
+    /// <typeparam name="TSpace">Coordinate space marker type.</typeparam>
+    /// <param name="spatial">The spatial point.</param>
+    /// <returns>The raw coordinates.</returns>
     public static Point ToPoint<TSpace>(this SpatialPoint<TSpace> spatial) => spatial.Point;
 
-    /// <summary>
-    ///     Converts a <see cref="Point"/> to a spatial point in element coordinate space.
-    /// </summary>
-    /// <param name="p">The point to convert.</param>
-    /// <returns>A spatial point in element coordinate space.</returns>
+    /// <summary>Wraps a point as ElementSpace.</summary>
+    /// <param name="p">The point.</param>
+    /// <returns>A spatial point in element coordinates.</returns>
     public static SpatialPoint<ElementSpace> AsElement(this Point p) => new(p);
 
-    /// <summary>
-    ///     Converts a <see cref="Point"/> to a spatial point in window coordinate space.
-    /// </summary>
-    /// <param name="p">The point to convert.</param>
-    /// <returns>A spatial point in window coordinate space.</returns>
+    /// <summary>Wraps a point as WindowSpace.</summary>
+    /// <param name="p">The point.</param>
+    /// <returns>A spatial point in window-client coordinates.</returns>
     public static SpatialPoint<WindowSpace> AsWindow(this Point p) => new(p);
 
-    /// <summary>
-    ///     Converts a <see cref="Point"/> to a spatial point in screen coordinate space.
-    /// </summary>
-    /// <param name="p">The point to convert.</param>
-    /// <returns>A spatial point in screen coordinate space.</returns>
+    /// <summary>Wraps a point as ScreenSpace.</summary>
+    /// <param name="p">The point.</param>
+    /// <returns>A spatial point in desktop-global logical coordinates.</returns>
     public static SpatialPoint<ScreenSpace> AsScreen(this Point p) => new(p);
+
+    /// <summary>
+    ///     Wraps a point as PhysicalScreenSpace. The underlying Point stores physical pixels;
+    ///     round to integers at Win32 boundaries when constructing native structures.
+    /// </summary>
+    /// <param name="p">The point.</param>
+    /// <returns>A spatial point in physical screen pixels.</returns>
+    public static SpatialPoint<PhysicalScreenSpace> AsPhysicalScreen(this Point p) => new(p);
 }

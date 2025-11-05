@@ -1,0 +1,436 @@
+<Page
+    x:Class="DroidNet.Coordinates.PointerDemo.DemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:pointerdemo="using:DroidNet.Coordinates.PointerDemo"
+    d:DataContext="{d:DesignInstance pointerdemo:DemoViewModel,
+                                     IsDesignTimeCreatable=True}"
+    mc:Ignorable="d">
+    <Page.Resources>
+        <ResourceDictionary>
+            <!--  Reusable styles for info panels  -->
+            <Style x:Key="DataHeader" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalAlignment" Value="Right" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="Unit" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Opacity" Value="0.6" />
+            </Style>
+
+            <Style x:Key="DataValue" TargetType="TextBlock">
+                <Setter Property="FontFamily" Value="Cascadia Mono" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </Page.Resources>
+    <Grid x:Name="RootLayout" Padding="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Spacing="8">
+            <TextBlock
+                FontSize="24"
+                FontWeight="SemiBold"
+                Text="Real-time coordinate mapping" />
+            <TextBlock
+                Opacity="0.8"
+                Text="Physical, logical screen, window, and element coordinates follow the cursor even when it leaves the window."
+                TextWrapping="WrapWholeWords" />
+
+            <StackPanel Margin="0,16,0,0" Spacing="12">
+                <!--  Window & Monitor split into two panels: Monitor (left) and Window (right)  -->
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="1*" />
+                        <ColumnDefinition Width="1*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!--  Monitor panel (left)  -->
+                    <Border
+                        Grid.Column="0"
+                        Padding="0"
+                        Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="0">
+                        <StackPanel>
+                            <Grid Padding="8" Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}"
+                                    Text="Monitor" />
+                            </Grid>
+
+                            <Grid
+                                Margin="0"
+                                Padding="12"
+                                ColumnSpacing="20"
+                                RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="120" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="3*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="0"
+                                    FontWeight="Light"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding ElementRelativeWindow}" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="-" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding MonitorInfo.HandleDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="DPI" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="-" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding MonitorInfo.DpiDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Physical (px)" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="px" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding MonitorInfo.PhysicalDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Logical (DIP)" />
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding MonitorInfo.LogicalDisplay}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <!--  Window panel (right)  -->
+                    <Border
+                        Grid.Column="1"
+                        Padding="0"
+                        Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="0">
+                        <StackPanel>
+                            <Grid Padding="8" Background="{ThemeResource LayerOnMicaBaseAltFillColorSecondaryBrush}">
+                                <TextBlock
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource SystemControlForegroundBaseHighBrush}"
+                                    Text="Window" />
+                            </Grid>
+
+                            <Grid
+                                Margin="0"
+                                Padding="12"
+                                ColumnSpacing="20"
+                                RowSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="120" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="3*" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Window origin:" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="0"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding WindowInfo.WindowOriginDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Window size:" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="1"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding WindowInfo.WindowSizeDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Window DPI:" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="-" />
+                                <TextBlock
+                                    Grid.Row="2"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding WindowInfo.WindowDpiDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Client origin:" />
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="3"
+                                    Grid.Column="2"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding WindowInfo.ClientOriginDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="4"
+                                    Grid.Column="0"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Client size:" />
+                                <TextBlock
+                                    Grid.Row="4"
+                                    Grid.Column="1"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="4"
+                                    Grid.Column="2"
+                                    Margin="0,6,0,0"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding WindowInfo.ClientSizeDisplay}" />
+
+                                <TextBlock
+                                    Grid.Row="6"
+                                    Grid.Column="0"
+                                    FontWeight="Light"
+                                    Style="{StaticResource DataHeader}"
+                                    Text="Element (rel. window)" />
+                                <TextBlock
+                                    Grid.Row="6"
+                                    Grid.Column="1"
+                                    FontWeight="Light"
+                                    Style="{StaticResource Unit}"
+                                    Text="DIP" />
+                                <TextBlock
+                                    Grid.Row="6"
+                                    Grid.Column="2"
+                                    FontWeight="Light"
+                                    Style="{StaticResource DataValue}"
+                                    Text="{Binding ElementRelativeWindow}" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <!--  Pointer coordinates panel  -->
+                <Border
+                    Padding="0"
+                    Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                    BorderThickness="1"
+                    CornerRadius="0">
+                    <StackPanel>
+                        <!--  header panel uses Accent color  -->
+                        <Grid Padding="8" Background="{ThemeResource AccentAcrylicBackgroundFillColorBaseBrush}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock
+                                Grid.Column="0"
+                                FontSize="14"
+                                FontWeight="SemiBold"
+                                Text="Pointer coordinates" />
+
+                            <TextBlock
+                                Grid.Column="1"
+                                Margin="12,0,0,0"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                FontWeight="SemiBold">
+                                <Run Text="DPI: " />
+                                <Run Text="{Binding PointerMonitorDpi}" />
+                            </TextBlock>
+                        </Grid>
+
+                        <!--  content grid: label + value per row  -->
+                        <Grid
+                            Margin="0"
+                            Padding="12"
+                            ColumnSpacing="20"
+                            RowSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="120" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="3*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="0"
+                                Style="{StaticResource DataHeader}"
+                                Text="Physical screen" />
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="1"
+                                Style="{StaticResource Unit}"
+                                Text="px" />
+                            <TextBlock
+                                Grid.Row="0"
+                                Grid.Column="2"
+                                Style="{StaticResource DataValue}"
+                                Text="{Binding PhysicalScreen}" />
+
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Style="{StaticResource DataHeader}"
+                                Text="Logical screen" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="1"
+                                Style="{StaticResource Unit}"
+                                Text="DIP" />
+                            <TextBlock
+                                Grid.Row="1"
+                                Grid.Column="2"
+                                Style="{StaticResource DataValue}"
+                                Text="{Binding LogicalScreen}" />
+
+                            <TextBlock
+                                Grid.Row="2"
+                                Grid.Column="0"
+                                Style="{StaticResource DataHeader}"
+                                Text="Window client" />
+                            <TextBlock
+                                Grid.Row="2"
+                                Grid.Column="1"
+                                Style="{StaticResource Unit}"
+                                Text="DIP" />
+                            <TextBlock
+                                Grid.Row="2"
+                                Grid.Column="2"
+                                Style="{StaticResource DataValue}"
+                                Text="{Binding WindowClient}" />
+
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="0"
+                                Style="{StaticResource DataHeader}"
+                                Text="Element box" />
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="1"
+                                Style="{StaticResource Unit}"
+                                Text="DIP" />
+                            <TextBlock
+                                Grid.Row="3"
+                                Grid.Column="2"
+                                Margin="0,6,0,0"
+                                Style="{StaticResource DataValue}"
+                                Text="{Binding ElementBox}" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </StackPanel>
+
+        <!--  Content area: simple reference element (no shadow, no layers)  -->
+        <Grid
+            Grid.Row="1"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch">
+            <Border
+                x:Name="CoordinateSurface"
+                Width="400"
+                Height="200"
+                Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                BorderBrush="{ThemeResource SystemFillColorCriticalBrush}"
+                BorderThickness="1"
+                CornerRadius="0"
+                Opacity="1" />
+        </Grid>
+    </Grid>
+</Page>
