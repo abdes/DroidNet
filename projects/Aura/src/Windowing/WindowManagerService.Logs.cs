@@ -191,19 +191,19 @@ public sealed partial class WindowManagerService
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "The decoration was resolved from settings for the window with ID {windowId} and category {category}.")]
-    private static partial void LogDecorationResolvedFromSettings(ILogger logger, string windowId, string category);
+    private static partial void LogDecorationResolvedFromSettings(ILogger logger, ulong windowId, string category);
 
     [Conditional("DEBUG")]
-    private void LogDecorationResolvedFromSettings(Guid windowId, WindowCategory category)
-        => LogDecorationResolvedFromSettings(this.logger, windowId.ToString(), category.ToString());
+    private void LogDecorationResolvedFromSettings(WindowId windowId, WindowCategory category)
+        => LogDecorationResolvedFromSettings(this.logger, windowId.Value, category.ToString());
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "No decoration was resolved for the window with ID {windowId} because no settings service is available.")]
-    private static partial void LogNoDecorationResolved(ILogger logger, string windowId);
+    private static partial void LogNoDecorationResolved(ILogger logger, ulong windowId);
 
     [Conditional("DEBUG")]
-    private void LogNoDecorationResolved(Guid windowId)
-        => LogNoDecorationResolved(this.logger, windowId.ToString());
+    private void LogNoDecorationResolved(WindowId windowId)
+        => LogNoDecorationResolved(this.logger, windowId.Value);
 }
