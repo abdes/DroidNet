@@ -49,6 +49,8 @@ public partial class App
         WindowBackdropService backdropService,
         WindowChromeService chromeService)
     {
+        _ = themeModeService; // injected only to instantiate it early
+
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
