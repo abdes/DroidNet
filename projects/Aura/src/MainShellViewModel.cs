@@ -263,20 +263,14 @@ public partial class MainShellViewModel : AbstractOutletContainer
         bool TryPackagedAssetAtPath(string relativePath, out Uri? uri)
         {
             var candidateUri = new Uri($"ms-appx:///{relativePath}");
-            try
-            {
-                // Works for packaged apps
-                var file = StorageFile.GetFileFromApplicationUriAsync(candidateUri).GetAwaiter().GetResult();
-                uri = candidateUri;
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                this.LogAssetFileNotFound(isPackaged: true, relativePath, ex);
-                uri = null;
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
 
+            // This would work for packaged apps
+            var root = Windows.ApplicationModel.Package.Current.InstalledLocation;
+
+            // WinRT's StorageFolder.TryGetItemAsync is so fucking stupid and needs the separator to be `\\`
+            relativePath = relativePath.Replace("/", "\\", StringComparison.OrdinalIgnoreCase);
+            var item = root.TryGetItemAsync(relativePath).GetAwaiter().GetResult();
+            uri = item is StorageFile ? candidateUri : null;
             return uri is not null;
         }
 
