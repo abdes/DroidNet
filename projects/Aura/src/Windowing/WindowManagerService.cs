@@ -126,8 +126,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             try
             {
                 // Resolve decoration using the configured priority system.
-                var windowId = Guid.NewGuid();
-                var resolvedDecoration = this.ResolveDecoration(windowId, category);
+                var resolvedDecoration = this.ResolveDecoration(window.AppWindow.Id, category);
 
                 context = this.windowContextFactory.Create(window, category, resolvedDecoration, metadata);
 
@@ -450,7 +449,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     /// <param name="category">The window category to look up.</param>
     /// <returns>The resolved <see cref="Decoration.WindowDecorationOptions"/>, or null when no decoration applies.</returns>
     private Decoration.WindowDecorationOptions? ResolveDecoration(
-        Guid windowId,
+        WindowId windowId,
         WindowCategory category)
     {
         // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
