@@ -26,7 +26,7 @@ public static class ReadOnlyCollectionExtensions
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(start, 0);
         ArgumentOutOfRangeException.ThrowIfLessThan(count, 0);
-        ArgumentOutOfRangeException.ThrowIfLessThan(collection.Count - start, count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, collection.Count - start);
 
         var subset = new List<T>();
         for (var i = start; i < start + count && i < collection.Count; i++)
