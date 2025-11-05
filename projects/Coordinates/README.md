@@ -115,88 +115,67 @@ var diff2 = SpatialPoint.Subtract(a, b);
 
 ### Dependency Injection
 
-The recommended way to use DroidNet.Coordinates with dependency injection is to
-register the `SpatialMapperFactory` delegate and the `SpatialContextService`:
+Register DroidNet.Coordinates with DryIoc using the provided extension method.
+It wires up the transient mapper factory and exposes a strongly typed
+`SpatialMapperFactory` delegate.
 
 ```csharp
 using DryIoc;
+using DroidNet.Coordinates;
 
-// Register the factory delegate that creates mappers
-container.RegisterDelegate<SpatialMapperFactory>(r =>
-    (element, window) => new SpatialMapper(element, window));
+var container = new Container().WithSpatialMapping();
 
-// Register the context service
-container.Register<SpatialContextService>();
+// Chaining additional registrations is supported
+container.Register<MyViewModel>();
 ```
 
-Then consume the service in your classes:
+Inject the `SpatialMapperFactory` delegate wherever you need to produce mappers at runtime:
 
 ```csharp
+/// <summary>Strongly typed factory delegate for creating ISpatialMapper instances.</summary>
+public delegate ISpatialMapper SpatialMapperFactory(FrameworkElement element, Window? window);
+
 public class MyViewModel
 {
-    private readonly SpatialContextService spatialContext;
+    private readonly SpatialMapperFactory spatialMapperFactory;
 
-    public MyViewModel(SpatialContextService spatialContext)
+    public MyViewModel(SpatialMapperFactory spatialMapperFactory)
     {
-        this.spatialContext = spatialContext;
+        this.spatialMapperFactory = spatialMapperFactory;
     }
 
     public void HandleElementInteraction(FrameworkElement element, Window window)
     {
-        // Get a mapper for this specific element and window
-        var mapper = this.spatialContext.GetMapper(element, window);
-
-        // Use the mapper for coordinate transformations
+        var mapper = this.spatialMapperFactory(element, window);
         var screenPoint = mapper.ToScreen(elementPoint);
     }
 }
 ```
 
-For scenarios where mapper creation is expensive or may not be needed
-immediately, use lazy initialization:
-
-```csharp
-public class MyControl
-{
-    private readonly SpatialContextService spatialContext;
-    private Lazy<ISpatialMapper>? lazyMapper;
-
-    public MyControl(SpatialContextService spatialContext)
-    {
-        this.spatialContext = spatialContext;
-    }
-
-    private void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        // Create lazy mapper - actual mapper won't be created until accessed
-        this.lazyMapper = this.spatialContext.GetLazyMapper(this, this.XamlRoot.Content.XamlRoot);
-    }
-
-    private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
-    {
-        // Mapper is created only on first access
-        var mapper = this.lazyMapper!.Value;
-        var position = e.GetCurrentPoint(this).Position;
-        var screenPos = mapper.ToScreen(position.AsElement());
-    }
-}
-```
-
-> [!NOTE] Each call to `GetMapper()` returns a new `SpatialMapper` instance. The
-> factory pattern allows you to create context-specific mappers for different
-> element/window combinations as needed.
+The `window` parameter may be `null` if only element-space conversions are
+needed. Each invocation of `SpatialMapperFactory` yields a new mapper instance,
+keeping element/window pairs isolated and letting you manage lifetime and
+caching semantics explicitly.
 
 ## Core Concepts
 
 ### Coordinate Spaces
 
-DroidNet.Coordinates defines three coordinate spaces:
+DroidNet.Coordinates defines four coordinate spaces:
 
-- **`ElementSpace`**: Coordinates relative to a UI element's top-left corner
-- **`WindowSpace`**: Coordinates relative to the application window's client area
-- **`ScreenSpace`**: Absolute screen coordinates (physical pixels)
+- **`ElementSpace`**: Coordinates relative to a UI element's top-left corner (logical DIPs)
+- **`WindowSpace`**: Coordinates relative to the application window's client area (logical DIPs)
+- **`ScreenSpace`**: Absolute desktop-global screen coordinates in logical pixels (DIPs), with per-monitor DPI awareness
+- **`PhysicalScreenSpace`**: Absolute screen coordinates in physical device pixels (hardware pixels) for Win32 interop only
 
-Each space is represented by a marker type that tags spatial points at compile time, preventing accidental mixing of coordinate systems.
+Each space is represented by a marker type that tags spatial points at compile
+time, preventing accidental mixing of coordinate systems.
+
+**Units:**
+
+- Logical spaces (Element, Window, Screen) use logical pixels (DIPs, 1 DIP =
+  1/96 inch), desktop-virtualized with per-monitor DPI awareness
+- `PhysicalScreenSpace` uses physical pixels (px) for direct Win32 API interoperability
 
 ### Spatial Points
 
@@ -219,17 +198,30 @@ The `SpatialMapper` class handles all coordinate transformations, accounting for
 - Window decorations and title bar
 - Per-monitor DPI scaling factors
 - Multi-monitor configurations with different scaling settings
-- Physical to logical pixel conversions
+- Logical to physical pixel conversions for Win32 interop
 
 ```csharp
-public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMapper
+public interface ISpatialMapper
 {
+    public WindowInfo WindowInfo { get; }
+    public WindowMonitorInfo WindowMonitorInfo { get; }
+
     public SpatialPoint<TTarget> Convert<TSource, TTarget>(SpatialPoint<TSource> point);
     public SpatialPoint<ScreenSpace> ToScreen<TSource>(SpatialPoint<TSource> point);
     public SpatialPoint<WindowSpace> ToWindow<TSource>(SpatialPoint<TSource> point);
     public SpatialPoint<ElementSpace> ToElement<TSource>(SpatialPoint<TSource> point);
+    public SpatialPoint<PhysicalScreenSpace> ToPhysicalScreen<TSource>(SpatialPoint<TSource> point);
 }
 ```
+
+**WindowInfo**: Provides aggregated information about the mapper's window
+including client origin/size and outer window bounds in logical DIPs, plus the
+window's DPI.
+
+**WindowMonitorInfo**: Provides information about the monitor containing the
+window, including physical dimensions (pixels), logical dimensions (DIPs), and
+monitor DPI. Includes an `IsValid` property to check if monitor detection
+succeeded.
 
 ### Spatial Flow
 
@@ -238,6 +230,8 @@ public class SpatialMapper(FrameworkElement element, Window window) : ISpatialMa
 ```csharp
 public class SpatialFlow<TSpace>
 {
+    public SpatialPoint<TSpace> Point { get; }
+
     public SpatialFlow<ScreenSpace> ToScreen();
     public SpatialFlow<WindowSpace> ToWindow();
     public SpatialFlow<ElementSpace> ToElement();
@@ -249,6 +243,8 @@ public class SpatialFlow<TSpace>
 }
 ```
 
+Access the current `Point` property to get the underlying `SpatialPoint<TSpace>` at any stage in the flow chain.
+
 ## Use Cases
 
 DroidNet.Coordinates is designed for precision-critical scenarios:
@@ -259,6 +255,7 @@ DroidNet.Coordinates is designed for precision-critical scenarios:
 - **Custom Controls**: Build controls that need to work with multiple coordinate systems
 - **Multi-Monitor Apps**: Handle coordinate transformations across monitors with different DPI settings
 - **Drag and Drop**: Calculate precise drop positions when dragging across windows and monitors
+- **Win32 Interop**: Convert logical WinUI coordinates to physical screen pixels for Win32 APIs
 
 ## Example: UI Testing
 
@@ -278,6 +275,39 @@ var buttonCenter = new Point(button.ActualWidth / 2, button.ActualHeight / 2)
 SimulateMouseClick(buttonCenter);
 ```
 
+## Example: Win32 Interop
+
+When working with Win32 APIs that expect physical screen coordinates (e.g.,
+`GetCursorPos`, `SetWindowPos`), convert to `PhysicalScreenSpace`:
+
+```csharp
+// Convert WinUI element coordinates to physical screen pixels for Win32 API
+var mapper = new SpatialMapper(targetElement, window);
+
+// Get element center in element space, convert to physical screen space
+var elementCenter = new Point(targetElement.ActualWidth / 2, targetElement.ActualHeight / 2)
+    .AsElement()
+    .Flow(mapper)
+    .ToPhysicalScreen()
+    .ToPoint();
+
+// Round to integers for Win32 APIs
+var physicalX = (int)Math.Round(elementCenter.X);
+var physicalY = (int)Math.Round(elementCenter.Y);
+
+// Use with Win32 APIs
+var point = new Windows.Win32.Foundation.POINT { X = physicalX, Y = physicalY };
+PInvoke.SetCursorPos(physicalX, physicalY);
+```
+
+**Key Differences:**
+
+- **`ScreenSpace`**: Use for UI math and calculations within your WinUI app.
+  Coordinates are in logical DIPs, desktop-virtualized.
+- **`PhysicalScreenSpace`**: Use **only** at Win32 API boundaries. Coordinates
+  are in physical device pixels. Always round to integers before passing to
+  Win32 functions.
+
 ## Requirements
 
 - .NET 9.0 or later
@@ -286,7 +316,9 @@ SimulateMouseClick(buttonCenter);
 
 ## Contributing
 
-This project is part of the [DroidNet](https://github.com/abdes/DroidNet) mono-repo. Contributions are welcome! Please ensure your changes include appropriate tests and follow the existing code style.
+This project is part of the [DroidNet](https://github.com/abdes/DroidNet)
+mono-repo. Contributions are welcome! Please ensure your changes include
+appropriate tests and follow the existing code style.
 
 ## License
 

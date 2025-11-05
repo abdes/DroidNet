@@ -11,6 +11,7 @@ namespace DroidNet.Controls.Tests;
 /// class.
 /// </summary>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "App must be public")]
 public partial class App
 {
     /// <summary>
