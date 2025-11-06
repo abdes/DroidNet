@@ -4,14 +4,20 @@ on:
     workflow_dispatch:
     pull_request:
         branches: ["master"]
+        paths-ignore:
+            - "tooling/doc/**"
+            - "**/*.md"
+            - ".gitignore"
     push:
         branches: ["master"]
         paths-ignore:
-            - "/tooling/doc/*" # Don't run workflow when files are only in the /docs directory
+            - "tooling/doc/**"
+            - "**/*.md"
+            - ".gitignore"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
     build:
@@ -44,8 +50,9 @@ jobs:
             - name: Install .Net
               uses: actions/setup-dotnet@v4
               with:
-                  global-json-file: "global.json"
-                  cache: 'nuget'
+                  global-json-file: global.json
+                  cache: true
+                  cache-dependency-path: '**/*.csproj'
 
             - name: Setup MSBuild.exe
               uses: microsoft/setup-msbuild@v2
@@ -55,9 +62,10 @@ jobs:
               with:
                 path: |
                   ~/.dotnet/tools
+                  !~/.dotnet/tools/temp
                 key: ${{ runner.os }}-dotnet-tools-${{ hashFiles('**/global.json') }}
                 restore-keys: |
-                  ${{ runner.os }}-dotnet-tools-
+                  ${{ runner.os }}-dotnet-tools-${{ runner.os }}
 
             # Restore tools
             - name: Restore .Net tools
@@ -66,15 +74,56 @@ jobs:
                   dotnet tool list
 
             - name: Generate solution file
-              run: ./GenerateAllSolution
+              shell: pwsh
+              run: |
+                ./GenerateAllSolution
+                if (-not (Test-Path -Path ./AllProjects.sln)) {
+                    Write-Error "Solution file was not generated"
+                    exit 1
+                }
 
             - name: Restore NuGet packages
               shell: pwsh
-              run: dotnet restore ./AllProjects.sln --disable-parallel
+              run: |
+                dotnet restore ./AllProjects.sln --disable-parallel
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Package restore failed"
+                    exit 1
+                }
 
             - name: Build projects
               shell: pwsh
-              run: msbuild .\AllProjects.sln -t:build -v:m -p:DN_PreCommitHooks=false -p:Platform=${{ matrix.platform }} -p:Configuration=${{ matrix.configuration }}
+              run: |
+                msbuild .\AllProjects.sln `
+                  -t:build `
+                  -v:m `
+                  -p:DN_PreCommitHooks=false `
+                  -p:Platform=${{ matrix.platform }} `
+                  -p:Configuration=${{ matrix.configuration }} `
+                  -p:ContinuousIntegrationBuild=true
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Build failed"
+                    exit 1
+                }
 
             - name: Execute Unit Tests
-              run: dotnet test --no-build /p:Platform=${{ matrix.platform }} -c ${{ matrix.configuration }} --filter "TestCategory!=UITest"
+              shell: pwsh
+              run: |
+                dotnet test `
+                  --no-build `
+                  --logger "trx;LogFileName=test-results.trx" `
+                  /p:Platform=${{ matrix.platform }} `
+                  -c ${{ matrix.configuration }} `
+                  --filter "TestCategory!=UITest"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Error "Tests failed"
+                    exit 1
+                }
+
+            - name: Publish Test Results
+              uses: actions/upload-artifact@v4
+              if: always()  # Run this step even if previous steps failed
+              with:
+                name: test-results-${{ matrix.platform }}-${{ matrix.configuration }}
+                path: TestResults/test-results.trx
+                retention-days: 30
