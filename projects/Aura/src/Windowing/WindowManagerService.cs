@@ -60,7 +60,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     {
         ArgumentNullException.ThrowIfNull(windowContextFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
-        ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
+        ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
 
         this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
         this.windowContextFactory = windowContextFactory;
