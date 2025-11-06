@@ -3,7 +3,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
         <RootNamespace>$(RootNamespace).Tests</RootNamespace>
+        <AssemblyName>DroidNet.Samples.NoWindow.Tests</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
 </Project>

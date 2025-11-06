@@ -1,12 +1,12 @@
 # Windows App SDK No-Window Test Project Template
 
-This template demonstrates how to create unit test projects for Windows App SDK applications when you don't need to test UI controls or interact with windows. It provides a minimal setup that still allows running tests on the UI thread when needed.
-
-# Project Structure
-
-The solution follows a standard Windows App SDK project layout optimized for unit testing:
+This template demonstrates how to create unit test projects for Windows App SDK
+applications when you don't need to test UI controls or interact with windows.
+It provides a minimal setup that still allows running tests on the UI thread
+when needed.
 
 ## Core Files
+
 - `App.xaml` / `App.xaml.cs` - Application entry point that:
   - Initializes the test platform
   - Sets up the UI dispatcher
@@ -18,7 +18,8 @@ The solution follows a standard Windows App SDK project layout optimized for uni
   - Minimum Windows version requirements
 
 ## Test Project Organization
-```
+
+```text
 /
 ├── App.xaml                 # WinUI application definition
 ├── App.xaml.cs             # Test platform initialization
@@ -32,6 +33,7 @@ The solution follows a standard Windows App SDK project layout optimized for uni
 ```
 
 ## Key Facts
+
 - Uses MSTest v3.6+ test framework
 - Targets Windows 10.0.17763.0+
 - References Windows App SDK 1.6+
@@ -39,7 +41,6 @@ The solution follows a standard Windows App SDK project layout optimized for uni
 - Configures Windows App SDK without creating visible windows
 - Supports running tests on the UI thread using UITestMethodAttribute
 - Minimal dependencies and setup required
-
 
 ## Writing Tests
 

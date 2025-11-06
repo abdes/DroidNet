@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
         <RootNamespace>$(RootNamespace).NetClassLibrary.Tests</RootNamespace>
     </PropertyGroup>
 
