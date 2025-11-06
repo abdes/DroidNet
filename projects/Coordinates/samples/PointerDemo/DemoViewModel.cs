@@ -181,7 +181,7 @@ public partial class DemoViewModel(SpatialMapperFactory spatialMapperFactory, IW
             return;
         }
 
-        this.BeginTracking(this.trackedElement, window);
+        this.BeginTracking(window, this.trackedElement);
     }
 
     private bool IsElementHostedByWindow(Window window)
@@ -201,11 +201,11 @@ public partial class DemoViewModel(SpatialMapperFactory spatialMapperFactory, IW
         }
     }
 
-    private void BeginTracking(FrameworkElement element, Window window)
+    private void BeginTracking(Window window, FrameworkElement element)
     {
         this.ResetTrackingTimer();
 
-        this.mapper = this.spatialMapperFactory(element, window);
+        this.mapper = this.spatialMapperFactory(window, element);
         this.trackedWindow = window;
 
         var dispatcher = window.DispatcherQueue

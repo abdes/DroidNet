@@ -30,7 +30,7 @@ public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDispo
         await LoadTestContentAsync(element).ConfigureAwait(true);
 
         // Act
-        var mapper = factory(element, window);
+        var mapper = factory(window, element);
 
         // Assert
         _ = mapper.Should().NotBeNull();
@@ -52,24 +52,41 @@ public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDispo
         await LoadTestContentAsync(stackPanel).ConfigureAwait(true);
 
         // Act
-        var mapper1 = factory(element1, window);
-        var mapper2 = factory(element2, window);
+        var mapper1 = factory(window, element1);
+        var mapper2 = factory(window, element2);
 
         // Assert
         _ = mapper1.Should().NotBeSameAs(mapper2);
     });
 
     [TestMethod]
-    public Task SpatialMapperFactory_With_NullElement_Throws_Async() => EnqueueAsync(() =>
+    public Task SpatialMapperFactory_With_NullElement_Works_Async() => EnqueueAsync(() =>
     {
         // Arrange
         var factory = this.container.Resolve<SpatialMapperFactory>();
         var window = VisualUserInterfaceTestsApp.MainWindow;
 
-        // Act & Assert
-        Action act = () => factory(null!, window);
-        _ = act.Should().Throw<ArgumentNullException>();
+        // Act - null element is now valid
+        var mapper = factory(window, null);
+
+        // Assert
+        _ = mapper.Should().NotBeNull();
+        _ = mapper.Should().BeOfType<SpatialMapper>();
     });
+
+    [TestMethod]
+    public void SpatialMapperFactory_With_NullElementAndWindow_Works()
+    {
+        // Arrange
+        var factory = this.container.Resolve<SpatialMapperFactory>();
+
+        // Act - both null is now valid (for Physical↔Screen conversions only)
+        var mapper = factory(null, null);
+
+        // Assert
+        _ = mapper.Should().NotBeNull();
+        _ = mapper.Should().BeOfType<SpatialMapper>();
+    }
 
     [TestMethod]
     public void WithSpatialMapping_Resolves_Consumer_With_Factory()

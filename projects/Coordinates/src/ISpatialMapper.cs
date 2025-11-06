@@ -12,10 +12,10 @@ namespace DroidNet.Coordinates;
 /// <summary>
 ///     Factory delegate for creating <see cref="ISpatialMapper"/> instances via dependency injection.
 /// </summary>
-/// <param name="element">The element defining ElementSpace origin.</param>
-/// <param name="window">Optional window for HWND resolution and WindowSpace/ScreenSpace conversions.</param>
+/// <param name="window">Optional window for HWND resolution and WindowSpace/ScreenSpace conversions (null if not needed).</param>
+/// <param name="element">Optional element defining ElementSpace origin (null if not needed).</param>
 /// <returns>A configured mapper instance.</returns>
-public delegate ISpatialMapper SpatialMapperFactory(FrameworkElement element, Window? window);
+public delegate ISpatialMapper SpatialMapperFactory(Window? window, FrameworkElement? element);
 
 /// <summary>
 ///     Maps spatial points between coordinate spaces with per-monitor DPI awareness.

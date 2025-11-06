@@ -24,18 +24,14 @@ public static class DependencyInjectionExtensions
 
         container.Register<ISpatialMapper, SpatialMapper>(
             reuse: Reuse.Transient,
-            made: Made.Of(() => new SpatialMapper(Arg.Of<FrameworkElement>(), Arg.Of<Window?>(IfUnresolved.ReturnDefault))));
+            made: Made.Of(() => new SpatialMapper(Arg.Of<Window?>(IfUnresolved.ReturnDefault), Arg.Of<FrameworkElement?>(IfUnresolved.ReturnDefault))));
 
         container.RegisterDelegate<SpatialMapperFactory>(
             static r =>
             {
-                var factory = r.Resolve<Func<FrameworkElement, Window?, ISpatialMapper>>();
+                var factory = r.Resolve<Func<Window?, FrameworkElement?, ISpatialMapper>>();
 
-                return (FrameworkElement element, Window? window) =>
-                {
-                    ArgumentNullException.ThrowIfNull(element);
-                    return factory(element, window);
-                };
+                return (Window? window, FrameworkElement? element) => factory(window, element);
             });
 
         return container;

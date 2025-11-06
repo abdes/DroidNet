@@ -33,7 +33,7 @@ public class FluentApiTests : VisualUserInterfaceTests
 
         await LoadTestContentAsync(button).ConfigureAwait(true);
 
-        this.mapper = new SpatialMapper(button, window);
+        this.mapper = new SpatialMapper(window, button);
     });
 
     [TestMethod]

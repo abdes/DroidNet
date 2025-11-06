@@ -33,7 +33,7 @@ public abstract class SpatialMapperTestBase : VisualUserInterfaceTests
 
         TestWindow.Content = this.TestButton;
         await LoadTestContentAsync(this.TestButton).ConfigureAwait(true);
-        this.Mapper = new SpatialMapper(this.TestButton, TestWindow);
+        this.Mapper = new SpatialMapper(TestWindow, this.TestButton);
     });
 
     protected Point GetPhysicalClientOrigin()

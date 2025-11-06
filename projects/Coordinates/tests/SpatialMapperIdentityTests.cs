@@ -77,7 +77,7 @@ public class SpatialMapperIdentityTests : SpatialMapperTestBase
         // Arrange - Create mapper WITHOUT window to verify Physical→Physical doesn't need HWND
         var button = new Button();
         await LoadTestContentAsync(button).ConfigureAwait(true);
-        var mapperNoWindow = new SpatialMapper(button, window: null);
+        var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var point = new Point(100.0, 200.0);
         var spatial = new SpatialPoint<PhysicalScreenSpace>(point);
 

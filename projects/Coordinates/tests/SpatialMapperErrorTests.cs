@@ -22,13 +22,13 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         // Arrange - Create mapper WITHOUT associated window
         var button = new Button();
         await LoadTestContentAsync(button).ConfigureAwait(true);
-        var mapperNoWindow = new SpatialMapper(button, window: null);
+        var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var screenPoint = new SpatialPoint<ScreenSpace>(new Point(100, 200));
 
         // Act & Assert - Logical→Physical requires valid Window/HWND
         Action act = () => mapperNoWindow.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
         _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Unable to resolve the HWND*");
+            .WithMessage("*Window is required for this conversion*");
     });
 
     [TestMethod]
@@ -37,13 +37,13 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         // Arrange
         var button = new Button();
         await LoadTestContentAsync(button).ConfigureAwait(true);
-        var mapperNoWindow = new SpatialMapper(button, window: null);
+        var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var elementPoint = new SpatialPoint<ElementSpace>(new Point(10, 20));
 
         // Act & Assert
         Action act = () => mapperNoWindow.Convert<ElementSpace, PhysicalScreenSpace>(elementPoint);
         _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Unable to resolve the HWND*");
+            .WithMessage("*Window is required for this conversion*");
     });
 
     [TestMethod]
@@ -52,22 +52,27 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         // Arrange
         var button = new Button();
         await LoadTestContentAsync(button).ConfigureAwait(true);
-        var mapperNoWindow = new SpatialMapper(button, window: null);
+        var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var windowPoint = new SpatialPoint<WindowSpace>(new Point(50, 75));
 
         // Act & Assert
         Action act = () => mapperNoWindow.Convert<WindowSpace, PhysicalScreenSpace>(windowPoint);
         _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Unable to resolve the HWND*");
+            .WithMessage("*Window is required for this conversion*");
     });
 
     [TestMethod]
-    public void Mapper_Constructor_NullElement_Throws()
+    public void Mapper_WithoutElement_ElementConversion_Throws()
     {
-        // Act & Assert
-        Action act = () => _ = new SpatialMapper(null!, window: null);
-        _ = act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("element");
+        // Arrange - Create mapper without element
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var mapper = new SpatialMapper(window, element: null);
+        var windowPoint = new SpatialPoint<WindowSpace>(new Point(10, 20));
+
+        // Act & Assert - ElementSpace conversion should fail
+        Action act = () => mapper.Convert<WindowSpace, ElementSpace>(windowPoint);
+        _ = act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Element is required for ElementSpace conversions*");
     }
 
     [TestMethod]
@@ -81,7 +86,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
 
         // Create mapper WITHOUT window - so it must rely on element's XamlRoot
         // Since orphanElement has no XamlRoot, this should fail
-        var mapper = new SpatialMapper(orphanElement, window: null);
+        var mapper = new SpatialMapper(window: null, element: orphanElement);
         var point = new SpatialPoint<ElementSpace>(new Point(10, 20));
 
         // Act & Assert - Element not in visual tree should throw when trying to get root
@@ -96,13 +101,13 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         // Arrange
         var button = new Button();
         await LoadTestContentAsync(button).ConfigureAwait(true);
-        var mapperNoWindow = new SpatialMapper(button, window: null);
+        var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var elementPoint = new SpatialPoint<ElementSpace>(new Point(10, 20));
 
         // Act & Assert - ToPhysicalScreen helper should also enforce HWND requirement
         Action act = () => mapperNoWindow.ToPhysicalScreen(elementPoint);
         _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Unable to resolve the HWND*");
+            .WithMessage("*Window is required for this conversion*");
     });
 
     [TestMethod]
@@ -114,7 +119,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         window.Content = button;
         await LoadTestContentAsync(button).ConfigureAwait(true);
 
-        var mapper = new SpatialMapper(button, window);
+        var mapper = new SpatialMapper(window, button);
         var point = new SpatialPoint<string>(new Point(0, 0)); // Invalid space type
 
         // Act & Assert
@@ -132,7 +137,7 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         window.Content = button;
         await LoadTestContentAsync(button).ConfigureAwait(true);
 
-        var mapper = new SpatialMapper(button, window);
+        var mapper = new SpatialMapper(window, button);
         var point = new SpatialPoint<ElementSpace>(new Point(0, 0));
 
         // Act & Assert
@@ -140,4 +145,31 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         _ = act.Should().Throw<NotSupportedException>()
             .WithMessage("*Unsupported target space*");
     });
+
+    [TestMethod]
+    public void Mapper_WithoutElement_ToElement_Throws()
+    {
+        // Arrange - Create mapper with only window, no element
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var mapper = new SpatialMapper(window, element: null);
+        var screenPoint = new SpatialPoint<ScreenSpace>(new Point(100, 200));
+
+        // Act & Assert - ToElement should fail without an element
+        Action act = () => mapper.ToElement(screenPoint);
+        _ = act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Element is required for ElementSpace conversions*");
+    }
+
+    [TestMethod]
+    public void Mapper_WithoutWindow_ToWindow_Throws()
+    {
+        // Arrange - Create mapper without window
+        var mapper = new SpatialMapper(window: null, element: null);
+        var physicalPoint = new SpatialPoint<PhysicalScreenSpace>(new Point(1000, 2000));
+
+        // Act & Assert - ToWindow should fail without a window
+        Action act = () => mapper.ToWindow(physicalPoint);
+        _ = act.Should().Throw<InvalidOperationException>()
+            .WithMessage("*Window is required for this conversion*");
+    }
 }
