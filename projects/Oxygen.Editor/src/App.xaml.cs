@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;

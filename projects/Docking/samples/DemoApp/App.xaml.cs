@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
