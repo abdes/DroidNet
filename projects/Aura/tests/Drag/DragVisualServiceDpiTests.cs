@@ -42,8 +42,10 @@ public class DragVisualServiceDpiTests : VisualUserInterfaceTests
         var mockFactory = new Mock<IWindowFactory>();
 
         // Configure factory to return test window
+        // Pass explicit null for the optional metadata parameter so the expression
+        // tree used by Moq does not contain a call that relies on optional args.
         _ = mockFactory
-            .Setup(f => f.CreateWindow<DragOverlayWindow>())
+            .Setup(f => f.CreateWindow<DragOverlayWindow>(null))
             .ReturnsAsync(this.testWindow);
 
         // Create mapper factory that returns our mock
