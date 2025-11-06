@@ -30,7 +30,7 @@ namespace DroidNet.Aura.Tests.Drag;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DragVisualServiceTests")]
-[TestCategory("Phase3")]
+[TestCategory("UITest")]
 public class DragVisualServiceTests : VisualUserInterfaceTests
 {
     private DragVisualService service = null!;
@@ -43,10 +43,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     {
         // Create mock window factory that returns a new test window for each session
         var mockWindowFactory = new Mock<IWindowFactory>();
+
         // Explicitly pass null for the optional metadata parameter to avoid
         // expression-tree calls that rely on optional arguments (which are
         // disallowed inside expression trees used by Moq's Setup).
-        mockWindowFactory
+        _ = mockWindowFactory
             .Setup(f => f.CreateWindow<DragOverlayWindow>(null))
             .ReturnsAsync(() => new TestDragOverlayWindow());
 

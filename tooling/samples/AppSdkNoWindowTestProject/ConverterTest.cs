@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 namespace DroidNet.Samples.Tests;
 
 [TestClass]
+[TestCategory("UITest")]
 [ExcludeFromCodeCoverage]
 public class ConverterTest
 {

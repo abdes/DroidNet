@@ -23,7 +23,6 @@ public partial class App
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
 
-
     /// <summary>
     ///     Initializes a new instance of the <see cref="App" /> class.
     ///     <para>

@@ -77,8 +77,8 @@ public class SpatialMapperCompositionTests : SpatialMapperTestBase
         var dpi = this.GetWindowDpi();
         var physicalOrigin = this.GetPhysicalClientOrigin();
 
-        var dx = 30;
-        var dy = 40;
+        const int dx = 30;
+        const int dy = 40;
         var physicalPoint = new Point(physicalOrigin.X + dx, physicalOrigin.Y + dy);
 
         // Act

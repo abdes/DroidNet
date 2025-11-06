@@ -23,6 +23,7 @@ namespace DroidNet.Aura.Tests;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("UITest")]
 [TestCategory("AppThemeModeServiceTests")]
 public partial class AppThemeModeServiceTests : VisualUserInterfaceTests, IDisposable
 {

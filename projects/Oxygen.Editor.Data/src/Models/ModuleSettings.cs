@@ -134,10 +134,18 @@ public abstract class ModuleSettings(IEditorSettingsManager settingsManager, str
             try
             {
                 var defaultValue = property.GetValue(this);
-                var loadSettingMethod = typeof(IEditorSettingsManager).GetMethod(nameof(IEditorSettingsManager.LoadSettingAsync), [typeof(string), typeof(string), property.PropertyType]);
-                if (loadSettingMethod != null)
+
+                // Find the LoadSettingAsync<T>(string, string, T) method
+                var loadSettingMethods = typeof(IEditorSettingsManager)
+                    .GetMethods()
+                    .Where(m => m.Name == nameof(IEditorSettingsManager.LoadSettingAsync) &&
+                                m.IsGenericMethod &&
+                                m.GetParameters().Length == 3)
+                    .ToArray();
+
+                if (loadSettingMethods.Length > 0)
                 {
-                    var genericMethod = loadSettingMethod.MakeGenericMethod(property.PropertyType);
+                    var genericMethod = loadSettingMethods[0].MakeGenericMethod(property.PropertyType);
                     var task = genericMethod.Invoke(settingsManager, [this.ModuleName, property.Name, defaultValue]) as Task;
                     await task!.ConfigureAwait(true);
 

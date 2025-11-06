@@ -60,6 +60,7 @@ namespace Oxygen.Editor;
 ///     </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Program entry point must be public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -198,10 +199,9 @@ public static partial class Program
         _ = manager.AutoSave = true;
     }
 
+    // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
     private static void ConfigurePersistentStateDatabase(IContainer container)
-    {
-        // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
-        container.RegisterDelegate(
+        => container.RegisterDelegate(
             resolver =>
             {
                 var path = resolver.Resolve<IOxygenPathFinder>().StateDatabasePath;
@@ -215,7 +215,6 @@ public static partial class Program
                     .Options);
             },
             Reuse.Transient);
-    }
 
     private static void ConfigureApplicationServices(this IContainer container)
     {
@@ -252,16 +251,14 @@ public static partial class Program
         container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Transient);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 
-        // Register the project instance using a delegate that will request the currently open project from the project
-        // browser service.
+        // Register the project instance using a delegate that will request the currently open project from the project browser service.
         container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
 
         container.Register<IAppThemeModeService, AppThemeModeService>();
 
         /*
          * Set up the view model to view converters. We're using the standard
-         * converter, and a custom one with fall back if the view cannot be
-         * located.
+         * converter, and a custom one with fall back if the view cannot be located.
          */
         container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");

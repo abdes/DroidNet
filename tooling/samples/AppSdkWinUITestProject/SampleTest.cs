@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
@@ -9,6 +10,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 namespace DroidNet.Samples.Tests;
 
 [TestClass]
+[TestCategory("UITest")]
+[ExcludeFromCodeCoverage]
 public class SampleTest
 {
     [UITestMethod]

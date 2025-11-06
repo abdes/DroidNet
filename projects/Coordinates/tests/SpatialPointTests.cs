@@ -11,7 +11,6 @@ namespace DroidNet.Coordinates.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("SpatialPointTests")]
-[TestCategory("Phase3")]
 public class SpatialPointTests
 {
     [TestMethod]

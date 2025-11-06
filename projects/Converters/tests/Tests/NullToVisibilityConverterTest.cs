@@ -11,6 +11,7 @@ namespace DroidNet.Converters.Tests.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Null To Visibility")]
+[TestCategory("UITest")]
 public class NullToVisibilityConverterTest
 {
     private readonly NullToVisibilityConverter converter = new();

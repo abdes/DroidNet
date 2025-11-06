@@ -24,6 +24,7 @@ namespace DroidNet.Aura.Tests.WindowManagement;
 /// </remarks>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("UITest")]
 public class WindowContextFactoryTests : VisualUserInterfaceTests
 {
     private Mock<ILogger<WindowContextFactory>> mockLogger = null!;
