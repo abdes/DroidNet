@@ -9,4 +9,8 @@
         <ProjectReference Include="..\src\NetClassLibrary.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <Folder Include="Properties\" />
+    </ItemGroup>
+
 </Project>

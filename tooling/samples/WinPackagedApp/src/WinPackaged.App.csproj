@@ -3,7 +3,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
-        <RootNamespace>$(RootNameSpace)</RootNamespace>
         <AssemblyName>DroidNet.Samples.WinPackagedApp</AssemblyName>
 
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
@@ -38,8 +37,6 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
-        <!--<ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />-->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />

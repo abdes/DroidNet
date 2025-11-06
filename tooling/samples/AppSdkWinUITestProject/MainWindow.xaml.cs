@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.Tests;
-
 using Microsoft.UI.Xaml;
+
+namespace DroidNet.Samples.Tests;
 
 /// <summary>
 /// An empty window that can be used on its own or navigated to within a Frame.

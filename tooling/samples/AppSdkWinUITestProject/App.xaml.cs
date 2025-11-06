@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.Tests;
-
 #if MSTEST_RUNNER
 using Microsoft.Testing.Platform.Builder;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -13,6 +11,8 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 using Windows.Graphics;
+
+namespace DroidNet.Samples.Tests;
 
 /// <summary>
 /// Provides application-specific behavior to supplement the default Application class.

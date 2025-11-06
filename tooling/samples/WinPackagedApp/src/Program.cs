@@ -2,16 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Routing;
-using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
@@ -38,6 +36,7 @@ namespace DroidNet.Samples;
 /// </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "program entrypoint class must be public")]
 public static partial class Program
 {
     [LibraryImport("Microsoft.ui.xaml.dll")]
@@ -58,15 +57,27 @@ public static partial class Program
         var bootstrap = new Bootstrapper(args);
         try
         {
+            // Configure and build the host. The final container becomes available after Build().
             _ = bootstrap.Configure()
-                .WithLoggingAbstraction()
-                .WithConfiguration(
-                    MakeConfigFiles,
-                    ConfigureOptionsPattern)
                 .WithMvvm()
                 .WithRouting(MakeRoutes())
                 .WithWinUI<App>()
-                .WithAppServices(ConfigureApplicationServices);
+                .Build();
+
+            // The final container is now available for additional initialization.
+            var container = bootstrap.Container;
+            try
+            {
+                // Register and initialize the Config module and its sources.
+                InitializeSettings(container);
+
+                // Register application specific services (views, windows, domain services).
+                ConfigureApplicationServices(container);
+            }
+            catch (Exception ex) when (ex is DryIoc.ContainerException or InvalidOperationException)
+            {
+                // Settings module not present or initialization failed — skip settings init.
+            }
 
             // Finally start the host. This will block until the application lifetime is terminated
             // through CTRL+C, closing the UI windows or programmatically.
@@ -83,14 +94,27 @@ public static partial class Program
         }
     }
 
-    private static IEnumerable<string> MakeConfigFiles(IPathFinder finder, IFileSystem fs, IConfiguration config)
-        =>
-        [
-            finder.GetConfigFilePath(AppearanceSettings.ConfigFileName),
-        ];
+    private static void InitializeSettings(DryIoc.IContainer container)
+    {
+        // Register Config module
+        _ = container.WithConfig();
 
-    private static void ConfigureOptionsPattern(IConfiguration config, IServiceCollection sc)
-        => _ = sc.Configure<AppearanceSettings>(config.GetSection(AppearanceSettings.ConfigSectionName));
+        // If the bootstrapper included `Config` module, it will have added a SettingsManager.
+        // Configure settings source, and initialize it now so sources are loaded and
+        // services receive their initial values.
+        var manager = container.Resolve<SettingsManager>();
+        Debug.Assert(manager is not null, "SettingsManager should be registered");
+
+        var pathFinder = container.GetRequiredService<IPathFinder>();
+        _ = container
+            .WithJsonConfigSource(
+                "app.settings",
+                pathFinder.GetConfigFilePath("settings.json"),
+                watch: true);
+
+        manager.InitializeAsync().GetAwaiter().GetResult();
+        _ = manager.AutoSave = true;
+    }
 
     private static Routes MakeRoutes() => new(
     [
@@ -107,11 +131,13 @@ public static partial class Program
 
     private static void ConfigureApplicationServices(IContainer container)
     {
-        // Register core services
-
-        // Register domain specific services, which serve data required by the views
-        container.Register<AppearanceSettingsService>(Reuse.Singleton);
-        container.Register<ISettingsService<AppearanceSettings>, AppearanceSettingsService>(Reuse.Singleton);
+        // Register Aura window management with all required services
+        _ = container.WithAura(options => options
+            .WithAppearanceSettings()
+            .WithDecorationSettings()
+            .WithBackdropService()
+            .WithChromeService()
+            .WithThemeModeService());
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the
@@ -124,9 +150,6 @@ public static partial class Program
         // registered with a key that corresponding to name of the special target <see
         // cref="Target.Main" />.
         container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
-
-        // UI Services
-        container.Register<IAppThemeModeService, AppThemeModeService>();
 
         // Views and ViewModels
         container.Register<MainShellView>(Reuse.Singleton);
