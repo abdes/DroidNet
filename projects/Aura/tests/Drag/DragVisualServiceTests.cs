@@ -43,8 +43,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     {
         // Create mock window factory that returns a new test window for each session
         var mockWindowFactory = new Mock<IWindowFactory>();
+        // Explicitly pass null for the optional metadata parameter to avoid
+        // expression-tree calls that rely on optional arguments (which are
+        // disallowed inside expression trees used by Moq's Setup).
         mockWindowFactory
-            .Setup(f => f.CreateWindow<DragOverlayWindow>())
+            .Setup(f => f.CreateWindow<DragOverlayWindow>(null))
             .ReturnsAsync(() => new TestDragOverlayWindow());
 
         // Create hosting context
