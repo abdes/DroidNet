@@ -92,7 +92,7 @@ public partial class TabDragCoordinator
 
             // Create spatial mapper
             var window = Native.GetWindowForElement(source);
-            var spatialMapper = new SpatialMapper(source, window);
+            var spatialMapper = new SpatialMapper(window, source);
 
             // Store hotspot in context for use by strategies (esp. TearOutStrategy)
             this.dragContext = new DragContext(source, item, spatialMapper);
