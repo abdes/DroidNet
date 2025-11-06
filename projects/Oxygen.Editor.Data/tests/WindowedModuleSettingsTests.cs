@@ -21,7 +21,7 @@ public class WindowedModuleSettingsTests : DatabaseTests
     /// </summary>
     public WindowedModuleSettingsTests()
     {
-        this.Container.Register<SettingsManager>(Reuse.Scoped);
+        this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
     [TestMethod]
@@ -46,7 +46,7 @@ public class WindowedModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         using (scope)
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestWindowedModuleSettings(settingsManager, "TestModule");
 
             Action act = () => moduleSettings.WindowPosition = new Point(-1, -1);
@@ -61,7 +61,7 @@ public class WindowedModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         using (scope)
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestWindowedModuleSettings(settingsManager, "TestModule");
 
             Action act = () => moduleSettings.WindowSize = new Size(0, 0);
@@ -70,6 +70,6 @@ public class WindowedModuleSettingsTests : DatabaseTests
         }
     }
 
-    private sealed class TestWindowedModuleSettings(SettingsManager settingsManager, string moduleName)
+    private sealed class TestWindowedModuleSettings(EditorSettingsManager settingsManager, string moduleName)
         : WindowedModuleSettings(settingsManager, moduleName);
 }

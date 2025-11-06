@@ -9,17 +9,19 @@ using FluentAssertions;
 namespace Oxygen.Editor.Data.Tests;
 
 /// <summary>
-/// Contains unit tests for verifying the SettingsManager functionality.
+/// Contains unit tests for verifying the EditorSettingsManager functionality.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Settings Manager")]
-public class SettingsManagerTests : DatabaseTests
+public class EditorSettingsManagerTests : DatabaseTests
 {
-    public SettingsManagerTests()
+    public EditorSettingsManagerTests()
     {
-        this.Container.Register<SettingsManager>(Reuse.Scoped);
+        this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
+
+    public TestContext TestContext { get; set; }
 
     [TestMethod]
     public async Task SaveSettingAsync_ShouldSaveAndRetrieveSetting()
@@ -27,7 +29,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "TestKey";
@@ -47,7 +49,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "TestKey";
@@ -69,7 +71,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "NonExistentModule";
             const string key = "NonExistentKey";
@@ -86,7 +88,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "NonExistentModule";
             const string key = "NonExistentKey";
@@ -104,7 +106,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "TestKey";
@@ -123,7 +125,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         using (scope)
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "TestKey";
@@ -132,7 +134,7 @@ public class SettingsManagerTests : DatabaseTests
 
             settingsManager.RegisterChangeHandler(moduleName, key, _ => handlerCalled = true);
 
-            settingsManager.SaveSettingAsync(moduleName, key, value).Wait();
+            settingsManager.SaveSettingAsync(moduleName, key, value).Wait(this.TestContext.CancellationToken);
 
             _ = handlerCalled.Should().BeTrue();
         }
@@ -144,7 +146,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         using (scope)
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "TestKey";
@@ -154,7 +156,7 @@ public class SettingsManagerTests : DatabaseTests
 
             settingsManager.RegisterChangeHandler(moduleName, key, _ => handlerCalled = true);
 
-            settingsManager.SaveSettingAsync(moduleName, differentKey, value).Wait();
+            settingsManager.SaveSettingAsync(moduleName, differentKey, value).Wait(this.TestContext.CancellationToken);
 
             _ = handlerCalled.Should().BeFalse();
         }
@@ -166,7 +168,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "IntKey";
@@ -186,7 +188,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "StringKey";
@@ -206,7 +208,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "ListStringKey";
@@ -226,7 +228,7 @@ public class SettingsManagerTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
 
             const string moduleName = "TestModule";
             const string key = "DictionaryKey";

@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
+using DroidNet.Aura.Theming;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Docking.Controls;

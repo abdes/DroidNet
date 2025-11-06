@@ -16,7 +16,7 @@ public class ModuleSettingsTests : DatabaseTests
 {
     public ModuleSettingsTests()
     {
-        this.Container.Register<SettingsManager>(Reuse.Scoped);
+        this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
     [TestMethod]
@@ -25,7 +25,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
             {
                 TestProperty = "NewValue",
@@ -43,7 +43,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
 
             await settingsManager.SaveSettingAsync("TestModule", nameof(moduleSettings.TestProperty), "LoadedValue").ConfigureAwait(false);
@@ -61,7 +61,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
 
             await moduleSettings.SaveAsync().ConfigureAwait(false);
@@ -77,7 +77,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
             {
                 TestProperty = "NewValue",
@@ -93,7 +93,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
 
             var propertyChangedRaised = false;
@@ -117,7 +117,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
 
             await moduleSettings.LoadAsync().ConfigureAwait(false);
@@ -134,7 +134,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
             {
                 TestProperty = null,
@@ -152,7 +152,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
 
             await settingsManager.SaveSettingAsync("TestModule", nameof(moduleSettings.TestProperty), "LoadedValue").ConfigureAwait(false);
@@ -168,7 +168,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new FailingTestModuleSettings(settingsManager, "TestModule");
 
             var act = moduleSettings.LoadAsync;
@@ -184,7 +184,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
             {
                 TestProperty = "NewValue",
@@ -202,7 +202,7 @@ public class ModuleSettingsTests : DatabaseTests
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
-            var settingsManager = scope.Resolve<SettingsManager>();
+            var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new FailingTestModuleSettings(settingsManager, "TestModule")
             {
                 PrivateGetterProperty = "NewValue",
@@ -214,7 +214,7 @@ public class ModuleSettingsTests : DatabaseTests
         }
     }
 
-    private sealed class TestModuleSettings(SettingsManager settingsManager, string moduleName)
+    private sealed class TestModuleSettings(EditorSettingsManager settingsManager, string moduleName)
         : ModuleSettings(settingsManager, moduleName)
     {
         private string? testProperty;
@@ -243,7 +243,7 @@ public class ModuleSettingsTests : DatabaseTests
         }
     }
 
-    private sealed class FailingTestModuleSettings(SettingsManager settingsManager, string moduleName)
+    private sealed class FailingTestModuleSettings(EditorSettingsManager settingsManager, string moduleName)
         : ModuleSettings(settingsManager, moduleName)
     {
         private string testProperty = "PrivateValue";
