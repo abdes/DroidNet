@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <PackageReference Include="Basic.Reference.Assemblies.Net80" />
+        <PackageReference Include="HandleBars.net" />
         <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
     </ItemGroup>

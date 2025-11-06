@@ -40,15 +40,6 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
     private bool isDisposed;
 
     /// <summary>
-    /// Gets or sets the workspace content.
-    /// </summary>
-    /// <value>
-    /// The <see cref="UIElement"/> representing the workspace content.
-    /// </value>
-    [ObservableProperty]
-    private UIElement? workspaceContent;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
     /// </summary>
     /// <param name="resolver">The resolver used to resolve required services and view models.</param>
@@ -67,6 +58,15 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
             }
         };
     }
+
+    /// <summary>
+    /// Gets or sets the workspace content.
+    /// </summary>
+    /// <value>
+    /// The <see cref="UIElement"/> representing the workspace content.
+    /// </value>
+    [ObservableProperty]
+    public partial UIElement? WorkspaceContent { get; set; }
 
     /// <inheritdoc/>
     public void Dispose()

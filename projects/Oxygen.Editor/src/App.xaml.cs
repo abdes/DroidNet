@@ -15,7 +15,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
-using Oxygen.Editor.Data;
 using Oxygen.Editor.Services;
 
 namespace Oxygen.Editor;
@@ -23,6 +22,7 @@ namespace Oxygen.Editor;
 /// <summary>
 /// Provides application-specific behavior to supplement the default Application class.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Application class must always be public")]
 public partial class App
 {
     private readonly IRouter router;
@@ -40,6 +40,7 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter to be used to set the content inside the content control.</param>
     /// <param name="windowManager">Window manager service - injected to force early initialization before navigation.</param>
+    /// <param name="backdropService">The window backdrop service, injected to force early initialization before navigation.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service

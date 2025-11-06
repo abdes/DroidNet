@@ -77,11 +77,6 @@ public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<Pers
 
         ParseCommandLineArgs(args, out var useInMemoryDb, out var mode, out var dbPath);
 
-        if (useInMemoryDb && !string.IsNullOrEmpty(dbPath))
-        {
-            throw new ArgumentException("Only one of --use-in-memory-db or --db-path should be specified.", nameof(args));
-        }
-
         if (useInMemoryDb)
         {
             _ = optionsBuilder.UseSqlite("Data Source=:memory:");

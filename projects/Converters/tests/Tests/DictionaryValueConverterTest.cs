@@ -11,6 +11,7 @@ namespace DroidNet.Converters.Tests.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Dictionary Value")]
+[TestCategory("UITest")]
 public class DictionaryValueConverterTest
 {
     private readonly DictionaryValueConverter<int> converter = new();

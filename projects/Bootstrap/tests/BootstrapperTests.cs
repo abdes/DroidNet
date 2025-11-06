@@ -19,6 +19,7 @@ namespace DroidNet.Bootstrap.Tests;
 /// </summary>
 [TestClass]
 [TestCategory("Bootstrapper")]
+[TestCategory("UITest")]
 public sealed partial class BootstrapperTests : IDisposable
 {
     private readonly Bootstrapper defaultConfiguredBuilder;

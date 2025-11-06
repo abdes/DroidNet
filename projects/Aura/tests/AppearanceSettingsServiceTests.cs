@@ -17,8 +17,9 @@ namespace DroidNet.Aura.Tests;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("UITest")]
 [TestCategory("AppearanceSettingsServiceTests")]
-public sealed class AppearanceSettingsServiceTests : IDisposable
+public sealed partial class AppearanceSettingsServiceTests : IDisposable
 {
     private Container container = null!;
     private SettingsManager settingsManager = null!;
@@ -47,10 +48,7 @@ public sealed class AppearanceSettingsServiceTests : IDisposable
     }
 
     [TestCleanup]
-    public void TestCleanup()
-    {
-        this.service?.Dispose();
-    }
+    public void TestCleanup() => this.service?.Dispose();
 
     [TestMethod]
     public void Constructor_InitializesWithDefaultValues()
@@ -342,7 +340,7 @@ public sealed class AppearanceSettingsServiceTests : IDisposable
 
         // Act
         tempService.Dispose();
-        var act = () => tempService.Dispose();
+        var act = tempService.Dispose;
 
         // Assert
         _ = act.Should().NotThrow();

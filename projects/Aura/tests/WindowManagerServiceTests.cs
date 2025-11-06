@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
-using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
@@ -25,6 +24,7 @@ namespace DroidNet.Aura.Tests;
 ///     memory leak prevention, and concurrent operation handling.
 /// </remarks>
 [TestClass]
+[TestCategory("UITest")]
 [ExcludeFromCodeCoverage]
 public class WindowManagerServiceTests : VisualUserInterfaceTests
 {

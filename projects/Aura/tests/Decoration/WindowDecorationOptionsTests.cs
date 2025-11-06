@@ -16,7 +16,6 @@ namespace DroidNet.Aura.Tests.Decoration;
 public class WindowDecorationOptionsTests
 {
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithValidOptions_ShouldNotThrow()
     {
         // Arrange
@@ -36,7 +35,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithMenuAndChromeDisabled_ShouldThrow()
     {
         // Arrange
@@ -56,7 +54,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithZeroTitleBarHeight_ShouldThrow()
     {
         // Arrange
@@ -75,7 +72,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithNegativeTitleBarHeight_ShouldThrow()
     {
         // Arrange
@@ -94,7 +90,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithEmptyMenuProviderId_ShouldThrow()
     {
         // Arrange
@@ -114,7 +109,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithWhitespaceMenuProviderId_ShouldThrow()
     {
         // Arrange
@@ -134,7 +128,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithChromeDisabledAndNoMenu_ShouldNotThrow()
     {
         // Arrange
@@ -153,7 +146,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void Validate_WithValidMenu_ShouldNotThrow()
     {
         // Arrange
@@ -172,7 +164,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void WithExpression_ShouldPreserveOtherProperties()
     {
         // Arrange
@@ -195,7 +186,6 @@ public class WindowDecorationOptionsTests
     }
 
     [TestMethod]
-    [TestCategory("Unit")]
     public void DefaultValues_ShouldMatchSpecification()
     {
         // Arrange & Act

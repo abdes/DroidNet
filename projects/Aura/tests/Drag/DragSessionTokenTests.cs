@@ -15,7 +15,6 @@ namespace DroidNet.Aura.Tests.Drag;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DragSessionTokenTests")]
-[TestCategory("Phase3")]
 public class DragSessionTokenTests
 {
     /// <summary>

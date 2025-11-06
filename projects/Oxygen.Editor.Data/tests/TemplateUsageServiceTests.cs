@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using DryIoc;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
@@ -18,6 +19,16 @@ public partial class TemplateUsageServiceTests : DatabaseTests
 {
     public TemplateUsageServiceTests()
     {
+        // Register a factory function that creates a NEW PersistentState instance each time
+        // using the registered DbContextOptions, not the scoped PersistentState
+        this.Container.RegisterDelegate<Func<PersistentState>>(
+            resolver =>
+            {
+                var options = resolver.Resolve<DbContextOptions<PersistentState>>();
+                return () => new PersistentState(options);
+            },
+            Reuse.Scoped);
+
         this.Container.Register<TemplateUsageService>(Reuse.Scoped);
 #pragma warning disable CA2000 // Dispose objects before losing scope
         // DryIoc will properly dispose of this instance when the container is disposed
@@ -231,10 +242,16 @@ public partial class TemplateUsageServiceTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             // Arrange
+            var context = scope.Resolve<PersistentState>();
             var service = scope.Resolve<TemplateUsageService>();
             var memoryCache = scope.Resolve<IMemoryCache>();
 
+            // Seed the database with an existing template
             var template = new TemplateUsage { Location = "Location1", TimesUsed = 1 };
+            _ = context.TemplatesUsageRecords.Add(template);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+
+            // Also set the cache to verify it gets updated
             _ = memoryCache.Set($"{TemplateUsageService.CacheKeyPrefix}Location1", template);
 
             // Act

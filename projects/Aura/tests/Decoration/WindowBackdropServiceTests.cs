@@ -24,6 +24,7 @@ namespace DroidNet.Aura.Tests.Decoration;
 /// </remarks>
 [TestClass]
 [ExcludeFromCodeCoverage]
+[TestCategory("UITest")]
 public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDisposable
 {
     private Mock<IWindowManagerService> mockWindowManager = null!;

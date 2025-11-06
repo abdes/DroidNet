@@ -67,7 +67,7 @@ public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDispo
         var window = VisualUserInterfaceTestsApp.MainWindow;
 
         // Act - null element is now valid
-        var mapper = factory(window, null);
+        var mapper = factory(window, element: null);
 
         // Assert
         _ = mapper.Should().NotBeNull();
@@ -81,7 +81,7 @@ public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDispo
         var factory = this.container.Resolve<SpatialMapperFactory>();
 
         // Act - both null is now valid (for Physical↔Screen conversions only)
-        var mapper = factory(null, null);
+        var mapper = factory(window: null, element: null);
 
         // Assert
         _ = mapper.Should().NotBeNull();

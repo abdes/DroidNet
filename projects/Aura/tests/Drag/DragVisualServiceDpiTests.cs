@@ -24,7 +24,7 @@ namespace DroidNet.Aura.Tests.Drag;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DragVisualServiceDpiTests")]
-[TestCategory("Phase3")]
+[TestCategory("UITest")]
 public class DragVisualServiceDpiTests : VisualUserInterfaceTests
 {
     private Mock<ISpatialMapper> mockMapper = null!;

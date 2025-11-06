@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
-using System.Collections.Specialized;
 using DroidNet.TestHelpers;
 using FluentAssertions;
 
@@ -17,35 +16,6 @@ namespace DroidNet.Collections.Tests;
 [TestCategory("Filtered Observable Collection")]
 public class FilteredObservableCollectionTests
 {
-    private sealed class ObservableItem : INotifyPropertyChanged
-    {
-        private int value;
-
-        public ObservableItem(int value)
-        {
-            this.value = value;
-        }
-
-        public int Value
-        {
-            get => this.value;
-            set
-            {
-                if (this.value == value)
-                {
-                    return;
-                }
-
-                this.value = value;
-                this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
-            }
-        }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-
-        public override string ToString() => $"Item({this.value})";
-    }
-
     [TestMethod]
     public void Constructor_NullSource_Throws()
     {
@@ -75,9 +45,9 @@ public class FilteredObservableCollectionTests
         // Arrange
         var source = new ObservableCollection<ObservableItem>
         {
-            new ObservableItem(1),
-            new ObservableItem(2),
-            new ObservableItem(3),
+            new(1),
+            new(2),
+            new(3),
         };
 
         // filter: include even values only
@@ -94,9 +64,9 @@ public class FilteredObservableCollectionTests
         // Arrange
         var source = new ObservableCollection<ObservableItem>
         {
-            new ObservableItem(1),
-            new ObservableItem(2),
-            new ObservableItem(3),
+            new(1),
+            new(2),
+            new(3),
         };
 
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
@@ -125,8 +95,8 @@ public class FilteredObservableCollectionTests
         // Arrange
         var source = new ObservableCollection<ObservableItem>
         {
-            new ObservableItem(1),
-            new ObservableItem(2),
+            new(1),
+            new(2),
         };
 
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
@@ -156,7 +126,7 @@ public class FilteredObservableCollectionTests
         view.CollectionChanged += (_, e) => events.Add(e);
 
         // Act
-        source.Remove(a);
+        _ = source.Remove(a);
 
         // Assert
         _ = view.Count.Should().Be(1);
@@ -272,7 +242,7 @@ public class FilteredObservableCollectionTests
     public void Source_Reset_RebuildsAndRaisesReset()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(1), new ObservableItem(2) };
+        var source = new ObservableCollection<ObservableItem> { new(1), new(2) };
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
@@ -320,7 +290,7 @@ public class FilteredObservableCollectionTests
         var source = new ObservableCollection<ObservableItem> { item };
 
         // Only changes to "Other" should cause re-evaluation — since we change Value, no event expected
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0, new[] { "Other" });
+        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0, ["Other"]);
 
         var raised = false;
         view.CollectionChanged += (_, _) => raised = true;
@@ -336,7 +306,7 @@ public class FilteredObservableCollectionTests
     public void DeferNotifications_SuspendsEvents_ThenResetOnDispose()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(1) };
+        var source = new ObservableCollection<ObservableItem> { new(1) };
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
@@ -360,9 +330,9 @@ public class FilteredObservableCollectionTests
         // Arrange
         var source = new ObservableCollection<ObservableItem>
         {
-            new ObservableItem(1),
-            new ObservableItem(2),
-            new ObservableItem(3),
+            new(1),
+            new(2),
+            new(3),
         };
 
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
@@ -385,8 +355,8 @@ public class FilteredObservableCollectionTests
         // Arrange
         var source = new ObservableCollection<ObservableItem>
         {
-            new ObservableItem(1),
-            new ObservableItem(2),
+            new(1),
+            new(2),
         };
 
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
@@ -410,7 +380,7 @@ public class FilteredObservableCollectionTests
     public void Refresh_AfterDispose_DoesNotRaise()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(2) };
+        var source = new ObservableCollection<ObservableItem> { new(2) };
         var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         var raised = false;
@@ -428,23 +398,23 @@ public class FilteredObservableCollectionTests
     public void DeferNotifications_DisposeCalledMultipleTimes_SecondDisposeNoEffect()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(1) };
+        var source = new ObservableCollection<ObservableItem> { new(1) };
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
 
         // Act
-    IDisposable d = view.DeferNotifications();
+        var d = view.DeferNotifications();
 
-    // cause changes while suspended
-    source.Add(new ObservableItem(2));
+        // cause changes while suspended
+        source.Add(new ObservableItem(2));
 
         // first dispose: should resume and raise Reset
         d.Dispose();
 
         // second dispose: should call ResumeNotifications with suspendCount <= 0 and do nothing / not throw
-        var act = new Action(() => d.Dispose());
+        var act = new Action(d.Dispose);
 
         // Assert
         _ = act.Should().NotThrow();
@@ -455,12 +425,12 @@ public class FilteredObservableCollectionTests
     public void Dispose_WhenCalledMultipleTimes_DoesNotThrow()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(2) };
+        var source = new ObservableCollection<ObservableItem> { new(2) };
         var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         // Act
         view.Dispose();
-        var act = new Action(() => view.Dispose());
+        var act = new Action(view.Dispose);
 
         // Assert
         _ = act.Should().NotThrow();
@@ -470,7 +440,7 @@ public class FilteredObservableCollectionTests
     public void Methods_AfterDispose_BehaveCorrectly()
     {
         // Arrange
-        var source = new ObservableCollection<ObservableItem> { new ObservableItem(2) };
+        var source = new ObservableCollection<ObservableItem> { new(2) };
         using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
@@ -480,7 +450,7 @@ public class FilteredObservableCollectionTests
         view.Dispose();
 
         // Act / Assert: Refresh does not throw and does not raise events
-        var actRefresh = new Action(() => view.Refresh());
+        var actRefresh = new Action(view.Refresh);
         _ = actRefresh.Should().NotThrow();
         _ = events.Should().BeEmpty();
 
@@ -495,7 +465,7 @@ public class FilteredObservableCollectionTests
         _ = view.Should().BeEmpty();
 
         // Double dispose should not throw
-        var actDoubleDispose = new Action(() => view.Dispose());
+        var actDoubleDispose = new Action(view.Dispose);
         _ = actDoubleDispose.Should().NotThrow();
 
         // Mutating the source after dispose should not raise events on the view
@@ -512,18 +482,42 @@ public class FilteredObservableCollectionTests
         var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
 
         // Ensure subscription exists
-    var registered = EventHandlerTestHelper.FindAllRegisteredDelegates(source, "CollectionChanged");
-    _ = registered.Should().Contain(x => x.Method.Name.Contains("OnSourceCollectionChanged") || x.Method.Name.Contains("OnSourceOnCollectionChanged"));
+        var registered = EventHandlerTestHelper.FindAllRegisteredDelegates(source, "CollectionChanged");
+        _ = registered.Should().Contain(x => x.Method.Name.Contains("OnSourceCollectionChanged") || x.Method.Name.Contains("OnSourceOnCollectionChanged"));
 
         // Act
         view.Dispose();
 
         // Assert source collection changed handler removed
-    registered = EventHandlerTestHelper.FindAllRegisteredDelegates(source, "CollectionChanged");
-    _ = registered.Should().NotContain(x => x.Method.Name.Contains("OnSourceCollectionChanged") || x.Method.Name.Contains("OnSourceOnCollectionChanged"));
+        registered = EventHandlerTestHelper.FindAllRegisteredDelegates(source, "CollectionChanged");
+        _ = registered.Should().NotContain(x => x.Method.Name.Contains("OnSourceCollectionChanged") || x.Method.Name.Contains("OnSourceOnCollectionChanged"));
 
         // item property changed handlers removed
         var itemHandlers = EventHandlerTestHelper.FindAllRegisteredDelegates(item, "PropertyChanged");
         _ = itemHandlers.Should().BeEmpty();
+    }
+
+    private sealed class ObservableItem(int value) : INotifyPropertyChanged
+    {
+        private int value = value;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public int Value
+        {
+            get => this.value;
+            set
+            {
+                if (this.value == value)
+                {
+                    return;
+                }
+
+                this.value = value;
+                this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
+            }
+        }
+
+        public override string ToString() => $"Item({this.value})";
     }
 }

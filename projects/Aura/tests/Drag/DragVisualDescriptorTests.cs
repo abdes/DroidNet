@@ -17,7 +17,7 @@ namespace DroidNet.Aura.Tests.Drag;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DragVisualDescriptorTests")]
-[TestCategory("Phase3")]
+[TestCategory("UITest")]
 public class DragVisualDescriptorTests : VisualUserInterfaceTests
 {
     public required TestContext TestContext { get; set; }
