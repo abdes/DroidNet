@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace UnitTest;
-
 using FluentAssertions;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
+
+namespace DroidNet.Samples.Tests;
 
 [TestClass]
 public class SampleTest

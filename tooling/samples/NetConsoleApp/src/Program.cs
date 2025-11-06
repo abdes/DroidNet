@@ -2,13 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.NetConsoleApp;
-
 using DroidNet.Samples.NetClassLibrary;
 using DroidNet.Samples.NetConsoleApp.Resources;
 
+namespace DroidNet.Samples.NetConsoleApp;
+
+/// <summary>
+///     Application entry point.
+/// </summary>
 internal static class Program
 {
+    /// <summary>
+    ///     The main entry point of the application.
+    /// </summary>
+    /// <param name="args">command line arguments.</param>
+    [STAThread]
     public static void Main(string[] args)
     {
         _ = args;

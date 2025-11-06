@@ -2,12 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Samples.NetClassLibrary.Tests;
-
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Samples.NetClassLibrary;
 using FluentAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace DroidNet.Samples.NetClassLibrary.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
