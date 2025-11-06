@@ -5,9 +5,13 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
+using DroidNet.Aura.Windowing;
 using DroidNet.Config;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
@@ -19,172 +23,153 @@ namespace DroidNet.Aura.Tests;
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
-public class AppThemeModeServiceTests : VisualUserInterfaceTests
+[TestCategory("AppThemeModeServiceTests")]
+public partial class AppThemeModeServiceTests : VisualUserInterfaceTests, IDisposable
 {
-    [TestMethod]
-    public Task ApplyThemeMode_SetsLightTheme_Async() => EnqueueAsync(async () =>
+    private Mock<ISettingsService<IAppearanceSettings>> mockAppearanceSettings = null!;
+    private Mock<IWindowManagerService> mockWindowManager = null!;
+    private HostingContext hostingContext = null!;
+    private AppThemeModeService service = null!;
+    private Window? testWindow;
+    private bool isDisposed;
+
+    public required TestContext TestContext { get; set; }
+
+    [TestInitialize]
+    public Task InitializeAsync() => EnqueueAsync(() =>
     {
-        // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
-        var window = new Window
+        this.mockAppearanceSettings = new Mock<ISettingsService<IAppearanceSettings>>();
+        this.mockWindowManager = new Mock<IWindowManagerService>();
+        _ = this.mockWindowManager.Setup(m => m.OpenWindows).Returns([]);
+        _ = this.mockWindowManager.Setup(m => m.WindowEvents).Returns(System.Reactive.Linq.Observable.Empty<WindowLifecycleEvent>());
+
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        this.hostingContext = new HostingContext
         {
-            Content = new Grid(),
+            Dispatcher = dispatcher,
+            Application = Application.Current,
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
         };
 
-        try
-        {
-            // Act
-            service.ApplyThemeMode(window, ElementTheme.Light);
-            await WaitForRenderAsync().ConfigureAwait(true);
+        this.service = new AppThemeModeService(
+            this.hostingContext,
+            this.mockAppearanceSettings.Object,
+            this.mockWindowManager.Object,
+            NullLoggerFactory.Instance);
+    });
 
-            // Assert
-            var content = window.Content as FrameworkElement;
-            _ = content.Should().NotBeNull();
-            _ = content!.RequestedTheme.Should().Be(ElementTheme.Light);
-        }
-        finally
-        {
-            window.Close();
-            service.Dispose();
-        }
+    [TestCleanup]
+    public Task CleanupAsync() => EnqueueAsync(() =>
+    {
+        this.testWindow?.Close();
+        this.testWindow = null;
     });
 
     [TestMethod]
-    public Task ApplyThemeMode_SetsDarkTheme_Async() => EnqueueAsync(async () =>
+    public Task ApplyThemeToWindow_SetsLightTheme() => EnqueueAsync(() =>
     {
         // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
-        var window = new Window
-        {
-            Content = new Grid(),
-        };
-
-        try
-        {
-            // Act
-            service.ApplyThemeMode(window, ElementTheme.Dark);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert
-            var content = window.Content as FrameworkElement;
-            _ = content.Should().NotBeNull();
-            _ = content!.RequestedTheme.Should().Be(ElementTheme.Dark);
-        }
-        finally
-        {
-            window.Close();
-            service.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task ApplyThemeMode_DefaultTheme_ResolvesToSystemTheme_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
-        var window = new Window
-        {
-            Content = new Grid(),
-        };
-
-        try
-        {
-            // Act
-            service.ApplyThemeMode(window, ElementTheme.Default);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert
-            var content = window.Content as FrameworkElement;
-            _ = content.Should().NotBeNull();
-
-            var expectedTheme = Application.Current.RequestedTheme == ApplicationTheme.Light
-                ? ElementTheme.Light
-                : ElementTheme.Dark;
-            _ = content!.RequestedTheme.Should().Be(expectedTheme);
-        }
-        finally
-        {
-            window.Close();
-            service.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task ApplyThemeMode_ThrowsException_WhenContentIsNotFrameworkElement_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
-        var window = new Window
-        {
-            Content = null,
-        };
-
-        try
-        {
-            // Act
-            var act = () => service.ApplyThemeMode(window, ElementTheme.Light);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert
-            _ = act.Should().Throw<ArgumentException>()
-                .WithParameterName("window");
-        }
-        finally
-        {
-            window.Close();
-            service.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task ApplyThemeMode_UpdatesApplicationResources_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
-        var window = new Window
-        {
-            Content = new Grid(),
-        };
-
-        try
-        {
-            // Act
-            service.ApplyThemeMode(window, ElementTheme.Light);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert
-            _ = Application.Current.Resources.Should().ContainKey("AppTheme");
-            _ = Application.Current.Resources["AppTheme"].Should().Be(ElementTheme.Light);
-        }
-        finally
-        {
-            window.Close();
-            service.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task Dispose_UnsubscribesFromPropertyChanged_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var appearanceSettings = new Mock<ISettingsService<DroidNet.Aura.Settings.IAppearanceSettings>>();
-        var service = new AppThemeModeService(appearanceSettings.Object);
+        this.testWindow = new Window { Content = new Grid() };
 
         // Act
-        service.Dispose();
-        await WaitForRenderAsync().ConfigureAwait(true);
+        this.service.ApplyThemeToWindow(this.testWindow, ElementTheme.Light);
 
-        // Assert - Multiple disposes should not throw
-        var act = () => service.Dispose();
+        // Assert
+        var content = this.testWindow.Content as FrameworkElement;
+        _ = content.Should().NotBeNull();
+        _ = content!.RequestedTheme.Should().Be(ElementTheme.Light);
+    });
+
+    [TestMethod]
+    public Task ApplyThemeToWindow_SetsDarkTheme() => EnqueueAsync(() =>
+    {
+        // Arrange
+        this.testWindow = new Window { Content = new Grid() };
+
+        // Act
+        this.service.ApplyThemeToWindow(this.testWindow, ElementTheme.Dark);
+
+        // Assert
+        var content = this.testWindow.Content as FrameworkElement;
+        _ = content.Should().NotBeNull();
+        _ = content!.RequestedTheme.Should().Be(ElementTheme.Dark);
+    });
+
+    [TestMethod]
+    public Task ApplyThemeToWindow_DefaultTheme_ResolvesToSystemTheme() => EnqueueAsync(() =>
+    {
+        // Arrange
+        this.testWindow = new Window { Content = new Grid() };
+
+        // Act
+        this.service.ApplyThemeToWindow(this.testWindow, ElementTheme.Default);
+
+        // Assert
+        var content = this.testWindow.Content as FrameworkElement;
+        _ = content.Should().NotBeNull();
+
+        var expectedTheme = Application.Current.RequestedTheme == ApplicationTheme.Light
+            ? ElementTheme.Light
+            : ElementTheme.Dark;
+        _ = content!.RequestedTheme.Should().Be(expectedTheme);
+    });
+
+    [TestMethod]
+    public Task ApplyThemeToWindow_ThrowsException_WhenContentIsNull() => EnqueueAsync(() =>
+    {
+        // Arrange
+        this.testWindow = new Window { Content = null };
+
+        // Act
+        var act = () => this.service.ApplyThemeToWindow(this.testWindow, ElementTheme.Light);
+
+        // Assert
+        _ = act.Should().Throw<ArgumentException>()
+            .WithParameterName("window");
+    });
+
+    [TestMethod]
+    public Task ApplyThemeToWindow_UpdatesApplicationResources() => EnqueueAsync(() =>
+    {
+        // Arrange
+        this.testWindow = new Window { Content = new Grid() };
+
+        // Act
+        this.service.ApplyThemeToWindow(this.testWindow, ElementTheme.Light);
+
+        // Assert
+        _ = Application.Current.Resources.Should().ContainKey("AppTheme");
+        _ = Application.Current.Resources["AppTheme"].Should().Be(ElementTheme.Light);
+    });
+
+    [TestMethod]
+    public Task Dispose_CanBeCalledMultipleTimes() => EnqueueAsync(() =>
+    {
+        // Act
+        this.service.Dispose();
+        var act = () => this.service.Dispose();
+
+        // Assert
         _ = act.Should().NotThrow();
     });
 
-    private static async Task WaitForRenderAsync() =>
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { })
-            .ConfigureAwait(true);
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.isDisposed)
+        {
+            if (disposing)
+            {
+            }
+
+            this.service?.Dispose();
+            this.isDisposed = true;
+        }
+    }
 }

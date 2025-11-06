@@ -98,7 +98,7 @@ The solution uses three menu control types from `DroidNet.Controls.Menus`:
 
 **Predefined Categories:**
 
-- **Main**: Primary application window (height=40, all buttons, Mica backdrop)
+- **Main**: Primary application window (standard height=32, all buttons, Mica backdrop)
 - **Secondary**: Additional windows (standard height, all buttons, MicaAlt backdrop)
 - **Document**: Content editing (standard height, all buttons, Mica backdrop)
 - **Tool**: Palettes/inspectors (height=32, no maximize, MicaAlt backdrop)
