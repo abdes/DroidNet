@@ -13,36 +13,41 @@ namespace DroidNet.Coordinates;
 ///     per-monitor DPI awareness. Conversions compose through a strict hierarchy:
 ///     Element ↔ Window ↔ Screen (logical) ↔ Physical.
 /// </summary>
-/// <param name="element">The framework element defining the ElementSpace origin.</param>
 /// <param name="window">
 ///     Optional window for WindowSpace/ScreenSpace conversions and HWND resolution.
-///     Required for logical→physical conversions; omit only when working purely with logical spaces.
+///     Required for most conversions except identity conversions (same source and target space).
 /// </param>
-public partial class SpatialMapper(FrameworkElement element, Window? window = null) : ISpatialMapper
+/// <param name="element">
+///     Optional framework element defining the ElementSpace origin.
+///     Required only for conversions involving ElementSpace.
+/// </param>
+public partial class SpatialMapper(Window? window = null, FrameworkElement? element = null) : ISpatialMapper
 {
-    private readonly FrameworkElement element = element ?? throw new ArgumentNullException(nameof(element));
+    private readonly FrameworkElement? element = element;
     private readonly Window? window = window;
 
     private IntPtr cachedHwnd;
 
     /// <summary>
     ///     Converts a spatial point between coordinate spaces using strict one-level composition.
-    ///     Identity conversions (source == target) return immediately; Physical→Physical requires no HWND.
+    ///     Identity conversions (source == target) return immediately; Physical↔Physical requires no parameters.
     /// </summary>
     /// <typeparam name="TSource">Source coordinate space marker type.</typeparam>
     /// <typeparam name="TTarget">Target coordinate space marker type.</typeparam>
     /// <param name="point">The point to convert.</param>
     /// <returns>A new point in the target space.</returns>
     /// <remarks>
-    ///     <b>Logical→Physical conversion semantics:</b><br/>
-    ///     Converting from ElementSpace, WindowSpace, or ScreenSpace to PhysicalScreenSpace requires
-    ///     a valid HWND (either cached or resolvable via the associated Window). If no Window was
-    ///     provided at construction or the HWND becomes invalid, <see cref="InvalidOperationException"/> is thrown.
-    ///     Physical→Physical conversions are no-ops and do not require an HWND.
+    ///     <b>Conversion requirements:</b><br/>
+    ///     • <b>ElementSpace conversions:</b> Require a valid element (provided at construction).<br/>
+    ///     • <b>WindowSpace conversions:</b> Require a valid window (provided at construction).<br/>
+    ///     • <b>Physical↔Screen conversions:</b> Require a valid window for proper monitor DPI resolution.<br/>
+    ///     • <b>PhysicalScreenSpace↔PhysicalScreenSpace:</b> Identity conversion, no parameters needed.<br/>
+    ///     Missing required parameters will throw <see cref="InvalidOperationException"/>.
     /// </remarks>
     /// <exception cref="NotSupportedException">Source or target space is not one of the four supported marker types.</exception>
     /// <exception cref="InvalidOperationException">
-    ///     Logical→Physical conversion attempted without a valid HWND, or element is not in a visual tree.
+    ///     Required element or window parameter is missing for the requested conversion,
+    ///     or element is not in a visual tree, or HWND is invalid.
     /// </exception>
     public SpatialPoint<TTarget> Convert<TSource, TTarget>(SpatialPoint<TSource> point)
     {
@@ -58,6 +63,11 @@ public partial class SpatialMapper(FrameworkElement element, Window? window = nu
         // One-level helper functions
         Point ElementToWindow(Point p)
         {
+            if (this.element is null)
+            {
+                throw new InvalidOperationException("Element is required for ElementSpace conversions. Provide an element when constructing the SpatialMapper.");
+            }
+
             var root = this.window?.Content is UIElement windowContent
                 ? windowContent
                 : this.element.XamlRoot?.Content is UIElement xamlRootContent
@@ -69,6 +79,11 @@ public partial class SpatialMapper(FrameworkElement element, Window? window = nu
 
         Point WindowToElement(Point p)
         {
+            if (this.element is null)
+            {
+                throw new InvalidOperationException("Element is required for ElementSpace conversions. Provide an element when constructing the SpatialMapper.");
+            }
+
             var root = this.window?.Content is UIElement windowContent
                 ? windowContent
                 : this.element.XamlRoot?.Content is UIElement xamlRootContent
@@ -136,7 +151,7 @@ public partial class SpatialMapper(FrameworkElement element, Window? window = nu
 
         Point ScreenToPhysical(Point p)
         {
-            // Logical→Physical requires valid HWND
+            // Logical→Physical requires valid HWND for proper monitor DPI resolution
             _ = this.EnsureWindowHandle();
             var physical = Native.GetPhysicalScreenPointFromLogical(p);
             return new Point(physical.X, physical.Y);
@@ -219,10 +234,15 @@ public partial class SpatialMapper(FrameworkElement element, Window? window = nu
                 : this.cachedHwnd;
         }
 
-        var handle = this.window != null ? GetWindowHandleViaWindow(this.window) : IntPtr.Zero;
+        if (this.window is null)
+        {
+            throw new InvalidOperationException("Window is required for this conversion. Provide a window when constructing the SpatialMapper.");
+        }
+
+        var handle = GetWindowHandleViaWindow(this.window);
         if (handle == IntPtr.Zero)
         {
-            throw new InvalidOperationException("Unable to resolve the HWND for the associated element.");
+            throw new InvalidOperationException("Unable to resolve the HWND for the associated window.");
         }
 
         this.cachedHwnd = handle;
