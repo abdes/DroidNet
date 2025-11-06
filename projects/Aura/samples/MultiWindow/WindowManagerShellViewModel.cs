@@ -58,7 +58,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         IWindowFactory windowFactory,
         IWindowManagerService windowManager)
     {
-        ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher);
+        ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
 
         this.windowFactory = windowFactory;
         this.windowManager = windowManager;
