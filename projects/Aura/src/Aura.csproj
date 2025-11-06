@@ -33,6 +33,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\TabStrip\src\Controls.TabStrip.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Coordinates\src\Coordinates.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />

@@ -113,7 +113,7 @@ public sealed partial class WindowDecorationSettingsTests : IDisposable
         _ = effective.Should().NotBeNull();
         _ = effective.Category.Should().Be(WindowCategory.Main);
         _ = effective.ChromeEnabled.Should().BeTrue();
-        _ = effective.TitleBar?.Height.Should().Be(40.0);
+        _ = effective.TitleBar?.Height.Should().Be(32.0);
         _ = effective.Backdrop.Should().Be(BackdropKind.MicaAlt);
     }
 

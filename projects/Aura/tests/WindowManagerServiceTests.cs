@@ -2,15 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.Settings;
-using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
-using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
@@ -25,7 +21,7 @@ namespace DroidNet.Aura.Tests;
 ///     Comprehensive test suite for the <see cref="WindowManagerService"/> class.
 /// </summary>
 /// <remarks>
-///     These tests verify window lifecycle management, theme synchronization, event publishing,
+///     These tests verify window lifecycle management, event publishing,
 ///     memory leak prevention, and concurrent operation handling.
 /// </remarks>
 [TestClass]
@@ -33,9 +29,6 @@ namespace DroidNet.Aura.Tests;
 public class WindowManagerServiceTests : VisualUserInterfaceTests
 {
     private Mock<IWindowContextFactory> mockWindowContextFactory = null!;
-    private Mock<IAppThemeModeService> mockThemeService = null!;
-    private Mock<IAppearanceSettings> mockAppearanceSettings = null!;
-    private Mock<ISettingsService<IAppearanceSettings>> mockSettingsService = null!;
     private HostingContext hostingContext = null!;
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
 
@@ -56,14 +49,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
         // Setup mocks
         this.mockWindowContextFactory = new Mock<IWindowContextFactory>();
-        this.mockThemeService = new Mock<IAppThemeModeService>();
-        this.mockAppearanceSettings = new Mock<IAppearanceSettings>();
-        this.mockSettingsService = new Mock<ISettingsService<IAppearanceSettings>>();
         this.mockLoggerFactory = new Mock<ILoggerFactory>();
-
-        // Default appearance settings
-        _ = this.mockAppearanceSettings.Setup(s => s.AppThemeMode).Returns(ElementTheme.Dark);
-        _ = this.mockSettingsService.Setup(s => s.Settings).Returns(this.mockAppearanceSettings.Object);
 
         // Logger factory returns null logger
         _ = this.mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
@@ -110,32 +96,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             _ = context.Id.Should().Be(testWindow.AppWindow.Id);
             _ = sut.OpenWindows.Should().ContainSingle();
             _ = sut.OpenWindows.First().Id.Should().Be(context.Id);
-        }
-        finally
-        {
-            testWindow.Close();
-            sut.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task RegisterWindowAsync_AppliesThemeToNewWindow_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var testWindow = MakeSmallWindow("Test Window");
-
-        var sut = this.CreateService();
-
-        try
-        {
-            // Act
-            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert - Theme service should be called
-            this.mockThemeService.Verify(
-                s => s.ApplyThemeMode(testWindow, ElementTheme.Dark),
-                Times.Once);
         }
         finally
         {
@@ -638,103 +598,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task ThemeChange_ReappliesThemeToAllWindows_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var window1 = MakeSmallWindow();
-        var window2 = MakeSmallWindow();
-
-        var sut = this.CreateService();
-
-        try
-        {
-            _ = await sut.RegisterDecoratedWindowAsync(window1, new("Test1")).ConfigureAwait(true);
-            _ = await sut.RegisterDecoratedWindowAsync(window2, new("Test2")).ConfigureAwait(true);
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            this.mockThemeService.Invocations.Clear();
-
-            // Act - Change theme via PropertyChanged
-            _ = this.mockAppearanceSettings.Setup(s => s.AppThemeMode).Returns(ElementTheme.Light);
-            this.mockSettingsService.Raise(
-                s => s.PropertyChanged += null,
-                new PropertyChangedEventArgs(nameof(IAppearanceSettings.AppThemeMode)));
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert - TEST-001: Theme should be reapplied to all windows
-            this.mockThemeService.Verify(
-                s => s.ApplyThemeMode(It.IsAny<Window>(), ElementTheme.Light),
-                Times.AtLeast(2));
-        }
-        finally
-        {
-            window1.Close();
-            window2.Close();
-            sut.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task ThemeChange_OnlyReappliesWhenThemeModeChanges_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var testWindow = MakeSmallWindow();
-
-        var sut = this.CreateService();
-
-        try
-        {
-            _ = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
-            await WaitForRenderAsync().ConfigureAwait(true);
-            this.mockThemeService.Invocations.Clear();
-
-            // Act - Change a different property
-            this.mockSettingsService.Raise(
-                s => s.PropertyChanged += null,
-                new PropertyChangedEventArgs(nameof(IAppearanceSettings.AppThemeBackgroundColor)));
-
-            await WaitForRenderAsync().ConfigureAwait(true);
-
-            // Assert - Theme should NOT be reapplied
-            this.mockThemeService.Verify(
-                s => s.ApplyThemeMode(It.IsAny<Window>(), It.IsAny<ElementTheme>()),
-                Times.Never);
-        }
-        finally
-        {
-            testWindow.Close();
-            sut.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task RegisterWindow_WithoutThemeService_DoesNotFail_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var testWindow = MakeSmallWindow();
-
-        var sut = new WindowManagerService(
-            this.mockWindowContextFactory.Object,
-            this.hostingContext,
-            this.mockLoggerFactory.Object,
-            themeModeService: null, // No theme service
-            this.mockSettingsService.Object,
-            router: null);
-
-        try
-        {
-            // Act & Assert - Should not throw
-            var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
-            _ = await act.Should().NotThrowAsync().ConfigureAwait(true);
-        }
-        finally
-        {
-            testWindow.Close();
-            sut.Dispose();
-        }
-    });
-
-    [TestMethod]
     public Task WindowEvents_PublishesCreatedEvent_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -990,28 +853,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task Dispose_UnsubscribesFromAppearanceSettings_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var sut = this.CreateService();
-
-        // Act
-        sut.Dispose();
-
-        // Trigger PropertyChanged after disposal
-        this.mockSettingsService.Raise(
-            s => s.PropertyChanged += null,
-            new PropertyChangedEventArgs(nameof(IAppearanceSettings.AppThemeMode)));
-
-        await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
-
-        // Assert - No exception should be thrown, and theme service should not be called
-        this.mockThemeService.Verify(
-            s => s.ApplyThemeMode(It.IsAny<Window>(), It.IsAny<ElementTheme>()),
-            Times.Never);
-    });
-
-    [TestMethod]
     public Task Dispose_ClearsWindowCollection_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -1057,7 +898,5 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         => new(
             this.mockWindowContextFactory.Object,
             this.hostingContext,
-            this.mockLoggerFactory.Object,
-            this.mockThemeService.Object,
-            this.mockSettingsService.Object);
+            this.mockLoggerFactory.Object);
 }

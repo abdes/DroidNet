@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Window
+    x:Class="DroidNet.Aura.Drag.DragOverlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cvt="using:DroidNet.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:drag="using:DroidNet.Aura.Drag"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    d:DataContext="{d:DesignInstance Type=drag:DragVisualDescriptor}"
+    mc:Ignorable="d">
+
+
+    <Grid x:Name="RootGrid" Background="Transparent">
+        <Grid.Resources>
+            <cvt:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!--  Header Image - Bound to descriptor  -->
+        <Image
+            Grid.Row="0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Source="{Binding HeaderImage, Mode=OneWay}"
+            Stretch="Uniform"
+            Visibility="{Binding HeaderImage, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
+
+        <!--  Preview Image - Bound to descriptor  -->
+        <Image
+            Grid.Row="1"
+            Margin="0,4,0,0"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Source="{Binding PreviewImage, Mode=OneWay}"
+            Stretch="Uniform"
+            Visibility="{Binding PreviewImage, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
+    </Grid>
+</Window>
