@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Drag;
@@ -47,8 +46,8 @@ public partial class DragVisualService
             this.activeToken?.Id ?? Guid.Empty,
             size.Width,
             size.Height,
-            this.hotspot.Point.X,
-            this.hotspot.Point.Y);
+            this.windowPositionOffsets.Point.X,
+            this.windowPositionOffsets.Point.Y);
     }
 
     [LoggerMessage(
@@ -70,17 +69,16 @@ public partial class DragVisualService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Position update: Token={Token}, ScreenX={ScreenX}, ScreenY={ScreenY}, DPI={Dpi}, PhysicalX={PhysicalX}, PhysicalY={PhysicalY}")]
+        Message = "Position update: Token={Token}, Pointer=({PointerX}, {PointerY}), Window=({WindowX}, {WindowY}")]
     private static partial void LogPositionUpdated(
         ILogger logger,
         Guid token,
-        int screenX,
-        int screenY,
-        uint dpi,
-        int physicalX,
-        int physicalY);
+        int pointerX,
+        int pointerY,
+        int windowX,
+        int windowY);
 
-    private void LogPositionUpdated(Windows.Foundation.Point screenPoint, uint dpi, Windows.Foundation.Point physicalPos)
+    private void LogPositionUpdated(Windows.Foundation.Point pointerPosition, Windows.Foundation.Point windowPosition)
     {
         if (!this.logger.IsEnabled(LogLevel.Trace))
         {
@@ -90,11 +88,10 @@ public partial class DragVisualService
         LogPositionUpdated(
             this.logger,
             this.activeToken?.Id ?? Guid.Empty,
-            (int)screenPoint.X,
-            (int)screenPoint.Y,
-            dpi,
-            (int)Math.Round(physicalPos.X),
-            (int)Math.Round(physicalPos.Y));
+            (int)Math.Round(pointerPosition.X),
+            (int)Math.Round(pointerPosition.Y),
+            (int)Math.Round(windowPosition.X),
+            (int)Math.Round(windowPosition.Y));
     }
 
     [LoggerMessage(

@@ -5,7 +5,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:Microsoft.UI.Xaml.Controls"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:drag="using:DroidNet.Aura.Controls"
     xmlns:local="using:DroidNet.Controls.Demo.TabStrip"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
@@ -83,7 +83,7 @@
             Height="32"
             Margin="20"
             Background="{ThemeResource LayerFillColorDefaultBrush}">
-            <dnc:TabStrip
+            <drag:TabStrip
                 x:Name="DemoTabStrip"
                 DragCoordinator="{x:Bind ViewModel.DragCoordinator}"
                 LoggerFactory="{x:Bind ViewModel.LoggerFactory}"

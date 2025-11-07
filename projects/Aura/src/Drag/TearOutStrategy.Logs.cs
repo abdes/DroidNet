@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Drag;
@@ -27,6 +28,15 @@ internal sealed partial class TearOutStrategy
 
     private void LogEnterTearOutMode(Windows.Foundation.Point point) =>
         this.LogEnterTearOutMode(point.X, point.Y);
+
+    [LoggerMessage(
+        Level = LogLevel.Debug,
+        Message = "Reorder drag for item '{Item}' finished with no drop")]
+    private static partial void LogDragCompletedNoDrop(ILogger logger, string item);
+
+    [Conditional("DEBUG")]
+    private void LogDragCompletedNoDrop()
+        => LogDragCompletedNoDrop(this.logger, this.GetDraggedItemName());
 
     [LoggerMessage(
         Level = LogLevel.Debug,
@@ -115,4 +125,6 @@ internal sealed partial class TearOutStrategy
         Level = LogLevel.Debug,
         Message = "Drop ignored - strategy not active")]
     private partial void LogDropIgnored();
+
+    private string GetDraggedItemName() => this.context?.DraggedItem.ToString() ?? "<null>";
 }

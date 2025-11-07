@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Aura.Controls;
+using DroidNet.Aura.Drag;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 

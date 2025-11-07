@@ -16,7 +16,6 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Canvas = Microsoft.UI.Xaml.Controls.Canvas;
 
 namespace DroidNet.Aura.Controls;
 
@@ -48,15 +47,10 @@ public partial class TabStrip : Control, ITabStrip
     /// <summary>Logical name of the template part that supplies horizontal scrolling.</summary>
     public const string PartScrollHostName = "PartScrollHost";
 
-    /// <summary>Logical name of the template part used as an overlay for reorder placeholder visuals.</summary>
-    public const string PartReorderOverlayName = "PartReorderOverlay";
-
     private const double ScrollEpsilon = 1.0;
 
-    private readonly DispatcherCollectionProxy<TabItem>? pinnedProxy;
-    private readonly DispatcherCollectionProxy<TabItem>? regularProxy;
-
-    private bool proxiesDisposed;
+    private DispatcherCollectionProxy<TabItem>? pinnedProxy;
+    private DispatcherCollectionProxy<TabItem>? regularProxy;
 
     // Suppress handling when we programmatically move/modify the Items collection to avoid reentrancy
     private bool suppressCollectionChangeHandling;
@@ -67,7 +61,6 @@ public partial class TabStrip : Control, ITabStrip
     private ItemsRepeater? pinnedItemsRepeater;
     private ItemsRepeater? regularItemsRepeater;
     private ScrollViewer? scrollHost;
-    private Canvas? reorderOverlay;
 
     private ILogger? logger;
 
@@ -79,6 +72,10 @@ public partial class TabStrip : Control, ITabStrip
     private PointerEventHandler? pointerPressedHandler;
     private PointerEventHandler? pointerMovedHandler;
     private PointerEventHandler? pointerReleasedHandler;
+
+    private record struct RealizedItemInfo(FrameworkElement Element, int Index, bool IsPinned);
+
+    private readonly List<RealizedItemInfo> realizedItems = [];
 
     /// <summary>
     ///    Initializes a new instance of the <see cref="TabStrip" /> class.
@@ -149,16 +146,45 @@ public partial class TabStrip : Control, ITabStrip
     /// <inheritdoc/>
     public IReadOnlyList<TabStripItemSnapshot> TakeSnapshot()
     {
-        return this.GetRealizedRegularElements()
-            .Select(el => new TabStripItemSnapshot
+        return this.realizedItems
+            .Where(info => !info.IsPinned)
+            .Select(info =>
             {
-                ItemIndex = el.index,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(
-                    el.element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0))),
-                Width = el.element.RenderSize.Width,
+                Debug.WriteLine($"Realized Element[{info.Index}]: {info.Element.Tag}");
+                var point = info.Element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
+                return new TabStripItemSnapshot
+                {
+                    ItemIndex = info.Index,
+                    LayoutOrigin = info.Element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).AsElement(),
+                    Width = info.Element.RenderSize.Width,
+                };
             })
-            .OrderBy(i => i.LayoutOrigin.ToPoint().X)
+            .OrderBy(s => s.LayoutOrigin.Point.X)
+            .Select(s =>
+            {
+                Debug.WriteLine($"Snapshot[{s.ItemIndex}]: LayoutOrigin={s.LayoutOrigin}, Width={s.Width}");
+                return s;
+            })
             .ToList();
+
+        //return this.GetRealizedRegularElements()
+        //    .Select(el =>
+        //    {
+        //        Debug.WriteLine($"Realized Element[{el.index}]: {(el.element as FrameworkElement)?.Tag}");
+        //        return new TabStripItemSnapshot
+        //        {
+        //            ItemIndex = el.index,
+        //            LayoutOrigin = el.element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).AsElement(),
+        //            Width = el.element.RenderSize.Width,
+        //        };
+        //    })
+        //    .OrderBy(i => i.LayoutOrigin.ToPoint().X)
+        //    .Select(s =>
+        //    {
+        //        Debug.WriteLine($"Snapshot[{s.ItemIndex}]: LayoutOrigin={s.LayoutOrigin}, Width={s.Width}");
+        //        return s;
+        //    })
+        //    .ToList();
     }
 
     /// <inheritdoc/>
@@ -210,21 +236,29 @@ public partial class TabStrip : Control, ITabStrip
     }
 
     /// <inheritdoc/>
-    public bool HitTest(SpatialPoint<ElementSpace> elementPoint)
+    public int HitTestWithThreshold(SpatialPoint<ElementSpace> point, double threshold)
     {
-        var point = elementPoint.Point;
-        return point.X >= 0 && point.X <= this.ActualWidth &&
-                point.Y >= 0 && point.Y <= this.ActualHeight;
-    }
+        // Compute distances from edges, point is relative to strip, so strip X,Y is 0,0
+        var p = point.Point;
+        var dxLeft = p.X;
+        var dxRight = this.ActualWidth - p.X;
+        var dyTop = p.Y;
+        var dyBottom = this.ActualHeight - p.Y;
 
-    /// <inheritdoc/>
-    public bool HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold)
-    {
-        var point = elementPoint.Point;
-        return point.X >= threshold &&
-                point.X <= (this.ActualWidth - threshold) &&
-                point.Y >= threshold &&
-                point.Y <= (this.ActualHeight - threshold);
+        // Minimum inward distance from all sides
+        var minInward = Math.Min(Math.Min(dxLeft, dxRight), Math.Min(dyTop, dyBottom));
+
+        if (minInward > threshold)
+        {
+            return +1; // inside by more than threshold
+        }
+
+        if (minInward < -threshold)
+        {
+            return -1; // outside by more than threshold
+        }
+
+        return 0; // within threshold band
     }
 
     /// <summary>
@@ -266,53 +300,6 @@ public partial class TabStrip : Control, ITabStrip
     }
 
     /// <summary>
-    ///     Maps a repeater index in the RegularItemsRepeater to the corresponding TabItem
-    ///     in the Items collection by skipping pinned items.
-    /// </summary>
-    /// <param name="repeaterIndex">Index within the regular (unpinned) items repeater.</param>
-    /// <returns>The corresponding TabItem, or null if not found.</returns>
-    protected virtual TabItem? GetRegularItemForRepeaterIndex(int repeaterIndex)
-    {
-        if (this.Items is not ObservableCollection<TabItem> items)
-        {
-            return null;
-        }
-
-        var regularIndex = 0;
-        for (var j = 0; j < items.Count; j++)
-        {
-            if (!items[j].IsPinned)
-            {
-                if (regularIndex == repeaterIndex)
-                {
-                    return items[j];
-                }
-
-                regularIndex++;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    ///     Gets the count of items in the unpinned (regular) bucket.
-    /// </summary>
-    /// <returns>The number of items currently in the unpinned bucket.</returns>
-    protected virtual int GetRegularBucketCount() => this.RegularItemsView?.Count ?? 0;
-
-    /// <summary>
-    ///     Computes the X coordinate relative to the regular items repeater from a TabStrip-relative X.
-    /// </summary>
-    /// <param name="pointerX">The X coordinate in TabStrip-relative logical pixels.</param>
-    /// <returns>The corresponding X coordinate in the RegularItemsRepeater's coordinate space.</returns>
-    protected virtual double GetRepeaterRelativeX(double pointerX)
-    {
-        var repeaterOrigin = this.regularItemsRepeater!.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
-        return pointerX - repeaterOrigin.X;
-    }
-
-    /// <summary>
     ///    Called when the control template is applied. Initializes template parts and synchronizes
     ///    template state with current dependency-property values.
     /// </summary>
@@ -337,7 +324,6 @@ public partial class TabStrip : Control, ITabStrip
         this.InitializePinnedItemsRepeaterPart();
         this.InitializeRegularItemsRepeaterPart();
         this.InitializeScrollHostPart();
-        this.InitializeReorderOverlayPart();
 
         // Wire up drag detection after template is applied
         this.InstallDragPointerHandlers();
@@ -379,28 +365,20 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
-    /// <summary>
-    ///     Creates a new placeholder TabItem with appropriate properties.
-    /// </summary>
-    /// <returns>A new TabItem configured as a placeholder.</returns>
-    protected virtual TabItem CreatePlaceholderItem()
-        => new()
-        {
-            Header = string.Empty,
-            IsPlaceholder = true,
-            IsClosable = false,
-            IsPinned = false,
-        };
-
     private static IEnumerable<(UIElement element, int index)> GetRealizedElementsWithIndex(ItemsRepeater repeater)
-        => Enumerable.Range(0, repeater.ItemsSourceView.Count)
-            .Select(i =>
-            {
-                var el = repeater.GetOrCreateElement(i);
-                return (el, Index: i);
-            })
-        .Where(tuple => tuple.el is not null)
-            .OfType<(UIElement element, int index)>();
+    {
+        Debug.WriteLine($"Repeater has {repeater.ItemsSourceView.Count} items");
+        return Enumerable
+                .Range(0, repeater.ItemsSourceView.Count)
+                .Select(i =>
+                {
+                    var el = repeater.GetOrCreateElement(i);
+                    Debug.WriteLine($"TryGetElement[{i}] => {el}");
+                    return (el, Index: i);
+                })
+                .Where(tuple => tuple.el is not null)
+                .OfType<(UIElement element, int index)>();
+    }
 
     private IEnumerable<(UIElement element, int index)> GetRealizedRegularElements()
         => this.regularItemsRepeater is not null
@@ -427,17 +405,6 @@ public partial class TabStrip : Control, ITabStrip
     private T GetRequiredTemplatePart<T>(string name)
         where T : DependencyObject
         => this.GetTemplatePart<T>(name, isRequired: true)!;
-
-    /// <summary>
-    ///     Ensures the reorder overlay canvas exists in the current template.
-    /// </summary>
-    private void EnsureReorderOverlay()
-    {
-        if (this.reorderOverlay == null)
-        {
-            // Not fatal; simply no-op if template lacks the overlay (defensive)
-        }
-    }
 
     private void InitializeRootGridPart()
     {
@@ -478,11 +445,13 @@ public partial class TabStrip : Control, ITabStrip
         {
             this.pinnedItemsRepeater.ElementPrepared -= this.OnItemsRepeaterElementPrepared;
             this.pinnedItemsRepeater.ElementClearing -= this.OnItemsRepeaterElementClearing;
+            this.pinnedItemsRepeater.ElementIndexChanged -= this.OnItemsRepeaterElementIndexChanged;
         }
 
         this.pinnedItemsRepeater = this.GetRequiredTemplatePart<ItemsRepeater>(PartPinnedItemsRepeaterName);
         this.pinnedItemsRepeater.ElementPrepared += this.OnItemsRepeaterElementPrepared;
         this.pinnedItemsRepeater.ElementClearing += this.OnItemsRepeaterElementClearing;
+        this.pinnedItemsRepeater.ElementIndexChanged += this.OnItemsRepeaterElementIndexChanged;
         this.pinnedItemsRepeater.ItemsSource = this.PinnedItemsView;
     }
 
@@ -492,11 +461,13 @@ public partial class TabStrip : Control, ITabStrip
         {
             this.regularItemsRepeater.ElementPrepared -= this.OnItemsRepeaterElementPrepared;
             this.regularItemsRepeater.ElementClearing -= this.OnItemsRepeaterElementClearing;
+            this.regularItemsRepeater.ElementIndexChanged -= this.OnItemsRepeaterElementIndexChanged;
         }
 
         this.regularItemsRepeater = this.GetRequiredTemplatePart<ItemsRepeater>(PartRegularItemsRepeaterName);
         this.regularItemsRepeater.ElementPrepared += this.OnItemsRepeaterElementPrepared;
         this.regularItemsRepeater.ElementClearing += this.OnItemsRepeaterElementClearing;
+        this.regularItemsRepeater.ElementIndexChanged += this.OnItemsRepeaterElementIndexChanged;
         this.regularItemsRepeater.ItemsSource = this.RegularItemsView;
     }
 
@@ -513,38 +484,31 @@ public partial class TabStrip : Control, ITabStrip
         this.scrollHost.SizeChanged += this.OnTabStripSizeChanged;
     }
 
-    // No events are attached to the overlay; it simply hosts placeholder visuals.
-    private void InitializeReorderOverlayPart() =>
-        this.reorderOverlay = this.GetTemplatePart<Canvas>(PartReorderOverlayName);
-
     private void OnItemsRepeaterElementPrepared(ItemsRepeater sender, ItemsRepeaterElementPreparedEventArgs args)
     {
         Debug.Assert(args.Element is FrameworkElement { DataContext: TabItem }, "control expects DataContext to be set with a TabItem, on each of its TabStrip items");
 
         // The element is a Grid wrapper (from ItemTemplate) containing a TabStripItem or placeholder Border
-        if (args.Element is not Grid { DataContext: TabItem ti } wrapperGrid)
+        if (args.Element is not Grid wrapperGrid)
         {
             this.LogBadItem(sender, args.Element);
-            return;
-        }
-
-        // If this is a placeholder item, skip all setup logic (placeholders are lightweight and never interactive)
-        if (ti.IsPlaceholder)
-        {
             return;
         }
 
         // Find the TabStripItem child within the Grid wrapper
         var tsi = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
-        if (tsi == null)
+        if (tsi is not { Item: { } ti })
         {
             this.LogBadItem(sender, args.Element);
             return;
         }
 
+        // Cache it in the realized items list
+        var index = this.Items.IndexOf(ti);
         var pinned = sender == this.pinnedItemsRepeater;
+        this.LogSetupPreparedItem(index, ti, this.TabWidthPolicy == TabWidthPolicy.Compact && !pinned, pinned);
 
-        this.LogSetupPreparedItem(ti, this.TabWidthPolicy == TabWidthPolicy.Compact && !pinned, pinned);
+        this.realizedItems.Add(new RealizedItemInfo(wrapperGrid, index, ReferenceEquals(sender, this.pinnedItemsRepeater)));
 
         tsi.SetValue(AutomationProperties.NameProperty, ti.Header);
         ti.IsSelected = this.SelectedItem == ti;
@@ -571,6 +535,48 @@ public partial class TabStrip : Control, ITabStrip
         // repeaters. Defer to the DispatcherQueue to avoid running during
         // repeater preparation (prevents reentrancy).
         _ = this.DispatcherQueue.TryEnqueue(this.RecalculateAndApplyTabWidths);
+    }
+
+    private void OnItemsRepeaterElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
+    {
+        Debug.Assert(args.Element is Grid, "control expects each element to be a Grid wrapper from ItemTemplate");
+
+        // The element is a Grid wrapper; find the TabStripItem child
+        if (args.Element is not Grid wrapperGrid)
+        {
+            this.LogBadItem(sender, args.Element);
+            return;
+        }
+
+        // Remove from realized items cache
+        _ = this.realizedItems.RemoveAll(info => ReferenceEquals(info.Element, wrapperGrid));
+
+        var tsi = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
+        Debug.Assert(tsi is not null, $"Expecting the wrapper grid to have a child of type {nameof(TabStripItem)}");
+        this.LogClearElement(tsi);
+        tsi.Tapped -= this.OnTabElementTapped;
+        tsi.CloseRequested -= this.OnTabCloseRequested;
+    }
+
+    private void OnItemsRepeaterElementIndexChanged(ItemsRepeater sender, ItemsRepeaterElementIndexChangedEventArgs args)
+    {
+        // The element is a Grid wrapper; find the TabStripItem child
+        if (args.Element is not Grid wrapperGrid)
+        {
+            this.LogBadItem(sender, args.Element);
+            return;
+        }
+
+        this.LogItemIndexChanged(sender, args);
+
+        for (var i = 0; i < this.realizedItems.Count; i++)
+        {
+            if (ReferenceEquals(this.realizedItems[i].Element, wrapperGrid))
+            {
+                this.realizedItems[i] = new RealizedItemInfo(wrapperGrid, args.NewIndex, ReferenceEquals(sender, this.pinnedItemsRepeater));
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -608,36 +614,6 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
-    private void OnItemsRepeaterElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
-    {
-        Debug.Assert(args.Element is Grid, "control expects each element to be a Grid wrapper from ItemTemplate");
-
-        // The element is a Grid wrapper; find the TabStripItem child
-        if (args.Element is not Grid wrapperGrid)
-        {
-            this.LogBadItem(sender, args.Element);
-            return;
-        }
-
-        // If this is a placeholder, skip cleanup (no event handlers were attached)
-        if (wrapperGrid.DataContext is TabItem { IsPlaceholder: true })
-        {
-            return;
-        }
-
-        var tsi = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
-        if (tsi == null)
-        {
-            // Placeholder Border, not a TabStripItem - no cleanup needed
-            return;
-        }
-
-        this.LogClearElement(tsi);
-
-        tsi.Tapped -= this.OnTabElementTapped;
-        tsi.CloseRequested -= this.OnTabCloseRequested;
-    }
-
     private void TabStrip_Unloaded(object? sender, RoutedEventArgs e)
     {
         // Unsubscribe immediately and dispose proxies so we do not hold onto
@@ -647,14 +623,10 @@ public partial class TabStrip : Control, ITabStrip
         // Uninstall drag detection handlers
         this.UninstallDragPointerHandlers();
 
-        if (this.proxiesDisposed)
-        {
-            return;
-        }
-
         this.pinnedProxy?.Dispose();
+        this.pinnedProxy = null;
         this.regularProxy?.Dispose();
-        this.proxiesDisposed = true;
+        this.regularProxy = null;
 
         // Log unloading for troubleshooting
         this.LogUnloaded();
@@ -695,39 +667,6 @@ public partial class TabStrip : Control, ITabStrip
             this.RemoveHandler(PointerReleasedEvent, this.pointerReleasedHandler);
             this.pointerReleasedHandler = null;
         }
-    }
-
-    // (moved reorder helper methods earlier in the file)
-
-    /// <summary>
-    ///     Computes the left coordinate (TabStrip-relative) for the given unpinned-bucket slot index.
-    /// </summary>
-    private double GetBucketSlotLeft(int bucketIndex)
-    {
-        var count = this.GetRegularBucketCount();
-        if (this.regularItemsRepeater == null || count == 0)
-        {
-            return 0.0;
-        }
-
-        bucketIndex = Math.Max(0, Math.Min(bucketIndex, count));
-
-        var layout = this.regularItemsRepeater.Layout as StackLayout;
-        var spacing = layout?.Spacing ?? 0;
-
-        // Calculate position relative to the regularItemsRepeater
-        var left = 0.0;
-        for (var i = 0; i < bucketIndex && i < count; i++)
-        {
-            if (this.regularItemsRepeater.TryGetElement(i) is FrameworkElement fe)
-            {
-                left += fe.ActualWidth + spacing;
-            }
-        }
-
-        // Convert to TabStrip-relative coordinates for the overlay canvas
-        var repeaterOrigin = this.regularItemsRepeater.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
-        return left + repeaterOrigin.X;
     }
 
     private void OnTabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
@@ -916,7 +855,7 @@ public partial class TabStrip : Control, ITabStrip
             {
                 // TryGetElement returns the Grid wrapper from ItemTemplate
                 var wrapper = repeater.TryGetElement(i) as Grid;
-                if (wrapper?.DataContext is TabItem { IsPlaceholder: false } ti)
+                if (wrapper?.DataContext is TabItem { } ti)
                 {
                     // Extract TabStripItem from Grid wrapper
                     var tsi = wrapper.Children.OfType<TabStripItem>().FirstOrDefault();
@@ -935,7 +874,7 @@ public partial class TabStrip : Control, ITabStrip
             for (var i = 0; i < count; i++)
             {
                 var child = VisualTreeHelper.GetChild(repeater, i);
-                if (child is Grid wrapper && wrapper.DataContext is TabItem { IsPlaceholder: false } ti)
+                if (child is Grid wrapper && wrapper.DataContext is TabItem { } ti)
                 {
                     var tsi = wrapper.Children.OfType<TabStripItem>().FirstOrDefault();
                     if (tsi != null)
@@ -1108,7 +1047,7 @@ public partial class TabStrip : Control, ITabStrip
 
     private void OnItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        var items = this.Items as ObservableCollection<TabItem>;
+        var items = this.Items;
 
         // Delegate work to smaller helpers for clarity and testability
         if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems is not null && items is not null && !this.suppressCollectionChangeHandling)
@@ -1128,7 +1067,10 @@ public partial class TabStrip : Control, ITabStrip
             this.HandleRemovedItems(items, e);
         }
 
-        this.EnsureSelectedItem(items);
+        if (!this.suppressCollectionChangeHandling && items?.Count > 0 && this.SelectedItem is null)
+        {
+            this.SelectedItem = items[0];
+        }
 
         _ = this.DispatcherQueue.TryEnqueue(this.UpdateOverflowButtonVisibility);
     }
@@ -1143,12 +1085,6 @@ public partial class TabStrip : Control, ITabStrip
                 // Log addition now (collection already contains the new item)
                 var count = items.Count;
                 this.LogItemAdded(ti, count);
-
-                // Skip selection/activation logic for placeholder items used during drag reordering
-                if (ti.IsPlaceholder)
-                {
-                    continue;
-                }
 
                 // Compute desired index based on current selection snapshot
                 int desiredIndex;
@@ -1245,19 +1181,6 @@ public partial class TabStrip : Control, ITabStrip
                     var fallback = Math.Min(Math.Max(0, removedIndex), items.Count - 1);
                     this.SelectedItem = items[fallback];
                 }
-            }
-        }
-    }
-
-    private void EnsureSelectedItem(ObservableCollection<TabItem>? items)
-    {
-        if (!this.suppressCollectionChangeHandling && items?.Count > 0 && this.SelectedItem is null)
-        {
-            // Select the first non-placeholder item
-            var firstNonPlaceholder = items.FirstOrDefault(ti => !ti.IsPlaceholder);
-            if (firstNonPlaceholder is not null)
-            {
-                this.SelectedItem = firstNonPlaceholder;
             }
         }
     }

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Drag;
 
@@ -31,8 +33,9 @@ public partial class DragVisualService : IDragVisualService
     private DragSessionToken? activeToken;
     private DragVisualDescriptor? activeDescriptor;
     private DragOverlayWindow? overlayWindow;
-    private ISpatialMapper? spatialMapper;
-    private SpatialPoint<ScreenSpace> hotspot;
+    private SpatialPoint<ScreenSpace> windowPositionOffsets;
+    private bool windowIsShown;
+    private ISpatialMapper? mapper;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DragVisualService"/> class.
@@ -62,7 +65,7 @@ public partial class DragVisualService : IDragVisualService
     }
 
     /// <inheritdoc/>
-    public DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point logicalHotspot)
+    public DragSessionToken StartSession(DragVisualDescriptor descriptor, SpatialPoint<PhysicalScreenSpace> initialPosition, SpatialPoint<ScreenSpace> hotspotOffsets)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
         this.AssertUIThread();
@@ -78,17 +81,16 @@ public partial class DragVisualService : IDragVisualService
             var token = new DragSessionToken { Id = Guid.NewGuid() };
             this.activeToken = token;
             this.activeDescriptor = descriptor;
-            this.hotspot = logicalHotspot.AsScreen();
+            this.windowPositionOffsets = hotspotOffsets;
 
             // Subscribe to descriptor changes
             this.activeDescriptor.PropertyChanged += this.OnDescriptorPropertyChanged;
 
             // Create the overlay window using the factory
             this.CreateOverlayWindowAsync().GetAwaiter().GetResult();
+            this.mapper = this.spatialMapperFactory(this.overlayWindow, null);
 
-            // Create the spatial mapper with the window for Screen↔Physical conversions
-            // Element is not needed since we only do screen-space conversions
-            this.spatialMapper = this.spatialMapperFactory(window: this.overlayWindow, element: null);
+            this.UpdatePosition(token, initialPosition);
 
             this.LogSessionStarted();
 
@@ -97,7 +99,7 @@ public partial class DragVisualService : IDragVisualService
     }
 
     /// <inheritdoc/>
-    public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> physicalScreenPoint)
+    public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> position)
     {
         this.AssertUIThread();
 
@@ -109,32 +111,31 @@ public partial class DragVisualService : IDragVisualService
                 return;
             }
 
-            if (this.overlayWindow is null || this.spatialMapper is null)
+            if (this.overlayWindow is null)
             {
                 this.LogOverlayWindowNotInitialized();
                 return;
             }
 
-            // Convert physical screen point to logical screen space
-            var logicalCursor = this.spatialMapper.ToScreen(physicalScreenPoint);
-
-            // Subtract hotspot to get window position
-            var logicalWindowPosition = new Windows.Foundation.Point(
-                logicalCursor.Point.X - this.hotspot.Point.X,
-                logicalCursor.Point.Y - this.hotspot.Point.Y);
-
-            // Convert back to physical for AppWindow positioning
-            var physicalWindowPosition = this.spatialMapper.ToPhysicalScreen(logicalWindowPosition.AsScreen());
+            // Subtract windowPositionOffsets to get window position
+            Debug.Assert(this.mapper is not null, "Spatial mapper should be initialized when overlay window is created.");
+            var windowPosition = (this.mapper.ToPhysicalScreen(position) - this.mapper.ToPhysicalScreen(this.windowPositionOffsets)).ToPoint();
 
             this.LogPositionUpdated(
-                physicalScreenPoint.Point,
-                this.spatialMapper.WindowInfo.WindowDpi,
-                physicalWindowPosition.Point);
+                position.Point,
+                windowPosition);
 
             // Move the window using the virtual MoveWindow method
             this.overlayWindow.MoveWindow(new Windows.Graphics.PointInt32(
-                (int)Math.Round(physicalWindowPosition.Point.X),
-                (int)Math.Round(physicalWindowPosition.Point.Y)));
+                (int)Math.Round(windowPosition.X),
+                (int)Math.Round(windowPosition.Y)));
+
+            if (!this.windowIsShown)
+            {
+                // Show the window without activating it (no focus steal)
+                this.overlayWindow.ShowNoActivate();
+                this.windowIsShown = true;
+            }
         }
     }
 
@@ -157,12 +158,14 @@ public partial class DragVisualService : IDragVisualService
             }
 
             this.DestroyOverlayWindow();
+            this.windowIsShown = false;
 
             this.LogSessionEnded();
 
             this.activeDescriptor = null;
             this.activeToken = null;
-            this.hotspot = default;
+            this.mapper = null;
+            this.windowPositionOffsets = default;
         }
     }
 
@@ -191,15 +194,16 @@ public partial class DragVisualService : IDragVisualService
         this.DestroyOverlayWindow();
 
         // Get initial size from descriptor
-        var requestedSize = this.activeDescriptor?.RequestedSize ?? new Windows.Foundation.Size(200, 100);
+        var requestedSize = this.activeDescriptor?.RequestedSize ?? new Size(200, 100);
         if (requestedSize.Width <= 0 || requestedSize.Height <= 0)
         {
-            requestedSize = new Windows.Foundation.Size(200, 100);
+            requestedSize = new Size(400, 400);
         }
 
         // Create the overlay window using the factory
         // Note: We don't register this window with the window manager since it's a transient overlay
-        this.overlayWindow = await this.windowFactory.CreateWindow<DragOverlayWindow>().ConfigureAwait(false);
+        this.overlayWindow = await this.windowFactory.CreateDecoratedWindow<DragOverlayWindow>(WindowCategory.Frameless).ConfigureAwait(false);
+        this.overlayWindow.AppWindow.IsShownInSwitchers = false;
 
         // Get the window's content element for spatial mapper and data binding
         if (this.overlayWindow.Content is not FrameworkElement element)
@@ -213,18 +217,18 @@ public partial class DragVisualService : IDragVisualService
         // Set the window size
         this.overlayWindow.SetSize(requestedSize);
 
-        // Show the window without activating it (no focus steal)
-        this.overlayWindow.ShowNoActivate();
-
         this.LogLayeredWindowCreated();
     }
 
     private void DestroyOverlayWindow()
     {
-        this.overlayWindow?.Close();
-        this.overlayWindow = null;
+        if (this.overlayWindow is null)
+        {
+            return;
+        }
 
-        this.spatialMapper = null;
+        this.overlayWindow.Close();
+        this.overlayWindow = null;
 
         this.LogLayeredWindowDestroyed();
     }

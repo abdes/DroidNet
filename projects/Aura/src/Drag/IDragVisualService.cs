@@ -17,14 +17,14 @@ public interface IDragVisualService
     ///     must be provided to <see cref="EndSession(DragSessionToken)"/>.
     /// </summary>
     /// <param name="descriptor">Descriptor describing visual content and state.</param>
-    /// <param name="logicalHotspot">
+    /// <param name="hotspotOffsets">
     ///     Hotspot offset in **LOGICAL PIXELS** (XAML/DIP coordinate space) from the top-left of the header
     ///     image to align under the pointer. Service stores this in logical pixels and converts to physical
     ///     on every position update using the current monitor DPI.
     /// </param>
     /// <returns>A token representing the active session.</returns>
     /// <exception cref="InvalidOperationException">If a session is already active.</exception>
-    public DragSessionToken StartSession(DragVisualDescriptor descriptor, Windows.Foundation.Point logicalHotspot);
+    public DragSessionToken StartSession(DragVisualDescriptor descriptor, SpatialPoint<PhysicalScreenSpace> initialPosition, SpatialPoint<ScreenSpace> hotspotOffsets);
 
     /// <summary>
     ///     Updates the position of the drag overlay identified by <paramref name="token"/> to the
@@ -33,12 +33,12 @@ public interface IDragVisualService
     ///     behavior when the cursor crosses monitors with different DPI scaling.
     /// </summary>
     /// <param name="token">Session token.</param>
-    /// <param name="physicalScreenPoint">
+    /// <param name="position">
     ///     Cursor location in **PHYSICAL SCREEN PIXELS** as a typed spatial point.
-    ///     Service converts to logical pixels using current monitor DPI, subtracts the logical hotspot,
+    ///     Service converts to logical pixels using current monitor DPI, subtracts the logical windowPositionOffsets,
     ///     and converts back to physical pixels for window positioning.
     /// </param>
-    public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> physicalScreenPoint);
+    public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> position);
 
     /// <summary>
     ///     Ends the previously started session identified by <paramref name="token"/>.
