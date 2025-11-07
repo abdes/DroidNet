@@ -15,7 +15,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;
 
-namespace DroidNet.Aura.Tests.Drag;
+namespace DroidNet.Aura.Drag.Tests;
 
 /// <summary>
 ///     Unit tests for <see cref="DragVisualService"/> hotspot application and window positioning
