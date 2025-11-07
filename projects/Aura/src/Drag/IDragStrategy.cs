@@ -39,7 +39,7 @@ internal interface IDragStrategy
     /// <exception cref="ArgumentNullException">
     ///     Thrown if <paramref name="context"/> is <see langword="null"/>.
     /// </exception>
-    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> position);
+    public void InitiateDrag(DragContext context, SpatialPoint<PhysicalScreenSpace> position);
 
     /// <summary>
     ///     Updates the drag operation in response to pointer movement. This method should be called
@@ -52,13 +52,17 @@ internal interface IDragStrategy
     /// <remarks>
     ///     This method has no effect if a drag operation is not currently in progress.
     /// </remarks>
-    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> position);
+    public void OnDragPositionChanged(SpatialPoint<PhysicalScreenSpace> position);
 
     /// <summary>
     ///     Finalizes the drag operation and applies any resulting changes. Drag operations cannot
     ///     be cancelled and must always be completed. For every call to <see cref="InitiateDrag"/>,
     ///     there must be a corresponding call to <see cref="CompleteDrag"/>.
     /// </summary>
+    /// <param name="drop">
+    ///     Indicates whether the drag operation should result in a drop action. If <see langword="true"/>,
+    ///     the item is dropped at the current location; otherwise, the operation completes without a drop.
+    /// </param>
     /// <returns>
     ///     The final drop index in the destination TabStrip's Items collection, or <see langword="null"/>
     ///     if the strategy does not produce a final index (e.g., TearOut mode where the item is dropped
@@ -69,5 +73,5 @@ internal interface IDragStrategy
     ///     After completion, further calls to <see cref="OnDragPositionChanged"/> or <see
     ///     cref="CompleteDrag"/> have no effect until a new drag is initiated.
     /// </remarks>
-    public int? CompleteDrag();
+    public int? CompleteDrag(bool drop);
 }

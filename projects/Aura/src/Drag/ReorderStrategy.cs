@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Diagnostics;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
@@ -40,36 +39,29 @@ internal partial class ReorderStrategy : IDragStrategy
     internal bool IsActive => this.context is not null;
 
     /// <inheritdoc/>
-    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> position)
+    public void InitiateDrag(DragContext context, SpatialPoint<PhysicalScreenSpace> position)
     {
         ArgumentNullException.ThrowIfNull(context);
         Debug.Assert(context.TabStrip is not null, "TabStrip must be set in DragContext");
 
         if (this.IsActive)
         {
-            this.LogAlreadyActive();
-            throw new InvalidOperationException("ReorderStrategy is already active");
+            this.LogIgnored("InitiateDrag", "a drag operation is already ongoing.");
+            return;
         }
 
-        var localPosition = context.SpatialMapper.ToElement(position);
-        this.LogEnterReorderMode(position, localPosition);
+        this.LogEnterReorderMode(position);
 
         this.context = context;
-
-        // During re-order, we are confined to the TabStrip that initiated the drag, and it is not
-        // realistic or expected to have tabs changed. Therefore, we take a visual snapshot of the strip's
-        // regular items, and work with it for as long as we are re-ordering and not tearing out.
-        this.layout = new(context, localPosition);
-
-        this.LogReorderInitiated(this.layout.DraggedItemVisualIndex);
+        this.layout = new(context, context.SpatialMapper.ToElement(position));
     }
 
     /// <inheritdoc/>
-    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> position)
+    public void OnDragPositionChanged(SpatialPoint<PhysicalScreenSpace> position)
     {
         if (!this.IsActive)
         {
-            this.LogMoveIgnored();
+            this.LogIgnored("DragPositionChanged", "a drag operation is already ongoing.");
             return;
         }
 
@@ -88,11 +80,20 @@ internal partial class ReorderStrategy : IDragStrategy
     }
 
     /// <inheritdoc/>
-    public int? CompleteDrag()
+    public int? CompleteDrag(bool drop)
     {
-        if (!this.IsActive || this.context is null)
+        if (!drop)
         {
-            this.LogDropIgnored();
+            this.LogDragCompletedNoDrop();
+
+            // With no drop, completing the drag simply resets state
+            this.context = null;
+            this.layout = null;
+        }
+
+        if (!this.IsActive)
+        {
+            this.LogIgnored("CompleteDrag", "no drag operation is ongoing");
             return null;
         }
 
@@ -100,11 +101,10 @@ internal partial class ReorderStrategy : IDragStrategy
 
         var (dragIndex, dropIndex) = this.layout.GetCommittedIndices();
 
-        this.LogCommittedIndices(dragIndex, dropIndex);
         this.LogDrop(dragIndex, dropIndex);
 
         // Use interface methods to manipulate items
-        Debug.Assert(this.context.TabStrip is not null, "TabStrip must be set in DragContext");
+        Debug.Assert(this.context?.TabStrip is not null, "TabStrip must be set in DragContext");
         this.context.TabStrip.RemoveItemAt(dragIndex);
         this.context.TabStrip.InsertItemAt(dropIndex, this.context.DraggedItem);
 
@@ -126,35 +126,35 @@ internal partial class ReorderStrategy : IDragStrategy
     private sealed class ReorderLayout
     {
         private readonly List<TabStripItemSnapshot> items;
-        private readonly int draggedItemVisualIndex;
+        private readonly double grabOffsetX;
+
         private int lastDropTargetVisualIndex;
-        private double grabOffsetX;
 
         public ReorderLayout(DragContext context, SpatialPoint<ElementSpace> grabPoint)
         {
             Debug.Assert(context is { TabStrip: { } }, message: "Context must be set to take snapshot");
 
             // Use the interface method to take snapshot
-            this.items = context.TabStrip.TakeSnapshot().ToList();
+            this.items = [.. context.TabStrip.TakeSnapshot()];
 
             // Find the dragged item in the snapshot using its ItemIndex from context
-            this.draggedItemVisualIndex = this.items.FindIndex(i => i.ItemIndex == context.DraggedItemIndex);
-            Debug.Assert(this.draggedItemVisualIndex >= 0, "Dragged item must be found in TabStrip items");
-            this.lastDropTargetVisualIndex = this.draggedItemVisualIndex;
-            Debug.WriteLine("Dragged item visual index: " + this.draggedItemVisualIndex);
+            this.DraggedItemVisualIndex = this.items.FindIndex(i => i.ItemIndex == context.DraggedItemIndex);
+            Debug.Assert(this.DraggedItemVisualIndex >= 0, "Dragged item must be found in TabStrip items");
+            this.lastDropTargetVisualIndex = this.DraggedItemVisualIndex;
+            Debug.WriteLine("Dragged item visual index: " + this.DraggedItemVisualIndex);
 
-            var draggedItem = this.items[this.draggedItemVisualIndex];
+            var draggedItem = this.items[this.DraggedItemVisualIndex];
             this.grabOffsetX = grabPoint.Point.X - draggedItem.LayoutOrigin.Point.X;
             Debug.WriteLine("Grab offset X: " + this.grabOffsetX);
         }
 
-        public int DraggedItemVisualIndex => this.draggedItemVisualIndex;
+        public int DraggedItemVisualIndex { get; }
 
         public IReadOnlyList<TabStripItemSnapshot> Items => this.items.AsReadOnly();
 
         public (TabStripItemSnapshot? item, string direction) UpdateDrag(SpatialPoint<ElementSpace> pointer)
         {
-            var draggedItem = this.items[this.draggedItemVisualIndex];
+            var draggedItem = this.items[this.DraggedItemVisualIndex];
             Debug.WriteLine($"Pointer: {pointer}");
             Debug.WriteLine($"Dragged item logical index: {draggedItem.ItemIndex}");
 
@@ -165,7 +165,7 @@ internal partial class ReorderStrategy : IDragStrategy
 
             for (var i = 0; i < this.items.Count; i++)
             {
-                if (i == this.draggedItemVisualIndex)
+                if (i == this.DraggedItemVisualIndex)
                 {
                     Debug.WriteLine($"Skipping dragged item at index {i}");
                     continue;
@@ -182,7 +182,7 @@ internal partial class ReorderStrategy : IDragStrategy
                     Debug.WriteLine($"Pointer inside item {i}, localX={localX}, halfWidth={item.Width / 2}");
                     if (localX > item.Width / 2)
                     {
-                        double direction = i < this.draggedItemVisualIndex ? -1 : 1;
+                        double direction = i < this.DraggedItemVisualIndex ? -1 : 1;
                         var dir = direction < 0 ? "left" : "right";
                         item.Offset += direction * item.Width;
                         this.lastDropTargetVisualIndex = i;
@@ -191,10 +191,8 @@ internal partial class ReorderStrategy : IDragStrategy
                         // Return the displayed item index
                         return (item, dir);
                     }
-                    else
-                    {
-                        Debug.WriteLine($"Pointer in left half of item {i}, no displacement");
-                    }
+
+                    Debug.WriteLine($"Pointer in left half of item {i}, no displacement");
                 }
             }
 
@@ -204,7 +202,7 @@ internal partial class ReorderStrategy : IDragStrategy
 
         public (int dragIndex, int dropIndex) GetCommittedIndices()
         {
-            var dragIndex = this.items[this.draggedItemVisualIndex].ItemIndex;
+            var dragIndex = this.items[this.DraggedItemVisualIndex].ItemIndex;
             var dropIndex = this.items[this.lastDropTargetVisualIndex].ItemIndex;
             return (dragIndex, dropIndex);
         }

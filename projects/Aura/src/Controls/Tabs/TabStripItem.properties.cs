@@ -5,6 +5,7 @@
 #pragma warning disable SA1204 // Static elements should appear before instance elements
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Controls;
@@ -109,5 +110,9 @@ public partial class TabStripItem
         => ((TabStripItem)d).UpdateVisualStates(useTransitions: true);
 
     private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory)
-        => this.logger = loggerFactory?.CreateLogger<TabStripItem>();
+    {
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<TabStripItem>();
+        var visual = typeof(TabStripItem).FullName + ".Visual";
+        this.visualLogger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(visual);
+    }
 }

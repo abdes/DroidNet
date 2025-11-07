@@ -2,11 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Drag;
 using DroidNet.Coordinates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Controls;
 
@@ -23,18 +25,19 @@ public partial class TabStrip
     /// </summary>
     private const double DragThresholdPixels = 5.0;
 
+    private bool isDragOngoing;
     private TabStripItem? draggedItem;
     private SpatialPoint<ScreenSpace> dragStartPoint;
     private bool isDragThresholdExceeded;
+    private Point? hotspotOffsets;
 
     /// <summary>
-    ///     Gets the currently dragged item for testing purposes.
+    ///     Gets the currently dragged visualItem for testing purposes.
     /// </summary>
     protected TabStripItem? DraggedItem => this.draggedItem;
 
     /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage(category: "Design", "CA1031:Do not catch general exception types", Justification = "by design, drag/drop operation will always complete")]
-    void ITabStrip.CloseTab(object item)
+    public void CloseTab(object item)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (item is not TabItem tabItem)
@@ -55,13 +58,15 @@ public partial class TabStrip
     }
 
     /// <inheritdoc/>
-    void ITabStrip.CompleteDrag(object item, ITabStrip? destinationStrip, int? newIndex)
+    public void CompleteDrag(object item, ITabStrip? destinationStrip, int? newIndex)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (item is not TabItem tabItem)
         {
             throw new ArgumentException("Item must be of type TabItem.", nameof(item));
         }
+
+        this.isDragOngoing = false;
 
         try
         {
@@ -81,7 +86,7 @@ public partial class TabStrip
     }
 
     /// <inheritdoc/>
-    void ITabStrip.TearOutTab(object item, SpatialPoint<ScreenSpace> dropPoint)
+    public void TearOutTab(object item, SpatialPoint<ScreenSpace> dropPoint)
     {
         ArgumentNullException.ThrowIfNull(item);
         if (item is not TabItem tabItem)
@@ -162,7 +167,8 @@ public partial class TabStrip
             this.LogThresholdExceeded(delta, DragThresholdPixels);
 
             // Convert to screen coordinates at the point of threshold crossing
-            this.BeginDrag(this.draggedItem, currentPoint);
+            this.InitiateDrag(this.draggedItem, currentPoint);
+            this.draggedItem = null; // Clear to avoid re-triggering
             return true;
         }
 
@@ -182,9 +188,9 @@ public partial class TabStrip
     {
         var handled = false;
 
-        if (this.draggedItem != null)
+        if (this.isDragOngoing)
         {
-            this.LogPointerReleased(this.draggedItem);
+            this.LogPointerReleasedWhileDragging();
 
             // If drag was active, end it.
             if (this.isDragThresholdExceeded && this.DragCoordinator != null)
@@ -195,16 +201,17 @@ public partial class TabStrip
                 handled = true;
             }
 
-            this.draggedItem = null;
-            this.isDragThresholdExceeded = false;
         }
+
+        this.isDragThresholdExceeded = false;
+        this.draggedItem = null;
 
         return handled;
     }
 
     /// <summary>
     ///     Finds the TabStripItem under the pointer event location using hit-testing.
-    ///     Returns null if the pointer is not over any tab item.
+    ///     Returns null if the pointer is not over any tab visualItem.
     /// </summary>
     /// <param name="e">The pointer event arguments.</param>
     /// <returns>The TabStripItem under the pointer, or null if none found.</returns>
@@ -222,52 +229,58 @@ public partial class TabStrip
     }
 
     /// <summary>
-    ///     Begins a drag operation for the specified tab item. Raises TabDragImageRequest to allow
+    ///     Begins a drag operation for the specified tab visualItem. Raises TabDragImageRequest to allow
     ///     the application to provide a preview image, clears multi-selection (GUD-001), marks the
-    ///     item as dragging, and initiates the coordinator session.
+    ///     visualItem as dragging, and initiates the coordinator session.
     /// </summary>
-    /// <param name="item">The TabStripItem being dragged.</param>
+    /// <param name="visualItem">The TabStripItem being dragged.</param>
     /// <param name="initialScreenPoint">Initial screen position where drag threshold was exceeded. If not provided, will use GetCursorPos.</param>
     /// <remarks>
     ///     This method is protected virtual to allow tests to verify drag initiation logic
     ///     independently. Tests can override this method to inject custom drag behavior or
-    ///     verify hotspot calculation, selection clearing, and coordinator interaction.
+    ///     verify windowPositionOffsets calculation, selection clearing, and coordinator interaction.
     /// </remarks>
-    protected virtual void BeginDrag(TabStripItem item, SpatialPoint<ScreenSpace>? initialScreenPoint = null)
+    protected virtual void InitiateDrag(TabStripItem visualItem, SpatialPoint<ScreenSpace> initialScreenPoint)
     {
-        ArgumentNullException.ThrowIfNull(item);
-        this.AssertUIThread();
-
-        if (this.DragCoordinator == null || item.Item == null)
+        if (this.DragCoordinator is null)
         {
-            this.LogBeginDragFailed("Coordinator or Item is null");
-            return;
+            return; // No coordinator, no drag
         }
 
-        this.LogBeginDragStarted(item);
+        Debug.Assert(this.hotspotOffsets is not null, "expecting hotspot offsets to be initialized before drag is initiated");
+        this.AssertUIThread();
 
-        // Clear multi-selection: only the dragged item remains selected (GUD-001)
+        if (visualItem is not { Item: { } tabItem })
+        {
+            throw new ArgumentException("TabStripItem must not be null, and have a valid Item to initiate drag.", nameof(visualItem));
+        }
+
+        this.LogInitiateDrag(visualItem.Item, initialScreenPoint);
+
+        // Clear multi-selection: only the dragged visualItem remains selected (GUD-001)
         var originalSelection = this.SelectedItem;
-        this.SelectedItem = item.Item;
+        this.SelectedItem = tabItem;
         this.LogSelectionCleared();
 
-        // Mark the item as dragging
-        item.IsDragging = true;
+        // Mark the visualItem as dragging
+        visualItem.IsDragging = true;
 
         // Start the drag session via coordinator
         try
         {
-            var itemIndex = this.Items.IndexOf(item.Item);
-            this.DragCoordinator.StartDrag(item.Item, itemIndex, this, item, initialScreenPoint);
-            this.LogDragSessionStarted();
+            var itemIndex = this.Items.IndexOf(tabItem);
+            this.DragCoordinator.StartDrag(tabItem, itemIndex, this, this, visualItem, initialScreenPoint, this.hotspotOffsets ?? new(0, 0));
+            this.dragStartPoint = default; // Clear stored start point
         }
         catch (InvalidOperationException ex)
         {
             // Session already active in another part of the process; restore state and log
-            item.IsDragging = false;
+            visualItem.IsDragging = false;
             this.SelectedItem = originalSelection;
-            this.LogDragSessionFailure(ex);
+            this.LogInitiateDragFailed(ex);
         }
+
+        this.isDragOngoing = true;
     }
 
     private void OnPreviewPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -276,9 +289,10 @@ public partial class TabStrip
         this.AssertUIThread();
 
         var hitItem = this.FindTabStripItemAtPoint(e);
-        var position = e.GetCurrentPoint(this).Position;
+        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
 
-        this.HandlePointerPressed(hitItem, position.AsScreen());
+        this.hotspotOffsets = e.GetCurrentPoint(hitItem).Position;
+        this.HandlePointerPressed(hitItem, point);
 
         // If a drag started, capture the pointer for tracking across boundaries
         if (this.draggedItem != null)
@@ -302,13 +316,8 @@ public partial class TabStrip
         ArgumentNullException.ThrowIfNull(e);
         this.AssertUIThread();
 
-        if (this.draggedItem == null)
-        {
-            return;
-        }
-
-        var currentPoint = e.GetCurrentPoint(this).Position;
-        e.Handled = this.HandlePointerMoved(currentPoint.AsScreen());
+        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
+        e.Handled = this.HandlePointerMoved(point);
     }
 
     private void OnPreviewPointerReleased(object sender, PointerRoutedEventArgs e)
@@ -317,14 +326,10 @@ public partial class TabStrip
         this.AssertUIThread();
 
         // Get pointer position in LOGICAL screen coordinates (desktop-relative DIPs)
-        var point = e.GetCurrentPoint(relativeTo: null).Position;
-        e.Handled = this.HandlePointerReleased(point.AsScreen());
+        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
+        e.Handled = this.HandlePointerReleased(point);
 
-        // Release pointer capture if drag was active
-        if (this.draggedItem == null)
-        {
-            this.ReleasePointerCapture(e.Pointer);
-        }
+        this.ReleasePointerCapture(e.Pointer);
     }
 
     /// <summary>

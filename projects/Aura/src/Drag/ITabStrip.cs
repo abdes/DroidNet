@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Coordinates;
-using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Drag;
 
@@ -64,7 +63,7 @@ public interface ITabStrip
     ///     to element coordinates, then check if it falls within the element's bounds (0,0 to ActualWidth,ActualHeight).
     ///     </para>
     /// </remarks>
-    public bool HitTest(SpatialPoint<ElementSpace> elementPoint);
+    //public bool HitTest(SpatialPoint<ElementSpace> elementPoint);
 
     /// <summary>
     ///     Performs hit-testing with an inset threshold to determine if a point is well within the TabStrip's bounds.
@@ -84,7 +83,7 @@ public interface ITabStrip
     ///     The threshold creates an "inner zone" that ensures the cursor is sufficiently inside the
     ///     TabStrip before re-entering reorder mode, preventing rapid mode flickering at the edges.
     /// </remarks>
-    public bool HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold);
+    public int HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold);
 
     /// <summary>
     ///     Requests a preview image for the specified tab item during drag operations.

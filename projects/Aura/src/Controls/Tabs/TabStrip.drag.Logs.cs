@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Controls;
@@ -76,15 +77,15 @@ public partial class TabStrip
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Pointer released.")]
-    private static partial void LogPointerReleasedImpl(ILogger logger);
+        Message = "Pointer released while drag is ongoing.")]
+    private static partial void LogPointerReleasedWhileDragging(ILogger logger);
 
     [Conditional("DEBUG")]
-    private void LogPointerReleased(TabStripItem item)
+    private void LogPointerReleasedWhileDragging()
     {
         if (this.logger is ILogger logger)
         {
-            LogPointerReleasedImpl(logger);
+            LogPointerReleasedWhileDragging(logger);
         }
     }
 
@@ -105,31 +106,16 @@ public partial class TabStrip
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Beginning drag.")]
-    private static partial void LogBeginDragStartedImpl(ILogger logger);
+        Level = LogLevel.Debug,
+        Message = "Initiating drag for item '{Item}' inside TabStrip '{Strip}' at screen point ({Point})")]
+    private static partial void LogBeginDragStartedImpl(ILogger logger, string item, string strip, SpatialPoint<ScreenSpace> point);
 
     [Conditional("DEBUG")]
-    private void LogBeginDragStarted(TabStripItem item)
+    private void LogInitiateDrag(TabItem item, SpatialPoint<ScreenSpace> point)
     {
         if (this.logger is ILogger logger)
         {
-            LogBeginDragStartedImpl(logger);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Failed to begin drag: {Reason}.")]
-    private static partial void LogBeginDragFailed(ILogger logger, string Reason);
-
-    [Conditional("DEBUG")]
-    private void LogBeginDragFailed(string reason)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogBeginDragFailed(logger, reason);
+            LogBeginDragStartedImpl(logger, item.ToString(), this.Name, point);
         }
     }
 
@@ -150,27 +136,12 @@ public partial class TabStrip
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Drag session started with coordinator.")]
-    private static partial void LogDragSessionStartedImpl(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogDragSessionStarted()
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogDragSessionStartedImpl(logger);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Drag session start failed.")]
+        Message = "Failed to initiate drag.")]
     private static partial void LogDragSessionFailure(ILogger logger, InvalidOperationException Exception);
 
     [Conditional("DEBUG")]
-    private void LogDragSessionFailure(InvalidOperationException exception)
+    private void LogInitiateDragFailed(InvalidOperationException exception)
     {
         if (this.logger is ILogger logger)
         {

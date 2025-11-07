@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Drag;
 
@@ -71,17 +72,19 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     /// <param name="itemIndex">The index of the item being dragged within the source TabStrip.</param>
     /// <param name="source">Source TabStrip.</param>
     /// <param name="visualElement">Visual element for drag preview rendering.</param>
-    /// <param name="initialScreenPoint">Optional initial cursor position in screen coordinates. If null, will use GetCursorPos().</param>
+    /// <param name="hotspotOffsets">Optional initial cursor position in screen coordinates. If null, will use GetCursorPos().</param>
     public void StartDrag(
         object item,
         int itemIndex,
         ITabStrip source,
-        FrameworkElement visualElement,
-        SpatialPoint<ScreenSpace>? initialScreenPoint)
+        FrameworkElement stripContainer,
+        FrameworkElement draggedElement,
+        SpatialPoint<ScreenSpace> initialPosition,
+        Point hotspotOffsets)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(source);
-        ArgumentNullException.ThrowIfNull(visualElement);
+        ArgumentNullException.ThrowIfNull(draggedElement);
 
         lock (this.syncLock)
         {
@@ -93,17 +96,11 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
             this.isActive = true;
 
-            // Create spatial mapper using the visual element (not the interface)
-            var spatialMapper = this.CreateSpatialMapper(visualElement);
+            var mapper = this.CreateSpatialMapper(stripContainer);
+            this.dragContext = new DragContext(source, item, itemIndex, hotspotOffsets, stripContainer, draggedElement, mapper);
+            this.SwitchToReorderMode(mapper.ToPhysicalScreen(initialPosition));
 
-            // Store context including the item index and visual element for strategies
-            this.dragContext = new DragContext(source, item, itemIndex, visualElement, spatialMapper);
-            var initialPointOrFallback = initialScreenPoint ?? this.GetInitialCursorPosition();
-            this.lastCursorPosition = spatialMapper.Convert<ScreenSpace, PhysicalScreenSpace>(initialPointOrFallback);
-            this.SwitchToReorderMode(initialPointOrFallback);
-
-            // Note: Polling is NOT started here - Reorder mode uses pointer events.
-            // Polling only starts when switching to TearOut mode (for cross-window resilience).
+            this.StartPollingTimer();
             this.LogDragStarted();
         }
     }
@@ -131,7 +128,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             int? finalDropIndex = null;
             if (this.currentStrategy is not null)
             {
-                finalDropIndex = this.currentStrategy.CompleteDrag();
+                finalDropIndex = this.currentStrategy.CompleteDrag(drop: true);
             }
 
             // Determine final outcome and raise appropriate events
@@ -142,7 +139,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
                 // TabDragComplete is raised immediately with null to signal TearOut in progress
                 // Application handles window creation asynchronously
-                this.dragContext.TabStrip.CompleteDrag(this.dragContext.DraggedItem, null, null);
+                this.dragContext.TabStrip.CompleteDrag(this.dragContext.DraggedItem, destinationStrip: null, newIndex: null);
             }
             else if (hitStrip is not null && finalDropIndex.HasValue)
             {
@@ -152,7 +149,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             else
             {
                 // Error case - raise TabDragComplete with null destination
-                this.dragContext.TabStrip?.CompleteDrag(this.dragContext.DraggedItem, null, null);
+                this.dragContext.TabStrip?.CompleteDrag(this.dragContext.DraggedItem, destinationStrip: null, newIndex: null);
             }
 
             this.LogDragEnded(screenPoint.Point, hitStrip is not null, hitStrip, finalDropIndex);
@@ -172,7 +169,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         lock (this.syncLock)
         {
             // Clean up dead references
-            this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
+            _ = this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
 
             // Add new reference
             this.registeredStrips.Add(new WeakReference<ITabStrip>(strip));
@@ -218,7 +215,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             this.LogDragAborted();
 
             // Complete the drag with no target (abort)
-            _ = this.currentStrategy?.CompleteDrag();
+            _ = this.currentStrategy?.CompleteDrag(drop: false);
 
             this.CleanupState();
         }
@@ -267,23 +264,15 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     /// <param name="cursor">Cursor position in screen coordinates.</param>
     /// <param name="strip">TabStrip to check bounds against.</param>
     /// <returns>True if cursor is within TearOut threshold; false otherwise.</returns>
-    private bool IsWithinTearOutThreshold(SpatialPoint<ScreenSpace> cursor, ITabStrip? strip)
+    private bool ExceedsTearOutThreshold(SpatialPoint<ScreenSpace> cursor, ITabStrip? strip)
     {
         if (this.dragContext is null || strip is null)
         {
             return false;
         }
 
-        try
-        {
-            var stripPoint = this.dragContext.SpatialMapper.Convert<ScreenSpace, ElementSpace>(cursor);
-            return strip.HitTestWithThreshold(stripPoint, DragThresholds.TearOutThreshold);
-        }
-        catch
-        {
-            // If hit-test fails (window closed, etc.), assume not within bounds
-            return false;
-        }
+        var stripPoint = this.dragContext.SpatialMapper.Convert<ScreenSpace, ElementSpace>(cursor);
+        return strip.HitTestWithThreshold(stripPoint, DragThresholds.TearOutThreshold) > 0;
     }
 
     /// <summary>
@@ -301,7 +290,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         lock (this.syncLock)
         {
             // Clean up dead references first
-            this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
+            _ = this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
 
             foreach (var weakRef in this.registeredStrips)
             {
@@ -310,19 +299,11 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                     continue;
                 }
 
-                try
+                // Convert to the tab strip space for hit-testing
+                var elementPoint = this.dragContext.SpatialMapper.Convert<ScreenSpace, ElementSpace>(screenCursor);
+                if (strip.HitTestWithThreshold(elementPoint, DragThresholds.TearOutThreshold) >= 0)
                 {
-                    // Convert to element space for hit-testing
-                    var elementPoint = this.dragContext.SpatialMapper.Convert<ScreenSpace, ElementSpace>(screenCursor);
-                    if (strip.HitTest(elementPoint))
-                    {
-                        return strip;
-                    }
-                }
-                catch
-                {
-                    // Skip strips that throw (window closed, etc.)
-                    continue;
+                    return strip;
                 }
             }
 
@@ -330,31 +311,28 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
     }
 
-    private void SwitchToReorderMode(SpatialPoint<ScreenSpace> startPoint)
+    private void SwitchToReorderMode(SpatialPoint<PhysicalScreenSpace> position)
     {
         // Complete current strategy (abort if switching modes)
         if (this.currentStrategy is not null && this.dragContext is not null)
         {
-            _ = this.currentStrategy.CompleteDrag();
+            _ = this.currentStrategy.CompleteDrag(drop: false);
         }
 
         this.currentStrategy = this.reorderStrategy;
         if (this.dragContext is not null)
         {
             // Pass screen coordinates - strategy will convert to its preferred space
-            this.currentStrategy.InitiateDrag(this.dragContext, startPoint);
+            this.currentStrategy.InitiateDrag(this.dragContext, position);
         }
-
-        // Stop polling when entering Reorder mode - pointer events drive updates
-        this.StopPollingTimer();
     }
 
-    private void SwitchToTearOutMode(SpatialPoint<ScreenSpace> startPoint)
+    private void SwitchToTearOutMode(SpatialPoint<PhysicalScreenSpace> position)
     {
         // Complete current strategy (abort if switching modes)
         if (this.currentStrategy is not null && this.dragContext is not null)
         {
-            _ = this.currentStrategy.CompleteDrag();
+            _ = this.currentStrategy.CompleteDrag(drop: false);
         }
 
         // Close the tab before transitioning to TearOut mode
@@ -364,6 +342,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             {
                 this.dragContext.TabStrip.CloseTab(this.dragContext.DraggedItem);
             }
+#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)
             {
                 // If CloseTab handler throws, abort the drag
@@ -375,18 +354,15 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 this.CleanupState();
                 return;
             }
+#pragma warning restore CA1031 // Do not catch general exception types
         }
 
         this.currentStrategy = this.tearOutStrategy;
         if (this.dragContext is not null)
         {
             // Pass screen coordinates - strategy will convert to its preferred space
-            this.currentStrategy.InitiateDrag(this.dragContext, startPoint);
+            this.currentStrategy.InitiateDrag(this.dragContext, position);
         }
-
-        // Start polling when entering TearOut mode - needed for cross-window drag resilience
-        // (pointer events may stop when source window loses focus or visual is between windows)
-        this.StartPollingTimer();
     }
 
     private void StartPollingTimer()
@@ -446,13 +422,12 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 this.lastCursorPosition = newPosition.AsPhysicalScreen();
 
                 // Check for mode transitions based on cursor position
-                var spatialPoint = this.dragContext.SpatialMapper.Convert<PhysicalScreenSpace, ScreenSpace>(newPosition.AsPhysicalScreen());
-                this.CheckAndHandleModeTransitions(spatialPoint);
+                this.CheckAndHandleModeTransitions(newPosition.AsPhysicalScreen());
 
                 // Delegate to current strategy (pass screen coordinates, strategy will convert)
                 if (this.dragContext is not null)
                 {
-                    this.currentStrategy.OnDragPositionChanged(spatialPoint);
+                    this.currentStrategy.OnDragPositionChanged(newPosition.AsPhysicalScreen());
 
                     this.LogDragMoved(newPosition, previousPosition.Point);
                 }
@@ -460,7 +435,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
     }
 
-    private void CheckAndHandleModeTransitions(SpatialPoint<ScreenSpace> cursor)
+    private void CheckAndHandleModeTransitions(SpatialPoint<PhysicalScreenSpace> cursor)
     {
         if (this.dragContext is not { TabStrip: { } })
         {
@@ -468,25 +443,19 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
 
         var isCurrentlyInReorder = this.currentStrategy == this.reorderStrategy;
-        var isWithinSourceThreshold = this.IsWithinTearOutThreshold(cursor, this.dragContext.TabStrip);
+        var stripPoint = this.dragContext.SpatialMapper.Convert<PhysicalScreenSpace, ElementSpace>(cursor);
+        var hitTest = this.dragContext.TabStrip.HitTestWithThreshold(stripPoint, DragThresholds.TearOutThreshold);
 
-        if (isCurrentlyInReorder && !isWithinSourceThreshold)
+        if (isCurrentlyInReorder && hitTest < 0)
         {
             // Transition from Reorder to TearOut when cursor leaves source strip's threshold zone
             this.SwitchToTearOutMode(cursor);
         }
-        else if (!isCurrentlyInReorder)
+        else if (!isCurrentlyInReorder && hitTest > 0)
         {
-            // In TearOut mode: check if cursor enters ANY TabStrip's bounds (not just threshold)
-            // Phase 4 will handle the actual re-entry logic via DragMoved event subscribers
-            // Here we just check if we should switch back to Reorder mode
-            var hitStrip = this.GetHitTestTabStrip(cursor);
-            if (hitStrip is not null)
-            {
-                // Cursor is directly over a TabStrip - switch to Reorder mode
-                // Phase 4 will handle item insertion/removal via event handlers
-                this.SwitchToReorderMode(cursor);
-            }
+            // Cursor is directly over a TabStrip - switch to Reorder mode
+            // Phase 4 will handle item insertion/removal via event handlers
+            this.SwitchToReorderMode(cursor);
         }
     }
 

@@ -33,8 +33,8 @@ public interface ITabDragCoordinator
     /// <param name="item">The logical TabItem being dragged.</param>
     /// <param name="itemIndex">The index of the item in the source TabStrip's Items collection.</param>
     /// <param name="source">The source TabStrip where the drag originated.</param>
-    /// <param name="visualElement">The visual element to render for drag preview (e.g., TabStripItem).</param>
-    /// <param name="initialScreenPoint">
+    /// <param name="draggedElement">The visual element to render for drag preview (e.g., TabStripItem).</param>
+    /// <param name="initialPosition">
     ///     Optional initial cursor position in screen coordinates. If null, will use GetCursorPos().
     /// </param>
     /// <exception cref="InvalidOperationException">
@@ -44,8 +44,10 @@ public interface ITabDragCoordinator
         object item,
         int itemIndex,
         ITabStrip source,
-        FrameworkElement visualElement,
-        SpatialPoint<ScreenSpace>? initialScreenPoint = null);
+        FrameworkElement stripContainer,
+        FrameworkElement draggedElement,
+        SpatialPoint<ScreenSpace> initialPosition,
+        Point hotspotOffsets);
 
     /// <summary>
     ///     Ends the current drag operation.

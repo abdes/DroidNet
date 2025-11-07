@@ -178,6 +178,7 @@ public partial class TabStripItem : ContentControl
     private IconSourceElement? iconPart;
     private TextBlock? headerPart;
     private ILogger? logger;
+    private ILogger? visualLogger;
 
     // Keeps track of whether the pointer is currently over the control
     private bool isPointerOver;

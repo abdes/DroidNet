@@ -57,11 +57,6 @@ public sealed partial class TabItem : ObservableObject
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
 
-    /// <summary>
-    ///     Gets or sets a value indicating whether this is a temporary placeholder item
-    ///     used during drag-and-drop reordering. Placeholder items have a lightweight template
-    ///     and are never selected or activated.
-    /// </summary>
-    [ObservableProperty]
-    public partial bool IsPlaceholder { get; set; }
+    /// <inheritdoc/>
+    public override string ToString() => this.Header;
 }

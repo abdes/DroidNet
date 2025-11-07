@@ -71,40 +71,16 @@
                                                 The TranslateTransform on this Grid is used during reorder drag to slide
                                                 the item visually without affecting ItemsRepeater's layout of other items.
                                             -->
-                                            <Grid>
+                                            <Grid Tag="{Binding Header}">
                                                 <Grid.RenderTransform>
                                                     <TranslateTransform />
                                                 </Grid.RenderTransform>
-
-                                                <!--  Lightweight placeholder template (minimal visual, no content)  -->
-                                                <Border
-                                                    Width="120"
-                                                    Height="32"
-                                                    Margin="0,0,4,0"
-                                                    Background="{ThemeResource SubtleFillColorTransparentBrush}"
-                                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                                                    BorderThickness="1"
-                                                    CornerRadius="4"
-                                                    Opacity="0.5"
-                                                    Visibility="{Binding IsPlaceholder, Converter={StaticResource BoolToVisibilityConverter}}" />
-
-                                                <!--  Full TabStripItem (only visible when NOT a placeholder)  -->
-                                                <drag:TabStripItem
-                                                    Item="{Binding}"
-                                                    LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}"
-                                                    Visibility="{Binding IsPlaceholder, Converter={StaticResource InverseBoolToVisibilityConverter}}" />
+                                                <drag:TabStripItem Item="{Binding}" LoggerFactory="{Binding LoggerFactory, RelativeSource={RelativeSource TemplatedParent}}" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsRepeater.ItemTemplate>
                                 </ItemsRepeater>
                             </ScrollViewer>
-
-                            <!--  Reorder overlay canvas for placeholder visuals during in-strip dragging  -->
-                            <Canvas
-                                x:Name="PartReorderOverlay"
-                                HorizontalAlignment="Stretch"
-                                VerticalAlignment="Stretch"
-                                IsHitTestVisible="False" />
 
                             <!--  Left overflow overlay  -->
                             <Border

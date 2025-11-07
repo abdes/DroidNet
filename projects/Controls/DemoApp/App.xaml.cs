@@ -4,7 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
-using DroidNet.Aura.WindowManagement;
+using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Theming;
+using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,7 +39,10 @@ public partial class App
     /// <param name="converter">
     /// The ViewModel to View converter to be used to set the content inside the content control.
     /// </param>
-    /// <param name="windowManager">The window manager service. Must be injected in the App so it can hook into the MainWindow.</param>
+    /// <param name="windowManager">The window manager service for multi-window support.</param>
+    /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
+    /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
+    /// <param name="chromeService">The chrome service for automatic chrome application.</param>
     /// <remarks>
     /// The <paramref name="converter" /> needs to be available in the XAML as a static resource. However, because it has
     /// dependencies injected via the Dependency Injector, we create it in the code behind and programmatically add it as a static
@@ -48,9 +53,16 @@ public partial class App
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
-        IWindowManagerService windowManager)
+        IWindowManagerService windowManager,
+        IAppThemeModeService themeModeService,
+        WindowBackdropService backdropService,
+        WindowChromeService chromeService)
     {
+        // injected only to instantiate it early
+        _ = themeModeService;
         _ = windowManager;
+        _ = backdropService;
+        _ = chromeService;
 
         this.lifetime = lifetime;
         this.router = router;

@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
+using DroidNet.Aura.Drag;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Controls.Demo.DemoBrowser;
@@ -16,6 +17,7 @@ using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.Demo.TabStrip;
+using DroidNet.Coordinates;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -135,15 +137,20 @@ public static partial class Program
     private static void ConfigureApplicationServices(this IContainer container)
     {
         // Register Aura window management with all required services
-        _ = container.WithAura(options => options
-            .WithAppearanceSettings()
-            .WithDecorationSettings()
-            .WithBackdropService()
-            .WithChromeService()
-            .WithThemeModeService());
+        _ = container
+            .WithAura(options => options
+                .WithAppearanceSettings()
+                .WithDecorationSettings()
+                .WithBackdropService()
+                .WithChromeService()
+                .WithThemeModeService())
+            .WithSpatialMapping();
 
+        // TODO: TEMPORARY: Register Drag and Drop services until integrated in Aura
         container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
         container.Register<TabDragCoordinator>(Reuse.Singleton);
+        container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
+        container.Register<DragOverlayWindow>(Reuse.Transient);
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the

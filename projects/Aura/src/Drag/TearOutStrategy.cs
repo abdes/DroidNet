@@ -5,7 +5,6 @@
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace DroidNet.Aura.Drag;
@@ -40,7 +39,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
     }
 
     /// <inheritdoc/>
-    public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> initialPoint)
+    public void InitiateDrag(DragContext context, SpatialPoint<PhysicalScreenSpace> position)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -53,7 +52,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         this.context = context;
         this.isActive = true;
 
-        this.LogEnterTearOutMode(initialPoint.Point);
+        this.LogEnterTearOutMode(position.Point);
 
         // Capture header image from the source visual item
         var headerImage = this.CaptureHeaderImage();
@@ -62,22 +61,21 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         this.descriptor = new DragVisualDescriptor
         {
             HeaderImage = headerImage,
-            RequestedSize = new Windows.Foundation.Size(300, 150), // Default size
+            RequestedSize = new Windows.Foundation.Size(400, 200), // Default size
         };
 
         // Request preview image from the application
         this.RequestPreviewImage(this.descriptor);
 
-        // Start the drag visual session with the correct logical hotspot from context
-        this.sessionToken = this.dragService.StartSession(this.descriptor, initialPoint.Point);
-
-        // Update initial position
-        var phyInitialPoint = this.context.SpatialMapper.ToPhysicalScreen(initialPoint);
-        this.dragService.UpdatePosition(this.sessionToken.Value, phyInitialPoint);
+        // Start the drag visual session with the window position offsets calculated from the initial drag point
+        this.sessionToken = this.dragService.StartSession(
+            this.descriptor,
+            position,
+            this.context.HotspotOffsets.AsScreen());
     }
 
     /// <inheritdoc/>
-    public void OnDragPositionChanged(SpatialPoint<ScreenSpace> currentPoint)
+    public void OnDragPositionChanged(SpatialPoint<PhysicalScreenSpace> position)
     {
         if (!this.isActive || !this.sessionToken.HasValue)
         {
@@ -86,15 +84,29 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         }
 
         // Update overlay position
-        var phyCurrentPoint = this.context!.SpatialMapper.ToPhysicalScreen(currentPoint);
-        this.dragService.UpdatePosition(this.sessionToken.Value, phyCurrentPoint);
+        this.dragService.UpdatePosition(this.sessionToken.Value, position);
 
-        this.LogMove(currentPoint.Point);
+        this.LogMove(position.Point);
     }
 
     /// <inheritdoc/>
-    public int? CompleteDrag()
+    public int? CompleteDrag(bool drop)
     {
+        void ResetState()
+        {
+            this.isActive = false;
+            this.context = null;
+            this.descriptor = null;
+        }
+
+        if (!drop)
+        {
+            this.LogDragCompletedNoDrop();
+
+            // With no drop, completing the drag simply resets state
+            ResetState();
+        }
+
         if (!this.isActive)
         {
             this.LogDropIgnored();
@@ -110,10 +122,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             this.sessionToken = null;
         }
 
-        // Reset state
-        this.isActive = false;
-        this.context = null;
-        this.descriptor = null;
+        ResetState();
 
         // Drop outside any TabStrip - this should trigger TearOut event
         // Return null since the item isn't in any TabStrip yet (application will handle window creation)
@@ -128,7 +137,7 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             return null;
         }
 
-        if (this.context.VisualElement is not { } tabStripItem)
+        if (this.context.DraggedVisualElement is not { } tabStripItem)
         {
             this.LogHeaderCaptureFailed("no visual container");
             return null;
@@ -190,10 +199,12 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             // This allows the application to handle the event and provide a custom preview
             this.context.TabStrip?.RequestPreviewImage(this.context.DraggedItem, descriptor);
         }
+#pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
             // Log the exception but don't let it crash the drag operation
-            this.logger.LogError(ex, "Exception while requesting preview image from source TabStrip");
+            this.LogPreviewImageException(ex);
         }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 }

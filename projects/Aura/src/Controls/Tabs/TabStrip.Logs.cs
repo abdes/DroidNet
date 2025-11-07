@@ -252,15 +252,15 @@ public partial class TabStrip
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Setting up prepared item: Header='{Header}', IsPinned={IsPinned}, Compacting={Compacting}, Bucket={Bucket}")]
-    private static partial void LogSetupPreparedItem(ILogger logger, string Header, bool IsPinned, bool Compacting, string Bucket);
+        Message = "Setting up prepared Items[{index}]: Header='{Header}', IsPinned={IsPinned}, Compacting={Compacting}, Bucket={Bucket}")]
+    private static partial void LogSetupPreparedItem(ILogger logger, int index, string Header, bool IsPinned, bool Compacting, string Bucket);
 
     [Conditional("DEBUG")]
-    private void LogSetupPreparedItem(TabItem ti, bool compacting, bool pinned)
+    private void LogSetupPreparedItem(int index, TabItem ti, bool compacting, bool pinned)
     {
         if (this.logger is ILogger logger)
         {
-            LogSetupPreparedItem(logger, ti.Header ?? "<null>", ti.IsPinned, compacting, pinned ? "pinned" : "regular");
+            LogSetupPreparedItem(logger, index, ti.Header ?? "<null>", ti.IsPinned, compacting, pinned ? "pinned" : "regular");
         }
     }
 
@@ -278,6 +278,26 @@ public partial class TabStrip
         {
             var header = (tsi.DataContext as TabItem)?.Header ?? "<null>";
             LogClearElement(logger, header);
+        }
+    }
+
+    // Logs clearing element
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Repeater({Repeater}) item index changed: Item='{Item}', OldIndex={OldIndex}, NewIndex='{NewIndex}'")]
+    private static partial void LogItemIndexChanged(ILogger logger, string repeater, string item, int oldIndex, int newIndex);
+
+    [Conditional("DEBUG")]
+    private void LogItemIndexChanged(ItemsRepeater sender, ItemsRepeaterElementIndexChangedEventArgs args)
+    {
+        if (this.logger is ILogger logger)
+        {
+            var tsi = (args.Element as Grid)?.Children.OfType<TabStripItem>().FirstOrDefault();
+            var repeaterType = sender == this.pinnedItemsRepeater ? "pinned" : "regular";
+
+            var header = tsi?.Item?.Header ?? "<null>";
+            LogItemIndexChanged(logger, repeaterType, header, args.OldIndex, args.NewIndex);
         }
     }
 

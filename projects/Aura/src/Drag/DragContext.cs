@@ -4,6 +4,7 @@
 
 using DroidNet.Coordinates;
 using Microsoft.UI.Xaml;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Drag;
 
@@ -25,7 +26,9 @@ public sealed class DragContext(
     ITabStrip? tabStrip,
     object draggedItem,
     int draggedItemIndex,
-    FrameworkElement visualElement,
+    Windows.Foundation.Point hotspotOffsets,
+    FrameworkElement stripContainer,
+    FrameworkElement draggedElement,
     ISpatialMapper spatialMapper)
 {
     /// <summary>
@@ -33,6 +36,8 @@ public sealed class DragContext(
     /// Null when cursor is in out-world space.
     /// </summary>
     public ITabStrip? TabStrip { get; set; } = tabStrip;
+
+    public FrameworkElement TabStripContainer { get; } = stripContainer ?? throw new ArgumentNullException(nameof(stripContainer));
 
     /// <summary>
     /// Gets the dragged item. Required and immutable.
@@ -44,10 +49,12 @@ public sealed class DragContext(
     /// </summary>
     public int DraggedItemIndex { get; } = draggedItemIndex;
 
+    public Point HotspotOffsets { get; } = hotspotOffsets;
+
     /// <summary>
     /// Gets the visual element for drag preview rendering (e.g., TabStripItem).
     /// </summary>
-    public FrameworkElement VisualElement { get; } = visualElement ?? throw new ArgumentNullException(nameof(visualElement));
+    public FrameworkElement DraggedVisualElement { get; } = draggedElement ?? throw new ArgumentNullException(nameof(draggedElement));
 
     /// <summary>
     /// Gets the spatial mapper. Required and immutable.

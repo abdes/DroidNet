@@ -95,14 +95,14 @@ public partial class TabStripItem
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
+        Level = LogLevel.Trace,
         Message = "[{Header}] Visual state changed to '{State}' (IsCompact={IsCompact}, PointerOver={PointerOver}, IsSelected={Selected}, IsPinned={Pinned})")]
     private static partial void LogVisualState(ILogger logger, string header, string state, bool isCompact, bool pointerOver, bool selected, bool pinned);
 
     [Conditional("DEBUG")]
     private void LogVisualState(string state)
     {
-        if (this.logger is ILogger logger && this.Item is { } item)
+        if (this.visualLogger is ILogger logger && this.Item is { } item)
         {
             LogVisualState(logger, this.Item?.Header ?? "<null>", state, this.IsCompact, this.isPointerOver, item.IsSelected, item.IsPinned);
         }
