@@ -14,7 +14,7 @@ using Microsoft.UI.Xaml;
 using Moq;
 using Windows.Foundation;
 
-namespace DroidNet.Aura.Tests.Drag;
+namespace DroidNet.Aura.Drag.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="DragVisualService"/> core functionality and contract compliance.

@@ -6,7 +6,7 @@ using System.Collections.Generic;
 using DroidNet.Aura.Drag;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Aura.Tests.Drag;
+namespace DroidNet.Aura.Drag.Tests;
 
 /// <summary>
 ///     Test-specific implementation of <see cref="DragOverlayWindow"/> that tracks method calls

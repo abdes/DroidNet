@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Aura.Drag;
 using FluentAssertions;
 
-namespace DroidNet.Aura.Tests.Drag;
+namespace DroidNet.Aura.Drag.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="DragSessionToken"/> struct.

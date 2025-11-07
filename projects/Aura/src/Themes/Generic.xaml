@@ -5,6 +5,8 @@
     <!--  ReSharper disable Xaml.PathError  -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/AppIcon/AppIcon.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/Tabs/TabStrip.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/Tabs/TabStripItem.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
 </ResourceDictionary>

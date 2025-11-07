@@ -8,7 +8,7 @@ using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.UI.Xaml.Media.Imaging;
 
-namespace DroidNet.Aura.Tests.Drag;
+namespace DroidNet.Aura.Drag.Tests;
 
 /// <summary>
 /// Unit tests for <see cref="DragVisualDescriptor"/> class.
