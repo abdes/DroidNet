@@ -21,7 +21,7 @@ namespace DroidNet.Coordinates;
 /// <summary>
 ///     P/Invoke wrappers and native helpers for spatial coordinate transformations.
 /// </summary>
-public static partial class Native
+internal static partial class Native
 {
     private const string User32 = "user32.dll";
     private const string SHCore = "shcore.dll";
@@ -321,20 +321,4 @@ public static partial class Native
     /// <returns>Logical point in DIPs as WinRT Point.</returns>
     public static Windows.Foundation.Point GetLogicalPointFromPhysical(POINT physicalPoint, uint dpi)
         => new(PhysicalToLogical(physicalPoint.X, dpi), PhysicalToLogical(physicalPoint.Y, dpi));
-
-    /// <summary>
-    /// Gets the HWND (window handle) for the window containing the specified UI element.
-    /// </summary>
-    /// <param name="element">The UI element to find the window handle for.</param>
-    /// <returns>The HWND of the window, or IntPtr.Zero if not found.</returns>
-    public static IntPtr GetHwndForElement(Microsoft.UI.Xaml.FrameworkElement element)
-    {
-        if (element.XamlRoot?.ContentIslandEnvironment == null)
-        {
-            return IntPtr.Zero;
-        }
-
-        var windowId = element.XamlRoot.ContentIslandEnvironment.AppWindowId;
-        return Microsoft.UI.Win32Interop.GetWindowFromWindowId(windowId);
-    }
 }
