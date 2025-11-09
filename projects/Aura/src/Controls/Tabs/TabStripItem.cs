@@ -440,8 +440,12 @@ public partial class TabStripItem : ContentControl
         }
 
         var basicState = this.Item.IsSelected
-            ? this.isPointerOver ? SelectedPointerOverVisualState : SelectedVisualState
-            : this.isPointerOver ? PointerOverVisualState : NormalVisualState;
+            ? this.isPointerOver
+                ? SelectedPointerOverVisualState
+                : SelectedVisualState
+            : this.isPointerOver
+                ? PointerOverVisualState
+                : NormalVisualState;
 
         this.LogVisualState(basicState);
         _ = VisualStateManager.GoToState(this, basicState, useTransitions);
@@ -454,7 +458,11 @@ public partial class TabStripItem : ContentControl
         this.LogVisualState(draggingState);
         _ = VisualStateManager.GoToState(this, draggingState, useTransitions: false);
 
-        var overlayState = this.isPointerOver ? OverlayVisibleVisualState : OverlayHiddenVisualState;
+        var overlayState = this.IsDragging
+            ? OverlayHiddenVisualState
+            : this.isPointerOver
+                ? OverlayVisibleVisualState
+                : OverlayHiddenVisualState;
         this.LogVisualState(overlayState);
         _ = VisualStateManager.GoToState(this, overlayState, useTransitions);
     }

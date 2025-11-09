@@ -177,6 +177,18 @@ public partial class MainShellView
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Failed to configure passthrough regions: {ErrorMessage}")]
+    private static partial void LogPassthroughRegionsFailed(ILogger logger, string errorMessage);
+
+    private void LogPassthroughRegionsFailed(Exception exception)
+    {
+        Debug.Assert(this.IsLoaded, "logging can only be done after view is loaded");
+        LogPassthroughRegionsFailed(this.logger, exception.Message);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "CustomTitleBar: Layout updated (Scale: {Scale}, System Reserved: {RightInset}, Actual Width: {ActualWidth}, Actual Height: {ActualHeight})")]
     private static partial void LogCustomTitleBarLayout(ILogger logger, double scale, double rightInset, double actualWidth, double actualHeight);

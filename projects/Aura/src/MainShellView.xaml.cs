@@ -42,6 +42,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     // Last applied passthrough regions (device pixels). Used to avoid re-applying identical regions.
     private RectInt32[]? lastAppliedPassthroughRegions;
+    private bool passthroughUnavailable;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShellView"/> class.
@@ -334,6 +335,11 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     private void ConfigurePassthroughRegions(AppWindow window, double scaleAdjustment)
     {
+        if (this.passthroughUnavailable)
+        {
+            return;
+        }
+
         var newRegions = this.ComputeClampedPassthroughRegions(scaleAdjustment, window.TitleBar.RightInset);
 
         if (RegionsEqual(this.lastAppliedPassthroughRegions, newRegions))
@@ -342,12 +348,23 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             return;
         }
 
-        var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(window.Id);
-        nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. newRegions]);
-        this.LogPassthroughRegionsSet(newRegions.Length);
+        try
+        {
+            var nonClientInputSrc = InputNonClientPointerSource.GetForWindowId(window.Id);
+            nonClientInputSrc.SetRegionRects(NonClientRegionKind.Passthrough, [.. newRegions]);
+            this.LogPassthroughRegionsSet(newRegions.Length);
 
-        // Store for later comparison
-        this.lastAppliedPassthroughRegions = newRegions;
+            // Store for later comparison
+            this.lastAppliedPassthroughRegions = newRegions;
+        }
+#pragma warning disable CA1031 // Handle API failures gracefully; log and fallback without crashing design/debug sessions.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            this.passthroughUnavailable = true;
+            this.lastAppliedPassthroughRegions = null;
+            this.LogPassthroughRegionsFailed(ex);
+        }
 
         static bool RegionsEqual(Windows.Graphics.RectInt32[]? a, Windows.Graphics.RectInt32[]? b)
         {

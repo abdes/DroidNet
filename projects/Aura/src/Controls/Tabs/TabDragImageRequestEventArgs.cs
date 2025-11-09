@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System;
-using Microsoft.UI.Xaml.Media;
+using Windows.Graphics.Imaging;
 
 namespace DroidNet.Aura.Controls;
 
@@ -13,7 +13,7 @@ namespace DroidNet.Aura.Controls;
 /// </summary>
 /// <remarks>
 ///     Raised on the UI thread when the dragged tab leaves its originating <see cref="TabStrip"/>
-///     (tear-out begins). Handlers should set <see cref="PreviewImage"/> synchronously and return
+///     (tear-out begins). Handlers should set <see cref="PreviewBitmap"/> synchronously and return
 ///     quickly. The <see cref="RequestedSize"/> property indicates the desired logical size (XAML
 ///     pixels) for the preview image; handlers may honor that size or provide a different scale.
 ///     The control performs DPI-aware scaling when composing the drag overlay.
@@ -41,17 +41,16 @@ public sealed class TabDragImageRequestEventArgs : EventArgs
     public Windows.Foundation.Size RequestedSize { get; init; }
 
     /// <summary>
-    ///     Gets or sets an optional <see cref="ImageSource"/> to display in the drag overlay for
+    ///     Gets or sets an optional <see cref="SoftwareBitmap"/> to display in the drag overlay for
     ///     the dragged tab.
     /// </summary>
     /// <value>
-    ///     The image to use as the drag preview. Set this property synchronously in the event
+    ///     The bitmap to use as the drag preview. Set this property synchronously in the event
     ///     handler. If not set (<see langword="null"/>), the control renders a compact fallback
     ///     visual.
     /// </value>
     /// <remarks>
-    ///     Prefer lightweight, already-decoded image sources (for example, <c>BitmapImage</c> with
-    ///     a cached source) to avoid costly decoding work on the UI thread.
+    ///     Prefer lightweight, already-decoded bitmaps to avoid costly decoding work on the UI thread.
     /// </remarks>
-    public ImageSource? PreviewImage { get; set; }
+    public SoftwareBitmap? PreviewBitmap { get; set; }
 }

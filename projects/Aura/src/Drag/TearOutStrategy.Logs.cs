@@ -86,6 +86,11 @@ internal sealed partial class TearOutStrategy
     private partial void LogHeaderCaptureFailed(string reason);
 
     [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Design mode detected. Tear-out overlay suppressed.")]
+    private partial void LogDesignModeSuppressed();
+
+    [LoggerMessage(
         Level = LogLevel.Error,
         Message = "Header capture exception: {Message}")]
     private partial void LogHeaderCaptureException(string message);
@@ -126,5 +131,5 @@ internal sealed partial class TearOutStrategy
         Message = "Drop ignored - strategy not active")]
     private partial void LogDropIgnored();
 
-    private string GetDraggedItemName() => this.context?.DraggedItem.ToString() ?? "<null>";
+    private string GetDraggedItemName() => this.context?.DraggedItemData.ToString() ?? "<null>";
 }

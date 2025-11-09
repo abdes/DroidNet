@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Globalization;
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Drag;
@@ -44,7 +46,7 @@ public partial class TabDragCoordinator
         var sourceStripName = strip.GetType().Name;
         LogDragStarted(
             this.logger,
-            context.DraggedItem.ToString() ?? "Unknown",
+            context.DraggedItemData.ToString() ?? "Unknown",
             sourceStripName,
             (int)this.lastCursorPosition.Point.X,
             (int)this.lastCursorPosition.Point.Y);
@@ -61,29 +63,55 @@ public partial class TabDragCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Drag move: CursorX={CursorX}, CursorY={CursorY}, Delta=({DeltaX}, {DeltaY})")]
+        Message = "Drag move: {Pointer}, Delta=({DeltaX}, {DeltaY})")]
     private static partial void LogDragMoved(
         ILogger logger,
-        int cursorX,
-        int cursorY,
+        SpatialPoint<PhysicalScreenSpace> pointer,
         double deltaX,
         double deltaY);
 
-    private void LogDragMoved(Windows.Foundation.Point screenPoint, Windows.Foundation.Point previousPosition)
+    private void LogDragMoved(SpatialPoint<PhysicalScreenSpace> pointer, Windows.Foundation.Point previousPosition)
     {
         if (!this.logger.IsEnabled(LogLevel.Trace))
         {
             return;
         }
 
-        var deltaX = screenPoint.X - previousPosition.X;
-        var deltaY = screenPoint.Y - previousPosition.Y;
-        LogDragMoved(
-            this.logger,
-            (int)screenPoint.X,
-            (int)screenPoint.Y,
-            deltaX,
-            deltaY);
+        var deltaX = pointer.Point.X - previousPosition.X;
+        var deltaY = pointer.Point.Y - previousPosition.Y;
+        LogDragMoved(this.logger, pointer, deltaX, deltaY);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Registered strip {StripName} is not a FrameworkElement and cannot be hit-tested.")]
+    private static partial void LogStripNotFrameworkElement(ILogger logger, string stripName);
+
+    private void LogStripNotFrameworkElement(ITabStrip strip)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        LogStripNotFrameworkElement(this.logger, strip.GetType().Name);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Failed to create spatial mapper for strip {StripName}.")]
+    private static partial void LogSpatialMapperCreationFailed(ILogger logger, string stripName, Exception exception);
+
+    private void LogSpatialMapperCreationFailed(ITabStrip strip, Exception exception)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        LogSpatialMapperCreationFailed(this.logger, strip.GetType().Name, exception);
     }
 
     [LoggerMessage(
@@ -121,16 +149,15 @@ public partial class TabDragCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Drag ended: ScreenX={ScreenX}, ScreenY={ScreenY}, DroppedOverStrip={DroppedOverStrip}, Destination={DestinationStripName}, NewIndex={NewIndex}")]
+        Message = "Drag ended at {Point}, DroppedOverStrip={DroppedOverStrip}, Destination={DestinationStripName}, NewIndex={NewIndex}")]
     private static partial void LogDragEnded(
         ILogger logger,
-        int screenX,
-        int screenY,
+        SpatialPoint<ScreenSpace> point,
         bool droppedOverStrip,
         string destinationStripName,
         int? newIndex);
 
-    private void LogDragEnded(Windows.Foundation.Point screenPoint, bool droppedOverStrip, ITabStrip? destination, int? newIndex)
+    private void LogDragEnded(SpatialPoint<ScreenSpace> point, bool droppedOverStrip, ITabStrip? destination, int? newIndex)
     {
         if (!this.logger.IsEnabled(LogLevel.Debug))
         {
@@ -138,13 +165,65 @@ public partial class TabDragCoordinator
         }
 
         var destinationName = destination?.GetType().Name ?? "None";
-        LogDragEnded(
-            this.logger,
-            (int)screenPoint.X,
-            (int)screenPoint.Y,
-            droppedOverStrip,
-            destinationName,
-            newIndex);
+        LogDragEnded(this.logger, point, droppedOverStrip, destinationName, newIndex);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "EndDrag prep: TearOut={IsTearOutMode}, HitStrip={HitStripName}, FallbackIndex={FallbackIndex}, ContextIndex={ContextIndex}")]
+    private static partial void LogEndDragPreparation(
+        ILogger logger,
+        bool isTearOutMode,
+        string hitStripName,
+        int fallbackIndex,
+        int contextIndex);
+
+    private void LogEndDragPreparation(bool isTearOutMode, ITabStrip? hitStrip, int fallbackIndex, DragContext context)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var stripName = hitStrip?.GetType().Name ?? "None";
+        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, context.DraggedItemIndex);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Strategy complete: Type={StrategyType}, Result={Result}")]
+    private static partial void LogStrategyCompletion(ILogger logger, string strategyType, string result);
+
+    private void LogStrategyCompletion(IDragStrategy strategy, int? result)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var resultText = result.HasValue
+            ? result.Value.ToString(CultureInfo.InvariantCulture)
+            : "null";
+        var strategyType = strategy.GetType().Name;
+        LogStrategyCompletion(this.logger, strategyType, resultText);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Using fallback drop index {Index}")]
+    private static partial void LogFallbackIndex(ILogger logger, int index);
+
+    private void LogFallbackIndex(int index)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        LogFallbackIndex(this.logger, index);
     }
 
     [LoggerMessage(

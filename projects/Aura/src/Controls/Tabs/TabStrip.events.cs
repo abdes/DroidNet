@@ -73,13 +73,13 @@ public partial class TabStrip
     /// <summary>
     ///     Occurs when a drag session needs a lightweight preview image for the dragged <see
     ///     cref="TabItem"/>. Handlers may synchronously set <see
-    ///     cref="TabDragImageRequestEventArgs.PreviewImage"/> to customize the overlay.
+    ///     cref="TabDragImageRequestEventArgs.PreviewBitmap"/> to customize the overlay.
     /// </summary>
     /// <remarks>
     ///     Raised on the UI thread when the dragged tab leaves its originating <see
     ///     cref="TabStrip"/> (tear-out begins). Handlers must be fast and avoid blocking I/O.
-    ///     Prefer a ready-to-render <see cref="Microsoft.UI.Xaml.Media.ImageSource"/> (for example,
-    ///     a cached <c>BitmapImage</c>) set synchronously. If no preview is provided, the control
+    ///     Prefer a ready-to-render <see cref="Windows.Graphics.Imaging.SoftwareBitmap"/> set synchronously.
+    ///     If no preview is provided, the control
     ///     renders a compact fallback visual. After this event, the control raises
     ///     <c>TabCloseRequested</c> to signal tear-out has begun.
     ///     <para>

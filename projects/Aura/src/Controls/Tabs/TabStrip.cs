@@ -2,10 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using CommunityToolkit.WinUI;
 using DroidNet.Aura.Drag;
 using DroidNet.Collections;
 using DroidNet.Coordinates;
@@ -49,6 +54,14 @@ public partial class TabStrip : Control, ITabStrip
 
     private const double ScrollEpsilon = 1.0;
 
+    private readonly List<RealizedItemInfo> realizedItems = [];
+    private ExternalInsertInfo? pendingExternalInsert;
+
+    // Pending realization waiters keyed by TabItem.ContentId. Used so InsertItemAsync
+    // can await a central notification rather than subscribing a per-call handler
+    // to ItemsRepeater.ElementPrepared (avoids duplicate handlers and races).
+    private readonly Dictionary<Guid, TaskCompletionSource<FrameworkElement?>> pendingRealizations = new();
+
     private DispatcherCollectionProxy<TabItem>? pinnedProxy;
     private DispatcherCollectionProxy<TabItem>? regularProxy;
 
@@ -72,10 +85,6 @@ public partial class TabStrip : Control, ITabStrip
     private PointerEventHandler? pointerPressedHandler;
     private PointerEventHandler? pointerMovedHandler;
     private PointerEventHandler? pointerReleasedHandler;
-
-    private record struct RealizedItemInfo(FrameworkElement Element, int Index, bool IsPinned);
-
-    private readonly List<RealizedItemInfo> realizedItems = [];
 
     /// <summary>
     ///    Initializes a new instance of the <see cref="TabStrip" /> class.
@@ -157,6 +166,7 @@ public partial class TabStrip : Control, ITabStrip
                     ItemIndex = info.Index,
                     LayoutOrigin = info.Element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).AsElement(),
                     Width = info.Element.RenderSize.Width,
+                    Container = info.Element,
                 };
             })
             .OrderBy(s => s.LayoutOrigin.Point.X)
@@ -166,25 +176,6 @@ public partial class TabStrip : Control, ITabStrip
                 return s;
             })
             .ToList();
-
-        //return this.GetRealizedRegularElements()
-        //    .Select(el =>
-        //    {
-        //        Debug.WriteLine($"Realized Element[{el.index}]: {(el.element as FrameworkElement)?.Tag}");
-        //        return new TabStripItemSnapshot
-        //        {
-        //            ItemIndex = el.index,
-        //            LayoutOrigin = el.element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).AsElement(),
-        //            Width = el.element.RenderSize.Width,
-        //        };
-        //    })
-        //    .OrderBy(i => i.LayoutOrigin.ToPoint().X)
-        //    .Select(s =>
-        //    {
-        //        Debug.WriteLine($"Snapshot[{s.ItemIndex}]: LayoutOrigin={s.LayoutOrigin}, Width={s.Width}");
-        //        return s;
-        //    })
-        //    .ToList();
     }
 
     /// <inheritdoc/>
@@ -192,36 +183,109 @@ public partial class TabStrip : Control, ITabStrip
     {
         if (itemIndex < 0 || itemIndex >= this.Items.Count)
         {
+            Debug.WriteLine($"[TabStrip] ApplyTransform skipped: itemIndex={itemIndex}, offset={offsetX}, reason=out of range");
             return;
         }
 
-        var item = this.Items[itemIndex];
-        if (this.regularItemsRepeater is null)
+        // Use the realized items cache so we only touch prepared containers.
+        Debug.WriteLine($"[TabStrip] ApplyTransform start: itemIndex={itemIndex}, offset={offsetX}, realizedCount={this.realizedItems.Count}");
+        for (var i = 0; i < this.realizedItems.Count; i++)
         {
-            return;
-        }
-
-        // Find the wrapper Grid for this item
-        for (var i = 0; i < this.regularItemsRepeater.ItemsSourceView.Count; i++)
-        {
-            var element = this.regularItemsRepeater.TryGetElement(i);
-            if (element is Grid grid && grid.DataContext == item)
+            var info = this.realizedItems[i];
+            if (info.Index != itemIndex || info.IsPinned)
             {
-                // Apply transform to the wrapper Grid
-                if (grid.RenderTransform is TranslateTransform transform)
-                {
-                    transform.X = offsetX;
-                }
+                continue;
+            }
 
-                break;
+            if (info.Element is not Grid grid)
+            {
+                Debug.WriteLine($"[TabStrip] ApplyTransform skip: realized element at index {info.Index} is not Grid");
+                continue;
+            }
+
+            if (grid.RenderTransform is not TranslateTransform transform)
+            {
+                transform = new TranslateTransform();
+                grid.RenderTransform = transform;
+                Debug.WriteLine($"[TabStrip] ApplyTransform created new TranslateTransform for itemIndex={itemIndex}");
+            }
+
+            transform.X = offsetX;
+            Debug.WriteLine($"[TabStrip] ApplyTransform applied offset: itemIndex={itemIndex}, offset={offsetX}");
+            break;
+        }
+
+        Debug.WriteLine($"[TabStrip] ApplyTransform end: itemIndex={itemIndex}");
+    }
+
+    /// <inheritdoc/>
+    public FrameworkElement? GetContainerForIndex(int index)
+    {
+        if (index < 0)
+        {
+            return null;
+        }
+
+        for (var i = 0; i < this.realizedItems.Count; i++)
+        {
+            var info = this.realizedItems[i];
+            if (info.Index != index)
+            {
+                continue;
+            }
+
+            if (info.Element is Grid grid)
+            {
+                return grid.Children.OfType<TabStripItem>().FirstOrDefault();
             }
         }
+
+        return null;
     }
 
     /// <inheritdoc/>
     public void RemoveItemAt(int index)
     {
         this.Items.RemoveAt(index);
+    }
+
+    /// <inheritdoc/>
+    public void MoveItem(int fromIndex, int toIndex)
+    {
+        var items = this.Items;
+
+        if (fromIndex < 0 || fromIndex >= items.Count)
+        {
+            return;
+        }
+
+        var clampedTarget = System.Math.Clamp(toIndex, 0, items.Count - 1);
+        if (fromIndex == clampedTarget)
+        {
+            return;
+        }
+
+        var preservedSelection = this.SelectedItem;
+
+        try
+        {
+            this.suppressCollectionChangeHandling = true;
+            items.Move(fromIndex, clampedTarget);
+            this.RefreshAllRealizedItemIndices();
+        }
+        finally
+        {
+            this.suppressCollectionChangeHandling = false;
+        }
+
+        if (preservedSelection is not null && !ReferenceEquals(this.SelectedItem, preservedSelection))
+        {
+            this.SelectedItem = preservedSelection;
+        }
+
+        this.InvalidateRepeatersAndLayout();
+
+        _ = this.DispatcherQueue.TryEnqueue(this.UpdateOverflowButtonVisibility);
     }
 
     /// <inheritdoc/>
@@ -235,11 +299,262 @@ public partial class TabStrip : Control, ITabStrip
         this.Items.Insert(index, tabItem);
     }
 
+    /// <summary>
+    ///     Inserts an item and asynchronously waits for the ItemsRepeater to realize its container.
+    ///     This implements the Attached→Ready handshake used by the drag coordinator.
+    /// </summary>
+    public async Task<RealizationResult> InsertItemAsync(int index, object item, CancellationToken cancellationToken, int timeoutMs = 500)
+    {
+        this.AssertUIThread();
+
+        if (item is not TabItem tabItem)
+        {
+            throw new ArgumentException("Item must be a TabItem", nameof(item));
+        }
+
+        // Create a TCS and register it *before* inserting so we don't miss a very-fast preparation
+        var tcs = new TaskCompletionSource<FrameworkElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.pendingRealizations[tabItem.ContentId] = tcs;
+
+        // Insert into the logical collection first (authoritative)
+        using (this.EnterExternalInsertScope(index, tabItem.ContentId))
+        {
+            this.Items.Insert(index, tabItem);
+        }
+
+        // Fast-path: the container may already be realized
+        var fast = this.GetContainerForIndex(index);
+        if (fast is { })
+        {
+            _ = this.pendingRealizations.Remove(tabItem.ContentId);
+            return RealizationResult.Success(fast);
+        }
+
+        // Select repeater based on pinned state
+        var repeater = tabItem.IsPinned ? this.pinnedItemsRepeater : this.regularItemsRepeater;
+
+        if (repeater is null)
+        {
+            // No repeater to observe; treat as timeout/failure
+            _ = this.pendingRealizations.Remove(tabItem.ContentId);
+            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linked.CancelAfter(timeoutMs);
+
+        using var reg = linked.Token.Register(() => tcs.TrySetCanceled());
+
+        var succeeded = false;
+        try
+        {
+            var container = await tcs.Task.ConfigureAwait(false);
+            if (container is not null)
+            {
+                // Container realized — control may animate here if desired
+                succeeded = true;
+                return RealizationResult.Success(container);
+            }
+
+            // Completed with null (shouldn't happen) — treat as timeout
+            // Fall through to failure handling which will remove the inserted clone
+            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
+        }
+        catch (TaskCanceledException)
+        {
+            // Distinguish external cancellation vs timeout
+            var status = cancellationToken.IsCancellationRequested
+                ? RealizationResult.Status.Cancelled
+                : RealizationResult.Status.TimedOut;
+
+            return RealizationResult.Failure(status);
+        }
+        catch (Exception ex)
+        {
+            return RealizationResult.Failure(RealizationResult.Status.Error, ex);
+        }
+        finally
+        {
+            // Clean up pending waiter first
+            _ = this.pendingRealizations.Remove(tabItem.ContentId);
+
+            // If the handshake did not succeed, ensure the inserted clone is removed so the
+            // coordinator does not need to perform removal. Locate by ContentId to handle
+            // duplicate clones safely and only remove the first matching entry.
+            if (!succeeded)
+            {
+                try
+                {
+                    var removeIndex = this.Items.IndexOf(tabItem);
+                    if (removeIndex >= 0)
+                    {
+                        try
+                        {
+                            this.suppressCollectionChangeHandling = true;
+                            this.Items.RemoveAt(removeIndex);
+                            Debug.WriteLine($"[TabStrip] InsertItemAsync removed pending clone at index={removeIndex} (ContentId={tabItem.ContentId})");
+                        }
+                        finally
+                        {
+                            this.suppressCollectionChangeHandling = false;
+                        }
+
+                        // Ensure layout and repeaters reflect the removal
+                        this.InvalidateRepeatersAndLayout();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // Swallow non-fatal exceptions but log for diagnostics
+                    Debug.WriteLine($"[TabStrip] InsertItemAsync: failed removing pending clone: {ex}");
+                }
+            }
+        }
+    }
+
+    private IDisposable EnterExternalInsertScope(int index, Guid contentId)
+    {
+        this.pendingExternalInsert = new ExternalInsertInfo(contentId, index);
+        return new ExternalInsertScope(this);
+    }
+
+    private sealed class ExternalInsertScope : IDisposable
+    {
+        private readonly TabStrip owner;
+        private bool disposed;
+
+        public ExternalInsertScope(TabStrip owner)
+        {
+            this.owner = owner;
+        }
+
+        public void Dispose()
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.owner.pendingExternalInsert = null;
+            this.disposed = true;
+        }
+    }
+
     /// <inheritdoc/>
-    public int HitTestWithThreshold(SpatialPoint<ElementSpace> point, double threshold)
+    public async Task<ExternalDropPreparationResult?> PrepareExternalDropAsync(
+        object payload,
+        SpatialPoint<ElementSpace> pointerPosition,
+        CancellationToken cancellationToken,
+        int timeoutMs = 500)
+    {
+        this.AssertUIThread();
+
+        ArgumentNullException.ThrowIfNull(payload);
+
+        if (payload is not TabItem tabItem)
+        {
+            throw new ArgumentException("Payload must be a TabItem.", nameof(payload));
+        }
+
+        if (tabItem.IsPinned)
+        {
+            Debug.WriteLine("[TabStrip] PrepareExternalDropAsync aborted: payload is pinned.");
+            return null;
+        }
+
+        var snapshots = this.TakeSnapshot();
+        var insertionIndex = this.ResolveInsertionIndex(pointerPosition, snapshots);
+
+        try
+        {
+            var realization = await this.InsertItemAsync(insertionIndex, payload, cancellationToken, timeoutMs).ConfigureAwait(true);
+            if (realization.CurrentStatus != RealizationResult.Status.Realized)
+            {
+                Debug.WriteLine($"[TabStrip] PrepareExternalDropAsync unrealized: status={realization.CurrentStatus}.");
+                return null;
+            }
+
+            var realizedContainer = this.ResolveRealizedContainer(insertionIndex, realization.Container);
+            if (realizedContainer is null)
+            {
+                Debug.WriteLine("[TabStrip] PrepareExternalDropAsync missing realized container.");
+                return null;
+            }
+
+            return new ExternalDropPreparationResult(insertionIndex, realizedContainer);
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("[TabStrip] PrepareExternalDropAsync cancelled.");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[TabStrip] PrepareExternalDropAsync failed: {ex}");
+            return null;
+        }
+    }
+
+    private int ResolveInsertionIndex(SpatialPoint<ElementSpace> pointerPosition, IReadOnlyList<TabStripItemSnapshot> snapshots)
+    {
+        var itemsCount = this.Items.Count;
+        if (itemsCount == 0)
+        {
+            return 0;
+        }
+
+        if (snapshots.Count == 0)
+        {
+            return Math.Clamp(this.CountPinnedItems(), 0, itemsCount);
+        }
+
+        var pointerX = pointerPosition.Point.X;
+        var closest = snapshots
+            .Select(snapshot => new
+            {
+                Snapshot = snapshot,
+                Left = snapshot.LayoutOrigin.Point.X + snapshot.Offset,
+                Right = snapshot.LayoutOrigin.Point.X + snapshot.Offset + snapshot.Width,
+                Center = snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2),
+                Distance = Math.Abs(pointerX - (snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2))),
+            })
+            .OrderBy(x => x.Distance)
+            .ThenBy(x => x.Center)
+            .First();
+
+        var index = pointerX <= closest.Left
+            ? closest.Snapshot.ItemIndex
+            : pointerX >= closest.Right
+                ? closest.Snapshot.ItemIndex + 1
+                : pointerX < closest.Center
+                    ? closest.Snapshot.ItemIndex
+                    : closest.Snapshot.ItemIndex + 1;
+
+        return Math.Clamp(index, 0, itemsCount);
+    }
+
+    private FrameworkElement? ResolveRealizedContainer(int index, FrameworkElement? candidate)
+    {
+        if (candidate is Grid wrapperGrid)
+        {
+            var realized = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
+            if (realized is not null)
+            {
+                return realized;
+            }
+        }
+
+        return candidate ?? this.GetContainerForIndex(index);
+    }
+
+    private int CountPinnedItems()
+        => this.Items.TakeWhile(tab => tab.IsPinned).Count();
+
+    /// <inheritdoc/>
+    public int HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold)
     {
         // Compute distances from edges, point is relative to strip, so strip X,Y is 0,0
-        var p = point.Point;
+        var p = elementPoint.Point;
         var dxLeft = p.X;
         var dxRight = this.ActualWidth - p.X;
         var dyTop = p.Y;
@@ -280,15 +595,15 @@ public partial class TabStrip : Control, ITabStrip
             {
                 Item = tabItem,
                 RequestedSize = descriptor.RequestedSize,
-                PreviewImage = null,
+                PreviewBitmap = null,
             };
 
             this.TabDragImageRequest?.Invoke(this, eventArgs);
 
             // If the handler set a preview image, update the descriptor
-            if (eventArgs.PreviewImage is not null)
+            if (eventArgs.PreviewBitmap is not null)
             {
-                descriptor.PreviewImage = eventArgs.PreviewImage;
+                descriptor.PreviewBitmap = eventArgs.PreviewBitmap;
             }
         }
 #pragma warning disable CA1031 // Do not catch general exception types
@@ -365,25 +680,54 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
-    private static IEnumerable<(UIElement element, int index)> GetRealizedElementsWithIndex(ItemsRepeater repeater)
+    private void OnPreviewPointerPressed(object sender, PointerRoutedEventArgs e)
     {
-        Debug.WriteLine($"Repeater has {repeater.ItemsSourceView.Count} items");
-        return Enumerable
-                .Range(0, repeater.ItemsSourceView.Count)
-                .Select(i =>
-                {
-                    var el = repeater.GetOrCreateElement(i);
-                    Debug.WriteLine($"TryGetElement[{i}] => {el}");
-                    return (el, Index: i);
-                })
-                .Where(tuple => tuple.el is not null)
-                .OfType<(UIElement element, int index)>();
+        ArgumentNullException.ThrowIfNull(e);
+        this.AssertUIThread();
+
+        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
+        var hitItem = (e.OriginalSource as DependencyObject)?.FindAscendant<TabStripItem>();
+
+        if (hitItem is not null)
+        {
+            this.hotspotOffsets = e.GetCurrentPoint(hitItem).Position;
+        }
+
+        _ = this.CapturePointer(e.Pointer);
+        this.HandlePointerPressed(hitItem, point);
     }
 
-    private IEnumerable<(UIElement element, int index)> GetRealizedRegularElements()
-        => this.regularItemsRepeater is not null
-            ? GetRealizedElementsWithIndex(this.regularItemsRepeater)
-            : [];
+    /// <summary>
+    ///     Handles preview (tunneling) pointer moved events. Tracks pointer movement and initiates
+    ///     drag when movement exceeds the threshold.
+    /// </summary>
+    /// <param name="sender">The event source.</param>
+    /// <param name="e">Pointer event arguments.</param>
+    /// <remarks>
+    ///     This handler uses tunneling (preview) events to track pointer movement continuously,
+    ///     even when TabStripItem children would normally handle the events.
+    /// </remarks>
+    private void OnPreviewPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        this.AssertUIThread();
+
+        var point = e.GetCurrentPoint(relativeTo: this).Position.AsElement();
+        e.Handled = this.HandlePointerMoved(point);
+    }
+
+    private void OnPreviewPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        this.AssertUIThread();
+
+        // Get pointer position in LOGICAL screen coordinates (desktop-relative DIPs)
+        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
+        e.Handled = this.HandlePointerReleased(point);
+
+        this.hotspotOffsets = null;
+        this.ReleasePointerCapture(e.Pointer);
+    }
 
     private T? GetTemplatePart<T>(string name, bool isRequired = false)
         where T : DependencyObject
@@ -510,8 +854,16 @@ public partial class TabStrip : Control, ITabStrip
 
         this.realizedItems.Add(new RealizedItemInfo(wrapperGrid, index, ReferenceEquals(sender, this.pinnedItemsRepeater)));
 
+        // UI-thread: notify any pending InsertItemAsync waiter for this content id
+        Debug.Assert(this.DispatcherQueue.HasThreadAccess);
+        if (this.pendingRealizations.TryGetValue(ti.ContentId, out var waiter))
+        {
+            _ = this.pendingRealizations.Remove(ti.ContentId);
+            waiter.TrySetResult(wrapperGrid);
+        }
+
         tsi.SetValue(AutomationProperties.NameProperty, ti.Header);
-        ti.IsSelected = this.SelectedItem == ti;
+        ti.IsSelected = ReferenceEquals(this.SelectedItem, ti); // exact reference match
         tsi.LoggerFactory = this.LoggerFactory;
         tsi.IsCompact = this.TabWidthPolicy == TabWidthPolicy.Compact && !pinned;
 
@@ -560,21 +912,38 @@ public partial class TabStrip : Control, ITabStrip
 
     private void OnItemsRepeaterElementIndexChanged(ItemsRepeater sender, ItemsRepeaterElementIndexChangedEventArgs args)
     {
-        // The element is a Grid wrapper; find the TabStripItem child
-        if (args.Element is not Grid wrapperGrid)
+        if (args.Element is not Grid wrapperGrid || wrapperGrid.DataContext is not TabItem ti)
         {
             this.LogBadItem(sender, args.Element);
             return;
         }
 
         this.LogItemIndexChanged(sender, args);
+        this.RefreshRealizedItemIndex(wrapperGrid, ti, sender);
+    }
 
+    private void RefreshRealizedItemIndex(Grid wrapperGrid, TabItem ti, ItemsRepeater sender)
+    {
+        var itemsIndex = this.Items.IndexOf(ti);
         for (var i = 0; i < this.realizedItems.Count; i++)
         {
             if (ReferenceEquals(this.realizedItems[i].Element, wrapperGrid))
             {
-                this.realizedItems[i] = new RealizedItemInfo(wrapperGrid, args.NewIndex, ReferenceEquals(sender, this.pinnedItemsRepeater));
+                this.realizedItems[i] = new RealizedItemInfo(wrapperGrid, itemsIndex, ReferenceEquals(sender, this.pinnedItemsRepeater));
                 break;
+            }
+        }
+    }
+
+    private void RefreshAllRealizedItemIndices()
+    {
+        for (var i = 0; i < this.realizedItems.Count; i++)
+        {
+            var info = this.realizedItems[i];
+            if (info.Element is Grid grid && grid.DataContext is TabItem ti)
+            {
+                var itemsIndex = this.Items.IndexOf(ti);
+                this.realizedItems[i] = new RealizedItemInfo(grid, itemsIndex, info.IsPinned);
             }
         }
     }
@@ -1078,32 +1447,49 @@ public partial class TabStrip : Control, ITabStrip
     // Handle additions: compute desired index, log, and defer move/selection to the dispatcher
     private void HandleAddedItems(ObservableCollection<TabItem> items, NotifyCollectionChangedEventArgs e)
     {
+        var indexOffset = 0;
+
         foreach (var newItem in e.NewItems!)
         {
-            if (newItem is TabItem ti)
+            if (newItem is not TabItem ti)
             {
-                // Log addition now (collection already contains the new item)
-                var count = items.Count;
-                this.LogItemAdded(ti, count);
-
-                // Compute desired index based on current selection snapshot
-                int desiredIndex;
-                if (items.Count == 1)
-                {
-                    desiredIndex = 0;
-                }
-                else if (this.SelectedItem is TabItem sel && items.Contains(sel))
-                {
-                    var selIndex = items.IndexOf(sel);
-                    desiredIndex = Math.Min(selIndex + 1, items.Count - 1);
-                }
-                else
-                {
-                    desiredIndex = items.Count - 1;
-                }
-
-                this.DeferMoveAndSelect(items, ti, desiredIndex);
+                indexOffset++;
+                continue;
             }
+
+            // Log addition now (collection already contains the new item)
+            var count = items.Count;
+            this.LogItemAdded(ti, count);
+
+            var resolvedIndex = e.NewStartingIndex >= 0
+                ? Math.Clamp(e.NewStartingIndex + indexOffset, 0, items.Count - 1)
+                : items.IndexOf(ti);
+
+            // Compute desired index based on current selection snapshot unless an external
+            // insert requested an explicit location (for example, a drag-and-drop operation).
+            int desiredIndex;
+            if (this.pendingExternalInsert is { } external
+                && ti.ContentId == external.ContentId
+                && resolvedIndex == external.TargetIndex)
+            {
+                desiredIndex = external.TargetIndex;
+            }
+            else if (items.Count == 1)
+            {
+                desiredIndex = 0;
+            }
+            else if (this.SelectedItem is TabItem sel && items.Contains(sel))
+            {
+                var selIndex = items.IndexOf(sel);
+                desiredIndex = Math.Min(selIndex + 1, items.Count - 1);
+            }
+            else
+            {
+                desiredIndex = items.Count - 1;
+            }
+
+            this.DeferMoveAndSelect(items, ti, desiredIndex);
+            indexOffset++;
         }
     }
 
@@ -1127,6 +1513,7 @@ public partial class TabStrip : Control, ITabStrip
                     if (curIndex >= 0 && curIndex != target)
                     {
                         items.Move(curIndex, target);
+                        this.RefreshAllRealizedItemIndices();
                     }
 
                     // Newly added item becomes the selected item
@@ -1160,28 +1547,29 @@ public partial class TabStrip : Control, ITabStrip
     // Handle removals: if the selected item was removed, choose a neighbor
     private void HandleRemovedItems(ObservableCollection<TabItem> items, NotifyCollectionChangedEventArgs e)
     {
+        // If the previously-selected item is gone, choose a deterministic adjacent item.
+        // Preferred policy: select the item that occupies the removed item's index (right neighbor),
+        // clamped to the last item. This matches common tab-strip behavior and avoids leaving
+        // the control without a selection.
         if (this.SelectedItem is TabItem sel && !items.Contains(sel))
         {
             if (items.Count == 0)
             {
+                // No items remain
                 this.SelectedItem = null;
                 this.SelectedIndex = -1;
+                return;
             }
-            else
-            {
-                var removedIndex = e.OldStartingIndex;
-                var candidateIndex = removedIndex - 1;
-                if (candidateIndex >= 0 && candidateIndex < items.Count)
-                {
-                    this.SelectedItem = items[candidateIndex];
-                }
-                else
-                {
-                    // pick the item at the removedIndex (which is now the next item), or the last item
-                    var fallback = Math.Min(Math.Max(0, removedIndex), items.Count - 1);
-                    this.SelectedItem = items[fallback];
-                }
-            }
+
+            // Use the starting index of the removal. If it's not provided (negative),
+            // defensively pick 0 so we still choose a valid neighbor.
+            var removedIndex = e.OldStartingIndex >= 0 ? e.OldStartingIndex : 0;
+
+            // Prefer the right neighbor (the item that now occupies the removed index).
+            var newIndex = Math.Min(removedIndex, items.Count - 1);
+            newIndex = Math.Max(0, newIndex);
+
+            this.SelectedItem = items[newIndex];
         }
     }
 
@@ -1233,4 +1621,8 @@ public partial class TabStrip : Control, ITabStrip
         // Try to update overflow visibility immediately in case layout is already settled.
         this.UpdateOverflowButtonVisibility();
     }
+
+    private readonly record struct ExternalInsertInfo(Guid ContentId, int TargetIndex);
+
+    private readonly record struct RealizedItemInfo(FrameworkElement Element, int Index, bool IsPinned);
 }

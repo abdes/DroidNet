@@ -587,19 +587,31 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         public int? ReturnIndexOverride { get; set; }
 
-        public int? CompleteDrag()
+        public bool? LastDropArgument { get; private set; }
+
+        public DragContext? LastContext { get; private set; }
+
+        public SpatialPoint<PhysicalScreenSpace>? LastInitiatePosition { get; private set; }
+
+        public SpatialPoint<PhysicalScreenSpace>? LastMovePosition { get; private set; }
+
+        public int? CompleteDrag(bool drop)
         {
             this.CompleteCalled = true;
+            this.LastDropArgument = drop;
             this.ReturnedIndex = this.ReturnIndexOverride;
             return this.ReturnedIndex;
         }
 
-        public void InitiateDrag(DragContext context, SpatialPoint<ScreenSpace> initialPoint)
+        public void InitiateDrag(DragContext context, SpatialPoint<PhysicalScreenSpace> position)
         {
+            this.LastContext = context;
+            this.LastInitiatePosition = position;
         }
 
-        public void OnDragPositionChanged(SpatialPoint<ScreenSpace> currentPoint)
+        public void OnDragPositionChanged(SpatialPoint<PhysicalScreenSpace> position)
         {
+            this.LastMovePosition = position;
         }
     }
 

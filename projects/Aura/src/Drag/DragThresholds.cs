@@ -10,20 +10,26 @@ namespace DroidNet.Aura.Drag;
 public static class DragThresholds
 {
     /// <summary>
-    ///     The minimum distance in pixels that the pointer must move after initial press
-    ///     to initiate a drag operation. This prevents accidental drags from simple clicks.
+    ///     The minimum distance in pixels that the pointer must move after initial press to
+    ///     initiate a drag operation. This prevents accidental drags from simple clicks.
     /// </summary>
-    public const double DragInitiationThreshold = 5.0;
+    public const double InitiationThreshold = 5.0;
 
     /// <summary>
-    ///     The distance in pixels that the pointer must move outside the TabStrip bounds
-    ///     to trigger a transition from Reorder mode to TearOut mode.
+    ///     The distance in pixels that the pointer must move outside the TabStrip bounds to trigger
+    ///     a transition from Reorder mode to TearOut mode.
     /// </summary>
-    public const double TearOutThreshold = 20.0;
+    public const double TearOutThreshold = 5.0;
 
     /// <summary>
-    ///     The fraction of a tab item's width that the pointer must cross to trigger
-    ///     a swap with an adjacent item during reordering.
+    ///     The distance in pixels that the edge of the dragged item should move inside an adjacent
+    ///     item to trigger a swap.
     /// </summary>
-    public const double SwapThreshold = 0.5;
+    public const double SwapThreshold = 10.0;
+
+    /// <summary>
+    ///     The minimum value, any of the drag thresholds can be set to. This guarantees a
+    ///     reasonable and consistent user experience.
+    /// </summary>
+    public const double MinThresholdValue = 4.0;
 }
