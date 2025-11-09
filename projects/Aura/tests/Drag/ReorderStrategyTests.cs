@@ -378,7 +378,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task CompleteDrag_CallsRemoveAndInsert_OnSameStripDrop_Async() => EnqueueAsync(async () =>
+    public Task CompleteDrag_DoesNotInvokeMove_WhenDropIndexUnchanged_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var mockStrip = new TabStripMockBuilder().Build();
@@ -392,8 +392,8 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         _ = setup.Strategy.CompleteDrag();
 
         // Assert
-        mockStrip.VerifyRemoveItemAt(0, Times.Once());
-        mockStrip.Verify(m => m.InsertItemAt(It.IsAny<int>(), tabItem), Times.Once());
+        mockStrip.VerifyMoveItem(It.IsAny<int>(), It.IsAny<int>(), Times.Never());
+        mockStrip.Verify(m => m.InsertItemAt(It.IsAny<int>(), tabItem), Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -428,26 +428,51 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         // Arrange
         var draggedItem = CreateTabItem("DraggedTab");
         var mockStrip = new TabStripMockBuilder().Build();
+        var snapshots = new List<TabStripItemSnapshot>
+        {
+            new()
+            {
+                ItemIndex = 0,
+                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(0, 0)),
+                Width = DefaultItemWidth,
+            },
+            new()
+            {
+                ItemIndex = 1,
+                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(DefaultItemWidth + 10, 0)),
+                Width = DefaultItemWidth,
+            },
+            new()
+            {
+                ItemIndex = 2,
+                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point((DefaultItemWidth + 10) * 2, 0)),
+                Width = DefaultItemWidth,
+            },
+        }.AsReadOnly();
         var setup = this.StartDrag(
             strategy: new ReorderStrategy(this.LoggerFactory),
             stripMock: mockStrip,
             draggedItem: draggedItem,
-            draggedIndex: 1,
-            visualElement: new Border());
+            draggedIndex: 0,
+            visualElement: new Border(),
+            startX: DefaultItemWidth / 2,
+            snapshots: snapshots);
+
+        setup.Strategy.OnDragPositionChanged(DragTestHelpers.PhysicalPoint((DefaultItemWidth + 10) * 2, DefaultItemHeight / 2));
 
         // Act
         var result = setup.Strategy.CompleteDrag();
 
         // Assert
-        _ = result.Should().Be(1); // Should return the final drop index
-        mockStrip.VerifyRemoveItemAt(1, Times.Once());
-        mockStrip.Verify(m => m.InsertItemAt(1, draggedItem), Times.Once());
+        _ = result.Should().Be(1); // Should return the final drop index after moving past the neighbor
+        mockStrip.VerifyMoveItem(0, 1, Times.Once());
+        mockStrip.Verify(m => m.InsertItemAt(It.IsAny<int>(), draggedItem), Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     [TestMethod]
-    public Task CompleteDrag_RemovesAndReinsertsItem_OnSameStripDrop_Async() => EnqueueAsync(async () =>
+    public Task CompleteDrag_DoesNotRemoveItem_OnSameStripDrop_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var draggedItem = CreateTabItem("DraggedTab");
@@ -463,7 +488,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
 
         // Assert
         _ = result.Should().NotBeNull();
-        sourceStrip.VerifyRemoveItemAt(It.IsAny<int>(), Times.AtLeastOnce());
+        sourceStrip.VerifyRemoveItemAt(It.IsAny<int>(), Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -512,7 +537,8 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         FrameworkElement? visualElement = null,
         FrameworkElement? stripElement = null,
         double startX = 50,
-        double startY = 25)
+        double startY = 25,
+        IReadOnlyList<TabStripItemSnapshot>? snapshots = null)
     {
         var activeStrategy = strategy ?? new ReorderStrategy();
         Mock<ITabStrip> activeStrip;
@@ -527,7 +553,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         }
 
         // Always setup snapshot for the current draggedIndex (overwrites any previous setup)
-        activeStrip.Setup(m => m.TakeSnapshot()).Returns(new List<TabStripItemSnapshot>
+        var snapshotItems = snapshots ?? new List<TabStripItemSnapshot>
         {
             new()
             {
@@ -535,7 +561,8 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
                 LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(0, 0)),
                 Width = DefaultItemWidth,
             },
-        }.AsReadOnly());
+        }.AsReadOnly();
+        activeStrip.Setup(m => m.TakeSnapshot()).Returns(snapshotItems);
 
         var item = draggedItem ?? CreateTabItem();
         var context = this.CreateDragContext(activeStrip, item, draggedIndex, visualElement, stripElement, out _);

@@ -2,72 +2,81 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
-using DroidNet.Aura.Windowing;
+using System;
+using System.ComponentModel;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
-using Windows.Foundation;
+using Windows.Graphics;
+using Windows.Graphics.Imaging;
+using WinPoint = Windows.Foundation.Point;
+using WinSize = Windows.Foundation.Size;
 
 namespace DroidNet.Aura.Drag;
 
 /// <summary>
-///     Implementation of <see cref="IDragVisualService"/> using a frameless WinUI window for the drag
-///     overlay. The overlay is non-activating and provides visual feedback during drag operations.
+///     Implementation of <see cref="IDragVisualService"/> using a Win32 layered window for the drag
+///     overlay. The overlay is topmost, non-activating, click-through, and survives source
+///     AppWindow closure.
 /// </summary>
-/// <remarks>
-///     This service uses dependency injection to obtain a window factory and spatial mapper factory,
-///     enabling proper coordinate transformations and window management without manual Win32 interop.
-/// </remarks>
 public partial class DragVisualService : IDragVisualService
 {
+    private const double DefaultWidthDip = 400.0;
+    private const double DefaultHeightDip = 200.0;
+    private const double PreviewSpacingDip = 4.0;
+
     private readonly ILogger logger;
     private readonly DispatcherQueue dispatcherQueue;
-    private readonly IWindowFactory windowFactory;
-    private readonly SpatialMapperFactory spatialMapperFactory;
     private readonly Lock syncLock = new();
+    private readonly bool suppressOverlay;
 
     private DragSessionToken? activeToken;
     private DragVisualDescriptor? activeDescriptor;
-    private DragOverlayWindow? overlayWindow;
+    private NativeDragOverlayWindow? overlayWindow;
     private SpatialPoint<ScreenSpace> windowPositionOffsets;
     private bool windowIsShown;
-    private ISpatialMapper? mapper;
+    private double currentScale = 1.0;
+    private uint currentDpi = 96;
+    private SpatialPoint<PhysicalScreenSpace> lastPointerPosition;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DragVisualService"/> class.
     /// </summary>
-    /// <param name="hosting">The <see cref="HostingContext"/> providing the UI thread dispatcher.</param>
-    /// <param name="windowFactory">The window factory for creating the overlay window.</param>
-    /// <param name="spatialMapperFactory">The spatial mapper factory for coordinate transformations.</param>
-    /// <param name="loggerFactory">
-    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
-    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
-    /// </param>
-    public DragVisualService(
-        HostingContext hosting,
-        IWindowFactory windowFactory,
-        SpatialMapperFactory spatialMapperFactory,
-        ILoggerFactory? loggerFactory = null)
+    /// <param name="hosting">The hosting context that exposes the UI dispatcher.</param>
+    /// <param name="loggerFactory">Optional logger factory.</param>
+    public DragVisualService(HostingContext hosting, ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(hosting);
-        ArgumentNullException.ThrowIfNull(windowFactory);
-        ArgumentNullException.ThrowIfNull(spatialMapperFactory);
 
         this.logger = loggerFactory?.CreateLogger<DragVisualService>() ?? NullLogger<DragVisualService>.Instance;
         this.dispatcherQueue = hosting.Dispatcher;
-        this.windowFactory = windowFactory;
-        this.spatialMapperFactory = spatialMapperFactory;
+        this.suppressOverlay = DesignModeService.IsDesignModeEnabled;
+
         this.LogCreated();
     }
 
-    /// <inheritdoc/>
-    public DragSessionToken StartSession(DragVisualDescriptor descriptor, SpatialPoint<PhysicalScreenSpace> initialPosition, SpatialPoint<ScreenSpace> hotspotOffsets)
+    /// <inheritdoc />
+    public DragSessionToken StartSession(
+        DragVisualDescriptor descriptor,
+        SpatialPoint<PhysicalScreenSpace> initialPosition,
+        SpatialPoint<ScreenSpace> hotspotOffsets)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+
+        if (this.suppressOverlay)
+        {
+            this.LogSessionSuppressedForDesignMode();
+            return default;
+        }
+
         this.AssertUIThread();
 
         lock (this.syncLock)
@@ -82,15 +91,17 @@ public partial class DragVisualService : IDragVisualService
             this.activeToken = token;
             this.activeDescriptor = descriptor;
             this.windowPositionOffsets = hotspotOffsets;
+            this.lastPointerPosition = initialPosition;
 
-            // Subscribe to descriptor changes
-            this.activeDescriptor.PropertyChanged += this.OnDescriptorPropertyChanged;
+            descriptor.PropertyChanged += this.OnDescriptorPropertyChanged;
 
-            // Create the overlay window using the factory
-            this.CreateOverlayWindowAsync().GetAwaiter().GetResult();
-            this.mapper = this.spatialMapperFactory(this.overlayWindow, null);
+            this.overlayWindow = new NativeDragOverlayWindow(this);
+            _ = this.UpdateMonitorScale(initialPosition);
+            this.RefreshOverlayVisual();
+            this.MoveOverlay(initialPosition);
 
-            this.UpdatePosition(token, initialPosition);
+            this.overlayWindow.Show();
+            this.windowIsShown = true;
 
             this.LogSessionStarted();
 
@@ -98,9 +109,14 @@ public partial class DragVisualService : IDragVisualService
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> position)
     {
+        if (this.suppressOverlay)
+        {
+            return;
+        }
+
         this.AssertUIThread();
 
         lock (this.syncLock)
@@ -117,31 +133,36 @@ public partial class DragVisualService : IDragVisualService
                 return;
             }
 
-            // Subtract windowPositionOffsets to get window position
-            Debug.Assert(this.mapper is not null, "Spatial mapper should be initialized when overlay window is created.");
-            var windowPosition = (this.mapper.ToPhysicalScreen(position) - this.mapper.ToPhysicalScreen(this.windowPositionOffsets)).ToPoint();
+            this.lastPointerPosition = position;
+            var scaleChanged = this.UpdateMonitorScale(position);
+            if (scaleChanged)
+            {
+                this.RefreshOverlayVisual();
+            }
 
-            this.LogPositionUpdated(
-                position.Point,
-                windowPosition);
-
-            // Move the window using the virtual MoveWindow method
-            this.overlayWindow.MoveWindow(new Windows.Graphics.PointInt32(
-                (int)Math.Round(windowPosition.X),
-                (int)Math.Round(windowPosition.Y)));
+            this.MoveOverlay(position);
 
             if (!this.windowIsShown)
             {
-                // Show the window without activating it (no focus steal)
-                this.overlayWindow.ShowNoActivate();
+                this.overlayWindow.Show();
                 this.windowIsShown = true;
             }
+
+            var windowPosition = this.overlayWindow.CurrentPosition;
+            this.LogPositionUpdated(
+                position.Point,
+                new WinPoint(windowPosition.X, windowPosition.Y));
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public void EndSession(DragSessionToken token)
     {
+        if (this.suppressOverlay)
+        {
+            return;
+        }
+
         this.AssertUIThread();
 
         lock (this.syncLock)
@@ -155,29 +176,37 @@ public partial class DragVisualService : IDragVisualService
             if (this.activeDescriptor is not null)
             {
                 this.activeDescriptor.PropertyChanged -= this.OnDescriptorPropertyChanged;
+                this.activeDescriptor.HeaderBitmap = null;
+                this.activeDescriptor.PreviewBitmap = null;
             }
 
             this.DestroyOverlayWindow();
             this.windowIsShown = false;
-
-            this.LogSessionEnded();
-
             this.activeDescriptor = null;
             this.activeToken = null;
-            this.mapper = null;
             this.windowPositionOffsets = default;
+            this.lastPointerPosition = default;
+            this.currentScale = 1.0;
+            this.currentDpi = 96;
+
+            this.LogSessionEnded();
         }
     }
 
-    /// <inheritdoc/>
+    /// <inheritdoc />
     public DragVisualDescriptor? GetDescriptor(DragSessionToken token)
     {
         lock (this.syncLock)
         {
-            return !this.activeToken.HasValue || this.activeToken.Value != token
-                ? null
-                : this.activeDescriptor;
+            return !this.activeToken.HasValue || this.activeToken.Value != token ? null : this.activeDescriptor;
         }
+    }
+
+    /// <inheritdoc />
+    public bool TryEnqueue(Action action)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+        return this.dispatcherQueue.TryEnqueue(() => action());
     }
 
     private void AssertUIThread()
@@ -188,36 +217,90 @@ public partial class DragVisualService : IDragVisualService
         }
     }
 
-    private async Task CreateOverlayWindowAsync()
+    private void RefreshOverlayVisual()
     {
-        // Destroy existing window if any
-        this.DestroyOverlayWindow();
-
-        // Get initial size from descriptor
-        var requestedSize = this.activeDescriptor?.RequestedSize ?? new Size(200, 100);
-        if (requestedSize.Width <= 0 || requestedSize.Height <= 0)
+        if (this.overlayWindow is null || this.activeDescriptor is null)
         {
-            requestedSize = new Size(400, 400);
+            return;
         }
 
-        // Create the overlay window using the factory
-        // Note: We don't register this window with the window manager since it's a transient overlay
-        this.overlayWindow = await this.windowFactory.CreateDecoratedWindow<DragOverlayWindow>(WindowCategory.Frameless).ConfigureAwait(false);
-        this.overlayWindow.AppWindow.IsShownInSwitchers = false;
+        var descriptor = this.activeDescriptor;
+        var size = this.ToPixelSize(descriptor.RequestedSize);
+        var header = CreateNativeImage(descriptor.HeaderBitmap);
+        var preview = CreateNativeImage(descriptor.PreviewBitmap);
+        var spacingPx = this.DipToPixels(PreviewSpacingDip);
 
-        // Get the window's content element for spatial mapper and data binding
-        if (this.overlayWindow.Content is not FrameworkElement element)
+        this.overlayWindow.SetSize(size);
+        this.overlayWindow.UpdateContent(header, preview, size, spacingPx);
+        this.MoveOverlay(this.lastPointerPosition);
+    }
+
+    private void MoveOverlay(SpatialPoint<PhysicalScreenSpace> pointerPosition)
+    {
+        if (this.overlayWindow is null)
         {
-            throw new InvalidOperationException("Overlay window content is not a FrameworkElement.");
+            return;
         }
 
-        // Set the descriptor as the DataContext for data binding
-        element.DataContext = this.activeDescriptor;
+        var pointerX = (int)Math.Round(pointerPosition.Point.X, MidpointRounding.AwayFromZero);
+        var pointerY = (int)Math.Round(pointerPosition.Point.Y, MidpointRounding.AwayFromZero);
+        var offsetX = this.DipToPixels(this.windowPositionOffsets.Point.X);
+        var offsetY = this.DipToPixels(this.windowPositionOffsets.Point.Y);
 
-        // Set the window size
-        this.overlayWindow.SetSize(requestedSize);
+        var position = new PointInt32(pointerX - offsetX, pointerY - offsetY);
+        this.overlayWindow.Move(position);
+    }
 
-        this.LogLayeredWindowCreated();
+    private bool UpdateMonitorScale(SpatialPoint<PhysicalScreenSpace> pointerPosition)
+    {
+        var dpi = ResolveMonitorDpi(pointerPosition);
+        if (dpi == 0)
+        {
+            dpi = 96;
+        }
+
+        if (dpi == this.currentDpi)
+        {
+            return false;
+        }
+
+        this.currentDpi = dpi;
+        this.currentScale = dpi / 96.0;
+        return true;
+    }
+
+    private SizeInt32 ToPixelSize(WinSize requestedSize)
+    {
+        var widthDip = requestedSize.Width > 0 ? requestedSize.Width : DefaultWidthDip;
+        var heightDip = requestedSize.Height > 0 ? requestedSize.Height : DefaultHeightDip;
+
+        return new SizeInt32(
+            Math.Max(1, (int)Math.Round(widthDip * this.currentScale, MidpointRounding.AwayFromZero)),
+            Math.Max(1, (int)Math.Round(heightDip * this.currentScale, MidpointRounding.AwayFromZero)));
+    }
+
+    private int DipToPixels(double dips) =>
+        (int)Math.Round(dips * this.currentScale, MidpointRounding.AwayFromZero);
+
+    private static NativeImage? CreateNativeImage(SoftwareBitmap? bitmap)
+    {
+        if (bitmap is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var normalized = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            var pixelCount = normalized.PixelWidth * normalized.PixelHeight * 4;
+            var pixels = new byte[pixelCount];
+            normalized.CopyToBuffer(pixels.AsBuffer());
+            return new NativeImage(pixels, normalized.PixelWidth, normalized.PixelHeight);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private void DestroyOverlayWindow()
@@ -227,43 +310,520 @@ public partial class DragVisualService : IDragVisualService
             return;
         }
 
-        this.overlayWindow.Close();
+        this.overlayWindow.Dispose();
         this.overlayWindow = null;
-
-        this.LogLayeredWindowDestroyed();
     }
 
-    // Queue render update on UI thread
-    private void OnDescriptorPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e) =>
+    private void OnDescriptorPropertyChanged(object? sender, PropertyChangedEventArgs e) =>
         _ = this.dispatcherQueue.TryEnqueue(() =>
         {
             lock (this.syncLock)
             {
-                // Validate descriptor reference inside lock to ensure consistency
-                if (sender is not DragVisualDescriptor descriptor || this.activeDescriptor != descriptor)
+                if (sender is not DragVisualDescriptor descriptor || !ReferenceEquals(this.activeDescriptor, descriptor))
                 {
                     return;
                 }
 
-                // Handle size changes (header/preview images are handled automatically via data binding)
-                switch (e.PropertyName)
-                {
-                    case var name when string.Equals(name, nameof(DragVisualDescriptor.HeaderImage), StringComparison.Ordinal)
-                        || string.Equals(name, nameof(DragVisualDescriptor.PreviewImage), StringComparison.Ordinal):
-                        // Data binding automatically updates the images
-                        this.LogDescriptorPropertyChanged(name ?? "Unknown", "updated via data binding");
-                        break;
-                    case var name when string.Equals(name, nameof(DragVisualDescriptor.RequestedSize), StringComparison.Ordinal):
-                        // Size change can be applied directly
-                        this.LogDescriptorPropertyChanged(name ?? "Unknown", "resizing window");
-                        var size = descriptor.RequestedSize;
-                        if (size.Width > 0 && size.Height > 0)
-                        {
-                            this.overlayWindow?.SetSize(size);
-                        }
+                var propertyName = e.PropertyName;
 
+                switch (propertyName)
+                {
+                    case nameof(DragVisualDescriptor.HeaderBitmap):
+                    case nameof(DragVisualDescriptor.PreviewBitmap):
+                        this.LogDescriptorPropertyChanged(propertyName ?? "Unknown", "update layered content");
+                        this.RefreshOverlayVisual();
+                        break;
+
+                    case nameof(DragVisualDescriptor.RequestedSize):
+                        this.LogDescriptorPropertyChanged(propertyName ?? "Unknown", "resize layered window");
+                        this.RefreshOverlayVisual();
                         break;
                 }
             }
         });
+
+    private static uint ResolveMonitorDpi(SpatialPoint<PhysicalScreenSpace> pointerPosition)
+    {
+        var point = new NativeMethods.Point(
+            (int)Math.Round(pointerPosition.Point.X, MidpointRounding.AwayFromZero),
+            (int)Math.Round(pointerPosition.Point.Y, MidpointRounding.AwayFromZero));
+
+        var monitor = NativeMethods.MonitorFromPoint(point, NativeMethods.MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero)
+        {
+            return 96;
+        }
+
+        var result = NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MonitorDpiType.EffectiveDpi, out var dpiX, out _);
+        return result < 0 || dpiX == 0 ? 96u : dpiX;
+    }
+
+    private readonly record struct NativeImage(byte[] Pixels, int Width, int Height);
+
+    private sealed class NativeDragOverlayWindow : IDisposable
+    {
+        private readonly DragVisualService owner;
+        private readonly nint hwnd;
+        private PointInt32 currentPosition;
+        private SizeInt32 currentSize;
+
+        internal NativeDragOverlayWindow(DragVisualService owner)
+        {
+            this.owner = owner;
+            NativeWindowClass.EnsureRegistered();
+            this.hwnd = this.CreateWindow();
+            this.currentPosition = new PointInt32(0, 0);
+            this.currentSize = new SizeInt32(1, 1);
+            this.owner.LogLayeredWindowCreated();
+        }
+
+        internal PointInt32 CurrentPosition => this.currentPosition;
+
+        public void Show()
+        {
+            const int ShowNoActivate = 4;
+            _ = NativeMethods.ShowWindow(this.hwnd, ShowNoActivate);
+            _ = NativeMethods.SetWindowPos(
+                this.hwnd,
+                NativeMethods.HwndTopMost,
+                this.currentPosition.X,
+                this.currentPosition.Y,
+                this.currentSize.Width,
+                this.currentSize.Height,
+                NativeMethods.SwpNoActivate | NativeMethods.SwpShowWindow);
+        }
+
+        public void Move(PointInt32 position)
+        {
+            this.currentPosition = position;
+            _ = NativeMethods.SetWindowPos(
+                this.hwnd,
+                NativeMethods.HwndTopMost,
+                position.X,
+                position.Y,
+                0,
+                0,
+                NativeMethods.SwpNoSize | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        }
+
+        public void SetSize(SizeInt32 size)
+        {
+            if (size.Width <= 0 || size.Height <= 0)
+            {
+                size = new SizeInt32(1, 1);
+            }
+
+            if (size.Equals(this.currentSize))
+            {
+                return;
+            }
+
+            this.currentSize = size;
+            _ = NativeMethods.SetWindowPos(
+                this.hwnd,
+                NativeMethods.HwndTopMost,
+                0,
+                0,
+                size.Width,
+                size.Height,
+                NativeMethods.SwpNoMove | NativeMethods.SwpNoActivate | NativeMethods.SwpNoOwnerZOrder);
+        }
+
+        public void UpdateContent(NativeImage? header, NativeImage? preview, SizeInt32 windowSize, int spacingPx)
+        {
+            using var surface = new Bitmap(windowSize.Width, windowSize.Height, PixelFormat.Format32bppPArgb);
+
+            using (var graphics = Graphics.FromImage(surface))
+            {
+                graphics.Clear(Color.Transparent);
+                graphics.CompositingMode = CompositingMode.SourceOver;
+                graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+                graphics.SmoothingMode = SmoothingMode.HighQuality;
+
+                var y = 0;
+
+                if (header.HasValue)
+                {
+                    using var headerBitmap = CreateBitmapFromNativeImage(header.Value);
+                    var headerHeight = Math.Min(header.Value.Height, windowSize.Height);
+                    var headerWidth = Math.Min(header.Value.Width, windowSize.Width);
+                    var destRect = new Rectangle(0, 0, headerWidth, headerHeight);
+                    graphics.DrawImage(headerBitmap, destRect);
+                    y = destRect.Bottom;
+                }
+
+                if (preview.HasValue && y < windowSize.Height)
+                {
+                    if (header.HasValue && spacingPx > 0)
+                    {
+                        y = Math.Min(windowSize.Height, y + spacingPx);
+                    }
+
+                    var availableHeight = windowSize.Height - y;
+                    if (availableHeight > 0 && windowSize.Width > 0)
+                    {
+                        using var previewBitmap = CreateBitmapFromNativeImage(preview.Value);
+                        var scale = Math.Min(
+                            windowSize.Width / (double)preview.Value.Width,
+                            availableHeight / (double)preview.Value.Height);
+
+                        var destWidth = Math.Max(1, (int)Math.Round(preview.Value.Width * scale, MidpointRounding.AwayFromZero));
+                        var destHeight = Math.Max(1, (int)Math.Round(preview.Value.Height * scale, MidpointRounding.AwayFromZero));
+                        var destRect = new Rectangle(0, y, destWidth, destHeight);
+                        graphics.DrawImage(previewBitmap, destRect);
+                    }
+                }
+            }
+
+            using var gdi = new GdiBitmap(this.owner, surface);
+            gdi.Commit(this.hwnd, windowSize, this.currentPosition);
+        }
+
+        public void Dispose()
+        {
+            if (this.hwnd != IntPtr.Zero)
+            {
+                _ = NativeMethods.DestroyWindow(this.hwnd);
+                this.owner.LogLayeredWindowDestroyed();
+            }
+        }
+
+        private nint CreateWindow()
+        {
+            var exStyle = NativeMethods.WsExLayered | NativeMethods.WsExTransparent | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
+            var hwnd = NativeMethods.CreateWindowEx(
+                exStyle,
+                NativeWindowClass.ClassName,
+                string.Empty,
+                NativeMethods.WsPopup,
+                0,
+                0,
+                1,
+                1,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                NativeWindowClass.ModuleHandle,
+                IntPtr.Zero);
+
+            if (hwnd == IntPtr.Zero)
+            {
+                var error = Marshal.GetLastWin32Error();
+                this.owner.LogCreateLayeredWindowFailed(error);
+                throw new InvalidOperationException("Failed to create drag overlay window.");
+            }
+
+            return hwnd;
+        }
+
+        private static Bitmap CreateBitmapFromNativeImage(NativeImage image)
+        {
+            var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppPArgb);
+            var rect = new Rectangle(0, 0, image.Width, image.Height);
+            var data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, bitmap.PixelFormat);
+
+            try
+            {
+                Marshal.Copy(image.Pixels, 0, data.Scan0, image.Pixels.Length);
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+
+            return bitmap;
+        }
+
+        private sealed class GdiBitmap : IDisposable
+        {
+            private readonly DragVisualService owner;
+            private readonly nint hBitmap;
+
+            internal GdiBitmap(DragVisualService owner, Bitmap surface)
+            {
+                this.owner = owner;
+                this.hBitmap = surface.GetHbitmap(Color.FromArgb(0));
+                if (this.hBitmap == IntPtr.Zero)
+                {
+                    this.owner.LogCreateDibSectionFailed();
+                    throw new InvalidOperationException("Failed to create DIB section.");
+                }
+            }
+
+            public void Commit(nint hwnd, SizeInt32 size, PointInt32 position)
+            {
+                var memoryDc = NativeMethods.CreateCompatibleDC(IntPtr.Zero);
+                if (memoryDc == IntPtr.Zero)
+                {
+                    this.owner.LogCreateCompatibleDcFailed();
+                    return;
+                }
+
+                try
+                {
+                    var previous = NativeMethods.SelectObject(memoryDc, this.hBitmap);
+                    try
+                    {
+                        var dest = new NativeMethods.Point(position.X, position.Y);
+                        var src = new NativeMethods.Point(0, 0);
+                        var winSize = new NativeMethods.Size(size.Width, size.Height);
+                        var blend = new NativeMethods.BlendFunction
+                        {
+                            BlendOp = NativeMethods.AcSrcOver,
+                            BlendFlags = 0,
+                            SourceConstantAlpha = 255,
+                            AlphaFormat = NativeMethods.AcSrcAlpha,
+                        };
+
+                        if (!NativeMethods.UpdateLayeredWindow(hwnd, IntPtr.Zero, ref dest, ref winSize, memoryDc, ref src, 0, ref blend, NativeMethods.UlwAlpha))
+                        {
+                            var error = Marshal.GetLastWin32Error();
+                            this.owner.LogCreateLayeredWindowFailed(error);
+                        }
+                        else
+                        {
+                            this.owner.LogDibSectionCreated();
+                        }
+                    }
+                    finally
+                    {
+                        _ = NativeMethods.SelectObject(memoryDc, previous);
+                    }
+                }
+                finally
+                {
+                    NativeMethods.DeleteDC(memoryDc);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (this.hBitmap != IntPtr.Zero)
+                {
+                    _ = NativeMethods.DeleteObject(this.hBitmap);
+                }
+            }
+        }
+
+        private static class NativeWindowClass
+        {
+            internal const string ClassName = "DroidNet_Aura_DragOverlay";
+            private static ushort atom;
+            private static readonly NativeMethods.WindowProcedure WindowProcedureDelegate = WindowProc;
+            private static readonly nint WindowProcedurePointer = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate);
+
+            internal static nint ModuleHandle => NativeMethods.GetModuleHandle(null);
+
+            internal static void EnsureRegistered()
+            {
+                if (atom != 0)
+                {
+                    return;
+                }
+
+                var wndClass = new NativeMethods.WndClassEx
+                {
+                    Size = (uint)Marshal.SizeOf<NativeMethods.WndClassEx>(),
+                    Style = 0,
+                    WindowProcedure = WindowProcedurePointer,
+                    ClassExtraBytes = 0,
+                    WindowExtraBytes = 0,
+                    InstanceHandle = ModuleHandle,
+                    CursorHandle = NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IdcArrow),
+                    BackgroundBrush = IntPtr.Zero,
+                    MenuName = IntPtr.Zero,
+                };
+
+                var classNameHandle = Marshal.StringToHGlobalUni(ClassName);
+                try
+                {
+                    wndClass.ClassName = classNameHandle;
+                    atom = NativeMethods.RegisterClassEx(ref wndClass);
+                }
+                finally
+                {
+                    if (classNameHandle != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(classNameHandle);
+                    }
+                }
+
+                if (atom == 0)
+                {
+                    throw new InvalidOperationException("Failed to register drag overlay window class.");
+                }
+            }
+
+            private static nint WindowProc(nint hwnd, uint msg, nint wParam, nint lParam) =>
+                NativeMethods.DefWindowProc(hwnd, msg, wParam, lParam);
+        }
+    }
+
+    private static partial class NativeMethods
+    {
+        internal const int WsPopup = unchecked((int)0x8000_0000);
+        internal const int WsExLayered = 0x0008_0000;
+        internal const int WsExTransparent = 0x0000_0020;
+        internal const int WsExToolWindow = 0x0000_0080;
+        internal const int WsExNoActivate = 0x0800_0000;
+
+        internal const uint SwpNoSize = 0x0001;
+        internal const uint SwpNoMove = 0x0002;
+        internal const uint SwpNoActivate = 0x0010;
+        internal const uint SwpShowWindow = 0x0040;
+        internal const uint SwpNoOwnerZOrder = 0x0200;
+
+        internal const uint UlwAlpha = 0x0000_0002;
+        internal const byte AcSrcOver = 0x00;
+        internal const byte AcSrcAlpha = 0x01;
+
+        internal const int MonitorDefaultToNearest = 0x0000_0002;
+        internal static readonly nint HwndTopMost = new(-1);
+        internal static readonly nint IdcArrow = new(32512);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct Point
+        {
+            internal readonly int X;
+            internal readonly int Y;
+
+            internal Point(int x, int y)
+            {
+                this.X = x;
+                this.Y = y;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal readonly struct Size
+        {
+            internal readonly int Width;
+            internal readonly int Height;
+
+            internal Size(int width, int height)
+            {
+                this.Width = width;
+                this.Height = height;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WndClassEx
+        {
+            internal uint Size;
+            internal uint Style;
+            internal nint WindowProcedure;
+            internal int ClassExtraBytes;
+            internal int WindowExtraBytes;
+            internal nint InstanceHandle;
+            internal nint IconHandle;
+            internal nint CursorHandle;
+            internal nint BackgroundBrush;
+            internal nint MenuName;
+            internal nint ClassName;
+            internal nint SmallIconHandle;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct BlendFunction
+        {
+            internal byte BlendOp;
+            internal byte BlendFlags;
+            internal byte SourceConstantAlpha;
+            internal byte AlphaFormat;
+        }
+
+        [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16)]
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "SYSLIB1051:Types used with LibraryImport must be blittable", Justification = "Struct is manually marshalled and uses raw pointers for strings.")]
+        internal static partial nint CreateWindowEx(
+            int extendedStyle,
+            string className,
+            string? windowName,
+            int style,
+            int x,
+            int y,
+            int width,
+            int height,
+            nint parentHandle,
+            nint menuHandle,
+            nint instanceHandle,
+            nint param);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool DestroyWindow(nint windowHandle);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool ShowWindow(nint windowHandle, int commandShow);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool SetWindowPos(
+            nint windowHandle,
+            nint insertAfter,
+            int x,
+            int y,
+            int width,
+            int height,
+            uint flags);
+
+    [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "RegisterClassExW")]
+    internal static unsafe partial ushort RegisterClassEx(ref WndClassEx classEx);
+
+    [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")]
+    internal static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
+
+        [LibraryImport("user32.dll", EntryPoint = "LoadCursorW")]
+        internal static partial nint LoadCursor(nint instanceHandle, nint cursorName);
+
+        [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+        internal static partial nint GetModuleHandle(string? moduleName);
+
+        [LibraryImport("gdi32.dll", SetLastError = true)]
+        internal static partial nint CreateCompatibleDC(nint hdc);
+
+        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool DeleteDC(nint hdc);
+
+        [LibraryImport("gdi32.dll", SetLastError = true)]
+        internal static partial nint SelectObject(nint hdc, nint handle);
+
+        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool DeleteObject(nint handle);
+
+        [LibraryImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static partial bool UpdateLayeredWindow(
+            nint windowHandle,
+            nint destinationDc,
+            ref Point destinationPoint,
+            ref Size windowSize,
+            nint sourceDc,
+            ref Point sourcePoint,
+            int colorKey,
+            ref BlendFunction blend,
+            uint flags);
+
+        [LibraryImport("shcore.dll")]
+        internal static partial int GetDpiForMonitor(
+            nint monitorHandle,
+            MonitorDpiType dpiType,
+            out uint dpiX,
+            out uint dpiY);
+
+        [LibraryImport("user32.dll")]
+        internal static partial nint MonitorFromPoint(Point point, uint flags);
+
+        internal delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
+
+        internal enum MonitorDpiType
+        {
+            EffectiveDpi = 0,
+            AngularDpi = 1,
+            RawDpi = 2,
+        }
+    }
 }

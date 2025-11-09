@@ -140,6 +140,10 @@ public sealed partial class WindowChromeService
         var hasTitleBar = decoration?.TitleBar is not null;
 
         presenter?.SetBorderAndTitleBar(hasBorder: hasBorder, hasTitleBar: hasTitleBar);
+        //if (!hasBorder)
+        //{
+        //    window.AppWindow.SetPresenter(AppWindowPresenterKind.CompactOverlay);
+        //}
 
         // Setup resizing - default is true
         _ = presenter?.IsResizable = decoration?.IsResizable ?? true;

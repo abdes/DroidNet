@@ -23,6 +23,14 @@ public partial class DragVisualService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Design mode detected. Drag overlay is disabled.")]
+    private static partial void LogSessionSuppressedForDesignMode(ILogger logger);
+
+    private void LogSessionSuppressedForDesignMode() => LogSessionSuppressedForDesignMode(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Session started: Token={Token}, Size={DescriptorWidth}x{DescriptorHeight}, Hotspot=({HotspotX}, {HotspotY})")]
     private static partial void LogSessionStarted(

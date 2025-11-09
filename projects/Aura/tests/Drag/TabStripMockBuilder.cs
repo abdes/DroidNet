@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Coordinates;
+using Microsoft.UI.Xaml;
 using Moq;
 using Windows.Foundation;
 
@@ -186,7 +187,9 @@ internal sealed class TabStripMockBuilder
         mock.Setup(m => m.CompleteDrag(It.IsAny<object>(), It.IsAny<ITabStrip>(), It.IsAny<int?>()));
         mock.Setup(m => m.ApplyTransformToItem(It.IsAny<int>(), It.IsAny<double>()));
         mock.Setup(m => m.RemoveItemAt(It.IsAny<int>()));
+        mock.Setup(m => m.MoveItem(It.IsAny<int>(), It.IsAny<int>()));
         mock.Setup(m => m.InsertItemAt(It.IsAny<int>(), It.IsAny<object>()));
+        mock.Setup(m => m.GetContainerForIndex(It.IsAny<int>())).Returns((FrameworkElement?)null);
 
         return mock;
     }

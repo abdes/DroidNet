@@ -108,14 +108,14 @@ public partial class TabStrip
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Initiating drag for item '{Item}' inside TabStrip '{Strip}' at screen point ({Point})")]
-    private static partial void LogBeginDragStartedImpl(ILogger logger, string item, string strip, SpatialPoint<ScreenSpace> point);
+    private static partial void LogBeginDragStartedImpl(ILogger logger, string item, string strip, SpatialPoint<ElementSpace> point);
 
     [Conditional("DEBUG")]
-    private void LogInitiateDrag(TabItem item, SpatialPoint<ScreenSpace> point)
+    private void LogInitiateDrag(TabItem item, SpatialPoint<ElementSpace> point)
     {
         if (this.logger is ILogger logger)
         {
-            LogBeginDragStartedImpl(logger, item.ToString(), this.Name, point);
+            LogBeginDragStartedImpl(logger, item.Title, this.Name, point);
         }
     }
 

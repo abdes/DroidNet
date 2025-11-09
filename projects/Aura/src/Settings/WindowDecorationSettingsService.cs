@@ -66,7 +66,7 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
             RoundedCorners = false,
             IsResizable = false,
             Buttons = new() { ShowMaximize = false, ShowMinimize = false },
-            Backdrop = BackdropKind.Mica,
+            Backdrop = BackdropKind.Acrylic,
         },
         [WindowCategory.System] = new WindowDecorationOptions
         {

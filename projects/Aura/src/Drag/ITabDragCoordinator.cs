@@ -46,7 +46,7 @@ public interface ITabDragCoordinator
         ITabStrip source,
         FrameworkElement stripContainer,
         FrameworkElement draggedElement,
-        SpatialPoint<ScreenSpace> initialPosition,
+        SpatialPoint<ElementSpace> initialPosition,
         Point hotspotOffsets);
 
     /// <summary>

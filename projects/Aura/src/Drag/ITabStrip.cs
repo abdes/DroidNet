@@ -2,9 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using DroidNet.Coordinates;
+using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Drag;
+
+#pragma warning disable SA1402 // File may only contain a single type
 
 /// <summary>
 ///     Defines the contract between <see cref="TabDragCoordinator"/> and TabStrip implementations.
@@ -44,26 +50,6 @@ public interface ITabStrip
     ///     Gets the name of the TabStrip instance for logging and diagnostics.
     /// </summary>
     public string Name { get; }
-
-    /// <summary>
-    ///     Performs hit-testing to determine if a point in element coordinates is within this TabStrip's bounds.
-    /// </summary>
-    /// <param name="elementPoint">Point in the tab strip element coordinates space.</param>
-    /// <returns>
-    ///     <see langword="true"/> if the point is within the TabStrip's bounds;
-    ///     <see langword="false"/> otherwise.
-    /// </returns>
-    /// <remarks>
-    ///     <para>
-    ///     Called by the coordinator during drag operations to determine which TabStrip (if any)
-    ///     is under the cursor. This enables cross-window drag scenarios.
-    ///     </para>
-    ///     <para>
-    ///     The implementation should use the TabStrip's spatial mapper to convert the screen point
-    ///     to element coordinates, then check if it falls within the element's bounds (0,0 to ActualWidth,ActualHeight).
-    ///     </para>
-    /// </remarks>
-    //public bool HitTest(SpatialPoint<ElementSpace> elementPoint);
 
     /// <summary>
     ///     Performs hit-testing with an inset threshold to determine if a point is well within the TabStrip's bounds.
@@ -121,13 +107,14 @@ public interface ITabStrip
     /// <param name="dropPoint">Screen coordinates where the tab was dropped.</param>
     /// <remarks>
     ///     The application should create a new window with a TabStrip and host the tab there.
-    ///     If the handler throws an exception, CompleteDrag is called with null destination.
+    ///     If the handler throws an exception, TryCompleteDrag is called with null destination.
     /// </remarks>
     public void TearOutTab(object item, SpatialPoint<ScreenSpace> dropPoint);
 
     /// <summary>
-    ///     Completes a drag operation by raising the TabDragComplete event.
-    ///     Called by the coordinator after any drag operation completes (success or error).
+    ///     Completes a drag operation and raises the control's <c>TabDragComplete</c> event. Called
+    ///     by the coordinator after any drag operation completes (success or error). Should not
+    ///     throw exceptions.
     /// </summary>
     /// <param name="item">The model object for the item that was dragged.</param>
     /// <param name="destinationStrip">
@@ -136,11 +123,7 @@ public interface ITabStrip
     /// <param name="newIndex">
     ///     The index in the destination TabStrip's Items collection, or null if the operation failed.
     /// </param>
-    /// <remarks>
-    ///     This event is always raised at the end of a drag operation, regardless of success or failure.
-    ///     A null destinationStrip or newIndex indicates an error or abort condition.
-    /// </remarks>
-    public void CompleteDrag(object item, ITabStrip? destinationStrip, int? newIndex);
+    public void TryCompleteDrag(object item, ITabStrip? destinationStrip, int? newIndex);
 
     /// <summary>
     ///     Takes a snapshot of the current visual layout of items in the TabStrip.
@@ -156,6 +139,16 @@ public interface ITabStrip
     ///     without needing direct access to the visual tree.
     /// </remarks>
     public IReadOnlyList<TabStripItemSnapshot> TakeSnapshot();
+
+    /// <summary>
+    ///     Attempts to retrieve the realized visual container for the item at the specified index.
+    /// </summary>
+    /// <param name="index">The index of the item in the Items collection.</param>
+    /// <returns>
+    ///     The realized container element when available; otherwise, <see langword="null"/> if the
+    ///     container has not been realized yet.
+    /// </returns>
+    public FrameworkElement? GetContainerForIndex(int index);
 
     /// <summary>
     ///     Applies a horizontal translation transform to the visual container of a tab item.
@@ -174,10 +167,22 @@ public interface ITabStrip
     /// </summary>
     /// <param name="index">The index of the item to remove.</param>
     /// <remarks>
-    ///     Called by ReorderStrategy when completing a drag operation to remove the item
-    ///     from its original position before reinserting at the drop location.
+    ///     Used by drag strategies when a tab must leave the strip entirely (for example,
+    ///     during tear-out or when moving across TabStrip instances).
     /// </remarks>
     public void RemoveItemAt(int index);
+
+    /// <summary>
+    ///     Moves an item within the TabStrip's Items collection from one index to another.
+    /// </summary>
+    /// <param name="fromIndex">The current index of the item.</param>
+    /// <param name="toIndex">The target index for the item.</param>
+    /// <remarks>
+    ///     Called by ReorderStrategy when completing an in-strip reorder to avoid removing
+    ///     and reinserting the same item, which would otherwise trigger collection-change
+    ///     side effects intended for new tabs.
+    /// </remarks>
+    public void MoveItem(int fromIndex, int toIndex);
 
     /// <summary>
     ///     Inserts an item into the TabStrip's Items collection at the specified index.
@@ -189,6 +194,37 @@ public interface ITabStrip
     ///     at its new position after removal from the original location.
     /// </remarks>
     public void InsertItemAt(int index, object item);
+
+    /// <summary>
+    ///     Inserts an item into the TabStrip's Items collection and asynchronously waits for the
+    ///     ItemsRepeater to realize the corresponding container.
+    /// </summary>
+    /// <param name="index">The index where the item should be inserted.</param>
+    /// <param name="item">The model object for the item to insert (typically a shallow clone for drag operations).</param>
+    /// <param name="cancellationToken">A token to cancel the realization handshake (for example when the pointer moves away).</param>
+    /// <param name="timeoutMs">Maximum time in milliseconds to wait for realization before timing out. Default is 500 ms.</param>
+    /// <returns>
+    ///     A <see cref="RealizationResult"/> describing whether the container was realized, and the realized container when available.
+    /// </returns>
+    public Task<RealizationResult> InsertItemAsync(int index, object item, CancellationToken cancellationToken, int timeoutMs = 500);
+
+    /// <summary>
+    ///     Prepares the TabStrip to host an externally dragged tab by inserting a temporary placeholder at the
+    ///     appropriate position and realizing its visual container.
+    /// </summary>
+    /// <param name="payload">The shallow-cloned payload instance created by the coordinator.</param>
+    /// <param name="pointerPosition">Pointer position in the TabStrip element coordinate space.</param>
+    /// <param name="cancellationToken">Token used to cancel the preparation when the pointer leaves the strip.</param>
+    /// <param name="timeoutMs">Maximum time in milliseconds to wait for realization before timing out. Default is 500 ms.</param>
+    /// <returns>
+    ///     An <see cref="ExternalDropPreparationResult"/> when the placeholder is realized; otherwise <see langword="null"/>
+    ///     if the preparation was cancelled or failed.
+    /// </returns>
+    public Task<ExternalDropPreparationResult?> PrepareExternalDropAsync(
+        object payload,
+        SpatialPoint<ElementSpace> pointerPosition,
+        CancellationToken cancellationToken,
+        int timeoutMs = 500);
 }
 
 /// <summary>
@@ -208,4 +244,61 @@ public class TabStripItemSnapshot
 
     /// <summary>Gets or sets the current horizontal translation offset applied to the item.</summary>
     public double Offset { get; set; }
+
+    /// <summary>Gets or initializes the realized container backing this snapshot when available.</summary>
+    public FrameworkElement? Container { get; init; }
 }
+
+/// <summary>
+///     Result returned from <see cref="ITabStrip.InsertItemAsync(int, object, CancellationToken, int)"/>.
+///     Declared as a nested type to keep related types grouped with the interface.
+/// </summary>
+public sealed class RealizationResult
+{
+    /// <summary>
+    ///     Outcome statuses for the realization handshake.
+    /// </summary>
+    public enum Status
+    {
+        /// <summary>Container was realized and is available.</summary>
+        Realized = 0,
+
+        /// <summary>Realization did not complete within the configured timeout.</summary>
+        TimedOut = 1,
+
+        /// <summary>The operation was cancelled.</summary>
+        Cancelled = 2,
+
+        /// <summary>An error occurred while attempting to realize the container.</summary>
+        Error = 3,
+    }
+
+    /// <summary>Gets the final status of the realization handshake.</summary>
+    public Status CurrentStatus { get; init; }
+
+    /// <summary>Gets the realized container element when <see cref="CurrentStatus"/> is <see cref="Status.Realized"/>; otherwise null.</summary>
+    public FrameworkElement? Container { get; init; }
+
+    /// <summary>Gets the exception that occurred during realization, if any.</summary>
+    public Exception? Exception { get; init; }
+
+    /// <summary>
+    ///     Convenience factory for a successful result.
+    /// </summary>
+    /// <param name="container">The realized container element.</param>
+    /// <returns>A <see cref="RealizationResult"/> with status <see cref="Status.Realized"/>.</returns>
+    public static RealizationResult Success(FrameworkElement container) => new() { CurrentStatus = Status.Realized, Container = container };
+
+    /// <summary>
+    ///     Convenience factory for a failed result.
+    /// </summary>
+    /// <param name="status">The failure status (TimedOut, Cancelled, or Error).</param>
+    /// <param name="ex">Optional exception associated with the failure.</param>
+    /// <returns>A <see cref="RealizationResult"/> representing the failure.</returns>
+    public static RealizationResult Failure(Status status, Exception? ex = null) => new() { CurrentStatus = status, Exception = ex };
+}
+
+/// <summary>
+///     Result returned from <see cref="ITabStrip.PrepareExternalDropAsync(object, SpatialPoint{ElementSpace}, CancellationToken, int)"/>.
+/// </summary>
+public sealed record ExternalDropPreparationResult(int DropIndex, FrameworkElement RealizedContainer);

@@ -44,7 +44,17 @@ public partial class TabStrip
             nameof(PreferredItemWidth),
             typeof(double),
             typeof(TabStrip),
-            new PropertyMetadata(240.0, OnWidthPropertyChanged));
+            new PropertyMetadata(200.0, OnWidthPropertyChanged));
+
+    /// <summary>
+    ///     Identifies the <see cref="DragThreshold"/> dependency property.
+    /// </summary>
+    public static readonly DependencyProperty DragThresholdProperty =
+        DependencyProperty.Register(
+            nameof(DragThreshold),
+            typeof(double),
+            typeof(TabStrip),
+            new PropertyMetadata(DragThresholds.InitiationThreshold));
 
     /// <summary>
     ///     Identifies the <see cref="Items"/> dependency property.
@@ -189,6 +199,17 @@ public partial class TabStrip
     {
         get => (double)this.GetValue(PreferredItemWidthProperty);
         set => this.SetValue(PreferredItemWidthProperty, Math.Min(value, this.MaxItemWidth));
+    }
+
+    /// <summary>
+    ///     Gets or sets the minimum pointer displacement (in DIPs) required to initiate a drag
+    ///     operation while pressed. This value helps prevent accidental drags from minor pointer
+    ///     movements. The property enforces a minimum of 4 DIPs and always uses the absolute value.
+    /// </summary>
+    public double DragThreshold
+    {
+        get => (double)this.GetValue(DragThresholdProperty);
+        set => this.SetValue(DragThresholdProperty, Math.Max(Math.Abs(value), DragThresholds.MinThresholdValue));
     }
 
     /// <summary>

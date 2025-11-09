@@ -10,7 +10,6 @@
     d:DataContext="{d:DesignInstance Type=drag:DragVisualDescriptor}"
     mc:Ignorable="d">
 
-
     <Grid x:Name="RootGrid" Background="Transparent">
         <Grid.Resources>
             <cvt:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
@@ -21,13 +20,17 @@
         </Grid.RowDefinitions>
 
         <!--  Header Image - Bound to descriptor  -->
-        <Image
+        <Border
             Grid.Row="0"
             HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Source="{Binding HeaderImage, Mode=OneWay}"
-            Stretch="Uniform"
-            Visibility="{Binding HeaderImage, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
+            VerticalAlignment="Stretch"
+            Background="Transparent"
+            BorderThickness="0">
+            <Image
+                Source="{Binding HeaderImage, Mode=OneWay}"
+                Stretch="None"
+                Visibility="{Binding HeaderImage, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
+        </Border>
 
         <!--  Preview Image - Bound to descriptor  -->
         <Image

@@ -31,6 +31,16 @@ internal static class TabStripMockExtensions
         => mock.Verify(m => m.RemoveItemAt(index), times);
 
     /// <summary>
+    /// Verifies that MoveItem was called with the specified arguments.
+    /// </summary>
+    /// <param name="mock">The TabStrip mock.</param>
+    /// <param name="fromIndex">The expected source index.</param>
+    /// <param name="toIndex">The expected destination index.</param>
+    /// <param name="times">The expected invocation count.</param>
+    public static void VerifyMoveItem(this Mock<ITabStrip> mock, int fromIndex, int toIndex, Times times)
+        => mock.Verify(m => m.MoveItem(fromIndex, toIndex), times);
+
+    /// <summary>
     /// Verifies that ApplyTransformToItem was called.
     /// </summary>
     /// <param name="mock">The TabStrip mock.</param>
