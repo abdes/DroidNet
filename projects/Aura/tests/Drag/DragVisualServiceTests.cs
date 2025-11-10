@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Aura.Drag;
-using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
@@ -31,55 +29,14 @@ namespace DroidNet.Aura.Drag.Tests;
 [ExcludeFromCodeCoverage]
 [TestCategory("DragVisualServiceTests")]
 [TestCategory("UITest")]
-public class DragVisualServiceTests : VisualUserInterfaceTests
+public partial class DragVisualServiceTests : VisualUserInterfaceTests, IDisposable
 {
     private DragVisualService service = null!;
     private DragSessionToken token;
 
+    private bool disposed;
+
     public required TestContext TestContext { get; set; }
-
-    [TestInitialize]
-    public Task InitializeAsync() => EnqueueAsync(() =>
-    {
-        // Create mock window factory that returns a new test window for each session
-        var mockWindowFactory = new Mock<IWindowFactory>();
-
-        // Explicitly pass null for the optional metadata parameter to avoid
-        // expression-tree calls that rely on optional arguments (which are
-        // disallowed inside expression trees used by Moq's Setup).
-        _ = mockWindowFactory
-            .Setup(f => f.CreateWindow<DragOverlayWindow>(null))
-            .ReturnsAsync(() => new TestDragOverlayWindow());
-
-        // Create hosting context
-        var dispatcher = DispatcherQueue.GetForCurrentThread();
-        var hosting = new HostingContext
-        {
-            Dispatcher = dispatcher,
-            Application = Application.Current,
-            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
-        };
-
-        // Create spatial mapper factory (returns a basic mapper)
-        static ISpatialMapper MapperFactory(Window? window, FrameworkElement? element) => new SpatialMapper(window, element);
-
-        // Create service with dependencies
-        this.service = new DragVisualService(
-            hosting,
-            mockWindowFactory.Object,
-            MapperFactory,
-            this.LoggerFactory);
-    });
-
-    [TestCleanup]
-    public Task CleanupAsync() => EnqueueAsync(() =>
-    {
-        if (this.token != default)
-        {
-            this.service.EndSession(this.token);
-            this.token = default;
-        }
-    });
 
     /// <summary>
     /// REQ-001: Single Active Session
@@ -90,14 +47,14 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_ThrowsWhenSessionAlreadyActive_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor1 = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
-        var descriptor2 = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor1 = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
+        var descriptor2 = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
 
-        this.token = this.service.StartSession(descriptor1, hotspot);
+        this.token = this.service.StartSession(descriptor1, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act & Assert
-        var act = () => this.service.StartSession(descriptor2, hotspot);
+        var act = () => this.service.StartSession(descriptor2, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         _ = act.Should().Throw<InvalidOperationException>()
             .WithMessage("*already active*", "Only one session allowed per process (REQ-001)");
     });
@@ -110,15 +67,15 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_SucceedsAfterPreviousSessionEnds_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor1 = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
-        var descriptor2 = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor1 = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
+        var descriptor2 = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
 
-        var token1 = this.service.StartSession(descriptor1, hotspot);
+        var token1 = this.service.StartSession(descriptor1, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         this.service.EndSession(token1);
 
         // Act
-        this.token = this.service.StartSession(descriptor2, hotspot);
+        this.token = this.service.StartSession(descriptor2, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Assert
         _ = this.token.Should().NotBe(default(DragSessionToken), "Valid token should be returned");
@@ -131,9 +88,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task EndSession_SucceedsWithValidToken_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act & Assert
         var act = () => this.service.EndSession(this.token);
@@ -163,9 +120,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task EndSession_CalledTwice_IsHandledGracefully_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         this.service.EndSession(this.token);
 
         // Act & Assert
@@ -182,14 +139,72 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task UpdatePosition_SucceedsWithValidToken_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act & Assert
         var physicalPosition = new SpatialPoint<PhysicalScreenSpace>(new Point(500, 300));
         var act = () => this.service.UpdatePosition(this.token, physicalPosition);
         _ = act.Should().NotThrow("UpdatePosition with valid token should succeed");
+    });
+
+    /// <summary>
+    ///     Tests that hotspot offset is correctly applied in logical space. Service should compute:
+    ///     windowPosition = cursorPosition - hotspot (all in logical pixels).
+    /// </summary>
+    /// <param name="hotspotX">Hotspot X offset in logical pixels.</param>
+    /// <param name="hotspotY">Hotspot Y offset in logical pixels.</param>
+    /// <param name="cursorLogicalX">Cursor X position in logical screen space.</param>
+    /// <param name="cursorLogicalY">Cursor Y position in logical screen space.</param>
+    /// <param name="expectedWindowLogicalX">Expected window X position in logical screen
+    /// space.</param>
+    /// <param name="expectedWindowLogicalY">Expected window Y position in logical screen
+    /// space.</param>
+    [TestMethod]
+    [DataRow(50.0, 20.0, 100.0, 100.0, 50.0, 80.0, DisplayName = "Standard hotspot: cursor(100,100) - hotspot(50,20) = window(50,80)")]
+    [DataRow(0.0, 0.0, 100.0, 100.0, 100.0, 100.0, DisplayName = "Zero hotspot: window positioned at cursor")]
+    [DataRow(100.0, 50.0, 100.0, 100.0, 0.0, 50.0, DisplayName = "Hotspot equals cursor X: window X = 0")]
+    [DataRow(200.0, 100.0, 500.0, 300.0, 300.0, 200.0, DisplayName = "Large hotspot: cursor(500,300) - hotspot(200,100) = window(300,200)")]
+    public Task HotspotOffset_AppliedCorrectly_InLogicalSpace_Async(
+        double hotspotX,
+        double hotspotY,
+        double cursorLogicalX,
+        double cursorLogicalY,
+        double expectedWindowLogicalX,
+        double expectedWindowLogicalY) => EnqueueAsync(() =>
+    {
+        // Arrange
+        var mockMapper = new Mock<ISpatialMapper>();
+
+        // Create raw mapper factory that returns our mock regardless of HWND
+        RawSpatialMapperFactory rawFactory = CreateMapperFactory;
+        ISpatialMapper CreateMapperFactory(IntPtr hwnd) => mockMapper.Object;
+
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
+        var initialPosition = new Point(0, 0).AsPhysicalScreen();
+        var hotspotOffsets = new Point(hotspotX, hotspotY).AsScreen();
+        this.token = this.service.StartSession(descriptor, initialPosition, hotspotOffsets);
+
+        var cursorLogical = new SpatialPoint<ScreenSpace>(new Point(cursorLogicalX, cursorLogicalY));
+        _ = mockMapper
+            .Setup(m => m.ToScreen(It.IsAny<SpatialPoint<PhysicalScreenSpace>>()))
+            .Returns(cursorLogical);
+
+        _ = mockMapper
+            .Setup(m => m.ToPhysicalScreen(It.Is<SpatialPoint<ScreenSpace>>(
+                p => Math.Abs(p.Point.X - expectedWindowLogicalX) < 0.01
+                  && Math.Abs(p.Point.Y - expectedWindowLogicalY) < 0.01)))
+            .Returns((SpatialPoint<ScreenSpace> p) => new SpatialPoint<PhysicalScreenSpace>(
+                new Point(p.Point.X * 1.5, p.Point.Y * 1.5))); // Simulate 150% DPI
+
+        // Act
+        var cursorPhysical = new SpatialPoint<PhysicalScreenSpace>(new Point(100, 100));
+        this.service.UpdatePosition(this.token, cursorPhysical);
+
+        // Assert
+        var expectedPhysicalX = (int)Math.Round(expectedWindowLogicalX * 1.5);
+        var expectedPhysicalY = (int)Math.Round(expectedWindowLogicalY * 1.5);
     });
 
     /// <summary>
@@ -214,9 +229,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task UpdatePosition_AfterEndSession_IsNoOp_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         this.service.EndSession(this.token);
 
         // Act & Assert
@@ -235,9 +250,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task GetDescriptor_ReturnsLiveDescriptor_DuringSession_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act
         var retrievedDescriptor = this.service.GetDescriptor(this.token);
@@ -254,9 +269,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task GetDescriptor_ReturnsNull_AfterSessionEnds_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         this.service.EndSession(this.token);
 
         // Act
@@ -295,7 +310,7 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
         var hotspot = new Point(10, 10);
 
         // Act & Assert
-        var act = () => this.service.StartSession(null!, hotspot);
+        var act = () => this.service.StartSession(null!, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
         _ = act.Should().Throw<ArgumentNullException>()
             .WithParameterName("descriptor", "Descriptor cannot be null");
     });
@@ -310,11 +325,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_AcceptsFractionalHotspot_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var fractionalHotspot = new Point(50.5, 20.75);
 
         // Act
-        this.token = this.service.StartSession(descriptor, fractionalHotspot);
+        this.token = this.service.StartSession(descriptor, fractionalHotspot.AsPhysicalScreen(), fractionalHotspot.AsScreen());
 
         // Assert
         _ = this.token.Should().NotBe(default(DragSessionToken), "Valid token should be returned");
@@ -328,9 +343,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task UpdatePosition_HandlesRapidUpdates_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act: Simulate rapid cursor movement (physical pixels)
         for (var i = 0; i < 100; i++)
@@ -356,11 +371,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_AcceptsZeroHotspot_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var zeroHotspot = new Point(0, 0);
 
         // Act
-        this.token = this.service.StartSession(descriptor, zeroHotspot);
+        this.token = this.service.StartSession(descriptor, zeroHotspot.AsPhysicalScreen(), zeroHotspot.AsScreen());
 
         // Assert
         _ = this.token.Should().NotBe(default(DragSessionToken), "Zero hotspot should be accepted");
@@ -373,11 +388,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_AcceptsNegativeHotspot_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var negativeHotspot = new Point(-10, -5);
 
         // Act
-        this.token = this.service.StartSession(descriptor, negativeHotspot);
+        this.token = this.service.StartSession(descriptor, negativeHotspot.AsPhysicalScreen(), negativeHotspot.AsScreen());
 
         // Assert
         _ = this.token.Should().NotBe(default(DragSessionToken), "Negative hotspot should be accepted");
@@ -390,11 +405,11 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task StartSession_AcceptsLargeHotspot_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var largeHotspot = new Point(1000, 800);
 
         // Act
-        this.token = this.service.StartSession(descriptor, largeHotspot);
+        this.token = this.service.StartSession(descriptor, largeHotspot.AsPhysicalScreen(), largeHotspot.AsScreen());
 
         // Assert
         _ = this.token.Should().NotBe(default(DragSessionToken), "Large hotspot should be accepted");
@@ -407,9 +422,9 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
     public Task UpdatePosition_HandlesExtremeCursorPositions_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { RequestedSize = new Windows.Foundation.Size(200, 100) };
+        var descriptor = new DragVisualDescriptor { RequestedSize = new Size(200, 100) };
         var hotspot = new Point(10, 10);
-        this.token = this.service.StartSession(descriptor, hotspot);
+        this.token = this.service.StartSession(descriptor, hotspot.AsPhysicalScreen(), hotspot.AsScreen());
 
         // Act: Extreme positions (e.g., far-right monitor in multi-monitor setup)
         var extremePositions = new[]
@@ -427,4 +442,57 @@ public class DragVisualServiceTests : VisualUserInterfaceTests
 
         // Assert: Should complete without throwing (implicit)
     });
+
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected override Task TestSetupAsync() => EnqueueAsync(() =>
+    {
+        // Create hosting context
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var hosting = new HostingContext
+        {
+            Dispatcher = dispatcher,
+            Application = Application.Current,
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
+        };
+
+        // Create raw mapper factory (returns a mapper bound to an HWND)
+        static ISpatialMapper RawFactory(nint hwnd = 0) => new SpatialMapper(hwnd);
+
+        // Create service with dependencies
+        this.service = new DragVisualService(
+            hosting,
+            RawFactory,
+            this.LoggerFactory);
+    });
+
+    protected override Task TestCleanupAsync() => EnqueueAsync(() =>
+    {
+        if (this.token != default)
+        {
+            this.service?.EndSession(this.token);
+            this.token = default;
+        }
+    });
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // dispose managed resources
+            this.service?.Dispose();
+            this.service = null!;
+        }
+
+        this.disposed = true;
+    }
 }

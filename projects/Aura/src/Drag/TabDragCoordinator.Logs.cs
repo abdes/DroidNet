@@ -27,13 +27,15 @@ public partial class TabDragCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Drag started: Item={ItemContent}, Source={SourceStripName}, InitialCursorX={InitialCursorX}, InitialCursorY={InitialCursorY}")]
+        Message = "Drag started: Item={ItemContent}, Source={SourceStripName}, InitialCursorX={InitialCursorX}, InitialCursorY={InitialCursorY}, HotSpot=({HotspotX}, {HotspotY})")]
     private static partial void LogDragStarted(
         ILogger logger,
         string itemContent,
         string sourceStripName,
         int initialCursorX,
-        int initialCursorY);
+        int initialCursorY,
+        int hotspotX,
+        int hotspotY);
 
     [Conditional("DEBUG")]
     private void LogDragStarted()
@@ -49,7 +51,9 @@ public partial class TabDragCoordinator
             context.DraggedItemData.ToString() ?? "Unknown",
             sourceStripName,
             (int)this.lastCursorPosition.Point.X,
-            (int)this.lastCursorPosition.Point.Y);
+            (int)this.lastCursorPosition.Point.Y,
+            (int)this.dragContext.HotspotOffsets.X,
+            (int)this.dragContext.HotspotOffsets.Y);
     }
 
     [LoggerMessage(

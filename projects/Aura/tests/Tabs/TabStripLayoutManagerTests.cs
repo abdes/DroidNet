@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 
-namespace DroidNet.Controls.Tabs.Tests;
+namespace DroidNet.Aura.Controls.Tabs.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

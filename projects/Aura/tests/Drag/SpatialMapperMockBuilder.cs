@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using DroidNet.Coordinates;
 using Moq;
 using Windows.Foundation;
@@ -13,6 +11,7 @@ namespace DroidNet.Aura.Drag.Tests;
 /// <summary>
 /// Fluent builder for creating configured <see cref="Mock{ISpatialMapper}"/> instances for testing.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated via reflection in tests")]
 internal sealed class SpatialMapperMockBuilder
 {
     private IReadOnlyList<SpatialPoint<PhysicalScreenSpace>>? physicalResponses;

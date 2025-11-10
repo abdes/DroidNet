@@ -47,7 +47,7 @@ internal partial class ReorderStrategy : IDragStrategy
         if (this.IsActive)
         {
             this.LogIgnored("InitiateDrag", "a drag operation is already ongoing.");
-            throw new InvalidOperationException("A drag operation is already ongoing.");
+            throw new InvalidOperationException("A drag operation is already active.");
         }
 
         this.LogEnterReorderMode(position);

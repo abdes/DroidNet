@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Controls;
 using DroidNet.Coordinates;
@@ -12,6 +11,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Moq;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Drag.Tests;
 
@@ -26,8 +26,6 @@ namespace DroidNet.Aura.Drag.Tests;
 [TestCategory("UITest")]
 public class ReorderStrategyTests : VisualUserInterfaceTests
 {
-    public TestContext TestContext { get; set; }
-
     private const double DefaultItemWidth = 120;
 
     private const double DefaultItemHeight = 40;
@@ -36,23 +34,9 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
 
     private StackPanel? stripHost;
 
-    protected override async Task TestSetupAsync()
-    {
-        await base.TestSetupAsync().ConfigureAwait(true);
+    private SpatialMapper? mapper;
 
-        this.testRoot = new Grid();
-        this.stripHost = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-            Spacing = 8,
-        };
-
-        this.testRoot.Children.Add(this.stripHost);
-        await LoadTestContentAsync(this.testRoot).ConfigureAwait(true);
-        await DragTestHelpers.WaitForRenderAsync().ConfigureAwait(true);
-    }
+    public TestContext TestContext { get; set; }
 
     [TestMethod]
     public Task StrategyCanBeInstantiated_WithDefaultLogger_Async() => EnqueueAsync(async () =>
@@ -90,7 +74,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     {
         // Arrange
         var strategy = new ReorderStrategy();
-        var startPoint = DragTestHelpers.ScreenPoint(10, 10);
+        var startPoint = this.ToPhysical(10, 10);
 
         // Act & Assert
         var act = () => strategy.InitiateDrag(null!, startPoint);
@@ -118,7 +102,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var setup = this.StartDrag();
 
         // Act & Assert
-        var act = () => setup.Strategy.InitiateDrag(setup.Context, DragTestHelpers.ScreenPoint(50, 25));
+        var act = () => setup.Strategy.InitiateDrag(setup.Context, this.ToPhysical(50, 25));
         _ = act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -145,8 +129,8 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var setup = this.StartDrag(visualElement: visual, stripElement: stripElement);
 
         // Assert
-        _ = setup.Context.VisualElement.RenderTransform.Should().BeOfType<TranslateTransform>();
-        var transform = (TranslateTransform)setup.Context.VisualElement.RenderTransform;
+        _ = setup.Context.DraggedVisualElement.RenderTransform.Should().BeOfType<TranslateTransform>();
+        var transform = (TranslateTransform)setup.Context.DraggedVisualElement.RenderTransform;
         _ = transform.X.Should().Be(0);
         _ = transform.Y.Should().Be(0);
 
@@ -191,13 +175,13 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var visual = new Border();
 
         // Create context without calling StartDrag (which would overwrite the mock setup)
-        var context = this.CreateDragContext(mockStrip, tabItem, 0, visual, null, out var stripRoot);
+        var context = this.CreateDragContext(mockStrip, tabItem, 0, visual, stripElement: null, out var stripRoot);
 
         // Set up TakeSnapshot to throw AFTER creating context but BEFORE InitiateDrag
-        mockStrip.Setup(m => m.TakeSnapshot()).Throws(new InvalidOperationException("snapshot failed"));
+        _ = mockStrip.Setup(m => m.TakeSnapshot()).Throws(new InvalidOperationException("snapshot failed"));
 
         // Act & Assert - InitiateDrag should propagate the exception
-        var act = () => strategy.InitiateDrag(context, DragTestHelpers.ScreenPoint(50, 25));
+        var act = () => strategy.InitiateDrag(context, this.ToPhysical(50, 25));
         _ = act.Should().Throw<InvalidOperationException>().WithMessage("snapshot failed");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -210,7 +194,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var strategy = new ReorderStrategy();
 
         // Act & Assert
-        var act = () => strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(100, 50));
+        var act = () => strategy.OnDragPositionChanged(this.ToPhysical(100, 50));
         _ = act.Should().NotThrow();
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -222,14 +206,14 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         // Arrange
         var setup = this.StartDrag(visualElement: new Border());
 
-        var initialTransform = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var initialTransform = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         var initialX = initialTransform?.X ?? 0;
 
         // Act
-        setup.Strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(150, 75));
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical(150, 75));
 
         // Assert
-        var updatedTransform = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var updatedTransform = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         _ = updatedTransform.Should().NotBeNull();
         _ = updatedTransform!.X.Should().Be(initialX);
         setup.Strip.VerifyApplyTransform(Times.Never());
@@ -238,21 +222,21 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
-    public Task OnDragPositionChanged_DoesNotApplyTransformWhenDraggingWithinBounds_Async() => EnqueueAsync(async () =>
+    public Task OnDragPositionChanged_DoesNotTransformWithoutOverlap_WithLogging_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var setup = this.StartDrag(strategy: new ReorderStrategy(this.LoggerFactory), visualElement: new Border(), startX: 100, startY: 50);
 
-        var initialTransform = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var initialTransform = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         var initialX = initialTransform?.X ?? 0;
 
         // Act
-        setup.Strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(200, 50));
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical(150, 75));
 
         // Assert
-        var updatedTransform = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var updatedTransform = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         _ = updatedTransform.Should().NotBeNull();
-        _ = updatedTransform!.X.Should().Be(initialX);
+        _ = updatedTransform!.X.Should().Be(initialX, "No horizontal movement should occur when cursor moves vertically");
         setup.Strip.VerifyApplyTransform(Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -269,10 +253,10 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             startY: 50);
 
         // Act
-        setup.Strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(150, 50));
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical(150, 50));
 
         // Assert
-        var transform = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var transform = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         _ = transform.Should().NotBeNull();
         _ = transform!.X.Should().Be(0);
         setup.Strip.VerifyApplyTransform(Times.Never());
@@ -287,7 +271,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var strategy = new ReorderStrategy();
 
         // Act
-        var result = strategy.CompleteDrag();
+        var result = strategy.CompleteDrag(drop: false);
 
         // Assert
         _ = result.Should().BeNull();
@@ -303,7 +287,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var setup = this.StartDrag(stripMock: sourceStrip);
 
         // Act
-        var result = setup.Strategy.CompleteDrag();
+        var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         _ = result.Should().NotBeNull();
@@ -319,7 +303,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var setup = this.StartDrag(strategy: new ReorderStrategy(this.LoggerFactory));
 
         // Act
-        var result = setup.Strategy.CompleteDrag();
+        var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         _ = result.Should().NotBeNull();
@@ -341,7 +325,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var firstUsage = this.StartDrag(strategy: strategy, stripMock: mockStrip, draggedItem: item1);
         _ = firstUsage.Strategy.IsActive.Should().BeTrue();
 
-        _ = strategy.CompleteDrag();
+        _ = strategy.CompleteDrag(drop: false);
         _ = strategy.IsActive.Should().BeFalse();
 
         // Act - Second usage
@@ -365,12 +349,12 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var setup = this.StartDrag(strategy: new ReorderStrategy(this.LoggerFactory), visualElement: new Border());
 
         // Act
-        var result = setup.Strategy.CompleteDrag();
+        var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         _ = result.Should().NotBeNull();
-        _ = setup.Context.VisualElement.RenderTransform.Should().BeOfType<TranslateTransform>();
-        var transform = (TranslateTransform)setup.Context.VisualElement.RenderTransform;
+        _ = setup.Context.DraggedVisualElement.RenderTransform.Should().BeOfType<TranslateTransform>();
+        var transform = (TranslateTransform)setup.Context.DraggedVisualElement.RenderTransform;
         _ = transform.X.Should().Be(0);
         _ = transform.Y.Should().Be(0);
 
@@ -389,7 +373,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             draggedItem: tabItem);
 
         // Act
-        _ = setup.Strategy.CompleteDrag();
+        _ = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         mockStrip.VerifyMoveItem(It.IsAny<int>(), It.IsAny<int>(), Times.Never());
@@ -408,13 +392,13 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             draggedItem: draggedItem,
             visualElement: new Border());
 
-        _ = (setup.Context.VisualElement.RenderTransform as TranslateTransform).Should().NotBeNull();
+        _ = (setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform).Should().NotBeNull();
 
         // Act
-        _ = setup.Strategy.CompleteDrag();
+        _ = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
-        var transformAfterDrop = setup.Context.VisualElement.RenderTransform as TranslateTransform;
+        var transformAfterDrop = setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform;
         _ = transformAfterDrop.Should().NotBeNull();
         _ = transformAfterDrop!.X.Should().Be(0);
         _ = transformAfterDrop.Y.Should().Be(0);
@@ -433,19 +417,19 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             new()
             {
                 ItemIndex = 0,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(0, 0)),
+                LayoutOrigin = new Point(0, 0).AsElement(),
                 Width = DefaultItemWidth,
             },
             new()
             {
                 ItemIndex = 1,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(DefaultItemWidth + 10, 0)),
+                LayoutOrigin = new Point(DefaultItemWidth + 10, 0).AsElement(),
                 Width = DefaultItemWidth,
             },
             new()
             {
                 ItemIndex = 2,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point((DefaultItemWidth + 10) * 2, 0)),
+                LayoutOrigin = new Point((DefaultItemWidth + 10) * 2, 0).AsElement(),
                 Width = DefaultItemWidth,
             },
         }.AsReadOnly();
@@ -458,10 +442,12 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             startX: DefaultItemWidth / 2,
             snapshots: snapshots);
 
-        setup.Strategy.OnDragPositionChanged(DragTestHelpers.PhysicalPoint((DefaultItemWidth + 10) * 2, DefaultItemHeight / 2));
+        // Nudge the pointer slightly away from exact boundaries to avoid floating-point
+        // tie-breaking that can make this test flaky on some platforms.
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical((DefaultItemWidth + 10) * 1.5, DefaultItemHeight / 2));
 
         // Act
-        var result = setup.Strategy.CompleteDrag();
+        var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         _ = result.Should().Be(1); // Should return the final drop index after moving past the neighbor
@@ -484,7 +470,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             visualElement: new Border());
 
         // Act
-        var result = setup.Strategy.CompleteDrag();
+        var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
         _ = result.Should().NotBeNull();
@@ -508,7 +494,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         _ = initialDrag.Strategy.IsActive.Should().BeTrue();
 
         // Act
-        _ = strategy.CompleteDrag();
+        _ = strategy.CompleteDrag(drop: false);
 
         // Assert
         _ = strategy.IsActive.Should().BeFalse();
@@ -527,7 +513,51 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
+    protected override async Task TestSetupAsync()
+    {
+        await base.TestSetupAsync().ConfigureAwait(true);
+
+        this.testRoot = new Grid();
+        this.stripHost = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Spacing = 8,
+        };
+
+        this.testRoot.Children.Add(this.stripHost);
+        await LoadTestContentAsync(this.testRoot).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        // Initialize the localMapper with the main window and the stripHost as the reference element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, this.stripHost);
+    }
+
     private static TabItem CreateTabItem(string header = "TestTab") => new() { Header = header };
+
+    private static Border CreateTestVisualElement()
+        => new()
+        {
+            Width = DefaultItemWidth,
+            Height = DefaultItemHeight,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+
+    /// <summary>
+    /// Converts element-space coordinates to physical screen space using the localMapper.
+    /// </summary>
+    private SpatialPoint<PhysicalScreenSpace> ToPhysical(double x, double y)
+    {
+        if (this.mapper is null)
+        {
+            throw new InvalidOperationException("Mapper not initialized. Ensure TestSetupAsync has been called.");
+        }
+
+        var elementPoint = new Point(x, y).AsElement();
+        return this.mapper.Convert<ElementSpace, PhysicalScreenSpace>(elementPoint);
+    }
 
     private DragSetup StartDrag(
         ReorderStrategy? strategy = null,
@@ -541,16 +571,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         IReadOnlyList<TabStripItemSnapshot>? snapshots = null)
     {
         var activeStrategy = strategy ?? new ReorderStrategy();
-        Mock<ITabStrip> activeStrip;
-
-        if (stripMock != null)
-        {
-            activeStrip = stripMock;
-        }
-        else
-        {
-            activeStrip = new TabStripMockBuilder().Build();
-        }
+        var activeStrip = stripMock ?? new TabStripMockBuilder().Build();
 
         // Always setup snapshot for the current draggedIndex (overwrites any previous setup)
         var snapshotItems = snapshots ?? new List<TabStripItemSnapshot>
@@ -558,16 +579,39 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
             new()
             {
                 ItemIndex = draggedIndex,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(new Windows.Foundation.Point(0, 0)),
+                LayoutOrigin = new Point(0, 0).AsElement(),
                 Width = DefaultItemWidth,
             },
         }.AsReadOnly();
-        activeStrip.Setup(m => m.TakeSnapshot()).Returns(snapshotItems);
+
+        // Return fresh copies on each TakeSnapshot call to avoid mutating caller-owned snapshots
+        _ = activeStrip.Setup(m => m.TakeSnapshot()).Returns(() =>
+            snapshotItems.Select(s => new TabStripItemSnapshot
+            {
+                ItemIndex = s.ItemIndex,
+                LayoutOrigin = s.LayoutOrigin,
+                Width = s.Width,
+                Offset = s.Offset,
+                Container = s.Container,
+            }).ToList().AsReadOnly());
 
         var item = draggedItem ?? CreateTabItem();
-        var context = this.CreateDragContext(activeStrip, item, draggedIndex, visualElement, stripElement, out _);
 
-        activeStrategy.InitiateDrag(context, DragTestHelpers.ScreenPoint(startX, startY));
+        // Convert element coordinates to physical screen coordinates
+        var startPhysical = this.ToPhysical(startX, startY);
+
+        // Create a context and let CreateDragContext compute the hotspot in element-space after layout.
+        var context = this.CreateDragContext(
+            activeStrip,
+            item,
+            draggedIndex,
+            visualElement,
+            stripElement,
+            out _,
+            startPhysical: startPhysical,
+            snapshotsForHotspot: snapshots ?? snapshotItems);
+
+        activeStrategy.InitiateDrag(context, startPhysical);
         return new DragSetup(activeStrategy, activeStrip, context);
     }
 
@@ -577,7 +621,10 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         int draggedIndex,
         FrameworkElement? visualElement,
         FrameworkElement? stripElement,
-        out FrameworkElement stripRoot)
+        out FrameworkElement stripRoot,
+        SpatialPoint<PhysicalScreenSpace>? startPhysical = null,
+        IReadOnlyList<TabStripItemSnapshot>? snapshotsForHotspot = null,
+        Windows.Foundation.Point? hotspotOffsets = null)
     {
         stripRoot = this.PrepareStripElement(stripElement);
         var element = this.PrepareVisualElement(visualElement, stripRoot);
@@ -590,8 +637,37 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         stripRoot.UpdateLayout();
         element.UpdateLayout();
 
-        var mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, stripRoot);
-        return new DragContext(strip.Object, draggedItem, draggedIndex, element, mapper);
+        var localMapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, stripRoot);
+
+        // Determine hotspot offsets (element-space). Priority:
+        // 1) Explicit hotspotOffsets param
+        // 2) If a physical start point and snapshots are provided, convert the physical point to element space
+        //    and compute offset relative to the snapshot's LayoutOrigin
+        // 3) Default to (0,0)
+        Windows.Foundation.Point offsets;
+        if (hotspotOffsets is not null)
+        {
+            offsets = hotspotOffsets.Value;
+        }
+        else if (startPhysical is not null && snapshotsForHotspot?.Count > 0)
+        {
+            var elementPoint = localMapper.ToElement(startPhysical.Value);
+            var snap = snapshotsForHotspot.FirstOrDefault(p => p.ItemIndex == draggedIndex) ?? snapshotsForHotspot[0];
+            offsets = new Windows.Foundation.Point(elementPoint.Point.X - snap.LayoutOrigin.Point.X, elementPoint.Point.Y - snap.LayoutOrigin.Point.Y);
+        }
+        else
+        {
+            offsets = new Windows.Foundation.Point(0, 0);
+        }
+
+        return new DragContext(
+            strip.Object,
+            draggedItem,
+            draggedIndex,
+            offsets,
+            stripRoot,
+            element,
+            localMapper);
     }
 
     private FrameworkElement PrepareStripElement(FrameworkElement? stripElement)
@@ -608,7 +684,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
 
     private FrameworkElement PrepareVisualElement(FrameworkElement? visualElement, FrameworkElement stripRoot)
     {
-        var element = visualElement ?? this.CreateTestVisualElement();
+        var element = visualElement ?? CreateTestVisualElement();
 
         if (ReferenceEquals(element, stripRoot))
         {
@@ -644,17 +720,6 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         }
 
         return element;
-    }
-
-    private Border CreateTestVisualElement()
-    {
-        return new Border
-        {
-            Width = DefaultItemWidth,
-            Height = DefaultItemHeight,
-            HorizontalAlignment = HorizontalAlignment.Left,
-            VerticalAlignment = VerticalAlignment.Top,
-        };
     }
 
     private sealed record DragSetup(ReorderStrategy Strategy, Mock<ITabStrip> Strip, DragContext Context);

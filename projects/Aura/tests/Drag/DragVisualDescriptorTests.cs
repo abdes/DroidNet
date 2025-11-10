@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Aura.Drag;
 using DroidNet.Tests;
 using FluentAssertions;
-using Microsoft.UI.Xaml.Media.Imaging;
+using Windows.Graphics.Imaging;
 
 namespace DroidNet.Aura.Drag.Tests;
 
@@ -20,11 +19,11 @@ namespace DroidNet.Aura.Drag.Tests;
 [TestCategory("UITest")]
 public class DragVisualDescriptorTests : VisualUserInterfaceTests
 {
-    public required TestContext TestContext { get; set; }
+    public TestContext TestContext { get; set; }
 
     /// <summary>
     /// Verifies that descriptor can be created with default values.
-    /// HeaderImage and PreviewImage are optional (service uses placeholder when null).
+    /// HeaderBitmap and PreviewBitmap are optional (service uses placeholder when null).
     /// </summary>
     [TestMethod]
     public void Descriptor_CanBeCreated_WithDefaultValues()
@@ -33,8 +32,8 @@ public class DragVisualDescriptorTests : VisualUserInterfaceTests
         var descriptor = new DragVisualDescriptor();
 
         // Assert
-        _ = descriptor.HeaderImage.Should().BeNull("HeaderImage should be null by default");
-        _ = descriptor.PreviewImage.Should().BeNull("PreviewImage should be null by default");
+        _ = descriptor.HeaderBitmap.Should().BeNull("HeaderBitmap should be null by default");
+        _ = descriptor.PreviewBitmap.Should().BeNull("PreviewBitmap should be null by default");
         _ = descriptor.RequestedSize.Should().Be(default(Windows.Foundation.Size), "RequestedSize should be default");
     }
 
@@ -84,13 +83,13 @@ public class DragVisualDescriptorTests : VisualUserInterfaceTests
     }
 
     /// <summary>
-    /// Verifies that PropertyChanged event is raised when HeaderImage changes.
+    /// Verifies that PropertyChanged event is raised when HeaderBitmap changes.
     /// Requires UI thread to create BitmapImage.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_RaisesPropertyChanged_WhenHeaderImageChanges_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_RaisesPropertyChanged_WhenHeaderBitmapChanges_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var descriptor = new DragVisualDescriptor();
@@ -100,32 +99,32 @@ public class DragVisualDescriptorTests : VisualUserInterfaceTests
         descriptor.PropertyChanged += (_, e) =>
         {
             propertyName = e.PropertyName;
-            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.HeaderImage), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.HeaderBitmap), StringComparison.Ordinal))
             {
                 eventRaised = true;
             }
         };
 
-        // Act - Create new BitmapImage to actually change the value
-        var newImage = new BitmapImage();
-        descriptor.HeaderImage = newImage;
+        // Act - Create new SoftwareBitmap to actually change the value
+        var newImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
+        descriptor.HeaderBitmap = newImage;
 
         // Assert
-        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when HeaderImage changes from null to an actual image");
-        _ = propertyName.Should().Be(nameof(DragVisualDescriptor.HeaderImage), "Property name should match");
-        _ = descriptor.HeaderImage.Should().BeSameAs(newImage, "HeaderImage should be set to the new image");
+        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when HeaderBitmap changes from null to an actual image");
+        _ = propertyName.Should().Be(nameof(DragVisualDescriptor.HeaderBitmap), "Property name should match");
+        _ = descriptor.HeaderBitmap.Should().BeSameAs(newImage, "HeaderBitmap should be set to the new image");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that PropertyChanged event is raised when PreviewImage changes.
+    /// Verifies that PropertyChanged event is raised when PreviewBitmap changes.
     /// Requires UI thread to create BitmapImage.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_RaisesPropertyChanged_WhenPreviewImageChanges_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_RaisesPropertyChanged_WhenPreviewBitmapChanges_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var descriptor = new DragVisualDescriptor();
@@ -135,150 +134,150 @@ public class DragVisualDescriptorTests : VisualUserInterfaceTests
         descriptor.PropertyChanged += (_, e) =>
         {
             propertyName = e.PropertyName;
-            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.PreviewImage), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.PreviewBitmap), StringComparison.Ordinal))
             {
                 eventRaised = true;
             }
         };
 
-        // Act - Create new BitmapImage to actually change the value
-        var newImage = new BitmapImage();
-        descriptor.PreviewImage = newImage;
+        // Act - Create new SoftwareBitmap to actually change the value
+        var newImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
+        descriptor.PreviewBitmap = newImage;
 
         // Assert
-        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when PreviewImage changes from null to an actual image");
-        _ = propertyName.Should().Be(nameof(DragVisualDescriptor.PreviewImage), "Property name should match");
-        _ = descriptor.PreviewImage.Should().BeSameAs(newImage, "PreviewImage should be set to the new image");
+        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when PreviewBitmap changes from null to an actual image");
+        _ = propertyName.Should().Be(nameof(DragVisualDescriptor.PreviewBitmap), "Property name should match");
+        _ = descriptor.PreviewBitmap.Should().BeSameAs(newImage, "PreviewBitmap should be set to the new image");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that HeaderImage can be set and retrieved correctly.
+    /// Verifies that HeaderBitmap can be set and retrieved correctly.
     /// Requires UI thread to create BitmapImage.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_HeaderImage_CanBeSet_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_HeaderBitmap_CanBeSet_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var descriptor = new DragVisualDescriptor();
-        var expectedImage = new BitmapImage();
+        var expectedImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
 
         // Act
-        descriptor.HeaderImage = expectedImage;
+        descriptor.HeaderBitmap = expectedImage;
 
         // Assert
-        _ = descriptor.HeaderImage.Should().BeSameAs(expectedImage, "HeaderImage should be set correctly");
+        _ = descriptor.HeaderBitmap.Should().BeSameAs(expectedImage, "HeaderBitmap should be set correctly");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that PreviewImage can be set and retrieved correctly.
+    /// Verifies that PreviewBitmap can be set and retrieved correctly.
     /// Requires UI thread to create BitmapImage.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_PreviewImage_CanBeSet_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_PreviewBitmap_CanBeSet_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var descriptor = new DragVisualDescriptor();
-        var expectedImage = new BitmapImage();
+        var expectedImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
 
         // Act
-        descriptor.PreviewImage = expectedImage;
+        descriptor.PreviewBitmap = expectedImage;
 
         // Assert
-        _ = descriptor.PreviewImage.Should().BeSameAs(expectedImage, "PreviewImage should be set correctly");
+        _ = descriptor.PreviewBitmap.Should().BeSameAs(expectedImage, "PreviewBitmap should be set correctly");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that HeaderImage and PreviewImage can both be set on the same descriptor.
+    /// Verifies that HeaderBitmap and PreviewBitmap can both be set on the same descriptor.
     /// Requires UI thread to create BitmapImage objects.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_CanSetBothHeaderAndPreviewImages_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_CanSetBothHeaderAndPreviewBitmaps_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var descriptor = new DragVisualDescriptor();
-        var headerImage = new BitmapImage();
-        var previewImage = new BitmapImage();
+        var headerImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
+        var previewImage = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied);
 
         // Act
-        descriptor.HeaderImage = headerImage;
-        descriptor.PreviewImage = previewImage;
+        descriptor.HeaderBitmap = headerImage;
+        descriptor.PreviewBitmap = previewImage;
 
         // Assert
-        _ = descriptor.HeaderImage.Should().BeSameAs(headerImage, "HeaderImage should be set");
-        _ = descriptor.PreviewImage.Should().BeSameAs(previewImage, "PreviewImage should be set");
-        _ = descriptor.HeaderImage.Should().NotBeSameAs(descriptor.PreviewImage, "HeaderImage and PreviewImage should be different instances");
+        _ = descriptor.HeaderBitmap.Should().BeSameAs(headerImage, "HeaderBitmap should be set");
+        _ = descriptor.PreviewBitmap.Should().BeSameAs(previewImage, "PreviewBitmap should be set");
+        _ = descriptor.HeaderBitmap.Should().NotBeSameAs(descriptor.PreviewBitmap, "HeaderBitmap and PreviewBitmap should be different instances");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that setting HeaderImage to null raises PropertyChanged.
+    /// Verifies that setting HeaderBitmap to null raises PropertyChanged.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_RaisesPropertyChanged_WhenHeaderImageSetToNull_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_RaisesPropertyChanged_WhenHeaderBitmapSetToNull_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { HeaderImage = new BitmapImage() };
+        var descriptor = new DragVisualDescriptor { HeaderBitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied) };
         var eventRaised = false;
 
         descriptor.PropertyChanged += (_, e) =>
         {
-            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.HeaderImage), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.HeaderBitmap), StringComparison.Ordinal))
             {
                 eventRaised = true;
             }
         };
 
         // Act - Change from image to null
-        descriptor.HeaderImage = null;
+        descriptor.HeaderBitmap = null;
 
         // Assert
-        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when HeaderImage changes from image to null");
-        _ = descriptor.HeaderImage.Should().BeNull("HeaderImage should be null");
+        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when HeaderBitmap changes from image to null");
+        _ = descriptor.HeaderBitmap.Should().BeNull("HeaderBitmap should be null");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     /// <summary>
-    /// Verifies that setting PreviewImage to null raises PropertyChanged.
+    /// Verifies that setting PreviewBitmap to null raises PropertyChanged.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [TestMethod]
     [TestCategory("UITest")]
-    public Task Descriptor_RaisesPropertyChanged_WhenPreviewImageSetToNull_Async() => EnqueueAsync(async () =>
+    public Task Descriptor_RaisesPropertyChanged_WhenPreviewBitmapSetToNull_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var descriptor = new DragVisualDescriptor { PreviewImage = new BitmapImage() };
+        var descriptor = new DragVisualDescriptor { PreviewBitmap = new SoftwareBitmap(BitmapPixelFormat.Bgra8, 1, 1, BitmapAlphaMode.Premultiplied) };
         var eventRaised = false;
 
         descriptor.PropertyChanged += (_, e) =>
         {
-            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.PreviewImage), StringComparison.Ordinal))
+            if (string.Equals(e.PropertyName, nameof(DragVisualDescriptor.PreviewBitmap), StringComparison.Ordinal))
             {
                 eventRaised = true;
             }
         };
 
         // Act - Change from image to null
-        descriptor.PreviewImage = null;
+        descriptor.PreviewBitmap = null;
 
         // Assert
-        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when PreviewImage changes from image to null");
-        _ = descriptor.PreviewImage.Should().BeNull("PreviewImage should be null");
+        _ = eventRaised.Should().BeTrue("PropertyChanged should be raised when PreviewBitmap changes from image to null");
+        _ = descriptor.PreviewBitmap.Should().BeNull("PreviewBitmap should be null");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Threading.Tasks;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -65,10 +64,10 @@ internal sealed partial class TearOutStrategy : IDragStrategy
             return;
         }
 
-        // Create descriptor for the drag visual
+        // Create descriptor for the drag visual (default size chosen to match app preview expectations)
         this.descriptor = new DragVisualDescriptor
         {
-            RequestedSize = new Windows.Foundation.Size(400, 200), // Default size
+            RequestedSize = new Windows.Foundation.Size(300, 150), // Default size
         };
 
         // Populate header bitmap asynchronously; fire-and-forget because rendering uses async WinUI APIs
@@ -77,7 +76,8 @@ internal sealed partial class TearOutStrategy : IDragStrategy
         // Request preview bitmap from the application
         this.RequestPreviewImage(this.descriptor);
 
-        // Start the drag visual session with the window position offsets calculated from the initial drag point
+        // Start the drag visual session. Do not convert the hotspot offsets here; service expects
+        // them in logical pixels, and as offsets, not absolute positions.
         this.sessionToken = this.dragService.StartSession(
             this.descriptor,
             position,

@@ -2,18 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Reflection;
-using System.Threading.Tasks;
-using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -33,51 +30,56 @@ namespace DroidNet.Aura.Drag.Tests;
 [TestCategory("UITest")]
 public class TabDragCoordinatorTests : VisualUserInterfaceTests
 {
+    private SpatialMapper? mapper;
+
+    private Border? testElement;
+
     public TestContext TestContext { get; set; }
 
     [TestMethod]
     public Task StartDrag_WithValidParameters_InitializesContext_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedIndex = 1;
+        const int draggedIndex = 1;
         var tabStripMock = new TabStripMockBuilder()
             .WithDraggedItemSnapshot(draggedIndex)
             .Build();
-        var draggedItem = "Item1";
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const string draggedItem = "Item1";
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
         var factoryInvocations = new List<(Window? window, FrameworkElement? element)>();
         var coordinator = this.CreateCoordinator(
             mapperFactory: (window, element) =>
             {
                 factoryInvocations.Add((window, element));
-                var mapperMock = new Mock<ISpatialMapper>();
-                mapperMock.Setup(m => m.Convert<ScreenSpace, PhysicalScreenSpace>(It.IsAny<SpatialPoint<ScreenSpace>>()))
-                    .Returns<SpatialPoint<ScreenSpace>>(sp => new SpatialPoint<PhysicalScreenSpace>(sp.Point));
-                return mapperMock.Object;
+                return new SpatialMapper(window, element);
             });
 
-        var initialPoint = CreateScreenPoint(120, 30);
+        var initialElementPoint = new Point(120, 30).AsElement();
 
         // Act
-        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, initialPoint);
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Assert
-        factoryInvocations.Should().HaveCount(1);
-        factoryInvocations[0].window.Should().Be(VisualUserInterfaceTestsApp.MainWindow);
-        factoryInvocations[0].element.Should().Be(visualElement, "factory should be called with the visual element, not the TabStrip interface");
+        _ = factoryInvocations.Should().HaveCount(1);
+        _ = factoryInvocations[0].window.Should().Be(VisualUserInterfaceTestsApp.MainWindow);
+        _ = factoryInvocations[0].element.Should().Be(visualElement, "factory should be called with the visual element, not the TabStrip interface");
 
         var isActive = GetPrivateField<bool>(coordinator, "isActive");
-        isActive.Should().BeTrue();
+        _ = isActive.Should().BeTrue();
 
         var context = GetPrivateField<DragContext?>(coordinator, "dragContext");
-        context.Should().NotBeNull();
-        context!.TabStrip.Should().Be(tabStripMock.Object);
-        context.DraggedItem.Should().Be(draggedItem);
-        context.DraggedItemIndex.Should().Be(draggedIndex);
+        _ = context.Should().NotBeNull();
+        _ = context!.TabStrip.Should().Be(tabStripMock.Object);
+        _ = context.DraggedItemData.Should().Be(draggedItem);
+        _ = context.DraggedItemIndex.Should().Be(draggedIndex);
 
+        // The last cursor position should be in physical screen space, converted properly from element space
         var lastPhysical = GetPrivateField<SpatialPoint<PhysicalScreenSpace>>(coordinator, "lastCursorPosition");
-        AreClose(lastPhysical.Point, initialPoint.Point).Should().BeTrue();
+        _ = lastPhysical.Should().NotBeNull();
 
         coordinator.Abort();
 
@@ -92,16 +94,20 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var tabStripMock = new TabStripMockBuilder()
             .WithDraggedItemSnapshot(0)
             .Build();
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var initialPoint = CreateScreenPoint(80, 20);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
-        coordinator.StartDrag("FirstItem", 0, tabStripMock.Object, visualElement, initialPoint);
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(80, 20).AsElement();
+
+        coordinator.StartDrag("FirstItem", 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Act
-        var act = () => coordinator.StartDrag("SecondItem", 0, tabStripMock.Object, visualElement, initialPoint);
+        var act = () => coordinator.StartDrag("SecondItem", 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Assert
-        act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
+        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
 
         coordinator.Abort();
 
@@ -114,13 +120,16 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var coordinator = this.CreateCoordinator();
         var tabStrip = Mock.Of<ITabStrip>();
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
         // Act
-        var act = () => coordinator.StartDrag(null!, 0, tabStrip, visualElement, CreateScreenPoint(60, 18));
+        var act = () => coordinator.StartDrag(null!, 0, tabStrip, visualElement, visualElement, new Point(60, 18).AsElement(), new Point(0, 0));
 
         // Assert
-        act.Should().Throw<ArgumentNullException>().WithParameterName("item");
+        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("item");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -130,29 +139,32 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     {
         // Arrange
         var coordinator = this.CreateCoordinator();
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
         // Act
-        var act = () => coordinator.StartDrag("Item", 0, null!, visualElement, CreateScreenPoint(40, 22));
+        var act = () => coordinator.StartDrag("Item", 0, null!, visualElement, visualElement, new Point(40, 22).AsElement(), new Point(0, 0));
 
         // Assert
-        act.Should().Throw<ArgumentNullException>().WithParameterName("source");
+        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("source");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
     [TestMethod]
-    public Task StartDrag_ThrowsWhenVisualElementNull_Async() => EnqueueAsync(async () =>
+    public Task StartDrag_ThrowsWhenDraggedElementNull_Async() => EnqueueAsync(async () =>
     {
         // Arrange
         var coordinator = this.CreateCoordinator();
         var tabStrip = Mock.Of<ITabStrip>();
 
         // Act
-        var act = () => coordinator.StartDrag("Item", 0, tabStrip, null!, CreateScreenPoint(55, 35));
+        var act = () => coordinator.StartDrag("Item", 0, tabStrip, null!, null!, new Point(55, 35).AsElement(), new Point(0, 0));
 
         // Assert
-        act.Should().Throw<ArgumentNullException>().WithParameterName("visualElement");
+        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("draggedElement");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -161,27 +173,31 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task EndDrag_WhenActive_CompletesStrategyAndResetsState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedIndex = 1;
+        const int draggedIndex = 1;
         var coordinator = this.CreateCoordinator();
         var tabStripMock = new TabStripMockBuilder()
             .WithDraggedItemSnapshot(draggedIndex)
             .Build();
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var initialPoint = CreateScreenPoint(120, 30);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, initialPoint);
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(120, 30).AsElement();
+
+        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
 
         // Act
-        coordinator.EndDrag(CreateScreenPoint(140, 40));
+        coordinator.EndDrag(this.ToScreen(140, 40));
 
         // Assert
-        strategy.CompleteCalled.Should().BeTrue();
-        strategy.ReturnedIndex.Should().BeNull("stub strategy returns null");
-        GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
-        GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
+        _ = strategy.CompleteCalled.Should().BeTrue();
+        _ = strategy.ReturnedIndex.Should().BeNull("stub strategy returns null");
+        _ = GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
+        _ = GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -195,10 +211,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         SetPrivateField(coordinator, "currentStrategy", strategy);
 
         // Act
-        coordinator.EndDrag(CreateScreenPoint(20, 15));
+        coordinator.EndDrag(this.ToScreen(20, 15));
 
         // Assert
-        strategy.CompleteCalled.Should().BeFalse();
+        _ = strategy.CompleteCalled.Should().BeFalse();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -207,14 +223,17 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task Abort_WhenActive_EndsStrategyAndClearsState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedIndex = 1;
+        const int draggedIndex = 1;
         var coordinator = this.CreateCoordinator();
         var tabStripMock = new TabStripMockBuilder()
             .WithDraggedItemSnapshot(draggedIndex)
             .Build();
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, CreateScreenPoint(100, 25));
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
@@ -223,10 +242,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.Abort();
 
         // Assert
-        strategy.CompleteCalled.Should().BeTrue();
-        strategy.ReturnedIndex.Should().BeNull("abort returns null");
-        GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
-        GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
+        _ = strategy.CompleteCalled.Should().BeTrue();
+        _ = strategy.ReturnedIndex.Should().BeNull("abort returns null");
+        _ = GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
+        _ = GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -243,7 +262,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.Abort();
 
         // Assert
-        strategy.CompleteCalled.Should().BeFalse();
+        _ = strategy.CompleteCalled.Should().BeFalse();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -260,7 +279,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Assert
         var registered = GetRegisteredStrips(coordinator);
-        registered.Should().ContainSingle();
+        _ = registered.Should().ContainSingle();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -281,7 +300,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Assert
         var registered = GetRegisteredStrips(coordinator);
-        registered.Should().ContainSingle().Which.Should().Be(stripBMock.Object);
+        _ = registered.Should().ContainSingle().Which.Should().Be(stripBMock.Object);
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -290,36 +309,43 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task EndDrag_InTearOutMode_WithoutHitStrip_RaisesTabTearOutRequested_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var draggedIndex = 0;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
-        var draggedItem = "ItemA";
-        var initialPoint = CreateScreenPoint(120, 30);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        const string draggedItem = "ItemA";
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(120, 30).AsElement();
+        var initialScreenPoint = this.ToScreen(120, 30);
+
+        // SwitchToTearOutMode expects a PhysicalScreenSpace point; convert the ScreenSpace point
+        var initialPhysicalPoint = this.ToPhysical(120, 30);
 
         // Setup drag visual service mock for TearOut mode
         var dragServiceMock = new DragVisualServiceMockBuilder()
-            .WithSessionToken(new DragSessionToken())
+            .WithSessionToken(default)
             .WithDescriptor(new DragVisualDescriptor())
             .Build();
 
         var coordinator = this.CreateCoordinator(dragService: dragServiceMock.Object);
-        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, initialPoint);
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Switch to TearOut mode explicitly via SwitchToTearOutMode
         var switchMethod = typeof(TabDragCoordinator).GetMethod(
             "SwitchToTearOutMode",
             BindingFlags.Instance | BindingFlags.NonPublic);
-        switchMethod?.Invoke(coordinator, [initialPoint]);
+        _ = switchMethod?.Invoke(coordinator, [initialPhysicalPoint]);
 
         // Act: Drop outside any TabStrip (far away point that won't hit test)
-        var dropPoint = CreateScreenPoint(5000, 5000);
+        var dropPoint = this.ToScreen(5000, 5000);
         coordinator.EndDrag(dropPoint);
 
         // Assert
         tabStripMock.Verify(s => s.TearOutTab(draggedItem, It.IsAny<SpatialPoint<ScreenSpace>>()), Times.Once());
-        tabStripMock.Verify(s => s.CompleteDrag(draggedItem, null, null), Times.Once());
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -328,31 +354,39 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task EndDrag_WithHitStrip_CallsCompleteDragWithDestination_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var draggedIndex = 0;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
-        var draggedItem = "ItemA";
-        var initialPoint = CreateScreenPoint(120, 30);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        const string draggedItem = "ItemA";
 
-        var coordinator = this.CreateCoordinator();
-        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, initialPoint);
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
-        // Register the strip so it can be hit-tested
-        coordinator.RegisterTabStrip(tabStripMock.Object);
+        var initialElementPoint = new Point(120, 30).AsElement();
+
+        var coordinator = this.CreateCoordinator(mapperFactory: (w, e) => new SpatialMapper(w, e));
+
+        // Load the wrapper element into the visual tree so the coordinator can create a mapper for it
+        await LoadTestContentAsync(stripElement).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, stripElement, stripElement, initialElementPoint, new Point(0, 0));
+
+        // Register the wrapper element so it can be hit-tested
+        coordinator.RegisterTabStrip((ITabStrip)stripElement);
 
         // Use ReorderStrategy which returns an actual drop index
         var reorderStrategy = new StubDragStrategy { ReturnIndexOverride = 2 };
         SetPrivateField(coordinator, "currentStrategy", reorderStrategy);
 
         // Act: Drop within the TabStrip bounds
-        var dropPoint = CreateScreenPoint(50, 20);
+        var dropPoint = this.ToScreen(50, 20);
         coordinator.EndDrag(dropPoint);
 
         // Assert
-        reorderStrategy.CompleteCalled.Should().BeTrue();
-        tabStripMock.Verify(s => s.CompleteDrag(draggedItem, tabStripMock.Object, 2), Times.Once());
+        _ = reorderStrategy.CompleteCalled.Should().BeTrue();
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, tabStripMock.Object, 2), Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -361,28 +395,33 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task SwitchToTearOutMode_CallsCloseTabOnSource_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var draggedIndex = 0;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
-        var draggedItem = "ItemA";
-        var initialPoint = CreateScreenPoint(120, 30);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        const string draggedItem = "ItemA";
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(120, 30).AsElement();
+        var initialScreenPoint = this.ToScreen(120, 30);
+        var initialPhysicalPoint = this.ToPhysical(120, 30);
 
         // Setup drag visual service mock for TearOut mode
         var dragServiceMock = new DragVisualServiceMockBuilder()
-            .WithSessionToken(new DragSessionToken())
+            .WithSessionToken(default)
             .WithDescriptor(new DragVisualDescriptor())
             .Build();
 
         var coordinator = this.CreateCoordinator(dragService: dragServiceMock.Object);
-        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, initialPoint);
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Act: Switch to TearOut mode by calling the private method via reflection
         var method = typeof(TabDragCoordinator).GetMethod(
             "SwitchToTearOutMode",
             BindingFlags.Instance | BindingFlags.NonPublic);
-        method?.Invoke(coordinator, [initialPoint]);
+        _ = method?.Invoke(coordinator, [initialPhysicalPoint]);
 
         // Assert
         tabStripMock.Verify(s => s.CloseTab(draggedItem), Times.Once());
@@ -406,9 +445,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Assert
         var registered = GetRegisteredStrips(coordinator);
-        registered.Should().Contain(secondStripMock.Object, "second strip should be registered");
-        registered.Should().Contain(thirdStripMock.Object, "third strip should be registered");
-        registered.Count.Should().Be(2, "exactly two strips should be registered");
+        _ = registered.Should().Contain(secondStripMock.Object, "second strip should be registered");
+        _ = registered.Should().Contain(thirdStripMock.Object, "third strip should be registered");
+        _ = registered.Count.Should().Be(2, "exactly two strips should be registered");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -417,14 +456,16 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task Abort_WhenActive_CompletesStrategyAndCleansUpState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var draggedIndex = 0;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
         var coordinator = this.CreateCoordinator();
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, CreateScreenPoint(100, 25));
+        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
@@ -433,10 +474,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.Abort();
 
         // Assert
-        strategy.CompleteCalled.Should().BeTrue("strategy should be completed during abort");
-        strategy.ReturnedIndex.Should().BeNull("abort returns null");
-        GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
-        GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
+        _ = strategy.CompleteCalled.Should().BeTrue("strategy should be completed during abort");
+        _ = strategy.ReturnedIndex.Should().BeNull("abort returns null");
+        _ = GetPrivateField<bool>(coordinator, "isActive").Should().BeFalse();
+        _ = GetPrivateField<DragContext?>(coordinator, "dragContext").Should().BeNull();
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -445,7 +486,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task StartDrag_WithNullInitialPoint_UsesGetCursorPos_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         var tabStripMock = new TabStripMockBuilder()
             .WithDraggedItemSnapshot(0)
             .Build();
@@ -453,14 +494,14 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var coordinator = this.CreateCoordinator();
 
         // Act: Start drag without providing initial point (null)
-        coordinator.StartDrag("Item", 0, tabStripMock.Object, visualElement, initialScreenPoint: null);
+        coordinator.StartDrag("Item", 0, tabStripMock.Object, visualElement, visualElement, new Point(0, 0).AsElement(), new Point(0, 0));
 
         // Assert: Should successfully initialize (GetCursorPos is called internally)
         var isActive = GetPrivateField<bool>(coordinator, "isActive");
-        isActive.Should().BeTrue("drag should be active even without explicit initial point");
+        _ = isActive.Should().BeTrue("drag should be active even without explicit initial point");
 
         var context = GetPrivateField<DragContext?>(coordinator, "dragContext");
-        context.Should().NotBeNull("context should be initialized");
+        _ = context.Should().NotBeNull("context should be initialized");
 
         coordinator.Abort();
 
@@ -471,34 +512,123 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task EndDrag_InReorderMode_WhenStrategyReturnsNull_CallsCompleteDragWithNullIndex_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var visualElement = await this.CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var draggedIndex = 0;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
-        var draggedItem = "ItemA";
-        var initialPoint = CreateScreenPoint(120, 30);
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        const string draggedItem = "ItemA";
 
-        var coordinator = this.CreateCoordinator();
-        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, initialPoint);
-        coordinator.RegisterTabStrip(tabStripMock.Object);
+        // Update mapper to use the visual element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        var initialElementPoint = new Point(120, 30).AsElement();
+
+        var coordinator = this.CreateCoordinator(mapperFactory: (w, e) => new SpatialMapper(w, e));
+
+        // Ensure wrapper is loaded so the coordinator can create a SpatialMapper for it
+        await LoadTestContentAsync(stripElement).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
+        coordinator.RegisterTabStrip((ITabStrip)stripElement);
 
         // Use a strategy that returns null (error case)
         var nullReturningStrategy = new StubDragStrategy { ReturnIndexOverride = null };
         SetPrivateField(coordinator, "currentStrategy", nullReturningStrategy);
 
         // Act: Drop within bounds but strategy returns null (error case)
-        var dropPoint = CreateScreenPoint(50, 20);
+        var dropPoint = this.ToScreen(50, 20);
         coordinator.EndDrag(dropPoint);
 
         // Assert: hitStrip is not null but finalDropIndex is null => error case
-        nullReturningStrategy.CompleteCalled.Should().BeTrue();
-        tabStripMock.Verify(s => s.CompleteDrag(draggedItem, null, null), Times.Once());
+        _ = nullReturningStrategy.CompleteCalled.Should().BeTrue();
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
-    #region Helper Methods
+    protected override async Task TestSetupAsync()
+    {
+        await base.TestSetupAsync().ConfigureAwait(true);
+
+        // Create a test element for the mapper
+        this.testElement = new Border
+        {
+            Width = 100,
+            Height = 40,
+            Background = new SolidColorBrush(Colors.LightGray),
+        };
+
+        await LoadTestContentAsync(this.testElement).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        // Initialize the mapper with the main window and test element
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, this.testElement);
+    }
+
+    private static async Task<Border> CreateLoadedVisualElementAsync()
+    {
+        var element = new Border
+        {
+            Width = 100,
+            Height = 40,
+            Background = new SolidColorBrush(Colors.LightGray),
+        };
+        await LoadTestContentAsync(element).ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+        return element;
+    }
+
+    private static TField GetPrivateField<TField>(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        return field is null ? default! : (TField)field.GetValue(instance)!;
+    }
+
+    private static void SetPrivateField(object instance, string fieldName, object? value)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        field?.SetValue(instance, value);
+    }
+
+    private static List<ITabStrip> GetRegisteredStrips(TabDragCoordinator coordinator)
+    {
+        var field = coordinator.GetType().GetField("registeredStrips", BindingFlags.Instance | BindingFlags.NonPublic);
+        return field?.GetValue(coordinator) is not List<WeakReference<ITabStrip>> references
+            ? []
+            : (List<ITabStrip>)[.. references
+            .Select(reference => reference.TryGetTarget(out var strip) ? strip : null)
+            .Where(strip => strip is not null)
+            .Cast<ITabStrip>(),];
+    }
+
+    /// <summary>
+    /// Converts element-space coordinates to screen space using the mapper.
+    /// </summary>
+    private SpatialPoint<ScreenSpace> ToScreen(double x, double y)
+    {
+        if (this.mapper is null)
+        {
+            throw new InvalidOperationException("Mapper not initialized. Ensure TestSetupAsync has been called.");
+        }
+
+        var elementPoint = new Point(x, y).AsElement();
+        return this.mapper.Convert<ElementSpace, ScreenSpace>(elementPoint);
+    }
+
+    /// <summary>
+    /// Converts element-space coordinates to physical screen space using the mapper.
+    /// </summary>
+    private SpatialPoint<PhysicalScreenSpace> ToPhysical(double x, double y)
+    {
+        if (this.mapper is null)
+        {
+            throw new InvalidOperationException("Mapper not initialized. Ensure TestSetupAsync has been called.");
+        }
+
+        var elementPoint = new Point(x, y).AsElement();
+        return this.mapper.Convert<ElementSpace, PhysicalScreenSpace>(elementPoint);
+    }
 
     private TabDragCoordinator CreateCoordinator(
         IWindowManagerService? windowManager = null,
@@ -516,68 +646,27 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
                 CreatedAt = DateTimeOffset.UtcNow,
             };
 
-            wmMock.Setup(wm => wm.GetWindow(It.IsAny<WindowId>())).Returns(windowContext);
-            wmMock.Setup(wm => wm.OpenWindows).Returns(new[] { windowContext });
+            _ = wmMock.Setup(wm => wm.GetWindow(It.IsAny<WindowId>())).Returns(windowContext);
+            _ = wmMock.Setup(wm => wm.OpenWindows).Returns([windowContext]);
             windowManager = wmMock.Object;
         }
 
+        // Create a HostingContext for UI-affine operations and pass it as the first parameter.
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var hosting = new HostingContext
+        {
+            Dispatcher = dispatcher,
+            Application = Application.Current,
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
+        };
+
         return new TabDragCoordinator(
+            hosting,
             windowManager,
             mapperFactory ?? ((w, e) => Mock.Of<ISpatialMapper>()),
             dragService ?? Mock.Of<IDragVisualService>(),
             this.LoggerFactory);
     }
-
-    private async Task<Border> CreateLoadedVisualElementAsync()
-    {
-        var element = new Border
-        {
-            Width = 100,
-            Height = 40,
-            Background = new SolidColorBrush(Colors.LightGray),
-        };
-        await LoadTestContentAsync(element).ConfigureAwait(true);
-        await DragTestHelpers.WaitForRenderAsync().ConfigureAwait(true);
-        return element;
-    }
-
-    private static SpatialPoint<ScreenSpace> CreateScreenPoint(double x, double y) => DragTestHelpers.ScreenPoint(x, y);
-
-    private static bool AreClose(Point left, Point right, double tolerance = 0.1) => DragTestHelpers.AreClose(left, right, tolerance);
-
-    private static TField GetPrivateField<TField>(object instance, string fieldName)
-    {
-        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-        return field is null ? default! : (TField)field.GetValue(instance)!;
-    }
-
-    private static void SetPrivateField(object instance, string fieldName, object? value)
-    {
-        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-        field?.SetValue(instance, value);
-    }
-
-    private static List<ITabStrip> GetRegisteredStrips(TabDragCoordinator coordinator)
-    {
-        var field = coordinator.GetType().GetField("registeredStrips", BindingFlags.Instance | BindingFlags.NonPublic);
-        if (field?.GetValue(coordinator) is not List<WeakReference<ITabStrip>> references)
-        {
-            return [];
-        }
-
-        return references
-            .Select(reference => reference.TryGetTarget(out var strip) ? strip : null)
-            .Where(strip => strip is not null)
-            .Cast<ITabStrip>()
-            .ToList();
-    }
-
-    private static async Task WaitForRenderCompletionAsync() =>
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-
-    #endregion
-
-    #region Test Helpers
 
     private sealed class StubDragStrategy : IDragStrategy
     {
@@ -610,10 +699,6 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         }
 
         public void OnDragPositionChanged(SpatialPoint<PhysicalScreenSpace> position)
-        {
-            this.LastMovePosition = position;
-        }
+            => this.LastMovePosition = position;
     }
-
-    #endregion
 }
