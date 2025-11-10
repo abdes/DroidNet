@@ -788,10 +788,6 @@ public class MenuItemTests : VisualUserInterfaceTests
         return (menuItem, vsm);
     }
 
-    protected static async Task WaitForRenderCompletion() =>
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { })
-            .ConfigureAwait(true);
-
     protected static void CheckPartIsThere(MenuItem menuItem, string partName)
     {
         var part = menuItem.FindDescendant<FrameworkElement>(e => string.Equals(e.Name, partName, StringComparison.Ordinal));
