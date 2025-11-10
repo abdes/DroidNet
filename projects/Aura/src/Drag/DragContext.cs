@@ -29,36 +29,36 @@ public sealed class DragContext(
     ISpatialMapper spatialMapper)
 {
     /// <summary>
-    ///     The tab strip where the drag originated. Set once in the constructor and not modified.
+    ///     Gets the tab strip where the drag originated. Set once in the constructor and not modified.
     ///     Use as a fallback when <see cref="TabStrip"/> is unavailable (for example during tear-out).
     /// </summary>
     public ITabStrip? SourceTabStrip { get; } = tabStrip;
 
     /// <summary>
-    ///     The current host of the dragged item. Updated by <see cref="UpdateCurrentStrip"/>.
+    ///     Gets the current host of the dragged item. Updated by <see cref="UpdateCurrentStrip"/>.
     ///     May be <see langword="null"/> while the item is not hosted by any strip.
     /// </summary>
     public ITabStrip? TabStrip { get; private set; } = tabStrip;
 
     /// <summary>
-    ///     The container element of the active TabStrip, or <see langword="null"/> when
+    ///     Gets the container element of the active TabStrip, or <see langword="null"/> when
     ///     the item is not hosted by a strip.
     /// </summary>
     public FrameworkElement? TabStripContainer { get; private set; } = stripContainer ?? throw new ArgumentNullException(nameof(stripContainer));
 
-    /// <summary>The opaque dragged item data.</summary>
+    /// <summary>Gets the opaque dragged item data.</summary>
     public object DraggedItemData { get; } = draggedItemData ?? throw new ArgumentNullException(nameof(draggedItemData));
 
-    /// <summary>The index of the dragged item in the current TabStrip's Items collection.</summary>
+    /// <summary>Gets the index of the dragged item in the current TabStrip's Items collection.</summary>
     public int DraggedItemIndex { get; private set; } = draggedItemIndex;
 
-    /// <summary>The visual element used for drag preview rendering (for example, a TabStripItem).</summary>
+    /// <summary>Gets the visual element used for drag preview rendering (for example, a TabStripItem).</summary>
     public FrameworkElement DraggedVisualElement { get; private set; } = draggedElement ?? throw new ArgumentNullException(nameof(draggedElement));
 
-    /// <summary>The offset from the top-left corner of the dragged element to the drag hotspot.</summary>
+    /// <summary>Gets the offset from the top-left corner of the dragged element to the drag hotspot.</summary>
     public Point HotspotOffsets { get; } = hotspotOffsets;
 
-    /// <summary>The mapper used for coordinate conversions during the drag operation.</summary>
+    /// <summary>Gets the mapper used for coordinate conversions during the drag operation.</summary>
     public ISpatialMapper SpatialMapper { get; private set; } = spatialMapper ?? throw new ArgumentNullException(nameof(spatialMapper));
 
     /// <summary>
