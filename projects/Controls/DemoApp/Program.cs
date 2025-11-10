@@ -150,7 +150,6 @@ public static partial class Program
         container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
         container.Register<TabDragCoordinator>(Reuse.Singleton);
         container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
-        container.Register<DragOverlayWindow>(Reuse.Transient);
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the

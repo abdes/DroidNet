@@ -2,14 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
@@ -37,24 +36,30 @@ public partial class DragVisualService : IDragVisualService
     private readonly DispatcherQueue dispatcherQueue;
     private readonly Lock syncLock = new();
     private readonly bool suppressOverlay;
+    private readonly DroidNet.Coordinates.RawSpatialMapperFactory spatialMapperFactory;
 
     private DragSessionToken? activeToken;
     private DragVisualDescriptor? activeDescriptor;
     private NativeDragOverlayWindow? overlayWindow;
+    private ISpatialMapper? spatial;
     private SpatialPoint<ScreenSpace> windowPositionOffsets;
     private bool windowIsShown;
-    private double currentScale = 1.0;
-    private uint currentDpi = 96;
     private SpatialPoint<PhysicalScreenSpace> lastPointerPosition;
+    private bool disposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DragVisualService"/> class.
     /// </summary>
     /// <param name="hosting">The hosting context that exposes the UI dispatcher.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
-    public DragVisualService(HostingContext hosting, ILoggerFactory? loggerFactory = null)
+    public DragVisualService(
+        HostingContext hosting,
+        RawSpatialMapperFactory rawMapperFactory,
+        ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(hosting);
+
+        this.spatialMapperFactory = rawMapperFactory ?? throw new ArgumentNullException(nameof(rawMapperFactory));
 
         this.logger = loggerFactory?.CreateLogger<DragVisualService>() ?? NullLogger<DragVisualService>.Instance;
         this.dispatcherQueue = hosting.Dispatcher;
@@ -69,6 +74,7 @@ public partial class DragVisualService : IDragVisualService
         SpatialPoint<PhysicalScreenSpace> initialPosition,
         SpatialPoint<ScreenSpace> hotspotOffsets)
     {
+        this.ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(descriptor);
 
         if (this.suppressOverlay)
@@ -96,7 +102,13 @@ public partial class DragVisualService : IDragVisualService
             descriptor.PropertyChanged += this.OnDescriptorPropertyChanged;
 
             this.overlayWindow = new NativeDragOverlayWindow(this);
-            _ = this.UpdateMonitorScale(initialPosition);
+
+            // Create a mapper bound to the overlay HWND via the injected factory. The
+            // factory is required; do not fall back to manual math.
+            var hwnd = new IntPtr((long)this.overlayWindow.Hwnd);
+            this.spatial = this.spatialMapperFactory(hwnd)
+                ?? throw new InvalidOperationException("A spatial mapper is required for overlay positioning.");
+
             this.RefreshOverlayVisual();
             this.MoveOverlay(initialPosition);
 
@@ -112,6 +124,7 @@ public partial class DragVisualService : IDragVisualService
     /// <inheritdoc />
     public void UpdatePosition(DragSessionToken token, SpatialPoint<PhysicalScreenSpace> position)
     {
+        this.ThrowIfDisposed();
         if (this.suppressOverlay)
         {
             return;
@@ -134,12 +147,6 @@ public partial class DragVisualService : IDragVisualService
             }
 
             this.lastPointerPosition = position;
-            var scaleChanged = this.UpdateMonitorScale(position);
-            if (scaleChanged)
-            {
-                this.RefreshOverlayVisual();
-            }
-
             this.MoveOverlay(position);
 
             if (!this.windowIsShown)
@@ -158,6 +165,7 @@ public partial class DragVisualService : IDragVisualService
     /// <inheritdoc />
     public void EndSession(DragSessionToken token)
     {
+        this.ThrowIfDisposed();
         if (this.suppressOverlay)
         {
             return;
@@ -186,8 +194,6 @@ public partial class DragVisualService : IDragVisualService
             this.activeToken = null;
             this.windowPositionOffsets = default;
             this.lastPointerPosition = default;
-            this.currentScale = 1.0;
-            this.currentDpi = 96;
 
             this.LogSessionEnded();
         }
@@ -196,17 +202,11 @@ public partial class DragVisualService : IDragVisualService
     /// <inheritdoc />
     public DragVisualDescriptor? GetDescriptor(DragSessionToken token)
     {
+        this.ThrowIfDisposed();
         lock (this.syncLock)
         {
             return !this.activeToken.HasValue || this.activeToken.Value != token ? null : this.activeDescriptor;
         }
-    }
-
-    /// <inheritdoc />
-    public bool TryEnqueue(Action action)
-    {
-        ArgumentNullException.ThrowIfNull(action);
-        return this.dispatcherQueue.TryEnqueue(() => action());
     }
 
     private void AssertUIThread()
@@ -224,6 +224,8 @@ public partial class DragVisualService : IDragVisualService
             return;
         }
 
+        Debug.Assert(this.spatial is not null, "Overlay mapper should be initialized by StartSession and must not be null here.");
+
         var descriptor = this.activeDescriptor;
         var size = this.ToPixelSize(descriptor.RequestedSize);
         var header = CreateNativeImage(descriptor.HeaderBitmap);
@@ -231,8 +233,8 @@ public partial class DragVisualService : IDragVisualService
         var spacingPx = this.DipToPixels(PreviewSpacingDip);
 
         this.overlayWindow.SetSize(size);
-        this.overlayWindow.UpdateContent(header, preview, size, spacingPx);
         this.MoveOverlay(this.lastPointerPosition);
+        this.overlayWindow.UpdateContent(header, preview, size, spacingPx);
     }
 
     private void MoveOverlay(SpatialPoint<PhysicalScreenSpace> pointerPosition)
@@ -244,29 +246,19 @@ public partial class DragVisualService : IDragVisualService
 
         var pointerX = (int)Math.Round(pointerPosition.Point.X, MidpointRounding.AwayFromZero);
         var pointerY = (int)Math.Round(pointerPosition.Point.Y, MidpointRounding.AwayFromZero);
-        var offsetX = this.DipToPixels(this.windowPositionOffsets.Point.X);
-        var offsetY = this.DipToPixels(this.windowPositionOffsets.Point.Y);
 
-        var position = new PointInt32(pointerX - offsetX, pointerY - offsetY);
+        // Convert the stored hotspot/window offsets (in logical ScreenSpace DIPs) to
+        // physical pixels for the monitor under the pointer using the overlay mapper.
+        Debug.Assert(this.spatial is not null, "Overlay mapper should be initialized by StartSession and must not be null here.");
+
+        var phys = this.spatial!.Convert<ScreenSpace, PhysicalScreenSpace>(this.windowPositionOffsets).Point;
+        var offsetPhysical = phys;
+
+        var offsetXi = (int)Math.Round(offsetPhysical.X, MidpointRounding.AwayFromZero);
+        var offsetYi = (int)Math.Round(offsetPhysical.Y, MidpointRounding.AwayFromZero);
+
+        var position = new PointInt32(pointerX - offsetXi, pointerY - offsetYi);
         this.overlayWindow.Move(position);
-    }
-
-    private bool UpdateMonitorScale(SpatialPoint<PhysicalScreenSpace> pointerPosition)
-    {
-        var dpi = ResolveMonitorDpi(pointerPosition);
-        if (dpi == 0)
-        {
-            dpi = 96;
-        }
-
-        if (dpi == this.currentDpi)
-        {
-            return false;
-        }
-
-        this.currentDpi = dpi;
-        this.currentScale = dpi / 96.0;
-        return true;
     }
 
     private SizeInt32 ToPixelSize(WinSize requestedSize)
@@ -274,13 +266,27 @@ public partial class DragVisualService : IDragVisualService
         var widthDip = requestedSize.Width > 0 ? requestedSize.Width : DefaultWidthDip;
         var heightDip = requestedSize.Height > 0 ? requestedSize.Height : DefaultHeightDip;
 
-        return new SizeInt32(
-            Math.Max(1, (int)Math.Round(widthDip * this.currentScale, MidpointRounding.AwayFromZero)),
-            Math.Max(1, (int)Math.Round(heightDip * this.currentScale, MidpointRounding.AwayFromZero)));
+        Debug.Assert(this.spatial is not null, "Overlay mapper should be initialized by StartSession and must not be null here.");
+
+        var topLeft = new SpatialPoint<ScreenSpace>(new WinPoint(0, 0));
+        var bottomRight = new SpatialPoint<ScreenSpace>(new WinPoint(widthDip, heightDip));
+        var physTopLeft = this.spatial!.Convert<ScreenSpace, PhysicalScreenSpace>(topLeft).Point;
+        var physBottomRight = this.spatial!.Convert<ScreenSpace, PhysicalScreenSpace>(bottomRight).Point;
+
+        var pixelWidth = Math.Max(1, (int)Math.Round(Math.Abs(physBottomRight.X - physTopLeft.X), MidpointRounding.AwayFromZero));
+        var pixelHeight = Math.Max(1, (int)Math.Round(Math.Abs(physBottomRight.Y - physTopLeft.Y), MidpointRounding.AwayFromZero));
+
+        return new SizeInt32(pixelWidth, pixelHeight);
     }
 
-    private int DipToPixels(double dips) =>
-        (int)Math.Round(dips * this.currentScale, MidpointRounding.AwayFromZero);
+    private int DipToPixels(double dips)
+    {
+        Debug.Assert(this.spatial is not null, "Overlay mapper should be initialized by StartSession and must not be null here.");
+
+        var sp = new SpatialPoint<ScreenSpace>(new WinPoint(dips, 0));
+        var phys = this.spatial!.Convert<ScreenSpace, PhysicalScreenSpace>(sp).Point;
+        return (int)Math.Round(phys.X, MidpointRounding.AwayFromZero);
+    }
 
     private static NativeImage? CreateNativeImage(SoftwareBitmap? bitmap)
     {
@@ -312,6 +318,61 @@ public partial class DragVisualService : IDragVisualService
 
         this.overlayWindow.Dispose();
         this.overlayWindow = null;
+
+        // Drop the overlay mapper when the overlay window is destroyed.
+        this.spatial = null;
+    }
+
+    private void ThrowIfDisposed()
+    {
+        if (this.disposed)
+        {
+            throw new ObjectDisposedException(nameof(DragVisualService));
+        }
+    }
+
+    /// <summary>
+    ///     Dispose pattern implementation. Disposes managed resources when <paramref name="disposing"/> is true.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose(), false when called from a finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // dispose managed resources
+            lock (this.syncLock)
+            {
+                if (this.activeDescriptor is not null)
+                {
+                    this.activeDescriptor.PropertyChanged -= this.OnDescriptorPropertyChanged;
+                    this.activeDescriptor.HeaderBitmap = null;
+                    this.activeDescriptor.PreviewBitmap = null;
+                }
+
+                this.DestroyOverlayWindow();
+
+                this.windowIsShown = false;
+                this.activeDescriptor = null;
+                this.activeToken = null;
+                this.windowPositionOffsets = default;
+                this.lastPointerPosition = default;
+                this.spatial = null;
+            }
+        }
+
+        this.disposed = true;
+    }
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
     }
 
     private void OnDescriptorPropertyChanged(object? sender, PropertyChangedEventArgs e) =>
@@ -342,22 +403,6 @@ public partial class DragVisualService : IDragVisualService
             }
         });
 
-    private static uint ResolveMonitorDpi(SpatialPoint<PhysicalScreenSpace> pointerPosition)
-    {
-        var point = new NativeMethods.Point(
-            (int)Math.Round(pointerPosition.Point.X, MidpointRounding.AwayFromZero),
-            (int)Math.Round(pointerPosition.Point.Y, MidpointRounding.AwayFromZero));
-
-        var monitor = NativeMethods.MonitorFromPoint(point, NativeMethods.MonitorDefaultToNearest);
-        if (monitor == IntPtr.Zero)
-        {
-            return 96;
-        }
-
-        var result = NativeMethods.GetDpiForMonitor(monitor, NativeMethods.MonitorDpiType.EffectiveDpi, out var dpiX, out _);
-        return result < 0 || dpiX == 0 ? 96u : dpiX;
-    }
-
     private readonly record struct NativeImage(byte[] Pixels, int Width, int Height);
 
     private sealed class NativeDragOverlayWindow : IDisposable
@@ -366,6 +411,8 @@ public partial class DragVisualService : IDragVisualService
         private readonly nint hwnd;
         private PointInt32 currentPosition;
         private SizeInt32 currentSize;
+
+        internal nint Hwnd => this.hwnd;
 
         internal NativeDragOverlayWindow(DragVisualService owner)
         {
@@ -661,6 +708,10 @@ public partial class DragVisualService : IDragVisualService
 
     private static partial class NativeMethods
     {
+        private const string User32 = "user32.dll";
+        private const string Kernel32 = "kernel32.dll";
+        private const string Gdi32 = "gdi32.dll";
+
         internal const int WsPopup = unchecked((int)0x8000_0000);
         internal const int WsExLayered = 0x0008_0000;
         internal const int WsExTransparent = 0x0000_0020;
@@ -678,8 +729,11 @@ public partial class DragVisualService : IDragVisualService
         internal const byte AcSrcAlpha = 0x01;
 
         internal const int MonitorDefaultToNearest = 0x0000_0002;
+
         internal static readonly nint HwndTopMost = new(-1);
         internal static readonly nint IdcArrow = new(32512);
+
+        internal delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
 
         [StructLayout(LayoutKind.Sequential)]
         internal readonly struct Point
@@ -733,7 +787,8 @@ public partial class DragVisualService : IDragVisualService
             internal byte AlphaFormat;
         }
 
-        [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport(User32, SetLastError = true, EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "SYSLIB1051:Types used with LibraryImport must be blittable", Justification = "Struct is manually marshalled and uses raw pointers for strings.")]
         internal static partial nint CreateWindowEx(
             int extendedStyle,
@@ -749,15 +804,18 @@ public partial class DragVisualService : IDragVisualService
             nint instanceHandle,
             nint param);
 
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport(User32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool DestroyWindow(nint windowHandle);
 
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport(User32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool ShowWindow(nint windowHandle, int commandShow);
 
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport(User32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool SetWindowPos(
             nint windowHandle,
@@ -768,33 +826,42 @@ public partial class DragVisualService : IDragVisualService
             int height,
             uint flags);
 
-    [LibraryImport("user32.dll", SetLastError = true, EntryPoint = "RegisterClassExW")]
-    internal static unsafe partial ushort RegisterClassEx(ref WndClassEx classEx);
+        [LibraryImport(User32, SetLastError = true, EntryPoint = "RegisterClassExW")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static unsafe partial ushort RegisterClassEx(ref WndClassEx classEx);
 
-    [LibraryImport("user32.dll", EntryPoint = "DefWindowProcW")]
-    internal static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
+        [LibraryImport(User32, EntryPoint = "DefWindowProcW")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        internal static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
 
-        [LibraryImport("user32.dll", EntryPoint = "LoadCursorW")]
+        [LibraryImport(User32, EntryPoint = "LoadCursorW")]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial nint LoadCursor(nint instanceHandle, nint cursorName);
 
-        [LibraryImport("kernel32.dll", EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+        [LibraryImport(Kernel32, EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial nint GetModuleHandle(string? moduleName);
 
-        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial nint CreateCompatibleDC(nint hdc);
 
-        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool DeleteDC(nint hdc);
 
-        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         internal static partial nint SelectObject(nint hdc, nint handle);
 
-        [LibraryImport("gdi32.dll", SetLastError = true)]
+        [LibraryImport(Gdi32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool DeleteObject(nint handle);
 
-        [LibraryImport("user32.dll", SetLastError = true)]
+        [LibraryImport(User32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static partial bool UpdateLayeredWindow(
             nint windowHandle,
@@ -806,24 +873,5 @@ public partial class DragVisualService : IDragVisualService
             int colorKey,
             ref BlendFunction blend,
             uint flags);
-
-        [LibraryImport("shcore.dll")]
-        internal static partial int GetDpiForMonitor(
-            nint monitorHandle,
-            MonitorDpiType dpiType,
-            out uint dpiX,
-            out uint dpiY);
-
-        [LibraryImport("user32.dll")]
-        internal static partial nint MonitorFromPoint(Point point, uint flags);
-
-        internal delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
-
-        internal enum MonitorDpiType
-        {
-            EffectiveDpi = 0,
-            AngularDpi = 1,
-            RawDpi = 2,
-        }
     }
 }

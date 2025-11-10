@@ -890,10 +890,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         return window;
     }
 
-    private static async Task WaitForRenderAsync() =>
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { })
-            .ConfigureAwait(true);
-
     private WindowManagerService CreateService()
         => new(
             this.mockWindowContextFactory.Object,

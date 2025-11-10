@@ -2,18 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading.Tasks;
-using CommunityToolkit.WinUI;
 using DroidNet.Aura.Controls;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using FluentAssertions;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -32,14 +29,152 @@ namespace DroidNet.Aura.Drag.Tests;
 [TestCategory("UITest")]
 public class TearOutStrategyTests : VisualUserInterfaceTests
 {
-    public TestContext TestContext { get; set; }
-
     private const double DefaultElementWidth = 200;
     private const double DefaultElementHeight = 120;
 
     private Grid? testRoot;
     private StackPanel? elementHost;
     private TabDragCoordinator? coordinator;
+    private SpatialMapper? mapper;
+
+    public TestContext TestContext { get; set; }
+
+    [TestMethod]
+    public Task InitiateDrag_ThrowsWhenContextNull_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
+        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
+        var initialPoint = this.ToPhysical(120, 80);
+
+        // Act
+        var act = () => strategy.InitiateDrag(null!, initialPoint);
+
+        // Assert
+        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("context");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task InitiateDrag_StartsSessionRequestsPreviewAndUpdatesPosition_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var initialPoint = this.ToScreen(320, 240);
+        var physicalInitial = this.ToPhysical(320, 240);
+        var setup = await this.StartTearOutAsync(
+            initialPoint,
+            [physicalInitial]).ConfigureAwait(true);
+
+        // Assert
+        setup.DragService.Verify(
+            s => s.StartSession(
+                It.Is<DragVisualDescriptor>(d => d.RequestedSize == new Size(300, 150)),
+                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, physicalInitial.Point)),
+                It.IsAny<SpatialPoint<ScreenSpace>>()),
+            Times.Once());
+        setup.TabStrip.Verify(
+            ts => ts.RequestPreviewImage(
+                setup.Context.DraggedItemData,
+                It.Is<DragVisualDescriptor>(d => ReferenceEquals(d, setup.Descriptor))),
+            Times.Once());
+        _ = setup.Descriptor.RequestedSize.Should().Be(new Size(300, 150));
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task InitiateDrag_ThrowsWhenAlreadyActive_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var setup = await this.StartTearOutAsync().ConfigureAwait(true);
+
+        // Act
+        var act = () => setup.Strategy.InitiateDrag(setup.Context, this.ToPhysical(10, 10));
+
+        // Assert
+        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task OnDragPositionChanged_IgnoredWhenNotActive_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
+        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
+
+        // Act
+        strategy.OnDragPositionChanged(this.ToPhysical(200, 120));
+
+        // Assert
+        dragService.VerifyNoOtherCalls();
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task OnDragPositionChanged_UpdatesOverlayPosition_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var initialPoint = this.ToScreen(240, 180);
+        var initialPhysical = this.ToPhysical(240, 180);
+        var movedPhysical = this.ToPhysical(260, 200);
+        var setup = await this.StartTearOutAsync(
+            initialPoint,
+            [initialPhysical, movedPhysical]).ConfigureAwait(true);
+
+        // Clear any initial invocations so we only observe the move under test
+        setup.DragService.Invocations.Clear();
+
+        // Act
+        setup.Strategy.OnDragPositionChanged(movedPhysical);
+
+        // Assert
+        setup.DragService.Verify(
+            s => s.UpdatePosition(
+                setup.Token,
+                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, movedPhysical.Point))),
+            Times.Once());
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task CompleteDrag_EndsSessionAndResetsDescriptor_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var setup = await this.StartTearOutAsync().ConfigureAwait(true);
+        setup.DragService.Invocations.Clear();
+
+        // Act
+        var result = setup.Strategy.CompleteDrag(drop: true);
+
+        // Assert
+        _ = result.Should().BeNull("TearOut strategy returns null since item is not in any TabStrip yet");
+        setup.DragService.Verify(s => s.EndSession(setup.Token), Times.Once());
+        setup.DragService.VerifyNoOtherCalls();
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task CompleteDrag_ReturnsFalseWhenInactive_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
+        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
+
+        // Act
+        var result = strategy.CompleteDrag(drop: true);
+
+        // Assert
+        _ = result.Should().BeNull("strategy is not active");
+        dragService.VerifyNoOtherCalls();
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
 
     protected override async Task TestSetupAsync()
     {
@@ -58,172 +193,71 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
         this.coordinator = this.CreateStubCoordinator();
 
         await LoadTestContentAsync(this.testRoot).ConfigureAwait(true);
-        await WaitForRenderCompletionAsync().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        // Initialize the mapper with the main window and elementHost
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, this.elementHost);
     }
 
-    [TestMethod]
-    public Task InitiateDrag_ThrowsWhenContextNull_Async() => EnqueueAsync(async () =>
+    /// <summary>
+    /// Checks if two points are close enough (within tolerance).
+    /// </summary>
+    private static bool AreClose(Point left, Point right, double tolerance = 0.1)
+        => Math.Abs(left.X - right.X) < tolerance && Math.Abs(left.Y - right.Y) < tolerance;
+
+    private static TabItem CreateTabItem(string header) => new() { Header = header };
+
+    private static Border CreateVisualElement()
+        => new()
+        {
+            Width = DefaultElementWidth,
+            Height = DefaultElementHeight,
+            Background = new SolidColorBrush(Colors.DimGray),
+        };
+
+    /// <summary>
+    /// Converts element-space coordinates to physical screen space using the mapper.
+    /// </summary>
+    private SpatialPoint<PhysicalScreenSpace> ToPhysical(double x, double y)
     {
-        // Arrange
-        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
-        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
-        var initialPoint = DragTestHelpers.ScreenPoint(120, 80);
+        if (this.mapper is null)
+        {
+            throw new InvalidOperationException("Mapper not initialized. Ensure TestSetupAsync has been called.");
+        }
 
-        // Act
-        var act = () => strategy.InitiateDrag(null!, initialPoint);
+        var elementPoint = new SpatialPoint<ElementSpace>(new Point(x, y));
+        return this.mapper.Convert<ElementSpace, PhysicalScreenSpace>(elementPoint);
+    }
 
-        // Assert
-        _ = act.Should().Throw<ArgumentNullException>().WithParameterName("context");
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task InitiateDrag_StartsSessionRequestsPreviewAndUpdatesPosition_Async() => EnqueueAsync(async () =>
+    /// <summary>
+    /// Converts element-space coordinates to screen space using the mapper.
+    /// </summary>
+    private SpatialPoint<ScreenSpace> ToScreen(double x, double y)
     {
-        // Arrange
-        var initialPoint = DragTestHelpers.ScreenPoint(320, 240);
-        var physicalInitial = DragTestHelpers.PhysicalPoint(640, 480);
-        var setup = await this.StartTearOutAsync(
-            initialPoint,
-            [physicalInitial]).ConfigureAwait(true);
+        if (this.mapper is null)
+        {
+            throw new InvalidOperationException("Mapper not initialized. Ensure TestSetupAsync has been called.");
+        }
 
-        // Assert
-        setup.DragService.Verify(
-            s => s.StartSession(
-                It.Is<DragVisualDescriptor>(d => d.RequestedSize == new Size(300, 150)),
-                It.Is<Point>(p => DragTestHelpers.AreClose(p, initialPoint.Point))),
-            Times.Once());
-        setup.TabStrip.Verify(
-            ts => ts.RequestPreviewImage(
-                setup.Context.DraggedItem,
-                It.Is<DragVisualDescriptor>(d => ReferenceEquals(d, setup.Descriptor))),
-            Times.Once());
-        setup.DragService.Verify(
-            s => s.UpdatePosition(
-                setup.Token,
-                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => DragTestHelpers.AreClose(p.Point, physicalInitial.Point))),
-            Times.Once());
-        _ = setup.Descriptor.RequestedSize.Should().Be(new Size(300, 150));
-        _ = setup.Hotspot.Should().Be(initialPoint.Point);
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task InitiateDrag_ThrowsWhenAlreadyActive_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var setup = await this.StartTearOutAsync().ConfigureAwait(true);
-
-        // Act
-        var act = () => setup.Strategy.InitiateDrag(setup.Context, DragTestHelpers.ScreenPoint(10, 10));
-
-        // Assert
-        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task OnDragPositionChanged_IgnoredWhenNotActive_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
-        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
-
-        // Act
-        strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(200, 120));
-
-        // Assert
-        dragService.VerifyNoOtherCalls();
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task OnDragPositionChanged_UpdatesOverlayPosition_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var initialPoint = DragTestHelpers.ScreenPoint(240, 180);
-        var initialPhysical = DragTestHelpers.PhysicalPoint(480, 360);
-        var movedPhysical = DragTestHelpers.PhysicalPoint(520, 410);
-        var setup = await this.StartTearOutAsync(
-            initialPoint,
-            [initialPhysical, movedPhysical]).ConfigureAwait(true);
-
-        setup.DragService.Verify(
-            s => s.UpdatePosition(
-                setup.Token,
-                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => DragTestHelpers.AreClose(p.Point, initialPhysical.Point))),
-            Times.Once());
-        setup.DragService.Invocations.Clear();
-
-        // Act
-        setup.Strategy.OnDragPositionChanged(DragTestHelpers.ScreenPoint(260, 200));
-
-        // Assert
-        setup.DragService.Verify(
-            s => s.UpdatePosition(
-                setup.Token,
-                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => DragTestHelpers.AreClose(p.Point, movedPhysical.Point))),
-            Times.Once());
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task CompleteDrag_EndsSessionAndResetsDescriptor_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var setup = await this.StartTearOutAsync().ConfigureAwait(true);
-        setup.DragService.Invocations.Clear();
-
-        // Act
-        var result = setup.Strategy.CompleteDrag();
-
-        // Assert
-        _ = result.Should().BeNull("TearOut strategy returns null since item is not in any TabStrip yet");
-        setup.DragService.Verify(s => s.EndSession(setup.Token), Times.Once());
-        setup.DragService.VerifyNoOtherCalls();
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
-
-    [TestMethod]
-    public Task CompleteDrag_ReturnsFalseWhenInactive_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        var dragService = new Mock<IDragVisualService>(MockBehavior.Strict);
-        var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
-
-        // Act
-        var result = strategy.CompleteDrag();
-
-        // Assert
-        _ = result.Should().BeNull("strategy is not active");
-        dragService.VerifyNoOtherCalls();
-
-        await Task.CompletedTask.ConfigureAwait(true);
-    });
+        var elementPoint = new SpatialPoint<ElementSpace>(new Point(x, y));
+        return this.mapper.Convert<ElementSpace, ScreenSpace>(elementPoint);
+    }
 
     private async Task<TearOutTestSetup> StartTearOutAsync(
         SpatialPoint<ScreenSpace>? initialPoint = null,
         IReadOnlyList<SpatialPoint<PhysicalScreenSpace>>? physicalResponses = null,
         int draggedIndex = 0)
     {
-        var screenPoint = initialPoint ?? DragTestHelpers.ScreenPoint(320, 200);
-        var responses = physicalResponses is { Count: > 0 }
-            ? physicalResponses
-            : new[] { DragTestHelpers.PhysicalPoint(640, 400) };
+        // If initialPoint not provided, use element coords and convert to screen
+        var screenPoint = initialPoint ?? this.ToScreen(320, 200);
 
         DragVisualDescriptor? capturedDescriptor = null;
-        Point? capturedHotspot = null;
+        SpatialPoint<ScreenSpace>? capturedHotspot = null;
         var token = new DragSessionToken { Id = Guid.NewGuid() };
 
         var dragService = new DragVisualServiceMockBuilder()
             .WithSessionToken(token)
-            .CaptureStartSession((descriptor, hotspot) =>
+            .CaptureStartSession((descriptor, initialPosition, hotspot) =>
             {
                 capturedDescriptor = descriptor;
                 capturedHotspot = hotspot;
@@ -231,39 +265,44 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
             .Build();
 
         var tabStrip = new TabStripMockBuilder().Build();
-        var mapper = new SpatialMapperMockBuilder()
-            .WithPhysicalResponses(responses)
-            .Build();
 
         var strategy = new TearOutStrategy(dragService.Object, this.coordinator!, this.LoggerFactory);
 
-        var visualElement = this.CreateVisualElement();
+        var visualElement = CreateVisualElement();
         await this.AttachElementAsync(visualElement).ConfigureAwait(true);
+
+        // Update mapper to use the visual element
+        var realMapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+
+        // If physical responses were provided, use the first one; otherwise convert screenPoint to physical
+        var initialPhysical = physicalResponses is { Count: > 0 }
+            ? physicalResponses[0]
+            : realMapper.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
 
         var context = new DragContext(
             tabStrip.Object,
             CreateTabItem("Dragged"),
             draggedIndex,
+            new Point(0, 0),
             visualElement,
-            mapper.Object);
+            visualElement,
+            realMapper);
 
-        strategy.InitiateDrag(context, screenPoint);
+        // Strategy now expects a physical screen position
+        strategy.InitiateDrag(context, initialPhysical);
 
-        if (capturedDescriptor is null || !capturedHotspot.HasValue)
-        {
-            throw new InvalidOperationException("Drag visual session was not started as expected.");
-        }
-
-        return new TearOutTestSetup(
+        return capturedDescriptor is null || !capturedHotspot.HasValue
+            ? throw new InvalidOperationException("Drag visual session was not started as expected.")
+            : new TearOutTestSetup(
             strategy,
             context,
             dragService,
             tabStrip,
-            mapper,
+            realMapper,
             token,
             capturedDescriptor,
-            capturedHotspot.Value,
-            responses[0]);
+            capturedHotspot!.Value.Point,
+            initialPhysical);
     }
 
     private async Task AttachElementAsync(FrameworkElement element)
@@ -278,38 +317,32 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
             this.elementHost.Children.Add(element);
         }
 
-        await WaitForRenderCompletionAsync().ConfigureAwait(true);
-    }
-
-    private static async Task WaitForRenderCompletionAsync() =>
-        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-
-    private Border CreateVisualElement()
-    {
-        return new Border
-        {
-            Width = DefaultElementWidth,
-            Height = DefaultElementHeight,
-            Background = new SolidColorBrush(Colors.DimGray),
-        };
+        await WaitForRenderAsync().ConfigureAwait(true);
     }
 
     private TabDragCoordinator CreateStubCoordinator()
     {
         var windowManager = Mock.Of<IWindowManagerService>();
-        SpatialMapperFactory mapperFactory = (_, _) => Mock.Of<ISpatialMapper>();
+        static ISpatialMapper MapperFactory(Window? wnd, FrameworkElement? el) => Mock.Of<ISpatialMapper>();
         var dragService = Mock.Of<IDragVisualService>();
-        return new TabDragCoordinator(windowManager, mapperFactory, dragService, this.LoggerFactory);
-    }
 
-    private static TabItem CreateTabItem(string header) => new() { Header = header };
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var hosting = new HostingContext
+        {
+            Dispatcher = dispatcher,
+            Application = Application.Current,
+            DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
+        };
+
+        return new TabDragCoordinator(hosting, windowManager, MapperFactory, dragService, this.LoggerFactory);
+    }
 
     private sealed record TearOutTestSetup(
         TearOutStrategy Strategy,
         DragContext Context,
         Mock<IDragVisualService> DragService,
         Mock<ITabStrip> TabStrip,
-        Mock<ISpatialMapper> Mapper,
+        ISpatialMapper Mapper,
         DragSessionToken Token,
         DragVisualDescriptor Descriptor,
         Point Hotspot,

@@ -13,3 +13,4 @@ using System.Diagnostics.CodeAnalysis;
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1601:Partial elements should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1615:Element return value should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]
 [assembly: SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "test classes need to be public", Scope = "module")]
+[assembly: SuppressMessage("Style", "IDE0130:Namespace does not match folder structure", Justification = "we have our own structure", Scope = "module")]

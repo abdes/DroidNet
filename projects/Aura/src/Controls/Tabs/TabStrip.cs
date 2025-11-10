@@ -692,6 +692,7 @@ public partial class TabStrip : Control, ITabStrip
         {
             this.hotspotOffsets = e.GetCurrentPoint(hitItem).Position;
         }
+        Debug.WriteLine($"OnPreviewPointerPressed: hitItem={(hitItem?.Tag ?? "null")}, point={point}, hotspotOffsets={this.hotspotOffsets}");
 
         _ = this.CapturePointer(e.Pointer);
         this.HandlePointerPressed(hitItem, point);

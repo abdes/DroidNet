@@ -10,6 +10,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Aura.Controls;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
+using DroidNet.Hosting.WinUI;
 using DryIoc.ImTools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -36,6 +37,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     private readonly TearOutStrategy tearOutStrategy;
     private readonly IWindowManagerService windowManager;
     private readonly List<WeakReference<ITabStrip>> registeredStrips = [];
+    private readonly DispatcherQueue dispatcherQueue;
 
     // Pending insert CancellationTokenSources keyed by payload ContentId. Used to signal
     // cancellation to a control-owned InsertItemAsync operation when the coordinator
@@ -60,12 +62,14 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
     public TabDragCoordinator(
+        HostingContext hosting,
         IWindowManagerService windowManager,
         SpatialMapperFactory spatialMapperFactory,
         IDragVisualService dragService,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<TabDragCoordinator>() ?? NullLoggerFactory.Instance.CreateLogger<TabDragCoordinator>();
+        this.dispatcherQueue = hosting.Dispatcher;
         this.spatialMapperFactory = spatialMapperFactory;
         this.dragService = dragService;
         this.reorderStrategy = new ReorderStrategy(loggerFactory);
@@ -152,7 +156,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         int fallbackDropIndex;
         if (hitStrip is not null)
         {
-        var result = await this.PrepareDropForHitStrip(screenPoint, hitStrip, isTearOutMode);
+            var result = await this.PrepareDropForHitStrip(screenPoint, hitStrip, isTearOutMode);
             fallbackDropIndex = result.insertionIndex;
             isTearOutMode = result.isTearOutMode;
         }
@@ -488,14 +492,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
     private void StartPollingTimer()
     {
-        var dispatcherQueue = DispatcherQueue.GetForCurrentThread();
-        if (dispatcherQueue is null)
-        {
-            this.LogPollingTimerNoDispatcher();
-            return;
-        }
-
-        this.pollingTimer = dispatcherQueue.CreateTimer();
+        this.pollingTimer = this.dispatcherQueue.CreateTimer();
         this.pollingTimer.Interval = TimeSpan.FromMilliseconds(PollingIntervalMs); // ~60Hz
         this.pollingTimer.IsRepeating = true;
         this.pollingTimer.Tick += this.OnPollingTimerTick;
@@ -555,8 +552,8 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return;
         }
 
-    // Check for mode transitions based on cursor position (may await)
-    await this.CheckAndHandleModeTransitions(newPosition);
+        // Check for mode transitions based on cursor position (may await)
+        await this.CheckAndHandleModeTransitions(newPosition);
 
         // Delegate to current strategy (pass screen coordinates, strategy will convert)
         lock (this.syncLock)
@@ -568,83 +565,42 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 {
                     Debug.WriteLine($"[TabDragCoordinator] Invoking OnDragPositionChanged: cursor={newPosition.Point}, lastCursor={previousPosition.Point}, isTearOut={(strategy == this.tearOutStrategy)}, strategy={strategy.GetType().Name}");
 
-                    // Ensure we execute UI-manipulating code on the control's DispatcherQueue
+                    // Ensure we execute UI-manipulating code on the UI's DispatcherQueue
                     // to avoid RPC_E_WRONG_THREAD and native runtime races when the
                     // continuation after awaits executes on a thread-pool thread.
-                    var dispatcherQueue = this.dragContext?.TabStripContainer?.DispatcherQueue;
                     var logged = false;
 
-                        if (dispatcherQueue is not null)
-                        {
-                            if (dispatcherQueue.HasThreadAccess)
-                            {
-                                this.logger.LogDebug("[TabDragCoordinator] OnDragPositionChanged executing on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                                strategy.OnDragPositionChanged(newPosition);
-                                this.LogDragMoved(newPosition, previousPosition.Point);
-                                logged = true;
-                            }
-                            else
-                            {
-                                this.logger.LogDebug("[TabDragCoordinator] Enqueueing OnDragPositionChanged to DispatcherQueue (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                                var enqueued = dispatcherQueue.TryEnqueue(() =>
-                                {
-                                    try
-                                    {
-                                        this.logger.LogDebug("[TabDragCoordinator] Enqueued OnDragPositionChanged running on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                                        strategy.OnDragPositionChanged(newPosition);
-                                        this.LogDragMoved(newPosition, previousPosition.Point);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        this.logger.LogError(ex, "[TabDragCoordinator] Exception in enqueued OnDragPositionChanged");
-                                    }
-                                });
-
-                                if (!enqueued)
-                                {
-                                    this.logger.LogWarning("[TabDragCoordinator] Failed to enqueue OnDragPositionChanged to UI dispatcher (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                                }
-
-                                // We won't call LogDragMoved here (it will be logged inside the enqueued action)
-                                logged = true;
-                            }
-                        }
+                    if (this.dispatcherQueue.HasThreadAccess)
+                    {
+                        this.logger.LogDebug("[TabDragCoordinator] OnDragPositionChanged executing on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
+                        strategy.OnDragPositionChanged(newPosition);
+                        this.LogDragMoved(newPosition, previousPosition.Point);
+                        logged = true;
+                    }
                     else
                     {
-                        // No dispatcher available on the drag context container; attempt to
-                        // enqueue the strategy invocation on the drag visual service's UI
-                        // dispatcher as a best-effort fallback. If that is unavailable,
-                        // fall back to direct invocation (unsafe) but log clearly.
-                        var enqueuedToDragService = false;
-                        if (this.dragService is DragVisualService dvs)
+                        this.logger.LogDebug("[TabDragCoordinator] Enqueueing OnDragPositionChanged to DispatcherQueue (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
+                        var enqueued = dispatcherQueue.TryEnqueue(() =>
                         {
                             try
                             {
-                                enqueuedToDragService = dvs.TryEnqueue(() =>
-                                {
-                                    try
-                                    {
-                                        strategy.OnDragPositionChanged(newPosition);
-                                        this.LogDragMoved(newPosition, previousPosition.Point);
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        this.logger.LogError(ex, "[TabDragCoordinator] Exception in DragVisualService-enqueued OnDragPositionChanged");
-                                    }
-                                });
+                                this.logger.LogDebug("[TabDragCoordinator] Enqueued OnDragPositionChanged running on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
+                                strategy.OnDragPositionChanged(newPosition);
+                                this.LogDragMoved(newPosition, previousPosition.Point);
                             }
                             catch (Exception ex)
                             {
-                                this.logger.LogError(ex, "[TabDragCoordinator] Exception while attempting to enqueue to DragVisualService dispatcher");
-                                enqueuedToDragService = false;
+                                this.logger.LogError(ex, "[TabDragCoordinator] Exception in enqueued OnDragPositionChanged");
                             }
+                        });
+
+                        if (!enqueued)
+                        {
+                            this.logger.LogWarning("[TabDragCoordinator] Failed to enqueue OnDragPositionChanged to UI dispatcher (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
                         }
 
-                        if (!enqueuedToDragService)
-                        {
-                            this.logger.LogWarning("[TabDragCoordinator] No DispatcherQueue available on TabStripContainer and DragVisualService enqueue failed; invoking strategy directly (unsafe)");
-                            strategy.OnDragPositionChanged(newPosition);
-                        }
+                        // We won't call LogDragMoved here (it will be logged inside the enqueued action)
+                        logged = true;
                     }
 
                     if (!logged)
@@ -862,10 +818,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         {
             // Dispatch a defensive layout update; do not block here. If dispatch fails
             // we ignore it — the control is responsible for eventual cleanup.
-            if (pendingContainer.DispatcherQueue is not null)
-            {
-                _ = pendingContainer.DispatcherQueue.EnqueueAsync(() => pendingContainer.UpdateLayout());
-            }
+            _ = pendingContainer.DispatcherQueue.EnqueueAsync(() => pendingContainer.UpdateLayout());
         }
 
         this.dragContext.UpdateCurrentStrip(null, null, this.dragContext.SpatialMapper, -1);
