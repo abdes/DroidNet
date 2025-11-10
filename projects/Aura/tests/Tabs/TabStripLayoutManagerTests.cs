@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using FluentAssertions;
 
-namespace DroidNet.Aura.Controls.Tabs.Tests;
+namespace DroidNet.Aura.Controls.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -36,14 +36,14 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(4);
-        result.Items.Should().Contain(item => item.Index == 0 && item.Width == 100 && item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 1 && item.Width == 100 && item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 2 && item.Width == 100 && !item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 3 && item.Width == 100 && !item.IsPinned);
-        result.SumPinnedWidth.Should().Be(200);
-        result.SumRegularWidth.Should().Be(200);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().HaveCount(4);
+        _ = result.Items.Should().Contain(item => item.Index == 0 && item.Width == 100 && item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 1 && item.Width == 100 && item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 2 && item.Width == 100 && !item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 3 && item.Width == 100 && !item.IsPinned);
+        _ = result.SumPinnedWidth.Should().Be(200);
+        _ = result.SumRegularWidth.Should().Be(200);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -67,11 +67,11 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
-        result.SumPinnedWidth.Should().Be(0);
-        result.SumRegularWidth.Should().Be(300);
-        result.NeedsScrolling.Should().BeTrue();
+        _ = result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
+        _ = result.SumPinnedWidth.Should().Be(0);
+        _ = result.SumRegularWidth.Should().Be(300);
+        _ = result.NeedsScrolling.Should().BeTrue();
     }
 
     [TestMethod]
@@ -93,8 +93,8 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(1);
-        result.Items[0].Width.Should().Be(120);
+        _ = result.Items.Should().HaveCount(1);
+        _ = result.Items[0].Width.Should().Be(120);
     }
 
     [TestMethod]
@@ -113,10 +113,10 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().BeEmpty();
-        result.SumPinnedWidth.Should().Be(0);
-        result.SumRegularWidth.Should().Be(0);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().BeEmpty();
+        _ = result.SumPinnedWidth.Should().Be(0);
+        _ = result.SumRegularWidth.Should().Be(0);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -140,11 +140,11 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
-        result.SumPinnedWidth.Should().Be(300);
-        result.SumRegularWidth.Should().Be(0);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
+        _ = result.SumPinnedWidth.Should().Be(300);
+        _ = result.SumRegularWidth.Should().Be(0);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -168,11 +168,11 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(2);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(120));
-        result.SumPinnedWidth.Should().Be(0);
-        result.SumRegularWidth.Should().Be(240);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().HaveCount(2);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(120));
+        _ = result.SumPinnedWidth.Should().Be(0);
+        _ = result.SumRegularWidth.Should().Be(240);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -197,11 +197,11 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
-        result.SumPinnedWidth.Should().Be(0);
-        result.SumRegularWidth.Should().Be(300);
-        result.NeedsScrolling.Should().BeTrue();
+        _ = result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
+        _ = result.SumPinnedWidth.Should().Be(0);
+        _ = result.SumRegularWidth.Should().Be(300);
+        _ = result.NeedsScrolling.Should().BeTrue();
     }
 
     [TestMethod]
@@ -224,8 +224,8 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(1);
-        result.Items[0].Width.Should().Be(120);
+        _ = result.Items.Should().HaveCount(1);
+        _ = result.Items[0].Width.Should().Be(120);
     }
 
     [TestMethod]
@@ -248,7 +248,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items[0].Width.Should().Be(120);
+        _ = result.Items[0].Width.Should().Be(120);
     }
 
     [TestMethod]
@@ -271,9 +271,9 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(2);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().HaveCount(2);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(100));
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -297,11 +297,11 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().HaveCount(3);
 
         // Assuming equal shrinking: 300 - 200 = 100 deficit, 100 / 3 ≈ 33.33, so 100 - 33.33 ≈ 66.67
-        result.Items.Should().AllSatisfy(item => item.Width.Should().BeApproximately(66.67, 0.01));
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().BeApproximately(66.67, 0.01));
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -324,9 +324,9 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(2);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(80));
-        result.NeedsScrolling.Should().BeTrue();
+        _ = result.Items.Should().HaveCount(2);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(80));
+        _ = result.NeedsScrolling.Should().BeTrue();
     }
 
     [TestMethod]
@@ -350,13 +350,13 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
-        result.Items.Should().Contain(item => item.Index == 0 && item.Width == 100 && item.IsPinned);
+        _ = result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().Contain(item => item.Index == 0 && item.Width == 100 && item.IsPinned);
 
         // Regular: sum desired 200, available 150, deficit 50, shrink per item 50/2 = 25, so 100 - 25 = 75
-        result.Items.Should().Contain(item => item.Index == 1 && item.Width == 75 && !item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 2 && item.Width == 75 && !item.IsPinned);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().Contain(item => item.Index == 1 && item.Width == 75 && !item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 2 && item.Width == 75 && !item.IsPinned);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -388,10 +388,10 @@ public class TabStripLayoutManagerTests
         // Proposed: 60,60,60 but item1 min80, so 60->80, remaining 0 and 2 with sum 120
         // Deficit now 300 - 180 - (100-80 wait, no: after first shrink, the sum is 60+80+60=200 >180, deficit 20, remaining 2 items (0 and 2), shrink 10 each, 60-10=50, 60-10=50
         // So final: 50,80,50
-        result.Items.Should().Contain(item => item.Index == 0 && item.Width == 50);
-        result.Items.Should().Contain(item => item.Index == 1 && item.Width == 80);
-        result.Items.Should().Contain(item => item.Index == 2 && item.Width == 50);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().Contain(item => item.Index == 0 && item.Width == 50);
+        _ = result.Items.Should().Contain(item => item.Index == 1 && item.Width == 80);
+        _ = result.Items.Should().Contain(item => item.Index == 2 && item.Width == 50);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -413,7 +413,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items[0].Width.Should().Be(120);
+        _ = result.Items[0].Width.Should().Be(120);
     }
 
     [TestMethod]
@@ -435,7 +435,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items[0].Width.Should().Be(50);
+        _ = result.Items[0].Width.Should().Be(50);
     }
 
     [TestMethod]
@@ -458,7 +458,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items[0].Width.Should().Be(50);
+        _ = result.Items[0].Width.Should().Be(50);
     }
 
     [TestMethod]
@@ -482,14 +482,14 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(2);
+        _ = result.Items.Should().HaveCount(2);
 
         // Both should be set to PreferredItemWidth = 120, regardless of pinned status
-        result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
-        result.SumPinnedWidth.Should().Be(120);
-        result.SumRegularWidth.Should().Be(120);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
+        _ = result.SumPinnedWidth.Should().Be(120);
+        _ = result.SumRegularWidth.Should().Be(120);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -513,14 +513,14 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(2);
+        _ = result.Items.Should().HaveCount(2);
 
         // Both should be set to PreferredItemWidth = 120, even if pinned has higher desired
-        result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
-        result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
-        result.SumPinnedWidth.Should().Be(120);
-        result.SumRegularWidth.Should().Be(120);
-        result.NeedsScrolling.Should().BeFalse();
+        _ = result.Items.Should().Contain(item => item.Index == 0 && item.Width == 120 && item.IsPinned);
+        _ = result.Items.Should().Contain(item => item.Index == 1 && item.Width == 120 && !item.IsPinned);
+        _ = result.SumPinnedWidth.Should().Be(120);
+        _ = result.SumRegularWidth.Should().Be(120);
+        _ = result.NeedsScrolling.Should().BeFalse();
     }
 
     [TestMethod]
@@ -544,8 +544,8 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(3);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().BeApproximately(26.67, 0.01));
+        _ = result.Items.Should().HaveCount(3);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().BeApproximately(26.67, 0.01));
 
         // No exact check for sum, as fractional is acceptable
     }
@@ -562,7 +562,7 @@ public class TabStripLayoutManagerTests
         var items = new List<LayoutPerItemInput>();
         for (var i = 0; i < 1000; i++)
         {
-            items.Add(new LayoutPerItemInput(i, false, 5, 10));
+            items.Add(new LayoutPerItemInput(i, IsPinned: false, 5, 10));
         }
 
         var request = new LayoutRequest(5000, items);
@@ -571,9 +571,9 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        result.Items.Should().HaveCount(1000);
-        result.Items.Should().AllSatisfy(item => item.Width.Should().Be(10));
-        result.NeedsScrolling.Should().BeTrue();
+        _ = result.Items.Should().HaveCount(1000);
+        _ = result.Items.Should().AllSatisfy(item => item.Width.Should().Be(10));
+        _ = result.NeedsScrolling.Should().BeTrue();
     }
 
     [TestMethod]
@@ -605,11 +605,11 @@ public class TabStripLayoutManagerTests
 
         // Assert
         // Auto: widths 100,100, sum 200 > 150, scrolling true
-        resultAuto.NeedsScrolling.Should().BeTrue();
+        _ = resultAuto.NeedsScrolling.Should().BeTrue();
 
         // Equal: widths 80,80, sum 160 > 150, scrolling true, but different widths
-        resultEqual.Items[0].Width.Should().Be(80);
-        resultEqual.NeedsScrolling.Should().BeTrue();
+        _ = resultEqual.Items[0].Width.Should().Be(80);
+        _ = resultEqual.NeedsScrolling.Should().BeTrue();
     }
 
     [TestMethod]
@@ -632,6 +632,6 @@ public class TabStripLayoutManagerTests
         var result2 = manager.ComputeLayout(request);
 
         // Assert
-        result1.Should().BeEquivalentTo(result2);
+        _ = result1.Should().BeEquivalentTo(result2);
     }
 }

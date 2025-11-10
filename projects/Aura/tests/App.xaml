@@ -4,7 +4,7 @@
     x:Class="DroidNet.Aura.Tests.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:DroidNet.Aura.Controls.Tabs.Tests"
+    xmlns:local="using:DroidNet.Aura.Controls.Tests"
     xmlns:tests="using:DroidNet.Tests">
     <Application.Resources>
         <ResourceDictionary>

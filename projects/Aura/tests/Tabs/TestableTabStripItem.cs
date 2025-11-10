@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-namespace DroidNet.Aura.Controls.Tabs.Tests;
+namespace DroidNet.Aura.Controls.Tests;
 
 /// <summary>
 ///     A testable subclass of <see cref="TabStripItem" /> that exposes protected members for testing.
