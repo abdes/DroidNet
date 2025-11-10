@@ -169,11 +169,6 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         _ = openingAnchors.Should().NotBeEmpty();
     });
 
-    private static async Task WaitForRenderCompletionAsync()
-        => _ = await CompositionTargetHelper
-                .ExecuteAfterCompositionRenderingAsync(static () => { })
-                .ConfigureAwait(true);
-
     private static async Task WaitForEventAsync(Task task, string failureMessage)
     {
         var completed = await Task.WhenAny(task, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(true);

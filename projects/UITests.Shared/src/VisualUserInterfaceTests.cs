@@ -280,6 +280,13 @@ public class VisualUserInterfaceTests
     }
 
     /// <summary>
+    /// Waits for the composition rendering to complete.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    protected static async Task WaitForRenderAsync()
+        => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+    /// <summary>
     /// Performs additional asynchronous setup steps for derived test classes.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>

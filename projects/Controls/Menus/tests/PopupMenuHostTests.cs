@@ -394,9 +394,6 @@ public sealed partial class PopupMenuHostTests : VisualUserInterfaceTests
         await task.ConfigureAwait(true);
     }
 
-    private static async Task WaitForRenderCompletionAsync()
-        => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
-
     private static TaskCompletionSource<bool> CreateSignal() =>
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
