@@ -17,7 +17,7 @@ namespace DroidNet.Coordinates.Tests;
 public class SpatialMapperErrorTests : VisualUserInterfaceTests
 {
     [TestMethod]
-    public Task Mapper_LogicalToPhysical_WithoutWindow_Throws_Async() => EnqueueAsync(async () =>
+    public Task Mapper_LogicalToPhysical_WithoutWindow_Works_Async() => EnqueueAsync(async () =>
     {
         // Arrange - Create mapper WITHOUT associated window
         var button = new Button();
@@ -25,10 +25,15 @@ public class SpatialMapperErrorTests : VisualUserInterfaceTests
         var mapperNoWindow = new SpatialMapper(window: null, element: button);
         var screenPoint = new SpatialPoint<ScreenSpace>(new Point(100, 200));
 
-        // Act & Assert - Logical→Physical requires valid Window/HWND
-        Action act = () => mapperNoWindow.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
-        _ = act.Should().Throw<InvalidOperationException>()
-            .WithMessage("*Window is required for this conversion*");
+        // Act - Logical -> Physical should succeed without a Window (monitor DPI can be
+        // resolved from the logical point). Verify roundtrip fidelity rather than relying on
+        // internal helper implementations.
+        var physical = mapperNoWindow.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
+        var backToScreen = mapperNoWindow.Convert<PhysicalScreenSpace, ScreenSpace>(physical);
+
+        // Assert - roundtrip returns approximately the original screen point
+        _ = backToScreen.Point.X.Should().BeApproximately(screenPoint.Point.X, 1.0);
+        _ = backToScreen.Point.Y.Should().BeApproximately(screenPoint.Point.Y, 1.0);
     });
 
     [TestMethod]

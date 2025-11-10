@@ -22,6 +22,40 @@ public abstract class SpatialMapperTestBase : VisualUserInterfaceTests
 
     protected Button TestButton { get; private set; } = null!;
 
+    protected Point PhysicalClientOrigin
+    {
+        get
+        {
+            var hwnd = GetHwndForElement(this.TestButton);
+            var clientOrigin = new Native.POINT(0, 0);
+            _ = Native.ClientToScreen(hwnd, ref clientOrigin);
+            return new Point(clientOrigin.X, clientOrigin.Y);
+        }
+    }
+
+    protected Point LogicalWindowTopLeft
+    {
+        get
+        {
+            var hwnd = GetHwndForElement(this.TestButton);
+            var clientOrigin = new Native.POINT(0, 0);
+            _ = Native.ClientToScreen(hwnd, ref clientOrigin);
+            var dpi = Native.GetDpiForPhysicalPoint(new Point(clientOrigin.X, clientOrigin.Y));
+            var logicalX = Native.PhysicalToLogical(clientOrigin.X, dpi);
+            var logicalY = Native.PhysicalToLogical(clientOrigin.Y, dpi);
+            return new Point(logicalX, logicalY);
+        }
+    }
+
+    protected uint WindowDpi
+    {
+        get
+        {
+            var hwnd = GetHwndForElement(this.TestButton);
+            return Native.GetDpiForWindow(hwnd);
+        }
+    }
+
     [TestInitialize]
     public Task SetupMapper() => EnqueueAsync(async () =>
     {
@@ -36,28 +70,19 @@ public abstract class SpatialMapperTestBase : VisualUserInterfaceTests
         this.Mapper = new SpatialMapper(TestWindow, this.TestButton);
     });
 
-    protected Point GetPhysicalClientOrigin()
+    /// <summary>
+    ///     Gets the HWND (window handle) for the window containing the specified UI element.
+    /// </summary>
+    /// <param name="element">The UI element to find the window handle for.</param>
+    /// <returns>The HWND of the window, or IntPtr.Zero if not found.</returns>
+    protected static IntPtr GetHwndForElement(Microsoft.UI.Xaml.FrameworkElement element)
     {
-        var hwnd = Native.GetHwndForElement(this.TestButton);
-        var clientOrigin = new Native.POINT(0, 0);
-        _ = Native.ClientToScreen(hwnd, ref clientOrigin);
-        return new Point(clientOrigin.X, clientOrigin.Y);
-    }
+        if (element.XamlRoot?.ContentIslandEnvironment == null)
+        {
+            return IntPtr.Zero;
+        }
 
-    protected Point GetLogicalWindowTopLeft()
-    {
-        var hwnd = Native.GetHwndForElement(this.TestButton);
-        var clientOrigin = new Native.POINT(0, 0);
-        _ = Native.ClientToScreen(hwnd, ref clientOrigin);
-        var dpi = Native.GetDpiForPhysicalPoint(new Point(clientOrigin.X, clientOrigin.Y));
-        var logicalX = Native.PhysicalToLogical(clientOrigin.X, dpi);
-        var logicalY = Native.PhysicalToLogical(clientOrigin.Y, dpi);
-        return new Point(logicalX, logicalY);
-    }
-
-    protected uint GetWindowDpi()
-    {
-        var hwnd = Native.GetHwndForElement(this.TestButton);
-        return Native.GetDpiForWindow(hwnd);
+        var windowId = element.XamlRoot.ContentIslandEnvironment.AppWindowId;
+        return Microsoft.UI.Win32Interop.GetWindowFromWindowId(windowId);
     }
 }

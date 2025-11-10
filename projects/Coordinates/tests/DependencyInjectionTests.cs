@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
 using DryIoc;
@@ -82,6 +83,35 @@ public partial class DependencyInjectionTests : VisualUserInterfaceTests, IDispo
 
         // Act - both null is now valid (for Physical↔Screen conversions only)
         var mapper = factory(window: null, element: null);
+
+        // Assert
+        _ = mapper.Should().NotBeNull();
+        _ = mapper.Should().BeOfType<SpatialMapper>();
+    }
+
+    [TestMethod]
+    public void RawSpatialMapperFactory_With_ZeroHwnd_Works()
+    {
+        // Arrange
+        var factory = this.container.Resolve<RawSpatialMapperFactory>();
+
+        // Act - use the default (IntPtr.Zero)
+        var mapper = factory();
+
+        // Assert
+        _ = mapper.Should().NotBeNull();
+        _ = mapper.Should().BeOfType<SpatialMapper>();
+    }
+
+    [TestMethod]
+    public void RawSpatialMapperFactory_With_NonZeroHwnd_Works()
+    {
+        // Arrange
+        var factory = this.container.Resolve<RawSpatialMapperFactory>();
+        var hwnd = new IntPtr(0x1234);
+
+        // Act
+        var mapper = factory(hwnd);
 
         // Assert
         _ = mapper.Should().NotBeNull();

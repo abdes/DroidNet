@@ -13,3 +13,4 @@ using System.Runtime.CompilerServices;
 */
 
 [assembly: InternalsVisibleTo("DroidNet.Coordinates.PointerDemo")]
+[assembly: InternalsVisibleTo("DroidNet.Coordinates.Tests")]

@@ -10,12 +10,32 @@ using Windows.Foundation;
 namespace DroidNet.Coordinates;
 
 /// <summary>
-///     Factory delegate for creating <see cref="ISpatialMapper"/> instances via dependency injection.
+///     Factory delegate for creating <see cref="ISpatialMapper"/> instances, with a <see
+///     cref="Window"/> via dependency injection, and a <see cref="FrameworkElement"/>. Use this
+///     when you are working within the context of a WinUI Window and have an element for
+///     ElementSpace conversions. Both the <paramref name="window"/> and <paramref name="element"/>
+///     parameters are optional and may be null.
 /// </summary>
-/// <param name="window">Optional window for HWND resolution and WindowSpace/ScreenSpace conversions (null if not needed).</param>
-/// <param name="element">Optional element defining ElementSpace origin (null if not needed).</param>
+/// <param name="window">
+///     Optional window for HWND resolution and WindowSpace/ScreenSpace conversions (null if not
+///     needed).
+/// </param>
+/// <param name="element">
+///     Optional element defining ElementSpace origin (null if not needed).
+/// </param>
 /// <returns>A configured mapper instance.</returns>
 public delegate ISpatialMapper SpatialMapperFactory(Window? window, FrameworkElement? element);
+
+/// <summary>
+///     Factory delegate for creating <see cref="ISpatialMapper"/> instances from a raw HWND. Use
+///     this when you only have an <see cref="IntPtr"/> window handle and do not have a <see
+///     cref="Window"/> or <see cref="FrameworkElement"/>.
+/// </summary>
+/// <param name="hwnd">
+///     The optional native HWND for WindowSpace/ScreenSpace conversions (omit if not needed).
+/// </param>
+/// <returns>A configured mapper instance bound to the provided HWND.</returns>
+public delegate ISpatialMapper RawSpatialMapperFactory(IntPtr hwnd = default);
 
 /// <summary>
 ///     Maps spatial points between coordinate spaces with per-monitor DPI awareness.

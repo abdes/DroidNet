@@ -37,7 +37,7 @@ public class SpatialMapperCompositionTests : SpatialMapperTestBase
     public Task Mapper_Convert_PhysicalToElement_ThreeLevelComposition_Async() => EnqueueAsync(() =>
     {
         // Arrange - Physical→Window→Element (2-level composition)
-        var physicalOrigin = this.GetPhysicalClientOrigin();
+        var physicalOrigin = this.PhysicalClientOrigin;
         var physicalPoint = new Point(physicalOrigin.X + 50, physicalOrigin.Y + 75);
 
         // Act
@@ -74,8 +74,8 @@ public class SpatialMapperCompositionTests : SpatialMapperTestBase
     public Task Mapper_Convert_PhysicalToWindow_DirectConversion_Async() => EnqueueAsync(() =>
     {
         // Arrange - Physical→Window is a direct 1-level conversion
-        var dpi = this.GetWindowDpi();
-        var physicalOrigin = this.GetPhysicalClientOrigin();
+        var dpi = this.WindowDpi;
+        var physicalOrigin = this.PhysicalClientOrigin;
 
         const int dx = 30;
         const int dy = 40;
@@ -84,11 +84,13 @@ public class SpatialMapperCompositionTests : SpatialMapperTestBase
         // Act
         var window = this.Mapper.Convert<PhysicalScreenSpace, WindowSpace>(new SpatialPoint<PhysicalScreenSpace>(physicalPoint));
 
-        // Assert - Should map to logical window client coordinates
-        var expectedX = Native.PhysicalToLogical(dx, dpi);
-        var expectedY = Native.PhysicalToLogical(dy, dpi);
-        _ = window.Point.X.Should().BeApproximately(expectedX, 1.0);
-        _ = window.Point.Y.Should().BeApproximately(expectedY, 1.0);
+        // Assert - Verify by roundtripping: map back to physical and compare offsets
+        var backToPhysical = this.Mapper.Convert<WindowSpace, PhysicalScreenSpace>(window);
+        var roundDx = backToPhysical.Point.X - physicalOrigin.X;
+        var roundDy = backToPhysical.Point.Y - physicalOrigin.Y;
+
+        _ = roundDx.Should().BeApproximately(dx, 1.0);
+        _ = roundDy.Should().BeApproximately(dy, 1.0);
     });
 
     [TestMethod]

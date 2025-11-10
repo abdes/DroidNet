@@ -63,7 +63,7 @@ public class SpatialMapperConvenienceMethodsTests : SpatialMapperTestBase
     public Task Mapper_ToScreen_FromAllSources_Works_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var physicalOrigin = this.GetPhysicalClientOrigin();
+        var physicalOrigin = this.PhysicalClientOrigin;
 
         // Act
         var results = new[]
@@ -82,7 +82,7 @@ public class SpatialMapperConvenienceMethodsTests : SpatialMapperTestBase
     public Task Mapper_ToWindow_FromAllSources_Works_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var physicalOrigin = this.GetPhysicalClientOrigin();
+        var physicalOrigin = this.PhysicalClientOrigin;
 
         // Act
         var results = new[]
@@ -101,7 +101,7 @@ public class SpatialMapperConvenienceMethodsTests : SpatialMapperTestBase
     public Task Mapper_ToElement_FromAllSources_Works_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var physicalOrigin = this.GetPhysicalClientOrigin();
+        var physicalOrigin = this.PhysicalClientOrigin;
 
         // Act
         var results = new[]
