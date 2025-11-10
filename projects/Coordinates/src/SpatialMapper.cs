@@ -26,7 +26,21 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
     private readonly FrameworkElement? element = element;
     private readonly Window? window = window;
 
-    private IntPtr cachedHwnd;
+    private IntPtr hwnd;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="SpatialMapper"/> class. Construct a <see
+    ///     cref="SpatialMapper"/> bound to a raw HWND. Use this when you only have an IntPtr for a
+    ///     native window (for example, a layered overlay window) and do not have a <see
+    ///     cref="Microsoft.UI.Xaml.Window"/>. The provided HWND will be used for all mappings that
+    ///     require window/monitor DPI or client↔screen conversions.
+    /// </summary>
+    /// <param name="hwnd">A valid native window handle. May be IntPtr.Zero if not yet known.</param>
+    public SpatialMapper(IntPtr hwnd = default)
+        : this(window: null, element: null)
+    {
+        this.hwnd = hwnd;
+    }
 
     /// <summary>
     ///     Converts a spatial point between coordinate spaces using strict one-level composition.
@@ -96,11 +110,11 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
 
         Point WindowToScreen(Point p)
         {
-            var hwnd = this.EnsureWindowHandle();
-            var dpi = Native.GetDpiForWindow(hwnd);
+            this.EnsureWindowHandle();
+            var dpi = Native.GetDpiForWindow(this.hwnd);
 
             var physicalPoint = Native.GetPhysicalPointFromLogical(p, dpi);
-            if (!Native.ClientToScreen(hwnd, ref physicalPoint))
+            if (!Native.ClientToScreen(this.hwnd, ref physicalPoint))
             {
                 throw new InvalidOperationException("ClientToScreen failed for the associated window.");
             }
@@ -111,11 +125,11 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
 
         Point ScreenToWindow(Point p)
         {
-            var hwnd = this.EnsureWindowHandle();
-            var dpi = Native.GetDpiForWindow(hwnd);
+            this.EnsureWindowHandle();
+            var dpi = Native.GetDpiForWindow(this.hwnd);
 
             var physicalPoint = Native.GetPhysicalPointFromLogical(p, dpi);
-            if (!Native.ScreenToClient(hwnd, ref physicalPoint))
+            if (!Native.ScreenToClient(this.hwnd, ref physicalPoint))
             {
                 throw new InvalidOperationException("ScreenToClient failed for the associated window.");
             }
@@ -135,11 +149,11 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
 
         Point PhysicalToWindow(Point p)
         {
-            var hwnd = this.EnsureWindowHandle();
-            var dpi = Native.GetDpiForWindow(hwnd);
+            this.EnsureWindowHandle();
+            var dpi = Native.GetDpiForWindow(this.hwnd);
 
             var phys = new Native.POINT(RoundToInt(p.X), RoundToInt(p.Y));
-            if (!Native.ScreenToClient(hwnd, ref phys))
+            if (!Native.ScreenToClient(this.hwnd, ref phys))
             {
                 throw new InvalidOperationException("ScreenToClient failed for the associated window.");
             }
@@ -151,8 +165,6 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
 
         Point ScreenToPhysical(Point p)
         {
-            // Logical→Physical requires valid HWND for proper monitor DPI resolution
-            _ = this.EnsureWindowHandle();
             var physical = Native.GetPhysicalScreenPointFromLogical(p);
             return new Point(physical.X, physical.Y);
         }
@@ -223,17 +235,22 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
     private static int RoundToInt(double value)
         => (int)Math.Round(value, MidpointRounding.AwayFromZero);
 
-    private IntPtr EnsureWindowHandle()
+    private void EnsureWindowHandle()
     {
-        if (this.cachedHwnd != IntPtr.Zero)
+        if (this.hwnd != IntPtr.Zero)
         {
             // Validate cached HWND. If the window was closed or the handle is no longer valid,
             // consider the window gone and fail rather than attempting to re-resolve.
-            return !Native.IsWindow(this.cachedHwnd)
-                ? throw new InvalidOperationException("The previously resolved HWND is no longer valid; the associated window appears to have been closed.")
-                : this.cachedHwnd;
+            if (!Native.IsWindow(this.hwnd))
+            {
+                throw new InvalidOperationException("The previously resolved HWND is no longer valid; the associated window appears to have been closed.");
+            }
+
+            // We have a valid HWND already - use it for conversions without requiring a Window
+            return;
         }
 
+        // No cached HWND: require a Window instance so we can resolve the HWND via WindowNative
         if (this.window is null)
         {
             throw new InvalidOperationException("Window is required for this conversion. Provide a window when constructing the SpatialMapper.");
@@ -245,8 +262,7 @@ public partial class SpatialMapper(Window? window = null, FrameworkElement? elem
             throw new InvalidOperationException("Unable to resolve the HWND for the associated window.");
         }
 
-        this.cachedHwnd = handle;
-        return handle;
+        this.hwnd = handle;
 
         static IntPtr GetWindowHandleViaWindow(Window owningWindow)
         {

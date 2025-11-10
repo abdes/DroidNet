@@ -19,7 +19,7 @@ public class SpatialMapperTests : SpatialMapperTestBase
     {
         // Arrange
         var point = new Point(10, 20);
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var expected = new Point(windowTopLeft.X + point.X, windowTopLeft.Y + point.Y);
 
         // Act
@@ -35,7 +35,7 @@ public class SpatialMapperTests : SpatialMapperTestBase
     {
         // Arrange
         var point = new Point(15, 25);
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var expected = new Point(windowTopLeft.X + point.X, windowTopLeft.Y + point.Y);
 
         // Act
@@ -51,7 +51,7 @@ public class SpatialMapperTests : SpatialMapperTestBase
     {
         // Arrange
         var screenPoint = new Point(30, 40);
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var expected = new Point(screenPoint.X - windowTopLeft.X, screenPoint.Y - windowTopLeft.Y);
 
         // Act
@@ -67,7 +67,7 @@ public class SpatialMapperTests : SpatialMapperTestBase
     {
         // Arrange
         var screenPoint = new Point(35, 45);
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var expected = new Point(screenPoint.X - windowTopLeft.X, screenPoint.Y - windowTopLeft.Y);
 
         // Act
@@ -148,7 +148,7 @@ public class SpatialMapperTests : SpatialMapperTestBase
     {
         // Arrange
         var point = new Point(0, 0);
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var expected = new Point(windowTopLeft.X + point.X, windowTopLeft.Y + point.Y);
 
         // Act

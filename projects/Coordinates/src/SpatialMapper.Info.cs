@@ -24,11 +24,11 @@ public partial class SpatialMapper
     {
         get
         {
-            var hwnd = this.EnsureWindowHandle();
-            var wndDpi = Native.GetDpiForWindow(hwnd);
+            this.EnsureWindowHandle();
+            var wndDpi = Native.GetDpiForWindow(this.hwnd);
 
             // Window outer rect
-            if (!Native.GetWindowRect(hwnd, out var winRect))
+            if (!Native.GetWindowRect(this.hwnd, out var winRect))
             {
                 return new WindowInfo(new Point(0, 0), new Size(0, 0), new Point(0, 0), new Size(0, 0), StandardDpi);
             }
@@ -37,12 +37,12 @@ public partial class SpatialMapper
             var clientOriginLogical = new Point(0, 0);
             var clientSizeLogical = new Size(0, 0);
 
-            if (Native.GetClientRect(hwnd, out var clientRect))
+            if (Native.GetClientRect(this.hwnd, out var clientRect))
             {
                 // Determine client origin in physical pixels then convert using window DPI
                 // (consistent with window rect conversion above)
                 var physOrigin = new Native.POINT(0, 0);
-                if (Native.ClientToScreen(hwnd, ref physOrigin))
+                if (Native.ClientToScreen(this.hwnd, ref physOrigin))
                 {
                     var logicalOrigin = Native.GetLogicalPointFromPhysical(physOrigin, wndDpi);
                     clientOriginLogical = logicalOrigin;
@@ -64,9 +64,9 @@ public partial class SpatialMapper
     {
         get
         {
-            var hwnd = this.EnsureWindowHandle();
+            this.EnsureWindowHandle();
 
-            if (!Native.GetWindowRect(hwnd, out var wr))
+            if (!Native.GetWindowRect(this.hwnd, out var wr))
             {
                 return new WindowMonitorInfo(IntPtr.Zero, 0, 0, 0.0, 0.0, StandardDpi);
             }

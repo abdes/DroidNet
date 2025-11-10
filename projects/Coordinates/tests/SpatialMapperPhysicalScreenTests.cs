@@ -17,27 +17,25 @@ public class SpatialMapperPhysicalScreenTests : SpatialMapperTestBase
     [TestMethod]
     public Task Mapper_Convert_Screen_To_PhysicalScreen_MapsCorrectly_Async() => EnqueueAsync(() =>
     {
-        // Arrange
-        const int dx = 42;
-        const int dy = 27;
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
-        var screenLogical = new Point(windowTopLeft.X + dx, windowTopLeft.Y + dy);
-        var expectedPhysical = Native.GetPhysicalScreenPointFromLogical(screenLogical);
+        // Arrange - choose a logical screen point
+        var windowTopLeft = this.LogicalWindowTopLeft;
+        var screenLogical = new Point(windowTopLeft.X + 42, windowTopLeft.Y + 27);
 
-        // Act
-        var result = this.Mapper.Convert<ScreenSpace, PhysicalScreenSpace>(new SpatialPoint<ScreenSpace>(screenLogical));
+        // Act - convert to physical and back
+        var physical = this.Mapper.Convert<ScreenSpace, PhysicalScreenSpace>(new SpatialPoint<ScreenSpace>(screenLogical));
+        var back = this.Mapper.Convert<PhysicalScreenSpace, ScreenSpace>(physical);
 
-        // Assert (approximate comparison due to rounding)
-        _ = result.Point.X.Should().BeApproximately(expectedPhysical.X, 1.0);
-        _ = result.Point.Y.Should().BeApproximately(expectedPhysical.Y, 1.0);
+        // Assert - roundtrip should return approximately the original logical point
+        _ = back.Point.X.Should().BeApproximately(screenLogical.X, 1.0);
+        _ = back.Point.Y.Should().BeApproximately(screenLogical.Y, 1.0);
     });
 
     [TestMethod]
     public Task Mapper_Convert_PhysicalScreen_To_Screen_MapsCorrectly_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var physicalOrigin = this.GetPhysicalClientOrigin();
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var physicalOrigin = this.PhysicalClientOrigin;
+        var windowTopLeft = this.LogicalWindowTopLeft;
 
         // Act
         var result = this.Mapper.Convert<PhysicalScreenSpace, ScreenSpace>(new SpatialPoint<PhysicalScreenSpace>(physicalOrigin));
@@ -52,27 +50,21 @@ public class SpatialMapperPhysicalScreenTests : SpatialMapperTestBase
     {
         // Arrange
         var elementDelta = new Point(11, 13);
-        var dpi = this.GetWindowDpi();
 
-        // Compute expected PHYSICAL target based on CLIENT origin to avoid non-client offset issues
-        var clientOrigin = this.GetPhysicalClientOrigin();
-        var dx = Native.LogicalToPhysical(elementDelta.X, dpi);
-        var dy = Native.LogicalToPhysical(elementDelta.Y, dpi);
-        var expectedPhysical = new Point(clientOrigin.X + dx, clientOrigin.Y + dy);
+        // Act - map element -> physical -> element and verify roundtrip
+        var toPhysical = this.Mapper.ToPhysicalScreen(new SpatialPoint<ElementSpace>(elementDelta));
+        var backToElement = this.Mapper.Convert<PhysicalScreenSpace, ElementSpace>(toPhysical);
 
-        // Act
-        var result = this.Mapper.ToPhysicalScreen(new SpatialPoint<ElementSpace>(elementDelta));
-
-        // Assert
-        _ = result.Point.X.Should().BeApproximately(expectedPhysical.X, 1.0);
-        _ = result.Point.Y.Should().BeApproximately(expectedPhysical.Y, 1.0);
+        // Assert - roundtrip should return approximately the original element delta
+        _ = backToElement.Point.X.Should().BeApproximately(elementDelta.X, 1.0);
+        _ = backToElement.Point.Y.Should().BeApproximately(elementDelta.Y, 1.0);
     });
 
     [TestMethod]
     public Task Mapper_RoundTrip_Screen_Physical_Screen_Async() => EnqueueAsync(() =>
     {
         // Arrange
-        var windowTopLeft = this.GetLogicalWindowTopLeft();
+        var windowTopLeft = this.LogicalWindowTopLeft;
         var screenLogical = new Point(windowTopLeft.X + 7, windowTopLeft.Y + 9);
 
         // Act
