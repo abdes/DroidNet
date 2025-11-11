@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -164,6 +165,55 @@ public partial class TabStrip
         if (this.logger is ILogger logger && item is not null)
         {
             LogItemAdded(logger, item.Header ?? "<null>", item.IsPinned, item.IsClosable, count);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tab insertion plan: Header='{Header}', IsPinned={IsPinned}, ResolvedIndex={ResolvedIndex}, ExternalTarget={ExternalTarget}, SelectedIndex={SelectedIndex}, PinnedCount={PinnedCount}")]
+    private static partial void LogTabInsertionPlan(ILogger logger, string Header, bool IsPinned, int ResolvedIndex, string ExternalTarget, int SelectedIndex, int PinnedCount);
+
+    private void LogTabInsertionPlan(TabItem item, int resolvedIndex, int? externalTarget)
+    {
+        if (this.logger is ILogger logger)
+        {
+            var externalText = externalTarget.HasValue
+                ? externalTarget.Value.ToString(CultureInfo.InvariantCulture)
+                : "<none>";
+            var selectedIndex = this.SelectedItem is TabItem selected && this.Items.Contains(selected)
+                ? this.Items.IndexOf(selected)
+                : -1;
+            var pinnedCount = this.CountPinnedItems();
+            LogTabInsertionPlan(logger, item.Header ?? "<null>", item.IsPinned, resolvedIndex, externalText, selectedIndex, pinnedCount);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Deferred move evaluated: Header='{Header}', CurrentIndex={CurrentIndex}, DesiredIndex={DesiredIndex}, ClampedIndex={ClampedIndex}, Moved={Moved}")]
+    private static partial void LogDeferredMoveResult(ILogger logger, string Header, int CurrentIndex, int DesiredIndex, int ClampedIndex, bool Moved);
+
+    private void LogDeferredMoveResult(TabItem item, int currentIndex, int desiredIndex, int clampedIndex, bool moved)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDeferredMoveResult(logger, item.Header ?? "<null>", currentIndex, desiredIndex, clampedIndex, moved);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Computed desired index: Header='{Header}', ResolvedIndex={ResolvedIndex}, AnchorIndex={AnchorIndex}, Result={Result}, SelectedIndex={SelectedIndex}, SelectedIsPinned={SelectedIsPinned}, PinnedCount={PinnedCount}")]
+    private static partial void LogComputedDesiredIndex(ILogger logger, string Header, int ResolvedIndex, int AnchorIndex, int Result, int SelectedIndex, bool SelectedIsPinned, int PinnedCount);
+
+    private void LogComputedDesiredIndex(TabItem item, int resolvedIndex, int anchorIndex, int result, int selectedIndex, bool selectedIsPinned, int pinnedCount)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogComputedDesiredIndex(logger, item.Header ?? "<null>", resolvedIndex, anchorIndex, result, selectedIndex, selectedIsPinned, pinnedCount);
         }
     }
 
