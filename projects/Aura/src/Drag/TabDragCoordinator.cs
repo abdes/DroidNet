@@ -685,32 +685,20 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 return false;
             }
 
-            if (container.DispatcherQueue.HasThreadAccess)
+            // Use CommunityToolkit's EnqueueAsync helper which will invoke the function directly
+            // if the current thread has access to the dispatcher; otherwise it schedules it on
+            // the target DispatcherQueue and returns a Task that proxies the inner operation.
+            try
             {
-                preparation = await targetStrip.PrepareExternalDropAsync(payloadClone, elementPoint, cts.Token).ConfigureAwait(true);
+                preparation = await container.DispatcherQueue
+                    .EnqueueAsync(() => targetStrip.PrepareExternalDropAsync(payloadClone, elementPoint, cts.Token))
+                    .ConfigureAwait(true);
             }
-            else
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                var tcs = new TaskCompletionSource<ExternalDropPreparationResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var enqueued = container.DispatcherQueue.TryEnqueue(async () =>
-                {
-                    try
-                    {
-                        var result = await targetStrip.PrepareExternalDropAsync(payloadClone, elementPoint, cts.Token).ConfigureAwait(true);
-                        tcs.TrySetResult(result);
-                    }
-                    catch (Exception ex)
-                    {
-                        tcs.TrySetException(ex);
-                    }
-                });
-                if (!enqueued)
-                {
-                    this.LogDispatcherEnqueueFailed("AttachToStrip");
-                    return false;
-                }
-
-                preparation = await tcs.Task.ConfigureAwait(true);
+                // Map dispatcher enqueuing failures to the same behavior as the previous TryEnqueue
+                this.LogDispatcherEnqueueFailed("AttachToStrip");
+                throw;
             }
         }
         catch (OperationCanceledException)
