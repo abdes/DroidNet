@@ -78,7 +78,7 @@ public class VisualUserInterfaceTests
     /// consistent logging behavior.</remarks>
     protected ILoggerFactory LoggerFactory { get; } =
         Microsoft.Extensions.Logging.LoggerFactory.Create(
-        builder => builder.AddDebug().SetMinimumLevel(LogLevel.Debug));
+        builder => builder.AddDebug().SetMinimumLevel(LogLevel.Trace));
 
     /// <summary>
     /// Initializes the test environment before each test method is run.
