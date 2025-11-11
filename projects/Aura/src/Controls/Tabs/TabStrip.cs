@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
@@ -692,6 +693,7 @@ public partial class TabStrip : Control, ITabStrip
         {
             this.hotspotOffsets = e.GetCurrentPoint(hitItem).Position;
         }
+
         Debug.WriteLine($"OnPreviewPointerPressed: hitItem={(hitItem?.Tag ?? "null")}, point={point}, hotspotOffsets={this.hotspotOffsets}");
 
         _ = this.CapturePointer(e.Pointer);
@@ -906,6 +908,16 @@ public partial class TabStrip : Control, ITabStrip
 
         var tsi = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
         Debug.Assert(tsi is not null, $"Expecting the wrapper grid to have a child of type {nameof(TabStripItem)}");
+        if (tsi is null)
+        {
+            return;
+        }
+
+        if (tsi.IsDragging)
+        {
+            tsi.IsDragging = false;
+        }
+
         this.LogClearElement(tsi);
         tsi.Tapped -= this.OnTabElementTapped;
         tsi.CloseRequested -= this.OnTabCloseRequested;
@@ -1458,7 +1470,6 @@ public partial class TabStrip : Control, ITabStrip
                 continue;
             }
 
-            // Log addition now (collection already contains the new item)
             var count = items.Count;
             this.LogItemAdded(ti, count);
 
@@ -1466,37 +1477,41 @@ public partial class TabStrip : Control, ITabStrip
                 ? Math.Clamp(e.NewStartingIndex + indexOffset, 0, items.Count - 1)
                 : items.IndexOf(ti);
 
-            // Compute desired index based on current selection snapshot unless an external
-            // insert requested an explicit location (for example, a drag-and-drop operation).
-            int desiredIndex;
-            if (this.pendingExternalInsert is { } external
-                && ti.ContentId == external.ContentId
-                && resolvedIndex == external.TargetIndex)
+            if (resolvedIndex < 0)
             {
-                desiredIndex = external.TargetIndex;
+                indexOffset++;
+                continue;
             }
-            else if (items.Count == 1)
+
+            int? externalTarget = null;
+            if (this.pendingExternalInsert is { } external && ti.ContentId == external.ContentId && resolvedIndex == external.TargetIndex)
             {
-                desiredIndex = 0;
+                externalTarget = external.TargetIndex;
             }
-            else if (this.SelectedItem is TabItem sel && items.Contains(sel))
+
+            this.LogTabInsertionPlan(ti, resolvedIndex, externalTarget);
+
+            if (externalTarget is int targetIndex)
             {
-                var selIndex = items.IndexOf(sel);
-                desiredIndex = Math.Min(selIndex + 1, items.Count - 1);
+                this.DeferMoveAndSelect(items, ti, () => targetIndex);
             }
             else
             {
-                desiredIndex = items.Count - 1;
+                var capturedResolvedIndex = resolvedIndex; // Snapshot for deferred evaluation.
+                this.DeferMoveAndSelect(items, ti, () => this.ComputeDesiredInsertIndex(items, ti, capturedResolvedIndex));
             }
 
-            this.DeferMoveAndSelect(items, ti, desiredIndex);
             indexOffset++;
         }
     }
 
-    // Enqueue move + selection logic so it runs after the CollectionChanged event completes
-    private void DeferMoveAndSelect(ObservableCollection<TabItem> items, TabItem ti, int desiredIndex)
-        => _ = this.DispatcherQueue.TryEnqueue(() =>
+    // Enqueue move + selection logic so it runs after the CollectionChanged event completes.
+    // The Func<int> lets us compute the destination index with the latest selection state and avoid stale snapshots.
+    private void DeferMoveAndSelect(ObservableCollection<TabItem> items, TabItem ti, Func<int> desiredIndexProvider)
+    {
+        ArgumentNullException.ThrowIfNull(desiredIndexProvider);
+
+        _ = this.DispatcherQueue.TryEnqueue(() =>
         {
             if (this.suppressCollectionChangeHandling)
             {
@@ -1510,12 +1525,17 @@ public partial class TabStrip : Control, ITabStrip
                 if (items.Contains(ti))
                 {
                     var curIndex = items.IndexOf(ti);
-                    var target = Math.Min(Math.Max(0, desiredIndex), items.Count - 1);
-                    if (curIndex >= 0 && curIndex != target)
+                    var target = desiredIndexProvider();
+                    var clampedTarget = Math.Min(Math.Max(0, target), items.Count - 1);
+                    var moved = false;
+                    if (curIndex >= 0 && curIndex != clampedTarget)
                     {
-                        items.Move(curIndex, target);
+                        items.Move(curIndex, clampedTarget);
                         this.RefreshAllRealizedItemIndices();
+                        moved = true;
                     }
+
+                    this.LogDeferredMoveResult(ti, curIndex, target, clampedTarget, moved);
 
                     // Newly added item becomes the selected item
                     this.SelectedItem = ti;
@@ -1531,6 +1551,38 @@ public partial class TabStrip : Control, ITabStrip
 
             _ = this.DispatcherQueue.TryEnqueue(this.UpdateOverflowButtonVisibility);
         });
+    }
+
+    private int ComputeDesiredInsertIndex(ObservableCollection<TabItem> items, TabItem item, int resolvedIndex)
+    {
+        var pinnedCount = this.CountPinnedItems();
+        var selectedItem = this.SelectedItem as TabItem;
+        var selectedIndex = selectedItem is not null && items.Contains(selectedItem)
+            ? items.IndexOf(selectedItem)
+            : -1;
+        var selectedIsPinned = selectedItem?.IsPinned ?? false;
+
+        // Pinned tabs must stay in the leading bucket, so clamp to the pinned boundary.
+        if (item.IsPinned)
+        {
+            var resultPinned = Math.Min(resolvedIndex, pinnedCount);
+            this.LogComputedDesiredIndex(item, resolvedIndex, resolvedIndex, resultPinned, selectedIndex, selectedIsPinned, pinnedCount);
+            return resultPinned;
+        }
+
+        var anchorIndex = resolvedIndex;
+
+        // Regular tabs sit immediately to the right of the current selection when possible.
+        if (selectedItem is not null && selectedIndex >= 0 && !selectedIsPinned)
+        {
+            anchorIndex = Math.Max(anchorIndex, selectedIndex + 1);
+        }
+
+        // Regular tabs must never intrude into the pinned segment.
+        var result = Math.Max(anchorIndex, pinnedCount);
+        this.LogComputedDesiredIndex(item, resolvedIndex, anchorIndex, result, selectedIndex, selectedIsPinned, pinnedCount);
+        return result;
+    }
 
     // Fallback logging for Add actions when the primary handler didn't run
     private void LogAddedItemsFallback(ObservableCollection<TabItem>? items, NotifyCollectionChangedEventArgs e)

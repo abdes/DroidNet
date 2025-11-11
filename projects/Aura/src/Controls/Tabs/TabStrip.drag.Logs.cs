@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Diagnostics;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
@@ -236,6 +237,21 @@ public partial class TabStrip
         if (this.logger is ILogger logger)
         {
             LogTabTearOutRequestedException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Drag state cleanup for '{Header}' (ContentId={ContentId}): cleared {ClearedCount} container(s).")]
+    private static partial void LogDragStateCleanupImpl(ILogger logger, string Header, Guid ContentId, int ClearedCount);
+
+    [Conditional("DEBUG")]
+    private void LogDragStateCleanup(TabItem item, int clearedCount)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDragStateCleanupImpl(logger, item.Header ?? "<null>", item.ContentId, clearedCount);
         }
     }
 }

@@ -92,31 +92,7 @@ public partial class TabStrip
 
         this.IsDragOngoing = false;
 
-        // Clear IsDragging on any prepared containers that correspond to the supplied
-        // dropped item. We must not keep historical drag state on the TabStrip; only
-        // use the item supplied to this method to locate matching visuals.
-        try
-        {
-            var targetContentId = tabItem.ContentId;
-
-            for (var i = 0; i < this.realizedItems.Count; i++)
-            {
-                var info = this.realizedItems[i];
-                if (info.Element is Grid g && g.DataContext is TabItem ti && ti.ContentId == targetContentId)
-                {
-                    var tsi = g.Children.OfType<TabStripItem>().FirstOrDefault();
-                    if (tsi?.IsDragging == true)
-                    {
-                        tsi.IsDragging = false;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            // Swallow non-fatal exceptions during cleanup but log for diagnostics.
-            Debug.WriteLine($"[TabStrip] TryCompleteDrag: failed clearing IsDragging for item (ContentId={tabItem.ContentId}): {ex}");
-        }
+        this.ClearDraggingVisualState(tabItem);
 
         try
         {
@@ -280,6 +256,47 @@ public partial class TabStrip
         }
 
         this.IsDragOngoing = true;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Cleanup should never surface to callers")]
+    private void ClearDraggingVisualState(TabItem tabItem)
+    {
+        // Clear IsDragging on any prepared containers that correspond to the supplied
+        // dropped item. We must not keep historical drag state on the TabStrip; only
+        // use the item supplied to this method to locate matching visuals.
+        try
+        {
+            var targetContentId = tabItem.ContentId;
+            var clearedCount = 0;
+
+            for (var i = 0; i < this.realizedItems.Count; i++)
+            {
+                var info = this.realizedItems[i];
+                if (info.Element is not Grid grid)
+                {
+                    continue;
+                }
+
+                var tsi = grid.Children.OfType<TabStripItem>().FirstOrDefault();
+                if (tsi is not { Item: { } tsiItem } || tsiItem.ContentId != targetContentId)
+                {
+                    continue;
+                }
+
+                if (tsi.IsDragging)
+                {
+                    tsi.IsDragging = false;
+                    clearedCount++;
+                }
+            }
+
+            this.LogDragStateCleanup(tabItem, clearedCount);
+        }
+        catch (Exception ex)
+        {
+            // Swallow non-fatal exceptions during cleanup but log for diagnostics.
+            Debug.WriteLine($"[TabStrip] TryCompleteDrag: failed clearing IsDragging for item (ContentId={tabItem.ContentId}): {ex}");
+        }
     }
 
     /// <summary>
