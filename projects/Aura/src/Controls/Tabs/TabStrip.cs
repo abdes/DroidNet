@@ -2,15 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Drag;
 using DroidNet.Collections;
@@ -56,12 +52,13 @@ public partial class TabStrip : Control, ITabStrip
     private const double ScrollEpsilon = 1.0;
 
     private readonly List<RealizedItemInfo> realizedItems = [];
-    private ExternalInsertInfo? pendingExternalInsert;
 
     // Pending realization waiters keyed by TabItem.ContentId. Used so InsertItemAsync
     // can await a central notification rather than subscribing a per-call handler
     // to ItemsRepeater.ElementPrepared (avoids duplicate handlers and races).
-    private readonly Dictionary<Guid, TaskCompletionSource<FrameworkElement?>> pendingRealizations = new();
+    private readonly Dictionary<Guid, TaskCompletionSource<FrameworkElement?>> pendingRealizations = [];
+
+    private ExternalInsertInfo? pendingExternalInsert;
 
     private DispatcherCollectionProxy<TabItem>? pinnedProxy;
     private DispatcherCollectionProxy<TabItem>? regularProxy;
@@ -155,15 +152,16 @@ public partial class TabStrip : Control, ITabStrip
 
     /// <inheritdoc/>
     public IReadOnlyList<TabStripItemSnapshot> TakeSnapshot()
-    {
-        return this.realizedItems
+        => this.realizedItems
             .Where(info => !info.IsPinned)
             .Select(info =>
             {
-                Debug.WriteLine($"Realized Element[{info.Index}]: {info.Element.Tag}");
+                this.LogRealizedElement(info.Index, info.Element.Tag?.ToString() ?? "null");
                 var point = info.Element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0));
+                var tabItem = (info.Element as Grid)?.DataContext as TabItem;
                 return new TabStripItemSnapshot
                 {
+                    ContentId = tabItem?.ContentId ?? Guid.Empty,
                     ItemIndex = info.Index,
                     LayoutOrigin = info.Element.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).AsElement(),
                     Width = info.Element.RenderSize.Width,
@@ -173,50 +171,62 @@ public partial class TabStrip : Control, ITabStrip
             .OrderBy(s => s.LayoutOrigin.Point.X)
             .Select(s =>
             {
-                Debug.WriteLine($"Snapshot[{s.ItemIndex}]: LayoutOrigin={s.LayoutOrigin}, Width={s.Width}");
+                this.LogSnapshot(s.ItemIndex, s.LayoutOrigin.ToString(), s.Width);
                 return s;
             })
             .ToList();
-    }
 
     /// <inheritdoc/>
-    public void ApplyTransformToItem(int itemIndex, double offsetX)
+    public void ApplyTransformToItem(Guid contentId, double offsetX)
     {
-        if (itemIndex < 0 || itemIndex >= this.Items.Count)
-        {
-            Debug.WriteLine($"[TabStrip] ApplyTransform skipped: itemIndex={itemIndex}, offset={offsetX}, reason=out of range");
-            return;
-        }
-
-        // Use the realized items cache so we only touch prepared containers.
-        Debug.WriteLine($"[TabStrip] ApplyTransform start: itemIndex={itemIndex}, offset={offsetX}, realizedCount={this.realizedItems.Count}");
+        // Find the container by matching ContentId from TabItem's DataContext
+        // This is resilient to ItemsRepeater realization/unrealization and collection changes
         for (var i = 0; i < this.realizedItems.Count; i++)
         {
             var info = this.realizedItems[i];
-            if (info.Index != itemIndex || info.IsPinned)
+
+            // Skip pinned items (not part of reorder strategy)
+            if (info.IsPinned)
             {
                 continue;
             }
 
-            if (info.Element is not Grid grid)
+            // Extract TabItem from the wrapper Grid's DataContext
+            if (info.Element is Grid grid && grid.DataContext is TabItem tabItem)
             {
-                Debug.WriteLine($"[TabStrip] ApplyTransform skip: realized element at index {info.Index} is not Grid");
-                continue;
+                if (tabItem.ContentId == contentId)
+                {
+                    ApplyTranslateToContainer(offsetX, info.Element);
+                    return;
+                }
             }
-
-            if (grid.RenderTransform is not TranslateTransform transform)
-            {
-                transform = new TranslateTransform();
-                grid.RenderTransform = transform;
-                Debug.WriteLine($"[TabStrip] ApplyTransform created new TranslateTransform for itemIndex={itemIndex}");
-            }
-
-            transform.X = offsetX;
-            Debug.WriteLine($"[TabStrip] ApplyTransform applied offset: itemIndex={itemIndex}, offset={offsetX}");
-            break;
         }
 
-        Debug.WriteLine($"[TabStrip] ApplyTransform end: itemIndex={itemIndex}");
+        // Container not found (may be unrealized) - this is not an error during drag
+        this.LogApplyTransformSkipped(contentId, offsetX);
+
+        void ApplyTranslateToContainer(double offsetX, FrameworkElement container)
+        {
+            this.LogTransform(contentId, container, offsetX);
+            switch (container.RenderTransform)
+            {
+                case null:
+                    var newTranslate = new TranslateTransform { X = offsetX };
+                    container.RenderTransform = newTranslate;
+                    break;
+                case TranslateTransform translate:
+                    translate.X = offsetX;
+                    break;
+                case CompositeTransform composite:
+                    composite.TranslateX = offsetX;
+                    break;
+                case MatrixTransform matrixTransform:
+                    var matrix = matrixTransform.Matrix;
+                    matrix.OffsetX = offsetX;
+                    matrixTransform.Matrix = matrix;
+                    break;
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -246,9 +256,7 @@ public partial class TabStrip : Control, ITabStrip
 
     /// <inheritdoc/>
     public void RemoveItemAt(int index)
-    {
-        this.Items.RemoveAt(index);
-    }
+        => this.Items.RemoveAt(index);
 
     /// <inheritdoc/>
     public void MoveItem(int fromIndex, int toIndex)
@@ -272,7 +280,6 @@ public partial class TabStrip : Control, ITabStrip
         {
             this.suppressCollectionChangeHandling = true;
             items.Move(fromIndex, clampedTarget);
-            this.RefreshAllRealizedItemIndices();
         }
         finally
         {
@@ -290,6 +297,19 @@ public partial class TabStrip : Control, ITabStrip
     }
 
     /// <inheritdoc/>
+    public int IndexOf(IDragPayload item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        if (item is not TabItem tabItem)
+        {
+            return -1;
+        }
+
+        return this.Items.IndexOf(tabItem);
+    }
+
+    /// <inheritdoc/>
     public void InsertItemAt(int index, object item)
     {
         if (item is not TabItem tabItem)
@@ -304,6 +324,14 @@ public partial class TabStrip : Control, ITabStrip
     ///     Inserts an item and asynchronously waits for the ItemsRepeater to realize its container.
     ///     This implements the Attached→Ready handshake used by the drag coordinator.
     /// </summary>
+    /// <param name="index">The index at which to insert the item.</param>
+    /// <param name="item">The item to insert. Must be a <see cref="TabItem"/>.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <param name="timeoutMs">The timeout in milliseconds to wait for realization. Default is 500ms.</param>
+    /// <returns>
+    ///     A <see cref="RealizationResult"/> indicating the outcome of the realization process,
+    ///     including the realized container if successful.
+    /// </returns>
     public async Task<RealizationResult> InsertItemAsync(int index, object item, CancellationToken cancellationToken, int timeoutMs = 500)
     {
         this.AssertUIThread();
@@ -372,6 +400,7 @@ public partial class TabStrip : Control, ITabStrip
         }
         catch (Exception ex)
         {
+            this.LogInsertItemAsyncFailed(ex);
             return RealizationResult.Failure(RealizationResult.Status.Error, ex);
         }
         finally
@@ -393,7 +422,7 @@ public partial class TabStrip : Control, ITabStrip
                         {
                             this.suppressCollectionChangeHandling = true;
                             this.Items.RemoveAt(removeIndex);
-                            Debug.WriteLine($"[TabStrip] InsertItemAsync removed pending clone at index={removeIndex} (ContentId={tabItem.ContentId})");
+                            this.LogInsertItemAsyncRemoved(removeIndex, tabItem.ContentId);
                         }
                         finally
                         {
@@ -407,7 +436,7 @@ public partial class TabStrip : Control, ITabStrip
                 catch (Exception ex)
                 {
                     // Swallow non-fatal exceptions but log for diagnostics
-                    Debug.WriteLine($"[TabStrip] InsertItemAsync: failed removing pending clone: {ex}");
+                    this.LogInsertItemAsyncFailed(ex);
                 }
             }
         }
@@ -419,15 +448,10 @@ public partial class TabStrip : Control, ITabStrip
         return new ExternalInsertScope(this);
     }
 
-    private sealed class ExternalInsertScope : IDisposable
+    private sealed partial class ExternalInsertScope(TabStrip owner) : IDisposable
     {
-        private readonly TabStrip owner;
+        private readonly TabStrip owner = owner;
         private bool disposed;
-
-        public ExternalInsertScope(TabStrip owner)
-        {
-            this.owner = owner;
-        }
 
         public void Dispose()
         {
@@ -459,7 +483,7 @@ public partial class TabStrip : Control, ITabStrip
 
         if (tabItem.IsPinned)
         {
-            Debug.WriteLine("[TabStrip] PrepareExternalDropAsync aborted: payload is pinned.");
+            this.LogPrepareExternalDropAborted();
             return null;
         }
 
@@ -471,14 +495,14 @@ public partial class TabStrip : Control, ITabStrip
             var realization = await this.InsertItemAsync(insertionIndex, payload, cancellationToken, timeoutMs).ConfigureAwait(true);
             if (realization.CurrentStatus != RealizationResult.Status.Realized)
             {
-                Debug.WriteLine($"[TabStrip] PrepareExternalDropAsync unrealized: status={realization.CurrentStatus}.");
+                this.LogPrepareExternalDropUnrealized(realization.CurrentStatus.ToString());
                 return null;
             }
 
             var realizedContainer = this.ResolveRealizedContainer(insertionIndex, realization.Container);
             if (realizedContainer is null)
             {
-                Debug.WriteLine("[TabStrip] PrepareExternalDropAsync missing realized container.");
+                this.LogPrepareExternalDropMissingContainer();
                 return null;
             }
 
@@ -486,70 +510,15 @@ public partial class TabStrip : Control, ITabStrip
         }
         catch (OperationCanceledException)
         {
-            Debug.WriteLine("[TabStrip] PrepareExternalDropAsync cancelled.");
+            this.LogPrepareExternalDropCancelled();
             return null;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[TabStrip] PrepareExternalDropAsync failed: {ex}");
+            this.LogPrepareExternalDropFailed(ex);
             return null;
         }
     }
-
-    private int ResolveInsertionIndex(SpatialPoint<ElementSpace> pointerPosition, IReadOnlyList<TabStripItemSnapshot> snapshots)
-    {
-        var itemsCount = this.Items.Count;
-        if (itemsCount == 0)
-        {
-            return 0;
-        }
-
-        if (snapshots.Count == 0)
-        {
-            return Math.Clamp(this.CountPinnedItems(), 0, itemsCount);
-        }
-
-        var pointerX = pointerPosition.Point.X;
-        var closest = snapshots
-            .Select(snapshot => new
-            {
-                Snapshot = snapshot,
-                Left = snapshot.LayoutOrigin.Point.X + snapshot.Offset,
-                Right = snapshot.LayoutOrigin.Point.X + snapshot.Offset + snapshot.Width,
-                Center = snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2),
-                Distance = Math.Abs(pointerX - (snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2))),
-            })
-            .OrderBy(x => x.Distance)
-            .ThenBy(x => x.Center)
-            .First();
-
-        var index = pointerX <= closest.Left
-            ? closest.Snapshot.ItemIndex
-            : pointerX >= closest.Right
-                ? closest.Snapshot.ItemIndex + 1
-                : pointerX < closest.Center
-                    ? closest.Snapshot.ItemIndex
-                    : closest.Snapshot.ItemIndex + 1;
-
-        return Math.Clamp(index, 0, itemsCount);
-    }
-
-    private FrameworkElement? ResolveRealizedContainer(int index, FrameworkElement? candidate)
-    {
-        if (candidate is Grid wrapperGrid)
-        {
-            var realized = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
-            if (realized is not null)
-            {
-                return realized;
-            }
-        }
-
-        return candidate ?? this.GetContainerForIndex(index);
-    }
-
-    private int CountPinnedItems()
-        => this.Items.TakeWhile(tab => tab.IsPinned).Count();
 
     /// <inheritdoc/>
     public int HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold)
@@ -576,6 +545,9 @@ public partial class TabStrip : Control, ITabStrip
 
         return 0; // within threshold band
     }
+
+    /// <inheritdoc/>
+    public FrameworkElement GetContainerElement() => this;
 
     /// <summary>
     ///     Requests a preview image for the specified tab item during drag operations.
@@ -681,24 +653,111 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
+    /// <summary>
+    ///     Handles scrolling left when the overflow left button is clicked.
+    /// </summary>
+    protected virtual void HandleOverflowLeftClick()
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var target = Math.Max(0, (int)(this.scrollHost.HorizontalOffset - 100));
+        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
+        this.LogOverflowLeftClicked();
+    }
+
+    /// <summary>
+    ///     Handles scrolling right when the overflow right button is clicked.
+    /// </summary>
+    protected virtual void HandleOverflowRightClick()
+    {
+        if (this.scrollHost is null)
+        {
+            return;
+        }
+
+        var target = (int)(this.scrollHost.HorizontalOffset + 100);
+        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
+        this.LogOverflowRightClicked();
+    }
+
+    /// <summary>
+    ///     Handles a tab close request. This is the event handler for TabStripItem.CloseRequested.
+    ///     Protected for testing scenarios where tests can call this method directly.
+    /// </summary>
+    protected virtual void HandleTabCloseRequest(object? sender, TabCloseRequestedEventArgs e)
+        => this.TabCloseRequested?.Invoke(this, e);
+
     private void OnPreviewPointerPressed(object sender, PointerRoutedEventArgs e)
     {
         ArgumentNullException.ThrowIfNull(e);
         this.AssertUIThread();
 
-        var point = e.GetCurrentPoint(relativeTo: null).Position.AsScreen();
+        var point = e.GetCurrentPoint(relativeTo: this).Position.AsElement();
         var hitItem = (e.OriginalSource as DependencyObject)?.FindAscendant<TabStripItem>();
-
         if (hitItem is not null)
         {
-            this.hotspotOffsets = e.GetCurrentPoint(hitItem).Position;
+            _ = this.CapturePointer(e.Pointer);
+            this.HandlePointerPressed(hitItem, point, e.GetCurrentPoint(hitItem).Position);
+        }
+    }
+
+    private int ResolveInsertionIndex(SpatialPoint<ElementSpace> pointerPosition, IReadOnlyList<TabStripItemSnapshot> snapshots)
+    {
+        var itemsCount = this.Items.Count;
+        if (itemsCount == 0)
+        {
+            return 0;
         }
 
-        Debug.WriteLine($"OnPreviewPointerPressed: hitItem={(hitItem?.Tag ?? "null")}, point={point}, hotspotOffsets={this.hotspotOffsets}");
+        if (snapshots.Count == 0)
+        {
+            return Math.Clamp(this.CountPinnedItems(), 0, itemsCount);
+        }
 
-        _ = this.CapturePointer(e.Pointer);
-        this.HandlePointerPressed(hitItem, point);
+        var pointerX = pointerPosition.Point.X;
+        var closest = snapshots
+            .Select(snapshot => new
+            {
+                Snapshot = snapshot,
+                Left = snapshot.LayoutOrigin.Point.X + snapshot.Offset,
+                Right = snapshot.LayoutOrigin.Point.X + snapshot.Offset + snapshot.Width,
+                Center = snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2),
+                Distance = Math.Abs(pointerX - (snapshot.LayoutOrigin.Point.X + snapshot.Offset + (snapshot.Width / 2))),
+            })
+            .OrderBy(x => x.Distance)
+            .ThenBy(x => x.Center)
+            .First();
+
+        var index = pointerX <= closest.Left
+            ? closest.Snapshot.ItemIndex
+            : pointerX >= closest.Right
+                ? closest.Snapshot.ItemIndex + 1
+                : pointerX < closest.Center
+                    ? closest.Snapshot.ItemIndex
+                    : closest.Snapshot.ItemIndex + 1;
+
+        return Math.Clamp(index, 0, itemsCount);
     }
+
+    private FrameworkElement? ResolveRealizedContainer(int index, FrameworkElement? candidate)
+    {
+        if (candidate is Grid wrapperGrid)
+        {
+            var realized = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
+            if (realized is not null)
+            {
+                return realized;
+            }
+        }
+
+        return candidate ?? this.GetContainerForIndex(index);
+    }
+
+    private int CountPinnedItems()
+        => this.Items.TakeWhile(tab => tab.IsPinned).Count();
 
     /// <summary>
     ///     Handles preview (tunneling) pointer moved events. Tracks pointer movement and initiates
@@ -858,11 +917,10 @@ public partial class TabStrip : Control, ITabStrip
         this.realizedItems.Add(new RealizedItemInfo(wrapperGrid, index, ReferenceEquals(sender, this.pinnedItemsRepeater)));
 
         // UI-thread: notify any pending InsertItemAsync waiter for this content id
-        Debug.Assert(this.DispatcherQueue.HasThreadAccess);
         if (this.pendingRealizations.TryGetValue(ti.ContentId, out var waiter))
         {
             _ = this.pendingRealizations.Remove(ti.ContentId);
-            waiter.TrySetResult(wrapperGrid);
+            _ = waiter.TrySetResult(wrapperGrid);
         }
 
         tsi.SetValue(AutomationProperties.NameProperty, ti.Header);
@@ -879,8 +937,8 @@ public partial class TabStrip : Control, ITabStrip
 
         tsi.Tapped -= this.OnTabElementTapped; // for safety
         tsi.Tapped += this.OnTabElementTapped;
-        tsi.CloseRequested -= this.OnTabCloseRequested; // for safety
-        tsi.CloseRequested += this.OnTabCloseRequested;
+        tsi.CloseRequested -= this.HandleTabCloseRequest; // for safety
+        tsi.CloseRequested += this.HandleTabCloseRequest;
 
         // Apply any cached authoritative layout result
         this.ApplyCachedLayoutResult(ti, tsi);
@@ -908,10 +966,6 @@ public partial class TabStrip : Control, ITabStrip
 
         var tsi = wrapperGrid.Children.OfType<TabStripItem>().FirstOrDefault();
         Debug.Assert(tsi is not null, $"Expecting the wrapper grid to have a child of type {nameof(TabStripItem)}");
-        if (tsi is null)
-        {
-            return;
-        }
 
         if (tsi.IsDragging)
         {
@@ -920,7 +974,7 @@ public partial class TabStrip : Control, ITabStrip
 
         this.LogClearElement(tsi);
         tsi.Tapped -= this.OnTabElementTapped;
-        tsi.CloseRequested -= this.OnTabCloseRequested;
+        tsi.CloseRequested -= this.HandleTabCloseRequest;
     }
 
     private void OnItemsRepeaterElementIndexChanged(ItemsRepeater sender, ItemsRepeaterElementIndexChangedEventArgs args)
@@ -1051,9 +1105,6 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
-    private void OnTabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
-        => this.TabCloseRequested?.Invoke(this, e);
-
     private void OnScrollOnWheelChanged(bool newValue)
     {
         this.PointerWheelChanged -= this.OnScrollHostPointerWheelChanged;
@@ -1073,12 +1124,48 @@ public partial class TabStrip : Control, ITabStrip
 
         var items = this.Items;
 
+        // Enforce invariant: a non-empty TabStrip must always have a selected item.
+        if (items?.Count > 0)
+        {
+            // If caller tried to set SelectedItem = null, restore valid selection
+            if (newItem is null)
+            {
+                // Restore oldItem if it still exists, otherwise pick first item.
+                if (oldItem is not null && items.Contains(oldItem))
+                {
+                    // Re-assign previous selection; this will re-enter OnSelectedItemChanged but
+                    // ReferenceEquals will prevent infinite recursion.
+                    this.SelectedItem = oldItem;
+                    return;
+                }
+
+                this.SelectedItem = items[0];
+                return;
+            }
+
+            // If newItem is not in the collection, clamp to first item
+            if (!items.Contains(newItem))
+            {
+                this.SelectedItem = items[0];
+                return;
+            }
+        }
+        else if (items is null || items.Count == 0)
+        {
+            // Empty collection: allow null selection
+            if (newItem is not null)
+            {
+                this.SelectedItem = null;
+                return;
+            }
+        }
+
         // Update IsSelected flags: deselect old item and select new item
         _ = oldItem?.IsSelected = false;
         _ = newItem?.IsSelected = true;
 
-        var oldIndex = oldItem is not null ? items.IndexOf(oldItem) : -1;
-        var newIndex = newItem is not null ? items.IndexOf(newItem) : -1;
+        var oldIndex = oldItem is not null && items is not null ? items.IndexOf(oldItem) : -1;
+        var newIndex = newItem is not null && items is not null ? items.IndexOf(newItem) : -1;
 
         this.SelectedIndex = newIndex;
 
@@ -1097,6 +1184,39 @@ public partial class TabStrip : Control, ITabStrip
         this.UpdatePreparedContainersState();
     }
 
+    // Handle writes to SelectedIndex DP and synchronize to SelectedItem.
+    // Policy: maintain invariant that a non-empty TabStrip always has a selection.
+    // - If Items is empty, SelectedItem is cleared (null) and SelectedIndex is -1.
+    // - If the written index is out of range (including -1), clamp to nearest valid index (0..Count-1).
+    private void OnSelectedIndexChanged(int oldIndex, int newIndex)
+    {
+        _ = oldIndex; // unused
+
+        this.AssertUIThread();
+
+        var items = this.Items;
+        if (items == null || items.Count == 0)
+        {
+            // Empty collection: clear selection
+            if (this.SelectedItem is not null)
+            {
+                this.SelectedItem = null;
+            }
+
+            return;
+        }
+
+        // Enforce invariant: non-empty collection must have a selection.
+        // Clamp out-of-range writes (including -1) to nearest valid index to preserve the invariant.
+        var desiredIndex = Math.Clamp(newIndex, 0, items.Count - 1);
+
+        var desiredItem = items[desiredIndex];
+        if (!ReferenceEquals(this.SelectedItem, desiredItem))
+        {
+            this.SelectedItem = desiredItem;
+        }
+    }
+
     // Called from the TabWidthPolicy dependency property change callback.
     private void OnTabWidthPolicyChanged(TabWidthPolicy newPolicy)
     {
@@ -1113,28 +1233,10 @@ public partial class TabStrip : Control, ITabStrip
     }
 
     private void OnOverflowLeftButtonClick(object? sender, RoutedEventArgs e)
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var target = Math.Max(0, (int)(this.scrollHost.HorizontalOffset - 100));
-        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
-        this.LogOverflowLeftClicked();
-    }
+        => this.HandleOverflowLeftClick();
 
     private void OnOverflowRightButtonClick(object? sender, RoutedEventArgs e)
-    {
-        if (this.scrollHost is null)
-        {
-            return;
-        }
-
-        var target = (int)(this.scrollHost.HorizontalOffset + 100);
-        _ = this.scrollHost.ChangeView(target, verticalOffset: null, zoomFactor: null);
-        this.LogOverflowRightClicked();
-    }
+        => this.HandleOverflowRightClick();
 
     private void OnScrollHostViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
         => this.UpdateOverflowButtonVisibility();
@@ -1432,6 +1534,11 @@ public partial class TabStrip : Control, ITabStrip
         var items = this.Items;
 
         // Delegate work to smaller helpers for clarity and testability
+        if (e.Action == NotifyCollectionChangedAction.Reset && items is not null && !this.suppressCollectionChangeHandling)
+        {
+            this.HandleResetItems(items);
+        }
+
         if (e.Action == NotifyCollectionChangedAction.Add && e.NewItems is not null && items is not null && !this.suppressCollectionChangeHandling)
         {
             this.HandleAddedItems(items, e);
@@ -1447,6 +1554,13 @@ public partial class TabStrip : Control, ITabStrip
         if (e.Action == NotifyCollectionChangedAction.Remove && e.OldItems is not null && items is not null && !this.suppressCollectionChangeHandling)
         {
             this.HandleRemovedItems(items, e);
+        }
+
+        // After any collection change, refresh the realized item indices cache to keep it synchronized
+        // with the actual collection. This handles Add/Remove/Reset/Move operations in one place.
+        if (!this.suppressCollectionChangeHandling)
+        {
+            this.RefreshAllRealizedItemIndices();
         }
 
         if (!this.suppressCollectionChangeHandling && items?.Count > 0 && this.SelectedItem is null)
@@ -1532,7 +1646,6 @@ public partial class TabStrip : Control, ITabStrip
                     if (curIndex >= 0 && curIndex != clampedTarget)
                     {
                         items.Move(curIndex, clampedTarget);
-                        this.RefreshAllRealizedItemIndices();
                         moved = true;
                     }
 
@@ -1630,6 +1743,33 @@ public partial class TabStrip : Control, ITabStrip
         }
     }
 
+    // Handle reset (clear): ensure selection is cleared when collection is emptied
+    private void HandleResetItems(ObservableCollection<TabItem> items)
+    {
+        var selectionCleared = false;
+
+        // When the collection is cleared (Reset), ensure selection is cleared
+        // to preserve the TabStrip invariant: only allow null selection when empty
+        if (items.Count == 0)
+        {
+            if (this.SelectedItem is not null)
+            {
+                this.SelectedItem = null; // will raise SelectionChanged via OnSelectedItemChanged
+                selectionCleared = true;
+            }
+        }
+        else
+        {
+            // If Reset leaves items (rare), ensure a selection exists
+            if (this.SelectedItem is null)
+            {
+                this.SelectedItem = items[0];
+            }
+        }
+
+        this.LogItemsReset(items.Count, selectionCleared);
+    }
+
     private void OnTabStripSizeChanged(object? sender, SizeChangedEventArgs e)
     {
         this.LogSizeChanged(e.NewSize.Width, e.NewSize.Height);
@@ -1679,6 +1819,7 @@ public partial class TabStrip : Control, ITabStrip
         this.UpdateOverflowButtonVisibility();
     }
 
+    [StructLayout(LayoutKind.Auto)]
     private readonly record struct ExternalInsertInfo(Guid ContentId, int TargetIndex);
 
     private readonly record struct RealizedItemInfo(FrameworkElement Element, int Index, bool IsPinned);

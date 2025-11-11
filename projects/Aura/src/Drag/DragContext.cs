@@ -21,8 +21,7 @@ namespace DroidNet.Aura.Drag;
 /// </remarks>
 public sealed class DragContext(
     ITabStrip? tabStrip,
-    object draggedItemData,
-    int draggedItemIndex,
+    IDragPayload draggedItemData,
     Point hotspotOffsets,
     FrameworkElement stripContainer,
     FrameworkElement draggedElement,
@@ -46,11 +45,8 @@ public sealed class DragContext(
     /// </summary>
     public FrameworkElement? TabStripContainer { get; private set; } = stripContainer ?? throw new ArgumentNullException(nameof(stripContainer));
 
-    /// <summary>Gets the opaque dragged item data.</summary>
-    public object DraggedItemData { get; } = draggedItemData ?? throw new ArgumentNullException(nameof(draggedItemData));
-
-    /// <summary>Gets the index of the dragged item in the current TabStrip's Items collection.</summary>
-    public int DraggedItemIndex { get; private set; } = draggedItemIndex;
+    /// <summary>Gets the dragged item data.</summary>
+    public IDragPayload DraggedItemData { get; } = draggedItemData ?? throw new ArgumentNullException(nameof(draggedItemData));
 
     /// <summary>Gets the visual element used for drag preview rendering (for example, a TabStripItem).</summary>
     public FrameworkElement DraggedVisualElement { get; private set; } = draggedElement ?? throw new ArgumentNullException(nameof(draggedElement));
@@ -62,29 +58,20 @@ public sealed class DragContext(
     public ISpatialMapper SpatialMapper { get; private set; } = spatialMapper ?? throw new ArgumentNullException(nameof(spatialMapper));
 
     /// <summary>
-    ///     Updates the current host, its container, the spatial mapper and the logical
-    ///     index of the dragged item. Intended to be called by the <see cref="TabDragCoordinator"/>.
+    ///     Updates the current host, its container, and the spatial mapper.
+    ///     Intended to be called by the <see cref="TabDragCoordinator"/>.
     ///     Ensure UI-thread affinity when passing UI-bound mappers or visual containers.
     /// </summary>
     /// <param name="tabStrip">The strip that currently hosts the dragged item, or <see langword="null"/>.</param>
     /// <param name="stripContainer">The container element of the active strip, if any.</param>
     /// <param name="spatialMapper">The mapper that converts coordinates for the active strip.</param>
-    /// <param name="draggedItemIndex">The logical index of the dragged item within the active strip.</param>
-    public void UpdateCurrentStrip(ITabStrip? tabStrip, FrameworkElement? stripContainer, ISpatialMapper spatialMapper, int draggedItemIndex)
+    public void UpdateCurrentStrip(ITabStrip? tabStrip, FrameworkElement? stripContainer, ISpatialMapper spatialMapper)
     {
         ArgumentNullException.ThrowIfNull(spatialMapper);
 
         this.TabStrip = tabStrip;
         this.TabStripContainer = stripContainer;
         this.SpatialMapper = spatialMapper;
-        this.DraggedItemIndex = draggedItemIndex;
-    }
-
-    /// <summary>Updates the logical index of the dragged item within the active strip.</summary>
-    /// <param name="draggedItemIndex">The new logical index.</param>
-    public void UpdateDraggedItemIndex(int draggedItemIndex)
-    {
-        this.DraggedItemIndex = draggedItemIndex;
     }
 
     /// <summary>Updates the visual element associated with the dragged item.</summary>

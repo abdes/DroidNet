@@ -64,6 +64,17 @@ public sealed partial class TabStripDemoView : Page
         this.DemoTabStrip.Items.Add(new TabItem { Header = "Home", IsPinned = true, IsClosable = false });
         this.DemoTabStrip.Items.Add(new TabItem { Header = "Editor", IsClosable = true });
         this.DemoTabStrip.Items.Add(new TabItem { Header = "Logs", IsClosable = true });
+
+        // Handle tab close requests
+        this.DemoTabStrip.TabCloseRequested += this.DemoTabStrip_TabCloseRequested;
+    }
+
+    private void DemoTabStrip_TabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
+    {
+        _ = sender; // Unused
+
+        // Remove the tab from the Items collection
+        this.DemoTabStrip.Items.Remove(e.Item);
     }
 
     private void AddTab_Click(object? sender, RoutedEventArgs e)

@@ -46,5 +46,5 @@ internal static class TabStripMockExtensions
     /// <param name="mock">The TabStrip mock.</param>
     /// <param name="times">The expected number of times.</param>
     public static void VerifyApplyTransform(this Mock<ITabStrip> mock, Times times)
-        => mock.Verify(m => m.ApplyTransformToItem(It.IsAny<int>(), It.IsAny<double>()), times);
+        => mock.Verify(m => m.ApplyTransformToItem(It.IsAny<Guid>(), It.IsAny<double>()), times);
 }

@@ -72,6 +72,12 @@ public interface ITabStrip
     public int HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold);
 
     /// <summary>
+    ///     Gets the container element for this TabStrip, used for spatial mapping and coordinate conversions.
+    /// </summary>
+    /// <returns>The FrameworkElement that hosts this TabStrip. Never null.</returns>
+    public FrameworkElement GetContainerElement();
+
+    /// <summary>
     ///     Requests a preview image for the specified tab item during drag operations.
     ///     This method raises the TabDragImageRequest event to allow the application to
     ///     provide a custom preview image.
@@ -153,14 +159,16 @@ public interface ITabStrip
     /// <summary>
     ///     Applies a horizontal translation transform to the visual container of a tab item.
     /// </summary>
-    /// <param name="itemIndex">The index of the item in the Items collection.</param>
+    /// <param name="contentId">The stable content identifier of the item to transform.</param>
     /// <param name="offsetX">The horizontal offset in logical pixels.</param>
     /// <remarks>
     ///     Called by ReorderStrategy to animate items sliding during drag operations.
-    ///     The implementation should locate the visual container for the item and update
-    ///     its TranslateTransform.X property.
+    ///     The implementation should locate the visual container for the item by matching
+    ///     the ContentId from the TabItem's DataContext and update its TranslateTransform.X property.
+    ///     Using ContentId instead of indices prevents desynchronization when ItemsRepeater
+    ///     realizes/unrealizes elements or when items move in the collection.
     /// </remarks>
-    public void ApplyTransformToItem(int itemIndex, double offsetX);
+    public void ApplyTransformToItem(Guid contentId, double offsetX);
 
     /// <summary>
     ///     Removes an item from the TabStrip's Items collection at the specified index.
@@ -183,6 +191,13 @@ public interface ITabStrip
     ///     side effects intended for new tabs.
     /// </remarks>
     public void MoveItem(int fromIndex, int toIndex);
+
+    /// <summary>
+    ///     Returns the index of the specified item in the TabStrip's Items collection.
+    /// </summary>
+    /// <param name="item">The item to locate.</param>
+    /// <returns>The zero-based index of the item if found; otherwise, -1.</returns>
+    public int IndexOf(IDragPayload item);
 
     /// <summary>
     ///     Inserts an item into the TabStrip's Items collection at the specified index.
@@ -233,6 +248,9 @@ public interface ITabStrip
 /// </summary>
 public class TabStripItemSnapshot
 {
+    /// <summary>Gets or initializes the stable content identifier of the item.</summary>
+    public required Guid ContentId { get; init; }
+
     /// <summary>Gets or initializes the index of the item in the Items collection.</summary>
     public required int ItemIndex { get; init; }
 

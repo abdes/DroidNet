@@ -2,20 +2,29 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Diagnostics;
+using DroidNet.Aura.Controls;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
 
 namespace DroidNet.Aura.Drag;
 
 /// <summary>
-///     Strategy for handling in-TabStrip drag operations using transforms.
-///     The dragged item follows the pointer. Adjacent items translate to make space.
+///     Strategy for handling in-TabStrip drag operations using transforms. The dragged item follows
+///     the pointer. Adjacent items translate to make space.
 /// </summary>
+/// <remarks>
+///    <b>Invariants and assumptions:</b>
+///    <list type="bullet">
+///      <item>This strategy operates within a single <see cref="ITabStrip"/>.</item>
+///      <item>
+///        Its scope of a drag operation is delimited between <see cref="InitiateDrag"/> and <see
+///        cref="CompleteDrag(bool)"/>. Within that scope, it expects the <see cref="DragContext"/>,
+///        the dragged item, and the strip items collection, to not change.
+///      </item>
+///    </list>
+/// </remarks>
 internal partial class ReorderStrategy : IDragStrategy
 {
     private readonly ILogger logger;
@@ -46,15 +55,14 @@ internal partial class ReorderStrategy : IDragStrategy
 
         if (this.IsActive)
         {
-            this.LogIgnored("InitiateDrag", "a drag operation is already ongoing.");
+            this.LogDragOngoing();
             throw new InvalidOperationException("A drag operation is already active.");
         }
 
         this.LogEnterReorderMode(position);
 
         this.context = context;
-        var elementPosition = this.context.SpatialMapper.ToElement(position);
-        this.layout = new(context, elementPosition, this.logger);
+        this.layout = new(context, this.context.SpatialMapper.ToElement(position), this.logger);
     }
 
     /// <inheritdoc/>
@@ -87,102 +95,47 @@ internal partial class ReorderStrategy : IDragStrategy
 
         try
         {
+            this.ResetTransforms();
+
             if (drop)
             {
-                return this.CommitDrop();
+                // Handle dropping back to the original position or no valid drop target, and do not trigger
+                // unnecessary changes to the TabStrip items collection.
+                var dropIndex = this.layout.GetCommittedDropIndex();
+                var dragIndex = this.context!.TabStrip!.IndexOf(this.context.DraggedItemData);
+
+                if (dropIndex == -1 || dragIndex == dropIndex)
+                {
+                    return dragIndex;
+                }
+
+                this.context!.TabStrip!.MoveItem(dragIndex, dropIndex);
+                this.LogDragCompletedWithDrop(dragIndex, dropIndex);
+                return dropIndex;
             }
 
             this.LogDragCompletedNoDrop();
-            this.ResetTransforms();
             return null;
         }
         finally
         {
-            this.ClearState();
+            // Reset the state for a new drag operation.
+            this.context = null;
+            this.layout = null;
         }
-    }
-
-    private int CommitDrop()
-    {
-        var (dragIndex, dropIndex) = this.layout!.GetCommittedIndices();
-        this.LogDrop(dragIndex, dropIndex);
-
-        this.ResetTransforms();
-
-        if (dropIndex == -1 || dragIndex == dropIndex)
-        {
-            return dragIndex;
-        }
-
-        this.context!.TabStrip!.MoveItem(dragIndex, dropIndex);
-
-        this.LogDropSuccess(dropIndex);
-        return dropIndex;
     }
 
     private void ResetTransforms()
     {
-        if (this.layout is null || this.context?.TabStrip is null)
+        if (this.context is not { TabStrip: { } strip } || this.layout is null)
         {
+            this.LogIgnored("ResetTransforms", "no drag operation is ongoing");
             return;
         }
 
         foreach (var item in this.layout.Items)
         {
-            this.ResetSnapshotTransform(item);
+            strip.ApplyTransformToItem(item.ContentId, 0);
         }
-    }
-
-    private void ResetSnapshotTransform(TabStripItemSnapshot item)
-    {
-        try
-        {
-            this.context!.TabStrip!.ApplyTransformToItem(item.ItemIndex, 0);
-        }
-#pragma warning disable CA1031 // Do not catch general exception types
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[ReorderStrategy] ResetTransforms failed for index={item.ItemIndex}: {ex}");
-            _ = TryReset(item.Container);
-            return;
-        }
-#pragma warning restore CA1031 // Do not catch general exception types
-
-        _ = TryReset(item.Container);
-
-        static bool TryReset(FrameworkElement? container)
-        {
-            if (container is null)
-            {
-                return false;
-            }
-
-            var transform = container.RenderTransform;
-
-            switch (transform)
-            {
-                case null:
-                    return false;
-                case TranslateTransform translate:
-                    translate.X = 0;
-                    return true;
-                case CompositeTransform composite:
-                    composite.TranslateX = 0;
-                    return true;
-                case MatrixTransform matrixTransform:
-                    var matrix = matrixTransform.Matrix;
-                    matrix.OffsetX = 0;
-                    matrixTransform.Matrix = matrix;
-                    return true;
-                default:
-                    return false;
-            }
-        }
-    }
-
-    private void ClearState()
-    {
-        this.context = null;
-        this.layout = null;
     }
 }

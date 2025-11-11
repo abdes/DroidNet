@@ -33,15 +33,15 @@ public interface ITabDragCoordinator
     /// <param name="item">The logical TabItem being dragged.</param>
     /// <param name="itemIndex">The index of the item in the source TabStrip's Items collection.</param>
     /// <param name="source">The source TabStrip where the drag originated.</param>
+    /// <param name="stripContainer">Container element hosting the source strip.</param>
     /// <param name="draggedElement">The visual element to render for drag preview (e.g., TabStripItem).</param>
-    /// <param name="initialPosition">
-    ///     Optional initial cursor position in screen coordinates. If null, will use GetCursorPos().
-    /// </param>
+    /// <param name="initialPosition">Initial cursor position relative to the source element.</param>
+    /// <param name="hotspotOffsets">Offset from the drag hotspot to the dragged element's origin.</param>
     /// <exception cref="InvalidOperationException">
     ///     Thrown if a drag is already active in this process.
     /// </exception>
     public void StartDrag(
-        object item,
+        IDragPayload item,
         int itemIndex,
         ITabStrip source,
         FrameworkElement stripContainer,

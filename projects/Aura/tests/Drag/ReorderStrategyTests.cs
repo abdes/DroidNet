@@ -126,7 +126,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         // Arrange
         var visual = new Border();
         var stripElement = new Border();
-        var setup = this.StartDrag(visualElement: visual, stripElement: stripElement);
+        var setup = this.StartDrag(visualElement: visual);
 
         // Assert
         _ = setup.Context.DraggedVisualElement.RenderTransform.Should().BeOfType<TranslateTransform>();
@@ -153,9 +153,13 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task InitiateDrag_DoesNotInsertItems_OnSourceStrip_Async() => EnqueueAsync(async () =>
     {
         // Arrange
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), DefaultItemWidth)
+            .WithItemSnapshot(1, "DraggedTab", new Point(DefaultItemWidth + 10, 0), DefaultItemWidth);
+
         var setup = this.StartDrag(
+            builder: builder,
             strategy: new ReorderStrategy(this.LoggerFactory),
-            draggedItem: CreateTabItem("DraggedTab"),
             draggedIndex: 1,
             visualElement: new Border());
 
@@ -170,18 +174,21 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     {
         // Arrange
         var strategy = new ReorderStrategy(this.LoggerFactory);
-        var tabItem = CreateTabItem();
-        var mockStrip = new TabStripMockBuilder().Build();
+        var builder = new TabStripMockBuilder().WithItemSnapshot(0, "TestTab", new Point(0, 0), DefaultItemWidth);
+        var tabItem = builder.GetItem(0);
+        var mockStrip = builder.Build();
         var visual = new Border();
 
+        var startPhysical = this.ToPhysical(50, 25);
+
         // Create context without calling StartDrag (which would overwrite the mock setup)
-        var context = this.CreateDragContext(mockStrip, tabItem, 0, visual, stripElement: null, out var stripRoot);
+        var context = this.CreateDragContext(mockStrip, tabItem, new Point(50, 25), visual);
 
         // Set up TakeSnapshot to throw AFTER creating context but BEFORE InitiateDrag
         _ = mockStrip.Setup(m => m.TakeSnapshot()).Throws(new InvalidOperationException("snapshot failed"));
 
         // Act & Assert - InitiateDrag should propagate the exception
-        var act = () => strategy.InitiateDrag(context, this.ToPhysical(50, 25));
+        var act = () => strategy.InitiateDrag(context, startPhysical);
         _ = act.Should().Throw<InvalidOperationException>().WithMessage("snapshot failed");
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -283,8 +290,12 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task CompleteDrag_HandlesCrossStripDrop_ByDelegating_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var sourceStrip = new TabStripMockBuilder().WithName("Source").Build();
-        var setup = this.StartDrag(stripMock: sourceStrip);
+        var builder = new TabStripMockBuilder()
+            .WithName("Source")
+            .WithItemSnapshot(0, "TestTab", new Point(0, 0), DefaultItemWidth);
+        var sourceStrip = builder.Build();
+        var draggedItem = builder.GetItem(0);
+        var setup = this.StartDrag(stripMock: sourceStrip, draggedItem: draggedItem);
 
         // Act
         var result = setup.Strategy.CompleteDrag(drop: true);
@@ -317,22 +328,20 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     {
         // Arrange
         var strategy = new ReorderStrategy();
-        var mockStrip = new TabStripMockBuilder().Build();
-        var item1 = CreateTabItem("Tab1");
-        var item2 = CreateTabItem("Tab2");
+        var builder1 = CreateDefaultStripBuilder("Tab1");
 
         // Act - First usage
-        var firstUsage = this.StartDrag(strategy: strategy, stripMock: mockStrip, draggedItem: item1);
+        var firstUsage = this.StartDrag(builder: builder1, strategy: strategy);
         _ = firstUsage.Strategy.IsActive.Should().BeTrue();
 
         _ = strategy.CompleteDrag(drop: false);
         _ = strategy.IsActive.Should().BeFalse();
 
         // Act - Second usage
+        var builder2 = CreateDefaultStripBuilder("Tab2");
         var secondUsage = this.StartDrag(
+            builder: builder2,
             strategy: strategy,
-            stripMock: mockStrip,
-            draggedItem: item2,
             startX: 100,
             startY: 50);
 
@@ -365,19 +374,18 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task CompleteDrag_DoesNotInvokeMove_WhenDropIndexUnchanged_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var mockStrip = new TabStripMockBuilder().Build();
-        var tabItem = CreateTabItem();
+        var builder = CreateDefaultStripBuilder();
         var setup = this.StartDrag(
-            strategy: new ReorderStrategy(this.LoggerFactory),
-            stripMock: mockStrip,
-            draggedItem: tabItem);
+            builder: builder,
+            strategy: new ReorderStrategy(this.LoggerFactory));
 
         // Act
         _ = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
-        mockStrip.VerifyMoveItem(It.IsAny<int>(), It.IsAny<int>(), Times.Never());
-        mockStrip.Verify(m => m.InsertItemAt(It.IsAny<int>(), tabItem), Times.Never());
+        var tabItem = builder.GetItem(0);
+        setup.Strip.VerifyMoveItem(It.IsAny<int>(), It.IsAny<int>(), Times.Never());
+        setup.Strip.Verify(m => m.InsertItemAt(It.IsAny<int>(), tabItem), Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -386,10 +394,10 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task CompleteDrag_RemovesTransform_AfterCommit_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedItem = CreateTabItem("DraggedTab");
+        var builder = CreateDefaultStripBuilder("DraggedTab");
         var setup = this.StartDrag(
+            builder: builder,
             strategy: new ReorderStrategy(this.LoggerFactory),
-            draggedItem: draggedItem,
             visualElement: new Border());
 
         _ = (setup.Context.DraggedVisualElement.RenderTransform as TranslateTransform).Should().NotBeNull();
@@ -410,37 +418,17 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task CompleteDrag_CommitsReorderAtTargetPosition_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedItem = CreateTabItem("DraggedTab");
-        var mockStrip = new TabStripMockBuilder().Build();
-        var snapshots = new List<TabStripItemSnapshot>
-        {
-            new()
-            {
-                ItemIndex = 0,
-                LayoutOrigin = new Point(0, 0).AsElement(),
-                Width = DefaultItemWidth,
-            },
-            new()
-            {
-                ItemIndex = 1,
-                LayoutOrigin = new Point(DefaultItemWidth + 10, 0).AsElement(),
-                Width = DefaultItemWidth,
-            },
-            new()
-            {
-                ItemIndex = 2,
-                LayoutOrigin = new Point((DefaultItemWidth + 10) * 2, 0).AsElement(),
-                Width = DefaultItemWidth,
-            },
-        }.AsReadOnly();
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "DraggedTab", new Point(0, 0), DefaultItemWidth)
+            .WithItemSnapshot(1, "Tab1", new Point(DefaultItemWidth + 10, 0), DefaultItemWidth)
+            .WithItemSnapshot(2, "Tab2", new Point((DefaultItemWidth + 10) * 2, 0), DefaultItemWidth);
+
         var setup = this.StartDrag(
+            builder: builder,
             strategy: new ReorderStrategy(this.LoggerFactory),
-            stripMock: mockStrip,
-            draggedItem: draggedItem,
             draggedIndex: 0,
             visualElement: new Border(),
-            startX: DefaultItemWidth / 2,
-            snapshots: snapshots);
+            startX: DefaultItemWidth / 2);
 
         // Nudge the pointer slightly away from exact boundaries to avoid floating-point
         // tie-breaking that can make this test flaky on some platforms.
@@ -450,9 +438,155 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         var result = setup.Strategy.CompleteDrag(drop: true);
 
         // Assert
+        var draggedItem = builder.GetItem(0);
         _ = result.Should().Be(1); // Should return the final drop index after moving past the neighbor
-        mockStrip.VerifyMoveItem(0, 1, Times.Once());
-        mockStrip.Verify(m => m.InsertItemAt(It.IsAny<int>(), draggedItem), Times.Never());
+        setup.Strip.VerifyMoveItem(0, 1, Times.Once());
+        setup.Strip.Verify(m => m.InsertItemAt(It.IsAny<int>(), draggedItem), Times.Never());
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task SlidesIntoGap_AlignsEdges_NoOverlap_MultipleSlides_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - four evenly spaced tabs to emulate the 'New Tab' scenario
+        const double itemWidth = DefaultItemWidth;
+        const int spacing = 10;
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), itemWidth)
+            .WithItemSnapshot(1, "Tab1", new Point(itemWidth + spacing, 0), itemWidth)
+            .WithItemSnapshot(2, "Tab2", new Point((itemWidth + spacing) * 2, 0), itemWidth)
+            .WithItemSnapshot(3, "Tab3", new Point((itemWidth + spacing) * 3, 0), itemWidth);
+
+        var setup = this.StartDrag(builder: builder, strategy: new ReorderStrategy(this.LoggerFactory), draggedIndex: 0, visualElement: new Border(), startX: itemWidth / 2);
+
+        // Capture offsets applied by the TabStrip mock for verification
+        var appliedOffsets = new Dictionary<Guid, double>();
+        _ = setup.Strip.Setup(m => m.ApplyTransformToItem(It.IsAny<Guid>(), It.IsAny<double>()))
+            .Callback<Guid, double>((id, offset) => appliedOffsets[id] = offset);
+
+        // Act - slide past first neighbor (index 1)
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical((itemWidth + spacing) * 1.5, DefaultItemHeight / 2));
+
+        // Assert - first neighbor (Tab1) should have been moved left to align to gapLeft (0)
+        var tab1 = builder.GetItem(1);
+        const double tab1Origin = itemWidth + spacing;
+        const double expectedTab1Offset = 0 - tab1Origin; // alignedLeft - originalLayoutOrigin (0 - 130)
+        _ = appliedOffsets.Should().ContainKey(tab1.ContentId);
+        _ = appliedOffsets[tab1.ContentId].Should().BeApproximately(expectedTab1Offset, 0.5);
+
+        // Act - continue sliding past the second neighbor (index 2)
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical((itemWidth + spacing) * 2.5, DefaultItemHeight / 2));
+
+        // Assert - second neighbor (Tab2) should have been moved left to align to new gapLeft (130)
+        var tab2 = builder.GetItem(2);
+        const double tab2Origin = (itemWidth + spacing) * 2;
+        const double expectedTab2Offset = tab1Origin - tab2Origin; // alignedLeft 130 - layoutOrigin(260) => -130
+        _ = appliedOffsets.Should().ContainKey(tab2.ContentId);
+        _ = appliedOffsets[tab2.ContentId].Should().BeApproximately(expectedTab2Offset, 0.5);
+
+        // Final Overlap Check - compute transformed bounds and ensure no overlap
+        var tab1Left = tab1Origin + appliedOffsets[tab1.ContentId]; // original layout origin + offset => should be 0
+        var tab1Right = tab1Left + itemWidth;
+        var tab2Left = tab2Origin + appliedOffsets[tab2.ContentId];
+        var tab2Right = tab2Left + itemWidth;
+
+        _ = tab1Right.Should().BeLessThanOrEqualTo(tab2Left, "Tab1 must not overlap Tab2 after sliding into gaps");
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task ResolveGapVisualIndex_MapsToCorrectDropIndex_AfterSlides_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - 7 tabs to simulate frequently seen cases
+        const double itemWidth = DefaultItemWidth;
+        const int spacing = 10;
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), itemWidth)
+            .WithItemSnapshot(1, "Tab1", new Point((itemWidth + spacing) * 1, 0), itemWidth)
+            .WithItemSnapshot(2, "Tab2", new Point((itemWidth + spacing) * 2, 0), itemWidth)
+            .WithItemSnapshot(3, "Tab3", new Point((itemWidth + spacing) * 3, 0), itemWidth)
+            .WithItemSnapshot(4, "DraggedTab", new Point((itemWidth + spacing) * 4, 0), itemWidth)
+            .WithItemSnapshot(5, "Tab5", new Point((itemWidth + spacing) * 5, 0), itemWidth)
+            .WithItemSnapshot(6, "Tab6", new Point((itemWidth + spacing) * 6, 0), itemWidth);
+
+        var setup = this.StartDrag(
+            builder: builder,
+            strategy: new ReorderStrategy(this.LoggerFactory),
+            draggedIndex: 4,
+            visualElement: new Border(),
+            startX: ((itemWidth + spacing) * 4) + (itemWidth / 2));
+
+        // Act - move the pointer a bit past the middle of Tab5 but not enough to cross Tab6
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical((itemWidth + spacing) * 5.5, DefaultItemHeight / 2));
+
+        // Commit drop
+        var resultIndex = setup.Strategy.CompleteDrag(drop: true);
+
+        // The dragged item should end up after Tab5 => new index should be 5
+        _ = resultIndex.Should().Be(5);
+
+        // Validate that MoveItem called with from 4 to 5
+        setup.Strip.VerifyMoveItem(4, 5, Times.Once());
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task ResolveGapVisualIndex_BeforeFirstSlot_ReturnsZero_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - 3 tabs, start dragging the middle one to the left
+        const double itemWidth = DefaultItemWidth;
+        const int spacing = 10;
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), itemWidth)
+            .WithItemSnapshot(1, "DraggedTab", new Point(itemWidth + spacing, 0), itemWidth)
+            .WithItemSnapshot(2, "Tab2", new Point((itemWidth + spacing) * 2, 0), itemWidth);
+
+        var setup = this.StartDrag(
+            builder: builder,
+            strategy: new ReorderStrategy(this.LoggerFactory),
+            draggedIndex: 1,
+            visualElement: new Border(),
+            startX: ((itemWidth + spacing) * 1) + (itemWidth / 2));
+
+        // Act - slide beyond the leftmost slot
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical(0, DefaultItemHeight / 2));
+
+        // Assert - completing drop should produce index 0
+        var result = setup.Strategy.CompleteDrag(drop: true);
+        _ = result.Should().Be(0);
+        setup.Strip.VerifyMoveItem(1, 0, Times.Once());
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    [TestMethod]
+    public Task ResolveGapVisualIndex_AfterLastSlot_ReturnsLastIndex_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - 3 tabs, start dragging the middle one to the right
+        const double itemWidth = DefaultItemWidth;
+        const int spacing = 10;
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), itemWidth)
+            .WithItemSnapshot(1, "DraggedTab", new Point(itemWidth + spacing, 0), itemWidth)
+            .WithItemSnapshot(2, "Tab2", new Point((itemWidth + spacing) * 2, 0), itemWidth);
+
+        var setup = this.StartDrag(
+            builder: builder,
+            strategy: new ReorderStrategy(this.LoggerFactory),
+            draggedIndex: 1,
+            visualElement: new Border(),
+            startX: ((itemWidth + spacing) * 1) + (itemWidth / 2));
+
+        // Act - slide to the position after the last slot
+        setup.Strategy.OnDragPositionChanged(this.ToPhysical((itemWidth + spacing) * 2.5, DefaultItemHeight / 2));
+
+        // Assert - completing drop should produce last index 2
+        var result = setup.Strategy.CompleteDrag(drop: true);
+        _ = result.Should().Be(2);
+        setup.Strip.VerifyMoveItem(1, 2, Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -461,12 +595,13 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     public Task CompleteDrag_DoesNotRemoveItem_OnSameStripDrop_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        var draggedItem = CreateTabItem("DraggedTab");
-        var sourceStrip = new TabStripMockBuilder().WithName("Source").Build();
+        var builder = new TabStripMockBuilder()
+            .WithName("Source")
+            .WithItemSnapshot(0, "DraggedTab", new Point(0, 0), DefaultItemWidth);
+
         var setup = this.StartDrag(
+            builder: builder,
             strategy: new ReorderStrategy(this.LoggerFactory),
-            stripMock: sourceStrip,
-            draggedItem: draggedItem,
             visualElement: new Border());
 
         // Act
@@ -474,7 +609,7 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
 
         // Assert
         _ = result.Should().NotBeNull();
-        sourceStrip.VerifyRemoveItemAt(It.IsAny<int>(), Times.Never());
+        setup.Strip.VerifyRemoveItemAt(It.IsAny<int>(), Times.Never());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -484,12 +619,10 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
     {
         // Arrange
         var strategy = new ReorderStrategy(this.LoggerFactory);
-        var draggedItem = CreateTabItem("DraggedTab");
-        var mockStrip = new TabStripMockBuilder().Build();
+        var builder1 = CreateDefaultStripBuilder("DraggedTab");
         var initialDrag = this.StartDrag(
+            builder: builder1,
             strategy: strategy,
-            stripMock: mockStrip,
-            draggedItem: draggedItem,
             visualElement: new Border());
         _ = initialDrag.Strategy.IsActive.Should().BeTrue();
 
@@ -499,11 +632,12 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         // Assert
         _ = strategy.IsActive.Should().BeFalse();
 
-        var newItem = CreateTabItem("NewTab");
+        var builder2 = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "Tab0", new Point(0, 0), DefaultItemWidth)
+            .WithItemSnapshot(1, "NewTab", new Point(DefaultItemWidth + 10, 0), DefaultItemWidth);
         var resumedDrag = this.StartDrag(
+            builder: builder2,
             strategy: strategy,
-            stripMock: mockStrip,
-            draggedItem: newItem,
             draggedIndex: 1,
             visualElement: new Border(),
             startX: 100,
@@ -546,6 +680,13 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         };
 
     /// <summary>
+    /// Creates a configured mock strip builder with a single item at default position.
+    /// </summary>
+    private static TabStripMockBuilder CreateDefaultStripBuilder(string itemHeader = "TestTab", int itemIndex = 0)
+        => new TabStripMockBuilder()
+            .WithItemSnapshot(itemIndex, itemHeader, new Point(0, 0), DefaultItemWidth);
+
+    /// <summary>
     /// Converts element-space coordinates to physical screen space using the localMapper.
     /// </summary>
     private SpatialPoint<PhysicalScreenSpace> ToPhysical(double x, double y)
@@ -559,74 +700,77 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
         return this.mapper.Convert<ElementSpace, PhysicalScreenSpace>(elementPoint);
     }
 
+    /// <summary>
+    /// Initiates a drag operation with the provided builder and returns the setup context.
+    /// </summary>
+    private DragSetup StartDrag(
+        TabStripMockBuilder builder,
+        ReorderStrategy? strategy = null,
+        int draggedIndex = 0,
+        FrameworkElement? visualElement = null,
+        double? startX = null,
+        double startY = 25,
+        Point? hotspotOffset = null)
+    {
+        var activeStrategy = strategy ?? new ReorderStrategy();
+        var mockStrip = builder.Build();
+        var draggedItem = builder.GetItem(draggedIndex);
+
+        // Use provided startX or default to item's left + 60 pixels
+        var effectiveStartX = startX ?? 60;
+        var startPhysical = this.ToPhysical(effectiveStartX, startY);
+
+        // Use provided hotspot offset or default to (60, 25)
+        var effectiveHotspotOffset = hotspotOffset ?? new Point(60, 25);
+
+        var context = this.CreateDragContext(mockStrip, draggedItem, effectiveHotspotOffset, visualElement);
+
+        activeStrategy.InitiateDrag(context, startPhysical);
+        return new DragSetup(activeStrategy, mockStrip, context);
+    }
+
+    /// <summary>
+    /// Overload for backward compatibility - creates a default strip builder if none provided.
+    /// </summary>
     private DragSetup StartDrag(
         ReorderStrategy? strategy = null,
         Mock<ITabStrip>? stripMock = null,
-        object? draggedItem = null,
+        TabItem? draggedItem = null,
         int draggedIndex = 0,
         FrameworkElement? visualElement = null,
-        FrameworkElement? stripElement = null,
-        double startX = 50,
+        double? startX = null,
         double startY = 25,
-        IReadOnlyList<TabStripItemSnapshot>? snapshots = null)
+        Point? hotspotOffset = null)
     {
-        var activeStrategy = strategy ?? new ReorderStrategy();
-        var activeStrip = stripMock ?? new TabStripMockBuilder().Build();
-
-        // Always setup snapshot for the current draggedIndex (overwrites any previous setup)
-        var snapshotItems = snapshots ?? new List<TabStripItemSnapshot>
+        // If a stripMock is provided, use legacy path for backward compatibility
+        if (stripMock != null)
         {
-            new()
-            {
-                ItemIndex = draggedIndex,
-                LayoutOrigin = new Point(0, 0).AsElement(),
-                Width = DefaultItemWidth,
-            },
-        }.AsReadOnly();
+            var activeStrategy = strategy ?? new ReorderStrategy();
+            var item = draggedItem ?? CreateTabItem();
+            var effectiveStartX = startX ?? 60;
+            var effectiveHotspotOffset = hotspotOffset ?? new Point(60, 25);
 
-        // Return fresh copies on each TakeSnapshot call to avoid mutating caller-owned snapshots
-        _ = activeStrip.Setup(m => m.TakeSnapshot()).Returns(() =>
-            snapshotItems.Select(s => new TabStripItemSnapshot
-            {
-                ItemIndex = s.ItemIndex,
-                LayoutOrigin = s.LayoutOrigin,
-                Width = s.Width,
-                Offset = s.Offset,
-                Container = s.Container,
-            }).ToList().AsReadOnly());
+            var startPhysical = this.ToPhysical(effectiveStartX, startY);
+            var context = this.CreateDragContext(stripMock, item, effectiveHotspotOffset, visualElement);
+            activeStrategy.InitiateDrag(context, startPhysical);
+            return new DragSetup(activeStrategy, stripMock, context);
+        }
 
-        var item = draggedItem ?? CreateTabItem();
+        // Otherwise create a default builder
+        var builder = draggedItem != null
+            ? new TabStripMockBuilder().WithItemSnapshot(draggedIndex, draggedItem.Header ?? "TestTab", new Point(0, 0), DefaultItemWidth)
+            : CreateDefaultStripBuilder("TestTab", draggedIndex);
 
-        // Convert element coordinates to physical screen coordinates
-        var startPhysical = this.ToPhysical(startX, startY);
-
-        // Create a context and let CreateDragContext compute the hotspot in element-space after layout.
-        var context = this.CreateDragContext(
-            activeStrip,
-            item,
-            draggedIndex,
-            visualElement,
-            stripElement,
-            out _,
-            startPhysical: startPhysical,
-            snapshotsForHotspot: snapshots ?? snapshotItems);
-
-        activeStrategy.InitiateDrag(context, startPhysical);
-        return new DragSetup(activeStrategy, activeStrip, context);
+        return this.StartDrag(builder, strategy, draggedIndex, visualElement, startX, startY, hotspotOffset);
     }
 
     private DragContext CreateDragContext(
         Mock<ITabStrip> strip,
-        object draggedItem,
-        int draggedIndex,
-        FrameworkElement? visualElement,
-        FrameworkElement? stripElement,
-        out FrameworkElement stripRoot,
-        SpatialPoint<PhysicalScreenSpace>? startPhysical = null,
-        IReadOnlyList<TabStripItemSnapshot>? snapshotsForHotspot = null,
-        Windows.Foundation.Point? hotspotOffsets = null)
+        IDragPayload draggedItem,
+        Point hotspotOffset,
+        FrameworkElement? visualElement)
     {
-        stripRoot = this.PrepareStripElement(stripElement);
+        var stripRoot = this.PrepareStripElement(stripElement: null);
         var element = this.PrepareVisualElement(visualElement, stripRoot);
 
         if (element.RenderTransform is not TranslateTransform)
@@ -639,32 +783,10 @@ public class ReorderStrategyTests : VisualUserInterfaceTests
 
         var localMapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, stripRoot);
 
-        // Determine hotspot offsets (element-space). Priority:
-        // 1) Explicit hotspotOffsets param
-        // 2) If a physical start point and snapshots are provided, convert the physical point to element space
-        //    and compute offset relative to the snapshot's LayoutOrigin
-        // 3) Default to (0,0)
-        Windows.Foundation.Point offsets;
-        if (hotspotOffsets is not null)
-        {
-            offsets = hotspotOffsets.Value;
-        }
-        else if (startPhysical is not null && snapshotsForHotspot?.Count > 0)
-        {
-            var elementPoint = localMapper.ToElement(startPhysical.Value);
-            var snap = snapshotsForHotspot.FirstOrDefault(p => p.ItemIndex == draggedIndex) ?? snapshotsForHotspot[0];
-            offsets = new Windows.Foundation.Point(elementPoint.Point.X - snap.LayoutOrigin.Point.X, elementPoint.Point.Y - snap.LayoutOrigin.Point.Y);
-        }
-        else
-        {
-            offsets = new Windows.Foundation.Point(0, 0);
-        }
-
         return new DragContext(
             strip.Object,
             draggedItem,
-            draggedIndex,
-            offsets,
+            hotspotOffset,
             stripRoot,
             element,
             localMapper);

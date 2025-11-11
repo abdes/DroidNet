@@ -455,7 +455,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
         if (this.decorationSettingsService is not null)
         {
-            // TODO: listen for changes on the decoration settings service and update the context accordingly as long as it is not disposed
+            // TODO: listen for changes on the decoration settings service and update the context accordingly as long as it is not isDisposed
             this.LogDecorationResolvedFromSettings(windowId, category);
             return this.decorationSettingsService.Settings.GetEffectiveDecoration(category);
         }

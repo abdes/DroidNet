@@ -4,9 +4,12 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using CommunityToolkit.WinUI;
+using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Controls;
 
@@ -513,6 +516,495 @@ public partial class TabStrip
         if (this.logger is ILogger logger)
         {
             LogTabDragImageRequestException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Items collection reset: Count={Count}, SelectionCleared={SelectionCleared}")]
+    private static partial void LogItemsReset(ILogger logger, int Count, bool SelectionCleared);
+
+    private void LogItemsReset(int count, bool selectionCleared)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogItemsReset(logger, count, selectionCleared);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Realized Element[{Index}]: {Tag}")]
+    private static partial void LogRealizedElement(ILogger logger, int Index, string Tag);
+
+    [Conditional("DEBUG")]
+    private void LogRealizedElement(int index, string tag)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogRealizedElement(logger, index, tag);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Snapshot[{ItemIndex}]: LayoutOrigin={LayoutOrigin}, Width={Width}")]
+    private static partial void LogSnapshot(ILogger logger, int ItemIndex, string LayoutOrigin, double Width);
+
+    [Conditional("DEBUG")]
+    private void LogSnapshot(int itemIndex, string layoutOrigin, double width)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogSnapshot(logger, itemIndex, layoutOrigin, width);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "ApplyTransform skipped: contentId={ContentId}, offset={Offset}, reason=container not found (may be unrealized)")]
+    private static partial void LogApplyTransformSkipped(ILogger logger, Guid ContentId, double Offset);
+
+    [Conditional("DEBUG")]
+    private void LogApplyTransformSkipped(Guid contentId, double offset)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyTransformSkipped(logger, contentId, offset);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "ApplyTransform start: itemIndex={ItemIndex}, offset={Offset}, realizedCount={RealizedCount}")]
+    private static partial void LogApplyTransformStart(ILogger logger, int ItemIndex, double Offset, int RealizedCount);
+
+    [Conditional("DEBUG")]
+    private void LogApplyTransformStart(int itemIndex, double offset, int realizedCount)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyTransformStart(logger, itemIndex, offset, realizedCount);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "ApplyTransform skip: realized element at index {Index} is not Grid")]
+    private static partial void LogApplyTransformSkip(ILogger logger, int Index);
+
+    [Conditional("DEBUG")]
+    private void LogApplyTransformSkip(int index)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyTransformSkip(logger, index);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "ApplyTransform created new TranslateTransform for itemIndex={ItemIndex}")]
+    private static partial void LogApplyTransformCreated(ILogger logger, int ItemIndex);
+
+    [Conditional("DEBUG")]
+    private void LogApplyTransformCreated(int itemIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyTransformCreated(logger, itemIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Transform(X={Offset}) applied to Item[contentId={ContentId}] '{ItemName}'.")]
+    private static partial void LogTransform(ILogger logger, Guid ContentId, string itemName, double Offset);
+
+    [Conditional("DEBUG")]
+    private void LogTransform(Guid contentId, FrameworkElement element, double offset)
+    {
+        if (this.logger is ILogger logger)
+        {
+            var tsi = element.FindDescendant<TabStripItem>();
+            LogTransform(logger, contentId, tsi?.Item?.Title ?? "<unknown>", offset);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "ApplyTransform end: itemIndex={ItemIndex}")]
+    private static partial void LogApplyTransformEnd(ILogger logger, int ItemIndex);
+
+    [Conditional("DEBUG")]
+    private void LogApplyTransformEnd(int itemIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogApplyTransformEnd(logger, itemIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "InsertItemAsync removed pending clone at index={Index} (ContentId={ContentId})")]
+    private static partial void LogInsertItemAsyncRemoved(ILogger logger, int Index, Guid ContentId);
+
+    [Conditional("DEBUG")]
+    private void LogInsertItemAsyncRemoved(int index, Guid contentId)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogInsertItemAsyncRemoved(logger, index, contentId);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "InsertItemAsync: failed removing pending clone")]
+    private static partial void LogInsertItemAsyncFailed(ILogger logger, Exception ex);
+
+    [Conditional("DEBUG")]
+    private void LogInsertItemAsyncFailed(Exception ex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogInsertItemAsyncFailed(logger, ex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "PrepareExternalDropAsync aborted: payload is pinned.")]
+    private static partial void LogPrepareExternalDropAborted(ILogger logger);
+
+    private void LogPrepareExternalDropAborted()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPrepareExternalDropAborted(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "PrepareExternalDropAsync unrealized: status={Status}.")]
+    private static partial void LogPrepareExternalDropUnrealized(ILogger logger, string Status);
+
+    private void LogPrepareExternalDropUnrealized(string status)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPrepareExternalDropUnrealized(logger, status);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "PrepareExternalDropAsync missing realized container.")]
+    private static partial void LogPrepareExternalDropMissingContainer(ILogger logger);
+
+    private void LogPrepareExternalDropMissingContainer()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPrepareExternalDropMissingContainer(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "PrepareExternalDropAsync cancelled.")]
+    private static partial void LogPrepareExternalDropCancelled(ILogger logger);
+
+    private void LogPrepareExternalDropCancelled()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPrepareExternalDropCancelled(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "PrepareExternalDropAsync failed")]
+    private static partial void LogPrepareExternalDropFailed(ILogger logger, Exception ex);
+
+    private void LogPrepareExternalDropFailed(Exception ex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPrepareExternalDropFailed(logger, ex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Coordinator subscribed.")]
+    private static partial void LogCoordinatorSubscribed(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogCoordinatorSubscribed()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCoordinatorSubscribed(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Coordinator unsubscribed.")]
+    private static partial void LogCoordinatorUnsubscribed(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogCoordinatorUnsubscribed()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCoordinatorUnsubscribed(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Pointer pressed on item '{HitItem}' at Position={Position}, HotSpot={HotspotOffsets}).")]
+    private static partial void LogPointerPressedImpl(ILogger logger, string hitItem, SpatialPoint<ElementSpace> position, Point hotspotOffsets);
+
+    [Conditional("DEBUG")]
+    private void LogPointerPressed(TabStripItem item, SpatialPoint<ElementSpace> position, Point hotspotOffsets)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPointerPressedImpl(logger, item.Item?.Title ?? "<unknown>", position, hotspotOffsets);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Pointer moved to ({X}, {Y}), delta={Delta}.")]
+    private static partial void LogPointerMovedImpl(ILogger logger, double X, double Y, double Delta);
+
+    [Conditional("DEBUG")]
+    private void LogPointerMoved(TabStripItem item, Windows.Foundation.Point position, double delta)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPointerMovedImpl(logger, position.X, position.Y, delta);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Pointer released while drag is ongoing.")]
+    private static partial void LogPointerReleasedWhileDragging(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogPointerReleasedWhileDragging()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogPointerReleasedWhileDragging(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Drag threshold exceeded: delta={Delta} >= threshold={Threshold}.")]
+    private static partial void LogThresholdExceeded(ILogger logger, double Delta, double Threshold);
+
+    [Conditional("DEBUG")]
+    private void LogThresholdExceeded(double delta, double threshold)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogThresholdExceeded(logger, delta, threshold);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Initiating drag for item '{Item}' inside TabStrip '{Strip}' at screen point ({Point})")]
+    private static partial void LogBeginDragStartedImpl(ILogger logger, string item, string strip, SpatialPoint<ElementSpace> point);
+
+    [Conditional("DEBUG")]
+    private void LogInitiateDrag(TabItem item, SpatialPoint<ElementSpace> point)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogBeginDragStartedImpl(logger, item.Title, this.Name, point);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Selection cleared for drag.")]
+    private static partial void LogSelectionClearedImpl(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogSelectionCleared()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogSelectionClearedImpl(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to initiate drag.")]
+    private static partial void LogDragSessionFailure(ILogger logger, InvalidOperationException Exception);
+
+    [Conditional("DEBUG")]
+    private void LogInitiateDragFailed(InvalidOperationException exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDragSessionFailure(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Coordinator reported drag moved to ({X}, {Y}).")]
+    private static partial void LogCoordinatorDragMovedImpl(ILogger logger, double X, double Y);
+
+    [Conditional("DEBUG")]
+    private void LogCoordinatorDragMoved(Windows.Foundation.Point screenPoint)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCoordinatorDragMovedImpl(logger, screenPoint.X, screenPoint.Y);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Coordinator reported drag ended at ({X}, {Y}), destination hash={DestHash}, newIndex={NewIndex}.")]
+    private static partial void LogCoordinatorDragEndedImpl(ILogger logger, double X, double Y, int DestHash, int NewIndex);
+
+    [Conditional("DEBUG")]
+    private void LogCoordinatorDragEnded(Windows.Foundation.Point screenPoint, TabStrip? destination, int? newIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCoordinatorDragEndedImpl(logger, screenPoint.X, screenPoint.Y, destination?.GetHashCode() ?? 0, newIndex ?? -1);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception during drag end.")]
+    private static partial void LogDragEndException(ILogger logger, Exception Exception);
+
+    [Conditional("DEBUG")]
+    private void LogDragEndException(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDragEndException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception in TabCloseRequested handler.")]
+    private static partial void LogTabCloseRequestedException(ILogger logger, Exception Exception);
+
+    [Conditional("DEBUG")]
+    private void LogTabCloseRequestedException(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTabCloseRequestedException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception in TabDragComplete handler.")]
+    private static partial void LogTabDragCompleteException(ILogger logger, Exception Exception);
+
+    [Conditional("DEBUG")]
+    private void LogTabDragCompleteException(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTabDragCompleteException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception in TabTearOutRequested handler.")]
+    private static partial void LogTabTearOutRequestedException(ILogger logger, Exception Exception);
+
+    [Conditional("DEBUG")]
+    private void LogTabTearOutRequestedException(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTabTearOutRequestedException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Drag state cleanup for '{Header}' (ContentId={ContentId}): cleared {ClearedCount} container(s).")]
+    private static partial void LogDragStateCleanupImpl(ILogger logger, string Header, Guid ContentId, int ClearedCount);
+
+    [Conditional("DEBUG")]
+    private void LogDragStateCleanup(TabItem item, int clearedCount)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDragStateCleanupImpl(logger, item.Header ?? "<null>", item.ContentId, clearedCount);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "TryCompleteDrag: failed clearing IsDragging for item (ContentId={ContentId})")]
+    private static partial void LogTryCompleteDragFailed(ILogger logger, Guid ContentId, Exception ex);
+
+    private void LogTryCompleteDragFailed(Guid contentId, Exception ex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTryCompleteDragFailed(logger, contentId, ex);
         }
     }
 }
