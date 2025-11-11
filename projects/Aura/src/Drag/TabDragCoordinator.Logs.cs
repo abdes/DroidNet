@@ -559,4 +559,18 @@ public partial class TabDragCoordinator
             LogCancelledPendingInsert(logger, contentId);
         }
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception in enqueded operation during OnDragPositionChanged handling.")]
+    private static partial void LogOnDragPositionChangedError(ILogger logger, Exception ex);
+
+    private void LogOnDragPositionChangedError(Exception ex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogOnDragPositionChangedError(logger, ex);
+        }
+    }
 }
