@@ -1498,7 +1498,8 @@ public partial class TabStrip : Control, ITabStrip
             else
             {
                 var capturedResolvedIndex = resolvedIndex; // Snapshot for deferred evaluation.
-                this.DeferMoveAndSelect(items, ti, () => this.ComputeDesiredInsertIndex(items, ti, capturedResolvedIndex));
+                var isExplicit = e.NewStartingIndex >= 0; // remember if caller requested a specific index
+                this.DeferMoveAndSelect(items, ti, () => this.ComputeDesiredInsertIndex(items, ti, capturedResolvedIndex, isExplicit));
             }
 
             indexOffset++;
@@ -1553,7 +1554,7 @@ public partial class TabStrip : Control, ITabStrip
         });
     }
 
-    private int ComputeDesiredInsertIndex(ObservableCollection<TabItem> items, TabItem item, int resolvedIndex)
+    private int ComputeDesiredInsertIndex(ObservableCollection<TabItem> items, TabItem item, int resolvedIndex, bool isExplicit = false)
     {
         var pinnedCount = this.CountPinnedItems();
         var selectedItem = this.SelectedItem as TabItem;
@@ -1572,8 +1573,11 @@ public partial class TabStrip : Control, ITabStrip
 
         var anchorIndex = resolvedIndex;
 
-        // Regular tabs sit immediately to the right of the current selection when possible.
-        if (selectedItem is not null && selectedIndex >= 0 && !selectedIsPinned)
+        // For explicit insertions (caller requested a specific index) respect the requested
+        // position and do not bias toward the right of the selection. For non-explicit
+        // (e.g., appended or generated) inserts, prefer placing regular tabs to the right
+        // of the current selection when possible.
+        if (!isExplicit && selectedItem is not null && selectedIndex >= 0 && !selectedIsPinned)
         {
             anchorIndex = Math.Max(anchorIndex, selectedIndex + 1);
         }
