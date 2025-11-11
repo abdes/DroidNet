@@ -3,11 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 using CommunityToolkit.WinUI;
-using DroidNet.Aura.Controls;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
@@ -42,7 +38,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     // Pending insert CancellationTokenSources keyed by payload ContentId. Used to signal
     // cancellation to a control-owned InsertItemAsync operation when the coordinator
     // detaches or the pointer moves away.
-    private readonly Dictionary<Guid, CancellationTokenSource> pendingInsertCts = new();
+    private readonly Dictionary<Guid, CancellationTokenSource> pendingInsertCts = [];
 
     // Drag state
     private bool isActive;
@@ -50,17 +46,17 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     private IDragStrategy? currentStrategy;
     private DispatcherQueueTimer? pollingTimer;
     private SpatialPoint<PhysicalScreenSpace> lastCursorPosition;
+    private bool isAttaching; // Prevents concurrent AttachToStrip calls
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="TabDragCoordinator"/> class.
+    ///     Coordinates drag operations across all <see cref="ITabStrip"/> instances in the application.
     /// </summary>
-    /// <param name="windowManager">The window manager service used to manage and query open windows.</param>
-    /// <param name="spatialMapperFactory">The factory used to create spatial mappers for coordinate conversions.</param>
-    /// <param name="dragService">The drag visual service.</param>
-    /// <param name="loggerFactory">
-    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
-    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
-    /// </param>
+    /// <param name="hosting">The hosting context providing the dispatcher queue.</param>
+    /// <param name="windowManager">Service for managing and querying open windows.</param>
+    /// <param name="spatialMapperFactory">Factory for creating spatial mappers for coordinate conversions.</param>
+    /// <param name="dragService">Service for managing drag visuals.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostics.</param>
     public TabDragCoordinator(
         HostingContext hosting,
         IWindowManagerService windowManager,
@@ -81,17 +77,17 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     }
 
     /// <summary>
-    /// Starts a drag operation for the provided <paramref name="item"/> originating from <paramref name="source"/>.
+    ///     Starts a drag operation for the specified tab item from the given source strip.
     /// </summary>
-    /// <param name="item">Logical TabItem being dragged.</param>
-    /// <param name="itemIndex">The index of the item being dragged within the source TabStrip.</param>
-    /// <param name="source">Source TabStrip.</param>
-    /// <param name="stripContainer">The container element that hosts the source <see cref="ITabStrip"/>.</param>
-    /// <param name="draggedElement">Visual element for drag preview rendering.</param>
+    /// <param name="item">The logical tab item being dragged.</param>
+    /// <param name="itemIndex">Index of the item in the source strip.</param>
+    /// <param name="source">Source <see cref="ITabStrip"/> instance.</param>
+    /// <param name="stripContainer">Container element hosting the source strip.</param>
+    /// <param name="draggedElement">Visual element for drag preview.</param>
     /// <param name="initialPosition">Initial pointer position relative to the source element.</param>
     /// <param name="hotspotOffsets">Offset from the drag hotspot to the dragged element's origin.</param>
     public void StartDrag(
-        object item,
+        IDragPayload item,
         int itemIndex,
         ITabStrip source,
         FrameworkElement stripContainer,
@@ -114,7 +110,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             this.isActive = true;
 
             var mapper = this.CreateSpatialMapper(stripContainer);
-            this.dragContext = new DragContext(source, item, itemIndex, hotspotOffsets, stripContainer, draggedElement, mapper);
+            this.dragContext = new DragContext(source, item, hotspotOffsets, stripContainer, draggedElement, mapper);
             var initialPhysicalPosition = mapper.ToPhysicalScreen(initialPosition);
             this.lastCursorPosition = initialPhysicalPosition;
             this.SwitchToReorderMode(initialPhysicalPosition);
@@ -125,7 +121,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     }
 
     /// <summary>
-    /// Ends the current drag operation.
+    ///     Ends the current drag operation and finalizes the drop.
     /// </summary>
     /// <param name="screenPoint">Screen coordinate where the drop occurred.</param>
     public async void EndDrag(SpatialPoint<ScreenSpace> screenPoint)
@@ -152,22 +148,24 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             isTearOutMode = this.currentStrategy == this.tearOutStrategy;
         }
 
-        // If there's a hit strip, ask it to prepare for drop (may await realization handshake).
+        // If there's a hit strip and we're NOT in tear-out mode, prepare for drop.
+        // If we're in tear-out mode at button release, treat it as a tear-out completion
+        // (don't reattach to strips that happen to be under the cursor).
         int fallbackDropIndex;
-        if (hitStrip is not null)
+        if (hitStrip is not null && !isTearOutMode)
         {
-            var result = await this.PrepareDropForHitStrip(screenPoint, hitStrip, isTearOutMode);
+            var result = await this.PrepareDropForHitStrip(screenPoint, hitStrip, isTearOutMode).ConfigureAwait(true);
             fallbackDropIndex = result.insertionIndex;
             isTearOutMode = result.isTearOutMode;
         }
         else
         {
-            fallbackDropIndex = context!.DraggedItemIndex;
+            fallbackDropIndex = this.GetDraggedItemIndex(context!);
         }
 
         if (fallbackDropIndex < 0)
         {
-            fallbackDropIndex = context!.DraggedItemIndex;
+            fallbackDropIndex = this.GetDraggedItemIndex(context!);
         }
 
         this.LogEndDragPreparation(isTearOutMode, hitStrip, fallbackDropIndex, context!);
@@ -197,7 +195,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     }
 
     /// <summary>
-    /// Registers a TabStrip instance for cross-window drag coordination.
+    ///     Registers a TabStrip instance for cross-window drag coordination.
     /// </summary>
     /// <param name="strip">The TabStrip to register.</param>
     public void RegisterTabStrip(ITabStrip strip)
@@ -215,7 +213,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     }
 
     /// <summary>
-    /// Unregisters a TabStrip instance from cross-window drag coordination.
+    ///     Unregisters a TabStrip instance from cross-window drag coordination.
     /// </summary>
     /// <param name="strip">The TabStrip to unregister.</param>
     public void UnregisterTabStrip(ITabStrip strip)
@@ -237,7 +235,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     }
 
     /// <summary>
-    /// Aborts an active drag, restoring state and ending the visual session.
+    ///     Aborts an active drag, restoring state and ending the visual session.
     /// </summary>
     public void Abort()
     {
@@ -279,15 +277,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             : this.spatialMapperFactory(window, element);
     }
 
-    private bool TryCreateMapperForStrip(ITabStrip strip, out ISpatialMapper mapper, out FrameworkElement? container)
+    private bool TryCreateMapperForStrip(ITabStrip strip, out ISpatialMapper mapper, out FrameworkElement container)
     {
-        container = strip as FrameworkElement;
-        if (container is null)
-        {
-            this.LogStripNotFrameworkElement(strip);
-            mapper = default!;
-            return false;
-        }
+        container = strip.GetContainerElement();
 
         try
         {
@@ -315,7 +307,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                     continue;
                 }
 
-                if (!this.TryCreateMapperForStrip(strip, out var mapper, out var container) || container is null)
+                if (!this.TryCreateMapperForStrip(strip, out var mapper, out var container))
                 {
                     continue;
                 }
@@ -392,9 +384,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return (-1, isTearOutMode);
         }
 
-        if (!this.TryCreateMapperForStrip(hitStrip, out var mapper, out var container) || container is null)
+        if (!this.TryCreateMapperForStrip(hitStrip, out var mapper, out var container))
         {
-            return (this.dragContext.DraggedItemIndex, isTearOutMode);
+            return (this.GetDraggedItemIndex(this.dragContext), isTearOutMode);
         }
 
         var physicalPoint = mapper.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
@@ -410,7 +402,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             }
         }
 
-        return (this.dragContext.DraggedItemIndex, isTearOutMode);
+        return (this.GetDraggedItemIndex(this.dragContext), isTearOutMode);
     }
 
     private void SwitchToReorderMode(SpatialPoint<PhysicalScreenSpace> position)
@@ -447,43 +439,31 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         if (currentStrip is not null)
         {
-            Debug.WriteLine($"[TabDragCoordinator] Tear-out start: item='{context.DraggedItemData}', index={context.DraggedItemIndex}, strip='{currentStrip.Name}'");
+            this.LogTearOutStart(context.DraggedItemData.ToString() ?? "Unknown", this.GetDraggedItemIndex(context), currentStrip.Name);
             try
             {
+                // CloseTab raises TabCloseRequested event. The application is responsible for
+                // removing the item from the Items collection in response to this event.
+                // We should NOT call RemoveItemAt here as that would remove a second item.
                 currentStrip.CloseTab(context.DraggedItemData);
-                Debug.WriteLine($"[TabDragCoordinator] Tear-out CloseTab issued for item='{context.DraggedItemData}'");
-
-                if (context.DraggedItemIndex >= 0)
-                {
-                    try
-                    {
-                        currentStrip.RemoveItemAt(context.DraggedItemIndex);
-                        Debug.WriteLine($"[TabDragCoordinator] Tear-out RemoveItemAt({context.DraggedItemIndex}) succeeded");
-                    }
-                    catch (ArgumentOutOfRangeException)
-                    {
-                        // Item already removed externally; ignore and continue tear-out.
-                        Debug.WriteLine($"[TabDragCoordinator] Tear-out RemoveItemAt skipped because index {context.DraggedItemIndex} is out of range");
-                    }
-                }
+                this.LogTearOutCloseTab(context.DraggedItemData.ToString() ?? "Unknown");
             }
 #pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)
             {
-                this.LogTabCloseRequestedFailed(ex);
-                Debug.WriteLine($"[TabDragCoordinator] Tear-out failed: {ex}");
+                this.LogTearOutFailed(ex);
                 currentStrip.TryCompleteDrag(
                     context.DraggedItemData,
                     currentStrip,
-                    context.DraggedItemIndex);
+                    this.GetDraggedItemIndex(context));
                 this.CleanupState();
                 return;
             }
 #pragma warning restore CA1031 // Do not catch general exception types
         }
 
-        context.UpdateCurrentStrip(null, null, context.SpatialMapper, -1);
-        Debug.WriteLine($"[TabDragCoordinator] Tear-out context reset for item='{context.DraggedItemData}'");
+        context.UpdateCurrentStrip(tabStrip: null, stripContainer: null, context.SpatialMapper);
+        this.LogTearOutContextReset(context.DraggedItemData.ToString() ?? "Unknown");
 
         this.currentStrategy = this.tearOutStrategy;
         this.lastCursorPosition = position;
@@ -553,7 +533,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
 
         // Check for mode transitions based on cursor position (may await)
-        await this.CheckAndHandleModeTransitions(newPosition);
+        await this.CheckAndHandleModeTransitions(newPosition).ConfigureAwait(true);
 
         // Delegate to current strategy (pass screen coordinates, strategy will convert)
         lock (this.syncLock)
@@ -561,64 +541,47 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             if (this.dragContext is not null && this.currentStrategy is not null)
             {
                 var strategy = this.currentStrategy!;
-                try
+
+                // Ensure we execute UI-manipulating code on the UI's DispatcherQueue
+                // to avoid RPC_E_WRONG_THREAD and native runtime races when the
+                // continuation after awaits executes on a thread-pool thread.
+                var logged = false;
+
+                if (this.dispatcherQueue.HasThreadAccess)
                 {
-                    Debug.WriteLine($"[TabDragCoordinator] Invoking OnDragPositionChanged: cursor={newPosition.Point}, lastCursor={previousPosition.Point}, isTearOut={(strategy == this.tearOutStrategy)}, strategy={strategy.GetType().Name}");
-
-                    // Ensure we execute UI-manipulating code on the UI's DispatcherQueue
-                    // to avoid RPC_E_WRONG_THREAD and native runtime races when the
-                    // continuation after awaits executes on a thread-pool thread.
-                    var logged = false;
-
-                    if (this.dispatcherQueue.HasThreadAccess)
+                    strategy.OnDragPositionChanged(newPosition);
+                    this.LogDragMoved(newPosition, previousPosition.Point);
+                    logged = true;
+                }
+                else
+                {
+                    var enqueued = this.dispatcherQueue.TryEnqueue(() =>
                     {
-                        this.logger.LogDebug("[TabDragCoordinator] OnDragPositionChanged executing on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                        strategy.OnDragPositionChanged(newPosition);
-                        this.LogDragMoved(newPosition, previousPosition.Point);
-                        logged = true;
-                    }
-                    else
-                    {
-                        this.logger.LogDebug("[TabDragCoordinator] Enqueueing OnDragPositionChanged to DispatcherQueue (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                        var enqueued = dispatcherQueue.TryEnqueue(() =>
+                        try
                         {
-                            try
-                            {
-                                this.logger.LogDebug("[TabDragCoordinator] Enqueued OnDragPositionChanged running on UI thread (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
-                                strategy.OnDragPositionChanged(newPosition);
-                                this.LogDragMoved(newPosition, previousPosition.Point);
-                            }
-                            catch (Exception ex)
-                            {
-                                this.logger.LogError(ex, "[TabDragCoordinator] Exception in enqueued OnDragPositionChanged");
-                            }
-                        });
-
-                        if (!enqueued)
-                        {
-                            this.logger.LogWarning("[TabDragCoordinator] Failed to enqueue OnDragPositionChanged to UI dispatcher (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
+                            strategy.OnDragPositionChanged(newPosition);
+                            this.LogDragMoved(newPosition, previousPosition.Point);
                         }
+                        catch (Exception ex)
+                        {
+                            this.logger.LogError(ex, "[TabDragCoordinator] Exception in enqueued OnDragPositionChanged");
+                        }
+                    });
 
-                        // We won't call LogDragMoved here (it will be logged inside the enqueued action)
-                        logged = true;
-                    }
-
-                    if (!logged)
+                    if (!enqueued)
                     {
-                        // If we didn't already log via the dispatched path, log movement now.
-                        this.LogDragMoved(newPosition, previousPosition.Point);
+                        this.LogAttachToStripEnqueueFailed();
                     }
+
+                    // We won't call LogDragMoved here (it will be logged inside the enqueued action)
+                    logged = true;
                 }
-#pragma warning disable CA1031 // Do not catch general exception types
-                catch (Exception ex)
+
+                if (!logged)
                 {
-                    // Log and swallow to prevent unhandled managed exceptions from
-                    // propagating into native XAML tooling where they can surface as
-                    // access violations. We intentionally swallow here but record
-                    // diagnostic details for investigation.
-                    this.logger.LogError(ex, "[TabDragCoordinator] Exception in OnDragPositionChanged (tid={ThreadId})", Thread.CurrentThread.ManagedThreadId);
+                    // If we didn't already log via the dispatched path, log movement now.
+                    this.LogDragMoved(newPosition, previousPosition.Point);
                 }
-#pragma warning restore CA1031 // Do not catch general exception types
             }
         }
     }
@@ -654,22 +617,43 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return;
         }
 
-        var hitResult = this.FindStripUnderCursor(cursor);
-        if (hitResult is null)
+        // Prevent concurrent attachment attempts
+        lock (this.syncLock)
         {
-            return;
+            if (this.isAttaching)
+            {
+                return;
+            }
+
+            this.isAttaching = true;
         }
 
-        var (targetStrip, mapper, container) = hitResult.Value;
-
-        var readyForReorder = await this.AttachToStrip(targetStrip, container, mapper, cursor).ConfigureAwait(true);
-
-        if (!readyForReorder)
+        try
         {
-            return;
-        }
+            var hitResult = this.FindStripUnderCursor(cursor);
+            if (hitResult is null)
+            {
+                return;
+            }
 
-        this.SwitchToReorderMode(cursor);
+            var (targetStrip, mapper, container) = hitResult.Value;
+
+            var readyForReorder = await this.AttachToStrip(targetStrip, container, mapper, cursor).ConfigureAwait(true);
+
+            if (!readyForReorder)
+            {
+                return;
+            }
+
+            this.SwitchToReorderMode(cursor);
+        }
+        finally
+        {
+            lock (this.syncLock)
+            {
+                this.isAttaching = false;
+            }
+        }
     }
 
     private async Task<bool> AttachToStrip(ITabStrip targetStrip, FrameworkElement container, ISpatialMapper mapper, SpatialPoint<PhysicalScreenSpace> cursor)
@@ -683,20 +667,13 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         var elementPoint = mapper.Convert<PhysicalScreenSpace, ElementSpace>(cursor);
 
-        object payloadClone = this.dragContext.DraggedItemData;
-        if (this.dragContext.DraggedItemData is IDragPayload payload)
-        {
-            payloadClone = payload.ShallowClone();
-        }
+        var payloadClone = this.dragContext.DraggedItemData.ShallowClone();
+        var contentId = payloadClone.ContentId;
 
-        Guid? contentId = (payloadClone as IDragPayload)?.ContentId;
         var cts = new CancellationTokenSource();
-        if (contentId.HasValue)
+        lock (this.syncLock)
         {
-            lock (this.syncLock)
-            {
-                this.pendingInsertCts[contentId.Value] = cts;
-            }
+            this.pendingInsertCts[contentId] = cts;
         }
 
         ExternalDropPreparationResult? preparation = null;
@@ -704,7 +681,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         {
             if (container.DispatcherQueue is null)
             {
-                Debug.WriteLine("[TabDragCoordinator] AttachToStrip aborted: container has no DispatcherQueue.");
+                this.LogAttachToStripAborted();
                 return false;
             }
 
@@ -715,7 +692,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             else
             {
                 var tcs = new TaskCompletionSource<ExternalDropPreparationResult?>(TaskCreationOptions.RunContinuationsAsynchronously);
-                if (!container.DispatcherQueue.TryEnqueue(async () =>
+                var enqueued = container.DispatcherQueue.TryEnqueue(async () =>
                 {
                     try
                     {
@@ -726,9 +703,10 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                     {
                         tcs.TrySetException(ex);
                     }
-                }))
+                });
+                if (!enqueued)
                 {
-                    Debug.WriteLine("[TabDragCoordinator] AttachToStrip failed to enqueue preparation on UI thread.");
+                    this.LogDispatcherEnqueueFailed("AttachToStrip");
                     return false;
                 }
 
@@ -737,31 +715,26 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
         catch (OperationCanceledException)
         {
-            Debug.WriteLine("[TabDragCoordinator] AttachToStrip cancelled during preparation.");
+            this.LogAttachToStripCancelled();
             return false;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[TabDragCoordinator] AttachToStrip failed: {ex}");
+            this.LogAttachToStripFailed(ex);
             return false;
         }
         finally
         {
-            if (contentId.HasValue)
+            lock (this.syncLock)
             {
-                lock (this.syncLock)
+                if (this.pendingInsertCts.TryGetValue(contentId, out var existingCts))
                 {
-                    if (this.pendingInsertCts.TryGetValue(contentId.Value, out var existingCts))
-                    {
-                        existingCts.Dispose();
-                        _ = this.pendingInsertCts.Remove(contentId.Value);
-                    }
+                    existingCts.Dispose();
+                    _ = this.pendingInsertCts.Remove(contentId);
                 }
             }
-            else
-            {
-                cts.Dispose();
-            }
+
+            cts.Dispose();
         }
 
         if (preparation is null)
@@ -769,9 +742,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return false;
         }
 
-        this.dragContext.UpdateCurrentStrip(targetStrip, container, mapper, preparation.DropIndex);
+        this.dragContext.UpdateCurrentStrip(targetStrip, container, mapper);
         this.dragContext.UpdateDraggedVisualElement(preparation.RealizedContainer);
-        Debug.WriteLine($"[TabDragCoordinator] AttachToStrip succeeded: strip='{targetStrip.Name}', index={preparation.DropIndex}");
+        this.LogAttachToStripSucceeded(targetStrip.Name, preparation.DropIndex);
         return true;
     }
 
@@ -785,7 +758,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
     private void DetachPendingAttachment(ITabStrip pendingStrip)
     {
-        Debug.WriteLine($"[TabDragCoordinator] Detaching pending attachment from strip='{pendingStrip.Name}', index={this.dragContext?.DraggedItemIndex}");
+        this.LogDetachPendingAttachment(
+            pendingStrip.Name,
+            this.dragContext is not null ? this.GetDraggedItemIndex(this.dragContext) : null);
 
         if (this.dragContext is null)
         {
@@ -796,21 +771,18 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         // control-side cleanup), signal cancellation for the pending insert operation if we
         // previously started one for this payload. The TabStrip control owns removing the
         // pending clone on cancellation/timeouts (see TabStrip.InsertItemAsync).
-        if (this.dragContext.DraggedItemData is IDragPayload payload)
+        var cid = this.dragContext.DraggedItemData.ContentId;
+        if (this.pendingInsertCts.TryGetValue(cid, out var cts))
         {
-            var cid = payload.ContentId;
-            if (this.pendingInsertCts.TryGetValue(cid, out var cts))
+            try
             {
-                try
-                {
-                    cts.Cancel();
-                    Debug.WriteLine($"[TabDragCoordinator] Cancelled pending insert for ContentId={cid}");
-                }
-                finally
-                {
-                    cts.Dispose();
-                    _ = this.pendingInsertCts.Remove(cid);
-                }
+                cts.Cancel();
+                this.LogCancelledPendingInsert(cid);
+            }
+            finally
+            {
+                cts.Dispose();
+                _ = this.pendingInsertCts.Remove(cid);
             }
         }
 
@@ -818,10 +790,10 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         {
             // Dispatch a defensive layout update; do not block here. If dispatch fails
             // we ignore it — the control is responsible for eventual cleanup.
-            _ = pendingContainer.DispatcherQueue.EnqueueAsync(() => pendingContainer.UpdateLayout());
+            _ = pendingContainer.DispatcherQueue.EnqueueAsync(pendingContainer.UpdateLayout);
         }
 
-        this.dragContext.UpdateCurrentStrip(null, null, this.dragContext.SpatialMapper, -1);
+        this.dragContext.UpdateCurrentStrip(tabStrip: null, stripContainer: null, this.dragContext.SpatialMapper);
         this.dragContext.UpdateDraggedVisualElement(this.dragContext.DraggedVisualElement);
     }
 
@@ -857,5 +829,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         this.dragContext = null;
         this.currentStrategy = null;
         this.lastCursorPosition = default;
+        this.isAttaching = false;
     }
+
+    private int GetDraggedItemIndex(DragContext context)
+        => context.TabStrip is null ? -1 : context.TabStrip.IndexOf(context.DraggedItemData);
 }

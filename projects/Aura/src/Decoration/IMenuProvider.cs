@@ -68,7 +68,7 @@ public interface IMenuProvider
     ///     Implementations must ensure thread-safety through appropriate synchronization mechanisms
     ///     such as locks or by using thread-safe data structures.
     ///     <para>
-    ///     The returned <see cref="IMenuSource"/> will be disposed when the window is closed.
+    ///     The returned <see cref="IMenuSource"/> will be isDisposed when the window is closed.
     ///     Providers should not cache menu sources or share them between windows.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">

@@ -40,11 +40,11 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task StartDrag_WithValidParameters_InitializesContext_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        const int draggedIndex = 1;
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
-        const string draggedItem = "Item1";
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(draggedIndex, "Item1", new Point(0, 0), 120);
+        var tabStripMock = builder.Build();
+        var draggedItem = builder.GetItem(0)!;
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
         // Update mapper to use the visual element
@@ -75,7 +75,6 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         _ = context.Should().NotBeNull();
         _ = context!.TabStrip.Should().Be(tabStripMock.Object);
         _ = context.DraggedItemData.Should().Be(draggedItem);
-        _ = context.DraggedItemIndex.Should().Be(draggedIndex);
 
         // The last cursor position should be in physical screen space, converted properly from element space
         var lastPhysical = GetPrivateField<SpatialPoint<PhysicalScreenSpace>>(coordinator, "lastCursorPosition");
@@ -91,9 +90,11 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     {
         // Arrange
         var coordinator = this.CreateCoordinator();
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(0)
-            .Build();
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(0, "FirstItem", new Point(0, 0), 120)
+            .WithItemSnapshot(1, "SecondItem", new Point(130, 0), 120);
+        var tabStripMock = builder.Build();
+        var firstItem = builder.GetItem(0)!;
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
         // Update mapper to use the visual element
@@ -101,10 +102,11 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         var initialElementPoint = new Point(80, 20).AsElement();
 
-        coordinator.StartDrag("FirstItem", 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
+        coordinator.StartDrag(firstItem, 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Act
-        var act = () => coordinator.StartDrag("SecondItem", 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
+        var secondItem = builder.GetItem(1)!;
+        var act = () => coordinator.StartDrag(secondItem, 0, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Assert
         _ = act.Should().Throw<InvalidOperationException>().WithMessage("*already active*");
@@ -144,8 +146,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
+        // Use the builder to create the test item so TabItem creation is centralized
+        var builder = new TabStripMockBuilder().WithItemSnapshot(0, "Item");
+        var testItem = builder.GetItem(0)!;
+
         // Act
-        var act = () => coordinator.StartDrag("Item", 0, null!, visualElement, visualElement, new Point(40, 22).AsElement(), new Point(0, 0));
+        var act = () => coordinator.StartDrag(testItem, 0, null!, visualElement, visualElement, new Point(40, 22).AsElement(), new Point(0, 0));
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>().WithParameterName("source");
@@ -160,8 +166,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var coordinator = this.CreateCoordinator();
         var tabStrip = Mock.Of<ITabStrip>();
 
+        // Use the builder to create the test item so TabItem creation is centralized
+        var builder = new TabStripMockBuilder().WithItemSnapshot(0, "Item");
+        var testItem = builder.GetItem(0)!;
+
         // Act
-        var act = () => coordinator.StartDrag("Item", 0, tabStrip, null!, null!, new Point(55, 35).AsElement(), new Point(0, 0));
+        var act = () => coordinator.StartDrag(testItem, 0, tabStrip, null!, null!, new Point(55, 35).AsElement(), new Point(0, 0));
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>().WithParameterName("draggedElement");
@@ -173,11 +183,12 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task EndDrag_WhenActive_CompletesStrategyAndResetsState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        const int draggedIndex = 1;
+        const int draggedIndex = 0;
         var coordinator = this.CreateCoordinator();
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(draggedIndex, "Item", new Point(0, 0), 120);
+        var tabStripMock = builder.Build();
+        var draggedItem = builder.GetItem(0)!;
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
         // Update mapper to use the visual element
@@ -185,7 +196,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         var initialElementPoint = new Point(120, 30).AsElement();
 
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
@@ -223,17 +234,18 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     public Task Abort_WhenActive_EndsStrategyAndClearsState_Async() => EnqueueAsync(async () =>
     {
         // Arrange
-        const int draggedIndex = 1;
+        const int draggedIndex = 0;
         var coordinator = this.CreateCoordinator();
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(draggedIndex)
-            .Build();
+        var builder = new TabStripMockBuilder()
+            .WithItemSnapshot(draggedIndex, "Item", new Point(0, 0), 120);
+        var tabStripMock = builder.Build();
+        var draggedItem = builder.GetItem(0)!;
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
@@ -272,7 +284,8 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     {
         // Arrange
         var coordinator = this.CreateCoordinator();
-        var tabStripMock = new TabStripMockBuilder().Build();
+        var builder = new TabStripMockBuilder();
+        var tabStripMock = builder.Build();
 
         // Act
         coordinator.RegisterTabStrip(tabStripMock.Object);
@@ -289,8 +302,10 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     {
         // Arrange
         var coordinator = this.CreateCoordinator();
-        var stripAMock = new TabStripMockBuilder().Build();
-        var stripBMock = new TabStripMockBuilder().Build();
+        var builderA = new TabStripMockBuilder();
+        var stripAMock = builderA.Build();
+        var builderB = new TabStripMockBuilder();
+        var stripBMock = builderB.Build();
 
         coordinator.RegisterTabStrip(stripAMock.Object);
         coordinator.RegisterTabStrip(stripBMock.Object);
@@ -311,9 +326,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         const int draggedIndex = 0;
-        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex, "ItemA");
         var (tabStripMock, stripElement) = builder.BuildWithElement();
-        const string draggedItem = "ItemA";
+        var draggedItem = builder.GetItem(0)!;
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
@@ -356,9 +371,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         const int draggedIndex = 0;
-        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex);
         var (tabStripMock, stripElement) = builder.BuildWithElement();
-        const string draggedItem = "ItemA";
+        var draggedItem = builder.GetItem(0)!;
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
@@ -397,9 +412,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         const int draggedIndex = 0;
-        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex);
         var (tabStripMock, stripElement) = builder.BuildWithElement();
-        const string draggedItem = "ItemA";
+        var draggedItem = builder.GetItem(0)!;
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
@@ -458,14 +473,15 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         const int draggedIndex = 0;
-        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex);
         var (tabStripMock, stripElement) = builder.BuildWithElement();
+        var draggedItem = builder.GetItem(0)!;
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
 
         var coordinator = this.CreateCoordinator();
-        coordinator.StartDrag("Item", draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(100, 25).AsElement(), new Point(0, 0));
 
         var strategy = new StubDragStrategy();
         SetPrivateField(coordinator, "currentStrategy", strategy);
@@ -487,14 +503,15 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
     {
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        var tabStripMock = new TabStripMockBuilder()
-            .WithDraggedItemSnapshot(0)
-            .Build();
+        const int draggedIndex = 0;
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex);
+        var (tabStripMock, stripElement) = builder.BuildWithElement();
+        var draggedItem = builder.GetItem(0)!;
 
         var coordinator = this.CreateCoordinator();
 
         // Act: Start drag without providing initial point (null)
-        coordinator.StartDrag("Item", 0, tabStripMock.Object, visualElement, visualElement, new Point(0, 0).AsElement(), new Point(0, 0));
+        coordinator.StartDrag(draggedItem, 0, tabStripMock.Object, visualElement, visualElement, new Point(0, 0).AsElement(), new Point(0, 0));
 
         // Assert: Should successfully initialize (GetCursorPos is called internally)
         var isActive = GetPrivateField<bool>(coordinator, "isActive");
@@ -514,9 +531,9 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         // Arrange
         var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
         const int draggedIndex = 0;
-        var builder = new TabStripMockBuilder().WithDraggedItemSnapshot(draggedIndex);
+        var builder = new TabStripMockBuilder().WithItemSnapshot(draggedIndex);
         var (tabStripMock, stripElement) = builder.BuildWithElement();
-        const string draggedItem = "ItemA";
+        var draggedItem = builder.GetItem(0)!;
 
         // Update mapper to use the visual element
         this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);

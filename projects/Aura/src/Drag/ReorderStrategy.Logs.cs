@@ -22,6 +22,17 @@ internal partial class ReorderStrategy
     private void LogCreated() => LogCreated(this.logger, nameof(ReorderStrategy));
 
     [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Cannot initiate a new drag when one is already ongoing for item '{Item}' in TabStrip '{TabStripName}'.")]
+    private static partial void LogDragOngoing(ILogger logger, string tabStripName, string item);
+
+    private void LogDragOngoing()
+    {
+        Debug.Assert(this.context is not null, "Context must be set during active drag");
+        LogDragOngoing(this.logger, this.context.TabStrip?.Name ?? "<unknown>", GetDraggedItemName(this.context));
+    }
+
+    [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Enter reorder mode at screen point ({ScreenPos})")]
     private static partial void LogEnterReorderMode(ILogger logger, SpatialPoint<PhysicalScreenSpace> screenPos);
@@ -33,11 +44,11 @@ internal partial class ReorderStrategy
     [LoggerMessage(
         Level = LogLevel.Debug,
         Message = "Drop item '{item}' in reorder mode: dragIndex={DragIndex}, dropIndex={DropIndex}")]
-    private static partial void LogDrop(ILogger logger, string item, int dragIndex, int dropIndex);
+    private static partial void LogDragCompletedWithDrop(ILogger logger, string item, int dragIndex, int dropIndex);
 
     [Conditional("DEBUG")]
-    private void LogDrop(int dragIndex, int dropIndex)
-        => LogDrop(this.logger, GetDraggedItemName(this.context), dragIndex, dropIndex);
+    private void LogDragCompletedWithDrop(int dragIndex, int dropIndex)
+        => LogDragCompletedWithDrop(this.logger, GetDraggedItemName(this.context), dragIndex, dropIndex);
 
     [LoggerMessage(
         Level = LogLevel.Debug,
@@ -66,37 +77,10 @@ internal partial class ReorderStrategy
     private void LogIgnored(string what, string reason)
         => LogIgnored(this.logger, what, reason);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Item '{Item}' successfully dropped at final index {Index}")]
-    private static partial void LogDropSuccess(ILogger logger, string item, int index);
-
-    [Conditional("DEBUG")]
-    private void LogDropSuccess(int dropIndex)
-        => LogDropSuccess(this.logger, GetDraggedItemName(this.context), dropIndex);
-
     private static string GetDraggedItemName(DragContext? context) => context?.DraggedItemData.ToString() ?? "<null>";
 
     private sealed partial class ReorderLayout
     {
-        [LoggerMessage(
-            Level = LogLevel.Trace,
-            Message = "Dragged item '{Item}' translated to offset {Offset}.")]
-        private static partial void LogDraggedItemTranslated(ILogger logger, string item, double offset);
-
-        [Conditional("DEBUG")]
-        private void LogDraggedItemTranslated(double offset)
-            => LogDraggedItemTranslated(this.logger, GetDraggedItemName(this.context), offset);
-
-        [LoggerMessage(
-            Level = LogLevel.Trace,
-            Message = "Adjacent Item {ItemIndex} displaced {Direction} and is now at offset {NewOffset}")]
-        private static partial void LogAdjacentItemDisplaced(ILogger logger, int itemIndex, Direction direction, double newOffset);
-
-        [Conditional("DEBUG")]
-        private void LogAdjacentItemDisplaced(int itemIndex, Direction direction, double newOffset)
-            => LogAdjacentItemDisplaced(this.logger, itemIndex, direction, newOffset);
-
         [LoggerMessage(
             Level = LogLevel.Trace,
             Message = "Snapshot[{Index}]: ItemIndex={ItemIndex}, LayoutOrigin={LayoutOrigin}, Width={Width}")]
@@ -140,12 +124,30 @@ internal partial class ReorderStrategy
 
         [Conditional("DEBUG")]
         private void LogDragUpdateComplete(int steps)
-            => LogUpdateStep(this.logger, steps, this.currentHotspotX);
+            => LogUpdateStep(this.logger, steps, this.hotspotOffset);
 
         [LoggerMessage(
             Level = LogLevel.Trace,
             Message = "Overlap detected with closest item {ItemIndex}. Setting as new drop target.")]
         private static partial void LogOverlapDetected(ILogger logger, int itemIndex);
+
+        [LoggerMessage(
+            Level = LogLevel.Trace,
+            Message = "ResolveGapVisualIndex: GapLeft={GapLeft}, SlotOrigins={SlotOrigins}, ResolvedIndex={ResolvedIndex}")]
+        private static partial void LogResolveGapVisualIndex(ILogger logger, double gapLeft, string slotOrigins, int resolvedIndex);
+
+        [Conditional("DEBUG")]
+        private void LogResolveGapVisualIndex(double gapLeft, double[] slotOrigins, int resolvedIndex)
+            => LogResolveGapVisualIndex(this.logger, gapLeft, string.Join(',', slotOrigins), resolvedIndex);
+
+        [LoggerMessage(
+            Level = LogLevel.Debug,
+            Message = "ReorderLayout initialized: ItemCount={ItemCount}, DraggedContentId={DraggedContentId}, DraggedVisualIndex={DraggedVisualIndex}")]
+        private static partial void LogReorderLayoutInitialized(ILogger logger, int itemCount, string draggedContentId, int draggedVisualIndex);
+
+        [Conditional("DEBUG")]
+        private void LogReorderLayoutInitialized(int itemCount, string draggedContentId, int draggedVisualIndex)
+            => LogReorderLayoutInitialized(this.logger, itemCount, draggedContentId, draggedVisualIndex);
 
         [Conditional("DEBUG")]
         private void LogOverlapDetected(int itemIndex)

@@ -13,33 +13,124 @@ namespace DroidNet.Aura.Drag;
 /// </summary>
 internal partial class ReorderStrategy
 {
+    /// <summary>
+    ///     ReorderLayout implements a visual gap-sliding algorithm for tab reordering.
+    /// </summary>
+    /// <remarks>
+    ///     <para><strong>ALGORITHM OVERVIEW</strong></para>
+    ///     <para>
+    ///     This implementation follows a gap-sliding reordering algorithm. When a tab is grabbed, a logical gap is
+    ///     created at the dragged slot. The dragged item detaches and follows the pointer while the gap remains
+    ///     stationary until a neighbour is slid into it. This yields smooth visual feedback without changing logical
+    ///     indexes until a drop occurs.
+    ///     </para>
+    ///     <para><strong>CONTRACTS &amp; RULES</strong></para>
+    ///     <list type="bullet">
+    ///       <item>
+    ///         <para>
+    ///         Gap initialization: gapLeft and gapRight are set to the dragged item's left and right edges
+    ///         (ElementSpace). The gap width equals the dragged item's width and does not change during the drag.
+    ///         </para>
+    ///       </item>
+    ///       <item>
+    ///         <para>
+    ///         Dragged item motion: the dragged item follows the pointer and is clamped inside [MinLeft, MaxRight -
+    ///         draggedWidth]. The initial hotspot offset remains constant for the drag duration.
+    ///         </para>
+    ///       </item>
+    ///       <item>
+    ///         <para>
+    ///         Slide conditions: a neighbour is considered for sliding only when the dragged item overlaps it beyond
+    ///         DragThresholds.SwapThreshold and it lies in the drag direction.
+    ///         </para>
+    ///       </item>
+    ///       <item>
+    ///         <para>Slide operation (two-step):
+    ///         <list type="number">
+    ///           <item>
+    ///             Align the crossed item's appropriate edge to the current gap edge exactly (no spacing):
+    ///             <list type="bullet">
+    ///               <item>Dragging RIGHT: align crossed item's LEFT to gapLeft.</item>
+    ///               <item>Dragging LEFT: align crossed item's RIGHT to gapRight.</item>
+    ///             </list>
+    ///             After translation, set the crossed item's Offset and call ApplyTransformToItem.
+    ///           </item>
+    ///           <item>
+    ///             Compute the new gap slot using the crossed item's PRE-SLIDE bounds and the dragged item's width:
+    ///             <list type="bullet">
+    ///               <item>If crossed moved LEFT into gapLeft, newGapRight = target previous right edge.</item>
+    ///               <item>If crossed moved RIGHT into gapRight, newGapLeft = target previous left edge.</item>
+    ///             </list>
+    ///             Then set newGapLeft/newGapRight and continue.
+    ///           </item>
+    ///         </list>
+    ///         </para>
+    ///       </item>
+    ///       <item>
+    ///         <para>Only the crossed target is translated; other items keep their existing offsets.</para>
+    ///       </item>
+    ///       <item>
+    ///         <para>
+    ///         Gap index resolution: DraggedItemVisualIndex is computed from each item's current left edge
+    ///         (LayoutOrigin + Offset), not their original layout origins.
+    ///         </para>
+    ///       </item>
+    ///     </list>
+    ///     <para><strong>INVARIANTS</strong></para>
+    ///     <list type="number">
+    ///       <item>
+    ///         Exactly one gap exists and its width equals the dragged item's width for the duration of the drag.
+    ///       </item>
+    ///       <item>
+    ///         The dragged item always stays aligned under the pointer using the initial hotspot offset.
+    ///       </item>
+    ///       <item>
+    ///         No two non-dragged items overlap: slide translations align edges exactly with the gap edge.
+    ///       </item>
+    ///       <item>
+    ///         Slides only occur in the direction of drag; lastSlidTargetId and lastSlideDirection prevent redundant
+    ///         re-sliding.
+    ///       </item>
+    ///     </list>
+    ///     <para>
+    ///     Coordinates are ElementSpace; ApplyTransformToItem accepts logical offsets in ElementSpace.
+    ///     </para>
+    /// </remarks>
     private sealed partial class ReorderLayout
     {
-        private const double HotspotTolerance = 0.5;
-
         private readonly DragContext context;
         private readonly ILogger logger;
         private readonly List<TabStripItemSnapshot> items;
         private readonly double itemSpacing;
         private readonly double draggedItemWidth;
-        private readonly double itemDisplacement;
 
-        private double currentHotspotX;
-        private int dropTargetItemIndex = -1;
+        // This represents the amount of offset from the left edge of the dragged item to current
+        // pointer position. It is provided at initialization via the DragContext.HotspotOffsets.X
+        // and theoretically remains constant throughout the drag.
+        private readonly double hotspotOffset;
+
+        private double gapLeft;
+
+        private double gapRight;
+
+        private int dropTargetItemIndex;
+
+        private Guid? lastSlidTargetId;
+
+        private Direction? lastSlideDirection;
 
         public ReorderLayout(DragContext context, SpatialPoint<ElementSpace> pointerPosition, ILogger logger)
         {
             Debug.Assert(context is { TabStrip: { } }, message: "Context must be set to take snapshot");
             Debug.Assert(context.HotspotOffsets.X >= 0, $"Grab offset must be non-negative: grabOffsetX={context.HotspotOffsets.X}");
-            Debug.Assert(context.DraggedItemIndex >= 0, "Dragged item index must be non-negative");
 
             this.context = context;
             this.logger = logger;
-            this.currentHotspotX = pointerPosition.Point.X;
             this.items = [.. context.TabStrip.TakeSnapshot()];
             Debug.Assert(this.items.Count > 0, "TabStrip must have at least one item");
 
-            Debug.WriteLine($"[ReorderLayout] Initialized: itemCount={this.items.Count}, draggedIndex={context.DraggedItemIndex}, draggedVisualIndex={this.DraggedItemVisualIndex}");
+            var draggedTabItem = context.DraggedItemData;
+            this.LogReorderLayoutInitialized(this.items.Count, draggedTabItem.ContentId.ToString(), this.DraggedItemVisualIndex);
 
             // Scan the items to find min and max positions, the dragged item visual index and to log.
             // Items are already sorted by LayoutOrigin.X
@@ -48,13 +139,14 @@ internal partial class ReorderStrategy
                 var item = this.items[i];
                 this.LogSnapshot(i, item);
 
-                if (item.ItemIndex == context.DraggedItemIndex)
+                if (item.ContentId == draggedTabItem.ContentId)
                 {
                     this.DraggedItemVisualIndex = i;
                     this.DraggedItemSnapshot = item;
                     this.dropTargetItemIndex = item.ItemIndex;
                     this.draggedItemWidth = item.Width;
-                    this.LogDraggedItemFound(i, context.HotspotOffsets.X);
+                    this.hotspotOffset = context.HotspotOffsets.X;
+                    this.LogDraggedItemFound(i, this.hotspotOffset);
                 }
 
                 if (i == 0)
@@ -78,13 +170,13 @@ internal partial class ReorderStrategy
                 Debug.Assert(item.LayoutOrigin.Point.X >= this.MinLeft, "Items must be sorted by LayoutOrigin.X");
             }
 
-            this.itemDisplacement = this.draggedItemWidth + this.itemSpacing;
-
             Debug.Assert(this.DraggedItemVisualIndex >= 0, "Dragged item must be found in TabStrip items");
             Debug.Assert(this.DraggedItemVisualIndex < this.items.Count, "Dragged item visual index must be within bounds");
             Debug.Assert(this.DraggedItemSnapshot is not null, "Dragged item snapshot must be set");
-            Debug.Assert(this.itemSpacing >= 0, "Item spacing must be non-negative");
+            Debug.Assert(this.items.Count == 1 || this.itemSpacing >= 0, "Item spacing must be non-negative when multiple items exist");
             Debug.Assert(this.MinLeft < this.MaxRight, "Strip must have positive width");
+
+            this.InitializeGapTracking();
 
             // Detach the dragged item and position it properly under the pointer
             this.DetachDraggedItem(pointerPosition.Point.X);
@@ -92,7 +184,7 @@ internal partial class ReorderStrategy
 
         public IReadOnlyList<TabStripItemSnapshot> Items => this.items.AsReadOnly();
 
-        private int DraggedItemVisualIndex { get; }
+        private int DraggedItemVisualIndex { get; set; }
 
         private TabStripItemSnapshot DraggedItemSnapshot { get; }
 
@@ -104,8 +196,8 @@ internal partial class ReorderStrategy
 
         private double MaxRight { get; }
 
-        public (int dragIndex, int dropIndex) GetCommittedIndices()
-            => (this.DraggedItemSnapshot.ItemIndex, this.dropTargetItemIndex);
+        public int GetCommittedDropIndex()
+            => this.dropTargetItemIndex;
 
         public void UpdateDrag(SpatialPoint<ElementSpace> pointerPosition)
         {
@@ -113,22 +205,18 @@ internal partial class ReorderStrategy
 
             this.AssertInvariants();
 
-            if (pointerPosition.Point.X == this.currentHotspotX)
-            {
-                return;
-            }
-
-            var movementDirection = pointerPosition.Point.X > this.currentHotspotX ? Direction.Right : Direction.Left;
+            var desiredLeftEdge = pointerPosition.Point.X - this.hotspotOffset;
+            var movementDirection = desiredLeftEdge > this.DraggedItemLeftEdge ? Direction.Right : Direction.Left;
 
             // At right edge: skip until pointer comes back to hotspot
-            if (this.DraggedItemRightEdge >= this.MaxRight && pointerPosition.Point.X > this.currentHotspotX)
+            if (this.DraggedItemRightEdge >= this.MaxRight && movementDirection == Direction.Right)
             {
                 this.LogDragUpdateSkipped(pointerPosition.Point.X, movementDirection);
                 return;
             }
 
             // At left edge: skip until pointer comes back to hotspot
-            if (this.DraggedItemLeftEdge <= this.MinLeft && pointerPosition.Point.X < this.currentHotspotX)
+            if (this.DraggedItemLeftEdge <= this.MinLeft && movementDirection == Direction.Left)
             {
                 this.LogDragUpdateSkipped(pointerPosition.Point.X, movementDirection);
                 return;
@@ -137,16 +225,53 @@ internal partial class ReorderStrategy
             this.ProcessDragSteps(pointerPosition, movementDirection);
         }
 
+        private static double GetItemLayoutOriginLeft(TabStripItemSnapshot item)
+            => item.LayoutOrigin.Point.X;
+
+        private static double GetItemLeft(TabStripItemSnapshot item)
+            => item.LayoutOrigin.Point.X + item.Offset;
+
+        private static double GetItemRight(TabStripItemSnapshot item)
+            => GetItemLeft(item) + item.Width;
+
+        private static double GetItemCenter(TabStripItemSnapshot item)
+            => GetItemLeft(item) + (item.Width / 2);
+
+        private int ResolveGapVisualIndexFromOrigins(double[] slotOrigins, double gapLeft)
+        {
+            const double PositionTolerance = 0.5;
+
+            // Use midpoint intervals between consecutive slot origins to map the gap to a slot.
+            // Example: for origins [x0, x1, x2], mid1 = (x0 + x1) / 2, mid2 = (x1 + x2) / 2.
+            // gapLeft <= mid1 => index 0, gapLeft <= mid2 => index 1, else index 2, etc.
+            for (var i = 0; i < slotOrigins.Length - 1; i++)
+            {
+                var mid = (slotOrigins[i] + slotOrigins[i + 1]) / 2.0;
+                if (gapLeft <= mid + PositionTolerance)
+                {
+                    var resolved = i;
+                    this.LogResolveGapVisualIndex(gapLeft, slotOrigins, resolved);
+                    return resolved;
+                }
+            }
+
+            // If the gap wasn't matched earlier, it's at or after the last slot => return last index explicitly.
+            var lastIndex = slotOrigins.Length - 1;
+            this.LogResolveGapVisualIndex(gapLeft, slotOrigins, lastIndex);
+            return lastIndex;
+        }
+
         private void ProcessDragSteps(SpatialPoint<ElementSpace> pointerPosition, Direction movementDirection)
         {
-            var pointerDelta = Math.Abs(pointerPosition.Point.X - this.currentHotspotX);
-            this.LogDragUpdate(this.currentHotspotX, pointerPosition.Point.X, pointerDelta, movementDirection);
+            var desiredLeftEdge = pointerPosition.Point.X - this.hotspotOffset;
+            var pointerDelta = Math.Abs(desiredLeftEdge - this.DraggedItemLeftEdge);
+            this.LogDragUpdate(this.hotspotOffset, pointerPosition.Point.X, pointerDelta, movementDirection);
 
             var step = 0;
-            while (pointerDelta != 0)
+            while (pointerDelta > 0.01)
             {
                 ++step;
-                var stepDelta = Math.Min(Math.Abs(pointerDelta), DragThresholds.SwapThreshold);
+                var stepDelta = Math.Min(pointerDelta, DragThresholds.SwapThreshold);
                 pointerDelta -= stepDelta;
 
                 var previousLeftEdge = this.DraggedItemLeftEdge;
@@ -156,7 +281,7 @@ internal partial class ReorderStrategy
                 this.AssertInvariants();
 
                 // If item is clamped and can't move, stop processing
-                if (actualDelta == 0)
+                if (actualDelta < 0.01)
                 {
                     break;
                 }
@@ -165,13 +290,9 @@ internal partial class ReorderStrategy
                 if (closest != null && this.CheckOverlapWithClosest(closest))
                 {
                     this.LogOverlapDetected(closest.ItemIndex);
-                    this.dropTargetItemIndex = closest.ItemIndex;
-                    var displacementDirection = movementDirection == Direction.Right ? Direction.Left : Direction.Right;
-                    this.TranslateAdjacentItem(closest, displacementDirection);
+                    this.SlideTargetIntoGap(closest, movementDirection);
                 }
             }
-
-            this.SyncCurrentHotspot();
 
             this.LogDragUpdateComplete(step);
             this.AssertInvariants();
@@ -181,29 +302,142 @@ internal partial class ReorderStrategy
         private void AssertInvariants()
         {
             // INVARIANT: Dragged item never leaves tabstrip bounds
-            Debug.Assert(this.DraggedItemLeftEdge >= this.MinLeft, "Dragged item left edge must be >= MinLeft");
-            Debug.Assert(this.DraggedItemRightEdge <= this.MaxRight, "Dragged item right edge must be <= MaxRight");
+            Debug.Assert(this.DraggedItemLeftEdge >= this.MinLeft - 0.01, "Dragged item left edge must be >= MinLeft");
+            Debug.Assert(this.DraggedItemRightEdge <= this.MaxRight + 0.01, "Dragged item right edge must be <= MaxRight");
+        }
 
-            // INVARIANT: currentHotspotX = DraggedItemLeftEdge + HotspotOffsets.X (within a few pixels of layout tolrerance
-            var expectedHotspotX = this.DraggedItemLeftEdge + this.context.HotspotOffsets.X;
-            Debug.Assert(
-                Math.Abs(this.currentHotspotX - expectedHotspotX) <= 3,
-                $"Hotspot invariant violated: currentHotspotX={this.currentHotspotX}, expected={expectedHotspotX}");
+        private void InitializeGapTracking()
+        {
+            this.gapLeft = this.DraggedItemSnapshot.LayoutOrigin.Point.X;
+
+            // Gap starts as the dragged item's occupied slot: left and right edges of
+            // the dragged item (no additional spacing). The gap is a logical slot
+            // where the dragged item would be inserted.
+            this.gapRight = this.gapLeft + this.draggedItemWidth;
+            this.DraggedItemVisualIndex = this.ResolveGapVisualIndex();
+            this.dropTargetItemIndex = this.items[this.DraggedItemVisualIndex].ItemIndex;
+            this.lastSlidTargetId = null;
+            this.lastSlideDirection = null;
+        }
+
+        private void SlideTargetIntoGap(TabStripItemSnapshot target, Direction movementDirection)
+        {
+            if (this.lastSlidTargetId == target.ContentId && this.lastSlideDirection == movementDirection)
+            {
+                return;
+            }
+
+            var targetVisualIndex = this.items.FindIndex(item => item.ContentId == target.ContentId);
+            if (targetVisualIndex < 0)
+            {
+                return;
+            }
+
+            // Save the current item bounds before translation.
+            var (alignedLeft, newGapLeft, newGapRight) = this.ComputeSlideAndNewGap(target, movementDirection);
+
+            var targetOffset = alignedLeft - GetItemLayoutOriginLeft(target);
+            if (Math.Abs(target.Offset - targetOffset) > 0.01)
+            {
+                target.Offset = targetOffset;
+                this.context.TabStrip!.ApplyTransformToItem(target.ContentId, targetOffset);
+            }
+
+            // After sliding the target we set the new gap based on the target's
+            // original slot (captured in the helper as newGapLeft/newGapRight).
+            this.gapLeft = newGapLeft;
+            this.gapRight = newGapRight;
+
+            this.DraggedItemVisualIndex = this.ResolveGapVisualIndex();
+            this.dropTargetItemIndex = this.items[this.DraggedItemVisualIndex].ItemIndex;
+
+            this.lastSlidTargetId = target.ContentId;
+            this.lastSlideDirection = movementDirection;
+        }
+
+        private (double alignedLeft, double newGapLeft, double newGapRight) ComputeSlideAndNewGap(TabStripItemSnapshot target, Direction movementDirection)
+        {
+            var targetLeft = GetItemLeft(target);
+            var targetRight = targetLeft + target.Width;
+
+            double alignedLeft;
+            double newGapLeft;
+            double newGapRight;
+
+            if (movementDirection == Direction.Right)
+            {
+                // Crossed item moves left: align its left edge with gapLeft.
+                alignedLeft = this.gapLeft;
+
+                // The previous slot is where the crossed item was; the new gap
+                // should be the area of that slot sized to draggedItemWidth.
+                newGapRight = targetRight;
+                newGapLeft = newGapRight - this.draggedItemWidth;
+            }
+            else
+            {
+                // Crossed item moves right: align its right edge with gapRight.
+                var alignedRight = this.gapRight;
+                alignedLeft = alignedRight - target.Width;
+                newGapLeft = targetLeft;
+                newGapRight = newGapLeft + this.draggedItemWidth;
+            }
+
+            return (alignedLeft, newGapLeft, newGapRight);
+        }
+
+        private int ResolveGapVisualIndex()
+        {
+            const double PositionTolerance = 0.5;
+
+            if (this.items.Count == 1)
+            {
+                return 0;
+            }
+
+            // Build array of original slot origins (layout origins). Unlike left edges which
+            // contain offsets applied by slides, layout origins remain stable and reflect the
+            // canonical slot positions we want to map the gap to. Resolving to the nearest
+            // layout origin avoids the bug where a morphed left edge (due to a slide) pulls
+            // the boundary calculation and yields the wrong index.
+            var slotOrigins = new double[this.items.Count];
+            for (var i = 0; i < this.items.Count; i++)
+            {
+                slotOrigins[i] = GetItemLayoutOriginLeft(this.items[i]);
+            }
+
+            // Special-case: if gap is before the first slot (or very close), return index 0.
+            if (this.gapLeft <= slotOrigins[0] + PositionTolerance)
+            {
+                return 0;
+            }
+
+            // If gap matches very closely an existing slot origin, return it immediately.
+            for (var i = 0; i < slotOrigins.Length; i++)
+            {
+                if (Math.Abs(this.gapLeft - slotOrigins[i]) <= PositionTolerance)
+                {
+                    return i;
+                }
+            }
+
+            return this.ResolveGapVisualIndexFromOrigins(slotOrigins, this.gapLeft);
         }
 
         private bool CheckOverlapWithClosest(TabStripItemSnapshot closest)
         {
-            var draggedItem = this.items[this.DraggedItemVisualIndex];
-            var draggedCenter = draggedItem.LayoutOrigin.Point.X + draggedItem.Offset + (draggedItem.Width / 2);
+            var draggedLeft = this.DraggedItemLeftEdge;
+            var draggedRight = this.DraggedItemRightEdge;
+            var draggedCenter = GetItemLeft(this.DraggedItemSnapshot) + (this.DraggedItemSnapshot.Width / 2);
 
-            var closestLeft = closest.LayoutOrigin.Point.X + closest.Offset;
-            var closestRight = closestLeft + closest.Width;
-            var closestCenter = closestLeft + (closest.Width / 2);
+            var closestLeft = GetItemLeft(closest);
+            var closestRight = GetItemRight(closest);
+            var closestCenter = GetItemCenter(closest);
 
             // Determine which edge to check based on relative position
             var overlap = closestCenter < draggedCenter
-                ? closestRight - this.DraggedItemLeftEdge // Closest is left, check left edge
-                : this.DraggedItemRightEdge - closestLeft; // Closest is right, check right edge
+                ? closestRight - draggedLeft // Closest is left, check left edge
+                : draggedRight - closestLeft; // Closest is right, check right edge
 
             return overlap > DragThresholds.SwapThreshold;
         }
@@ -217,12 +451,13 @@ internal partial class ReorderStrategy
 
             for (var i = 0; i < this.items.Count; i++)
             {
-                if (i == this.DraggedItemVisualIndex)
+                var item = this.items[i];
+
+                if (item.ContentId == this.DraggedItemSnapshot.ContentId)
                 {
                     continue;
                 }
 
-                var item = this.items[i];
                 var itemCenter = GetItemCenter(item);
 
                 // Filter by direction: only consider items in the direction of movement
@@ -247,67 +482,13 @@ internal partial class ReorderStrategy
 
             return closest;
 
-            static double GetItemCenter(TabStripItemSnapshot item)
-            {
-                return item.LayoutOrigin.Point.X + item.Offset + (item.Width / 2);
-            }
-        }
-
-        /// <summary>
-        ///     Translates the adjacent target item to make space for the dragged item.
-        /// </summary>
-        /// <param name="itemSnapshot">The snapshot of the adjacent item to translate.</param>
-        /// <param name="direction">The displacement direction.</param>
-        /// <remarks>
-        ///     Clamps adjacent-item offsets to at most ±(dragged width + spacing) and skips
-        ///     reapplying transforms when that limit is already reached. This prevents repeated
-        ///     offset accumulation if the UI lags behind pointer updates while still letting the
-        ///     offset return to zero (and resetting the drop target) when we move back across the
-        ///     item.
-        /// </remarks>
-        private void TranslateAdjacentItem(TabStripItemSnapshot itemSnapshot, Direction direction)
-        {
-            const double OffsetResetTolerance = 0.01;
-
-            // Compute the one-step displacement in the requested direction (dragged width + spacing).
-            var displacementStep = direction.Sign() * this.itemDisplacement;
-            var desiredOffset = itemSnapshot.Offset + displacementStep;
-
-            // Clamp to the expected bounds so multiple notifications cannot accumulate drift.
-            var clampedOffset = Math.Clamp(desiredOffset, -this.itemDisplacement, this.itemDisplacement);
-
-            // Avoid redundant work when the existing transform already matches the clamped value.
-            if (Math.Abs(clampedOffset - itemSnapshot.Offset) <= OffsetResetTolerance)
-            {
-                return;
-            }
-
-            // Snap near-zero values back to 0 so transforms settle cleanly.
-            // When the neighbour slides back home, restore the drop target to the dragged item.
-            itemSnapshot.Offset = Math.Abs(clampedOffset) <= OffsetResetTolerance ? 0 : clampedOffset;
-            if (itemSnapshot.Offset == 0 && this.dropTargetItemIndex == itemSnapshot.ItemIndex)
-            {
-                this.dropTargetItemIndex = this.DraggedItemSnapshot.ItemIndex;
-            }
-
-            try
-            {
-                this.context.TabStrip!.ApplyTransformToItem(itemSnapshot.ItemIndex, itemSnapshot.Offset);
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ReorderLayout] ApplyTransformToItem failed for index={itemSnapshot.ItemIndex}, offset={itemSnapshot.Offset}: {ex}");
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-
-            this.LogAdjacentItemDisplaced(itemSnapshot.ItemIndex, direction, itemSnapshot.Offset);
+            // Uses class-level GetItemCenter helper
         }
 
         private void DetachDraggedItem(double pointerX)
         {
-            var initialDraggedItemDisplacement = pointerX - this.context.HotspotOffsets.X - this.DraggedItemSnapshot.LayoutOrigin.Point.X;
-            var direction = initialDraggedItemDisplacement > 0 ? Direction.Right : Direction.Left;
+            var initialDraggedItemDisplacement = pointerX - this.hotspotOffset - this.DraggedItemSnapshot.LayoutOrigin.Point.X;
+            var direction = initialDraggedItemDisplacement >= 0 ? Direction.Right : Direction.Left;
             this.TranslateDraggedItem(Math.Abs(initialDraggedItemDisplacement), direction);
         }
 
@@ -322,7 +503,7 @@ internal partial class ReorderStrategy
             const double MovementTolerance = 0.001;
 
             Debug.Assert(delta >= 0, "Delta must be non-negative");
-            if (delta == 0)
+            if (delta < MovementTolerance)
             {
                 return;
             }
@@ -331,33 +512,13 @@ internal partial class ReorderStrategy
             var boundedLeftEdge = Math.Clamp(desiredLeftEdge, this.MinLeft, this.MaxRight - this.DraggedItemSnapshot.Width);
 
             var adjustedDelta = boundedLeftEdge - this.DraggedItemLeftEdge;
-            if (Math.Abs(adjustedDelta) <= MovementTolerance)
+            if (Math.Abs(adjustedDelta) < MovementTolerance && Math.Abs(delta) > 0)
             {
-                // When reentering reorder mode after dropping into empty strip space, the dragged
-                // item clamps at the strip edge, preventing hotspot realignment and tripping the
-                // ReorderLayout invariant. Keep currentHotspotX consistent even if the pointer is
-                // far outside the realized tab.
-                this.SyncCurrentHotspot();
                 return;
             }
 
             this.DraggedItemSnapshot.Offset += adjustedDelta;
-            try
-            {
-                this.context.TabStrip!.ApplyTransformToItem(this.DraggedItemSnapshot.ItemIndex, this.DraggedItemSnapshot.Offset);
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[ReorderLayout] ApplyTransformToItem (dragged) failed for index={this.DraggedItemSnapshot.ItemIndex}, offset={this.DraggedItemSnapshot.Offset}: {ex}");
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-
-            this.LogDraggedItemTranslated(this.DraggedItemSnapshot.Offset);
-            this.SyncCurrentHotspot();
+            this.context.TabStrip!.ApplyTransformToItem(this.DraggedItemSnapshot.ContentId, this.DraggedItemSnapshot.Offset);
         }
-
-        private void SyncCurrentHotspot()
-            => this.currentHotspotX = this.DraggedItemLeftEdge + this.context.HotspotOffsets.X;
     }
 }

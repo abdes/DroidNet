@@ -191,7 +191,7 @@ public partial class TabDragCoordinator
         }
 
         var stripName = hitStrip?.GetType().Name ?? "None";
-        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, context.DraggedItemIndex);
+        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, this.GetDraggedItemIndex(context));
     }
 
     [LoggerMessage(
@@ -363,4 +363,200 @@ public partial class TabDragCoordinator
         double bottom,
         double threshold,
         bool isWithin);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tear-out start: item='{DraggedItem}', index={DraggedItemIndex}, strip='{StripName}'")]
+    private static partial void LogTearOutStart(ILogger logger, string DraggedItem, int DraggedItemIndex, string StripName);
+
+    private void LogTearOutStart(string draggedItem, int draggedItemIndex, string stripName)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutStart(logger, draggedItem, draggedItemIndex, stripName);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tear-out CloseTab issued for item='{DraggedItem}'")]
+    private static partial void LogTearOutCloseTab(ILogger logger, string DraggedItem);
+
+    private void LogTearOutCloseTab(string draggedItem)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutCloseTab(logger, draggedItem);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tear-out RemoveItemAt({DraggedItemIndex}) succeeded")]
+    private static partial void LogTearOutRemoveItemSuccess(ILogger logger, int DraggedItemIndex);
+
+    private void LogTearOutRemoveItemSuccess(int draggedItemIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutRemoveItemSuccess(logger, draggedItemIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tear-out RemoveItemAt skipped because index {DraggedItemIndex} is out of range")]
+    private static partial void LogTearOutRemoveItemSkipped(ILogger logger, int DraggedItemIndex);
+
+    private void LogTearOutRemoveItemSkipped(int draggedItemIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutRemoveItemSkipped(logger, draggedItemIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Tear-out failed")]
+    private static partial void LogTearOutFailed(ILogger logger, Exception Exception);
+
+    private void LogTearOutFailed(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutFailed(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tear-out context reset for item='{DraggedItem}'")]
+    private static partial void LogTearOutContextReset(ILogger logger, string DraggedItem);
+
+    private void LogTearOutContextReset(string draggedItem)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutContextReset(logger, draggedItem);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "AttachToStrip aborted: container has no DispatcherQueue.")]
+    private static partial void LogAttachToStripAborted(ILogger logger);
+
+    private void LogAttachToStripAborted()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogAttachToStripAborted(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "AttachToStrip failed to enqueue preparation on UI thread.")]
+    private static partial void LogAttachToStripEnqueueFailed(ILogger logger);
+
+    private void LogAttachToStripEnqueueFailed()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogAttachToStripEnqueueFailed(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "AttachToStrip cancelled during preparation.")]
+    private static partial void LogAttachToStripCancelled(ILogger logger);
+
+    private void LogAttachToStripCancelled()
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogAttachToStripCancelled(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "AttachToStrip failed")]
+    private static partial void LogAttachToStripFailed(ILogger logger, Exception? ex);
+
+    private void LogAttachToStripFailed(Exception? ex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogAttachToStripFailed(logger, ex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to enqueue asuync operations on DispatcherQueue while executing '{Operation}'.")]
+    private static partial void LogDispatcherEnqueueFailed(ILogger logger, string operation);
+
+    private void LogDispatcherEnqueueFailed(string operation)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDispatcherEnqueueFailed(logger, operation);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "AttachToStrip succeeded: strip='{StripName}', index={DropIndex}")]
+    private static partial void LogAttachToStripSucceeded(ILogger logger, string StripName, int DropIndex);
+
+    private void LogAttachToStripSucceeded(string stripName, int dropIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogAttachToStripSucceeded(logger, stripName, dropIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Detaching pending attachment from strip='{StripName}', index={DraggedItemIndex}")]
+    private static partial void LogDetachPendingAttachment(ILogger logger, string StripName, int? DraggedItemIndex);
+
+    private void LogDetachPendingAttachment(string stripName, int? draggedItemIndex)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDetachPendingAttachment(logger, stripName, draggedItemIndex);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Cancelled pending insert for ContentId={ContentId}")]
+    private static partial void LogCancelledPendingInsert(ILogger logger, Guid ContentId);
+
+    private void LogCancelledPendingInsert(Guid contentId)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogCancelledPendingInsert(logger, contentId);
+        }
+    }
 }

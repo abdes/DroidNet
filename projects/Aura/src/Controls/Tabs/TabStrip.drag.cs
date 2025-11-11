@@ -17,7 +17,7 @@ namespace DroidNet.Aura.Controls;
 /// </summary>
 public partial class TabStrip
 {
-    private SpatialPoint<ScreenSpace> dragStartPoint; // Pointer position at initial press
+    private SpatialPoint<ElementSpace> dragStartPoint; // Pointer position at initial press
     private TabStripItem? draggedItem; // Item being considered for drag
     private Point? hotspotOffsets; // Offset from pointer to top-left of dragged item at press time
 
@@ -27,7 +27,7 @@ public partial class TabStrip
     /// </summary>
     /// <seealso cref="DragThreshold"/>
     /// <seealso cref="InitiateDrag"/>
-    protected bool IsDragEngaged => this.DragCoordinator is null && this.draggedItem is not null;
+    protected bool IsDragEngaged => this.DragCoordinator is not null && this.draggedItem is not null;
 
     /// <summary>
     ///     Gets a value indicating whether a drag operation has been initiated, and is currently
@@ -115,26 +115,29 @@ public partial class TabStrip
     ///     Testable implementation of pointer pressed logic. Extracts position data
     ///     and performs drag detection initialization.
     /// </summary>
-    /// <param name="hitItem">The TabStripItem under the pointer, or null if none.</param>
+    /// <param name="hitItem">The TabStripItem under the pointer.</param>
     /// <param name="position">The pointer position relative to this control.</param>
+    /// <param name="hotspotOffsets">The offset from the pointer to the top-left of the dragged item at press time.</param>
     /// <remarks>
     ///     This method can be called directly in tests without requiring a Pointer object.
     /// </remarks>
-    protected virtual void HandlePointerPressed(TabStripItem? hitItem, SpatialPoint<ScreenSpace> position)
+    protected virtual void HandlePointerPressed(TabStripItem hitItem, SpatialPoint<ElementSpace> position, Point hotspotOffsets)
     {
-        if (hitItem != null)
-        {
-            // Enforce pinned tab constraint: pinned tabs cannot be dragged
-            if (hitItem.Item?.IsPinned == true)
-            {
-                this.LogPointerPressed(hitItem, position.Point);
-                return;
-            }
+        Debug.Assert(hitItem is not null, "hitItem must not be null in HandlePointerPressed");
 
-            this.draggedItem = hitItem;
-            this.dragStartPoint = position;
-            this.LogPointerPressed(hitItem, position.Point);
+        this.LogPointerPressed(hitItem, position, hotspotOffsets);
+
+        // Enforce pinned tab constraint: pinned tabs cannot be dragged
+        if (hitItem.Item?.IsPinned == true)
+        {
+            return;
         }
+
+        this.draggedItem = hitItem;
+
+        // Remember the drag start point and the hotspot offsets for use during drag initiation
+        this.hotspotOffsets = hotspotOffsets;
+        this.dragStartPoint = position;
     }
 
     /// <summary>
@@ -252,7 +255,7 @@ public partial class TabStrip
             // Session already active in another part of the process; restore state and log
             visualItem.IsDragging = false;
             this.SelectedItem = originalSelection;
-            this.LogInitiateDragFailed(ex);
+            this.LogTryCompleteDragFailed(tabItem.ContentId, ex);
         }
 
         this.IsDragOngoing = true;

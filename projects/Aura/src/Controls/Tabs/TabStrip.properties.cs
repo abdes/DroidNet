@@ -104,7 +104,7 @@ public partial class TabStrip
             nameof(SelectedIndex),
             typeof(int),
             typeof(TabStrip),
-            new PropertyMetadata(-1));
+            new PropertyMetadata(-1, OnSelectedIndexPropertyChanged));
 
     /// <summary>
     ///     Identifies the <see cref="ScrollOnWheel"/> dependency property.
@@ -243,6 +243,9 @@ public partial class TabStrip
         get => (ITabDragCoordinator?)this.GetValue(DragCoordinatorProperty);
         set => this.SetValue(DragCoordinatorProperty, value);
     }
+
+    private static void OnSelectedIndexPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        => ((TabStrip)d).OnSelectedIndexChanged((int)e.OldValue, (int)e.NewValue);
 
     private static void OnTabWidthPolicyPropertyChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         => ((TabStrip)d).OnTabWidthPolicyChanged((TabWidthPolicy)e.NewValue);

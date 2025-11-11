@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Aura.Controls;
 using DroidNet.Coordinates;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -18,8 +19,11 @@ namespace DroidNet.Aura.Drag.Tests;
 [ExcludeFromCodeCoverage]
 internal sealed partial class TabStripMockBuilder
 {
+    private readonly List<TabStripItemSnapshot> snapshots = [];
+    private readonly List<TabItem> items = [];
+
     private string name = "MockTabStrip";
-    private IReadOnlyList<TabStripItemSnapshot>? snapshots;
+
     private Func<SpatialPoint<ElementSpace>, bool>? hitTestFunc;
     private Func<SpatialPoint<ElementSpace>, double, bool>? hitTestThresholdFunc;
     private Rect? bounds;
@@ -42,7 +46,10 @@ internal sealed partial class TabStripMockBuilder
     /// <returns>This builder for fluent chaining.</returns>
     public TabStripMockBuilder WithSnapshots(IReadOnlyList<TabStripItemSnapshot> value)
     {
-        this.snapshots = value;
+        // store a mutable copy of the provided snapshots; items are not created here
+        this.snapshots.Clear();
+        this.snapshots.AddRange(value);
+        this.items.Clear();
         return this;
     }
 
@@ -102,26 +109,43 @@ internal sealed partial class TabStripMockBuilder
     }
 
     /// <summary>
-    /// Configures a single-item snapshot for the dragged item at the specified index.
+    /// Adds a single-item snapshot and creates a backing <see cref="TabItem"/> for it.
+    /// Can be called multiple times to add several snapshots/items.
     /// </summary>
-    /// <param name="draggedItemIndex">The index of the dragged item.</param>
+    /// <param name="itemIndex">The index of the item in the strip.</param>
+    /// <param name="header">The header text for the created TabItem (default: "TestTab").</param>
     /// <param name="layoutOrigin">The layout origin (default: 0,0).</param>
     /// <param name="width">The item width (default: 120).</param>
     /// <returns>This builder for fluent chaining.</returns>
-    public TabStripMockBuilder WithDraggedItemSnapshot(int draggedItemIndex, Point? layoutOrigin = null, double width = 120)
+    public TabStripMockBuilder WithItemSnapshot(int itemIndex, string header = "TestTab", Point? layoutOrigin = null, double width = 120)
     {
+        var item = new TabItem { Header = header };
+
         var origin = layoutOrigin ?? new Point(0, 0);
-        this.snapshots = new List<TabStripItemSnapshot>
+
+        this.items.Add(item);
+        this.snapshots.Add(new TabStripItemSnapshot
         {
-            new()
-            {
-                ItemIndex = draggedItemIndex,
-                LayoutOrigin = new SpatialPoint<ElementSpace>(origin),
-                Width = width,
-            },
-        }.AsReadOnly();
+            ItemIndex = itemIndex,
+            ContentId = item.ContentId,
+            LayoutOrigin = new SpatialPoint<ElementSpace>(origin),
+            Width = width,
+        });
+
         return this;
     }
+
+    /// <summary>
+    /// Returns the configured <see cref="TabItem"/> at the given index.
+    /// Throws when no items were configured or the index is out of range.
+    /// </summary>
+    /// <param name="index">The zero-based index of the item to retrieve.</param>
+    public TabItem GetItem(int index) => this.items[index];
+
+    /// <summary>
+    /// Returns all configured items.
+    /// </summary>
+    public IReadOnlyList<TabItem> GetItems() => this.items.AsReadOnly();
 
     /// <summary>
     /// Builds the configured <see cref="Mock{ITabStrip}"/> instance.
@@ -135,6 +159,9 @@ internal sealed partial class TabStripMockBuilder
 
         // Setup name
         _ = mock.SetupGet(m => m.Name).Returns(this.name);
+
+        // Setup GetContainerElement to return a basic Border element
+        _ = mock.Setup(m => m.GetContainerElement()).Returns(new Border { Width = actualBounds.Width, Height = actualBounds.Height });
 
         // Setup unified threshold hit-test (interface now exposes HitTestWithThreshold which returns an index >=0 on hit)
         if (this.hitTestThresholdFunc != null)
@@ -162,17 +189,18 @@ internal sealed partial class TabStripMockBuilder
         }
 
         // Setup snapshots: return fresh copies on each call to avoid mutating caller-owned snapshot objects
-        if (this.snapshots != null)
+        if (this.snapshots.Count > 0)
         {
             _ = mock.Setup(m => m.TakeSnapshot()).Returns(() =>
-                this.snapshots.Select(s => new TabStripItemSnapshot
+                this.snapshots.ConvertAll(s => new TabStripItemSnapshot
                 {
                     ItemIndex = s.ItemIndex,
+                    ContentId = s.ContentId,
                     LayoutOrigin = s.LayoutOrigin,
                     Width = s.Width,
                     Offset = s.Offset,
                     Container = s.Container,
-                }).ToList().AsReadOnly());
+                }).AsReadOnly());
         }
         else
         {
@@ -184,11 +212,19 @@ internal sealed partial class TabStripMockBuilder
         _ = mock.Setup(m => m.CloseTab(It.IsAny<object>()));
         _ = mock.Setup(m => m.TearOutTab(It.IsAny<object>(), It.IsAny<SpatialPoint<ScreenSpace>>()));
         _ = mock.Setup(m => m.TryCompleteDrag(It.IsAny<object>(), It.IsAny<ITabStrip?>(), It.IsAny<int?>()));
-        _ = mock.Setup(m => m.ApplyTransformToItem(It.IsAny<int>(), It.IsAny<double>()));
+        _ = mock.Setup(m => m.ApplyTransformToItem(It.IsAny<Guid>(), It.IsAny<double>()));
         _ = mock.Setup(m => m.RemoveItemAt(It.IsAny<int>()));
         _ = mock.Setup(m => m.MoveItem(It.IsAny<int>(), It.IsAny<int>()));
         _ = mock.Setup(m => m.InsertItemAt(It.IsAny<int>(), It.IsAny<object>()));
         _ = mock.Setup(m => m.GetContainerForIndex(It.IsAny<int>())).Returns((FrameworkElement?)null);
+
+        // Setup IndexOf to return the item's ItemIndex (not visual index) based on matching ContentId
+        _ = mock.Setup(m => m.IndexOf(It.IsAny<IDragPayload>()))
+            .Returns<IDragPayload>(item =>
+            {
+                var snapshot = this.snapshots.FirstOrDefault(s => s.ContentId == item.ContentId);
+                return snapshot?.ItemIndex ?? -1;
+            });
 
         return mock;
     }
@@ -211,6 +247,8 @@ internal sealed partial class TabStripMockBuilder
         private readonly ITabStrip inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
         string ITabStrip.Name => this.inner.Name;
+
+        public FrameworkElement GetContainerElement() => this;
 
         public int HitTestWithThreshold(SpatialPoint<ElementSpace> elementPoint, double threshold)
             => this.inner.HitTestWithThreshold(elementPoint, threshold);
@@ -235,11 +273,13 @@ internal sealed partial class TabStripMockBuilder
 
         public FrameworkElement? GetContainerForIndex(int index) => this.inner.GetContainerForIndex(index);
 
-        public void ApplyTransformToItem(int itemIndex, double offsetX) => this.inner.ApplyTransformToItem(itemIndex, offsetX);
+        public void ApplyTransformToItem(Guid contentId, double offsetX) => this.inner.ApplyTransformToItem(contentId, offsetX);
 
         public void RemoveItemAt(int index) => this.inner.RemoveItemAt(index);
 
         public void MoveItem(int fromIndex, int toIndex) => this.inner.MoveItem(fromIndex, toIndex);
+
+        public int IndexOf(IDragPayload item) => this.inner.IndexOf(item);
 
         public void InsertItemAt(int index, object item) => this.inner.InsertItemAt(index, item);
 

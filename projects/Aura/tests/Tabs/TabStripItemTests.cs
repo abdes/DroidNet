@@ -4,8 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.WinUI;
+using DroidNet.TestHelpers;
 using DroidNet.Tests;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -15,7 +17,7 @@ namespace DroidNet.Aura.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("UITest")]
-public class TabStripItemTests : VisualUserInterfaceTests
+public partial class TabStripItemTests : VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; }
 
@@ -601,7 +603,33 @@ public class TabStripItemTests : VisualUserInterfaceTests
         _ = tabStripItem.Item.Should().Be(restored, "Item should be the restored instance");
     });
 
-    // TODO: add a test case that checks control will emit logs if provided with a logger factory
+    [TestMethod]
+    public Task EmitsLogs_WhenLoggerFactoryProvided_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange - create a logger factory that captures messages
+        using var provider = new TestLoggerProvider();
+        using var factory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => builder.AddProvider(provider).SetMinimumLevel(LogLevel.Trace));
+
+        // Create the testable control and assign the logger factory BEFORE loading the template
+        var testable = new TestableTabStripItem
+        {
+            Item = new TabItem { Header = "Logging Tab" },
+            LoggerFactory = factory,
+        };
+
+        // Act - load the control (template application should emit logs)
+        var (tabStripItem, _) = await SetupTabStripItemWithData(testable).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Trigger some actions that also produce logs
+        testable.OnPinClicked();
+        testable.OnCloseClicked();
+        testable.OnPointerEntered();
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - we should have captured at least one of the known log messages
+        _ = provider.Messages.Should().Contain(m => m.Contains("Applying template") || m.Contains("Close button clicked") || m.Contains("Pointer"));
+    });
 
     [TestMethod]
     public Task RecycledContainer_PinnedIconBinding_Rebinds_Async() => EnqueueAsync(async () =>

@@ -22,6 +22,7 @@
                 styling and control template as the original controls.
             -->
             <Style BasedOn="{StaticResource DefaultTabStripItemStyle}" TargetType="local:TestableTabStripItem" />
+            <Style BasedOn="{StaticResource DefaultTabStripStyle}" TargetType="local:TestableTabStrip" />
         </ResourceDictionary>
     </Application.Resources>
 </tests:VisualUserInterfaceTestsApp>

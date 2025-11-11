@@ -70,7 +70,7 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
         setup.DragService.Verify(
             s => s.StartSession(
                 It.Is<DragVisualDescriptor>(d => d.RequestedSize == new Size(300, 150)),
-                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, physicalInitial.Point)),
+                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, physicalInitial.Point, 0.1)),
                 It.IsAny<SpatialPoint<ScreenSpace>>()),
             Times.Once());
         setup.TabStrip.Verify(
@@ -135,7 +135,7 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
         setup.DragService.Verify(
             s => s.UpdatePosition(
                 setup.Token,
-                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, movedPhysical.Point))),
+                It.Is<SpatialPoint<PhysicalScreenSpace>>(p => AreClose(p.Point, movedPhysical.Point, 0.1))),
             Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
@@ -202,7 +202,7 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
     /// <summary>
     /// Checks if two points are close enough (within tolerance).
     /// </summary>
-    private static bool AreClose(Point left, Point right, double tolerance = 0.1)
+    private static bool AreClose(Point left, Point right, double tolerance)
         => Math.Abs(left.X - right.X) < tolerance && Math.Abs(left.Y - right.Y) < tolerance;
 
     private static TabItem CreateTabItem(string header) => new() { Header = header };
@@ -245,8 +245,7 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
 
     private async Task<TearOutTestSetup> StartTearOutAsync(
         SpatialPoint<ScreenSpace>? initialPoint = null,
-        IReadOnlyList<SpatialPoint<PhysicalScreenSpace>>? physicalResponses = null,
-        int draggedIndex = 0)
+        IReadOnlyList<SpatialPoint<PhysicalScreenSpace>>? physicalResponses = null)
     {
         // If initialPoint not provided, use element coords and convert to screen
         var screenPoint = initialPoint ?? this.ToScreen(320, 200);
@@ -282,7 +281,6 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
         var context = new DragContext(
             tabStrip.Object,
             CreateTabItem("Dragged"),
-            draggedIndex,
             new Point(0, 0),
             visualElement,
             visualElement,

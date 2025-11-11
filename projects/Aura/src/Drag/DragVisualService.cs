@@ -45,12 +45,16 @@ public partial class DragVisualService : IDragVisualService
     private SpatialPoint<ScreenSpace> windowPositionOffsets;
     private bool windowIsShown;
     private SpatialPoint<PhysicalScreenSpace> lastPointerPosition;
-    private bool disposed;
+    private bool isDisposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DragVisualService"/> class.
     /// </summary>
     /// <param name="hosting">The hosting context that exposes the UI dispatcher.</param>
+    /// <param name="rawMapperFactory">
+    ///     The factory delegate used to create an <see cref="ISpatialMapper"/> bound to the overlay HWND.
+    ///     This is required for correct overlay positioning and must not be null.
+    /// </param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     public DragVisualService(
         HostingContext hosting,
@@ -209,6 +213,73 @@ public partial class DragVisualService : IDragVisualService
         }
     }
 
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    ///     Dispose pattern implementation. Disposes managed resources when <paramref name="disposing"/> is true.
+    /// </summary>
+    /// <param name="disposing">True when called from Dispose(), false when called from a finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // dispose managed resources
+            lock (this.syncLock)
+            {
+                if (this.activeDescriptor is not null)
+                {
+                    this.activeDescriptor.PropertyChanged -= this.OnDescriptorPropertyChanged;
+                    this.activeDescriptor.HeaderBitmap = null;
+                    this.activeDescriptor.PreviewBitmap = null;
+                }
+
+                this.DestroyOverlayWindow();
+
+                this.windowIsShown = false;
+                this.activeDescriptor = null;
+                this.activeToken = null;
+                this.windowPositionOffsets = default;
+                this.lastPointerPosition = default;
+                this.spatial = null;
+            }
+        }
+
+        this.isDisposed = true;
+    }
+
+    private static NativeImage? CreateNativeImage(SoftwareBitmap? bitmap)
+    {
+        if (bitmap is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var normalized = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            var pixelCount = normalized.PixelWidth * normalized.PixelHeight * 4;
+            var pixels = new byte[pixelCount];
+            normalized.CopyToBuffer(pixels.AsBuffer());
+            return new NativeImage(pixels, normalized.PixelWidth, normalized.PixelHeight);
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception)
+        {
+            return null;
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
     private void AssertUIThread()
     {
         if (!this.dispatcherQueue.HasThreadAccess)
@@ -288,27 +359,6 @@ public partial class DragVisualService : IDragVisualService
         return (int)Math.Round(phys.X, MidpointRounding.AwayFromZero);
     }
 
-    private static NativeImage? CreateNativeImage(SoftwareBitmap? bitmap)
-    {
-        if (bitmap is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            using var normalized = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-            var pixelCount = normalized.PixelWidth * normalized.PixelHeight * 4;
-            var pixels = new byte[pixelCount];
-            normalized.CopyToBuffer(pixels.AsBuffer());
-            return new NativeImage(pixels, normalized.PixelWidth, normalized.PixelHeight);
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
-
     private void DestroyOverlayWindow()
     {
         if (this.overlayWindow is null)
@@ -323,57 +373,7 @@ public partial class DragVisualService : IDragVisualService
         this.spatial = null;
     }
 
-    private void ThrowIfDisposed()
-    {
-        if (this.disposed)
-        {
-            throw new ObjectDisposedException(nameof(DragVisualService));
-        }
-    }
-
-    /// <summary>
-    ///     Dispose pattern implementation. Disposes managed resources when <paramref name="disposing"/> is true.
-    /// </summary>
-    /// <param name="disposing">True when called from Dispose(), false when called from a finalizer.</param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            // dispose managed resources
-            lock (this.syncLock)
-            {
-                if (this.activeDescriptor is not null)
-                {
-                    this.activeDescriptor.PropertyChanged -= this.OnDescriptorPropertyChanged;
-                    this.activeDescriptor.HeaderBitmap = null;
-                    this.activeDescriptor.PreviewBitmap = null;
-                }
-
-                this.DestroyOverlayWindow();
-
-                this.windowIsShown = false;
-                this.activeDescriptor = null;
-                this.activeToken = null;
-                this.windowPositionOffsets = default;
-                this.lastPointerPosition = default;
-                this.spatial = null;
-            }
-        }
-
-        this.disposed = true;
-    }
-
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
-    }
+    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.isDisposed, nameof(DragVisualService));
 
     private void OnDescriptorPropertyChanged(object? sender, PropertyChangedEventArgs e) =>
         _ = this.dispatcherQueue.TryEnqueue(() =>
@@ -405,33 +405,32 @@ public partial class DragVisualService : IDragVisualService
 
     private readonly record struct NativeImage(byte[] Pixels, int Width, int Height);
 
-    private sealed class NativeDragOverlayWindow : IDisposable
+    private sealed partial class NativeDragOverlayWindow : IDisposable
     {
         private readonly DragVisualService owner;
-        private readonly nint hwnd;
         private PointInt32 currentPosition;
         private SizeInt32 currentSize;
-
-        internal nint Hwnd => this.hwnd;
 
         internal NativeDragOverlayWindow(DragVisualService owner)
         {
             this.owner = owner;
             NativeWindowClass.EnsureRegistered();
-            this.hwnd = this.CreateWindow();
+            this.Hwnd = this.CreateWindow();
             this.currentPosition = new PointInt32(0, 0);
             this.currentSize = new SizeInt32(1, 1);
             this.owner.LogLayeredWindowCreated();
         }
+
+        internal nint Hwnd { get; }
 
         internal PointInt32 CurrentPosition => this.currentPosition;
 
         public void Show()
         {
             const int ShowNoActivate = 4;
-            _ = NativeMethods.ShowWindow(this.hwnd, ShowNoActivate);
+            _ = NativeMethods.ShowWindow(this.Hwnd, ShowNoActivate);
             _ = NativeMethods.SetWindowPos(
-                this.hwnd,
+                this.Hwnd,
                 NativeMethods.HwndTopMost,
                 this.currentPosition.X,
                 this.currentPosition.Y,
@@ -444,7 +443,7 @@ public partial class DragVisualService : IDragVisualService
         {
             this.currentPosition = position;
             _ = NativeMethods.SetWindowPos(
-                this.hwnd,
+                this.Hwnd,
                 NativeMethods.HwndTopMost,
                 position.X,
                 position.Y,
@@ -467,7 +466,7 @@ public partial class DragVisualService : IDragVisualService
 
             this.currentSize = size;
             _ = NativeMethods.SetWindowPos(
-                this.hwnd,
+                this.Hwnd,
                 NativeMethods.HwndTopMost,
                 0,
                 0,
@@ -524,21 +523,39 @@ public partial class DragVisualService : IDragVisualService
             }
 
             using var gdi = new GdiBitmap(this.owner, surface);
-            gdi.Commit(this.hwnd, windowSize, this.currentPosition);
+            gdi.Commit(this.Hwnd, windowSize, this.currentPosition);
         }
 
         public void Dispose()
         {
-            if (this.hwnd != IntPtr.Zero)
+            if (this.Hwnd != IntPtr.Zero)
             {
-                _ = NativeMethods.DestroyWindow(this.hwnd);
+                _ = NativeMethods.DestroyWindow(this.Hwnd);
                 this.owner.LogLayeredWindowDestroyed();
             }
         }
 
+        private static Bitmap CreateBitmapFromNativeImage(NativeImage image)
+        {
+            var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppPArgb);
+            var rect = new Rectangle(0, 0, image.Width, image.Height);
+            var data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, bitmap.PixelFormat);
+
+            try
+            {
+                Marshal.Copy(image.Pixels, 0, data.Scan0, image.Pixels.Length);
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+
+            return bitmap;
+        }
+
         private nint CreateWindow()
         {
-            var exStyle = NativeMethods.WsExLayered | NativeMethods.WsExTransparent | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
+            const int exStyle = NativeMethods.WsExLayered | NativeMethods.WsExTransparent | NativeMethods.WsExToolWindow | NativeMethods.WsExNoActivate;
             var hwnd = NativeMethods.CreateWindowEx(
                 exStyle,
                 NativeWindowClass.ClassName,
@@ -563,25 +580,231 @@ public partial class DragVisualService : IDragVisualService
             return hwnd;
         }
 
-        private static Bitmap CreateBitmapFromNativeImage(NativeImage image)
+        private static class NativeWindowClass
         {
-            var bitmap = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppPArgb);
-            var rect = new Rectangle(0, 0, image.Width, image.Height);
-            var data = bitmap.LockBits(rect, ImageLockMode.WriteOnly, bitmap.PixelFormat);
+            internal const string ClassName = "DroidNet_Aura_DragOverlay";
 
-            try
+            private static readonly NativeMethods.WindowProcedure WindowProcedureDelegate = WindowProc;
+            private static readonly nint WindowProcedurePointer = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate);
+            private static ushort atom;
+
+            internal static nint ModuleHandle => NativeMethods.GetModuleHandle(moduleName: null);
+
+            internal static void EnsureRegistered()
             {
-                Marshal.Copy(image.Pixels, 0, data.Scan0, image.Pixels.Length);
-            }
-            finally
-            {
-                bitmap.UnlockBits(data);
+                if (atom != 0)
+                {
+                    return;
+                }
+
+                var wndClass = new NativeMethods.WndClassEx
+                {
+                    Size = (uint)Marshal.SizeOf<NativeMethods.WndClassEx>(),
+                    Style = 0,
+                    WindowProcedure = WindowProcedurePointer,
+                    ClassExtraBytes = 0,
+                    WindowExtraBytes = 0,
+                    InstanceHandle = ModuleHandle,
+                    CursorHandle = NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IdcArrow),
+                    BackgroundBrush = IntPtr.Zero,
+                    MenuName = IntPtr.Zero,
+                };
+
+                var classNameHandle = Marshal.StringToHGlobalUni(ClassName);
+                try
+                {
+                    wndClass.ClassName = classNameHandle;
+                    atom = NativeMethods.RegisterClassEx(ref wndClass);
+                }
+                finally
+                {
+                    if (classNameHandle != IntPtr.Zero)
+                    {
+                        Marshal.FreeHGlobal(classNameHandle);
+                    }
+                }
+
+                if (atom == 0)
+                {
+                    throw new InvalidOperationException("Failed to register drag overlay window class.");
+                }
             }
 
-            return bitmap;
+            private static nint WindowProc(nint hwnd, uint msg, nint wParam, nint lParam) =>
+                NativeMethods.DefWindowProc(hwnd, msg, wParam, lParam);
         }
 
-        private sealed class GdiBitmap : IDisposable
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1201:Elements should appear in the correct order", Justification = "better organization of native wrappers")]
+        private static partial class NativeMethods
+        {
+            internal const int WsPopup = unchecked((int)0x8000_0000);
+            internal const int WsExLayered = 0x0008_0000;
+            internal const int WsExTransparent = 0x0000_0020;
+            internal const int WsExToolWindow = 0x0000_0080;
+            internal const int WsExNoActivate = 0x0800_0000;
+
+            internal const uint SwpNoSize = 0x0001;
+            internal const uint SwpNoMove = 0x0002;
+            internal const uint SwpNoActivate = 0x0010;
+            internal const uint SwpShowWindow = 0x0040;
+            internal const uint SwpNoOwnerZOrder = 0x0200;
+
+            internal const uint UlwAlpha = 0x0000_0002;
+            internal const byte AcSrcOver = 0x00;
+            internal const byte AcSrcAlpha = 0x01;
+
+            internal const int MonitorDefaultToNearest = 0x0000_0002;
+
+            internal static readonly nint HwndTopMost = new(-1);
+            internal static readonly nint IdcArrow = new(32512);
+
+            private const string User32 = "user32.dll";
+            private const string Kernel32 = "kernel32.dll";
+            private const string Gdi32 = "gdi32.dll";
+
+            internal delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal readonly struct Point
+            {
+                internal readonly int X;
+                internal readonly int Y;
+
+                internal Point(int x, int y)
+                {
+                    this.X = x;
+                    this.Y = y;
+                }
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal readonly struct Size
+            {
+                internal readonly int Width;
+                internal readonly int Height;
+
+                internal Size(int width, int height)
+                {
+                    this.Width = width;
+                    this.Height = height;
+                }
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct WndClassEx
+            {
+                internal uint Size;
+                internal uint Style;
+                internal nint WindowProcedure;
+                internal int ClassExtraBytes;
+                internal int WindowExtraBytes;
+                internal nint InstanceHandle;
+                internal nint IconHandle;
+                internal nint CursorHandle;
+                internal nint BackgroundBrush;
+                internal nint MenuName;
+                internal nint ClassName;
+                internal nint SmallIconHandle;
+            }
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct BlendFunction
+            {
+                internal byte BlendOp;
+                internal byte BlendFlags;
+                internal byte SourceConstantAlpha;
+                internal byte AlphaFormat;
+            }
+
+            [LibraryImport(User32, SetLastError = true, EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "SYSLIB1051:Types used with LibraryImport must be blittable", Justification = "Struct is manually marshalled and uses raw pointers for strings.")]
+            internal static partial nint CreateWindowEx(
+                int extendedStyle,
+                string className,
+                string? windowName,
+                int style,
+                int x,
+                int y,
+                int width,
+                int height,
+                nint parentHandle,
+                nint menuHandle,
+                nint instanceHandle,
+                nint param);
+
+            [LibraryImport(User32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool DestroyWindow(nint windowHandle);
+
+            [LibraryImport(User32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool ShowWindow(nint windowHandle, int commandShow);
+
+            [LibraryImport(User32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool SetWindowPos(
+                nint windowHandle,
+                nint insertAfter,
+                int x,
+                int y,
+                int width,
+                int height,
+                uint flags);
+
+            [LibraryImport(User32, SetLastError = true, EntryPoint = "RegisterClassExW")]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static unsafe partial ushort RegisterClassEx(ref WndClassEx classEx);
+
+            [LibraryImport(User32, EntryPoint = "DefWindowProcW")]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
+
+            [LibraryImport(User32, EntryPoint = "LoadCursorW")]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static partial nint LoadCursor(nint instanceHandle, nint cursorName);
+
+            [LibraryImport(Kernel32, EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static partial nint GetModuleHandle(string? moduleName);
+
+            [LibraryImport(Gdi32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static partial nint CreateCompatibleDC(nint hdc);
+
+            [LibraryImport(Gdi32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool DeleteDC(nint hdc);
+
+            [LibraryImport(Gdi32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            internal static partial nint SelectObject(nint hdc, nint handle);
+
+            [LibraryImport(Gdi32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool DeleteObject(nint handle);
+
+            [LibraryImport(User32, SetLastError = true)]
+            [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static partial bool UpdateLayeredWindow(
+                nint windowHandle,
+                nint destinationDc,
+                ref Point destinationPoint,
+                ref Size windowSize,
+                nint sourceDc,
+                ref Point sourcePoint,
+                int colorKey,
+                ref BlendFunction blend,
+                uint flags);
+        }
+
+        private sealed partial class GdiBitmap : IDisposable
         {
             private readonly DragVisualService owner;
             private readonly nint hBitmap;
@@ -639,7 +862,7 @@ public partial class DragVisualService : IDragVisualService
                 }
                 finally
                 {
-                    NativeMethods.DeleteDC(memoryDc);
+                    _ = NativeMethods.DeleteDC(memoryDc);
                 }
             }
 
@@ -651,227 +874,5 @@ public partial class DragVisualService : IDragVisualService
                 }
             }
         }
-
-        private static class NativeWindowClass
-        {
-            internal const string ClassName = "DroidNet_Aura_DragOverlay";
-            private static ushort atom;
-            private static readonly NativeMethods.WindowProcedure WindowProcedureDelegate = WindowProc;
-            private static readonly nint WindowProcedurePointer = Marshal.GetFunctionPointerForDelegate(WindowProcedureDelegate);
-
-            internal static nint ModuleHandle => NativeMethods.GetModuleHandle(null);
-
-            internal static void EnsureRegistered()
-            {
-                if (atom != 0)
-                {
-                    return;
-                }
-
-                var wndClass = new NativeMethods.WndClassEx
-                {
-                    Size = (uint)Marshal.SizeOf<NativeMethods.WndClassEx>(),
-                    Style = 0,
-                    WindowProcedure = WindowProcedurePointer,
-                    ClassExtraBytes = 0,
-                    WindowExtraBytes = 0,
-                    InstanceHandle = ModuleHandle,
-                    CursorHandle = NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IdcArrow),
-                    BackgroundBrush = IntPtr.Zero,
-                    MenuName = IntPtr.Zero,
-                };
-
-                var classNameHandle = Marshal.StringToHGlobalUni(ClassName);
-                try
-                {
-                    wndClass.ClassName = classNameHandle;
-                    atom = NativeMethods.RegisterClassEx(ref wndClass);
-                }
-                finally
-                {
-                    if (classNameHandle != IntPtr.Zero)
-                    {
-                        Marshal.FreeHGlobal(classNameHandle);
-                    }
-                }
-
-                if (atom == 0)
-                {
-                    throw new InvalidOperationException("Failed to register drag overlay window class.");
-                }
-            }
-
-            private static nint WindowProc(nint hwnd, uint msg, nint wParam, nint lParam) =>
-                NativeMethods.DefWindowProc(hwnd, msg, wParam, lParam);
-        }
-    }
-
-    private static partial class NativeMethods
-    {
-        private const string User32 = "user32.dll";
-        private const string Kernel32 = "kernel32.dll";
-        private const string Gdi32 = "gdi32.dll";
-
-        internal const int WsPopup = unchecked((int)0x8000_0000);
-        internal const int WsExLayered = 0x0008_0000;
-        internal const int WsExTransparent = 0x0000_0020;
-        internal const int WsExToolWindow = 0x0000_0080;
-        internal const int WsExNoActivate = 0x0800_0000;
-
-        internal const uint SwpNoSize = 0x0001;
-        internal const uint SwpNoMove = 0x0002;
-        internal const uint SwpNoActivate = 0x0010;
-        internal const uint SwpShowWindow = 0x0040;
-        internal const uint SwpNoOwnerZOrder = 0x0200;
-
-        internal const uint UlwAlpha = 0x0000_0002;
-        internal const byte AcSrcOver = 0x00;
-        internal const byte AcSrcAlpha = 0x01;
-
-        internal const int MonitorDefaultToNearest = 0x0000_0002;
-
-        internal static readonly nint HwndTopMost = new(-1);
-        internal static readonly nint IdcArrow = new(32512);
-
-        internal delegate nint WindowProcedure(nint windowHandle, uint message, nint wParam, nint lParam);
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal readonly struct Point
-        {
-            internal readonly int X;
-            internal readonly int Y;
-
-            internal Point(int x, int y)
-            {
-                this.X = x;
-                this.Y = y;
-            }
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal readonly struct Size
-        {
-            internal readonly int Width;
-            internal readonly int Height;
-
-            internal Size(int width, int height)
-            {
-                this.Width = width;
-                this.Height = height;
-            }
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct WndClassEx
-        {
-            internal uint Size;
-            internal uint Style;
-            internal nint WindowProcedure;
-            internal int ClassExtraBytes;
-            internal int WindowExtraBytes;
-            internal nint InstanceHandle;
-            internal nint IconHandle;
-            internal nint CursorHandle;
-            internal nint BackgroundBrush;
-            internal nint MenuName;
-            internal nint ClassName;
-            internal nint SmallIconHandle;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct BlendFunction
-        {
-            internal byte BlendOp;
-            internal byte BlendFlags;
-            internal byte SourceConstantAlpha;
-            internal byte AlphaFormat;
-        }
-
-        [LibraryImport(User32, SetLastError = true, EntryPoint = "CreateWindowExW", StringMarshalling = StringMarshalling.Utf16)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Interoperability", "SYSLIB1051:Types used with LibraryImport must be blittable", Justification = "Struct is manually marshalled and uses raw pointers for strings.")]
-        internal static partial nint CreateWindowEx(
-            int extendedStyle,
-            string className,
-            string? windowName,
-            int style,
-            int x,
-            int y,
-            int width,
-            int height,
-            nint parentHandle,
-            nint menuHandle,
-            nint instanceHandle,
-            nint param);
-
-        [LibraryImport(User32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DestroyWindow(nint windowHandle);
-
-        [LibraryImport(User32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool ShowWindow(nint windowHandle, int commandShow);
-
-        [LibraryImport(User32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool SetWindowPos(
-            nint windowHandle,
-            nint insertAfter,
-            int x,
-            int y,
-            int width,
-            int height,
-            uint flags);
-
-        [LibraryImport(User32, SetLastError = true, EntryPoint = "RegisterClassExW")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static unsafe partial ushort RegisterClassEx(ref WndClassEx classEx);
-
-        [LibraryImport(User32, EntryPoint = "DefWindowProcW")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial nint DefWindowProc(nint windowHandle, uint message, nint wParam, nint lParam);
-
-        [LibraryImport(User32, EntryPoint = "LoadCursorW")]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial nint LoadCursor(nint instanceHandle, nint cursorName);
-
-        [LibraryImport(Kernel32, EntryPoint = "GetModuleHandleW", StringMarshalling = StringMarshalling.Utf16)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial nint GetModuleHandle(string? moduleName);
-
-        [LibraryImport(Gdi32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial nint CreateCompatibleDC(nint hdc);
-
-        [LibraryImport(Gdi32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DeleteDC(nint hdc);
-
-        [LibraryImport(Gdi32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        internal static partial nint SelectObject(nint hdc, nint handle);
-
-        [LibraryImport(Gdi32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool DeleteObject(nint handle);
-
-        [LibraryImport(User32, SetLastError = true)]
-        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        internal static partial bool UpdateLayeredWindow(
-            nint windowHandle,
-            nint destinationDc,
-            ref Point destinationPoint,
-            ref Size windowSize,
-            nint sourceDc,
-            ref Point sourcePoint,
-            int colorKey,
-            ref BlendFunction blend,
-            uint flags);
     }
 }
