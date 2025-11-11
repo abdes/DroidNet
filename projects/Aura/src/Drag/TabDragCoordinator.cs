@@ -564,7 +564,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                         }
                         catch (Exception ex)
                         {
-                            this.logger.LogError(ex, "[TabDragCoordinator] Exception in enqueued OnDragPositionChanged");
+                            this.LogOnDragPositionChangedError(ex);
                         }
                     });
 
