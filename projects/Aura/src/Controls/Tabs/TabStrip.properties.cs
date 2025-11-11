@@ -240,7 +240,7 @@ public partial class TabStrip
     /// </summary>
     public ITabDragCoordinator? DragCoordinator
     {
-        get => (TabDragCoordinator?)this.GetValue(DragCoordinatorProperty);
+        get => (ITabDragCoordinator?)this.GetValue(DragCoordinatorProperty);
         set => this.SetValue(DragCoordinatorProperty, value);
     }
 
