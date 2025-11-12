@@ -143,13 +143,9 @@ public static partial class Program
                 .WithDecorationSettings()
                 .WithBackdropService()
                 .WithChromeService()
-                .WithThemeModeService())
+                .WithThemeModeService()
+                .WithDrag())
             .WithSpatialMapping();
-
-        // TODO: TEMPORARY: Register Drag and Drop services until integrated in Aura
-        container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
-        container.Register<TabDragCoordinator>(Reuse.Singleton);
-        container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
 
         /*
          * Configure the Application's Windows. Each window represents a target in which to open the

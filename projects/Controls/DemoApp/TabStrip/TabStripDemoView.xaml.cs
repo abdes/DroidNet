@@ -24,6 +24,7 @@ public sealed partial class TabStripDemoView : Page
     {
         this.InitializeComponent();
         this.Loaded += this.TabStripDemoView_Loaded;
+        this.Unloaded += this.TabStripDemoView_Unloaded;
     }
 
     /// <summary>
@@ -67,6 +68,18 @@ public sealed partial class TabStripDemoView : Page
 
         // Handle tab close requests
         this.DemoTabStrip.TabCloseRequested += this.DemoTabStrip_TabCloseRequested;
+
+        // Handle detaching and tear-out (create a new window for the tab)
+        this.DemoTabStrip.TabDetachRequested += this.DemoTabStrip_TabDetachRequested;
+        this.DemoTabStrip.TabTearOutRequested += this.DemoTabStrip_TabTearOutRequested;
+    }
+
+    private void TabStripDemoView_Unloaded(object? sender, RoutedEventArgs e)
+    {
+        // Unregister handlers to avoid duplicate subscriptions on repeated load/unload
+        this.DemoTabStrip.TabCloseRequested -= this.DemoTabStrip_TabCloseRequested;
+        this.DemoTabStrip.TabDetachRequested -= this.DemoTabStrip_TabDetachRequested;
+        this.DemoTabStrip.TabTearOutRequested -= this.DemoTabStrip_TabTearOutRequested;
     }
 
     private void DemoTabStrip_TabCloseRequested(object? sender, TabCloseRequestedEventArgs e)
@@ -74,7 +87,48 @@ public sealed partial class TabStripDemoView : Page
         _ = sender; // Unused
 
         // Remove the tab from the Items collection
-        this.DemoTabStrip.Items.Remove(e.Item);
+        _ = this.DemoTabStrip.Items.Remove(e.Item);
+    }
+
+    private void DemoTabStrip_TabDetachRequested(object? sender, TabDetachRequestedEventArgs e)
+    {
+        _ = sender; // Unused
+
+        if (e?.Item is null)
+        {
+            return;
+        }
+
+        // Detach should not create a new window in the demo; intentionally no-op.
+    }
+
+    private void DemoTabStrip_TabTearOutRequested(object? sender, TabTearOutRequestedEventArgs e)
+    {
+        _ = sender; // Unused
+
+        if (e is null || e.Item is null)
+        {
+            return;
+        }
+
+        // Remove the tab from this TabStrip
+        _ = this.DemoTabStrip.Items.Remove(e.Item);
+
+        // Create a new window with a small page showing the tab header for the demo
+        var headerText = e.Item.Header ?? "Torn Out Tab";
+        var page = new Page
+        {
+            Content = new Grid
+            {
+                Padding = new Thickness(8),
+                Children = { new TextBlock { Text = headerText, FontSize = 18 } },
+            },
+        };
+
+        var window = new Window { Content = page };
+
+        window.AppWindow.Resize(new Windows.Graphics.SizeInt32 { Width = 600, Height = 400 });
+        window.Activate();
     }
 
     private void AddTab_Click(object? sender, RoutedEventArgs e)

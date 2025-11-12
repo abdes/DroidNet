@@ -335,7 +335,7 @@ public sealed partial class PopupMenuHostTests : VisualUserInterfaceTests
 
             _ = context.Host.IsOpen.Should().BeFalse();
 
-            await WaitForRenderCompletionAsync().ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             var focusedElement = FocusManager.GetFocusedElement(context.Anchors[0].XamlRoot);
             _ = focusedElement.Should().Be(context.Anchors[0], "Keyboard dismissal should restore focus to the anchor");
@@ -427,8 +427,8 @@ public sealed partial class PopupMenuHostTests : VisualUserInterfaceTests
                 stackPanel.Children.Add(anchor);
             }
 
-            await PopupMenuHostTests.LoadTestContentAsync(stackPanel).ConfigureAwait(true);
-            await WaitForRenderCompletionAsync().ConfigureAwait(true);
+            await LoadTestContentAsync(stackPanel).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             return new PopupMenuHostTestContext(host, anchors);
         }

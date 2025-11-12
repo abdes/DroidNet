@@ -209,7 +209,7 @@ public sealed class ContextMenuTests : VisualUserInterfaceTests
     private static ICascadedMenuHost? GetMenuHost(UIElement element)
     {
         var property = (DependencyProperty)typeof(ContextMenu)
-            .GetField("MenuHostProperty", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
+            .GetField("MenuHostProperty", BindingFlags.NonPublic | BindingFlags.Static)!
             .GetValue(null)!;
         return (ICascadedMenuHost?)element.GetValue(property);
     }

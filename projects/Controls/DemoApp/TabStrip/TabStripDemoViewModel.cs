@@ -14,7 +14,7 @@ namespace DroidNet.Controls.Demo.TabStrip;
 ///     ViewModel for demonstrating the TabStrip control.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModels must be public")]
-public partial class TabStripDemoViewModel(TabDragCoordinator dragCoordinator, ILoggerFactory loggerFactory) : ObservableObject
+public partial class TabStripDemoViewModel(ITabDragCoordinator dragCoordinator, ILoggerFactory loggerFactory) : ObservableObject
 {
     [ObservableProperty]
     public partial string NewItemHeader { get; set; } = "New Tab";
@@ -51,7 +51,7 @@ public partial class TabStripDemoViewModel(TabDragCoordinator dragCoordinator, I
     /// <summary>
     ///     Gets the <see cref="TabDragCoordinator"/> used for managing tab drag operations.
     /// </summary>
-    internal TabDragCoordinator DragCoordinator { get; } = dragCoordinator;
+    internal ITabDragCoordinator DragCoordinator { get; } = dragCoordinator;
 
     partial void OnTabWidthPolicyNameChanged(string value)
     {

@@ -36,7 +36,7 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
         _ = harness.Host.ShowAt(harness.Anchors[0], MenuNavigationMode.PointerInput);
 
         await WaitForEventAsync(openedSignal.Task, "Flyout should open").ConfigureAwait(true);
-        await WaitForRenderCompletionAsync().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         _ = openingCount.Should().Be(1);
         _ = harness.Host.IsOpen.Should().BeTrue();
@@ -225,8 +225,8 @@ public sealed partial class FlyoutMenuHostTests : VisualUserInterfaceTests
                 stackPanel.Children.Add(anchor);
             }
 
-            await FlyoutMenuHostTests.LoadTestContentAsync(stackPanel).ConfigureAwait(true);
-            await WaitForRenderCompletionAsync().ConfigureAwait(true);
+            await LoadTestContentAsync(stackPanel).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
 
             var host = new FlyoutMenuHost { RootSurface = new StubRootSurface(menuSource.Items) };
             return new FlyoutMenuHostHarness(host, menuSource, anchors);
