@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.CommandLine;
-using System.CommandLine.Parsing;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config;
 using Microsoft.EntityFrameworkCore;
@@ -105,18 +104,21 @@ public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<Pers
     private static void ParseCommandLineArgs(string[] args, out bool useInMemoryDb, out string? mode, out string? dbPath)
     {
         // Define command-line options
-        var modeOption = new Option<string>(
-            "--mode",
-            description: "Specifies the mode for the PathFinder (dev or real).");
+        var modeOption = new Option<string>("--mode")
+        {
+            Description = "Specifies the mode for the PathFinder (dev or real).",
+        };
 
-        var useInMemoryDbOption = new Option<bool>(
-            "--use-in-memory-db",
-            getDefaultValue: () => false,
-            description: "Specifies whether to use an in-memory SQLite database.");
+        var useInMemoryDbOption = new Option<bool>("--use-in-memory-db")
+        {
+            Description = "Specifies whether to use an in-memory SQLite database.",
+            DefaultValueFactory = _ => false,
+        };
 
-        var dbPathOption = new Option<string?>(
-            "--db-path",
-            description: "Specifies an explicit path to the SQLite database file to use for design-time operations.");
+        var dbPathOption = new Option<string?>("--db-path")
+        {
+            Description = "Specifies an explicit path to the SQLite database file to use for design-time operations.",
+        };
 
         // Create a root command with the options
         var rootCommand = new RootCommand
@@ -130,9 +132,9 @@ public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<Pers
         var parseResult = rootCommand.Parse(args);
 
         // Get the actual values (not just whether the option was present)
-        useInMemoryDb = parseResult.GetValueForOption(useInMemoryDbOption);
-        mode = parseResult.GetValueForOption(modeOption);
-        dbPath = parseResult.GetValueForOption(dbPathOption);
+        useInMemoryDb = parseResult.GetValue(useInMemoryDbOption);
+        mode = parseResult.GetValue(modeOption);
+        dbPath = parseResult.GetValue(dbPathOption);
 
         // Only treat this as a conflict when the in-memory flag is true and another DB selection was provided.
         if (useInMemoryDb && (!string.IsNullOrEmpty(mode) || !string.IsNullOrEmpty(dbPath)))
