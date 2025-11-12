@@ -410,7 +410,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocOpenedAsync(e));
 
-        async Task OnDocOpenedAsync(DocumentOpenedEventArgs args)
+        Task OnDocOpenedAsync(DocumentOpenedEventArgs args)
         {
             Debug.WriteLine($"OnDocOpened: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}, ShouldSelect={args.ShouldSelect}");
             this.documents[args.Metadata.DocumentId] = args.Metadata;
@@ -424,6 +424,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 this.ActiveDocumentTitle = args.Metadata.Title;
                 this.ActiveDocumentIsDirty = args.Metadata.IsDirty;
             }
+
+            return Task.CompletedTask;
         }
     }
 
@@ -437,7 +439,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocMetadataChangedAsync(e));
 
-        async Task OnDocMetadataChangedAsync(DocumentMetadataChangedEventArgs args)
+        Task OnDocMetadataChangedAsync(DocumentMetadataChangedEventArgs args)
         {
             Debug.WriteLine($"OnDocMetadataChanged: DocId={args.NewMetadata.DocumentId}, Title='{args.NewMetadata.Title}', IsDirty={args.NewMetadata.IsDirty}, Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
 
@@ -448,6 +450,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 this.ActiveDocumentTitle = args.NewMetadata.Title;
                 this.ActiveDocumentIsDirty = args.NewMetadata.IsDirty;
             }
+
+            return Task.CompletedTask;
         }
     }
 
@@ -461,13 +465,13 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocActivatedAsync(e));
 
-        async Task OnDocActivatedAsync(DocumentActivatedEventArgs args)
+        Task OnDocActivatedAsync(DocumentActivatedEventArgs args)
         {
             Debug.WriteLine($"OnDocActivated: DocId={args.DocumentId}, Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
 
             if (!this.documents.TryGetValue(args.DocumentId, out var metadata))
             {
-                return;
+                return Task.CompletedTask;
             }
 
             if (args.Window is not null)
@@ -480,6 +484,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 this.ActiveDocumentTitle = metadata.Title;
                 this.ActiveDocumentIsDirty = metadata.IsDirty;
             }
+
+            return Task.CompletedTask;
         }
     }
 
