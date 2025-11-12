@@ -287,20 +287,6 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         _ = ds.DetachedIds.Should().Contain(id);
     });
 
-    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
-    {
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (!condition() && sw.Elapsed < timeout)
-        {
-            await Task.Delay(10).ConfigureAwait(false);
-        }
-
-        if (!condition())
-        {
-            throw new InvalidOperationException("Condition not met within timeout");
-        }
-    }
-
     [TestMethod]
     public Task DocumentClose_ServiceVeto_PreventsClose_Async() => EnqueueAsync(async () =>
     {
@@ -328,6 +314,20 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         _ = ds.ClosedIds.Should().NotContain(id);
         _ = tabStrip.Items.Should().HaveCount(1);
     });
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && sw.Elapsed < timeout)
+        {
+            await Task.Delay(10).ConfigureAwait(false);
+        }
+
+        if (!condition())
+        {
+            throw new InvalidOperationException("Condition not met within timeout");
+        }
+    }
 
     /// <summary>
     /// Helper to create a WindowContext for tests (avoids using the IWindowContextFactory dependency). This mirrors the minimal parts of the window context used by DocumentTabPresenter.
@@ -391,7 +391,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
                     Title = metadata.Title ?? string.Empty,
                     IconUri = metadata is { } ? metadata!.IconUri : null,
                     IsDirty = metadata is { } ? metadata!.IsDirty : false,
-                    IsPinnedHint = metadata is { } ? metadata!.IsPinnedHint : false,
+                    IsPinnedHint = metadata is { } && metadata!.IsPinnedHint,
                 };
             }
 
