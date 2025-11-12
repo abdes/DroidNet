@@ -76,7 +76,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.ItemData.IsChecked = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NoDecorationVisualState]);
@@ -121,7 +121,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Enable the item to trigger state change
         menuItem.ItemData!.IsEnabled = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NormalVisualState]);
@@ -139,7 +139,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Disable the item to trigger state change
         menuItem.ItemData!.IsEnabled = false;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.DisabledVisualState]);
@@ -164,7 +164,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Act - Disable the command to trigger visual state change
         canExecute = false;
         command.NotifyCanExecuteChanged();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - should be disabled because command cannot execute
         _ = menuItem.ItemData!.IsInteractive.Should().BeFalse("Item should not be interactive when command cannot execute");
@@ -173,7 +173,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Act - Enable the command
         canExecute = true;
         command.NotifyCanExecuteChanged();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - should now be in normal state
         _ = menuItem.ItemData!.IsInteractive.Should().BeTrue("Item should be interactive when command can execute");
@@ -182,7 +182,7 @@ public class MenuItemTests : VisualUserInterfaceTests
         // Act - Disable the command again
         canExecute = false;
         command.NotifyCanExecuteChanged();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - should return to disabled state
         _ = menuItem.ItemData!.IsInteractive.Should().BeFalse("Item should not be interactive when command is disabled again");
@@ -201,7 +201,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Change to separator to trigger state change
         menuItem.ItemData!.IsSeparator = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.SeparatorVisualState]);
@@ -220,7 +220,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Set icon to trigger state change
         menuItem.ItemData!.Icon = new SymbolIconSource { Symbol = Symbol.Save };
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.HasIconVisualState]);
@@ -239,7 +239,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Remove icon to trigger state change
         menuItem.ItemData!.Icon = null;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NoIconVisualState]);
@@ -257,7 +257,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Set accelerator text to trigger state change
         menuItem.ItemData!.AcceleratorText = "Ctrl+S";
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.HasAcceleratorVisualState]);
@@ -276,7 +276,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Remove accelerator text to trigger state change
         menuItem.ItemData!.AcceleratorText = null;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NoAcceleratorVisualState]);
@@ -295,7 +295,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Select the item to trigger state change
         menuItem.ItemData!.IsChecked = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.CheckedNoIconVisualState]);
@@ -315,7 +315,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Unselect the item to trigger state change
         menuItem.ItemData!.IsChecked = false;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NoDecorationVisualState]);
@@ -335,7 +335,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Select the item to trigger state change
         menuItem.ItemData!.IsChecked = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.CheckedWithIconVisualState]);
@@ -356,7 +356,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Unselect the item to trigger state change
         menuItem.ItemData!.IsChecked = false;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NoDecorationVisualState]);
@@ -378,7 +378,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = menuItem.ItemData.IsChecked.Should().Be(!initialState, "Checkable item should toggle its checked state");
@@ -417,14 +417,14 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Enable to trigger first state change
         menuItem.ItemData!.IsEnabled = true;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Verify the enabled state was captured
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.NormalVisualState]);
 
         // Act - Disable again to trigger second state change
         menuItem.ItemData!.IsEnabled = false;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - Visual state should update to disabled
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.DisabledVisualState]);
@@ -448,7 +448,7 @@ public class MenuItemTests : VisualUserInterfaceTests
             new() { Text = "Sub Item 2" },
         };
         menuItem.ItemData!.SubItems = subItems;
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Check visual state
         _ = vsm.GetCurrentStates(menuItem).Should().Contain([MenuItem.WithChildrenVisualState]);
@@ -494,7 +494,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Checkable item should toggle its checked state even without a command");
@@ -538,7 +538,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = menuItem.ItemData!.IsChecked.Should().BeTrue("Checked state should be handled");
@@ -569,7 +569,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act - Command is already disabled (canExecute = false)
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = commandExecuted.Should().BeFalse("Disabled command should not execute");
@@ -606,7 +606,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - CanExecute threw so command should not execute; Invoked should be raised with failure details
         _ = commandExecuted.Should().BeFalse("Command should not execute when CanExecute throws");
@@ -637,7 +637,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert - Execute threw, failure should be reported via Invoked args and checked state should not be toggled
         _ = invokedRaised.Should().BeTrue("Invoked should be raised even when the command fails");
@@ -687,7 +687,7 @@ public class MenuItemTests : VisualUserInterfaceTests
 
         // Act
         menuItem.InvokeTapped();
-        await WaitForRenderCompletion().ConfigureAwait(true);
+        await WaitForRenderAsync().ConfigureAwait(true);
 
         // Assert
         _ = menuItem.ItemData!.IsChecked.Should().BeFalse("Non-checkable item should not change checked state");
