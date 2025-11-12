@@ -125,26 +125,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     /// <param name="screenPoint">Screen coordinate where the drop occurred.</param>
     public async void EndDrag(SpatialPoint<ScreenSpace> screenPoint)
     {
-        DragContext? context;
-        ITabStrip? hitStrip;
-        bool isTearOutMode;
-
-        // Capture necessary state under lock, then release before awaiting UI operations.
-        lock (this.syncLock)
+        if (!this.TryCaptureEndDragState(screenPoint, out var context, out var hitStrip, out var isTearOutMode))
         {
-            if (!this.isActive || this.dragContext is null)
-            {
-                this.LogDragEndedIgnored();
-                return;
-            }
-
-            this.StopPollingTimer();
-
-            context = this.dragContext;
-            Debug.Assert(context is not null, "Drag context should not be null inside EndDrag");
-
-            hitStrip = this.GetHitTestTabStrip(screenPoint);
-            isTearOutMode = this.currentStrategy == this.tearOutStrategy;
+            return;
         }
 
         // If there's a hit strip and we're NOT in tear-out mode, prepare for drop. If we're in
@@ -165,27 +148,8 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         this.LogEndDragPreparation(isTearOutMode, hitStrip, fallbackDropIndex, context!);
 
-        // Re-enter critical section to complete the strategy and finalize outcome.
-        lock (this.syncLock)
-        {
-            // Complete the current strategy (strategy will handle the drop)
-            int? finalDropIndex = null;
-            if (this.currentStrategy is not null)
-            {
-                finalDropIndex = this.currentStrategy.CompleteDrag(drop: true);
-                this.LogStrategyCompletion(this.currentStrategy, finalDropIndex);
-            }
-
-            if (!finalDropIndex.HasValue && hitStrip is not null
-                && ReferenceEquals(context!.TabStrip, hitStrip) && fallbackDropIndex >= 0)
-            {
-                finalDropIndex = fallbackDropIndex;
-                this.LogFallbackIndex(fallbackDropIndex);
-            }
-
-            this.FinalizeDropOutcome(context!, isTearOutMode, hitStrip, finalDropIndex, screenPoint);
-            this.CleanupState();
-        }
+        // Complete and finalize the end-drag under lock.
+        this.CompleteEndDrag(context!, hitStrip, isTearOutMode, fallbackDropIndex, screenPoint);
     }
 
     /// <summary>
@@ -253,6 +217,56 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
     private static int GetDraggedItemIndex(DragContext context)
         => context.TabStrip is null ? -1 : context.TabStrip.IndexOf(context.DraggedItemData);
+
+    private bool TryCaptureEndDragState(SpatialPoint<ScreenSpace> screenPoint, out DragContext? context, out ITabStrip? hitStrip, out bool isTearOutMode)
+    {
+        context = null;
+        hitStrip = null;
+        isTearOutMode = false;
+
+        lock (this.syncLock)
+        {
+            if (!this.isActive || this.dragContext is null)
+            {
+                this.LogDragEndedIgnored();
+                return false;
+            }
+
+            this.StopPollingTimer();
+
+            context = this.dragContext;
+            Debug.Assert(context is not null, "Drag context should not be null inside EndDrag");
+
+            hitStrip = this.GetHitTestTabStrip(screenPoint);
+            isTearOutMode = this.currentStrategy == this.tearOutStrategy;
+        }
+
+        return true;
+    }
+
+    private void CompleteEndDrag(DragContext context, ITabStrip? hitStrip, bool isTearOutMode, int fallbackDropIndex, SpatialPoint<ScreenSpace> screenPoint)
+    {
+        lock (this.syncLock)
+        {
+            // Complete the current strategy (strategy will handle the drop)
+            int? finalDropIndex = null;
+            if (this.currentStrategy is not null)
+            {
+                finalDropIndex = this.currentStrategy.CompleteDrag(drop: true);
+                this.LogStrategyCompletion(this.currentStrategy, finalDropIndex);
+            }
+
+            if (!finalDropIndex.HasValue && hitStrip is not null
+                && ReferenceEquals(context.TabStrip, hitStrip) && fallbackDropIndex >= 0)
+            {
+                finalDropIndex = fallbackDropIndex;
+                this.LogFallbackIndex(fallbackDropIndex);
+            }
+
+            this.FinalizeDropOutcome(context, isTearOutMode, hitStrip, finalDropIndex, screenPoint);
+            this.CleanupState();
+        }
+    }
 
     private ISpatialMapper CreateSpatialMapper(FrameworkElement element)
     {
@@ -530,10 +544,21 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return;
         }
 
+        // Handle the actual moved logic (check mode transitions then update strategy)
+        await this.HandleCursorMovedAsync(newPosition, previousPosition).ConfigureAwait(true);
+    }
+
+    private async Task HandleCursorMovedAsync(SpatialPoint<PhysicalScreenSpace> newPosition, SpatialPoint<PhysicalScreenSpace> previousPosition)
+    {
         // Check for mode transitions based on cursor position (may await)
         await this.CheckAndHandleModeTransitions(newPosition).ConfigureAwait(true);
 
         // Delegate to current strategy (pass screen coordinates, strategy will convert)
+        this.DelegateToCurrentStrategy(newPosition, previousPosition);
+    }
+
+    private void DelegateToCurrentStrategy(SpatialPoint<PhysicalScreenSpace> newPosition, SpatialPoint<PhysicalScreenSpace> previousPosition)
+    {
         lock (this.syncLock)
         {
             if (this.dragContext is not null && this.currentStrategy is not null)
@@ -600,20 +625,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         if (this.currentStrategy == this.reorderStrategy)
         {
-            if (this.dragContext.TabStrip is not { } activeStrip)
-            {
-                this.SwitchToTearOutMode(cursor);
-                return;
-            }
-
-            var elementPoint = this.dragContext.SpatialMapper.ToElement(cursor);
-            var hitTest = activeStrip.HitTestWithThreshold(elementPoint, DragThresholds.TearOutThreshold);
-
-            if (hitTest < 0)
-            {
-                this.SwitchToTearOutMode(cursor);
-            }
-
+            await this.HandleReorderModeTransitions(cursor).ConfigureAwait(true);
             return;
         }
 
@@ -622,6 +634,35 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return;
         }
 
+        await this.HandleTearOutModeTransitions(cursor).ConfigureAwait(true);
+    }
+
+    private Task HandleReorderModeTransitions(SpatialPoint<PhysicalScreenSpace> cursor)
+    {
+        if (this.dragContext is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (this.dragContext.TabStrip is not { } activeStrip)
+        {
+            this.SwitchToTearOutMode(cursor);
+            return Task.CompletedTask;
+        }
+
+        var elementPoint = this.dragContext.SpatialMapper.ToElement(cursor);
+        var hitTest = activeStrip.HitTestWithThreshold(elementPoint, DragThresholds.TearOutThreshold);
+
+        if (hitTest < 0)
+        {
+            this.SwitchToTearOutMode(cursor);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleTearOutModeTransitions(SpatialPoint<PhysicalScreenSpace> cursor)
+    {
         // Prevent concurrent attachment attempts
         lock (this.syncLock)
         {
@@ -683,29 +724,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         ExternalDropPreparationResult? preparation = null;
         try
         {
-            if (container.DispatcherQueue is null)
-            {
-                this.LogAttachToStripAborted();
-                return false;
-            }
-
-            // Use CommunityToolkit's EnqueueAsync helper which will invoke the function directly
-            // if the current thread has access to the dispatcher; otherwise it schedules it on
-            // the target DispatcherQueue and returns a Task that proxies the inner operation.
-            try
-            {
-                preparation = await container.DispatcherQueue
-                    .EnqueueAsync(() => targetStrip.PrepareExternalDropAsync(payloadClone, elementPoint, cts.Token))
-                    .ConfigureAwait(true);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                // If scheduling fails (the old code handled TryEnqueue returning false), mimic that
-                // behavior by logging and returning false rather than rethrowing, which would be
-                // caught by the outer exception handler and cause duplicate logging.
-                this.LogDispatcherEnqueueFailed("AttachToStrip");
-                return false;
-            }
+            preparation = await this.EnqueuePrepareExternalDropAsync(container, targetStrip, payloadClone, elementPoint, cts.Token).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
@@ -742,6 +761,35 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         this.dragContext.UpdateDraggedVisualElement(preparation.RealizedContainer);
         this.LogAttachToStripSucceeded(targetStrip.Name, preparation.DropIndex);
         return true;
+    }
+
+    private async Task<ExternalDropPreparationResult?> EnqueuePrepareExternalDropAsync(
+        FrameworkElement container,
+        ITabStrip targetStrip,
+        IDragPayload payloadClone,
+        SpatialPoint<ElementSpace> elementPoint,
+        CancellationToken ct)
+    {
+        if (container.DispatcherQueue is null)
+        {
+            this.LogAttachToStripAborted();
+            return null;
+        }
+
+        try
+        {
+            // Use CommunityToolkit's EnqueueAsync helper to marshal the call to the container's dispatcher.
+            return await container.DispatcherQueue
+                .EnqueueAsync(() => targetStrip.PrepareExternalDropAsync(payloadClone, elementPoint, ct))
+                .ConfigureAwait(true);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // If scheduling fails, mimic original behavior by logging and returning null
+            // so the caller can handle failure.
+            this.LogDispatcherEnqueueFailed("AttachToStrip");
+            return null;
+        }
     }
 
     private void DetachIfSwitchingStrips(ITabStrip targetStrip)
