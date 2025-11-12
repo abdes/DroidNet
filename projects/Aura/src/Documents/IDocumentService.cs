@@ -15,14 +15,18 @@ namespace DroidNet.Aura.Documents;
 ///     Threading and event contract:
 /// </para>
 /// <list type="bullet">
-///     <item><description>Implementations may raise events from any thread. UI subscribers must marshal
-///     to the UI thread (for example using <c>DispatcherQueue.TryEnqueue</c>) before touching UI controls.</description></item>
-///     <item><description>The <see cref="DocumentClosing"/> event is a pre-close notification. Handlers may
-///     register async veto tasks via <see cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/>. The service
-///     implementation should await all veto tasks and cancel the close if any veto returns <c>false</c>.</description></item>
-///     <item><description>When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI should
-///     call <see cref="CloseDocumentAsync(Guid,bool)"/>. Aura does not attempt to close windows - app is responsible
-///     for deciding and implementing the policy to close windows or detach documents as needed.</description></item>
+///     <item><description>Implementations may raise events from any thread. UI subscribers must
+///     marshal to the UI thread (for example using <c>DispatcherQueue.TryEnqueue</c>) before
+///     touching UI controls.</description></item>
+///     <item><description>The <see cref="DocumentClosing"/> event is a pre-close notification.
+///     Handlers may register async veto tasks via <see
+///     cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/>. The service implementation should
+///     await all veto tasks and cancel the close if any veto returns
+///     <see langword="false"/>.</description></item>
+///     <item><description>When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI
+///     should call <see cref="CloseDocumentAsync(WindowContext,Guid,bool)"/>. Aura does not attempt
+///     to close windows - app is responsible for deciding and implementing the policy to close
+///     windows or detach documents as needed.</description></item>
 /// </list>
 /// </summary>
 public interface IDocumentService
@@ -80,18 +84,20 @@ public interface IDocumentService
     ///     Requests close of the specified document. Returns true when the document
     ///     was successfully closed; false if the operation was vetoed by the app.
     /// </summary>
+    /// <param name="window">The window that initiated the close request.</param>
     /// <param name="documentId">The document identifier.</param>
     /// <param name="force">When true, bypasses app-level checks and forces closure.</param>
     /// <returns>True when the document closed; false if the app vetoed the close.</returns>
-    public Task<bool> CloseDocumentAsync(Guid documentId, bool force = false);
+    public Task<bool> CloseDocumentAsync(WindowContext window, Guid documentId, bool force = false);
 
     /// <summary>
     ///     Detaches a document from its host window as part of a tear-out flow.
     ///     Returns the document metadata when the detach succeeds or null if it fails.
     /// </summary>
+    /// <param name="window">The window from which the document is being detached.</param>
     /// <param name="documentId">The document identifier to detach.</param>
     /// <returns>The document metadata when detached, or null on failure.</returns>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(Guid documentId);
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowContext window, Guid documentId);
 
     /// <summary>
     ///     Attaches an app-provided document to a target window.
@@ -106,10 +112,11 @@ public interface IDocumentService
     /// <summary>
     ///     Updates the metadata for an existing document.
     /// </summary>
+    /// <param name="window">The window where the metadata update originates from.</param>
     /// <param name="documentId">The id of the document to update.</param>
     /// <param name="metadata">The new metadata content.</param>
     /// <returns>True when the operation succeeded.</returns>
-    public Task<bool> UpdateMetadataAsync(Guid documentId, IDocumentMetadata metadata);
+    public Task<bool> UpdateMetadataAsync(WindowContext window, Guid documentId, IDocumentMetadata metadata);
 
     /// <summary>
     ///     Requests activation (selection) of the document in the specified window.

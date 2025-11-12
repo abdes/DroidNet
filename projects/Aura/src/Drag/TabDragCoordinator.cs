@@ -439,11 +439,12 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             this.LogTearOutStart(context.DraggedItemData.ToString() ?? "Unknown", GetDraggedItemIndex(context), currentStrip.Name);
             try
             {
-                // CloseTab raises TabCloseRequested event. The application is responsible for
-                // removing the item from the Items collection in response to this event.
-                // We should NOT call RemoveItemAt here as that would remove a second item.
-                currentStrip.CloseTab(context.DraggedItemData);
-                this.LogTearOutCloseTab(context.DraggedItemData.ToString() ?? "Unknown");
+                // DetachTab raises TabDetachRequested. This signals the application to detach
+                // the document for tear-out and is not a close operation. The application is
+                // responsible for detaching the item in response; the UI should not interpret
+                // this as a request to close the document.
+                currentStrip.DetachTab(context.DraggedItemData);
+                this.LogTearOutDetachTab(context.DraggedItemData.ToString() ?? "Unknown");
             }
 #pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)

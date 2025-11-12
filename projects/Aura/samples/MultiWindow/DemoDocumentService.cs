@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
@@ -15,24 +16,33 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 /// the IDocumentService contract to support opening, selecting, updating and closing
 /// documents; it's intentionally small and not intended for production.
 /// </summary>
-public sealed class DemoDocumentService : IDocumentService
+[SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
+internal sealed class DemoDocumentService : IDocumentService
 {
     private readonly ConcurrentDictionary<Guid, IDocumentMetadata> docs = new();
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentClosingEventArgs>? DocumentClosing;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentClosedEventArgs>? DocumentClosed;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentAttachedEventArgs>? DocumentAttached;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentMetadataChangedEventArgs>? DocumentMetadataChanged;
 
+    /// <inheritdoc/>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
+    /// <inheritdoc/>
     public Task<Guid> OpenDocumentAsync(WindowContext window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         var id = metadata?.DocumentId ?? Guid.NewGuid();
@@ -45,32 +55,51 @@ public sealed class DemoDocumentService : IDocumentService
         return Task.FromResult(assigned);
     }
 
-    public Task<bool> CloseDocumentAsync(Guid documentId, bool force = false)
+    /// <inheritdoc/>
+    public async Task<bool> CloseDocumentAsync(WindowContext window, Guid documentId, bool force = false)
     {
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
-        if (!this.docs.TryRemove(documentId, out var metadata))
+        if (!this.docs.TryGetValue(documentId, out var metadata))
         {
             Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} not found");
-            return Task.FromResult(false);
+            return false;
         }
 
-        // Raise DocumentClosed with dummy WindowContext of the first match; demo doesn't track per-window lists
+        // Fire DocumentClosing and await veto if not forced
+        var closingArgs = new DocumentClosingEventArgs(window, metadata, force);
+        this.DocumentClosing?.Invoke(this, closingArgs);
+
+        if (!force)
+        {
+            var allowed = await closingArgs.WaitForVetoResultAsync().ConfigureAwait(false);
+            if (!allowed)
+            {
+                Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} vetoed");
+                return false;
+            }
+        }
+
+        // Proceed with close
+        _ = this.docs.TryRemove(documentId, out _);
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
-        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(window: null!, metadata));
-        return Task.FromResult(true);
+        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(window, metadata));
+        return true;
     }
 
-    public Task<IDocumentMetadata?> DetachDocumentAsync(Guid documentId)
+    /// <inheritdoc/>
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowContext window, Guid documentId)
     {
         if (this.docs.TryRemove(documentId, out var metadata))
         {
+            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(window, metadata));
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
 
         return Task.FromResult<IDocumentMetadata?>(null);
     }
 
+    /// <inheritdoc/>
     public Task<bool> AttachDocumentAsync(WindowContext targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         this.docs[metadata.DocumentId] = metadata;
@@ -78,7 +107,8 @@ public sealed class DemoDocumentService : IDocumentService
         return Task.FromResult(true);
     }
 
-    public Task<bool> UpdateMetadataAsync(Guid documentId, IDocumentMetadata metadata)
+    /// <inheritdoc/>
+    public Task<bool> UpdateMetadataAsync(WindowContext window, Guid documentId, IDocumentMetadata metadata)
     {
         if (!this.docs.ContainsKey(documentId))
         {
@@ -87,11 +117,12 @@ public sealed class DemoDocumentService : IDocumentService
 
         this.docs[documentId] = metadata;
 
-        // For sample, we raise DocumentMetadataChanged without a WindowContext; real apps will pass proper context
-        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(null!, metadata));
+        // For sample, raise DocumentMetadataChanged with the provided window.
+        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(window, metadata));
         return Task.FromResult(true);
     }
 
+    /// <inheritdoc/>
     public Task<bool> SelectDocumentAsync(WindowContext window, Guid documentId)
     {
         if (!this.docs.TryGetValue(documentId, out var metadata))

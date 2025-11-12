@@ -85,6 +85,63 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     });
 
     [TestMethod]
+    public Task DocumentClose_Veto_PreventsClose_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentService();
+        var ctx = WindowContextFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var meta = new TestDocumentMetadata { Title = "VetoDoc" };
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Add a veto handler
+        ds.DocumentClosing += (s, e) => e.AddVetoTask(Task.FromResult(false));
+
+        // Act - request close from tabStrip
+        var tab = tabStrip.Items[0];
+        tab.IsClosable = true;
+        tabStrip.HandleTabCloseRequest(tab);
+        await WaitUntilAsync(() => ds.CloseCallCount > 0 || ds.ClosedIds.Count > 0, TimeSpan.FromSeconds(1)).ConfigureAwait(true);
+
+        // Assert - close was vetoed
+        _ = ds.CloseCallCount.Should().Be(1);
+        _ = ds.ClosedIds.Should().NotContain(id);
+        _ = tabStrip.Items.Should().HaveCount(1);
+    });
+
+    [TestMethod]
+    public Task DocumentClose_ForceBypassesVeto_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentService();
+        var ctx = WindowContextFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var meta = new TestDocumentMetadata { Title = "ForceDoc" };
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Add a veto handler that would normally veto
+        ds.DocumentClosing += (s, e) => e.AddVetoTask(Task.FromResult(false));
+
+        // Act - force close from test service (bypass veto)
+        _ = await ds.CloseDocumentAsync(ctx, id, force: true).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - closed despite veto
+        _ = ds.ClosedIds.Should().Contain(id);
+        _ = tabStrip.Items.Should().HaveCount(0);
+    });
+
+    [TestMethod]
     public Task DocumentClosed_RemovesTab_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -100,7 +157,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - close the doc from service
-        _ = await ds.CloseDocumentAsync(id, force: true).ConfigureAwait(true);
+        _ = await ds.CloseDocumentAsync(ctx, id, force: true).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
@@ -147,7 +204,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act
-        _ = await ds.DetachDocumentAsync(id).ConfigureAwait(true);
+        _ = await ds.DetachDocumentAsync(ctx, id).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
@@ -196,13 +253,38 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         // Act - update metadata
         var newMeta = new TestDocumentMetadata { Title = "Doc 5 - Renamed", IsDirty = true, IsPinnedHint = true };
-        _ = await ds.UpdateMetadataAsync(id, newMeta).ConfigureAwait(true);
+        _ = await ds.UpdateMetadataAsync(ctx, id, newMeta).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
         var tab = tabStrip.Items[0];
         _ = tab.Header.Should().Be(newMeta.Title);
         _ = tab.IsPinned.Should().BeTrue();
+    });
+
+    [TestMethod]
+    public Task TabDetachRequested_CallsDetachAsync_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentService();
+        var ctx = WindowContextFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var meta = new TestDocumentMetadata { Title = "Doc 2" };
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Act - request detach from tabStrip (simulate tear-out start)
+        var tab = tabStrip.Items[0];
+
+        tabStrip.DetachTab(tab);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = ds.DetachedIds.Should().Contain(id);
     });
 
     /// <summary>
@@ -217,6 +299,20 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             Category = new WindowCategory("Test"),
             CreatedAt = DateTimeOffset.UtcNow,
         };
+    }
+
+    private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && sw.Elapsed < timeout)
+        {
+            await Task.Delay(10).ConfigureAwait(false);
+        }
+
+        if (!condition())
+        {
+            throw new InvalidOperationException("Condition not met within timeout");
+        }
     }
 
     private sealed class TestDocumentService : IDocumentService
@@ -237,7 +333,9 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
-        public List<Guid> ClosedIds { get; } = new();
+        public List<Guid> ClosedIds { get; } = [];
+
+        public List<Guid> DetachedIds { get; } = [];
 
         public int CloseCallCount { get; private set; }
 
@@ -276,27 +374,36 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             return Task.FromResult(id);
         }
 
-        public Task<bool> CloseDocumentAsync(Guid documentId, bool force = false)
+        public async Task<bool> CloseDocumentAsync(WindowContext window, Guid documentId, bool force = false)
         {
             this.CloseCallCount++;
-            this.ClosedIds.Add(documentId);
 
             var metadata = this.store.TryGetValue(documentId, out var value)
                 ? value
                 : new TestDocumentMetadata { Title = "Unknown", DocumentId = documentId };
 
             // Fire DocumentClosing then DocumentClosed
-            var closing = new DocumentClosingEventArgs(window: null, metadata, force);
+            var closing = new DocumentClosingEventArgs(window, metadata, force);
             this.DocumentClosing?.Invoke(this, closing);
 
-            var closed = new DocumentClosedEventArgs(window: null, metadata!);
+            if (!force)
+            {
+                var allowed = await closing.WaitForVetoResultAsync().ConfigureAwait(false);
+                if (!allowed)
+                {
+                    return false;
+                }
+            }
+
+            var closed = new DocumentClosedEventArgs(window, metadata!);
             this.DocumentClosed?.Invoke(this, closed);
+            this.ClosedIds.Add(documentId);
 
             this.store.Remove(documentId);
-            return Task.FromResult(true);
+            return true;
         }
 
-        public Task<IDocumentMetadata?> DetachDocumentAsync(Guid documentId)
+        public Task<IDocumentMetadata?> DetachDocumentAsync(WindowContext window, Guid documentId)
         {
             if (!this.store.TryGetValue(documentId, out var metadata))
             {
@@ -304,7 +411,8 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             }
 
             this.store.Remove(documentId);
-            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(window: null, metadata));
+            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(window, metadata));
+            this.DetachedIds.Add(documentId);
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
 
@@ -317,7 +425,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             return Task.FromResult(true);
         }
 
-        public Task<bool> UpdateMetadataAsync(Guid documentId, IDocumentMetadata metadata)
+        public Task<bool> UpdateMetadataAsync(WindowContext window, Guid documentId, IDocumentMetadata metadata)
         {
             // Ensure the metadata contains the document id so the presenter can find the tab.
             IDocumentMetadata effective;
@@ -339,7 +447,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             }
 
             this.store[documentId] = effective;
-            this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(null, effective));
+            this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(window, effective));
             return Task.FromResult(true);
         }
 

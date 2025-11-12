@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using DroidNet.Aura.Documents;
 using DroidNet.Mvvm;
@@ -29,6 +30,7 @@ namespace DroidNet.Aura;
 ///     bar, and managing the minimum window width. It decorates the window with a custom title bar,
 ///     an icon, an optional main menu and a flyout menu for settings and theme selection.
 /// </remarks>
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The view owns the DocumentTabPresenter and disposes it in the Unloaded handler to match WinUI control lifetime semantics.")]
 [ViewModel(typeof(MainShellViewModel))]
 public sealed partial class MainShellView : INotifyPropertyChanged
 {

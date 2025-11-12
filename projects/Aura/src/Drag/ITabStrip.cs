@@ -106,6 +106,15 @@ public interface ITabStrip
     public void CloseTab(object item);
 
     /// <summary>
+    ///     Detaches a tab from its host (start of a tear-out). This is an explicit
+    ///     detach request and should not be treated as a 'close' operation; it is
+    ///     triggered by the coordinator when a tab begins a tear-out, and is not
+    ///     vetoable.
+    /// </summary>
+    /// <param name="item">The model object for the item being detached.</param>
+    public void DetachTab(object item);
+
+    /// <summary>
     ///     Tears out a tab by raising the TabTearOutRequested event to notify the application
     ///     to create a new window. Called by the coordinator when a tab is dropped outside any TabStrip.
     /// </summary>

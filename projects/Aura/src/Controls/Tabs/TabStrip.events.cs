@@ -71,6 +71,17 @@ public partial class TabStrip
     public event EventHandler<TabCloseRequestedEventArgs>? TabCloseRequested;
 
     /// <summary>
+    ///     Occurs when the user begins tearing out a tab (tear-out start). This is a
+    ///     request to detach the tab from its host window, not a request to close it.
+    /// </summary>
+    /// <remarks>
+    ///     Raised to notify the application that a tab is being detached for tear-out.
+    ///     This event should not be used to veto an operation; use the application-level
+    ///     document closing contract when the user explicitly requests to close a document.
+    /// </remarks>
+    public event EventHandler<TabDetachRequestedEventArgs>? TabDetachRequested;
+
+    /// <summary>
     ///     Occurs when a drag session needs a lightweight preview image for the dragged <see
     ///     cref="TabItem"/>. Handlers may synchronously set <see
     ///     cref="TabDragImageRequestEventArgs.PreviewBitmap"/> to customize the overlay.

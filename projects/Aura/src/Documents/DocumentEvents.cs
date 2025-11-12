@@ -10,77 +10,191 @@ using DroidNet.Aura.Windowing;
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
-///     Event arguments for DocumentOpened.
+///     Event arguments for <see cref="IDocumentService.DocumentOpened"/>.
 /// </summary>
-public sealed class DocumentOpenedEventArgs(WindowContext? window, IDocumentMetadata metadata, int indexHint, bool shouldSelect) : EventArgs
+public sealed class DocumentOpenedEventArgs(WindowContext window, IDocumentMetadata metadata, int indexHint, bool shouldSelect) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window in which the document was opened.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>
+    ///     Gets the application-provided metadata for the opened document.
+    /// </summary>
     public IDocumentMetadata Metadata { get; } = metadata;
 
+    /// <summary>
+    ///     Gets a suggested insertion index for the document within the target window's documents
+    ///     collection, or <c>-1</c> when no preference is specified.
+    /// </summary>
     public int IndexHint { get; } = indexHint;
 
+    /// <summary>
+    ///     Gets a value indicating whether the document should be selected after opening.
+    /// </summary>
     public bool ShouldSelect { get; } = shouldSelect;
 }
 
 /// <summary>
-///     Event arguments used when a document is about to close. Handlers can register
-///     async veto tasks; the service should respect any veto.
+///     Event arguments used when a document is about to be closed. Handlers may register
+///     asynchronous veto tasks using <see cref="AddVetoTask"/> to prevent the close.
 /// </summary>
-public sealed class DocumentClosingEventArgs(WindowContext? window, IDocumentMetadata metadata, bool force) : EventArgs
+public sealed class DocumentClosingEventArgs(WindowContext window, IDocumentMetadata metadata, bool force) : EventArgs
 {
     private readonly List<Task<bool>> vetoTasks = [];
 
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window (in which the document is open) that triggered the close request.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>
+    ///     Gets the application-provided document metadata for which the close was requested.
+    /// </summary>
     public IDocumentMetadata Metadata { get; } = metadata;
 
+    /// <summary>
+    ///     Gets a value indicating whether the close should be forced, bypassing application veto
+    ///     handlers when true.
+    /// </summary>
     public bool Force { get; } = force;
 
     /// <summary>
-    ///     Adds an asynchronous veto task. The task should return true to approve the close,
-    ///     false to veto. The service implementation should await all registered veto tasks
-    ///     and cancel the close if any veto.
+    ///     Adds an asynchronous veto task which can veto the requested close. The task should
+    ///     return <see langword="true"/> to approve the close, or <see langword="false"/> to veto.
+    ///     Callers that raise this event should await all registered veto tasks and cancel the
+    ///     close when any returns <see langword="false"/>.
     /// </summary>
+    /// <param name="vetoTask">The asynchronous task that resolves to a bool indicating
+    /// approval.</param>
     public void AddVetoTask(Task<bool> vetoTask)
         => this.vetoTasks.Add(vetoTask);
 
+    /// <summary>
+    ///     Awaits all registered veto tasks and returns <see langword="true"/> when all
+    ///     tasks complete and approve the close. If any task returns <see langword="false"/>
+    ///     or throws, the result is <see langword="false"/> indicating the close was vetoed.
+    /// </summary>
+    /// <param name="cancellationToken">Optional cancellation token to cancel waiting for veto tasks.</param>
+    /// <returns><see langword="true"/> if all veto tasks approve the close; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> WaitForVetoResultAsync(CancellationToken cancellationToken = default)
+    {
+        List<Task<bool>> tasks;
+        lock (this.vetoTasks)
+        {
+            tasks = this.vetoTasks.ToList();
+        }
+
+        if (tasks.Count == 0)
+        {
+            return true;
+        }
+
+        try
+        {
+            var safeTasks = tasks.Select(t => t.ContinueWith(
+                completedTask => completedTask.IsCompletedSuccessfully ? completedTask.Result : false,
+                cancellationToken,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default)).ToArray();
+
+            var completed = await Task.WhenAll(safeTasks).WaitAsync(cancellationToken).ConfigureAwait(false);
+
+            // Approve only if all tasks returned true.
+            return completed.All(r => r);
+        }
+        catch (OperationCanceledException)
+        {
+            return false; // Timeout/cancel -> treat as veto
+        }
+    }
+
+    /// <summary>
+    ///     Internal helper for service implementations to obtain the current veto task results.
+    /// </summary>
+    /// <returns>An array containing the boolean results from each registered veto task.</returns>
     internal Task<bool[]> GetVetoTasks() => Task.WhenAll(this.vetoTasks);
 }
 
-public sealed class DocumentClosedEventArgs(WindowContext? window, IDocumentMetadata metadata) : EventArgs
+/// <summary>
+///     Event arguments raised after a document has been closed.
+/// </summary>
+public sealed class DocumentClosedEventArgs(WindowContext window, IDocumentMetadata metadata) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window (in which the document is open) that triggered the close request.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>
+    ///     Gets the metadata for the document that was closed.
+    /// </summary>
     public IDocumentMetadata Metadata { get; } = metadata;
 }
 
-public sealed class DocumentDetachedEventArgs(WindowContext? window, IDocumentMetadata metadata) : EventArgs
+/// <summary>
+///     Event arguments raised when a document is detached from a window (for example, the user
+///     initiated a tear-out operation).
+/// </summary>
+public sealed class DocumentDetachedEventArgs(WindowContext window, IDocumentMetadata metadata) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window (in which the document is attached) that triggered the detach request.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>
+    ///     Gets the metadata for the detached document.
+    /// </summary>
     public IDocumentMetadata Metadata { get; } = metadata;
 }
 
-public sealed class DocumentAttachedEventArgs(WindowContext? window, IDocumentMetadata metadata, int indexHint) : EventArgs
+/// <summary>
+///     Event arguments raised when a document is attached to a window (for example, dropped into
+///     another window's TabStrip as part of a tear-out attach).
+/// </summary>
+public sealed class DocumentAttachedEventArgs(WindowContext window, IDocumentMetadata metadata, int indexHint) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the target window, to which the document was attached.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>Gets the metadata for the attached document.</summary>
     public IDocumentMetadata Metadata { get; } = metadata;
 
+    /// <summary>
+    ///     Gets a preferred insertion index for the attached document, or <c>-1</c> when no hint is
+    ///     supplied by the application.
+    /// </summary>
     public int IndexHint { get; } = indexHint;
 }
 
-public sealed class DocumentMetadataChangedEventArgs(WindowContext? window, IDocumentMetadata newMetadata) : EventArgs
+/// <summary>
+///     Event arguments raised when application-provided metadata for a document changes.
+/// </summary>
+public sealed class DocumentMetadataChangedEventArgs(WindowContext window, IDocumentMetadata newMetadata) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window (in which the document is open) where the metadata change occurred.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>Gets the updated metadata content.</summary>
     public IDocumentMetadata NewMetadata { get; } = newMetadata;
 }
 
-public sealed class DocumentActivatedEventArgs(WindowContext? window, Guid documentId) : EventArgs
+/// <summary>
+///     Event arguments raised when the application activates (selects) a document in a window.
+/// </summary>
+public sealed class DocumentActivatedEventArgs(WindowContext window, Guid documentId) : EventArgs
 {
-    public WindowContext? Window { get; } = window;
+    /// <summary>
+    ///     Gets the window (in which the document is open) where the activation occurred.
+    /// </summary>
+    public WindowContext Window { get; } = window;
 
+    /// <summary>Gets the identifier of the document that was activated.</summary>
     public Guid DocumentId { get; } = documentId;
 }
