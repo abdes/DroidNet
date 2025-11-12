@@ -107,12 +107,11 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 throw new InvalidOperationException("A drag is already active in this process.");
             }
 
-            this.isActive = true;
-
             var mapper = this.CreateSpatialMapper(stripContainer);
             this.dragContext = new DragContext(source, item, hotspotOffsets, stripContainer, draggedElement, mapper);
             var initialPhysicalPosition = mapper.ToPhysicalScreen(initialPosition);
             this.lastCursorPosition = initialPhysicalPosition;
+            this.isActive = true;
             this.SwitchToReorderMode(initialPhysicalPosition);
 
             this.StartPollingTimer();
@@ -148,24 +147,20 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             isTearOutMode = this.currentStrategy == this.tearOutStrategy;
         }
 
-        // If there's a hit strip and we're NOT in tear-out mode, prepare for drop.
-        // If we're in tear-out mode at button release, treat it as a tear-out completion
-        // (don't reattach to strips that happen to be under the cursor).
-        int fallbackDropIndex;
+        // If there's a hit strip and we're NOT in tear-out mode, prepare for drop. If we're in
+        // tear-out mode at button release, treat it as a tear-out completion (don't reattach to
+        // strips that happen to be under the cursor).
+        var fallbackDropIndex = -1;
         if (hitStrip is not null && !isTearOutMode)
         {
             var result = await this.PrepareDropForHitStrip(screenPoint, hitStrip, isTearOutMode).ConfigureAwait(true);
             fallbackDropIndex = result.insertionIndex;
             isTearOutMode = result.isTearOutMode;
         }
-        else
-        {
-            fallbackDropIndex = this.GetDraggedItemIndex(context!);
-        }
 
         if (fallbackDropIndex < 0)
         {
-            fallbackDropIndex = this.GetDraggedItemIndex(context!);
+            fallbackDropIndex = GetDraggedItemIndex(context!);
         }
 
         this.LogEndDragPreparation(isTearOutMode, hitStrip, fallbackDropIndex, context!);
@@ -189,7 +184,6 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             }
 
             this.FinalizeDropOutcome(context!, isTearOutMode, hitStrip, finalDropIndex, screenPoint);
-
             this.CleanupState();
         }
     }
@@ -256,6 +250,9 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             this.CleanupState();
         }
     }
+
+    private static int GetDraggedItemIndex(DragContext context)
+        => context.TabStrip is null ? -1 : context.TabStrip.IndexOf(context.DraggedItemData);
 
     private ISpatialMapper CreateSpatialMapper(FrameworkElement element)
     {
@@ -386,7 +383,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         if (!this.TryCreateMapperForStrip(hitStrip, out var mapper, out var container))
         {
-            return (this.GetDraggedItemIndex(this.dragContext), isTearOutMode);
+            return (GetDraggedItemIndex(this.dragContext), isTearOutMode);
         }
 
         var physicalPoint = mapper.Convert<ScreenSpace, PhysicalScreenSpace>(screenPoint);
@@ -402,7 +399,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             }
         }
 
-        return (this.GetDraggedItemIndex(this.dragContext), isTearOutMode);
+        return (GetDraggedItemIndex(this.dragContext), isTearOutMode);
     }
 
     private void SwitchToReorderMode(SpatialPoint<PhysicalScreenSpace> position)
@@ -439,7 +436,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         if (currentStrip is not null)
         {
-            this.LogTearOutStart(context.DraggedItemData.ToString() ?? "Unknown", this.GetDraggedItemIndex(context), currentStrip.Name);
+            this.LogTearOutStart(context.DraggedItemData.ToString() ?? "Unknown", GetDraggedItemIndex(context), currentStrip.Name);
             try
             {
                 // CloseTab raises TabCloseRequested event. The application is responsible for
@@ -455,7 +452,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 currentStrip.TryCompleteDrag(
                     context.DraggedItemData,
                     currentStrip,
-                    this.GetDraggedItemIndex(context));
+                    GetDraggedItemIndex(context));
                 this.CleanupState();
                 return;
             }
@@ -542,12 +539,15 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             {
                 var strategy = this.currentStrategy!;
 
-                // Ensure we execute UI-manipulating code on the UI's DispatcherQueue
-                // to avoid RPC_E_WRONG_THREAD and native runtime races when the
-                // continuation after awaits executes on a thread-pool thread.
+                // Determine the best dispatcher to use for UI work. If the drag context
+                // is associated with a TabStrip and its container exposes a DispatcherQueue,
+                // prefer that — this ensures UI work runs on the actual TabStrip's window
+                // dispatcher in multi-window scenarios. Otherwise, fallback to the
+                // coordinator's dispatcher queue.
+                var targetDispatcher = this.dragContext.TabStripContainer?.DispatcherQueue ?? this.dispatcherQueue;
                 var logged = false;
 
-                if (this.dispatcherQueue.HasThreadAccess)
+                if (targetDispatcher.HasThreadAccess)
                 {
                     strategy.OnDragPositionChanged(newPosition);
                     this.LogDragMoved(newPosition, previousPosition.Point);
@@ -555,22 +555,26 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 }
                 else
                 {
-                    var enqueued = this.dispatcherQueue.TryEnqueue(() =>
+                    var enqueued = targetDispatcher.TryEnqueue(() =>
                     {
                         try
                         {
                             strategy.OnDragPositionChanged(newPosition);
                             this.LogDragMoved(newPosition, previousPosition.Point);
                         }
+#pragma warning disable CA1031 // Do not catch general exception types
                         catch (Exception ex)
                         {
                             this.LogOnDragPositionChangedError(ex);
                         }
+#pragma warning restore CA1031 // Do not catch general exception types
                     });
 
                     if (!enqueued)
                     {
-                        this.LogAttachToStripEnqueueFailed();
+                        // Use general dispatcher enqueue failed logging with a specific
+                        // operation name so the log message clearly indicates what failed.
+                        this.LogDispatcherEnqueueFailed("OnDragPositionChanged");
                     }
 
                     // We won't call LogDragMoved here (it will be logged inside the enqueued action)
@@ -579,7 +583,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
                 if (!logged)
                 {
-                    // If we didn't already log via the dispatched path, log movement now.
+                    // If, for some reason, nothing logged we log here as a last resort.
                     this.LogDragMoved(newPosition, previousPosition.Point);
                 }
             }
@@ -601,7 +605,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 return;
             }
 
-            var elementPoint = this.dragContext.SpatialMapper.Convert<PhysicalScreenSpace, ElementSpace>(cursor);
+            var elementPoint = this.dragContext.SpatialMapper.ToElement(cursor);
             var hitTest = activeStrip.HitTestWithThreshold(elementPoint, DragThresholds.TearOutThreshold);
 
             if (hitTest < 0)
@@ -639,7 +643,6 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             var (targetStrip, mapper, container) = hitResult.Value;
 
             var readyForReorder = await this.AttachToStrip(targetStrip, container, mapper, cursor).ConfigureAwait(true);
-
             if (!readyForReorder)
             {
                 return;
@@ -696,9 +699,11 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Map dispatcher enqueuing failures to the same behavior as the previous TryEnqueue
+                // If scheduling fails (the old code handled TryEnqueue returning false), mimic that
+                // behavior by logging and returning false rather than rethrowing, which would be
+                // caught by the outer exception handler and cause duplicate logging.
                 this.LogDispatcherEnqueueFailed("AttachToStrip");
-                throw;
+                return false;
             }
         }
         catch (OperationCanceledException)
@@ -706,11 +711,13 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             this.LogAttachToStripCancelled();
             return false;
         }
+#pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
             this.LogAttachToStripFailed(ex);
             return false;
         }
+#pragma warning restore CA1031 // Do not catch general exception types
         finally
         {
             lock (this.syncLock)
@@ -748,7 +755,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     {
         this.LogDetachPendingAttachment(
             pendingStrip.Name,
-            this.dragContext is not null ? this.GetDraggedItemIndex(this.dragContext) : null);
+            this.dragContext is not null ? GetDraggedItemIndex(this.dragContext) : null);
 
         if (this.dragContext is null)
         {
@@ -819,7 +826,4 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         this.lastCursorPosition = default;
         this.isAttaching = false;
     }
-
-    private int GetDraggedItemIndex(DragContext context)
-        => context.TabStrip is null ? -1 : context.TabStrip.IndexOf(context.DraggedItemData);
 }
