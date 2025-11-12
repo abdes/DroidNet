@@ -3,6 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml;
+using DroidNet.Aura.Documents;
+using DroidNet.Aura.Windowing;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
@@ -15,18 +19,33 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 /// </remarks>
 public sealed partial class DocumentWindow : Window
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DocumentWindow"/> class.
-    /// </summary>
-    public DocumentWindow()
+    private readonly IDocumentService? documentService;
+    private readonly IWindowManagerService? windowManagerService;
+    private readonly ILogger logger;
+
+    public DocumentWindow(IDocumentService? documentService = null, IWindowManagerService? windowManagerService = null, ILoggerFactory? loggerFactory = null)
     {
         this.InitializeComponent();
         this.Title = "Document Window";
+
+        this.documentService = documentService;
+        this.windowManagerService = windowManagerService;
+        this.logger = loggerFactory?.CreateLogger<DocumentWindow>() ?? NullLogger<DocumentWindow>.Instance;
 
         // Set a comfortable size for document editing
         this.AppWindow.Resize(new Windows.Graphics.SizeInt32(800, 600));
 
         // Set the title bar spacer as the drag region when it loads
-        this.TitleBarSpacer.Loaded += (s, e) => this.SetTitleBar(this.TitleBarSpacer);
+        this.TitleBarSpacer.Loaded += (s, e) =>
+        {
+            try
+            {
+                this.SetTitleBar(this.TitleBarSpacer);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogWarning(ex, "Failed to set title bar for DocumentWindow");
+            }
+        };
     }
 }

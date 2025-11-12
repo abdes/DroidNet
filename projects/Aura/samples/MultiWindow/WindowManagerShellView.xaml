@@ -68,6 +68,17 @@
                         FontWeight="SemiBold"
                         Text="{x:Bind ViewModel.ActiveWindowInfo, Mode=OneWay}"
                         TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Active Document" />
+                    <TextBlock
+                        FontSize="16"
+                        FontWeight="Normal"
+                        TextTrimming="CharacterEllipsis">
+                        <Run Text="{x:Bind ViewModel.ActiveDocumentTitle, Mode=OneWay}" />
+                        <Run Text="{x:Bind ViewModel.ActiveDocumentDirtyIndicator, Mode=OneWay}" />
+                    </TextBlock>
                 </StackPanel>
             </Grid>
         </Border>

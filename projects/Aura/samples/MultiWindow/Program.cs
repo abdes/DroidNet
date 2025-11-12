@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
@@ -146,7 +147,10 @@ public static partial class Program
             .WithThemeModeService());
 
         // Register menu providers using standard DI patterns
-        _ = container.RegisterMenus();
+        container.RegisterMenus();
+
+        // Register a minimal in-demo document service for the sample
+        container.Register<IDocumentService, DemoDocumentService>(Reuse.Singleton);
 
         // Register secondary window types as transient (Main window is singleton)
         _ = container.AddWindow<Window>();

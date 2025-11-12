@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
@@ -50,6 +51,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private readonly IWindowManagerService? windowManagerService;
+    private readonly IDocumentService? documentService;
     private readonly IPathFinder pathFinder;
     private MenuItemData? themesMenuItem;
 
@@ -63,6 +65,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// <param name="pathFinder">The relativePath finder used to resolve file and directory paths.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
+    /// <param name="documentService">Optional document service implemented by the host application.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -73,6 +76,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         IPathFinder pathFinder,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
         IWindowManagerService? windowManagerService = null,
+        IDocumentService? documentService = null,
         ILoggerFactory? loggerFactory = null)
     {
         Debug.Assert(
@@ -85,6 +89,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
 
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
+        this.documentService = documentService;
         appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
         // Initialize fallback settings menu (used if window context has no menu)
@@ -112,6 +117,18 @@ public partial class MainShellViewModel : AbstractOutletContainer
                     this.UpdateMenuFromWindowContext();
                 });
     }
+
+    /// <summary>
+    ///     Gets the optional document service implemented by the host application. This property
+    ///     may be null when the application does not register an IDocumentService implementation.
+    /// </summary>
+    public IDocumentService? DocumentService => this.documentService;
+
+    /// <summary>
+    /// Gets the optional window manager service used for multi-window coordination. Exposed
+    /// so views can convert document actions into window-level operations in demos.
+    /// </summary>
+    public IWindowManagerService? WindowManagerService => this.windowManagerService;
 
     /// <summary>
     /// Gets the menu builder for creating the settings menu.

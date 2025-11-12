@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
+using DroidNet.Aura.Documents;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
@@ -39,6 +40,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     // Holds the subscription for titlebar/layout observables so we can dispose it on Unloaded
     private IDisposable? titlebarSubscription;
+    private IDocumentService? cachedDocumentService;
+    private DocumentTabPresenter? documentTabPresenter;
 
     // Last applied passthrough regions (device pixels). Used to avoid re-applying identical regions.
     private RectInt32[]? lastAppliedPassthroughRegions;
@@ -71,6 +74,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.ViewModelChanged += this.InitializeLogger;
 
             this.ObserveTitleBar(uiContext);
+            this.AttachDocumentServiceHandlers();
         };
 
         this.Unloaded += (_, _) =>
@@ -78,6 +82,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.ViewModelChanged -= this.InitializeLogger;
 
             this.ForgetTitleBar();
+            this.DetachDocumentServiceHandlers();
 
             this.LogUnloaded();
         };
@@ -107,7 +112,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             // updated (or updated with an incompatible unit) and the user can resize below
             // the intended minimum. The operation is cheap and idempotent from the app's
             // perspective; the platform will clamp it if necessary.
-            if (this.ViewModel?.Window is WindowEx wnd)
+            if (this.ViewModel?.Window is WindowEx wnd) // TODO: eliminate the need for WindowEx
             {
                 // Use a ceiling to avoid fractional DIP rounding issues that the host
                 // windowing subsystem might ignore; enforce an integer DIP minimum.
@@ -199,6 +204,43 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         });
     }
 
+    private void AttachDocumentServiceHandlers()
+    {
+        var ds = this.ViewModel?.DocumentService;
+        if (ReferenceEquals(ds, this.cachedDocumentService))
+        {
+            return; // nothing to do
+        }
+
+        // Detach from previous
+        this.DetachDocumentServiceHandlers();
+
+        if (ds is null)
+        {
+            this.cachedDocumentService = null;
+            return;
+        }
+
+        this.cachedDocumentService = ds;
+        if (this.ViewModel?.Context is not null)
+        {
+            this.documentTabPresenter = new DocumentTabPresenter(this.DocumentTabStrip, ds, this.ViewModel.Context, this.DispatcherQueue, this.logger);
+        }
+    }
+
+    private void DetachDocumentServiceHandlers()
+    {
+        if (this.cachedDocumentService is not null)
+        {
+            // Presenter owns event subscriptions; nothing to unsubscribe here.
+            this.cachedDocumentService = null;
+        }
+
+        // Dispose the presenter which will unsubscribe from events and clear tabs
+        this.documentTabPresenter?.Dispose();
+        this.documentTabPresenter = null;
+    }
+
     private void ForgetTitleBar()
     {
         this.titlebarSubscription?.Dispose();
@@ -242,6 +284,12 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// UpdateLayout() is called after setting this width to force Grid recalculation.
     /// ]]>
     /// </code>
+    /// <para><b>Note:</b></para>
+    /// <para>
+    /// The documents <c>TabStrip</c> is not part of the drag area in the title
+    /// bar, and as such is excluded from the observed layout and from the
+    /// passthrough region calculations.
+    /// </para>
     /// </remarks>
     private void SetupCustomTitleBar()
     {
@@ -366,7 +414,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.LogPassthroughRegionsFailed(ex);
         }
 
-        static bool RegionsEqual(Windows.Graphics.RectInt32[]? a, Windows.Graphics.RectInt32[]? b)
+        static bool RegionsEqual(RectInt32[]? a, RectInt32[]? b)
         {
             if (ReferenceEquals(a, b))
             {
@@ -402,13 +450,13 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         }
     }
 
-    private Windows.Graphics.RectInt32[] ComputeClampedPassthroughRegions(double scaleAdjustment, int systemRightInsetDevice)
+    private RectInt32[] ComputeClampedPassthroughRegions(double scaleAdjustment, int systemRightInsetDevice)
     {
-        var passthroughRegions = new List<Windows.Graphics.RectInt32>();
+        var passthroughRegions = new List<RectInt32>();
         AddPassthroughRegion(this.PrimaryCommands, scaleAdjustment, passthroughRegions);
         AddPassthroughRegion(this.SecondaryCommands, scaleAdjustment, passthroughRegions);
 
-        var clamped = new List<Windows.Graphics.RectInt32>();
+        var clamped = new List<RectInt32>();
         var deviceWindowWidth = (int)Math.Round(this.ActualWidth * scaleAdjustment);
         var gap = Math.Max(2, (int)this.SecondaryCommands.Margin.Right);
         var allowedMaxX = deviceWindowWidth - systemRightInsetDevice - gap;
@@ -429,7 +477,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
             if (clampedWidth > 0)
             {
-                var cr = new Windows.Graphics.RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height);
+                var cr = new RectInt32(_X: r.X, _Y: r.Y, _Width: clampedWidth, _Height: r.Height);
                 clamped.Add(cr);
             }
         }
@@ -441,7 +489,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         void AddPassthroughRegion(
            FrameworkElement element,
            double scaleAdjustment,
-           List<Windows.Graphics.RectInt32> regions)
+           List<RectInt32> regions)
         {
             if (element.Visibility is not Visibility.Visible || element.ActualWidth <= 0)
             {
