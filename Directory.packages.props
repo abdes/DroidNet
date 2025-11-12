@@ -25,17 +25,17 @@
     <PackageVersion Include="Destructurama.Attributed" Version="5.1.0" />
     <PackageVersion Include="Testably.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Testably.Abstractions.Interface" Version="9.0.0" />
-    <PackageVersion Include="Testably.Abstractions.FileSystem.Interface" Version="9.0.0" />
+    <PackageVersion Include="Testably.Abstractions.FileSystem.Interface" Version="10.0.0" />
     <PackageVersion Include="ReflectionMagic" Version="5.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <PackageVersion Include="System.CommandLine" Version="2.0.0-beta4.22272.1" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.0" />
     <PackageVersion Include="System.Reactive" Version="6.1.0" />
     <PackageVersion Include="System.Linq.Async" Version="6.0.3" />
     <PackageVersion Include="System.Reactive.Async" Version="6.0.0-alpha.18" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
@@ -53,7 +53,7 @@
     <PackageVersion Include="CommunityToolkit.WinUI.Controls.Sizers" Version="8.2.250402" />
     <PackageVersion Include="CommunityToolkit.WinUI.Converters" Version="8.2.250402" />
     <PackageVersion Include="CommunityToolkit.WinUI.Behaviors" Version="8.2.250402" />
-    <PackageVersion Include="Microsoft.Data.Sqlite" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
@@ -88,6 +88,6 @@
     <PackageVersion Include="Verify.MSTest" Version="31.6.0" />
     <PackageVersion Include="Verify.SourceGenerators" Version="2.5.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.8.3" />
-    <PackageVersion Include="Testably.Abstractions.Testing" Version="4.3.9" />
+    <PackageVersion Include="Testably.Abstractions.Testing" Version="5.0.0" />
   </ItemGroup>
 </Project>
