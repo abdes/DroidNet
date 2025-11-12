@@ -15,9 +15,39 @@
 -->
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
 
-    <Import Project="Common.props" />
-
     <PropertyGroup>
+        <!-- Enable .NET simplified centralized artifacts output layout (requires .NET SDK 8+).
+             This sets OutputPath/IntermediateOutputPath/Package output location under a single
+             repository-level `artifacts/` root. It helps CI and tooling find build outputs.
+
+             Notes / usage:
+             - If your CI or dev machine uses an older SDK than .NET 8, you should set UseArtifactsOutput
+               to false in that environment or set it per-project where needed via MSBuild properties.
+             - To change the artifacts directory, set ArtifactsPath to a custom absolute/relative path.
+               Example: <ArtifactsPath>$(MSBuildThisFileDirectory)out\artifacts</ArtifactsPath>
+             - Artifacts pivot naming defaults to a combination of TFM, Configuration, and RID. You can
+               optionally customize or append to the pivot via ArtifactsPivots (see examples below).
+             - To debug artifact resolved paths in scripts or CI, use the dotnet CLI with the getProperty option to query properties:
+               e.g., dotnet build (getProperty: OutputPath) or dotnet build (getProperty: ArtifactsPath)
+             - If you need the older layout for some projects, set UseArtifactsOutput=false in that project's
+               Directory.Build.props or project file.
+         -->
+        <UseArtifactsOutput>true</UseArtifactsOutput>
+        <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+        <!-- Use a stable, informative pivot format: Configuration[_TargetFramework[_RID]]
+             Examples:
+               - Debug_net9.0-windows10.0.26100.0
+               - Release_net9.0
+             This defaults to config plus target framework and runtime identifier when present. The
+             property is set with conditional property groups so empty values don't create trailing underscores. -->
+        <ArtifactsPivots Condition="'$(TargetFramework)' == '' and '$(RuntimeIdentifier)' == ''">$(Configuration)</ArtifactsPivots>
+        <ArtifactsPivots Condition="'$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</ArtifactsPivots>
+        <ArtifactsPivots Condition="'$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</ArtifactsPivots>
+    </PropertyGroup>
+
+  <Import Project="Common.props" />
+
+  <PropertyGroup>
         <Authors>Abdessattar Sassi</Authors>
         <Company>DroidNet</Company>
         <Copyright>© 2024 Abdessattar Sassi. This product is licensed under the MIT License.</Copyright>

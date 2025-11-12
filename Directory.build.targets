@@ -23,8 +23,13 @@
          TreatAsLocalProperty="MyTopLevelDirectory;MyToolingDirectory">
 
     <!-- Read-only source tree (builds to top-level bin/obj folders) -->
-    <PropertyGroup>
+    <PropertyGroup Condition="'$(UseArtifactsOutput)' != 'true'">
+        <!-- Only set a custom package output path when the artifacts output layout is not enabled. -->
         <PackageOutputPath>$(MyTopLevelDirectory)bin\Packages\$(Configuration)\</PackageOutputPath>
+    </PropertyGroup>
+    <PropertyGroup Condition="'$(UseArtifactsOutput)' == 'true'">
+        <!-- With artifacts layout enabled, prefer artifacts package location -->
+        <PackageOutputPath>$(ArtifactsPath)\package\$(Configuration)\</PackageOutputPath>
     </PropertyGroup>
 
     <!--
@@ -34,7 +39,7 @@
     <PropertyGroup>
         <PreCommitInstallLockFilePath>$(MyTopLevelDirectory)\.pre-commit.installed.lock</PreCommitInstallLockFilePath>
     </PropertyGroup>
-    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists($(PreCommitInstallLockFilePath)) And $(DN_PrecommitHooks) != 'false'">
+    <Target Name="InstallPreCommitHooks" BeforeTargets="BeforeBuild" Condition="!Exists('$(PreCommitInstallLockFilePath)') And '$(DN_PrecommitHooks)' != 'false' And '$(GITHUB_ACTIONS)' != 'true' And Exists('$(MyTopLevelDirectory)\.git')">
         <Touch Files="$(PreCommitInstallLockFilePath)" AlwaysCreate="true" />
         <Exec Command="pre-commit install" />
     </Target>
