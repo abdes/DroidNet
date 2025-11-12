@@ -103,6 +103,15 @@
                     <FontIcon FontSize="16" Glyph="&#xE713;" />
                 </cm:MenuButton>
             </StackPanel>
+            <!--  Optional Document Tabs row shown under the main title bar  -->
+            <auraControls:TabStrip
+                x:Name="DocumentTabStrip"
+                Grid.Row="1"
+                Grid.Column="1"
+                Grid.ColumnSpan="4"
+                MinHeight="24"
+                LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.WithDocumentTabs, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
             <!--  Empty element to force SystemReservedRight column to reserve space for system caption buttons  -->
             <Border
                 x:Name="SystemReservedSpacer"

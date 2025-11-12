@@ -5,11 +5,13 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
@@ -41,6 +43,9 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     private readonly IWindowFactory windowFactory;
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
+    private readonly IDocumentService? documentService;
+    private readonly Dictionary<Guid, IDocumentMetadata> documents = new();
+    private readonly Dictionary<WindowId, Guid> windowActiveDocument = new();
     private readonly IDisposable windowEventsSubscription;
 
     private bool isDisposed;
@@ -52,17 +57,20 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     /// <param name="hostingContext">The hosting context containing dispatcher information.</param>
     /// <param name="windowFactory">The window factory for creating new windows.</param>
     /// <param name="windowManager">The window manager service.</param>
+    /// <param name="documentService">Optional document service for demo scenarios.</param>
     public WindowManagerShellViewModel(
         IRouter router,
         HostingContext hostingContext,
         IWindowFactory windowFactory,
-        IWindowManagerService windowManager)
+        IWindowManagerService windowManager,
+        IDocumentService? documentService = null)
     {
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
 
         this.windowFactory = windowFactory;
         this.windowManager = windowManager;
         this.dispatcherQueue = hostingContext.Dispatcher;
+        this.documentService = documentService;
 
         this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
 
@@ -75,9 +83,31 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             .Subscribe(evt =>
                 _ = this.dispatcherQueue.TryEnqueue(() => this.OnWindowLifecycleEvent(evt)));
 
+        // Subscribe to document service events (if present) to update document metadata display
+        if (this.documentService is not null)
+        {
+            this.documentService.DocumentOpened += this.OnDocOpened;
+            this.documentService.DocumentMetadataChanged += this.OnDocMetadataChanged;
+            this.documentService.DocumentActivated += this.OnDocActivated;
+            this.documentService.DocumentClosed += this.OnDocClosed;
+        }
+
         // Initialize the window list
         this.UpdateWindowList();
     }
+
+    [ObservableProperty]
+    public partial string? ActiveDocumentTitle { get; set; }
+
+    [ObservableProperty]
+    public partial bool ActiveDocumentIsDirty { get; set; }
+
+    /// <summary>
+    /// Gets a simple indicator text when the active document is dirty.
+    /// </summary>
+    public string ActiveDocumentDirtyIndicator => this.ActiveDocumentIsDirty ? " • Unsaved" : string.Empty;
+
+    // Event handlers for document events are implemented after the UpdateActiveWindowInfo method to keep property declarations before methods.
 
     /// <summary>
     /// Gets the window associated with this view model.
@@ -135,6 +165,13 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         if (disposing)
         {
             this.windowEventsSubscription.Dispose();
+            if (this.documentService is not null)
+            {
+                this.documentService.DocumentOpened -= this.OnDocOpened;
+                this.documentService.DocumentMetadataChanged -= this.OnDocMetadataChanged;
+                this.documentService.DocumentActivated -= this.OnDocActivated;
+                this.documentService.DocumentClosed -= this.OnDocClosed;
+            }
         }
 
         this.isDisposed = true;
@@ -172,6 +209,28 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 category: WindowCategory.Document).ConfigureAwait(true);
             window.AppWindow.Title = string.Create(CultureInfo.InvariantCulture, $"Document Window {window.AppWindow.Id.Value}");
             window.Activate();
+
+            // Also create a document metadata entry for the document window and the main window
+            // using the same DocumentId so the document tab in the main shell and the document
+            // window represent the same document instance.
+            if (this.documentService is not null)
+            {
+                var docCtx = this.windowManager.GetWindow(window.AppWindow.Id);
+                var mainCtx = this.windowManager.OpenWindows.FirstOrDefault(wc => wc.Category == WindowCategory.Main);
+                if (docCtx is not null && mainCtx is not null)
+                {
+                    var md = new SampleDocumentMetadata
+                    {
+                        DocumentId = Guid.NewGuid(),
+                        Title = $"Document {window.AppWindow.Id.Value}",
+                        IsDirty = false,
+                    };
+
+                    // Open the document for the document window first, then add a tab to the main window
+                    _ = await this.documentService.OpenDocumentAsync(docCtx, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                    _ = await this.documentService.OpenDocumentAsync(mainCtx, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -319,5 +378,129 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         this.ActiveWindowInfo = activeWindow is not null
             ? string.Create(CultureInfo.InvariantCulture, $"{activeWindow.Window.Title} ({activeWindow.Category})")
             : "None";
+
+        if (activeWindow is not null && this.windowActiveDocument.TryGetValue(activeWindow.Id, out var docId) && this.documents.TryGetValue(docId, out var meta))
+        {
+            this.ActiveDocumentTitle = meta.Title;
+            this.ActiveDocumentIsDirty = meta.IsDirty;
+        }
+        else
+        {
+            this.ActiveDocumentTitle = null;
+            this.ActiveDocumentIsDirty = false;
+        }
+    }
+
+    // Document service event handlers (kept near other UI update helpers)
+    private void OnDocOpened(object? sender, DocumentOpenedEventArgs e)
+    {
+        if (e is null || e.Metadata is null)
+        {
+            return;
+        }
+
+        Debug.WriteLine($"OnDocOpened: DocId={e.Metadata.DocumentId}, Title='{e.Metadata.Title}', Window={(e.Window is not null ? e.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}, ShouldSelect={e.ShouldSelect}");
+        this.documents[e.Metadata.DocumentId] = e.Metadata;
+        if (e.Window is not null && e.ShouldSelect)
+        {
+            this.windowActiveDocument[e.Window.Id] = e.Metadata.DocumentId;
+        }
+
+        if (ReferenceEquals(e.Window, this.windowManager.ActiveWindow))
+        {
+            this.ActiveDocumentTitle = e.Metadata.Title;
+            this.ActiveDocumentIsDirty = e.Metadata.IsDirty;
+        }
+    }
+
+    private void OnDocMetadataChanged(object? sender, DocumentMetadataChangedEventArgs e)
+    {
+        if (e is null || e.NewMetadata is null)
+        {
+            return;
+        }
+
+        Debug.WriteLine($"OnDocMetadataChanged: DocId={e.NewMetadata.DocumentId}, Title='{e.NewMetadata.Title}', IsDirty={e.NewMetadata.IsDirty}, Window={(e.Window is not null ? e.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+
+        this.documents[e.NewMetadata.DocumentId] = e.NewMetadata;
+
+        if (ReferenceEquals(e.Window, this.windowManager.ActiveWindow))
+        {
+            this.ActiveDocumentTitle = e.NewMetadata.Title;
+            this.ActiveDocumentIsDirty = e.NewMetadata.IsDirty;
+        }
+    }
+
+    private void OnDocActivated(object? sender, DocumentActivatedEventArgs e)
+    {
+        if (e is null)
+        {
+            return;
+        }
+
+        Debug.WriteLine($"OnDocActivated: DocId={e.DocumentId}, Window={(e.Window is not null ? e.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+
+        if (!this.documents.TryGetValue(e.DocumentId, out var metadata))
+        {
+            return;
+        }
+
+        if (e.Window is not null)
+        {
+            this.windowActiveDocument[e.Window.Id] = e.DocumentId;
+        }
+
+        if (ReferenceEquals(e.Window, this.windowManager.ActiveWindow))
+        {
+            this.ActiveDocumentTitle = metadata.Title;
+            this.ActiveDocumentIsDirty = metadata.IsDirty;
+        }
+    }
+
+    private async void OnDocClosed(object? sender, DocumentClosedEventArgs e)
+    {
+        if (e is null || e.Metadata is null)
+        {
+            return;
+        }
+
+        Debug.WriteLine($"OnDocClosed: DocId={e.Metadata.DocumentId}, Title='{e.Metadata.Title}', Window={(e.Window is not null ? e.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+
+        _ = this.documents.Remove(e.Metadata.DocumentId);
+        if (e.Window == this.windowManager.ActiveWindow)
+        {
+            this.ActiveDocumentTitle = null;
+            this.ActiveDocumentIsDirty = false;
+        }
+
+        // If the document was open in any secondary/document windows (not the main window),
+        // close those windows. The app owns window lifecycles and should decide how to
+        // handle document removal; in the demo we close any document window hosting this doc.
+        var docId = e.Metadata.DocumentId;
+        var windowIds = this.windowActiveDocument
+            .Where(kvp => kvp.Value == docId)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var windowId in windowIds)
+        {
+            // Remove the mapping for the window regardless of the result.
+            _ = this.windowActiveDocument.Remove(windowId);
+
+            try
+            {
+                Debug.WriteLine($"Attempting to close window {windowId.Value} for document {docId}");
+                var ctx = this.windowManager.GetWindow(windowId);
+                if (ctx is not null && ctx.Category != WindowCategory.Main)
+                {
+                    _ = await this.windowManager.CloseWindowAsync(windowId).ConfigureAwait(true);
+                    Debug.WriteLine($"Closed window {windowId.Value} for document {docId}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Failed to close window {windowId.Value}: {ex.Message}");
+            }
+        }
     }
 }
