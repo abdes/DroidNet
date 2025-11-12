@@ -115,6 +115,7 @@ public class DependencyInjectionExtensionsTests
         _ = resolved.Should().BeOfType<TestWindowFactory>();
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Used as a type argument for DI registration tests; not directly instantiated.")]
     private sealed class TestWindowFactory : IWindowFactory
     {
         public Task<TWindow> CreateWindow<TWindow>(IReadOnlyDictionary<string, object>? metadata = null)
