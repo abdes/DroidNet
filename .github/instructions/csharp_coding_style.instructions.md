@@ -11,6 +11,29 @@ applyTo: '**/*.cs'
 - Use expression-bodied members for simple properties and methods where appropriate.
 - Always use `this.` to reference instance members to improve code readability.
 
+## Language Options
+
+Every project uses the following common language build properties. Do not add useless imports. Comply with the following settings:
+
+```xml
+    <!-- Language Options -->
+    <PropertyGroup>
+        <LangVersion>preview</LangVersion>
+        <Features>Strict</Features>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
+        <WarningLevel>999</WarningLevel>
+        <NoWarn>$(NoWarn),1573,1591,1712</NoWarn>
+        <WarningsAsErrors>nullable</WarningsAsErrors>
+        <DefaultLanguage>en-US</DefaultLanguage>
+
+        <AnalysisLevel>latest</AnalysisLevel>
+        <AnalysisMode>All</AnalysisMode>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    </PropertyGroup>
+```
+
 ## WinUI 3 Specific Guidelines
 - Follow the MVVM (Model-View-ViewModel) pattern for UI development.
 - Use data binding for UI elements instead of code-behind manipulation whenever possible.
