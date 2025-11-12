@@ -337,15 +337,8 @@ public partial class TabStrip : Control, ITabStrip
             throw new ArgumentException("Item must be a TabItem", nameof(item));
         }
 
-        // Create a TCS and register it *before* inserting so we don't miss a very-fast preparation
-        var tcs = new TaskCompletionSource<FrameworkElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        this.pendingRealizations[tabItem.ContentId] = tcs;
-
-        // Insert into the logical collection first (authoritative)
-        using (this.EnterExternalInsertScope(index, tabItem.ContentId))
-        {
-            this.Items.Insert(index, tabItem);
-        }
+        // Register the pending realization and insert the item atomically
+        var tcs = this.RegisterPendingRealizationAndInsert(index, tabItem);
 
         // Fast-path: the container may already be realized
         var fast = this.GetContainerForIndex(index);
@@ -355,86 +348,15 @@ public partial class TabStrip : Control, ITabStrip
             return RealizationResult.Success(fast);
         }
 
-        // Select repeater based on pinned state
-        var repeater = tabItem.IsPinned ? this.pinnedItemsRepeater : this.regularItemsRepeater;
+        var result = await this.WaitForPendingRealizationAsync(tabItem, tcs, timeoutMs, cancellationToken).ConfigureAwait(true);
 
-        if (repeater is null)
+        if (result.CurrentStatus != RealizationResult.Status.Realized)
         {
-            // No repeater to observe; treat as timeout/failure
-            _ = this.pendingRealizations.Remove(tabItem.ContentId);
-            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
+            // If the handshake did not complete successfully, remove the inserted clone
+            this.RemoveInsertedCloneSafely(tabItem);
         }
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        linked.CancelAfter(timeoutMs);
-        await using var reg = linked.Token.Register(() => tcs.TrySetCanceled(linked.Token)).ConfigureAwait(true);
-
-        var succeeded = false;
-        try
-        {
-            var container = await tcs.Task.ConfigureAwait(true);
-            if (container is not null)
-            {
-                // Container realized — control may animate here if desired
-                succeeded = true;
-                return RealizationResult.Success(container);
-            }
-
-            // Completed with null (shouldn't happen) — treat as timeout
-            // Fall through to failure handling which will remove the inserted clone
-            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
-        }
-        catch (TaskCanceledException)
-        {
-            // Distinguish external cancellation vs timeout
-            var status = cancellationToken.IsCancellationRequested
-                ? RealizationResult.Status.Cancelled
-                : RealizationResult.Status.TimedOut;
-
-            return RealizationResult.Failure(status);
-        }
-        catch (Exception ex)
-        {
-            this.LogInsertItemAsyncFailed(ex);
-            return RealizationResult.Failure(RealizationResult.Status.Error, ex);
-        }
-        finally
-        {
-            // Clean up pending waiter first
-            _ = this.pendingRealizations.Remove(tabItem.ContentId);
-
-            // If the handshake did not succeed, ensure the inserted clone is removed so the
-            // coordinator does not need to perform removal. Locate by ContentId to handle
-            // duplicate clones safely and only remove the first matching entry.
-            if (!succeeded)
-            {
-                try
-                {
-                    var removeIndex = this.Items.IndexOf(tabItem);
-                    if (removeIndex >= 0)
-                    {
-                        try
-                        {
-                            this.suppressCollectionChangeHandling = true;
-                            this.Items.RemoveAt(removeIndex);
-                            this.LogInsertItemAsyncRemoved(removeIndex, tabItem.ContentId);
-                        }
-                        finally
-                        {
-                            this.suppressCollectionChangeHandling = false;
-                        }
-
-                        // Ensure layout and repeaters reflect the removal
-                        this.InvalidateRepeatersAndLayout();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Swallow non-fatal exceptions but log for diagnostics
-                    this.LogInsertItemAsyncFailed(ex);
-                }
-            }
-        }
+        return result;
     }
 
     /// <inheritdoc/>
@@ -485,11 +407,13 @@ public partial class TabStrip : Control, ITabStrip
             this.LogPrepareExternalDropCancelled();
             return null;
         }
+#pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
             this.LogPrepareExternalDropFailed(ex);
             return null;
         }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     /// <inheritdoc/>
@@ -672,6 +596,101 @@ public partial class TabStrip : Control, ITabStrip
     {
         this.pendingExternalInsert = new ExternalInsertInfo(contentId, index);
         return new ExternalInsertScope(this);
+    }
+
+    private TaskCompletionSource<FrameworkElement?> RegisterPendingRealizationAndInsert(int index, TabItem tabItem)
+    {
+        var tcs = new TaskCompletionSource<FrameworkElement?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        this.pendingRealizations[tabItem.ContentId] = tcs;
+
+        // Insert into the logical collection first (authoritative)
+        using (this.EnterExternalInsertScope(index, tabItem.ContentId))
+        {
+            this.Items.Insert(index, tabItem);
+        }
+
+        return tcs;
+    }
+
+    private async Task<RealizationResult> WaitForPendingRealizationAsync(TabItem tabItem, TaskCompletionSource<FrameworkElement?> tcs, int timeoutMs, CancellationToken cancellationToken)
+    {
+        // Select repeater based on pinned state
+        var repeater = tabItem.IsPinned ? this.pinnedItemsRepeater : this.regularItemsRepeater;
+        if (repeater is null)
+        {
+            // No repeater to observe; treat as timeout/failure
+            _ = this.pendingRealizations.Remove(tabItem.ContentId);
+            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
+        }
+
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        linked.CancelAfter(timeoutMs);
+        await using var reg = linked.Token.Register(() => tcs.TrySetCanceled(linked.Token)).ConfigureAwait(true);
+
+        try
+        {
+            var container = await tcs.Task.ConfigureAwait(true);
+            if (container is not null)
+            {
+                // Container realized — control may animate here if desired
+                return RealizationResult.Success(container);
+            }
+
+            // Completed with null (shouldn't happen) — treat as timeout
+            return RealizationResult.Failure(RealizationResult.Status.TimedOut);
+        }
+        catch (TaskCanceledException)
+        {
+            // Distinguish external cancellation vs timeout
+            var status = cancellationToken.IsCancellationRequested
+                ? RealizationResult.Status.Cancelled
+                : RealizationResult.Status.TimedOut;
+
+            return RealizationResult.Failure(status);
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            this.LogInsertItemAsyncFailed(ex);
+            return RealizationResult.Failure(RealizationResult.Status.Error, ex);
+        }
+        finally
+        {
+            // Clean up pending waiter now so callers know it has been removed
+            _ = this.pendingRealizations.Remove(tabItem.ContentId);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
+
+    private void RemoveInsertedCloneSafely(TabItem tabItem)
+    {
+#pragma warning disable CA1031 // Do not catch general exception types
+        try
+        {
+            var removeIndex = this.Items.IndexOf(tabItem);
+            if (removeIndex >= 0)
+            {
+                try
+                {
+                    this.suppressCollectionChangeHandling = true;
+                    this.Items.RemoveAt(removeIndex);
+                    this.LogInsertItemAsyncRemoved(removeIndex, tabItem.ContentId);
+                }
+                finally
+                {
+                    this.suppressCollectionChangeHandling = false;
+                }
+
+                // Ensure layout and repeaters reflect the removal
+                this.InvalidateRepeatersAndLayout();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Swallow non-fatal exceptions but log for diagnostics
+            this.LogInsertItemAsyncFailed(ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     private void OnPreviewPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -1106,6 +1125,24 @@ public partial class TabStrip : Control, ITabStrip
             return;
         }
 
+        if (this.TryEnforceSelectionInvariant(oldItem, newItem))
+        {
+            return;
+        }
+
+        // Update IsSelected flags: deselect old item and select new item
+        _ = oldItem?.IsSelected = false;
+        _ = newItem?.IsSelected = true;
+
+        var items = this.Items;
+        var oldIndex = oldItem is not null && items is not null ? items.IndexOf(oldItem) : -1;
+        var newIndex = newItem is not null && items is not null ? items.IndexOf(newItem) : -1;
+
+        this.NotifySelectionChanged(oldItem, newItem, oldIndex, newIndex);
+    }
+
+    private bool TryEnforceSelectionInvariant(TabItem? oldItem, TabItem? newItem)
+    {
         var items = this.Items;
 
         // Enforce invariant: a non-empty TabStrip must always have a selected item.
@@ -1120,18 +1157,18 @@ public partial class TabStrip : Control, ITabStrip
                     // Re-assign previous selection; this will re-enter OnSelectedItemChanged but
                     // ReferenceEquals will prevent infinite recursion.
                     this.SelectedItem = oldItem;
-                    return;
+                    return true;
                 }
 
                 this.SelectedItem = items[0];
-                return;
+                return true;
             }
 
             // If newItem is not in the collection, clamp to first item
             if (!items.Contains(newItem))
             {
                 this.SelectedItem = items[0];
-                return;
+                return true;
             }
         }
         else if (items is null || items.Count == 0)
@@ -1140,17 +1177,15 @@ public partial class TabStrip : Control, ITabStrip
             if (newItem is not null)
             {
                 this.SelectedItem = null;
-                return;
+                return true;
             }
         }
 
-        // Update IsSelected flags: deselect old item and select new item
-        _ = oldItem?.IsSelected = false;
-        _ = newItem?.IsSelected = true;
+        return false;
+    }
 
-        var oldIndex = oldItem is not null && items is not null ? items.IndexOf(oldItem) : -1;
-        var newIndex = newItem is not null && items is not null ? items.IndexOf(newItem) : -1;
-
+    private void NotifySelectionChanged(TabItem? oldItem, TabItem? newItem, int oldIndex, int newIndex)
+    {
         this.SelectedIndex = newIndex;
 
         this.LogSelectionChanged(oldItem, newItem, oldIndex, newIndex);
