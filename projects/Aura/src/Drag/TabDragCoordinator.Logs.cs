@@ -395,6 +395,20 @@ public partial class TabDragCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
+        Message = "Tear-out DetachTab issued for item='{DraggedItem}'")]
+    private static partial void LogTearOutDetachTab(ILogger logger, string DraggedItem);
+
+    private void LogTearOutDetachTab(string draggedItem)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTearOutDetachTab(logger, draggedItem);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
         Message = "Tear-out RemoveItemAt({DraggedItemIndex}) succeeded")]
     private static partial void LogTearOutRemoveItemSuccess(ILogger logger, int DraggedItemIndex);
 

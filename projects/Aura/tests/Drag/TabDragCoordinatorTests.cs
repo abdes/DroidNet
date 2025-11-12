@@ -439,7 +439,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         _ = method?.Invoke(coordinator, [initialPhysicalPoint]);
 
         // Assert
-        tabStripMock.Verify(s => s.CloseTab(draggedItem), Times.Once());
+        tabStripMock.Verify(s => s.DetachTab(draggedItem), Times.Once());
 
         coordinator.Abort();
 

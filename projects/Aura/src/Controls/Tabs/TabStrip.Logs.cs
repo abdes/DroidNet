@@ -981,6 +981,20 @@ public partial class TabStrip
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Exception in TabDetachRequested handler.")]
+    private static partial void LogTabDetachRequestedException(ILogger logger, Exception Exception);
+
+    private void LogTabDetachRequestedException(Exception exception)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogTabDetachRequestedException(logger, exception);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Drag state cleanup for '{Header}' (ContentId={ContentId}): cleared {ClearedCount} container(s).")]
     private static partial void LogDragStateCleanupImpl(ILogger logger, string Header, Guid ContentId, int ClearedCount);

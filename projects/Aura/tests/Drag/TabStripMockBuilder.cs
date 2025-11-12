@@ -210,6 +210,7 @@ internal sealed partial class TabStripMockBuilder
         // Setup no-op methods
         _ = mock.Setup(m => m.RequestPreviewImage(It.IsAny<object>(), It.IsAny<DragVisualDescriptor>()));
         _ = mock.Setup(m => m.CloseTab(It.IsAny<object>()));
+        _ = mock.Setup(m => m.DetachTab(It.IsAny<object>()));
         _ = mock.Setup(m => m.TearOutTab(It.IsAny<object>(), It.IsAny<SpatialPoint<ScreenSpace>>()));
         _ = mock.Setup(m => m.TryCompleteDrag(It.IsAny<object>(), It.IsAny<ITabStrip?>(), It.IsAny<int?>()));
         _ = mock.Setup(m => m.ApplyTransformToItem(It.IsAny<Guid>(), It.IsAny<double>()));
@@ -257,6 +258,8 @@ internal sealed partial class TabStripMockBuilder
             => this.inner.RequestPreviewImage(item, descriptor);
 
         public void CloseTab(object item) => this.inner.CloseTab(item);
+
+        public void DetachTab(object item) => this.inner.DetachTab(item);
 
         public void TearOutTab(object item, SpatialPoint<ScreenSpace> dropPoint) => this.inner.TearOutTab(item, dropPoint);
 

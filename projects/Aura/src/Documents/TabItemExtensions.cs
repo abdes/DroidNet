@@ -4,6 +4,10 @@
 
 namespace DroidNet.Aura.Documents;
 
+/// <summary>
+///     Provides extension methods for creating and updating <see cref="Controls.TabItem"/>
+///     instances from <see cref="IDocumentMetadata"/>.
+/// </summary>
 internal static class TabItemExtensions
 {
     /// <summary>

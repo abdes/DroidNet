@@ -47,6 +47,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.documentService.DocumentActivated += this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested += this.TabStrip_TabCloseRequested;
+        this.tabStrip.TabDetachRequested += this.TabStrip_TabDetachRequested;
         this.tabStrip.SelectionChanged += this.TabStrip_SelectionChanged;
     }
 
@@ -61,6 +62,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.documentService.DocumentActivated -= this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested -= this.TabStrip_TabCloseRequested;
+        this.tabStrip.TabDetachRequested -= this.TabStrip_TabDetachRequested;
         this.tabStrip.SelectionChanged -= this.TabStrip_SelectionChanged;
 
         this.tabStrip.Items.Clear();
@@ -95,9 +97,26 @@ public sealed partial class DocumentTabPresenter : IDisposable
         }
 
         var id = item.ContentId;
-        this.logger.LogDebug("DocumentTabPresenter.TabStrip_TabCloseRequested: DocumentId={DocumentId}", id);
-        var closed = await this.documentService.CloseDocumentAsync(id, force: false).ConfigureAwait(true);
-        this.logger.LogDebug("DocumentTabPresenter.TabStrip_TabCloseRequested: DocumentId={DocumentId}, Closed={Closed}", id, closed);
+        this.LogDocumentCloseRequested(id);
+        var closed = await this.documentService.CloseDocumentAsync(this.hostWindow, id, force: false).ConfigureAwait(true);
+        this.LogDocumentCloseVerdict(id, closed);
+    }
+
+    private async void TabStrip_TabDetachRequested(object? sender, Controls.TabDetachRequestedEventArgs e)
+    {
+        if (e is null || e.Item is null)
+        {
+            return;
+        }
+
+        if (e.Item is not Controls.TabItem item)
+        {
+            return;
+        }
+
+        var id = item.ContentId;
+        this.LogDocumentDetachRequested(id);
+        _ = await this.documentService.DetachDocumentAsync(this.hostWindow, id).ConfigureAwait(true);
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
@@ -173,8 +192,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
             if (this.tabMap.TryGetValue(docId, out var tab))
             {
-                this.tabStrip.Items.Remove(tab);
-                this.tabMap.Remove(docId);
+                _ = this.tabStrip.Items.Remove(tab);
+                _ = this.tabMap.Remove(docId);
             }
         });
     }
@@ -197,8 +216,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
             if (this.tabMap.TryGetValue(docId, out var tab))
             {
-                this.tabStrip.Items.Remove(tab);
-                this.tabMap.Remove(docId);
+                _ = this.tabStrip.Items.Remove(tab);
+                _ = this.tabMap.Remove(docId);
             }
         });
     }

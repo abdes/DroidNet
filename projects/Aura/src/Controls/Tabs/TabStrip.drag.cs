@@ -81,6 +81,26 @@ public partial class TabStrip
     }
 
     /// <inheritdoc/>
+    public void DetachTab(object item)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        if (item is not TabItem tabItem)
+        {
+            throw new ArgumentException("Item must be of type TabItem.", nameof(item));
+        }
+
+        try
+        {
+            this.TabDetachRequested?.Invoke(this, new TabDetachRequestedEventArgs { Item = tabItem });
+        }
+        catch (Exception ex)
+        {
+            this.LogTabDetachRequestedException(ex);
+            throw;
+        }
+    }
+
+    /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "method not expected to throw")]
     public void TryCompleteDrag(object item, ITabStrip? destinationStrip, int? newIndex)
     {
