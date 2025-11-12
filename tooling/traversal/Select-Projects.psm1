@@ -23,6 +23,10 @@
     When set, this switch will cause all test projects to be ignored.
 .PARAMETER ExcludeSamples
     When set, this switch will cause all sample projects to be ignored.
+.PARAMETER Exclude
+    Optional regex to exclude projects whose file name matches the pattern.
+    Example: -Exclude '^.*\.Tests$' will exclude projects whose filenames
+    (without extension) end with '.Tests'.
 .EXAMPLE
     Prints the full path of each selected project to the output:
     .\traverse.ps1 -Tasks Select-Path
@@ -33,15 +37,17 @@
     Pass parameters only as switches or using the form '-Name Value'. ';' and
     '=' are not supported.
 #>
-Param (
-    [Parameter(HelpMessage = "Add extra diagnostic output to slngen generator.")]
-    [switch]$UseDiagnostics = $false
-)
+Param ()
 
 # Function to load .gitignore patterns
-function LoadGitIgnorePatterns() {
+function LoadGitIgnorePatterns {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.IO.DirectoryInfo]$StartLocation
+    )
+
     $patterns = @()
-    $directory = Get-Location
+    $directory = $StartLocation
 
     # Function to convert glob patterns to regex
     function ConvertGlobToRegex {
@@ -50,7 +56,7 @@ function LoadGitIgnorePatterns() {
     }
 
     while ($True) {
-        $gitignore_file = Join-Path -Path $directory -ChildPath ".gitignore"
+        $gitignore_file = Join-Path -Path $directory.FullName -ChildPath ".gitignore"
 
         if (Test-Path -Path $gitignore_file) {
             $patterns += Get-Content $gitignore_file |
@@ -58,32 +64,33 @@ function LoadGitIgnorePatterns() {
             ForEach-Object { ConvertGlobToRegex -glob $_ }
         }
 
-        if (Test-Path -Path (Join-Path -Path $directory -ChildPath ".git")) { break }
+        if (Test-Path -Path (Join-Path -Path $directory.FullName -ChildPath ".git")) { break }
 
-        $directory = Split-Path -Path $directory -Parent
-        if ($directory -eq "") { break }
+        $directory = $directory.Parent
+        if (-not $directory) { break }
     }
 
     return $patterns
 }
 
 # Function to check if a file is ignored
-function CheckIgnored() {
+function CheckIgnored {
     param(
         [string[]]$patterns,
-        [System.IO.FileSystemInfo]$file
+        [System.IO.FileSystemInfo]$file,
+        [System.IO.DirectoryInfo]$StartLocation
     )
 
     $name = $file.Name
-    $relativePath = $file.FullName.Replace($startingLocation.Path + '\', '').Replace('\\', '/')
+    $relativePath = $file.FullName.Replace($StartLocation.FullName + '\\', '').Replace('\\', '/')
     $patternsToCheck = @($relativePath, "$relativePath/", $name, "$name/")
 
     foreach ($pattern in $patterns) {
         foreach ($path in $patternsToCheck) {
-            if ($path -match $pattern) { return 'true' }
+            if ($path -match $pattern) { return $true }
         }
     }
-    return 'false'
+    return $false
 }
 
 function Get-Tasks {
@@ -139,7 +146,45 @@ function Get-Tasks {
                     [System.Collections.IDictionary]
                     $OtherParams
                 )
-                & "$Task" -Project $Project @OtherParams
+                # If the target function explicitly declares an "OtherParams" parameter,
+                # prefer to pass the hashtable to it. This prevents splatting a hashtable
+                # with keys unknown to the target function which would cause an error.
+                $cmd = Get-Command -Name $Task -CommandType Function -ErrorAction SilentlyContinue
+                # Prepare splat: always include Project explicitly
+                $splat = @{
+                    Project = $Project
+                }
+
+                # If the function defines explicit parameters for typical forwarding
+                # like Framework and Filter, prefer to pass them directly from the
+                # OtherParams hashtable so splatting doesn't fail if unknown keys
+                # were provided.
+                if ($cmd) {
+                    foreach ($pName in @('framework','filter','verbosity')) {
+                        if ($cmd.Parameters.ContainsKey(($pName.Substring(0,1).ToUpper()+$pName.Substring(1))) -and $OtherParams.Contains($pName)) {
+                            $splat[($pName.Substring(0,1).ToUpper()+$pName.Substring(1))] = $OtherParams[$pName]
+                        }
+                    }
+                }
+
+                # If the target function still accepts a generic OtherParams hashtable,
+                # pass it as well so it can receive unexpected keys.
+                if ($cmd -and $cmd.Parameters.ContainsKey('OtherParams')) {
+                    $splat['OtherParams'] = $OtherParams
+                    & "$Task" @splat
+                }
+                else {
+                    # Convert hashtable keys to a new hashtable with PascalCase keys
+                    # for splatting to a function that expects parameter names with case
+                    # matching their declaration. We still keep any $splat values.
+                    $pascalSplat = @{}
+                    foreach ($k in $OtherParams.Keys) {
+                        $pascal = ($k.Substring(0,1).ToUpper() + $k.Substring(1))
+                        $pascalSplat[$pascal] = $OtherParams[$k]
+                    }
+                    foreach ($key in $pascalSplat.GetEnumerator()) { $splat[$key.Key] = $key.Value }
+                    & "$Task" @splat
+                }
             }
         }
     }
@@ -155,6 +200,7 @@ function Select-Projects {
         [switch]$ExcludeTests,
 
         [switch]$ExcludeSamples,
+        [regex]$Exclude,
 
         [Parameter(Mandatory)]
         [string[]]$Tasks,
@@ -174,11 +220,12 @@ function Select-Projects {
     }
 
     process {
-        $patterns = LoadGitIgnorePatterns
+        $startingLocation = Get-Item -Path $StartLocation -ErrorAction Stop
+        $patterns = LoadGitIgnorePatterns -StartLocation $startingLocation
         $stack = New-Object System.Collections.Stack
 
         Get-ChildItem -Path $StartLocation | ForEach-Object {
-            if (CheckIgnored -patterns $patterns -file $_ -eq 'false') { $stack.Push($_) }
+            if (-not (CheckIgnored -patterns $patterns -file $_ -StartLocation $startingLocation)) { $stack.Push($_) }
         }
 
         while ($stack.Count -gt 0 -and ($item = $stack.Pop())) {
@@ -189,51 +236,124 @@ function Select-Projects {
                 }
 
                 Get-ChildItem -Path $item.FullName | ForEach-Object {
-                    if (CheckIgnored -file $_ -eq 'false') { $stack.Push($_) }
+                    if (-not (CheckIgnored -patterns $patterns -file $_ -StartLocation $startingLocation)) { $stack.Push($_) }
                 }
             }
             elseif ($item.FullName -match ".*.csproj$") {
-                if ($PSCmdlet.ShouldProcess($_.FullName, "Perform tasks")) {
+                # If the caller requested to exclude projects by regex and the
+                # project's filename (without extension) matches the provided
+                # pattern, skip processing this project.
+                if ($PSBoundParameters.ContainsKey('Exclude') -and $Exclude -ne $null) {
+                    try {
+                        if ($Exclude.IsMatch($item.BaseName)) { continue }
+                    }
+                    catch {
+                        Write-Error "Select-Projects: The provided -Exclude regex failed to evaluate: $($_.Exception.Message)"
+                        continue
+                    }
+                }
+                if ($PSCmdlet.ShouldProcess($item.FullName, "Perform tasks")) {
                     foreach ($task in $Tasks) {
                         # & $knownTasks[$task] -Project $item $OtherParams
                         [scriptblock]$scriptBlock = $knownTasks[$task].action;
 
                         if ($knownTasks[$task].isBuiltIn) {
-                            Invoke-Command -Scriptblock $scriptBlock -ArgumentList $item, $OtherParams
+                            if ($DebugPreference -ne 'SilentlyContinue') {
+                                Invoke-Command -Scriptblock $scriptBlock -ArgumentList $item
+                            }
+                            else {
+                                Invoke-Command -Scriptblock $scriptBlock -ArgumentList $item
+                            }
                         }
                         else {
+                            if ($PSBoundParameters.ContainsKey('Debug')) { Write-Debug "Select-Projects: forwarding Debug to actionWrapper for task: $task" }
                             # Wrap the action script invocation to transform the
                             # unbound arguments into a Hashtable that gets
                             # passed to the action script block.
                             # https://stackoverflow.com/questions/62622385/wrapper-function-for-cmdlet-pass-remaining-parameters/62622638#62622638
                             $actionWrapper = {
                                 param(
-                                    [Parameter(Mandatory)]
-                                    [string]$Task,
+                                            [Parameter(Mandatory)]
+                                            [string]$Task,
 
-                                    [Parameter(Mandatory)]
-                                    [System.IO.FileSystemInfo]$Project,
+                                            [Parameter(Mandatory)]
+                                            [System.IO.FileSystemInfo]$Project,
 
-                                    [System.Collections.Generic.List`1[System.Object]] $UnboundArgs
-                                )
+                                        [object[]] $UnboundArgs,
+
+                                        [bool] $ParentWhatIf,
+
+                                        [bool] $ParentDebug
+                                        )
 
                                 # (Incompletely) emulate PowerShell's own argument parsing by
                                 # building a hashtable of parameter-argument pairs to pass through
                                 # to Set-Location via splatting.
-                                $htPassThruArgs = @{}; $key = $null
+                                # Build a hashtable of parameter names -> values from the
+                                # remaining arguments array. This supports repeated keys
+                                # (accumulated into arrays), quoted values, and boolean
+                                # switches specified without a value. PowerShell already
+                                # preserves quoted strings in $UnboundArgs, so we only
+                                # need to interpret tokens and group them.
+                                $htPassThruArgs = @{}
+                                if ($UnboundArgs -and $UnboundArgs.Count -gt 0) {
+                                    $i = 0
+                                    while ($i -lt $UnboundArgs.Count) {
+                                        $token = $UnboundArgs[$i]
+                                        if ($token -is [string] -and $token -match '^(-+)(?<name>.+)$') {
+                                            $name = $Matches['name']
+                                            $value = $true
+                                            $i++
+                                            if ($i -lt $UnboundArgs.Count) {
+                                                $nextToken = $UnboundArgs[$i]
+                                                if (-not ($nextToken -is [string] -and $nextToken -match '^-.+')) {
+                                                    # $nextToken is a value for $name
+                                                    $value = $nextToken
+                                                    $i++
+                                                }
+                                            }
 
-                                if ($UnboundArgs) {
-                                    switch -regex ($UnboundArgs) {
-                                        '^-(.+)' { if ($key) { $htPassThruArgs[$key] = $true } $key = $Matches[1] }
-                                        default { $htPassThruArgs[$key] = $_; $key = $null }
+                                            $name = $name.TrimStart('-')
+                                            $nameKey = $name.ToLower()
+                                            if ($htPassThruArgs.ContainsKey($nameKey)) {
+                                                # If existing value is an arraylist, append; otherwise convert to an arraylist.
+                                                if ($htPassThruArgs[$nameKey] -is [System.Collections.ArrayList]) {
+                                                    [void]$htPassThruArgs[$nameKey].Add($value)
+                                                }
+                                                else {
+                                                    $arr = New-Object System.Collections.ArrayList
+                                                    [void]$arr.Add($htPassThruArgs[$nameKey])
+                                                    [void]$arr.Add($value)
+                                                    $htPassThruArgs[$nameKey] = $arr
+                                                }
+                                            }
+                                            else { $htPassThruArgs[$nameKey] = $value }
+                                        }
+                                        else {
+                                            # Ignore stray tokens that are not '-Name' tokens.
+                                            $i++
+                                        }
                                     }
-                                    if ($key) { $htPassThruArgs[$key] = $true } # trailing switch param.
                                 }
 
+                                if ($ParentWhatIf) { $htPassThruArgs['WhatIf'] = $true }
+                                # If the parent Select-Projects was called with -Debug, forward
+                                # that preference to the invoked action by providing a boolean
+                                # flag the action can use to enable Write-Debug output.
+                                if ($ParentDebug) { $htPassThruArgs['Debug'] = $true }
+
+                                # If the parent requested debug, set the DebugPreference for the
+                                # invoked action so Write-Debug calls are visible.
+                                if ($ParentDebug) { $oldDebugPreference = $DebugPreference; $DebugPreference = 'Continue' }
                                 & $scriptBlock $Task $Project $htPassThruArgs
+                                if ($ParentDebug) { $DebugPreference = $oldDebugPreference }
                             }
 
-                            Invoke-Command -Scriptblock $actionWrapper -ArgumentList $task, $item, $OtherParams
+                            if ($DebugPreference -ne 'SilentlyContinue') {
+                                Invoke-Command -Scriptblock $actionWrapper -ArgumentList $task, $item, $OtherParams, $WhatIfPreference, $true
+                            } else {
+                                Invoke-Command -Scriptblock $actionWrapper -ArgumentList $task, $item, $OtherParams, $WhatIfPreference, $false
+                            }
                         }
                     }
                 }

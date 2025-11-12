@@ -21,10 +21,7 @@
 .NOTES
     See https://github.com/MicrosoftDocs/windows-dev-docs/blob/docs/hub/apps/package-and-deploy/ci-for-winui3.md
 #>
-Param (
-    [Parameter(HelpMessage = "Add extra diagnostic output to slngen generator.")]
-    [switch]$UseDiagnostics = $false
-)
+Param ()
 
 function New-Package {
     [CmdletBinding(SupportsShouldProcess)]
