@@ -191,7 +191,7 @@ public partial class TabDragCoordinator
         }
 
         var stripName = hitStrip?.GetType().Name ?? "None";
-        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, this.GetDraggedItemIndex(context));
+        LogEndDragPreparation(this.logger, isTearOutMode, stripName, fallbackIndex, GetDraggedItemIndex(context));
     }
 
     [LoggerMessage(
