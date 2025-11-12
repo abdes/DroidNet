@@ -151,6 +151,7 @@ public partial class TabStrip : Control, ITabStrip
     protected TabStripLayoutManager LayoutManager { get; set; } = new TabStripLayoutManager();
 
     /// <inheritdoc/>
+    [SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "more clear like this")]
     public IReadOnlyList<TabStripItemSnapshot> TakeSnapshot()
         => this.realizedItems
             .Where(info => !info.IsPinned)
@@ -301,12 +302,7 @@ public partial class TabStrip : Control, ITabStrip
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        if (item is not TabItem tabItem)
-        {
-            return -1;
-        }
-
-        return this.Items.IndexOf(tabItem);
+        return item is not TabItem tabItem ? -1 : this.Items.IndexOf(tabItem);
     }
 
     /// <inheritdoc/>
@@ -371,13 +367,12 @@ public partial class TabStrip : Control, ITabStrip
 
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         linked.CancelAfter(timeoutMs);
-
-        using var reg = linked.Token.Register(() => tcs.TrySetCanceled());
+        await using var reg = linked.Token.Register(() => tcs.TrySetCanceled(linked.Token)).ConfigureAwait(true);
 
         var succeeded = false;
         try
         {
-            var container = await tcs.Task.ConfigureAwait(false);
+            var container = await tcs.Task.ConfigureAwait(true);
             if (container is not null)
             {
                 // Container realized — control may animate here if desired
@@ -439,29 +434,6 @@ public partial class TabStrip : Control, ITabStrip
                     this.LogInsertItemAsyncFailed(ex);
                 }
             }
-        }
-    }
-
-    private IDisposable EnterExternalInsertScope(int index, Guid contentId)
-    {
-        this.pendingExternalInsert = new ExternalInsertInfo(contentId, index);
-        return new ExternalInsertScope(this);
-    }
-
-    private sealed partial class ExternalInsertScope(TabStrip owner) : IDisposable
-    {
-        private readonly TabStrip owner = owner;
-        private bool disposed;
-
-        public void Dispose()
-        {
-            if (this.disposed)
-            {
-                return;
-            }
-
-            this.owner.pendingExternalInsert = null;
-            this.disposed = true;
         }
     }
 
@@ -687,8 +659,20 @@ public partial class TabStrip : Control, ITabStrip
     ///     Handles a tab close request. This is the event handler for TabStripItem.CloseRequested.
     ///     Protected for testing scenarios where tests can call this method directly.
     /// </summary>
+    /// <param name="sender">
+    ///     The source of the event, expected to be a <see cref="TabStripItem"/> or other control raising the event.
+    /// </param>
+    /// <param name="e">
+    ///     The event data containing information about the tab close request.
+    /// </param>
     protected virtual void HandleTabCloseRequest(object? sender, TabCloseRequestedEventArgs e)
         => this.TabCloseRequested?.Invoke(this, e);
+
+    private ExternalInsertScope EnterExternalInsertScope(int index, Guid contentId)
+    {
+        this.pendingExternalInsert = new ExternalInsertInfo(contentId, index);
+        return new ExternalInsertScope(this);
+    }
 
     private void OnPreviewPointerPressed(object sender, PointerRoutedEventArgs e)
     {
@@ -1761,10 +1745,7 @@ public partial class TabStrip : Control, ITabStrip
         else
         {
             // If Reset leaves items (rare), ensure a selection exists
-            if (this.SelectedItem is null)
-            {
-                this.SelectedItem = items[0];
-            }
+            this.SelectedItem ??= items[0];
         }
 
         this.LogItemsReset(items.Count, selectionCleared);
@@ -1823,4 +1804,21 @@ public partial class TabStrip : Control, ITabStrip
     private readonly record struct ExternalInsertInfo(Guid ContentId, int TargetIndex);
 
     private readonly record struct RealizedItemInfo(FrameworkElement Element, int Index, bool IsPinned);
+
+    private sealed partial class ExternalInsertScope(TabStrip owner) : IDisposable
+    {
+        private readonly TabStrip owner = owner;
+        private bool disposed;
+
+        public void Dispose()
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.owner.pendingExternalInsert = null;
+            this.disposed = true;
+        }
+    }
 }
