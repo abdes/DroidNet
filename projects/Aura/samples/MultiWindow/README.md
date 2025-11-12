@@ -31,6 +31,20 @@ This sample demonstrates Aura's comprehensive multi-window management capabiliti
 - **Tool Windows** - Lightweight utility windows
 - **Document Windows** - Content editing windows with toolbars
 
+### Detach vs Close
+
+- **Detach** - Dragging (tear-out) a document tab starts a non-blocking detach
+  operation: the UI immediately removes a tab and the app receives a
+  DocumentDetached event to take ownership (for example creating a dedicated
+  document window). This flow intentionally does not allow vetoes from the app
+  so the UI remains responsive.
+- **Close** - Explicit close requests (clicking a tab's close button) call into
+  the app via the IDocumentService.CloseDocumentAsync API, which raises a
+  DocumentClosing event. The app can return a veto by adding a Task to the event
+  args which returns false (e.g., to block close while saving or when the
+  document is dirty). CloseDocumentAsync will await veto tasks unless forced
+  (force==true) which bypasses vetos.
+
 ### ⚡ Reactive Events
 
 - **Observable Event Streams** - Subscribe to window lifecycle events using Rx

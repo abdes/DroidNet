@@ -30,6 +30,17 @@
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                 Text="Demonstration of multi-window management capabilities"
                 TextWrapping="Wrap" />
+            <TextBlock
+                Margin="0,6,0,0"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Detach (drag out) will move a document into a new window. Close will request the app close the document and may be vetoed by the app."
+                TextWrapping="Wrap" />
+            <StackPanel
+                Margin="0,8,0,0"
+                Orientation="Horizontal"
+                Spacing="8">
+                <CheckBox Content="Ask before closing documents" IsChecked="{x:Bind ViewModel.ConfirmBeforeClose, Mode=TwoWay}" />
+            </StackPanel>
         </StackPanel>
 
         <!--  Window Statistics  -->
