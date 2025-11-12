@@ -106,24 +106,20 @@ jobs:
                     exit 1
                 }
 
-            - name: Execute Unit Tests
+            - name: Execute Unit Tests (traverse)
               shell: pwsh
               run: |
-                dotnet test `
-                  --no-build `
-                  --logger "trx;LogFileName=test-results.trx" `
-                  /p:Platform=${{ matrix.platform }} `
-                  -c ${{ matrix.configuration }} `
-                  --filter "TestCategory!=UITest"
+                # Use traversal script to run tests across projects. Keep the same
+                # filtering that excludes UI tests and forward configuration
+                # information from the matrix to the underlying dotnet invocation.
+                ./tooling/traverse.ps1 `
+                  -Exclude "Interop" `
+                  -Tasks Invoke-Tests `
+                  -StartLocation "./projects" `
+                  -Filter 'TestCategory!=UITest' `
+                  -configuration ${{ matrix.configuration }} `
+                  -Platform ${{ matrix.platform }}
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error "Tests failed"
                     exit 1
                 }
-
-            - name: Publish Test Results
-              uses: actions/upload-artifact@v4
-              if: always()  # Run this step even if previous steps failed
-              with:
-                name: test-results-${{ matrix.platform }}-${{ matrix.configuration }}
-                path: TestResults/test-results.trx
-                retention-days: 30

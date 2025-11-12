@@ -1,59 +1,155 @@
 # Traversal actions
 
-We have here a set of PowerShell modules to help traverse the projects in the
-monorepo and execute 'tasks' on them. This is very helpful for working on a set
-of connected projects, or in Continuous Integration workflows.
+A set of PowerShell modules to traverse project trees and execute "tasks" on
+projects in the monorepo. This is helpful for locally running commands across
+multiple projects or in Continuous Integration workflows.
 
-> Traversal ignores all files and directories that are ignored by `.gitignore`.
+> Traversal ignores files and folders that are ignored by the repository's
+> `.gitignore` files.
 
-Tasks can be [built-in](#built-in-tasks) (simple tasks with very little logic in
-them) or can be complex tasks implemented as full-fledged Cmdlets.
+Tasks may be either built-in or authored as external Cmdlets (placed under the
+`tooling/traversal/tasks` folder). The `traverse.ps1` script is a wrapper that
+invokes the `Select-Projects` cmdlet to locate projects and run tasks on them.
 
-The provided [script](../traverse.ps1) is an invocation wrapper around the
-[Select-Projects](./Select-Projects.psm1) Cmdlet.
+## Usage (examples)
 
-## Examples
+From the repository root, call the traversal wrapper script:
 
-Traversing the project tree and printing the project name only, so that the
-output can be used to do other things:
+```pwsh
+# Print project names
+.\tooling\traverse.ps1 -Tasks Select-Name
+.\tooling\traverse.ps1 -Tasks Select-Name -ExcludeTests
+.\tooling\traverse.ps1 -Tasks Select-Name -ExcludeSamples
 
-```shell
-.\traverse.ps1 -Tasks Select-Name
-.\traverse.ps1 -Tasks Select-Name -ExcludeTests
-.\traverse.ps1 -Tasks Select-Name -ExcludeSamples
+# Print full project path
+.\tooling\traverse.ps1 -Tasks Select-Path
+.\tooling\traverse.ps1 -Tasks Select-Path -ExcludeTests
+.\tooling\traverse.ps1 -Tasks Select-Path -ExcludeSamples
+
+# Build AppX package for package-capable projects
+.\tooling\traverse.ps1 -Tasks New-Package -StartLocation .\projects -Platform x64 -Configuration Debug -PackageCertificateKeyFile "F:\projects\DroidNet\tooling\cert\DroidNet-Test.pfx" -ExcludeTests
+
+# Run tests for .Tests projects (excludes .UI.Tests by default)
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Framework net9.0-windows10.0.26100.0 -Filter 'Category!=UITest' -Debug -WhatIf
 ```
 
-Traversing the project tree and printing the full project file path, so that the
-output can be used to do other things:
+Notes:
 
-```shell
-.\traverse.ps1 -Tasks Select-Path
-.\traverse.ps1 -Tasks Select-Path -ExcludeTests
-.\traverse.ps1 -Tasks Select-Path -ExcludeSamples
+- `-StartLocation` is optional; default is the repository root.
+
+- `-Debug` enables `Write-Debug` output in tasks (diagnostics); `-Verbose` is also supported.
+
+- `-WhatIf` and `-Confirm` are forwarded so you can simulate runs safely.
+
+## Argument forwarding and supported patterns
+
+`Select-Projects` forwards arguments to external task modules. This forwarding
+has been improved to support the following cases:
+
+- Support for both single-dash (`-name`) and double-dash (`--name`) tokens.
+- Quoted values are preserved (for example `-Configuration "My Config"`).
+- Repeated keys are forwarded as an array: `-Extra A -Extra B` becomes
+    `Extra = ["A","B"]`.
+- Boolean switches are forwarded as `Flag = $true`.
+- The parser builds a hashtable of parameters and either splats into the
+    function or passes the whole hashtable as `-OtherParams` if the task declares
+    such a parameter.
+
+Known limitations:
+
+- The parser assumes a `-Name Value` tokenization pattern. Values that
+    begin with `-` (e.g. `-Configuration -Debug`) will be interpreted as a
+    parameter unless the value is quoted (e.g. `-Configuration "-Debug"`).
+
+- The `name:value` or `name=value` syntaxes are not supported; please use
+    `-Name Value` or `--name value` instead.
+
+When writing a custom external task, add a `Project` parameter (Type: `FileInfo`
+or `FileSystemInfo`) and any named optional parameters you want to accept. For
+forwarding arbitrary unknown keys without function signature mismatch, declare
+an `OtherParams` parameter that expects a hashtable. Example:
+
+```powershell
+function New-Package {
+        param(
+                [Parameter(Mandatory)]
+                [System.IO.FileSystemInfo]$Project,
+
+                [string]$Platform,
+
+                [string]$Configuration,
+
+                [hashtable]$OtherParams
+        )
+        # ...
+}
 ```
 
-Traversing the project tree, and if the project can be packaged as an AppX
-package, run the MSBuild command to produce the package:
+If `OtherParams` is present, the parser will pass the entire argument hashtable
+as `-OtherParams` to your function. Otherwise, parsed keys will be splatted.
 
-```shell
-.\traverse.cmd -Tasks New-Package -StartLocation ..\projects -Platform x64 -Configuration Debug -PackageCertificateKeyFile "F:\projects\DroidNet\tooling\cert\DroidNet-Test.pfx" -ExcludeTests
-```
+### Parameter normalization
 
-> IMPORTANT NOTE: due to the limitation of parameter forwarding in PowerShell,
-> only arguments passed as switches or as '-Name Value', with the parameter name
-> and value separated by a space are accepted. Using ':' or '=' is not
-> supported.
+- Parameter names are normalized to lower-case in the parser, and when splatted
+    to tasks they are converted to PascalCase to align with typical PowerShell
+    parameter naming.
+
+- The traversal wrapper also forwards `-Debug`, `-Verbose`, `-WhatIf`, and `-Confirm`.
 
 ## Built-in tasks
 
-- Select-Name : print the project name
-- Select-Path : print the full project path
+### New-Package (tooling/traversal/tasks/New-Package.psm1)
 
-## Complex tasks
+Runs MSBuild to create an AppX package when the project includes
+`Package.appxmanifest`. Use `-WhatIf` to verify behavior without producing
+packages. Detailed options and flags are in the module's help header.
 
-### [New-Package](tasks/New-Package.psm1)
+### Invoke-Tests (tooling/traversal/tasks/Invoke-Tests.psm1)
 
-Run MSBuild command to generate a signed AppX package for the project.
+Runs `dotnet run` for test projects whose names end with `.Tests` — `*.UI.Tests`
+projects are excluded by default. This task is intended for CI flows that need
+to run many test runner projects and accepts forwarded parameters such as
+`-Framework` (TFM) and `-Filter`.
 
-The project must have a `Package.appxmanifest` file.
-Detailed usage information is in the [PowerShell module](tasks/New-Package.psm1).
+Example (keeping UI tests out):
+
+```pwsh
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Framework net9.0-windows10.0.26100.0 -Filter 'Category!=UITest' -Debug
+```
+
+`Invoke-Tests` builds a `dotnet run` argument array and forwards known named
+parameters; duplicate values are de-duplicated before running `dotnet`.
+
+## Writing external tasks
+
+- Place one or more task modules under `tooling/traversal/tasks/` as `*.psm1`.
+- Provide a `.psd1` manifest (recommended) so the module exports are explicit.
+- Tasks should declare a `Project` parameter and any other named parameters.
+- If you expect to receive arbitrary or unknown keys, declare an `OtherParams`
+    [hashtable] parameter to receive the argument hashtable.
+
+## Tips / FAQ
+
+- Use `-WhatIf` and `-Debug` for safe debugging and verbose diagnostics:
+
+```pwsh
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Framework net9.0-windows10.0.26100.0 -Filter 'Category!=UITest' -Debug -WhatIf
+```
+
+- For `dotnet run`, some projects target multiple frameworks — pass `-Framework`
+    to disambiguate which target to run.
+
+- If you hit an issue where values starting with `-` are misinterpreted, wrap
+    the value in quotes to ensure it is treated as a value (ex: `-Filter "-MyFlag"`).
+
+- Use `OtherParams` if you want to handle unknown keys yourself inside the task.
+
+## Contributing
+
+If you add a new task, please provide tests where possible and add a module
+manifest (`.psd1`) to the task under `tooling/traversal/tasks`. This makes the
+task self-describing and avoids issues with automatic discovery.
+
+---
+
+Happy traversing! 🚀

@@ -15,7 +15,14 @@ $modulePath = Join-Path -Path $PSScriptRoot -ChildPath "traversal\Select-Project
 Import-Module $modulePath
 
 try {
-    Select-Projects @args
+    # Forward common switches (Debug, Verbose, WhatIf, Confirm) to Select-Projects
+    $forward = @()
+    if ($PSBoundParameters.ContainsKey('Debug')) { $forward += '-Debug' }
+    if ($PSBoundParameters.ContainsKey('Verbose')) { $forward += '-Verbose' }
+    if ($PSBoundParameters.ContainsKey('WhatIf')) { $forward += '-WhatIf' }
+    if ($PSBoundParameters.ContainsKey('Confirm')) { $forward += '-Confirm' }
+
+    Select-Projects @args $forward
 }
 finally {
     # Remove the module at the end of the script
