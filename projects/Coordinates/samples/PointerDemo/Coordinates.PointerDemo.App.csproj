@@ -2,7 +2,7 @@
 
 <Project Sdk="Microsoft.NET.Sdk">
     <PropertyGroup>
-        <TargetFramework>net9.0-windows10.0.26100.0</TargetFramework>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
         <UseWinUI>true</UseWinUI>
         <DefineConstants>DISABLE_XAML_GENERATED_MAIN</DefineConstants>
         <RootNamespace>$(RootNamespace).Coordinates.PointerDemo</RootNamespace>

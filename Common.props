@@ -30,11 +30,14 @@
         <Platform Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'">x64</Platform>
     </PropertyGroup>
 
-    <!-- Read-only source tree (builds to top-level bin/obj folders) -->
-    <PropertyGroup>
+    <!-- Read-only source tree (builds to top-level bin/obj folders)
+         These default paths are disabled when UseArtifactsOutput is enabled
+         (configured in Directory.build.props) because .NET 8+ will set output
+         folders under the configured ArtifactsPath. -->
+    <PropertyGroup Condition="'$(UseArtifactsOutput)' != 'true'">
         <!-- Don't include platform in base paths - the SDK will add it automatically to the final output path -->
         <BaseIntermediateOutputPath>$(MyTopLevelDirectory)obj\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseIntermediateOutputPath>
-        <BaseOutputPath Condition=" '$(BaseOutputPath)' == '' ">$(MyTopLevelDirectory)bin\$(MSBuildProjectName)\</BaseOutputPath>
+        <BaseOutputPath Condition=" '$(BaseOutputPath)' == '' ">$(MyTopLevelDirectory)bin\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseOutputPath>
     </PropertyGroup>
 
     <PropertyGroup>
@@ -142,7 +145,9 @@
     <ItemDefinitionGroup>
         <!-- We always want MSBuild properties generated that point at the restored location of each package. -->
         <!-- https://learn.microsoft.com/en-us/nuget/consume-packages/package-references-in-project-files#generatepathproperty -->
-        <PackageReference GeneratePathProperty="true" />
+        <PackageReference>
+            <GeneratePathProperty>true</GeneratePathProperty>
+        </PackageReference>
     </ItemDefinitionGroup>
 
     <!-- Build Options -->
