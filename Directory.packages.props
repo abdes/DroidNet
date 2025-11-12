@@ -37,8 +37,8 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="9.0.10" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="9.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.10" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
@@ -75,7 +75,7 @@
   </ItemGroup>
   <!-- Testing -->
   <ItemGroup>
-    <PackageVersion Include="MSTest" Version="4.0.1" />
+    <PackageVersion Include="MSTest" Version="4.0.2" />
     <PackageVersion Include="MSTest.TestAdapter" Version="4.0.2" />
     <PackageVersion Include="MSTest.TestFramework" Version="4.0.2" />
     <PackageVersion Include="MSTest.Analyzers" Version="4.0.2" />
