@@ -287,20 +287,6 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         _ = ds.DetachedIds.Should().Contain(id);
     });
 
-    /// <summary>
-    /// Helper to create a WindowContext for tests (avoids using the IWindowContextFactory dependency). This mirrors the minimal parts of the window context used by DocumentTabPresenter.
-    /// </summary>
-    private static class WindowContextFactory
-    {
-        public static WindowContext CreateForWindow(Window window) => new()
-        {
-            Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
-            Window = window,
-            Category = new WindowCategory("Test"),
-            CreatedAt = DateTimeOffset.UtcNow,
-        };
-    }
-
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -313,6 +299,48 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         {
             throw new InvalidOperationException("Condition not met within timeout");
         }
+    }
+
+    [TestMethod]
+    public Task DocumentClose_ServiceVeto_PreventsClose_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentService();
+        var ctx = WindowContextFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var meta = new TestDocumentMetadata { Title = "SvcVetoDoc" };
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Add a veto handler
+        ds.DocumentClosing += (s, e) => e.AddVetoTask(Task.FromResult(false));
+
+        // Act - call CloseDocumentAsync directly (service API)
+        var result = await ds.CloseDocumentAsync(ctx, id, force: false).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - close was vetoed
+        _ = result.Should().BeFalse();
+        _ = ds.ClosedIds.Should().NotContain(id);
+        _ = tabStrip.Items.Should().HaveCount(1);
+    });
+
+    /// <summary>
+    /// Helper to create a WindowContext for tests (avoids using the IWindowContextFactory dependency). This mirrors the minimal parts of the window context used by DocumentTabPresenter.
+    /// </summary>
+    private static class WindowContextFactory
+    {
+        public static WindowContext CreateForWindow(Window window) => new()
+        {
+            Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
+            Window = window,
+            Category = new WindowCategory("Test"),
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
     }
 
     private sealed class TestDocumentService : IDocumentService
