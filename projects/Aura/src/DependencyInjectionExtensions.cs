@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
@@ -12,70 +13,73 @@ using DryIoc;
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Extension methods for configuring Aura window management services.
+///     Extension methods for configuring Aura window management services.
 /// </summary>
 public static class DependencyInjectionExtensions
 {
     /// <summary>
-    /// Registers all Aura window management services with optional feature configuration.
+    ///     Registers all Aura window management services with optional feature configuration.
     /// </summary>
     /// <param name="container">The DryIoc container to configure.</param>
-    /// <param name="configure">Optional configuration action for enabling optional features.</param>
-    /// <returns>The container for chaining.</returns>
+    /// <param name="configure">
+    ///     Optional configuration action used to enable optional Aura features. The
+    ///     <see cref="AuraOptions"/> fluent API provides options such as
+    ///     <see cref="AuraOptions.WithBackdropService"/>, <see cref="AuraOptions.WithDrag"/>, and
+    ///     <see cref="AuraOptions.WithThemeModeService"/>.
+    /// </param>
+    /// <returns>
+    ///     The container for chaining.
+    /// </returns>
     /// <remarks>
-    /// <para>
-    /// This method registers the mandatory Aura services and optionally registers additional features
-    /// based on the configuration provided.
-    /// </para>
-    /// <para>
-    /// <strong>Mandatory Services (Always Registered):</strong>
-    /// <list type="bullet">
-    /// <item><description><see cref="IWindowFactory"/> - Factory for creating window instances</description></item>
-    /// <item><description><see cref="IWindowContextFactory"/> - Factory for creating window contexts</description></item>
-    /// <item><description><see cref="IWindowManagerService"/> - Core window management service</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// <strong>Optional Services (Via Configuration):</strong>
-    /// Use the fluent configuration methods on <see cref="AuraOptions"/> to enable optional features.
-    /// </para>
-    /// <para>
-    /// <strong>Menu Providers:</strong>
-    /// Menu providers are registered separately using standard DI patterns. Register them as singletons
-    /// implementing <see cref="Decoration.IMenuProvider"/> anywhere in your startup code.
-    /// </para>
+    ///     <para>
+    ///     This method registers the mandatory Aura services and optionally registers additional
+    ///     features based on the configuration provided.
+    ///     </para>
+    ///     <para><strong>Mandatory Services (Always Registered):</strong></para>
+    ///     <list type="bullet">
+    ///     <item><description><see cref="IWindowFactory"/> - Factory for creating window instances</description></item>
+    ///     <item><description><see cref="IWindowContextFactory"/> - Factory for creating window contexts</description></item>
+    ///     <item><description><see cref="IWindowManagerService"/> - Core window management service</description></item>
+    ///     </list>
+    ///     <para><strong>Optional Services (Via Configuration):</strong></para>
+    ///     <para>
+    ///     Use the fluent configuration methods on <see cref="AuraOptions"/> to enable optional features.
+    ///     </para>
+    ///     <para><strong>Menu Providers:</strong></para>
+    ///     <para>
+    ///     Menu providers are registered separately using standard DI patterns. Register them as singletons
+    ///     implementing <see cref="Decoration.IMenuProvider"/> anywhere in your startup code.
+    ///     </para>
     /// </remarks>
     /// <example>
-    /// <strong>Minimal Setup:</strong>
-    /// <code>
-    /// services.WithAura();
-    /// </code>
-    /// <para/>
-    /// <strong>Full Setup with Optional Features:</strong>
-    /// <code>
-    /// container.WithAura(options => options
-    ///     .WithDecorationSettings()
-    ///     .WithAppearanceSettings()
-    ///     .WithBackdropService()
-    ///     .WithThemeModeService()
-    /// );
-    /// <para/>
-    /// // Register custom windows
-    /// container.AddWindow&lt;MainWindow&gt;();
-    /// <para/>
-    /// // Menu providers registered separately
-    /// container.Register&lt;IMenuProvider&gt;(
-    ///     made: Made.Of(() => new MenuProvider("App.MainMenu", () => new MenuBuilder()...)),
-    ///     reuse: Reuse.Singleton
-    /// );
-    /// </code>
-    /// <para/>
-    /// <strong>Custom Window Factory:</strong>
-    /// <code>
-    /// container.WithAura(options => options
-    ///     .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
-    /// );
-    /// </code>
+    ///     <strong>Minimal Setup:</strong>
+    ///     <code><![CDATA[
+    ///     services.WithAura();
+    ///     </code>
+    ///     <para><strong>Full Setup with Optional Features:</strong></para>
+    ///     <code><![CDATA[
+    ///     container.WithAura(options => options
+    ///         .WithDecorationSettings()
+    ///         .WithAppearanceSettings()
+    ///         .WithBackdropService()
+    ///         .WithThemeModeService()
+    ///         .WithDrag() // registers IDragVisualService and ITabDragCoordinator
+    ///     );
+    ///
+    ///     // Register custom windows
+    ///     container.AddWindow&lt;MainWindow&gt;();
+    ///
+    ///     // Menu providers registered separately
+    ///     container.Register&lt;IMenuProvider&gt;(
+    ///         made: Made.Of(() => new MenuProvider("App.MainMenu", () => new MenuBuilder()...)),
+    ///         reuse: Reuse.Singleton
+    ///     );
+    ///
+    ///     // Custom Window Factory
+    ///     container.WithAura(options => options
+    ///         .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
+    ///     );
+    ///     ]]></code>
     /// </example>
     public static IContainer WithAura(
         this IContainer container,
@@ -96,14 +100,14 @@ public static class DependencyInjectionExtensions
     }
 
     /// <summary>
-    /// Registers a window type as transient for creation by the window factory.
+    ///     Registers a window type as transient for creation by the window factory.
     /// </summary>
     /// <typeparam name="TWindow">The window type to register.</typeparam>
     /// <param name="container">The DryIoc container.</param>
     /// <returns>The container for chaining.</returns>
     /// <remarks>
-    /// Windows should be registered as transient since a new instance is created
-    /// each time the window manager requests one.
+    ///     Windows should be registered as transient since a new instance is created each time the
+    ///     window manager requests one.
     /// </remarks>
     public static IContainer AddWindow<TWindow>(this IContainer container)
         where TWindow : Microsoft.UI.Xaml.Window
@@ -162,6 +166,14 @@ public static class DependencyInjectionExtensions
         if (options.RegisterThemeModeService)
         {
             container.Register<IAppThemeModeService, AppThemeModeService>(Reuse.Singleton);
+        }
+
+        // Register drag & drop services if requested
+        if (options.RegisterDragServices)
+        {
+            // Drag components are singletons for the application.
+            container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
+            container.Register<ITabDragCoordinator, TabDragCoordinator>(Reuse.Singleton);
         }
     }
 }

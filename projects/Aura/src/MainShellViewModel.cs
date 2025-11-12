@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Documents;
+using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
@@ -66,6 +67,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
     /// <param name="documentService">Optional document service implemented by the host application.</param>
+    /// <param name="tabDragCoordinator">Optional tab drag coordinator used for cross-window tab drag operations.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -77,6 +79,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
         IWindowManagerService? windowManagerService = null,
         IDocumentService? documentService = null,
+        ITabDragCoordinator? tabDragCoordinator = null,
         ILoggerFactory? loggerFactory = null)
     {
         Debug.Assert(
@@ -90,6 +93,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
         this.documentService = documentService;
+        this.DragCoordinator = tabDragCoordinator;
         appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
         // Initialize fallback settings menu (used if window context has no menu)
@@ -129,6 +133,13 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// so views can convert document actions into window-level operations in demos.
     /// </summary>
     public IWindowManagerService? WindowManagerService => this.windowManagerService;
+
+    /// <summary>
+    ///     Gets the optional <see cref="ITabDragCoordinator"/> instance registered in DI. This
+    ///     allows <see cref="Controls.TabStrip"/> instances in the view to bind and use a shared
+    ///     drag coordinator for cross-window drag behaviors.
+    /// </summary>
+    public ITabDragCoordinator? DragCoordinator { get; }
 
     /// <summary>
     /// Gets the menu builder for creating the settings menu.
