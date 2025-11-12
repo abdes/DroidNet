@@ -8,111 +8,58 @@ using DroidNet.Aura.Windowing;
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Configuration options for Aura window management services.
+///     Configuration options for Aura window management services.
 /// </summary>
 /// <remarks>
-/// <para>
-/// This class provides a fluent API for configuring optional Aura features during dependency injection setup.
-/// Use the <c>WithAura()</c> extension method to register Aura services and configure optional features.
-/// </para>
-/// <para>
-/// <strong>Mandatory Services (Always Registered):</strong>
-/// <list type="bullet">
-/// <item><description><see cref="Windowing.IWindowFactory"/> - Factory for creating window instances</description></item>
-/// <item><description><see cref="Windowing.IWindowContextFactory"/> - Factory for creating window contexts with menu provider resolution</description></item>
-/// <item><description><see cref="Windowing.IWindowManagerService"/> - Core window management service</description></item>
-/// </list>
-/// </para>
-/// <para>
-/// <strong>Optional Services (Configured via Fluent Methods):</strong>
-/// <list type="bullet">
-/// <item><description>Window decoration settings - <see cref="WithDecorationSettings"/></description></item>
-/// <item><description>Appearance settings - <see cref="WithAppearanceSettings"/></description></item>
-/// <item><description>Window backdrop service - <see cref="WithBackdropService"/></description></item>
-/// <item><description>Theme mode service - <see cref="WithThemeModeService"/></description></item>
-/// <item><description>Custom window factory - <see cref="WithCustomWindowFactory{TFactory}"/></description></item>
-/// </list>
-/// </para>
-/// <para>
-/// <strong>Note:</strong> Menu providers are registered separately using standard DI patterns.
-/// See the examples below for menu provider registration.
-/// </para>
+///     This class provides a fluent API for configuring optional Aura features during dependency
+///     injection setup. Use the <c>WithAura()</c> extension method to register Aura services and
+///     configure optional features.
 /// </remarks>
-/// <example>
-/// <strong>Minimal Setup (Mandatory Services Only):</strong>
-/// <code>
-/// services.WithAura();
-/// </code>
-///
-/// <strong>Full Setup with Optional Features:</strong>
-/// <code>
-/// services.WithAura(options => options
-///     .WithDecorationSettings()
-///     .WithAppearanceSettings()
-///     .WithBackdropService()
-///     .WithThemeModeService()
-/// );
-///
-/// // Register custom windows
-/// services.AddWindow&lt;MainWindow&gt;();
-/// services.AddWindow&lt;ToolWindow&gt;();
-///
-/// // Menu providers registered separately
-/// services.AddSingleton&lt;IMenuProvider&gt;(
-///     new MenuProvider("App.MainMenu", () => new MenuBuilder()
-///         .AddItem("File", cmd => fileMenuBuilder)
-///         .AddItem("Edit", cmd => editMenuBuilder))
-/// );
-/// </code>
-///
-/// <strong>Custom Window Factory:</strong>
-/// <code>
-/// services.WithAura(options => options
-///     .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
-///     .WithDecorationSettings()
-/// );
-/// </code>
-/// </example>
 public sealed class AuraOptions
 {
     /// <summary>
-    /// Gets a value indicating whether window decoration settings should be registered.
+    ///     Gets a value indicating whether window decoration settings should be registered.
     /// </summary>
     internal bool RegisterDecorationSettings { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether appearance settings should be registered.
+    ///     Gets a value indicating whether appearance settings should be registered.
     /// </summary>
     internal bool RegisterAppearanceSettings { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the window backdrop service should be registered.
+    ///     Gets a value indicating whether the window backdrop service should be registered.
     /// </summary>
     internal bool RegisterBackdropService { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the window chrome service should be registered.
+    ///     Gets a value indicating whether the window chrome service should be registered.
     /// </summary>
     internal bool RegisterChromeService { get; private set; }
 
     /// <summary>
-    /// Gets a value indicating whether the theme mode service should be registered.
+    ///     Gets a value indicating whether the theme mode service should be registered.
     /// </summary>
     internal bool RegisterThemeModeService { get; private set; }
 
     /// <summary>
-    /// Gets the custom window factory type, if specified.
+    ///     Gets the custom window factory type, if specified.
     /// </summary>
     internal Type? CustomWindowFactoryType { get; private set; }
 
     /// <summary>
-    /// Registers the window decoration settings service (<see cref="Config.ISettingsService{T}"/>
-    /// wrapping <see cref="WindowDecorationSettings"/>).
+    ///     Gets a value indicating whether drag &amp; drop services should be registered.
+    /// </summary>
+    internal bool RegisterDragServices { get; private set; }
+
+    /// <summary>
+    ///     Registers the window decoration settings service (<see
+    ///     cref="Config.ISettingsService{T}"/> wrapping <see cref="WindowDecorationSettings"/>).
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// This enables persistent window decoration preferences including category-specific overrides
-    /// and code-defined defaults. The service is registered as a singleton.
+    ///     This enables persistent window decoration preferences including category-specific
+    ///     overrides and code-defined defaults. The service is registered as a singleton.
     /// </remarks>
     public AuraOptions WithDecorationSettings()
     {
@@ -121,13 +68,14 @@ public sealed class AuraOptions
     }
 
     /// <summary>
-    /// Registers the appearance settings service (<see cref="Config.ISettingsService{T}"/>
-    /// wrapping <see cref="IAppearanceSettings"/>).
+    ///     Registers the appearance settings service (<see cref="Config.ISettingsService{T}"/>
+    ///     wrapping <see cref="IAppearanceSettings"/>).
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// This enables application-wide appearance preferences including theme mode, background color,
-    /// and font family. The service is registered as a singleton following the Config module pattern.
+    ///     This enables application-wide appearance preferences including theme mode, background
+    ///     color, and font family. The service is registered as a singleton following the Config
+    ///     module pattern.
     /// </remarks>
     public AuraOptions WithAppearanceSettings()
     {
@@ -136,12 +84,14 @@ public sealed class AuraOptions
     }
 
     /// <summary>
-    /// Registers the window backdrop service for applying backdrop effects (Mica, Acrylic, etc.).
+    ///     Registers the window backdrop service for applying backdrop effects (Mica, Acrylic,
+    ///     etc.).
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// This enables backdrop application based on window decoration options. The backdrop service
-    /// coordinates backdrop effects with window-specific overrides. The service is registered as a singleton.
+    ///     This enables backdrop application based on window decoration options. The backdrop
+    ///     service coordinates backdrop effects with window-specific overrides. The service is
+    ///     registered as a singleton.
     /// </remarks>
     public AuraOptions WithBackdropService()
     {
@@ -150,12 +100,14 @@ public sealed class AuraOptions
     }
 
     /// <summary>
-    /// Registers the window chrome service for applying chrome decorations (ExtendsContentIntoTitleBar, etc.).
+    ///     Registers the window chrome service for applying chrome decorations
+    ///     (ExtendsContentIntoTitleBar, etc.).
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// This enables chrome application based on window decoration options. The chrome service
-    /// configures title bar customization and system chrome settings. The service is registered as a singleton.
+    ///     This enables chrome application based on window decoration options. The chrome service
+    ///     configures title bar customization and system chrome settings. The service is registered
+    ///     as a singleton.
     /// </remarks>
     public AuraOptions WithChromeService()
     {
@@ -164,12 +116,12 @@ public sealed class AuraOptions
     }
 
     /// <summary>
-    /// Registers the theme mode service for applying Light/Dark/System themes to windows.
+    ///     Registers the theme mode service for applying Light/Dark/System themes to windows.
     /// </summary>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// This enables automatic theme application to windows based on appearance settings.
-    /// The service is registered as a singleton.
+    ///     This enables automatic theme application to windows based on appearance settings. The
+    ///     service is registered as a singleton.
     /// </remarks>
     public AuraOptions WithThemeModeService()
     {
@@ -178,21 +130,31 @@ public sealed class AuraOptions
     }
 
     /// <summary>
-    /// Registers a custom window factory implementation.
+    ///     Registers drag &amp; drop services (TabDragCoordinator and DragVisualService).
     /// </summary>
-    /// <typeparam name="TFactory">The custom window factory type implementing <see cref="Windowing.IWindowFactory"/>.</typeparam>
+    /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
+    public AuraOptions WithDrag()
+    {
+        this.RegisterDragServices = true;
+        return this;
+    }
+
+    /// <summary>
+    ///     Registers a custom window factory implementation.
+    /// </summary>
+    /// <typeparam name="TFactory">The custom window factory type implementing <see cref="IWindowFactory"/>.</typeparam>
     /// <returns>This <see cref="AuraOptions"/> instance for method chaining.</returns>
     /// <remarks>
-    /// Use this method to replace the default window factory with a custom implementation.
-    /// The custom factory must implement <see cref="Windowing.IWindowFactory"/> and will be
-    /// registered as a singleton.
+    ///     Use this method to replace the default window factory with a custom implementation. The
+    ///     custom factory must implement <see cref="IWindowFactory"/> and will be registered as a
+    ///     singleton.
     /// </remarks>
     /// <example>
-    /// <code>
-    /// services.WithAura(options => options
-    ///     .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
-    /// );
-    /// </code>
+    ///     <code><![CDATA[
+    ///     services.WithAura(options => options
+    ///         .WithCustomWindowFactory&lt;MyCustomWindowFactory&gt;()
+    ///     );
+    ///     ]]></code>
     /// </example>
     public AuraOptions WithCustomWindowFactory<TFactory>()
         where TFactory : class, IWindowFactory

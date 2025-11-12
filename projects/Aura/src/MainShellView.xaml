@@ -110,6 +110,7 @@
                 Grid.Column="1"
                 Grid.ColumnSpan="4"
                 MinHeight="24"
+                DragCoordinator="{x:Bind ViewModel.DragCoordinator, Mode=OneWay}"
                 LoggerFactory="{x:Bind ViewModel.LoggerFactory, Mode=OneWay}"
                 Visibility="{x:Bind ViewModel.Context.Decorations.TitleBar.WithDocumentTabs, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Collapsed}" />
             <!--  Empty element to force SystemReservedRight column to reserve space for system caption buttons  -->

@@ -11,6 +11,7 @@ using DroidNet.Aura.Documents;
 using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
+using DroidNet.Coordinates;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
@@ -140,14 +141,16 @@ public static partial class Program
         // Register Aura window management with all required services
         _ = container
             .WithAura(options => options
-            .WithAppearanceSettings()
-            .WithDecorationSettings()
-            .WithBackdropService()
-            .WithChromeService()
-            .WithThemeModeService());
+                .WithAppearanceSettings()
+                .WithDecorationSettings()
+                .WithBackdropService()
+                .WithChromeService()
+                .WithThemeModeService()
+                .WithDrag())
+            .WithSpatialMapping();
 
         // Register menu providers using standard DI patterns
-        container.RegisterMenus();
+        _ = container.RegisterMenus();
 
         // Register a minimal in-demo document service for the sample
         container.Register<IDocumentService, DemoDocumentService>(Reuse.Singleton);
