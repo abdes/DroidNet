@@ -129,7 +129,7 @@ jobs:
                   --no-build `
                   --configuration ${{ matrix.configuration }} `
                   -- `
-                  --filter "TestCategory!=UITest" `
+                  --filter "TestCategory!=UITest&TestCategory!=ExcludeFromCI" `
                   --no-ansi `
                   --no-progress
                 if ($LASTEXITCODE -ne 0) {
