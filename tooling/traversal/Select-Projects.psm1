@@ -160,9 +160,26 @@ function Get-Tasks {
                 # OtherParams hashtable so splatting doesn't fail if unknown keys
                 # were provided.
                 if ($cmd) {
-                    foreach ($pName in @('framework','filter','verbosity')) {
-                        if ($cmd.Parameters.ContainsKey(($pName.Substring(0,1).ToUpper()+$pName.Substring(1))) -and $OtherParams.Contains($pName)) {
-                            $splat[($pName.Substring(0,1).ToUpper()+$pName.Substring(1))] = $OtherParams[$pName]
+                    # Forward any keys that match declared parameter names or any of
+                    # their aliases. OtherParams uses lowercase keys so compare in
+                    # lowercase; CommandParameter metadata contains the declared
+                    # parameter name and its aliases.
+                    foreach ($paramKey in $cmd.Parameters.Keys) {
+                        $paramLower = $paramKey.ToLower()
+                        if ($OtherParams.Contains($paramLower)) {
+                            $splat[$paramKey] = $OtherParams[$paramLower]
+                            continue
+                        }
+
+                        $aliases = $cmd.Parameters[$paramKey].Aliases
+                        if ($aliases) {
+                            foreach ($alias in $aliases) {
+                                $aliasLower = $alias.ToLower()
+                                if ($OtherParams.Contains($aliasLower)) {
+                                    $splat[$paramKey] = $OtherParams[$aliasLower]
+                                    break
+                                }
+                            }
                         }
                     }
                 }
