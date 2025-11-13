@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;

@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Generators.Tests.Demo;
 using DroidNet.TestHelpers;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 namespace DroidNet.Mvvm.Generators.Tests;

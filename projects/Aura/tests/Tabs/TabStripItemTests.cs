@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.WinUI;
 using DroidNet.TestHelpers;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;

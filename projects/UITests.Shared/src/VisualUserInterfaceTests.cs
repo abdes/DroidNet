@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.WinUI;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 

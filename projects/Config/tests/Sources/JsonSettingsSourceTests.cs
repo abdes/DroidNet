@@ -8,7 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DroidNet.Config.Sources;
 using DroidNet.Config.Tests.Helpers;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.Config.Tests.Sources;

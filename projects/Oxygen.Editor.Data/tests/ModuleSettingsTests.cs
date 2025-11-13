@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.Data.Tests;

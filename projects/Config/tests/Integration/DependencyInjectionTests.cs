@@ -8,7 +8,7 @@ using System.Text.Json;
 using DroidNet.Config.Sources;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Testably.Abstractions.Testing;
 

@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Windows.Input;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Menus.Tests;

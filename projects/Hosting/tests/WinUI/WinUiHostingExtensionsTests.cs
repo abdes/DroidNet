@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Hosting.WinUI;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;

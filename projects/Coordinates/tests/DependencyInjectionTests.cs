@@ -6,7 +6,7 @@ using System;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Coordinates.Tests;

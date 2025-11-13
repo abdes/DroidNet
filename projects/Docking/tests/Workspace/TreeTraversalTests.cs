@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Tests.Mocks;
 using DroidNet.Docking.Workspace;
-using FluentAssertions;
+using AwesomeAssertions;
 
 using static DroidNet.Docking.Workspace.TreeTraversal;
 

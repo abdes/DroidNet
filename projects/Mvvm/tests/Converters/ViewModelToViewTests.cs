@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm.Converters;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.Mvvm.Tests.Converters;

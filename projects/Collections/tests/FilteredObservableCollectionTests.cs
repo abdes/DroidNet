@@ -7,7 +7,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TestHelpers;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Collections.Tests;
 

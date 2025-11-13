@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
 using DroidNet.TimeMachine.Transactions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;

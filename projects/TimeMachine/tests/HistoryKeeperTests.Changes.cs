@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.TimeMachine.Changes;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;

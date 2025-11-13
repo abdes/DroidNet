@@ -481,7 +481,7 @@ While this library currently focuses on the core shell functionality, testing pa
 ### Testing Approach
 
 - **MSTest** framework for unit tests
-- **FluentAssertions** for readable assertions
+- **AwesomeAssertions** for readable assertions
 - **Moq** for mocking dependencies
 - **Testably.Abstractions** for filesystem abstractions
 

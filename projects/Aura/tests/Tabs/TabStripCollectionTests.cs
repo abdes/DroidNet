@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Aura.Controls.Tests;
 

@@ -8,7 +8,7 @@ using DroidNet.Config;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
 

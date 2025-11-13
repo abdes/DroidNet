@@ -4,7 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Collections.Tests;
 

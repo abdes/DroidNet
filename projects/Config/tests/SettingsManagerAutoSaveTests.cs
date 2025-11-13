@@ -8,7 +8,7 @@ using System.Globalization;
 using System.Reflection;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Config.Tests;
 

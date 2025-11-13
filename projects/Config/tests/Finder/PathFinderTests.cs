@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using DroidNet.Config.Helpers;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.Config.Tests;

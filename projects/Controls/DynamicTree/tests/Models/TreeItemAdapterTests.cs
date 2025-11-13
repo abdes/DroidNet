@@ -5,7 +5,7 @@
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls.Selection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 using Moq.Protected;
 

@@ -8,7 +8,7 @@ using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;

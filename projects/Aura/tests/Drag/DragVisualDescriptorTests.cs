@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Windows.Graphics.Imaging;
 
 namespace DroidNet.Aura.Drag.Tests;

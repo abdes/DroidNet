@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls.OutputLog.Formatting;
 using DroidNet.Controls.OutputLog.Theming;
-using FluentAssertions;
+using AwesomeAssertions;
 using Serilog.Events;
 
 namespace DroidNet.Controls.Tests.Formatting;

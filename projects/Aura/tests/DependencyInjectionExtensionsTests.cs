@@ -10,7 +10,7 @@ using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Aura.Tests;
 

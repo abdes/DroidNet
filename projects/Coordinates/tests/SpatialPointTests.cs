@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 using Windows.Foundation;
 
 namespace DroidNet.Coordinates.Tests;

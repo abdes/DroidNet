@@ -1,6 +1,6 @@
 # .Net Test Project Template
 
-NetTestProject is a sample unit testing project for a .NET class library. This project demonstrates how to set up and use unit tests in a .NET environment using MSTest and FluentAssertions.
+NetTestProject is a sample unit testing project for a .NET class library. This project demonstrates how to set up and use unit tests in a .NET environment using MSTest and AwesomeAssertions.
 
 ## Project Setup
 
@@ -11,15 +11,15 @@ The project is set up using a .NET class library with a corresponding unit test 
 
 ### Project File
 
-The `NetTestProject.Tests.csproj` file is designed to focus on the project specific dependencies and configurations for running the unit tests. All references and configuration of MSTest and related dependencies, including FluentAssertions, are already taken care of in the common MSBuild props files.
+The `NetTestProject.Tests.csproj` file is designed to focus on the project specific dependencies and configurations for running the unit tests. All references and configuration of MSTest and related dependencies, including AwesomeAssertions, are already taken care of in the common MSBuild props files.
 
 ## Adding Test Cases
 
-Test cases are added using `MSTest` and `FluentAssertions`. If mocking is required, `Moq` would be the framework of choice. Here is an example of a test class with test methods:
+Test cases are added using `MSTest` and `AwesomeAssertions`. If mocking is required, `Moq` would be the framework of choice. Here is an example of a test class with test methods:
 
 ```csharp
 namespace DroidNet.Samples.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 [TestClass]
@@ -44,7 +44,7 @@ public class SampleTest
 1. **Test Class**: Create a test class and annotate it with `[TestClass]`.
 2. **Test Methods**: Add test methods and annotate them with `[TestMethod]`.
 3. **Data-Driven Tests**: Use `[DataRow]` to provide multiple sets of data to the test method.
-4. **Assertions**: Use FluentAssertions to assert the expected outcomes.
+4. **Assertions**: Use AwesomeAssertions to assert the expected outcomes.
 
 ## Running Tests
 
