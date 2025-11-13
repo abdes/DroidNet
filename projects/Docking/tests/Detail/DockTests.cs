@@ -5,8 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Tests.Mocks;
-using FluentAssertions;
-using FluentAssertions.Execution;
+using AwesomeAssertions;
+using AwesomeAssertions.Execution;
 
 namespace DroidNet.Docking.Tests.Detail;
 

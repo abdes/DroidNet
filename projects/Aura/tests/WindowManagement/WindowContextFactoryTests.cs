@@ -8,7 +8,7 @@ using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Windowing;
 using DroidNet.Controls.Menus;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Moq;

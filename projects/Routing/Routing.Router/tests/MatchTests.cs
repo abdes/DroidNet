@@ -6,7 +6,7 @@
 namespace DroidNet.Routing;
 
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

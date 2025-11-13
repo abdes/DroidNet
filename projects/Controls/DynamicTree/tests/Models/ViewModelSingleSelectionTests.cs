@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls.Selection;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.Controls.Tests;

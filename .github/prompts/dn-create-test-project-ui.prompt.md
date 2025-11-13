@@ -138,7 +138,7 @@ Copy all standard WinUI test app assets from an existing test project (7 image f
 
 ## Assertions
 
-- Use FluentAssertions to assert
+- Use AwesomeAssertions to assert
 - Ensure assertions are simple in nature and have a message provided for clarity on failure
 
 ## Mocking and Isolation

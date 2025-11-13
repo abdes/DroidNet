@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 

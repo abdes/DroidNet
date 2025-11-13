@@ -4,7 +4,7 @@
 
 using System.Collections;
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Routing.Tests;
 

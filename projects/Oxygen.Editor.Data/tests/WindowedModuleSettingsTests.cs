@@ -6,7 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Oxygen.Editor.Data.Models;
 
 namespace Oxygen.Editor.Data.Tests;

@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using DroidNet.Config;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Core.Services;
 

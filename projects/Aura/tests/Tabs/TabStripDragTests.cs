@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Drag;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 using Windows.Foundation;
 

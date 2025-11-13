@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 

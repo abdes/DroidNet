@@ -413,7 +413,7 @@ dotnet run --project samples\DroidNet.Config.Example.csproj "$($PWD.Path)\sample
 
 ## Testing
 
-The Config project includes comprehensive unit tests with high code coverage. The tests use MSTest with FluentAssertions
+The Config project includes comprehensive unit tests with high code coverage. The tests use MSTest with AwesomeAssertions
 for readable assertions and Moq for mocking dependencies.
 
 ### Running Tests

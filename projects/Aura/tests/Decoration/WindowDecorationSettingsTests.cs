@@ -7,7 +7,7 @@ using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 

@@ -4,7 +4,7 @@
 
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DroidNet.Aura.Tests.Decoration;

@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Transactions;
-using FluentAssertions;
+using AwesomeAssertions;
 using Moq;
 using static DroidNet.TimeMachine.HistoryKeeper;
 

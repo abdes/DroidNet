@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Controls.Tests;
 

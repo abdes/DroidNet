@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing.Detail;
 using DryIoc;
-using FluentAssertions;
+using AwesomeAssertions;
 using ILoggerFactory = Microsoft.Extensions.Logging.ILoggerFactory;
 
 namespace DroidNet.Routing.Tests.Detail;

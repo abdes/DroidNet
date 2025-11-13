@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace Oxygen.Editor.Projects.Tests;
 

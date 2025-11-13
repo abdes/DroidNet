@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TimeMachine.Changes;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.TimeMachine.Tests;
 

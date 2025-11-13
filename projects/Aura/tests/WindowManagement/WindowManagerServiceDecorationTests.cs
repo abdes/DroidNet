@@ -11,7 +11,7 @@ using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;

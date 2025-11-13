@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using FluentAssertions;
+using AwesomeAssertions;
 using Oxygen.Editor.Storage.Native;
 using Testably.Abstractions.Helpers;
 using Testably.Abstractions.Testing;

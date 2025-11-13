@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.TestHelpers;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Docking.Tests;
 #pragma warning disable CA2000 // Dispose objects before losing scope

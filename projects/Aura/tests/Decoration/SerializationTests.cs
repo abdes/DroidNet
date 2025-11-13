@@ -5,7 +5,7 @@
 using System.Text.Json;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Decoration.Serialization;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Aura.Tests.Decoration;
 

@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;

@@ -5,7 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Drag;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Controls.Tests;

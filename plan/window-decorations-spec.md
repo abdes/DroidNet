@@ -985,7 +985,7 @@ See `plan/phase11-analysis.md` for detailed design rationale and implementation 
 ### Frameworks
 
 - **MSTest**: Primary testing framework for .NET
-- **FluentAssertions**: For readable assertion syntax
+- **AwesomeAssertions**: For readable assertion syntax
 - **Moq**: For mocking dependencies (IMenuProvider, IWindowDecorationSettings, ILogger)
 
 ### Test Data Management

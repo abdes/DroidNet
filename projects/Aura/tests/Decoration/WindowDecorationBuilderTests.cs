@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Aura.Decoration;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Aura.Tests.Decoration;
 

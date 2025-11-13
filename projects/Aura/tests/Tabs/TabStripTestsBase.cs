@@ -5,7 +5,7 @@
 using System.Globalization;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Controls.Tests;

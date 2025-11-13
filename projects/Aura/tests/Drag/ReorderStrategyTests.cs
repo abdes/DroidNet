@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Aura.Controls;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;

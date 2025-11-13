@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace DroidNet.Docking.Tests;
 
