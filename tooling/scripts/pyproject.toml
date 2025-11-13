@@ -4,16 +4,19 @@ version = "0.1.0"
 description = "DroidNet tooling scripts for working with build artifacts (helper for UseArtifactsOutput)."
 requires-python = ">=3.11"
 dependencies = [
-    "rich>=13.0.0"
+    "rich>=13.0.0",
+    "pathspec>=0.11.2"
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = ["get_artifacts", "hello"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tooling*"]
 
 [project.scripts]
-get-artifacts = "get_artifacts:run"
-hello-tooling = "hello:run"
+get-artifacts = "tooling.scripts.get_artifacts:run"
+hello-tooling = "tooling.scripts.hello:run"
+traverse = "tooling.scripts.traverse:main"
