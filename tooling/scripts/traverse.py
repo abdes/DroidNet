@@ -138,11 +138,19 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger.warning("Unrecognized tokens forwarded to tasks: %s", " ".join(extras))
 
     try:
-        runner.run(config)
+        result = runner.run(config)
     except Exception as exc:  # pragma: no cover - surfaced to CLI
         if args.debug:
             raise
         console.print(f"[red]Error:[/] {exc}")
+        return 1
+
+    if not result.success:
+        console.print(f"[red]Traversal completed with {len(result.failures)} failure(s).[/]")
+        for failure in result.failures:
+            console.print(
+                f"[red]- Task '{failure.task}' failed for {failure.project}: {failure.exception}[/]"
+            )
         return 1
 
     return 0

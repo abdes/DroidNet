@@ -29,6 +29,23 @@ class TraversalConfig:
     extra_arguments: List[str] | None = None
 
 
+@dataclass(slots=True)
+class TaskFailure:
+    project: Path
+    task: str
+    exception: Exception
+
+
+@dataclass(slots=True)
+class TraversalResult:
+    projects_processed: int
+    failures: List[TaskFailure]
+
+    @property
+    def success(self) -> bool:
+        return not self.failures
+
+
 class TraversalRunner:
     """Traverse the repository tree and run tasks against discovered projects."""
 
@@ -39,7 +56,7 @@ class TraversalRunner:
     def registry(self) -> TaskRegistry:
         return self._registry
 
-    def run(self, config: TraversalConfig) -> None:
+    def run(self, config: TraversalConfig) -> TraversalResult:
         start = config.start_location.resolve()
         log.debug("Traversal start: %s", start)
         manager = GitIgnoreManager()
@@ -63,13 +80,22 @@ class TraversalRunner:
         )
 
         project_count = 0
+        failures: List[TaskFailure] = []
         for project in project_iter:
             project_count += 1
             log.debug("Running tasks for project: %s", project)
             for task in config.tasks:
                 log.debug("Invoking task '%s'", task.name)
-                task.run(project, context)
+                try:
+                    task.run(project, context)
+                except Exception as exc:  # pragma: no cover - task failures logged and collected
+                    if context.logger.isEnabledFor(logging.DEBUG):
+                        context.logger.exception("Task '%s' failed for %s", task.name, project)
+                    else:
+                        context.logger.error("Task '%s' failed for %s: %s", task.name, project, exc)
+                    failures.append(TaskFailure(project=project, task=task.name, exception=exc))
         log.debug("Processed %d project(s)", project_count)
+        return TraversalResult(projects_processed=project_count, failures=failures)
 
     def _discover_projects(
         self,
@@ -114,5 +140,4 @@ class TraversalRunner:
     def available_tasks(self) -> Iterable[TaskInvocation]:
         return self._registry.tasks()
 
-
-__all__ = ["TraversalRunner", "TraversalConfig"]
+__all__ = ["TraversalRunner", "TraversalConfig", "TraversalResult", "TaskFailure"]
