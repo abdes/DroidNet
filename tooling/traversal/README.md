@@ -31,6 +31,8 @@ From the repository root, call the traversal wrapper script:
 
 # Run tests for .Tests projects (excludes .UI.Tests by default)
 .\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Framework net9.0-windows10.0.26100.0 -Filter 'Category!=UITest' -Debug -WhatIf
+# Example: pass the Configuration to influence `--configuration` for `dotnet run`
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Configuration Debug -Filter 'Category!=UITest'
 ```
 
 Notes:
@@ -115,6 +117,21 @@ Example (keeping UI tests out):
 
 ```pwsh
 .\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Framework net9.0-windows10.0.26100.0 -Filter 'Category!=UITest' -Debug
+```
+
+Example: pass the Configuration to influence `--configuration` for `dotnet run`:
+
+```pwsh
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Configuration Debug -Filter 'Category!=UITest'
+```
+
+You can use aliases: `-Config`, `-c`, or `-configuration` are accepted too.
+
+You can also pass application-level arguments that should go after the `--`
+dotnet separator via `-app` (alias for `-AppArgs`):
+
+```pwsh
+.\tooling\traverse.ps1 -Tasks Invoke-Tests -StartLocation .\projects -Configuration Debug -Filter 'Category!=UITest' -app '--no-ansi','--no-progress'
 ```
 
 `Invoke-Tests` builds a `dotnet run` argument array and forwards known named

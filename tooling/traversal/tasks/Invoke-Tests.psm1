@@ -3,7 +3,9 @@
     Invoke tests for '.Tests' projects (excluding '.UI.Tests') using dotnet run.
 .DESCRIPTION
     This task accepts forwarded parameters such as -Framework (alias -tfm),
-    -Filter and other arguments. If those arguments are not declared by name,
+    -Filter, -Configuration (alias -c, -config), and -app (alias for -AppArgs)
+    to specify application arguments. If those
+    arguments are not declared by name,
     they can be collected via the -OtherParams hashtable.
 #>
 
@@ -29,6 +31,16 @@ function Invoke-Tests {
         [Parameter(Mandatory = $false)]
         [hashtable]
         $OtherParams,
+
+        [Parameter(Mandatory = $false)]
+        [Alias('c','config')]
+        [string]
+        $Configuration,
+
+        [Parameter(Mandatory = $false)]
+        [Alias('app')]
+        [string[]]
+        $AppArgs,
 
 
 
@@ -121,7 +133,15 @@ function Invoke-Tests {
             else { Write-Debug "No Target Framework detected; proceeding without --framework" }
         }
 
-        if ($Filter) { $dotnetArgs += @('--filter', $Filter) }
+        # The --filter argument is intended for the test runner itself. Place it
+        # after the `--` separator so it is considered an app argument rather
+        # than a dotnet-run option.
+        $appArgList = New-Object System.Collections.ArrayList
+        if ($Filter) { [void]$appArgList.Add('--filter'); [void]$appArgList.Add($Filter) }
+
+        if ($AppArgs) { foreach ($a in $AppArgs) { [void]$appArgList.Add($a) } }
+
+        if ($Configuration) { $dotnetArgs += @('--configuration', $Configuration) }
 
         if ($Verbosity) { $dotnetArgs += @('--verbosity', $Verbosity) }
 
@@ -129,7 +149,7 @@ function Invoke-Tests {
         if ($OtherParams) {
             Write-Debug "OtherParams keys: $($OtherParams.Keys -join ',')"
             # Avoid duplicating Framework/Filter values that are supplied via dedicated parameters
-            $excludedKeys = @('framework','tfm','filter','project')
+            $excludedKeys = @('framework','tfm','filter','project','configuration','app','appargs','args')
             # Normalize keys
             $keysToAdd = @()
             foreach ($k in $OtherParams.Keys) {
@@ -146,7 +166,18 @@ function Invoke-Tests {
                         if ($val -is [System.Collections.IEnumerable] -and -not ($val -is [string])) {
                             foreach ($v in $val) { $dotnetArgs += @("--$k", $v) }
                         }
-                        else { $dotnetArgs += @("--$k", $val) }
+                        else {
+                            # Some forwarded keys may be intended as application args
+                            # (for the app that the test host runs). If the key is
+                            # one of well-known app args like 'no-ansi' or
+                            # 'no-progress', append them to the app args instead.
+                            $appKey = $k.ToLower()
+                            switch ($appKey) {
+                                'no-ansi' { [void]$appArgList.Add("--$k"); break }
+                                'no-progress' { [void]$appArgList.Add("--$k"); break }
+                                default { $dotnetArgs += @("--$k", $val); break }
+                            }
+                        }
                     }
                 }
             }
@@ -184,10 +215,14 @@ function Invoke-Tests {
             }
         }
 
-        Write-Debug "Final command: dotnet $($finalArgs -join ' ')"
+        Write-Debug "Final command: dotnet $($finalArgs -join ' ') -- $($appArgList -join ' ')"
         for ($i = 0; $i -lt $finalArgs.Count; $i++) { Write-Debug "finalArgs[$i] = $($finalArgs[$i])" }
         if ($PSCmdlet.ShouldProcess($Project.FullName, "Run tests")) {
-            & dotnet @finalArgs
+            # Execute dotnet run with application args after `--`.
+            $execArgs = New-Object System.Collections.ArrayList
+            for ($i = 0; $i -lt $finalArgs.Count; $i++) { [void]$execArgs.Add($finalArgs[$i]) }
+            if ($appArgList.Count -gt 0) { [void]$execArgs.Add('--'); foreach ($a in $appArgList) { [void]$execArgs.Add($a) } }
+            if ($PSCmdlet.ShouldProcess($Project.FullName, "Run tests (with app args)")) { & dotnet @execArgs }
         }
     }
 

@@ -117,8 +117,8 @@ jobs:
                   -Tasks Invoke-Tests `
                   -StartLocation "./projects" `
                   -Filter 'TestCategory!=UITest' `
-                  -configuration ${{ matrix.configuration }} `
-                  -Platform ${{ matrix.platform }}
+                  -Configuration ${{ matrix.configuration }} `
+                  -AppArgs @('--no-ansi','--no-progress') `
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error "Tests failed"
                     exit 1
