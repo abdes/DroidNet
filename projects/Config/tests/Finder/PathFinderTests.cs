@@ -259,21 +259,4 @@ public class PathFinderTests
         // Assert
         _ = configFilePath.Should().Be(Path.Combine(pathFinder.ProgramData, configFileName));
     }
-
-    [TestMethod]
-    [DataRow(PathFinder.DevelopmentMode)]
-    [DataRow(PathFinder.RealMode)]
-    public void PathFinderShouldGetUserOneDrivePath(string mode)
-    {
-        // Arrange
-        var config = new PathFinderConfig(mode, "MyCompany", "MyApp");
-        var pathFinder = new PathFinder(this.mockFileSystem.Object, config);
-
-        // Act
-        var oneDrivePath = pathFinder.UserOneDrive;
-
-        // Assert
-        var knownFolderPath = KnownFolders.GetKnownFolderPath(new Guid(0xA52BBA46, 0xE9E1, 0x435F, 0xB3, 0xD9, 0x28, 0xDA, 0xA6, 0x48, 0xC0, 0xF6) /* A52BBA46-E9E1-435F-B3D9-28DAA648C0F6 */, 0);
-        _ = oneDrivePath.Should().Be(knownFolderPath);
-    }
 }

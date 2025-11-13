@@ -62,7 +62,7 @@ public interface IPathFinder
     /// <summary>
     ///     Gets the user's OneDrive path.
     /// </summary>
-    public string UserOneDrive { get; }
+    public string? UserOneDrive { get; }
 
     /*
      * Common Application specific paths.

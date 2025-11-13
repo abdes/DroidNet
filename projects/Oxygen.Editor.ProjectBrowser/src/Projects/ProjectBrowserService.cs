@@ -415,10 +415,13 @@ public partial class ProjectBrowserService : IProjectBrowserService
                 this.localStorage,
                 this),
 
-            KnownLocations.OneDrive => await LocationFromLocalFolderPathAsync(
-                    locationKey,
-                    this.finder.UserOneDrive)
-                .ConfigureAwait(true),
+            // OneDrive may not be available on all systems
+            KnownLocations.OneDrive => this.finder.UserOneDrive is not null
+                ? await LocationFromLocalFolderPathAsync(
+                        locationKey,
+                        this.finder.UserOneDrive)
+                    .ConfigureAwait(true)
+                : null,
 
             KnownLocations.Downloads => await LocationFromLocalFolderPathAsync(
                     locationKey,

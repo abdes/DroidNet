@@ -70,7 +70,7 @@ public class OxygenPathFinder : IOxygenPathFinder
     public string UserDocuments => this.parentFinder.UserDocuments;
 
     /// <inheritdoc/>
-    public string UserOneDrive => this.parentFinder.UserOneDrive;
+    public string? UserOneDrive => this.parentFinder.UserOneDrive;
 
     /// <inheritdoc/>
     public string ProgramData => this.parentFinder.ProgramData;

@@ -52,7 +52,18 @@ public class PathFinder : IPathFinder
         this.UserHome = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         this.UserDocuments = Environment.GetFolderPath(Environment.SpecialFolder.Personal);
         this.UserDownloads = KnownFolders.GetKnownFolderPath(new Guid(0x374DE290, 0x123F, 0x4565, 0x91, 0x64, 0x39, 0xC4, 0x92, 0x5E, 0x46, 0x7B) /* 374DE290-123F-4565-9164-39C4925E467B */);
-        this.UserOneDrive = KnownFolders.GetKnownFolderPath(new Guid(0xa52bba46, 0xe9e1, 0x435f, 0xb3, 0xd9, 0x28, 0xda, 0xa6, 0x48, 0xc0, 0xf6) /* A52BBA46-E9E1-435f-B3D9-28DAA648C0F6 */);
+
+        // OneDrive is not guaranteed to be available on all systems
+#pragma warning disable CA1031 // Do not catch general exception types
+        try
+        {
+            this.UserOneDrive = KnownFolders.GetKnownFolderPath(new Guid(0xA52BBA46, 0xE9E1, 0x435F, 0xB3, 0xD9, 0x28, 0xDA, 0xA6, 0x48, 0xC0, 0xF6) /* A52BBA46-E9E1-435f-B3D9-28DAA648C0F6 */);
+        }
+        catch
+        {
+            this.UserOneDrive = null;
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
 
         this.ProgramData = AppContext.BaseDirectory;
 
@@ -85,7 +96,7 @@ public class PathFinder : IPathFinder
     public string SystemRoot { get; }
 
     /// <inheritdoc />
-    public string UserOneDrive { get; }
+    public string? UserOneDrive { get; }
 
     /// <inheritdoc />
     public string Temp { get; }
