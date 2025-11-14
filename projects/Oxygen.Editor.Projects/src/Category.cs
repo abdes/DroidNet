@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Resources;
+using DroidNet.Resources.Generator.Localized_e0db1f46;
 
 namespace Oxygen.Editor.Projects;
 
@@ -45,12 +45,12 @@ public class Category(string id, string name, string description)
     /// <summary>
     /// Gets the localized name of the project category.
     /// </summary>
-    public string Name { get; } = name.GetLocalizedMine();
+    public string Name { get; } = name.L();
 
     /// <summary>
     /// Gets the localized description of the project category.
     /// </summary>
-    public string Description { get; } = description.GetLocalizedMine();
+    public string Description { get; } = description.L();
 
     private static Dictionary<string, Category> CategoriesDictionary => LazyCategoriesDictionary.Value;
 

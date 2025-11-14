@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using DroidNet.Resources;
+using DroidNet.Resources.Generator.Localized_a870a544;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Core.Services;
@@ -403,14 +403,14 @@ public partial class ProjectBrowserService : IProjectBrowserService
         {
             KnownLocations.RecentProjects => new KnownLocation(
                 locationKey,
-                "Recent Projects".GetLocalizedMine(),
+                "Recent Projects".L(),
                 string.Empty,
                 this.localStorage,
                 this),
 
             KnownLocations.ThisComputer => new KnownLocation(
                 locationKey,
-                "This Computer".GetLocalizedMine(),
+                "This Computer".L(),
                 string.Empty,
                 this.localStorage,
                 this),

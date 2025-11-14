@@ -2,4 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-[assembly: DoNotParallelize]
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("DroidNet.Resources.Tests")]
