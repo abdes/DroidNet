@@ -49,7 +49,7 @@ public class CommonTestEnv : VerifyBase
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     [TestMethod]
-    public Task VerifyConventions_Satisfied() => VerifyChecks.Run();
+    public Task VerifyConventionsSatisfied() => VerifyChecks.Run();
 
     /// <summary>
     /// Configures logging for the specified IoC container.
