@@ -9,7 +9,7 @@ namespace DroidNet.TestHelpers;
 /// <summary>
 /// This is a helper class that allows us to suspend asserts / all trace listeners.
 /// </summary>
-public sealed partial class SuspendTrackerDisposable : IDisposable
+public sealed class SuspendTrackerDisposable : IDisposable
 {
     private readonly TraceListener[] suspendedListeners;
     private readonly TraceListenerCollection traceListenerCollection;
