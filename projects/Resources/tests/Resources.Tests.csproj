@@ -13,8 +13,22 @@
         <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
     </PropertyGroup>
 
+
     <ItemGroup>
-        <ProjectReference Include="..\src\Resources.csproj" />
+        <PackageReference Include="DryIoc.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Reference the runtime resources project so the generator sees the ResourceExtensions symbol -->
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
+
+        <!--
+        Add generator as an analyzer (development time only).
+        The key settings here are:
+        - OutputItemType="Analyzer": Treats the project reference as an analyzer/generator
+        - ReferenceOutputAssembly="false": Don't reference the DLL itself, only use it as an analyzer
+        -->
+        <ProjectReference Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>

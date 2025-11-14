@@ -120,4 +120,7 @@
   <data name="MSG_Thanks" xml:space="preserve">
     <value>Thanks</value>
   </data>
+  <data name="MSG_Goodbye" xml:space="preserve">
+    <value>Goodbye from MyApp</value>
+  </data>
 </root>

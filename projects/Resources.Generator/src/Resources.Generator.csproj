@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+How to setup source generator project
+https://stackoverflow.com/questions/74915263/c-sharp-source-generator-filenotfoundexception-could-not-load-file-or-assembly
+https://github.com/dotnet/roslyn/issues/52017#issuecomment-1046216200
+https://github.com/amis92/csharp-source-generators
+-->
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+
+        <!--
+        Must override this to false from the Directory.Build.props or Nuget
+        will refuse to make the package because we are not shipping the assembly
+        in the usual lib directory for a generator. Instead we ship it in the
+        analyzers/dotnet/cs directory.
+        -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <DevelopmentDependency>true</DevelopmentDependency>
+
+        <Title>Source generator for string localization via resource maps.</Title>
+        <Description>Generates per-assembly helper to localize resources, reducing boilerplate and noise.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>localization;resources;generator</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+
+        <RootNamespace>$(RootNamespace).Resources.Generator</RootNamespace>
+        <!-- Indicate this is an analyzer package -->
+        <PackageType>Analyzer</PackageType>
+    </PropertyGroup>
+
+    <!--Required for any analyzer / generator-->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive"/>
+    </ItemGroup>
+
+    <!-- Ensure the analyzer dll is included under the 'analyzers/dotnet/cs' folder in the generated NuGet package -->
+    <PropertyGroup>
+        <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+    </PropertyGroup>
+
+    <Target Name="GetDependencyTargetPaths" BeforeTargets="Pack">
+        <ItemGroup>
+            <!--Pack our DLL and the dependencies into a generated Nuget Package-->
+            <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+            <!-- Pack PDBs for analyzer symbol debugging when applicable. The repo's Common.props controls IncludeSymbols, so we only add it if present. -->
+            <None Include="$([System.IO.Path]::Combine('$(OutputPath)','$(AssemblyName).pdb'))" Condition="'$(IncludeSymbols)' == 'true'" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
+        </ItemGroup>
+    </Target>
+
+</Project>

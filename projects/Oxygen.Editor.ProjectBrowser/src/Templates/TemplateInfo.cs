@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
-using DroidNet.Resources;
+using DroidNet.Resources.Generator.Localized_a870a544;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
@@ -22,32 +22,25 @@ namespace Oxygen.Editor.ProjectBrowser.Templates;
 [method: JsonConstructor]
 public class TemplateInfo(string description, string name, Category category) : ITemplateInfo
 {
-    private string description = description.GetLocalizedMine();
-    private string name = name.GetLocalizedMine();
+    private string description = description.L();
+    private string name = name.L();
 
     /// <summary>
     /// Gets or sets the localized name of the template.
     /// </summary>
-    /// <remarks>
-    /// The name is automatically localized when set using <see cref="ResourceExtensions.GetLocalizedMine"/>.
-    /// This property is required and must be set during object initialization.
-    /// </remarks>
     public required string Name
     {
         get => this.name;
-        set => this.name = value.GetLocalizedMine();
+        set => this.name = value.L();
     }
 
     /// <summary>
     /// Gets or sets the localized description of the template.
     /// </summary>
-    /// <remarks>
-    /// The description is automatically localized when set using <see cref="ResourceExtensions.GetLocalizedMine"/>.
-    /// </remarks>
     public string Description
     {
         get => this.description;
-        set => this.description = value.GetLocalizedMine();
+        set => this.description = value.L();
     }
 
     /// <summary>

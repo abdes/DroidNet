@@ -7,25 +7,69 @@ using Microsoft.Windows.ApplicationModel.Resources;
 namespace DroidNet.Resources;
 
 /// <summary>
-/// Wraps the <see cref="ResourceMap"/> class to implement the <see cref="IResourceMap"/> interface.
+///     Wraps the Windows App SDK <see cref="Microsoft.Windows.ApplicationModel.Resources.ResourceMap"/> and exposes a typed,
+///     SDK-agnostic API.
 /// </summary>
 /// <remarks>
-/// <param name="resourceMap">The <see cref="ResourceMap"/> instance to wrap.</param>
-/// The <see cref="ResourceMapWrapper"/> class is introduced to provide an implementation of the
-/// <see cref="IResourceMap"/> interface. This allows for easier unit testing by enabling the use of mock
-/// or dummy implementations of resource maps. The challenge was to test the module without having a real
-/// <see cref="ResourceMap"/> with real resources. By using this wrapper, we can create testable
-/// implementations that simulate the behavior of <see cref="ResourceMap"/> without requiring actual resources.
+///     Implements <see cref="IResourceMap"/> by delegating lookups and subtree
+///     operations to an underlying <see cref="Microsoft.Windows.ApplicationModel.Resources.ResourceMap"/> instance.
 /// </remarks>
-internal sealed class ResourceMapWrapper(ResourceMap resourceMap) : IResourceMap
+internal sealed class ResourceMapWrapper : IResourceMap
 {
-    /// <inheritdoc cref="ResourceMap.TryGetValue(string)" />
-    public ResourceCandidate? TryGetValue(string key) => resourceMap.TryGetValue(key);
-
-    /// <inheritdoc cref="ResourceMap.GetSubtree(string)" />
-    public IResourceMap? GetSubtree(string key)
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="ResourceMapWrapper"/> class.
+    /// </summary>
+    /// <param name="resourceMap">The underlying <see cref="Microsoft.Windows.ApplicationModel.Resources.ResourceMap"/> to wrap.</param>
+    /// <exception cref="ArgumentNullException">
+    ///     Thrown when <paramref name="resourceMap"/> is <see langword="null"/>.
+    /// </exception>
+    public ResourceMapWrapper(ResourceMap resourceMap)
     {
-        var subMap = resourceMap.GetSubtree(key);
-        return subMap != null ? new ResourceMapWrapper(subMap) : null;
+        ArgumentNullException.ThrowIfNull(resourceMap);
+        this.ResourceMap = resourceMap;
+    }
+
+    /// <summary>
+    ///     Gets the underlying Windows App SDK <see cref="Microsoft.Windows.ApplicationModel.Resources.ResourceMap"/> being wrapped.
+    /// </summary>
+    internal ResourceMap ResourceMap { get; }
+
+    /// <summary>
+    ///     Attempts to get the localized value for the specified resource <paramref name="key"/>.
+    /// </summary>
+    /// <param name="key">The resource key to look up.</param>
+    /// <param name="value">
+    ///     When this method returns, contains the localized value if the key was found;
+    ///     otherwise <see langword="null"/>.
+    /// </param>
+    /// <returns><see langword="true"/> if the value was found; otherwise <see langword="false"/>.</returns>
+    public bool TryGetValue(string key, out string? value)
+    {
+        var candidate = this.ResourceMap.TryGetValue(key);
+        value = candidate?.ValueAsString;
+        return candidate is not null;
+    }
+
+    /// <summary>
+    ///     Returns a subtree for the specified resource <paramref name="key"/>, or
+    ///     <see cref="EmptyResourceMap"/> if the subtree is not found.
+    /// </summary>
+    /// <param name="key">The resource key that identifies the subtree.</param>
+    /// <returns>
+    ///     A new <see cref="ResourceMapWrapper"/> that wraps the subtree <see cref="Microsoft.Windows.ApplicationModel.Resources.ResourceMap"/>,
+    ///     or <see cref="EmptyResourceMap"/> if no subtree exists for the given key.
+    /// </returns>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "we use EmptyResourceMap on error")]
+    public IResourceMap GetSubtree(string key)
+    {
+        try
+        {
+            var subtree = this.ResourceMap.GetSubtree(key);
+            return subtree is not null ? new ResourceMapWrapper(subtree) : new EmptyResourceMap();
+        }
+        catch
+        {
+            return new EmptyResourceMap();
+        }
     }
 }

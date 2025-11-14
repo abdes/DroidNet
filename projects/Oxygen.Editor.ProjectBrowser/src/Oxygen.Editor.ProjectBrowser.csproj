@@ -35,7 +35,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
 
@@ -44,6 +43,15 @@
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
+    </ItemGroup>
+    <ItemGroup>
+        <!-- Reference the runtime resources project so the generator sees the ResourceExtensions
+        symbol -->
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
+        <!-- Add generator as an analyzer (development time only) -->
+        <ProjectReference
+            Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj"
+            OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>
