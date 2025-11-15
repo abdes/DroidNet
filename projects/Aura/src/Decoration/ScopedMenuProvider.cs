@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls.Menus;
+using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace DroidNet.Aura.Decoration;
@@ -56,15 +57,15 @@ namespace DroidNet.Aura.Decoration;
 /// <seealso cref="MenuProvider"/>
 public sealed class ScopedMenuProvider : IMenuProvider
 {
-    private readonly IServiceProvider serviceProvider;
-    private readonly Action<MenuBuilder, IServiceProvider> configureMenu;
+    private readonly IContainer container;
+    private readonly Action<MenuBuilder, IContainer> configureMenu;
     private readonly Lock lockObject = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="ScopedMenuProvider"/> class.
     /// </summary>
     /// <param name="providerId">The unique identifier for this menu provider. Must be non-empty.</param>
-    /// <param name="serviceProvider">The service provider used to resolve dependencies when building menus.</param>
+    /// <param name="container">The service provider used to resolve dependencies when building menus.</param>
     /// <param name="configureMenu">
     ///     An action that configures the menu using the provided <see cref="MenuBuilder"/> and <see
     ///     cref="IServiceProvider"/>. This action is invoked each time <see cref="CreateMenuSource"/> is called.
@@ -73,21 +74,23 @@ public sealed class ScopedMenuProvider : IMenuProvider
     ///     Thrown if <paramref name="providerId"/> is null, empty, or whitespace.
     /// </exception>
     /// <exception cref="ArgumentNullException">
-    ///     Thrown if <paramref name="serviceProvider"/> or <paramref name="configureMenu"/> is <see langword="null"/>.
+    ///     Thrown if <paramref name="container"/> or <paramref name="configureMenu"/> is <see langword="null"/>.
     /// </exception>
     public ScopedMenuProvider(
         string providerId,
-        IServiceProvider serviceProvider,
-        Action<MenuBuilder, IServiceProvider> configureMenu)
+        IContainer container,
+        Action<MenuBuilder, IContainer> configureMenu)
     {
+        ArgumentNullException.ThrowIfNull(container);
+        ArgumentNullException.ThrowIfNull(configureMenu);
         if (string.IsNullOrWhiteSpace(providerId))
         {
             throw new ArgumentException("Provider ID must be a non-empty string.", nameof(providerId));
         }
 
         this.ProviderId = providerId;
-        this.serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-        this.configureMenu = configureMenu ?? throw new ArgumentNullException(nameof(configureMenu));
+        this.container = container;
+        this.configureMenu = configureMenu;
     }
 
     /// <inheritdoc/>
@@ -113,9 +116,9 @@ public sealed class ScopedMenuProvider : IMenuProvider
         {
             // Try to resolve MenuBuilder from DI (may have ILoggerFactory dependency)
             // If not registered, create a default instance
-            var builder = this.serviceProvider.GetService<MenuBuilder>() ?? new MenuBuilder();
-
-            this.configureMenu(builder, this.serviceProvider);
+            var builder = this.container.Resolve<MenuBuilder>(IfUnresolved.ReturnDefault)
+                          ?? new MenuBuilder();
+            this.configureMenu(builder, this.container);
 
             return builder.Build();
         }

@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
-using Microsoft.Extensions.DependencyInjection;
+using DryIoc;
 
 namespace DroidNet.Aura.Tests.Decoration;
 
@@ -149,10 +149,10 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_Constructor_ThrowsOnNullProviderId()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
 
         // Act
-        var act = () => new ScopedMenuProvider(null!, services, (_, _) => { });
+        var act = () => new ScopedMenuProvider(null!, container, (_, _) => { });
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
@@ -164,10 +164,10 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_Constructor_ThrowsOnEmptyProviderId()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
 
         // Act
-        var act = () => new ScopedMenuProvider(string.Empty, services, (_, _) => { });
+        var act = () => new ScopedMenuProvider(string.Empty, container, (_, _) => { });
 
         // Assert
         _ = act.Should().Throw<ArgumentException>()
@@ -183,7 +183,7 @@ public partial class MenuProviderTests
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>()
-            .WithParameterName("serviceProvider");
+            .WithParameterName("container");
     }
 
     [TestMethod]
@@ -191,10 +191,10 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_Constructor_ThrowsOnNullConfigureAction()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
 
         // Act
-        var act = () => new ScopedMenuProvider("test.provider", services, null!);
+        var act = () => new ScopedMenuProvider("test.provider", container, null!);
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>()
@@ -206,8 +206,8 @@ public partial class MenuProviderTests
     {
         // Arrange
         const string expectedId = "App.ScopedMenu";
-        var services = new ServiceCollection().BuildServiceProvider();
-        var provider = new ScopedMenuProvider(expectedId, services, (_, _) => { });
+        using var container = new Container();
+        var provider = new ScopedMenuProvider(expectedId, container, (_, _) => { });
 
         // Act
         var actualId = provider.ProviderId;
@@ -221,16 +221,15 @@ public partial class MenuProviderTests
     {
         // Arrange
         var testService = new TestCommandService();
-        var services = new ServiceCollection();
-        _ = services.AddSingleton<ITestCommandService>(testService);
-        var serviceProvider = services.BuildServiceProvider();
+        using var container = new Container();
+        container.RegisterInstance<ITestCommandService>(testService);
 
         var provider = new ScopedMenuProvider(
             "test.provider",
-            serviceProvider,
-            (builder, sp) =>
+            container,
+            (builder, container) =>
             {
-                var commandService = sp.GetRequiredService<ITestCommandService>();
+                var commandService = container.Resolve<ITestCommandService>();
 #pragma warning disable IDE0058 // Expression value is never used (lambda expression
                 builder.AddMenuItem("Command", commandService.TestCommand);
 #pragma warning restore IDE0058 // Expression value is never used
@@ -250,10 +249,10 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_CreateMenuSource_ReturnsDistinctInstances()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
         var provider = new ScopedMenuProvider(
             "test.provider",
-            services,
+            container,
             (builder, _) => builder.AddMenuItem("Test", command: null, icon: null, acceleratorText: null));
 
         // Act
@@ -269,10 +268,10 @@ public partial class MenuProviderTests
     public async Task ScopedMenuProvider_CreateMenuSource_IsThreadSafe()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
         var provider = new ScopedMenuProvider(
             "test.provider",
-            services,
+            container,
             (builder, _) => builder.AddMenuItem("Test", command: null, icon: null, acceleratorText: null));
 
         var sources = new IMenuSource[100];
@@ -299,15 +298,13 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_CreateMenuSource_UsesRegisteredMenuBuilder()
     {
         // Arrange
-        var customBuilder = new MenuBuilder();
-        var services = new ServiceCollection();
-        _ = services.AddSingleton(customBuilder);
-        var serviceProvider = services.BuildServiceProvider();
+        using var container = new Container();
+        container.Register<MenuBuilder>(Reuse.Transient);
 
         var wasConfigured = false;
         var provider = new ScopedMenuProvider(
             "test.provider",
-            serviceProvider,
+            container,
             (builder, _) =>
             {
                 wasConfigured = true;
@@ -328,10 +325,10 @@ public partial class MenuProviderTests
     public void ScopedMenuProvider_CreateMenuSource_CreatesDefaultMenuBuilderWhenNotRegistered()
     {
         // Arrange
-        var services = new ServiceCollection().BuildServiceProvider();
+        using var container = new Container();
         var provider = new ScopedMenuProvider(
             "test.provider",
-            services,
+            container,
             (builder, _) => builder.AddMenuItem("Test", command: null, icon: null, acceleratorText: null));
 
         // Act

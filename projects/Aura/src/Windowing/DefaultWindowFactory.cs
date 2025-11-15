@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.Extensions.DependencyInjection;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -16,25 +16,25 @@ namespace DroidNet.Aura.Windowing;
 /// </summary>
 public sealed partial class DefaultWindowFactory : IWindowFactory
 {
-    private readonly IServiceProvider serviceProvider;
+    private readonly IContainer container;
     private readonly IWindowManagerService windowManagerService;
     private readonly ILogger<DefaultWindowFactory> logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DefaultWindowFactory"/> class.
     /// </summary>
-    /// <param name="serviceProvider">The service provider for resolving window instances.</param>
+    /// <param name="container">The DI container for resolving window instances.</param>
     /// <param name="windowManagerService">The window manager service for registering created windows.</param>
     /// <param name="loggerFactory">Optional logger factory used to create a service logger.</param>
     public DefaultWindowFactory(
-        IServiceProvider serviceProvider,
+        IContainer container,
         IWindowManagerService windowManagerService,
         ILoggerFactory? loggerFactory = null)
     {
-        ArgumentNullException.ThrowIfNull(serviceProvider);
+        ArgumentNullException.ThrowIfNull(container);
         ArgumentNullException.ThrowIfNull(windowManagerService);
 
-        this.serviceProvider = serviceProvider;
+        this.container = container;
         this.windowManagerService = windowManagerService;
         this.logger = loggerFactory?.CreateLogger<DefaultWindowFactory>() ?? NullLogger<DefaultWindowFactory>.Instance;
     }
@@ -47,7 +47,7 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
 
         try
         {
-            var window = this.serviceProvider.GetRequiredService<TWindow>();
+            var window = this.container.Resolve<TWindow>();
 
             // Register the created window with the window manager.
             _ = await this.windowManagerService.RegisterWindowAsync(window, metadata).ConfigureAwait(false);
@@ -65,13 +65,13 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
     /// <inheritdoc/>
     public async Task<Window> CreateWindow(string key, IReadOnlyDictionary<string, object>? metadata = null)
     {
-        ArgumentNullException.ThrowIfNullOrWhiteSpace(key);
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
         this.LogCreateKeyedWindow(key, widthMetadata: metadata != null);
 
         try
         {
             // Use keyed service resolution via the ServiceProvider
-            var window = this.serviceProvider.GetRequiredKeyedService<Window>(key);
+            var window = this.container.Resolve<Window>(key);
 
             // Register the created window with the window manager.
             _ = await this.windowManagerService.RegisterWindowAsync(window, metadata).ConfigureAwait(false);
@@ -95,7 +95,7 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
         try
         {
             // Create the window using the generic method
-            var window = this.serviceProvider.GetRequiredService<TWindow>();
+            var window = this.container.Resolve<TWindow>();
             _ = await this.windowManagerService.RegisterDecoratedWindowAsync(window, category, metadata).ConfigureAwait(false);
 
             this.LogDecoratedWindowCreated(category, window.GetType(), widthMetadata: metadata != null);
