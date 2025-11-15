@@ -98,7 +98,7 @@ jobs:
             - name: Restore NuGet packages
               shell: pwsh
               run: |
-                dotnet restore ./AllProjects.sln --disable-parallel
+                dotnet restore ./AllProjects.sln --disable-parallel -p:PublishReadyToRun=true -r win-x64
                 if ($LASTEXITCODE -ne 0) {
                     Write-Error "Package restore failed"
                     exit 1
