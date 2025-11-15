@@ -1,6 +1,6 @@
 ---
-mode: 'agent'
-tools: ['changes', 'codebase', 'editFiles', 'problems', 'search']
+agent: 'agent'
+tools: ['edit', 'search', 'microsoftdocs/mcp/*', 'problems', 'changes', 'testFailure', 'todos', 'runTests']
 description: 'Get best practices for MSTest unit testing, including data-driven tests'
 ---
 
