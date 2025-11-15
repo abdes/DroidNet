@@ -9,6 +9,7 @@ using DroidNet.Aura;
 using DroidNet.Aura.Theming;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
+using DroidNet.Coordinates;
 using DroidNet.Docking.Controls;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
@@ -221,11 +222,13 @@ public static partial class Program
         // Register Aura window management with all required services
         _ = container
             .WithAura(options => options
-            .WithAppearanceSettings()
-            .WithDecorationSettings()
-            .WithBackdropService()
-            .WithChromeService()
-            .WithThemeModeService());
+                .WithAppearanceSettings()
+                .WithDecorationSettings()
+                .WithBackdropService()
+                .WithChromeService()
+                .WithThemeModeService()
+                .WithDrag())
+            .WithSpatialMapping();
 
         // Core services
         container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
