@@ -37,6 +37,11 @@ https://github.com/amis92/csharp-source-generators
         <PackageType>Analyzer</PackageType>
     </PropertyGroup>
 
+    <!-- Suppress warning about including analyzer assemblies in the lib folder -->
+    <PropertyGroup>
+        <NoWarn>NU5128</NoWarn>
+    </PropertyGroup>
+
     <!--Required for any analyzer / generator-->
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
