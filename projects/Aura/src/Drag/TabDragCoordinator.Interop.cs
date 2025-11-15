@@ -3,11 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
-using DroidNet.Coordinates;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Drag;
 

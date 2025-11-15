@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.TestHelpers;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 
 namespace DroidNet.Docking.Tests;
 #pragma warning disable CA2000 // Dispose objects before losing scope

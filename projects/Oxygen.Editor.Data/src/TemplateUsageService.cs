@@ -31,7 +31,7 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
     /// <inheritdoc />
     public async Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync(int sizeLimit = 10)
     {
-        await using var context = contextFactory();
+        await using var context = this.contextFactory();
         var records = await context.TemplatesUsageRecords
             .AsNoTracking()
             .OrderByDescending(t => t.LastUsedOn)
@@ -45,12 +45,12 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
     /// <inheritdoc />
     public async Task<TemplateUsage?> GetTemplateUsageAsync(string location)
     {
-        if (cache.TryGetValue(CacheKeyPrefix + location, out TemplateUsage? cached))
+        if (this.cache.TryGetValue(CacheKeyPrefix + location, out TemplateUsage? cached))
         {
             return cached is null ? null : Clone(cached);
         }
 
-        await using var context = contextFactory();
+        await using var context = this.contextFactory();
         var templateUsage = await context.TemplatesUsageRecords
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
@@ -58,7 +58,7 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
         if (templateUsage != null)
         {
             var detached = Clone(templateUsage);
-            _ = cache.Set(CacheKeyPrefix + location, detached);
+            _ = this.cache.Set(CacheKeyPrefix + location, detached);
             return Clone(detached);
         }
 
@@ -70,7 +70,7 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
     {
         ValidateTemplateLocation(location);
 
-        await using var context = contextFactory();
+        await using var context = this.contextFactory();
 
         // Use tracked entity for updates
         var tracked = await context.TemplatesUsageRecords
@@ -95,20 +95,20 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
         _ = await context.SaveChangesAsync().ConfigureAwait(false);
 
         var cached = Clone(tracked);
-        _ = cache.Set(CacheKeyPrefix + location, cached);
+        _ = this.cache.Set(CacheKeyPrefix + location, cached);
     }
 
     /// <inheritdoc />
     public async Task<bool> HasRecentlyUsedTemplatesAsync()
     {
-        await using var context = contextFactory();
+        await using var context = this.contextFactory();
         return await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
     public async Task DeleteTemplateUsageAsync(string location)
     {
-        await using var context = contextFactory();
+        await using var context = this.contextFactory();
 
         // Retrieve a tracked entity for deletion
         var tracked = await context.TemplatesUsageRecords.FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
@@ -116,7 +116,7 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
         {
             _ = context.TemplatesUsageRecords.Remove(tracked);
             _ = await context.SaveChangesAsync().ConfigureAwait(false);
-            cache.Remove(CacheKeyPrefix + location);
+            this.cache.Remove(CacheKeyPrefix + location);
         }
     }
 

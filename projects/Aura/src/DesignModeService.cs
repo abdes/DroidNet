@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Diagnostics;
-using Microsoft.UI.Xaml;
 using Windows.ApplicationModel;
 
 namespace DroidNet.Aura;

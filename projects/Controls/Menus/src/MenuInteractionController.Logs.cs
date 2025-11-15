@@ -4,10 +4,8 @@
 
 using System.Diagnostics;
 using System.Globalization;
-using System.Reflection;
 using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls.Menus;
 

@@ -4,11 +4,11 @@
 
 using System.ComponentModel;
 using System.IO.Abstractions;
+using AwesomeAssertions;
 using DroidNet.Config;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
-using AwesomeAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
 

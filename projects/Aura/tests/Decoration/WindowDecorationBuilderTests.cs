@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Decoration;
 using AwesomeAssertions;
+using DroidNet.Aura.Decoration;
 
 namespace DroidNet.Aura.Tests.Decoration;
 

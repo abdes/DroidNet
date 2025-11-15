@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Controls.Tests;

@@ -31,7 +31,7 @@ public interface ITemplatesSource
     /// Implementations should validate the URI scheme to determine if they can handle
     /// loading from that type of location (e.g., `file://`, `http://`, etc.).
     /// </remarks>
-    bool CanLoad(Uri fromUri);
+    public bool CanLoad(Uri fromUri);
 
     /// <summary>
     /// Loads a project template from the specified location.
@@ -40,5 +40,5 @@ public interface ITemplatesSource
     /// <returns>The loaded template information if successful.</returns>
     /// <exception cref="ArgumentException">Thrown when the given location is not supported or is invalid.</exception>
     /// <exception cref="TemplateLoadingException">Thrown when an error occurs while loading the template or its assets.</exception>
-    Task<ITemplateInfo> LoadTemplateAsync(Uri fromUri);
+    public Task<ITemplateInfo> LoadTemplateAsync(Uri fromUri);
 }

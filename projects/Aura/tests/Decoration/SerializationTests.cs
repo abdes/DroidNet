@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Decoration.Serialization;
-using AwesomeAssertions;
 
 namespace DroidNet.Aura.Tests.Decoration;
 

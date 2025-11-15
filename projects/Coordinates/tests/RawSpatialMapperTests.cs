@@ -2,13 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
+using AwesomeAssertions;
 using DroidNet.Tests;
 using DryIoc;
-using AwesomeAssertions;
-using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Windows.Foundation;
 
 namespace DroidNet.Coordinates.Tests;
@@ -277,5 +274,5 @@ public sealed partial class RawSpatialMapperTests : VisualUserInterfaceTests, ID
             public string LpszClassName;
             public IntPtr HIconSm;
         }
-   }
+    }
 }

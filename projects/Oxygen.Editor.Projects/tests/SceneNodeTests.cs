@@ -156,10 +156,12 @@ public class SceneNodeTests
         Debug.Assert(node != null, nameof(node) + " != null");
         _ = node.Name.Should().Be("Node Name");
         _ = node.Scene.Should().BeSameAs(this.ExampleScene);
+
         // A Transform component is always present, so we expect 3 components total.
         _ = node.Components.Should().HaveCount(3);
         _ = node.Components.ElementAt(0).Name.Should().Be("Component 1");
         _ = node.Components.ElementAt(1).Name.Should().Be("Component 2");
+
         // The transform should be added automatically as the last component.
         _ = node.Components.ElementAt(2).Should().BeOfType<Transform>();
         _ = node.Components.ElementAt(2).Name.Should().Be("Transform");
@@ -185,6 +187,7 @@ public class SceneNodeTests
         _ = deserialized.Components.Should().HaveCount(3); // original 2 + always-present transform (may be duplicate if ToJson included transform explicitly)
         _ = deserialized.Components.ElementAt(0).Name.Should().Be("C1");
         _ = deserialized.Components.ElementAt(1).Name.Should().Be("T1");
+
         // Ensure each component's Node is set to the deserialized node
         foreach (var c in deserialized.Components)
         {
@@ -238,6 +241,7 @@ public class SceneNodeTests
         // Assert
         _ = node.Should().NotBeNull();
         Debug.Assert(node != null, "node != null");
+
         // Exactly one transform (provided in JSON) plus the named component => count == 2
         _ = node.Components.Should().HaveCount(2);
         _ = node.Components.Count(c => c is Transform).Should().Be(1);

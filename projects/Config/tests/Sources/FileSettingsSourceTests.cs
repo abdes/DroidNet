@@ -5,8 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Text;
-using DroidNet.Config.Sources;
 using AwesomeAssertions;
+using DroidNet.Config.Sources;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Testably.Abstractions.Testing;

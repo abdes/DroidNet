@@ -4,8 +4,8 @@
 
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Controls.Selection;
 using AwesomeAssertions;
+using DroidNet.Controls.Selection;
 using Moq;
 using Moq.Protected;
 

@@ -21,7 +21,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.Messages;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 

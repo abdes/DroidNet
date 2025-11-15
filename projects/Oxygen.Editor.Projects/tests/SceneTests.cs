@@ -208,6 +208,7 @@ public class SceneTests
         _ = deserialized.Nodes.Should().HaveCount(2);
         _ = deserialized.Nodes.ElementAt(0).Name.Should().Be("Node A");
         _ = deserialized.Nodes.ElementAt(1).Name.Should().Be("Node B");
+
         // Nodes should reference their parent scene
         foreach (var n in deserialized.Nodes)
         {

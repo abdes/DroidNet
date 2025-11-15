@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using DroidNet.Aura.Windowing;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 

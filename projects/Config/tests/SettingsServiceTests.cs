@@ -4,9 +4,9 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
-using AwesomeAssertions;
 
 namespace DroidNet.Config.Tests;
 

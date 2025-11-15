@@ -6,9 +6,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AwesomeAssertions;
 using DroidNet.Config.Sources;
 using DroidNet.Config.Tests.Helpers;
-using AwesomeAssertions;
 using Moq;
 
 namespace DroidNet.Config.Tests.Sources;

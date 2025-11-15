@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
-using DroidNet.Aura.Drag;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Controls.Demo.DemoBrowser;

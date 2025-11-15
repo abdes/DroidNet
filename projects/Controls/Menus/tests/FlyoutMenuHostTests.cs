@@ -4,8 +4,8 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Tests;
 using AwesomeAssertions;
+using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using MenuItemControl = DroidNet.Controls.Menus.MenuItem;
 

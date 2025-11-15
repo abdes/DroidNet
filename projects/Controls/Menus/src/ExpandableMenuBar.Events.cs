@@ -2,12 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Specialized;
-using System.Linq;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
-
 namespace DroidNet.Controls.Menus;
 
 /// <content>

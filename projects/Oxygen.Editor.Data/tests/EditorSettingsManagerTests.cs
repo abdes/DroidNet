@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DryIoc;
 using AwesomeAssertions;
+using DryIoc;
 
 namespace Oxygen.Editor.Data.Tests;
 

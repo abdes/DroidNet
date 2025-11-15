@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Mvvm.Converters;
 using AwesomeAssertions;
+using DroidNet.Mvvm.Converters;
 using Moq;
 
 namespace DroidNet.Mvvm.Tests.Converters;

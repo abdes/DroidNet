@@ -113,13 +113,13 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasItems)));
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.HasMultipleItems)));
 
-    this.RefreshOwnProperties();
-    this.UpdatePropertyEditors();
-    this.UpdatePropertyEditorsValues();
+        this.RefreshOwnProperties();
+        this.UpdatePropertyEditors();
+        this.UpdatePropertyEditorsValues();
 
-    // Log the collection update
-    this.LogItemsCollectionUpdated();
-    return;
+        // Log the collection update
+        this.LogItemsCollectionUpdated();
+        return;
 
         void OnItemPropertyExternallyChanged(object? sender, PropertyChangedEventArgs e)
         {
@@ -136,16 +136,16 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
     /// </remarks>
     protected virtual void RefreshOwnProperties()
     {
-    this.doNotPropagateRename = true;
-    this.Name = MixedValues.GetMixedValue(this.items, e => e.Name);
-    this.doNotPropagateRename = false;
+        this.doNotPropagateRename = true;
+        this.Name = MixedValues.GetMixedValue(this.items, e => e.Name);
+        this.doNotPropagateRename = false;
 
-    this.OnPropertyChanged(nameof(this.ItemsCount));
-    this.OnPropertyChanged(nameof(this.HasItems));
-    this.OnPropertyChanged(nameof(this.HasMultipleItems));
+        this.OnPropertyChanged(nameof(this.ItemsCount));
+        this.OnPropertyChanged(nameof(this.HasItems));
+        this.OnPropertyChanged(nameof(this.HasMultipleItems));
 
-    // Log refreshed properties (include mixed name if available)
-    this.LogRefreshedProperties(this.Name);
+        // Log refreshed properties (include mixed name if available)
+        this.LogRefreshedProperties(this.Name);
     }
 
     private void UpdatePropertyEditors()

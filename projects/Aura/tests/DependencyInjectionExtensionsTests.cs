@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
@@ -10,7 +11,6 @@ using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DryIoc;
-using AwesomeAssertions;
 
 namespace DroidNet.Aura.Tests;
 

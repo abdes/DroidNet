@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using System.Windows.Controls;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Routing.Events;
 using Microsoft.UI.Xaml;

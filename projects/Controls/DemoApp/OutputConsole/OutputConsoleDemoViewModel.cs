@@ -4,7 +4,6 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Controls.OutputConsole;
 using DroidNet.Controls.OutputConsole.Model;
 using Serilog;
 using Serilog.Events;

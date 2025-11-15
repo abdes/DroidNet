@@ -4,8 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
-using DroidNet.TestHelpers;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;

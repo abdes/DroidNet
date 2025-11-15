@@ -2,9 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using DroidNet.Coordinates;
 using Microsoft.UI.Xaml;
 

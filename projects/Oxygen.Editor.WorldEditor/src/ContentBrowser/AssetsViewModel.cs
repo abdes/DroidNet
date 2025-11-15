@@ -106,7 +106,7 @@ public partial class AssetsViewModel(
         {
             // Navigate into the folder
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.Location}");
-            await NavigateToFolder(args.InvokedItem.Location);
+            await this.NavigateToFolder(args.InvokedItem.Location);
         }
     }
 
