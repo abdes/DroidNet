@@ -42,7 +42,7 @@
              property is set with conditional property groups so empty values don't create trailing underscores. -->
         <ArtifactsPivots Condition="'$(TargetFramework)' == '' and '$(RuntimeIdentifier)' == ''">$(Configuration)</ArtifactsPivots>
         <ArtifactsPivots Condition="'$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</ArtifactsPivots>
-        <ArtifactsPivots Condition="'$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</ArtifactsPivots>
+        <ArtifactsPivots Condition="'$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)</ArtifactsPivots>
     </PropertyGroup>
 
   <Import Project="Common.props" />
