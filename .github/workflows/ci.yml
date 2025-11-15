@@ -1,138 +1,145 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Main Build
 
 on:
-    workflow_dispatch:
-    pull_request:
-        branches: ["master"]
-        paths-ignore:
-            - "tooling/doc/**"
-            - "**/*.md"
-            - ".gitignore"
-    push:
-        branches: ["master"]
-        paths-ignore:
-            - "tooling/doc/**"
-            - "**/*.md"
-            - ".gitignore"
+  workflow_dispatch:
+  pull_request:
+    branches: ["master"]
+    paths-ignore:
+      - "tooling/doc/**"
+      - "**/*.md"
+      - ".gitignore"
+  push:
+    branches: ["master"]
+    paths-ignore:
+      - "tooling/doc/**"
+      - "**/*.md"
+      - ".gitignore"
 
 concurrency:
-    group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-    build:
-        continue-on-error: ${{ matrix.experimental }}
-        strategy:
-          fail-fast: true
-          matrix:
-              configuration: [Debug]
-              platform: [x64]
-              experimental: [false]
-              include:
-                - configuration: Release
-                  platform: x64
-                  experimental: true
+  build:
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: true
+      matrix:
+        configuration: [Debug]
+        platform: [x64]
+        experimental: [false]
+        include:
+          - configuration: Release
+            platform: x64
+            experimental: true
 
-        runs-on:
-            windows-latest # For a list of available runner types, refer to
-            # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    # For a list of available runner types, refer to
+    # https://help.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idruns-on
+    runs-on: windows-latest
 
-        env:
-            Solution_Name: AllProjects.sln
+    env:
+      Solution_Name: AllProjects.sln
 
-        steps:
-            - name: Checkout
-              uses: actions/checkout@v4
-              with:
-                  fetch-depth: 0
-                  submodules: "recursive"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: "recursive"
 
-            - name: Install .Net
-              uses: actions/setup-dotnet@v4
-              with:
-                  global-json-file: global.json
-                  cache: true
-                  cache-dependency-path: '**/*.csproj'
+      - name: Install Windows App SDK Runtime 1.8.251106002
+        run: |
+          $ErrorActionPreference = "Stop"
+          Invoke-WebRequest -Uri https://aka.ms/windowsappsdk/1.8/1.8.251106002/windowsappruntimeinstall-x64.exe -OutFile winappsdk.exe
+          Start-Process winappsdk.exe -ArgumentList "/quiet","/norestart" -Wait
 
-            - name: Setup MSBuild.exe
-              uses: microsoft/setup-msbuild@v2
+      - name: Install .Net
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/*.csproj"
 
-            - name: Setup Python
-              uses: actions/setup-python@v5
-              with:
-                  python-version: '3.11'
-                  cache: 'pip'
-                  cache-dependency-path: tooling/scripts/pyproject.toml
+      - name: Setup MSBuild.exe
+        uses: microsoft/setup-msbuild@v2
 
-            - name: Install traversal tooling
-              shell: pwsh
-              run: |
-                python -m pip install --upgrade pip
-                python -m pip install ./tooling/scripts
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: tooling/scripts/pyproject.toml
 
-            - name: Cache dotnet tools
-              uses: actions/cache@v4
-              with:
-                path: |
-                  ~/.dotnet/tools
-                  !~/.dotnet/tools/temp
-                key: ${{ runner.os }}-dotnet-tools-${{ hashFiles('**/global.json') }}
-                restore-keys: |
-                  ${{ runner.os }}-dotnet-tools-${{ runner.os }}
+      - name: Install traversal tooling
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ./tooling/scripts
 
-            # Restore tools
-            - name: Restore .Net tools
-              run: |
-                  ./init -NoPreCommitHooks
-                  dotnet tool list
+      - name: Cache dotnet tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.dotnet/tools
+            !~/.dotnet/tools/temp
+          key: ${{ runner.os }}-dotnet-tools-${{ hashFiles('**/global.json') }}
+          restore-keys: |
+            ${{ runner.os }}-dotnet-tools-${{ runner.os }}
 
-            - name: Generate solution file
-              shell: pwsh
-              run: |
-                ./GenerateAllSolution
-                if (-not (Test-Path -Path ./AllProjects.sln)) {
-                    Write-Error "Solution file was not generated"
-                    exit 1
-                }
+      # Restore tools
+      - name: Restore .Net tools
+        run: |
+          ./init -NoPreCommitHooks
+          dotnet tool list
 
-            - name: Restore NuGet packages
-              shell: pwsh
-              run: |
-                dotnet restore ./AllProjects.sln --disable-parallel -p:PublishReadyToRun=true -r win-x64
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Package restore failed"
-                    exit 1
-                }
+      - name: Generate solution file
+        shell: pwsh
+        run: |
+          ./GenerateAllSolution
+          if (-not (Test-Path -Path ./AllProjects.sln)) {
+              Write-Error "Solution file was not generated"
+              exit 1
+          }
 
-            - name: Build projects
-              shell: pwsh
-              run: |
-                msbuild .\AllProjects.sln `
-                  -t:build `
-                  -v:m `
-                  -p:DN_PreCommitHooks=false `
-                  -p:Platform=${{ matrix.platform }} `
-                  -p:Configuration=${{ matrix.configuration }} `
-                  -p:ContinuousIntegrationBuild=true
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Build failed"
-                    exit 1
-                }
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: |
+          dotnet restore ./AllProjects.sln --disable-parallel -p:PublishReadyToRun=true -r win-x64
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Package restore failed"
+              exit 1
+          }
 
-            - name: Execute Unit Tests (traverse)
-              shell: pwsh
-              run: |
-                python -m tooling.scripts.traverse `
-                  Invoke-Tests `
-                  --start ./projects `
-                  --exclude "Interop|UI\.Tests" `
-                  --no-build `
-                  --configuration ${{ matrix.configuration }} `
-                  -- `
-                  --filter "TestCategory!=UITest&TestCategory!=ExcludeFromCI" `
-                  --no-ansi `
-                  --no-progress
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Error "Tests failed"
-                    exit 1
-                }
+      - name: Build projects
+        shell: pwsh
+        run: |
+          msbuild .\AllProjects.sln `
+            -t:build `
+            -v:m `
+            -p:DN_PreCommitHooks=false `
+            -p:Platform=${{ matrix.platform }} `
+            -p:Configuration=${{ matrix.configuration }} `
+            -p:ContinuousIntegrationBuild=true
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Build failed"
+              exit 1
+          }
+
+      - name: Execute Unit Tests (traverse)
+        shell: pwsh
+        run: |
+          python -m tooling.scripts.traverse `
+            Invoke-Tests `
+            --start ./projects `
+            --exclude "Interop|UI\.Tests" `
+            --no-build `
+            --configuration ${{ matrix.configuration }} `
+            -- `
+            --filter "TestCategory!=UITest&TestCategory!=ExcludeFromCI" `
+            --no-ansi `
+            --no-progress
+          if ($LASTEXITCODE -ne 0) {
+              Write-Error "Tests failed"
+              exit 1
+          }
