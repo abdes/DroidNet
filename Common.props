@@ -30,16 +30,6 @@
         <Platform Condition="'$(Platform)' == '' OR '$(Platform)' == 'AnyCPU'">x64</Platform>
     </PropertyGroup>
 
-    <!-- Read-only source tree (builds to top-level bin/obj folders)
-         These default paths are disabled when UseArtifactsOutput is enabled
-         (configured in Directory.build.props) because .NET 8+ will set output
-         folders under the configured ArtifactsPath. -->
-    <PropertyGroup Condition="'$(UseArtifactsOutput)' != 'true'">
-        <!-- Don't include platform in base paths - the SDK will add it automatically to the final output path -->
-        <BaseIntermediateOutputPath>$(MyTopLevelDirectory)obj\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseIntermediateOutputPath>
-        <BaseOutputPath Condition=" '$(BaseOutputPath)' == '' ">$(MyTopLevelDirectory)bin\$([MSBuild]::MakeRelative($(MyTopLevelDirectory), $(MSBuildProjectDirectory)))\</BaseOutputPath>
-    </PropertyGroup>
-
     <PropertyGroup>
         <!--
         We use TargetFrameworks even though we'e specifying a single TF here because in MSBuild, TF takes precedence over TFS.
