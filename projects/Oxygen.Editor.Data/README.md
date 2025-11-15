@@ -1,180 +1,646 @@
-# Oxygen Editor Data Layer
+# Oxygen.Editor.Data
+
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4)](https://dotnet.microsoft.com/)
+[![EF Core](https://img.shields.io/badge/EF%20Core-9.0-512BD4)](https://learn.microsoft.com/ef/core/)
+[![SQLite](https://img.shields.io/badge/SQLite-3-003B57)](https://www.sqlite.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](../../../LICENSE)
+
+**Persistence layer for the Oxygen Editor**, providing data storage and retrieval for editor settings, project usage history, and template usage tracking using Entity Framework Core with SQLite.
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Technology Stack](#technology-stack)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Usage Examples](#usage-examples)
+- [Data Model](#data-model)
+- [API Reference](#api-reference)
+- [Database Maintenance](#database-maintenance)
+- [Development](#development)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Overview
+
+`Oxygen.Editor.Data` is a self-contained module within the DroidNet monorepo that provides robust data persistence for the Oxygen game editor. It manages:
+
+- **Project Usage Tracking** — Recently opened projects with session restoration
+- **Template Usage Tracking** — Template usage history for the new project wizard
+- **Module Settings** — Flexible JSON-based configuration storage per editor module
+
+The module uses Entity Framework Core with SQLite for local-first, zero-configuration data storage, optimized for single-user desktop applications with multi-level caching for performance.
+
+## Features
+
+✅ **Recent Projects Management** — Track and display recently used projects with usage statistics
+✅ **Template History** — Remember frequently used project templates
+✅ **Flexible Settings System** — Store arbitrary module configuration as JSON with type-safe base classes
+✅ **Session Restoration** — Save and restore last opened scene and content browser state per project
+✅ **Multi-Level Caching** — In-memory caching for high-performance reads
+✅ **Change Notifications** — Subscribe to setting changes for reactive UI updates
+✅ **EF Core Migrations** — Schema versioning and evolution support
+✅ **Design-Time Factory** — Simplified migration workflow with in-memory database support
+✅ **Testable Design** — Uses `Testably.Abstractions.IFileSystem` for filesystem operations
+
+## Technology Stack
+
+### Core Technologies
+
+- **.NET 9.0** — Target framework (also targets `net9.0-windows10.0.26100.0`)
+- **C# 13** — Language features including primary constructors and collection expressions
+- **Entity Framework Core 9.0** — ORM and database abstraction
+- **SQLite** — Embedded relational database
+
+### Key Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `Microsoft.EntityFrameworkCore` | 9.0+ | Database context and change tracking |
+| `Microsoft.EntityFrameworkCore.Sqlite` | 9.0+ | SQLite provider for EF Core |
+| `Microsoft.EntityFrameworkCore.Design` | 9.0+ | Design-time tools for migrations |
+| `Microsoft.Extensions.Caching.Memory` | 9.0+ | In-memory caching layer |
+| `Testably.Abstractions` | Latest | Filesystem abstraction for testing |
+| `System.CommandLine` | Latest | CLI parsing for design-time factory |
+
+### Project References
+
+- `DroidNet.Config` — Provides `PathFinder` for database location resolution
+- `Oxygen.Editor.Core` — Core editor interfaces and types
+
+## Architecture
+
+### High-Level Design
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    Application Layer                         │
+│  (ViewModels, Controllers, UI Components)                    │
+└────────────────┬────────────────────────────────────────────┘
+                 │
+                 ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Service Layer                             │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐│
+│  │EditorSettings    │  │ProjectUsage      │  │TemplateUsage││
+│  │Manager           │  │Service           │  │Service       ││
+│  └────────┬─────────┘  └────────┬─────────┘  └─────┬──────┘│
+│           │                     │                    │        │
+│           └─────────────────────┼────────────────────┘        │
+│                                 │                             │
+│                    ┌────────────▼──────────────┐              │
+│                    │  Caching Layer             │              │
+│                    │  (MemoryCache/Dictionary)  │              │
+│                    └────────────┬──────────────┘              │
+└─────────────────────────────────┼───────────────────────────┘
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Data Access Layer (EF Core)                 │
+│                    PersistentState (DbContext)               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
+│  │ Settings     │  │ ProjectsUsage│  │ TemplatesUsage   │  │
+│  │ (DbSet)      │  │ (DbSet)      │  │ Records (DbSet)  │  │
+│  └──────────────┘  └──────────────┘  └──────────────────┘  │
+└─────────────────────────────────────┬───────────────────────┘
+                                      │
+                                      ▼
+┌─────────────────────────────────────────────────────────────┐
+│                       SQLite Database                        │
+│                   PersistentState.db                         │
+└─────────────────────────────────────────────────────────────┘
+```
 
-This README is a beginner-friendly A→Z guide to using Entity Framework Core (EF Core) with this project. It explains how to install the tools, create the initial database schema, add and apply migrations, and common troubleshooting tips.
+### Design Patterns
 
-> Quick note: this project includes a design-time factory (`DesignTimePersistentStateFactory`) that accepts extra command-line arguments used by the `dotnet ef` tools. The factory supports:
->
-> - `--mode` — `dev` or `real` (resolves where the on-disk SQLite file lives). Default: `dev`.
-> - `--use-in-memory-db` — use an in-memory SQLite instance (useful for tests and creating migrations without touching the local file).
-> - `--db-path` — specify an explicit SQLite database file path to use for design-time operations (this takes precedence over `--mode`).
->
-> Only one of these options should be provided at a time. If both are provided the factory throws an `ArgumentException`.
+- **Repository Pattern** — Services abstract data access logic
+- **Factory Pattern** — `TemplateUsageService` uses context factory for concurrency safety
+- **Cache-Aside** — Services implement read-through caching with manual invalidation
+- **Unit of Work** — EF Core DbContext manages transactions and change tracking
+- **Data Annotations + Fluent API** — Entity configuration via attributes and conventions
+- **Strategy Pattern** — Design-time factory supports multiple database resolution strategies
 
-## Prerequisites
+### Key Components
 
-- Install the .NET SDK (9.0 or later) and ensure `dotnet` is on your PATH. Verify with:
+#### PersistentState (DbContext)
 
- `dotnet --version`
+The central EF Core context managing three DbSets:
 
-- Install the EF Core CLI tool (global tool):
+- `Settings` — Module configuration storage
+- `ProjectUsageRecords` — Project history and state
+- `TemplatesUsageRecords` — Template usage tracking
 
- `dotnet tool install --global dotnet-ef`
+#### Service Layer
 
- If you already installed it earlier, update it with:
+**EditorSettingsManager** (`IEditorSettingsManager`)
 
- `dotnet tool update --global dotnet-ef`
+- Generic key-value storage with JSON serialization
+- In-memory caching with `ConcurrentDictionary`
+- Change notification support
 
-- Ensure the EF Core design and provider packages are referenced by the `Oxygen.Editor.Data` project. From the project folder (`projects/Oxygen.Editor.Data/src`) run (if not already present):
+**ProjectUsageService** (`IProjectUsageService`)
 
- `dotnet add package Microsoft.EntityFrameworkCore.Design`
+- CRUD operations for project usage records
+- `IMemoryCache`-based caching
+- Validation and cache coherence management
 
- `dotnet add package Microsoft.EntityFrameworkCore.Sqlite`
+**TemplateUsageService** (`ITemplateUsageService`)
 
- The `Design` package is required for `dotnet ef` design-time support; the `Sqlite` package provides the SQLite provider used by the project.
+- Template usage tracking and retrieval
+- Factory-based context creation for concurrency safety
+- Detached entity cloning to avoid tracking conflicts
 
-## Out-of-source build and intermediate directories (repo root `obj` and `out`)
+#### Models
 
-This repository keeps build outputs and MSBuild intermediates out-of-source at the repo root (for example `obj/` and `out/`). When running `dotnet ef`, pass an explicit `--msbuildprojectextensionspath` that points to the repo-root `obj` folder used for that project. This prevents collisions between different projects and ensures `dotnet ef` builds in the same out-of-source layout you use locally.
+**Base Classes:**
 
-Example (run from the repository root, adjust paths to match your repo layout):
+- `ModuleSettings` — Abstract base with `[Persisted]` attribute support
+- `WindowedModuleSettings` — Extends `ModuleSettings` with window position/size
 
- `--msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+**Entities:**
 
-Note: you don't need to create the folder beforehand; MSBuild will create it when building. If you also use a custom `out` folder for built artifacts you can set MSBuild properties when building manually (for example when calling `dotnet build`), but `--msbuildprojectextensionspath` is usually sufficient for `dotnet ef` commands.
+- `ProjectUsage` — Project metadata and session state
+- `TemplateUsage` — Template usage statistics
+- `ModuleSetting` — Key-value setting storage
 
-## Project layout notes for `dotnet ef`
+## Getting Started
 
-`dotnet ef` needs to know two things:
+### Prerequisites
 
-- The project that contains your EF Core model and migrations (the *target* project)
-- The project that should be used as the *startup* project when running design-time code (sometimes the same project)
+- .NET 9.0 SDK or later
+- (Optional) EF Core CLI tools: `dotnet tool install --global dotnet-ef`
 
-If you run `dotnet ef` from inside the `Oxygen.Editor.Data` project folder you'll usually only need `--project` and `--startup-project` pointing to the same folder. When invoking from the repository root, pass explicit `--project` and `--startup-project` paths.
+### Installation
 
-## Creating the initial migration (safe beginner workflow)
+This module is part of the DroidNet monorepo. To use it in your project:
 
-Why create the initial migration with an in-memory DB?
-- Using `--use-in-memory-db` in the design-time factory avoids a file-based DB locking and makes generating the migration deterministic for schema-only changes.
+1. **Add project reference:**
 
-From the repository root (example paths assume the repo root is the `projects` folder):
+   ```xml
+   <ItemGroup>
+     <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
+   </ItemGroup>
+   ```
 
-- Create an initial migration using in-memory SQLite (no DB file required):
+2. **Register services in DI container:**
 
- `dotnet ef migrations add InitialCreate --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --use-in-memory-db`
+   ```csharp
+   // In your host configuration
+   services.AddDbContext<PersistentState>(options =>
+   {
+       var dbPath = pathFinder.GetEditorDataPath() / "PersistentState.db";
+       options.UseSqlite($"Data Source={dbPath}");
+   });
 
-- Create an initial migration using the file-backed DB in development mode (PathFinder mode):
+   services.AddSingleton<IEditorSettingsManager, EditorSettingsManager>();
+   services.AddSingleton<IProjectUsageService, ProjectUsageService>();
+   services.AddSingleton<ITemplateUsageService>(sp =>
+   {
+       var cache = sp.GetRequiredService<IMemoryCache>();
+       return new TemplateUsageService(() => sp.GetRequiredService<PersistentState>(), cache);
+   });
+   ```
 
- `dotnet ef migrations add InitialCreate --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --mode=dev`
+3. **Apply migrations automatically:**
 
-- Create an initial migration using an explicit database file path (useful when your DB file lives outside the default location):
+   ```csharp
+   // On application startup
+   await using var context = new PersistentState(options);
+   await context.Database.MigrateAsync();
+   ```
 
- `dotnet ef migrations add InitialCreate --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --db-path="F:\\path\\to\\PersistentState.db"`
+### Quick Example
 
-Notes:
-- The `--msbuildprojectextensionspath` parameter is used in some CI / multi-project scenarios to avoid conflicting intermediate folders. The value shown above mirrors the pattern used in this repository; adjust if you run into MSBuild/SDK complaints.
-- The `--` separates `dotnet ef` options from arguments forwarded to the design-time factory.
+```csharp
+// Track project usage
+await projectUsageService.UpdateProjectUsageAsync("MyGame", @"C:\Projects\MyGame");
 
-After running the command you should see a new migration folder under `projects/Oxygen.Editor.Data/src/Migrations` containing the `Up`/`Down` code.
+// Retrieve recent projects
+var recentProjects = await projectUsageService.GetMostRecentlyUsedProjectsAsync(10);
 
-## Reviewing and editing migrations
+// Save a setting
+await settingsManager.SaveSettingAsync("Editor", "Theme", "Dark");
 
-- Always open the generated migration class and verify that the `Up` and `Down` methods reflect the changes you expect.
-- If you need to add seed data or custom SQL, you can add it to `Up()` using `migrationBuilder.InsertData(...)` or `migrationBuilder.Sql("...")`.
+// Load a setting with default
+var theme = await settingsManager.LoadSettingAsync("Editor", "Theme", "Light");
+```
 
-## Applying migrations (update the database)
+## Usage Examples
 
-To apply migrations to a database (create or update the database file), run. Use the same `--msbuildprojectextensionspath` and the same `--db-path` (if you used one when creating the migrations):
+### Managing Project Usage
 
-`dotnet ef database update --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --db-path="F:\\path\\to\\PersistentState.db"`
+```csharp
+// Open a project (tracks usage)
+await projectUsageService.UpdateProjectUsageAsync("MyProject", @"C:\Dev\MyProject");
 
-If you used the `--use-in-memory-db` mode to create migrations, switch to a file-backed mode when applying migrations in development, for example `--mode=dev` or by specifying `--db-path`.
+// Get top 5 recent projects
+var recent = await projectUsageService.GetMostRecentlyUsedProjectsAsync(5);
+foreach (var project in recent)
+{
+    Console.WriteLine($"{project.Name} - Opened {project.TimesOpened} times");
+}
 
-If you want to target a specific migration instead of applying all pending migrations, pass the migration name as the last argument:
+// Update last opened scene (for session restoration)
+await projectUsageService.UpdateLastOpenedSceneAsync(
+    "MyProject",
+    @"C:\Dev\MyProject",
+    "Scenes/MainMenu.scene");
 
-`dotnet ef database update InitialCreate --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --db-path="F:\\path\\to\\PersistentState.db"`
+// Update content browser state
+await projectUsageService.UpdateContentBrowserStateAsync(
+    "MyProject",
+    @"C:\Dev\MyProject",
+    JsonSerializer.Serialize(new { path = "/Assets", filter = "textures" }));
 
-## Generating SQL script
+// Rename or move project
+await projectUsageService.UpdateProjectNameAndLocationAsync(
+    "OldName",
+    @"C:\OldPath",
+    "NewName",
+    @"C:\NewPath");
 
-To generate a SQL migration script instead of applying migrations directly (example produces `migration.sql` in the current folder):
+// Delete usage record
+await projectUsageService.DeleteProjectUsageAsync("MyProject", @"C:\Dev\MyProject");
+```
 
-`dotnet ef migrations script --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src -o ./migration.sql --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+### Managing Template Usage
 
-This produces a `migration.sql` you can inspect or run against an external DB tool.
+```csharp
+// Record template usage (when creating new project)
+await templateUsageService.UpdateTemplateUsageAsync(@"C:\Templates\3DGame.template");
 
-## Common workflows
+// Get recent templates for wizard
+var recentTemplates = await templateUsageService.GetMostRecentlyUsedTemplatesAsync(10);
 
-- Add a migration after changing model classes:
-1. Update your POCO/DbContext model classes in code.
-2. `dotent ef migrations add <DescriptiveName> --project ... --startup-project ... --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --mode=dev` (or `--use-in-memory-db` for safe generation or `--db-path` to use a specific DB file).
-3. Review generated migration code.
-4. `dotnet ef database update --project ... --startup-project ... --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --mode=dev` to apply.
+// Check specific template usage
+var usage = await templateUsageService.GetTemplateUsageAsync(@"C:\Templates\3DGame.template");
+if (usage != null)
+{
+    Console.WriteLine($"Used {usage.TimesUsed} times, last on {usage.LastUsedOn}");
+}
+```
 
-- Undo the last migration (before applying to a shared DB):
+### Managing Settings
 
- `dotnet ef migrations remove --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+**Basic settings operations:**
 
-- Revert the database to the previous migration:
+```csharp
+// Save primitive types
+await settingsManager.SaveSettingAsync("MyModule", "WindowWidth", 1920);
+await settingsManager.SaveSettingAsync("MyModule", "Theme", "Dark");
+await settingsManager.SaveSettingAsync("MyModule", "EnableFeature", true);
 
- `dotnet ef database update <PreviousMigrationName> --project ... --startup-project ... --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+// Load with type inference
+var width = await settingsManager.LoadSettingAsync<int>("MyModule", "WindowWidth");
+var theme = await settingsManager.LoadSettingAsync<string>("MyModule", "Theme");
 
-## Troubleshooting
+// Load with default value
+var height = await settingsManager.LoadSettingAsync("MyModule", "WindowHeight", 1080);
+```
 
-- Error: "A suitable provider was not found"
- - Ensure `Microsoft.EntityFrameworkCore.Sqlite` is installed in the `Oxygen.Editor.Data` project and that `PersistentState`'s `OnConfiguring` or the app's `DbContextOptionsBuilder` calls `.UseSqlite(...)`.
+**Custom settings class with [Persisted] attributes:**
 
-- Error: "Unable to create an object of type 'PersistentState'"
- - Ensure a design-time factory exists (this project has `DesignTimePersistentStateFactory`) or add a `IDesignTimeDbContextFactory<PersistentState>` implementation so `dotnet ef` can create your context. You can pass `--db-path` to the factory so it will use your exact DB file location.
+```csharp
+public class EditorSettings : ModuleSettings
+{
+    [Persisted]
+    public string Theme { get; set; } = "Light";
+
+    [Persisted]
+    public int AutoSaveInterval { get; set; } = 300; // seconds
+
+    [Persisted]
+    public bool ShowLineNumbers { get; set; } = true;
+
+    // Not persisted (no attribute)
+    public bool IsDirtyFlag { get; set; }
+
+    public EditorSettings(IEditorSettingsManager manager)
+        : base(manager, "Editor")
+    {
+    }
+}
+
+// Usage
+var settings = new EditorSettings(settingsManager);
+await settings.LoadAsync();
+
+settings.Theme = "Dark";
+settings.AutoSaveInterval = 600;
+
+if (settings.IsDirty)
+{
+    await settings.SaveAsync();
+}
+```
+
+**Windowed module settings:**
+
+```csharp
+public class DockingModuleSettings : WindowedModuleSettings
+{
+    [Persisted]
+    public string LayoutFile { get; set; } = "default.layout";
+
+    public DockingModuleSettings(IEditorSettingsManager manager)
+        : base(manager, "Docking")
+    {
+    }
+}
+
+// Usage
+var settings = new DockingModuleSettings(settingsManager);
+await settings.LoadAsync();
+
+// WindowPosition and WindowSize are automatically persisted
+settings.WindowPosition = new Point(100, 100);
+settings.WindowSize = new Size(1920, 1080);
+settings.LayoutFile = "custom.layout";
+
+await settings.SaveAsync();
+```
+
+**Change notifications:**
+
+```csharp
+// Register handler for setting changes
+settingsManager.RegisterChangeHandler("Editor", "Theme", (newJsonValue) =>
+{
+    var newTheme = JsonSerializer.Deserialize<string>(newJsonValue);
+    Console.WriteLine($"Theme changed to: {newTheme}");
+    // Update UI
+});
+
+// Later, unregister
+settingsManager.UnregisterChangeHandler("Editor", "Theme");
+```
+
+## Data Model
+
+The persistence layer uses three primary tables. For detailed documentation, see [Data Model Documentation](docs/data-model.md).
+
+### Quick Reference
+
+| Entity | Purpose | Key Fields |
+|--------|---------|------------|
+| `ProjectUsage` | Project history & state | `Name`, `Location`, `LastUsedOn`, `TimesOpened`, `LastOpenedScene` |
+| `TemplateUsage` | Template usage tracking | `Location`, `LastUsedOn`, `TimesUsed` |
+| `ModuleSetting` | Module configuration | `ModuleName`, `Key`, `JsonValue` |
+
+**Entity Relationship:**
+
+```mermaid
+erDiagram
+    ProjectsUsage {
+        int Id PK
+        string Name
+        string Location
+        int TimesOpened
+        datetime LastUsedOn
+    }
+    TemplatesUsageRecords {
+        int Id PK
+        string Location UK
+        int TimesUsed
+    }
+    Settings {
+        int Id PK
+        string ModuleName
+        string Key
+        string JsonValue
+    }
+```
+
+## API Reference
+
+### IEditorSettingsManager
+
+```csharp
+Task SaveSettingAsync<T>(string moduleName, string key, T value);
+Task<T?> LoadSettingAsync<T>(string moduleName, string key);
+Task<T> LoadSettingAsync<T>(string moduleName, string key, T defaultValue);
+void RegisterChangeHandler(string moduleName, string key, Action<string> handler);
+void UnregisterChangeHandler(string moduleName, string key);
+void ClearCache();
+```
+
+### IProjectUsageService
+
+```csharp
+Task<bool> HasRecentlyUsedProjectsAsync();
+Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10);
+Task<ProjectUsage?> GetProjectUsageAsync(string name, string location);
+Task UpdateProjectUsageAsync(string name, string location);
+Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState);
+Task UpdateLastOpenedSceneAsync(string name, string location, string lastOpenedScene);
+Task UpdateProjectNameAndLocationAsync(string oldName, string oldLocation, string newName, string? newLocation = null);
+Task DeleteProjectUsageAsync(string name, string location);
+```
+
+### ITemplateUsageService
+
+```csharp
+Task<bool> HasRecentlyUsedTemplatesAsync();
+Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync(int sizeLimit = 10);
+Task<TemplateUsage?> GetTemplateUsageAsync(string location);
+Task UpdateTemplateUsageAsync(string location);
+Task DeleteTemplateUsageAsync(string location);
+```
+
+## Database Maintenance
+
+### EF Core Migrations
+
+The project uses Entity Framework Core migrations for schema versioning. For comprehensive migration workflows, see [Database Maintenance Guide](docs/db-maintenance.md).
+
+#### Quick Commands
+
+**Create a migration:**
+
+```powershell
+dotnet ef migrations add <Name> `
+  --project projects/Oxygen.Editor.Data/src `
+  --startup-project projects/Oxygen.Editor.Data/src `
+  --framework net9.0 `
+  -- --use-in-memory-db
+```
 
-- If `dotnet ef` complains about running in an unexpected project context, always pass explicit `--project` and `--startup-project` paths and the `--msbuildprojectextensionspath` value that matches your out-of-source layout.
+**Apply migrations:**
 
-- If migrations touch large binary columns or you see file locking problems on SQLite, generate migrations using `--use-in-memory-db` and only apply to the file-based DB when necessary.
+```powershell
+dotnet ef database update `
+  --project projects/Oxygen.Editor.Data/src `
+  --startup-project projects/Oxygen.Editor.Data/src `
+  --framework net9.0 `
+  -- --mode=dev
+```
 
-## Updating model classes safely
+**List migrations:**
 
-- Adding a new nullable column: safe; new rows will have NULL or default value.
-- Adding a non-nullable column: provide a default value or make it nullable first in a migration, populate values, then change to non-nullable.
-- Renaming a column: write a migration that uses `RenameColumn` or uses raw SQL in `migrationBuilder.Sql(...)` to avoid data loss.
-- Dropping columns: be cautious — this is destructive to existing data. Back up if data must be preserved.
+```powershell
+dotnet ef migrations list `
+  --project projects/Oxygen.Editor.Data/src `
+  --startup-project projects/Oxygen.Editor.Data/src
+```
 
-## Example: model change → add migration → apply (concise example)
+### Design-Time Factory
 
-1. Modify `ProjectState` model in `projects/Oxygen.Editor.Data/src/Models/ProjectState.cs`.
-2. From repo root run (adjust DB path to your location):
+The `DesignTimePersistentStateFactory` supports three database resolution modes:
 
- `dotnet ef migrations add AddNewFieldToProjectState --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --framework net9.0 --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --db-path="F:\\path\\to\\PersistentState.db"`
+| Argument | Description |
+|----------|-------------|
+| `--mode <dev\|real>` | Uses `PathFinder` to resolve database location (default: `dev`) |
+| `--use-in-memory-db` | Creates in-memory SQLite database (recommended for migrations) |
+| `--db-path <path>` | Explicit path to database file |
 
-3. Review `Migrations/<timestamp>_AddNewFieldToProjectState.cs`.
-4. Apply the migration:
+Use `--use-in-memory-db` for safe migration generation, then apply to file-based DB for testing.
 
- `dotnet ef database update --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/ -- --db-path="F:\\path\\to\\PersistentState.db"`
+## Development
 
-## Safety checks and good practices
+### Project Structure
 
-- Keep migration names descriptive (e.g. `AddTemplateUsageTable`, `RenameContentBrowserState`).
-- Review migrations before committing them to version control.
-- For collaborative projects, avoid generating migrations that depend on developer-local file paths; prefer in-memory generation and explicit runtime configuration.
-- Use SQL scripts (`migrations script`) for DBAs or production deployments where you want to review the SQL before running it.
+```text
+src/
+├── Models/                  # Entity definitions
+│   ├── ModuleSetting.cs
+│   ├── ModuleSettings.cs
+│   ├── ProjectUsage.cs
+│   ├── TemplateUsage.cs
+│   ├── WindowedModuleSettings.cs
+│   └── PersistedAttribute.cs
+├── Migrations/              # EF Core migrations
+│   ├── 20241124075532_InitialCreate.cs
+│   └── 20241126135247_AddModuleSetting.cs
+├── PersistentState.cs       # DbContext
+├── DesignTimePersistentStateFactory.cs
+├── EditorSettingsManager.cs
+├── ProjectUsageService.cs
+├── TemplateUsageService.cs
+└── *.csproj
 
-## Extra commands (handy)
+docs/
+├── data-model.md            # Detailed data model documentation
+└── db-maintenance.md        # EF Core tooling guide
 
-- List migrations:
+tests/                       # (Future: unit and integration tests)
+```
 
- `dotnet ef migrations list --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+### Building
 
-- Remove last migration (if not applied to DB):
+```powershell
+# Build the project
+dotnet build projects/Oxygen.Editor.Data/src
 
- `dotnet ef migrations remove --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+# Build with detailed logging
+dotnet build projects/Oxygen.Editor.Data/src -v detailed
+```
 
-- Create ID-based SQL script from the first migration to the latest:
+### Code Style
 
- `dotnet ef migrations script0 Latest --project projects/Oxygen.Editor.Data/src --startup-project projects/Oxygen.Editor.Data/src -o full-db-creation.sql --msbuildprojectextensionspath obj/projects/Oxygen.Editor.Data/src/`
+This project follows the DroidNet C# coding standards:
 
-## Where to learn more
+- C# 13 language features enabled
+- Nullable reference types enabled
+- Implicit usings enabled
+- Explicit access modifiers required
+- `this.` qualifier for instance members
+- StyleCop, Roslynator, and Meziantou analyzers enforced
 
-- Official EF Core docs: https://learn.microsoft.com/ef/core/
-- EF Core tooling: https://learn.microsoft.com/ef/core/cli/dotnet
+See [`.github/instructions/csharp_coding_style.instructions.md`](../../.github/instructions/csharp_coding_style.instructions.md) for complete guidelines.
 
+## Testing
+
+### Test Strategy
+
+*Note: Test projects are planned but not yet implemented.*
+
+**Planned coverage:**
+
+- **Unit Tests** — Service layer logic with mocked DbContext
+- **Integration Tests** — Full service layer with in-memory SQLite database
+- **Migration Tests** — Verify Up/Down migrations apply cleanly
+
+**Test framework:** MSTest with AwesomeAssertions
+
+**Mocking:** Moq for service dependencies, `Testably.Abstractions.Testing` for filesystem
+
+### Running Tests (Future)
+
+```powershell
+# Run all tests
+dotnet test projects/Oxygen.Editor.Data/tests
+
+# Run with coverage
+dotnet test projects/Oxygen.Editor.Data/tests /p:CollectCoverage=true
+```
+
+## Contributing
+
+Contributions are welcome! This project follows DroidNet repository conventions.
+
+### Development Workflow
+
+1. **Create a feature branch:**
+
+   ```powershell
+   git checkout -b feature/my-feature
+   ```
+
+2. **Make changes following coding standards**
+
+3. **Add tests** (when test infrastructure exists)
+
+4. **Create migration if schema changes:**
+
+   ```powershell
+   dotnet ef migrations add MyFeature -- --use-in-memory-db
+   ```
+
+5. **Build and verify:**
+
+   ```powershell
+   dotnet build projects/Oxygen.Editor.Data/src
+   ```
+
+6. **Commit and push:**
+
+   ```powershell
+   git add .
+   git commit -m "feat: add my feature"
+   git push origin feature/my-feature
+   ```
+
+7. **Create pull request**
+
+### Coding Standards
+
+- Follow `.github/instructions/csharp_coding_style.instructions.md`
+- Use descriptive migration names (e.g., `AddTemplateUsageTable`)
+- Document public APIs with XML comments
+- Keep service methods focused and testable
+- Use async/await consistently
+- Validate inputs at service boundaries
+
+### Pull Request Guidelines
+
+- Ensure all builds pass
+- Update documentation if API changes
+- Include migration files with schema changes
+- Add tests for new functionality (when infrastructure exists)
+- Keep PRs focused on a single concern
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](../../LICENSE) for details.
 
 ---
 
-If you want, I can also add a short shell script or PowerShell helper in the repo to standardize the `dotnet ef` commands (for example: `scripts/add-migration.ps1` and `scripts/update-db.ps1`) so beginners don't need to remember long command options.
+## Additional Resources
+
+- [Data Model Documentation](docs/data-model.md) — Detailed entity schemas and relationships
+- [Database Maintenance Guide](docs/db-maintenance.md) — EF Core tooling and migration workflows
+- [DroidNet Repository](https://github.com/abdes/DroidNet) — Parent monorepo
+- [Entity Framework Core Docs](https://learn.microsoft.com/ef/core/) — Official EF Core documentation
+- [SQLite Documentation](https://www.sqlite.org/docs.html) — SQLite reference
