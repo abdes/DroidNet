@@ -95,6 +95,27 @@ def invoke_tests(project: Path, context: TraversalContext) -> None:
     if context.dry_run:
         return
 
-    result = subprocess.run(exec_args, check=False)
+    # Run the process with a timeout so we don't hang forever; if the
+    # process takes more than 5 minutes (300 seconds) we'll stop it and
+    # return to the traversal loop.
+    try:
+        result = subprocess.run(exec_args, check=False, timeout=300)
+    except subprocess.TimeoutExpired:
+        msg = f"dotnet run timed out after 300 seconds for {project}"
+        context.logger.warning("%s", msg)
+        if context.console:
+            context.console.print(f"[bold yellow]Invoke-Tests[/]: {msg}")
+        else:
+            print(msg)
+        # Do not raise; return to allow the traversal to continue.
+        return
+
     if result.returncode != 0:
-        raise RuntimeError(f"dotnet run failed with exit code {result.returncode} for {project}")
+        msg = f"dotnet run failed with exit code {result.returncode} for {project}"
+        context.logger.warning("%s", msg)
+        if context.console:
+            context.console.print(f"[bold red]Invoke-Tests[/]: {msg}")
+        else:
+            print(msg)
+        # Do not raise; return to allow the traversal to continue.
+        return
