@@ -415,12 +415,12 @@ public partial class TabStripItem : ContentControl
     /// <param name="e">Property changed event data.</param>
     private void TabItem_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(TabItem.IsSelected), System.StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(TabItem.IsSelected), StringComparison.Ordinal))
         {
             this.LogItemPropertyChanged(e);
             this.UpdateVisualStates();
         }
-        else if (string.Equals(e.PropertyName, nameof(TabItem.IsPinned), System.StringComparison.Ordinal))
+        else if (string.Equals(e.PropertyName, nameof(TabItem.IsPinned), StringComparison.Ordinal))
         {
             this.LogItemPropertyChanged(e);
             this.UpdateVisualStates();

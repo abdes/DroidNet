@@ -269,7 +269,7 @@ public partial class TabStrip : Control, ITabStrip
             return;
         }
 
-        var clampedTarget = System.Math.Clamp(toIndex, 0, items.Count - 1);
+        var clampedTarget = Math.Clamp(toIndex, 0, items.Count - 1);
         if (fromIndex == clampedTarget)
         {
             return;
