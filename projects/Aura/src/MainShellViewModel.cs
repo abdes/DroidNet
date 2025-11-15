@@ -293,7 +293,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
             var candidateUri = new Uri($"ms-appx:///{relativePath}");
 
             // This would work for packaged apps
-            var root = Windows.ApplicationModel.Package.Current.InstalledLocation;
+            var root = Package.Current.InstalledLocation;
 
             // WinRT's StorageFolder.TryGetItemAsync is so fucking stupid and needs the separator to be `\\`
             relativePath = relativePath.Replace("/", "\\", StringComparison.OrdinalIgnoreCase);
