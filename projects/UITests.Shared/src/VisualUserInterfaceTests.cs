@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using CommunityToolkit.WinUI;
 using AwesomeAssertions;
+using CommunityToolkit.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 

@@ -6,9 +6,9 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Reflection;
+using AwesomeAssertions;
 using DroidNet.Config.Tests.Helpers;
 using DryIoc;
-using AwesomeAssertions;
 
 namespace DroidNet.Config.Tests;
 

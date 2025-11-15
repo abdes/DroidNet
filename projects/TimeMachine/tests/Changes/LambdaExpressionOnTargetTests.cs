@@ -4,8 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
-using DroidNet.TimeMachine.Changes;
 using AwesomeAssertions;
+using DroidNet.TimeMachine.Changes;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests.Changes;

@@ -5,10 +5,10 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
-using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Moq;

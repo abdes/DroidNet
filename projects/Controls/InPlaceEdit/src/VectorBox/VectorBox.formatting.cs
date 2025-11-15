@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Generic;
 using System.Globalization;
 
 namespace DroidNet.Controls;

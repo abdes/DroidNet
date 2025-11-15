@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using DroidNet.Aura.Controls;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;

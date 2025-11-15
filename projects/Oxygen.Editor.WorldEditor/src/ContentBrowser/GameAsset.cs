@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO;
-
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>

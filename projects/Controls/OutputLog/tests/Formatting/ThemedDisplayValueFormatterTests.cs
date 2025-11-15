@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Controls.OutputLog.Formatting;
 using DroidNet.Controls.OutputLog.Theming;
-using AwesomeAssertions;
 using Serilog.Events;
 
 namespace DroidNet.Controls.Tests.Formatting;

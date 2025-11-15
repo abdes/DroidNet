@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.UI.Xaml.Controls;
-
 namespace DroidNet.Aura.Controls;
 
 #pragma warning disable CS0067 // Event is never used

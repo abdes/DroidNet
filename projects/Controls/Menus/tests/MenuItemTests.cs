@@ -4,10 +4,10 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
-using AwesomeAssertions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 

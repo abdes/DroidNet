@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Docking.Tests.Mocks;
 using DroidNet.Docking.Workspace;
-using AwesomeAssertions;
-
 using static DroidNet.Docking.Workspace.TreeTraversal;
 
 namespace DroidNet.Docking.Tests.Workspace;

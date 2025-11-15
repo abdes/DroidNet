@@ -34,13 +34,6 @@ https://github.com/amis92/csharp-source-generators
         <RootNamespace>$(RootNamespace).Mvvm.Generators</RootNamespace>
     </PropertyGroup>
 
-    <ItemGroup>
-        <None Include="..\README.md">
-            <Pack>True</Pack>
-            <PackagePath>\</PackagePath>
-        </None>
-    </ItemGroup>
-
     <PropertyGroup>
         <NoWarn>1701;1702;NU5128</NoWarn>
     </PropertyGroup>

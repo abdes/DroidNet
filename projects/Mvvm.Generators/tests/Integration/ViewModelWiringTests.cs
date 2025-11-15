@@ -4,10 +4,10 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Mvvm.Generators.Tests.Demo;
 using DroidNet.TestHelpers;
 using DryIoc;
-using AwesomeAssertions;
 using Microsoft.VisualStudio.TestTools.UnitTesting.AppContainer;
 
 namespace DroidNet.Mvvm.Generators.Tests;

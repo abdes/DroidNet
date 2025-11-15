@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Controls.Selection;
 using DroidNet.TestHelpers;
-using AwesomeAssertions;
 
 namespace DroidNet.Controls.Tests.Selection;
 

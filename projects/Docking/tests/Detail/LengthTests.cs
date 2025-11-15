@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Docking.Detail;
 using AwesomeAssertions;
+using DroidNet.Docking.Detail;
 
 namespace DroidNet.Docking.Tests.Detail;
 

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Tests;
 using AwesomeAssertions;
+using DroidNet.Tests;
 using Windows.Graphics.Imaging;
 
 namespace DroidNet.Aura.Drag.Tests;

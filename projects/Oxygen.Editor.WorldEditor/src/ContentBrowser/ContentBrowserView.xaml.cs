@@ -4,7 +4,6 @@
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 

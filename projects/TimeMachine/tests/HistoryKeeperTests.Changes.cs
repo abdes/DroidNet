@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.TimeMachine.Changes;
 using AwesomeAssertions;
+using DroidNet.TimeMachine.Changes;
 using Moq;
 
 namespace DroidNet.TimeMachine.Tests;

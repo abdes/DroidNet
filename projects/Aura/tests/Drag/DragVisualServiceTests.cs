@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
-using AwesomeAssertions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;

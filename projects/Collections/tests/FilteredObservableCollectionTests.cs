@@ -6,8 +6,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.TestHelpers;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 
 namespace DroidNet.Collections.Tests;
 

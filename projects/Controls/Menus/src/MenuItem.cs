@@ -566,7 +566,7 @@ public partial class MenuItem : Control
 
         this.UpdateCommonVisualState();
 
-    // _ = this.TryExpandSubmenu(MenuInteractionInputSource.PointerInput);
+        // _ = this.TryExpandSubmenu(MenuInteractionInputSource.PointerInput);
     }
 
     /// <summary>
@@ -655,7 +655,7 @@ public partial class MenuItem : Control
 
         this.LogTapped();
 
-    // e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
+        // e.Handled = this.TryExpandOrInvoke(MenuInteractionInputSource.PointerInput);
     }
 
     private void UpdateTypeVisualState()

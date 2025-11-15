@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls;

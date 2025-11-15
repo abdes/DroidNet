@@ -23,7 +23,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown if an error occurs in the underlying storage system. The <see cref="Exception.InnerException" /> property may
     /// indicate the root cause (e.g., <see cref="UnauthorizedAccessException" />).
     /// </exception>
-    Task DeleteAsync(CancellationToken cancellationToken = default);
+    public Task DeleteAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies the document to the specified destination folder. If the destination folder does not exist, it will be created
@@ -50,7 +50,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the copy operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task<IDocument> CopyAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
+    public Task<IDocument> CopyAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies the document to the specified destination folder with a new desired name. If the destination folder does not exist,
@@ -83,7 +83,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the copy operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task<IDocument> CopyAsync(
+    public Task<IDocument> CopyAsync(
         IFolder destinationFolder,
         string desiredNewName,
         CancellationToken cancellationToken = default);
@@ -109,7 +109,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the copy operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task<IDocument> CopyOverwriteAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
+    public Task<IDocument> CopyOverwriteAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Copies the document to the specified destination folder with a new desired name, overwriting the destination if it exists.
@@ -138,7 +138,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the copy operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task<IDocument> CopyOverwriteAsync(
+    public Task<IDocument> CopyOverwriteAsync(
         IFolder destinationFolder,
         string desiredNewName,
         CancellationToken cancellationToken = default);
@@ -167,7 +167,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the move operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="UnauthorizedAccessException" />).
     /// </exception>
-    Task MoveAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
+    public Task MoveAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Moves the document to the specified destination folder, overwriting the destination if it exists. If the destination
@@ -189,7 +189,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the move operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task MoveOverwriteAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
+    public Task MoveOverwriteAsync(IFolder destinationFolder, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Moves the document to the specified destination folder with a new desired name. If the destination folder does not exist,
@@ -221,7 +221,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the move operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task MoveAsync(
+    public Task MoveAsync(
         IFolder destinationFolder,
         string desiredNewName,
         CancellationToken cancellationToken = default);
@@ -256,7 +256,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the move operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task MoveOverwriteAsync(
+    public Task MoveOverwriteAsync(
         IFolder destinationFolder,
         string desiredNewName,
         CancellationToken cancellationToken = default);
@@ -278,7 +278,7 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for other errors during the read operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task<string> ReadAllTextAsync(CancellationToken cancellationToken = default);
+    public Task<string> ReadAllTextAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Asynchronously writes the specified string to the document, using the "UTF-8" encoding. If the document already exists, it
@@ -297,5 +297,5 @@ public interface IDocument : INestedItem, IStorageItem
     /// Thrown for any errors during the write operation. The <see cref="Exception.InnerException" /> may provide more specific
     /// information (e.g., <see cref="IOException" />).
     /// </exception>
-    Task WriteAllTextAsync(string text, CancellationToken cancellationToken = default);
+    public Task WriteAllTextAsync(string text, CancellationToken cancellationToken = default);
 }

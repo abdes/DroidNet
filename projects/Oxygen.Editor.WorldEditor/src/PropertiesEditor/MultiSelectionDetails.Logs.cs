@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;

@@ -4,8 +4,8 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Controls.Selection;
 using AwesomeAssertions;
+using DroidNet.Controls.Selection;
 
 namespace DroidNet.Controls.Tests.Selection;
 

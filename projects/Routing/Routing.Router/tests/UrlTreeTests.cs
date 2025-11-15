@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.TestHelpers;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using Moq;
 
 namespace DroidNet.Routing.Tests;

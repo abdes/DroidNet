@@ -4,11 +4,11 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
+using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
-using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;

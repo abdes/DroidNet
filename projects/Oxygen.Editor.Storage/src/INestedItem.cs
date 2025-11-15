@@ -12,5 +12,5 @@ public interface INestedItem
     /// <summary>
     /// Gets the path of the parent folder containing the current item.
     /// </summary>
-    string ParentPath { get; }
+    public string ParentPath { get; }
 }

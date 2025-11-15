@@ -4,8 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.IO.Abstractions;
-using DroidNet.Config.Helpers;
 using AwesomeAssertions;
+using DroidNet.Config.Helpers;
 using Moq;
 
 namespace DroidNet.Config.Tests;

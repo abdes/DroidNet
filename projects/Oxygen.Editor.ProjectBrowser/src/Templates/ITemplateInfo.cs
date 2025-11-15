@@ -20,22 +20,22 @@ public interface ITemplateInfo
     /// <summary>
     /// Gets or sets the localized display name of the template.
     /// </summary>
-    string Name { get; set; }
+    public string Name { get; set; }
 
     /// <summary>
     /// Gets or sets the localized description explaining the purpose and contents of this template.
     /// </summary>
-    string Description { get; set; }
+    public string Description { get; set; }
 
     /// <summary>
     /// Gets the category this template belongs to for organizational purposes.
     /// </summary>
-    Category Category { get; }
+    public Category Category { get; }
 
     /// <summary>
     /// Gets or sets the filesystem path where this template's content is stored.
     /// </summary>
-    string Location { get; set; }
+    public string Location { get; set; }
 
     /// <summary>
     /// Gets or sets the path to an icon file representing this template in the UI.
@@ -43,15 +43,15 @@ public interface ITemplateInfo
     /// <remarks>
     /// Can be <see langword="null"/> if no custom icon is specified.
     /// </remarks>
-    string? Icon { get; set; }
+    public string? Icon { get; set; }
 
     /// <summary>
     /// Gets the collection of paths to preview images showcasing the template.
     /// </summary>
-    IList<string> PreviewImages { get; }
+    public IList<string> PreviewImages { get; }
 
     /// <summary>
     /// Gets or sets the timestamp when this template was last used to create a project.
     /// </summary>
-    DateTime LastUsedOn { get; set; }
+    public DateTime LastUsedOn { get; set; }
 }

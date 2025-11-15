@@ -4,8 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
-using DroidNet.TestHelpers;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Oxygen.Editor.Storage;
@@ -203,14 +203,14 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
 #else
-    this.mockLogger.Verify(
-        x => x.Log(
-            LogLevel.Error,
-            It.IsAny<EventId>(),
-            It.IsAny<It.IsAnyType>(),
-            It.IsAny<Exception>(),
-            It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
-        Times.Once);
+        this.mockLogger.Verify(
+            x => x.Log(
+                LogLevel.Error,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
 #endif
     }
 

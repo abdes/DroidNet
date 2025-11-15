@@ -21,19 +21,19 @@ public interface IStorageItem
     /// must be valid as per the path validity requirements of the storage system.
     /// </remarks>
     /// <seealso cref="InvalidPathException" />
-    string Name { get; }
+    public string Name { get; }
 
     /// <summary>
     /// Gets the full path where the item is located.
     /// </summary>
     /// <seealso cref="InvalidPathException" />
-    string Location { get; }
+    public string Location { get; }
 
     /// <summary>
     /// Gets the last access date and time of this storage item. If the item does not exist or the caller does not have the
     /// required permission, a value corresponding to the earliest file time is returned (see <see cref="DateTime.FromFileTime" />).
     /// </summary>
-    DateTime LastAccessTime { get; }
+    public DateTime LastAccessTime { get; }
 
     /// <summary>
     /// Checks if this storage item physically exists.
@@ -42,7 +42,7 @@ public interface IStorageItem
     /// A <see cref="Task" /> representing the asynchronous operation. The result is <see langword="true" /> if the caller has the
     /// required permissions and this item refers to an existing physical storage item; otherwise, <see langword="false" />.
     /// </returns>
-    Task<bool> ExistsAsync();
+    public Task<bool> ExistsAsync();
 
     /// <summary>
     /// Renames this storage item.
@@ -62,5 +62,5 @@ public interface IStorageItem
     /// <exception cref="TargetExistsException">
     /// If a folder or document already exists under the parent of this folder, with the same name as <paramref name="desiredNewName" />.
     /// </exception>
-    Task RenameAsync(string desiredNewName, CancellationToken cancellationToken = default);
+    public Task RenameAsync(string desiredNewName, CancellationToken cancellationToken = default);
 }

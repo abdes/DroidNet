@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using Windows.Graphics.Imaging;
 
 namespace DroidNet.Aura.Controls;

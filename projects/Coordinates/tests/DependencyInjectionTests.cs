@@ -2,11 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.Tests;
 using DryIoc;
-using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Coordinates.Tests;

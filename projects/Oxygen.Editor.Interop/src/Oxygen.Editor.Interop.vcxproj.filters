@@ -5,6 +5,7 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="vcpkg.json" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OxygenWorld.cpp" />

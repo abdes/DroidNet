@@ -4,7 +4,6 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Microsoft.Windows.ApplicationModel.DynamicDependency;
 
 namespace Oxygen.Editor.Projects.Tests;
 
