@@ -84,6 +84,46 @@ namespace Oxygen.Editor.Data.Migrations
 
                     b.ToTable("TemplatesUsageRecords");
                 });
+
+            modelBuilder.Entity("Oxygen.Editor.Data.Models.ModuleSetting", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("JsonValue")
+                        .HasMaxLength(2048)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScopeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SettingsModule")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SettingsModule", "Name", "Scope", "ScopeId")
+                        .IsUnique();
+
+                    b.ToTable("Settings");
+                });
 #pragma warning restore 612, 618
         }
     }

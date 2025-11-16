@@ -40,8 +40,10 @@ erDiagram
 
     Settings {
         int Id PK
-        string ModuleName
-        string Key
+        string Module
+        string Name
+        int Scope
+        string ScopeId
         string JsonValue
         datetime CreatedAt
         datetime UpdatedAt
@@ -116,19 +118,21 @@ Flexible key-value storage for module-specific settings with JSON serialization.
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `Id` | INTEGER | PRIMARY KEY, AUTOINCREMENT | Unique identifier |
-| `ModuleName` | TEXT(255) | NOT NULL, MIN 1 | Module identifier (e.g., "Docking", "ProjectBrowser") |
-| `Key` | TEXT(255) | NOT NULL, MIN 1 | Setting identifier within module namespace |
+| `SettingsModule` | TEXT(255) | NOT NULL, MIN 1 | Module identifier (e.g., "Docking", "ProjectBrowser") |
+| `Name` | TEXT(255) | NOT NULL, MIN 1 | Setting identifier within module namespace |
+| `Scope` | INTEGER | NOT NULL, DEFAULT 0 | Setting scope (0 = Application, 1 = Project) |
+| `ScopeId` | TEXT(1024) | NULL | Optional scope identifier e.g. project path |
 | `JsonValue` | TEXT(2048) | NULL | JSON-serialized setting value (camelCase convention) |
 | `CreatedAt` | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW | Record creation timestamp |
 | `UpdatedAt` | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW | Last modification timestamp |
 
 **Indexes:**
 
-- Unique index on `(ModuleName, Key)` — one setting per module+key combination
+- Unique index on `(SettingsModule, Name, Scope, ScopeId)` — one setting per module+name+scope combination
 
 **Business Rules:**
 
-- ModuleName and Key cannot be empty
+- Module and Name cannot be empty
 - JsonValue is nullable (supports deletion semantics)
 - UpdatedAt automatically updated on modification
 - JSON format uses camelCase property naming
@@ -167,7 +171,7 @@ Example JSON values:
 The data layer implements multi-level caching for performance:
 
 1. **EditorSettingsManager** — In-memory `ConcurrentDictionary` cache
-   - Key format: `"{ModuleName}:{Key}"`
+   - Name format: `"{Module}:{Name}"`
    - Invalidation on save
    - Thread-safe operations
 
@@ -209,11 +213,11 @@ ORDER BY LastUsedOn DESC
 LIMIT ?
 ```
 
-**Load Setting by Module and Key:**
+**Load Setting by SettingsModule and Key:**
 
 ```sql
 SELECT * FROM Settings
-WHERE ModuleName = ? AND Key = ?
+WHERE SettingsModule = ? AND Name = ?
 LIMIT 1
 ```
 
@@ -250,7 +254,7 @@ See [`db-maintenance.md`](./db-maintenance.md) for detailed migration procedures
 2. **Generous String Lengths** — 2048 chars for paths accommodates deep directory structures
 3. **JSON Flexibility** — Settings table avoids rigid schema for per-module configuration
 4. **Timestamp Tracking** — `LastUsedOn` enables MRU sorting; `CreatedAt`/`UpdatedAt` support auditing
-5. **No Foreign Keys** — Entities are independent; Settings table uses ModuleName as logical reference only
+5. **No Foreign Keys** — Entities are independent; Settings table uses Module as logical reference only
 
 ### Performance Characteristics
 

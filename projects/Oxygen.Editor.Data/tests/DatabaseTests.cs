@@ -31,6 +31,13 @@ public partial class DatabaseTests : TestSuiteWithAssertions
 
         this.dbConnection.Open();
 
+        // Enable WAL mode for better concurrency
+        using (var walCommand = this.dbConnection.CreateCommand())
+        {
+            walCommand.CommandText = "PRAGMA journal_mode=WAL;";
+            _ = walCommand.ExecuteNonQuery();
+        }
+
         using var scope = this.Container.OpenScope();
         var db = scope.Resolve<PersistentState>();
         db.Database.Migrate();

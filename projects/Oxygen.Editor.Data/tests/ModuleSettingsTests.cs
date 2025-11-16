@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DryIoc;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Tests;
 
@@ -16,6 +17,12 @@ public class ModuleSettingsTests : DatabaseTests
 {
     public ModuleSettingsTests()
     {
+        // Use composite provider to include reflection-based discovery for test descriptors
+        this.Container.RegisterDelegate<IDescriptorProvider>(
+            _ => new CompositeDescriptorProvider(
+                EditorSettingsManager.StaticProvider,
+                new ReflectionDescriptorProvider()),
+            Reuse.Singleton);
         this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
@@ -26,13 +33,16 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
+            var descriptors = await settingsManager.GetDescriptorsByCategoryAsync().ConfigureAwait(false);
+            var ds = descriptors.Values.SelectMany(v => v);
+            _ = ds.Should().Contain(d => d.SettingsModule == "TestModule" && d.Name == nameof(TestModuleSettings.TestProperty));
+            var moduleSettings = new TestModuleSettings("TestModule")
             {
                 TestProperty = "NewValue",
             };
-            await moduleSettings.SaveAsync().ConfigureAwait(false);
+            await moduleSettings.SaveAsync(settingsManager).ConfigureAwait(false);
 
-            var retrievedValue = await settingsManager.LoadSettingAsync<string>("TestModule", nameof(moduleSettings.TestProperty)).ConfigureAwait(false);
+            var retrievedValue = await settingsManager.LoadSettingAsync(new Settings.SettingKey<string>("TestModule", nameof(moduleSettings.TestProperty))).ConfigureAwait(false);
             _ = retrievedValue.Should().Be("NewValue");
         }
     }
@@ -44,10 +54,13 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
+            var descriptors = await settingsManager.GetDescriptorsByCategoryAsync().ConfigureAwait(false);
+            var ds = descriptors.Values.SelectMany(v => v);
+            _ = ds.Should().Contain(d => d.SettingsModule == "TestModule" && d.Name == nameof(TestModuleSettings.TestProperty));
+            var moduleSettings = new TestModuleSettings("TestModule");
 
-            await settingsManager.SaveSettingAsync("TestModule", nameof(moduleSettings.TestProperty), "LoadedValue").ConfigureAwait(false);
-            await moduleSettings.LoadAsync().ConfigureAwait(false);
+            await settingsManager.SaveSettingAsync(new Settings.SettingKey<string>("TestModule", nameof(moduleSettings.TestProperty)), "LoadedValue").ConfigureAwait(false);
+            await moduleSettings.LoadAsync(settingsManager).ConfigureAwait(false);
 
             _ = moduleSettings.TestProperty.Should().Be("LoadedValue");
             _ = moduleSettings.IsLoaded.Should().BeTrue();
@@ -62,11 +75,11 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
+            var moduleSettings = new TestModuleSettings("TestModule");
 
-            await moduleSettings.SaveAsync().ConfigureAwait(false);
+            await moduleSettings.SaveAsync(settingsManager).ConfigureAwait(false);
 
-            var retrievedValue = await settingsManager.LoadSettingAsync<string>("TestModule", nameof(moduleSettings.TestProperty)).ConfigureAwait(false);
+            var retrievedValue = await settingsManager.LoadSettingAsync(new Settings.SettingKey<string>("TestModule", nameof(moduleSettings.TestProperty))).ConfigureAwait(false);
             _ = retrievedValue.Should().BeNull();
         }
     }
@@ -78,7 +91,7 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
+            var moduleSettings = new TestModuleSettings("TestModule")
             {
                 TestProperty = "NewValue",
             };
@@ -94,7 +107,7 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
+            var moduleSettings = new TestModuleSettings("TestModule");
 
             var propertyChangedRaised = false;
             moduleSettings.PropertyChanged += (_, args) =>
@@ -118,9 +131,9 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
+            var moduleSettings = new TestModuleSettings("TestModule");
 
-            await moduleSettings.LoadAsync().ConfigureAwait(false);
+            await moduleSettings.LoadAsync(settingsManager).ConfigureAwait(false);
 
             _ = moduleSettings.TestProperty.Should().BeNull();
             _ = moduleSettings.IsLoaded.Should().BeTrue();
@@ -135,13 +148,13 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
+            var moduleSettings = new TestModuleSettings("TestModule")
             {
                 TestProperty = null,
             };
-            await moduleSettings.SaveAsync().ConfigureAwait(false);
+            await moduleSettings.SaveAsync(settingsManager).ConfigureAwait(false);
 
-            var retrievedValue = await settingsManager.LoadSettingAsync<string>("TestModule", nameof(moduleSettings.TestProperty)).ConfigureAwait(false);
+            var retrievedValue = await settingsManager.LoadSettingAsync(new Settings.SettingKey<string>("TestModule", nameof(moduleSettings.TestProperty))).ConfigureAwait(false);
             _ = retrievedValue.Should().BeNull();
         }
     }
@@ -153,10 +166,10 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule");
+            var moduleSettings = new TestModuleSettings("TestModule");
 
-            await settingsManager.SaveSettingAsync("TestModule", nameof(moduleSettings.TestProperty), "LoadedValue").ConfigureAwait(false);
-            await moduleSettings.LoadAsync().ConfigureAwait(false);
+            await settingsManager.SaveSettingAsync(new Settings.SettingKey<string>("TestModule", nameof(moduleSettings.TestProperty)), "LoadedValue").ConfigureAwait(false);
+            await moduleSettings.LoadAsync(settingsManager).ConfigureAwait(false);
 
             _ = moduleSettings.OnLoadedCalled.Should().BeTrue();
         }
@@ -169,9 +182,12 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new FailingTestModuleSettings(settingsManager, "TestModule");
+            var descriptors = await settingsManager.GetDescriptorsByCategoryAsync().ConfigureAwait(false);
+            var ds = descriptors.Values.SelectMany(v => v);
+            _ = ds.Should().Contain(d => d.SettingsModule == "TestModule" && d.Name == nameof(FailingTestModuleSettings.PrivateGetterProperty));
+            var moduleSettings = new FailingTestModuleSettings("TestModule");
 
-            var act = moduleSettings.LoadAsync;
+            var act = () => moduleSettings.LoadAsync(settingsManager);
 
             _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
             _ = moduleSettings.OnLoadedCalled.Should().BeFalse();
@@ -185,12 +201,12 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new TestModuleSettings(settingsManager, "TestModule")
+            var moduleSettings = new TestModuleSettings("TestModule")
             {
                 TestProperty = "NewValue",
             };
 
-            await moduleSettings.SaveAsync().ConfigureAwait(false);
+            await moduleSettings.SaveAsync(settingsManager).ConfigureAwait(false);
 
             _ = moduleSettings.OnSavingCalled.Should().BeTrue();
         }
@@ -203,23 +219,35 @@ public class ModuleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var settingsManager = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new FailingTestModuleSettings(settingsManager, "TestModule")
+            var descriptors = await settingsManager.GetDescriptorsByCategoryAsync().ConfigureAwait(false);
+            var ds = descriptors.Values.SelectMany(v => v);
+            _ = ds.Should().Contain(d => d.SettingsModule == "TestModule" && d.Name == nameof(FailingTestModuleSettings.PrivateGetterProperty));
+            var moduleSettings = new FailingTestModuleSettings("TestModule")
             {
                 PrivateGetterProperty = "NewValue",
             };
 
-            var act = moduleSettings.SaveAsync;
+            var act = () => moduleSettings.SaveAsync(settingsManager);
 
             _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
         }
     }
 
-    private sealed class TestModuleSettings(EditorSettingsManager settingsManager, string moduleName)
-        : ModuleSettings(settingsManager, moduleName)
+    // Descriptor set discovered via reflection by the EditorSettingsManager to enable
+    // descriptor-driven persistence in tests.
+    [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Used via runtime reflection for settings descriptor discovery in tests.")]
+    private sealed class TestModuleSettingsDescriptors : SettingsDescriptorSet
+    {
+        public static SettingDescriptor<string> TestProperty { get; } = CreateDescriptor<string>("TestModule", nameof(TestModuleSettings.TestProperty));
+
+        public static SettingDescriptor<string> PrivateGetterProperty { get; } = CreateDescriptor<string>("TestModule", nameof(FailingTestModuleSettings.PrivateGetterProperty));
+    }
+
+    private sealed class TestModuleSettings(string moduleName)
+        : ModuleSettings(moduleName)
     {
         private string? testProperty;
 
-        [Persisted]
         public string? TestProperty
         {
             get => this.testProperty;
@@ -243,16 +271,14 @@ public class ModuleSettingsTests : DatabaseTests
         }
     }
 
-    private sealed class FailingTestModuleSettings(EditorSettingsManager settingsManager, string moduleName)
-        : ModuleSettings(settingsManager, moduleName)
+    private sealed class FailingTestModuleSettings(string moduleName)
+        : ModuleSettings(moduleName)
     {
         private string testProperty = "PrivateValue";
 
-        [Persisted]
         [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = "needed for testing")]
         public static string ReadOnlyProperty => "ReadOnlyValue";
 
-        [Persisted]
         [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = "needed for testing")]
         public string PrivateGetterProperty
         {

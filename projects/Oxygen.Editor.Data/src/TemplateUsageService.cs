@@ -16,30 +16,47 @@ namespace Oxygen.Editor.Data;
 /// This service is designed to work with the <see cref="PersistentState"/> context to manage template usage data.
 /// It uses an <see cref="IMemoryCache"/> to cache template usage data for improved performance.
 /// </remarks>
-/// <param name="contextFactory">Factory that produces a new <see cref="PersistentState"/> instance for each operation.</param>
-/// <param name="cache">The memory cache to be used by the service.</param>
-public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryCache cache) : ITemplateUsageService
+public class TemplateUsageService : ITemplateUsageService
 {
     /// <summary>
     /// The prefix to be used for cache keys related to template usage data.
     /// </summary>
     internal const string CacheKeyPrefix = "TemplateUsage_";
 
-    private readonly Func<PersistentState> contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
-    private readonly IMemoryCache cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    private readonly Func<PersistentState> contextFactory;
+    private readonly IMemoryCache cache;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TemplateUsageService"/> class.
+    /// </summary>
+    /// <param name="contextFactory">A factory function to create a <see cref="PersistentState"/> context.</param>
+    /// <param name="cache">The memory cache used for caching template usage data.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "does not make sense when we are checking for null arguments")]
+    public TemplateUsageService(Func<PersistentState> contextFactory, IMemoryCache cache)
+    {
+        this.contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    }
 
     /// <inheritdoc />
     public async Task<IList<TemplateUsage>> GetMostRecentlyUsedTemplatesAsync(int sizeLimit = 10)
     {
-        await using var context = this.contextFactory();
-        var records = await context.TemplatesUsageRecords
-            .AsNoTracking()
-            .OrderByDescending(t => t.LastUsedOn)
-            .Take(sizeLimit > 0 ? sizeLimit : 10)
-            .ToListAsync().ConfigureAwait(false);
+        var context = this.contextFactory();
+        try
+        {
+            var records = await context.TemplatesUsageRecords
+                .AsNoTracking()
+                .OrderByDescending(t => t.LastUsedOn)
+                .Take(sizeLimit > 0 ? sizeLimit : 10)
+                .ToListAsync().ConfigureAwait(false);
 
-        // Return detached clones
-        return records.Select(Clone).ToList();
+            // Return detached clones
+            return records.Select(Clone).ToList();
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -50,19 +67,26 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
             return cached is null ? null : Clone(cached);
         }
 
-        await using var context = this.contextFactory();
-        var templateUsage = await context.TemplatesUsageRecords
-            .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
-
-        if (templateUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            var detached = Clone(templateUsage);
-            _ = this.cache.Set(CacheKeyPrefix + location, detached);
-            return Clone(detached);
-        }
+            var templateUsage = await context.TemplatesUsageRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
 
-        return null;
+            if (templateUsage != null)
+            {
+                var detached = Clone(templateUsage);
+                _ = this.cache.Set(CacheKeyPrefix + location, detached);
+                return Clone(detached);
+            }
+
+            return null;
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -70,53 +94,72 @@ public class TemplateUsageService(Func<PersistentState> contextFactory, IMemoryC
     {
         ValidateTemplateLocation(location);
 
-        await using var context = this.contextFactory();
-
-        // Use tracked entity for updates
-        var tracked = await context.TemplatesUsageRecords
-            .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
-
-        if (tracked != null)
+        var context = this.contextFactory();
+        try
         {
-            tracked.TimesUsed++;
-            tracked.LastUsedOn = DateTime.UtcNow;
-        }
-        else
-        {
-            tracked = new TemplateUsage
+            // Use tracked entity for updates
+            var tracked = await context.TemplatesUsageRecords
+                .FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
+
+            if (tracked != null)
             {
-                Location = location,
-                TimesUsed = 1,
-                LastUsedOn = DateTime.UtcNow,
-            };
-            _ = context.TemplatesUsageRecords.Add(tracked);
+                tracked.TimesUsed++;
+                tracked.LastUsedOn = DateTime.UtcNow;
+            }
+            else
+            {
+                tracked = new TemplateUsage
+                {
+                    Location = location,
+                    TimesUsed = 1,
+                    LastUsedOn = DateTime.UtcNow,
+                };
+                _ = context.TemplatesUsageRecords.Add(tracked);
+            }
+
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+
+            var cached = Clone(tracked);
+            _ = this.cache.Set(CacheKeyPrefix + location, cached);
         }
-
-        _ = await context.SaveChangesAsync().ConfigureAwait(false);
-
-        var cached = Clone(tracked);
-        _ = this.cache.Set(CacheKeyPrefix + location, cached);
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
     public async Task<bool> HasRecentlyUsedTemplatesAsync()
     {
-        await using var context = this.contextFactory();
-        return await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(false);
+        var context = this.contextFactory();
+        try
+        {
+            return await context.TemplatesUsageRecords.AnyAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
     public async Task DeleteTemplateUsageAsync(string location)
     {
-        await using var context = this.contextFactory();
-
-        // Retrieve a tracked entity for deletion
-        var tracked = await context.TemplatesUsageRecords.FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
-        if (tracked != null)
+        var context = this.contextFactory();
+        try
         {
-            _ = context.TemplatesUsageRecords.Remove(tracked);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
-            this.cache.Remove(CacheKeyPrefix + location);
+            // Retrieve a tracked entity for deletion
+            var tracked = await context.TemplatesUsageRecords.FirstOrDefaultAsync(t => t.Location == location).ConfigureAwait(false);
+            if (tracked != null)
+            {
+                _ = context.TemplatesUsageRecords.Remove(tracked);
+                _ = await context.SaveChangesAsync().ConfigureAwait(false);
+                this.cache.Remove(CacheKeyPrefix + location);
+            }
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
         }
     }
 

@@ -288,16 +288,16 @@ if (usage != null)
 
 ```csharp
 // Save primitive types
-await settingsManager.SaveSettingAsync("MyModule", "WindowWidth", 1920);
-await settingsManager.SaveSettingAsync("MyModule", "Theme", "Dark");
-await settingsManager.SaveSettingAsync("MyModule", "EnableFeature", true);
+await settingsManager.SaveSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<int>("MyModule", "WindowWidth"), 1920);
+await settingsManager.SaveSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<string>("MyModule", "Theme"), "Dark");
+await settingsManager.SaveSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<bool>("MyModule", "EnableFeature"), true);
 
 // Load with type inference
-var width = await settingsManager.LoadSettingAsync<int>("MyModule", "WindowWidth");
-var theme = await settingsManager.LoadSettingAsync<string>("MyModule", "Theme");
+var width = await settingsManager.LoadSettingAsync<int>(new Oxygen.Editor.Data.Settings.SettingKey<int>("MyModule", "WindowWidth"));
+var theme = await settingsManager.LoadSettingAsync<string>(new Oxygen.Editor.Data.Settings.SettingKey<string>("MyModule", "Theme"));
 
 // Load with default value
-var height = await settingsManager.LoadSettingAsync("MyModule", "WindowHeight", 1080);
+var height = await settingsManager.LoadSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<int>("MyModule", "WindowHeight"), 1080);
 ```
 
 **Custom settings class with [Persisted] attributes:**
@@ -365,16 +365,15 @@ await settings.SaveAsync();
 **Change notifications:**
 
 ```csharp
-// Register handler for setting changes
-settingsManager.RegisterChangeHandler("Editor", "Theme", (newJsonValue) =>
-{
-    var newTheme = JsonSerializer.Deserialize<string>(newJsonValue);
-    Console.WriteLine($"Theme changed to: {newTheme}");
-    // Update UI
-});
-
-// Later, unregister
-settingsManager.UnregisterChangeHandler("Editor", "Theme");
+// Subscribe to setting changes using typed SettingKey and IObservable
+using var subscription = settingsManager
+    .WhenSettingChanged(new Oxygen.Editor.Data.Settings.SettingKey<string>("Editor", "Theme"))
+    .Subscribe(evt =>
+    {
+        var newTheme = evt.NewValue; // typed value already deserialized
+        Console.WriteLine($"Theme changed to: {newTheme}");
+        // Update UI
+    });
 ```
 
 ## Data Model
@@ -387,7 +386,7 @@ The persistence layer uses three primary tables. For detailed documentation, see
 |--------|---------|------------|
 | `ProjectUsage` | Project history & state | `Name`, `Location`, `LastUsedOn`, `TimesOpened`, `LastOpenedScene` |
 | `TemplateUsage` | Template usage tracking | `Location`, `LastUsedOn`, `TimesUsed` |
-| `ModuleSetting` | Module configuration | `ModuleName`, `Key`, `JsonValue` |
+| `ModuleSetting` | Module configuration | `SettingsModule`, `Name`, `JsonValue` |
 
 **Entity Relationship:**
 
@@ -407,8 +406,10 @@ erDiagram
     }
     Settings {
         int Id PK
-        string ModuleName
-        string Key
+        string Module
+        string Name
+        int Scope
+        string ScopeId
         string JsonValue
     }
 ```
@@ -418,11 +419,10 @@ erDiagram
 ### IEditorSettingsManager
 
 ```csharp
-Task SaveSettingAsync<T>(string moduleName, string key, T value);
-Task<T?> LoadSettingAsync<T>(string moduleName, string key);
-Task<T> LoadSettingAsync<T>(string moduleName, string key, T defaultValue);
-void RegisterChangeHandler(string moduleName, string key, Action<string> handler);
-void UnregisterChangeHandler(string moduleName, string key);
+Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, CancellationToken ct = default);
+Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default);
+Task<T> LoadSettingAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, CancellationToken ct = default);
+IObservable<SettingChangedEvent<T>> WhenSettingChanged<T>(SettingKey<T> key);
 void ClearCache();
 ```
 
