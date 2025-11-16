@@ -11,7 +11,7 @@ namespace Oxygen.Editor.Data.Migrations;
 /// <inheritdoc />
 public partial class InitialCreate : Migration
 {
-    private static readonly string[] Columns = new[] { "Location", "Name" };
+    private static readonly string[] Columns = ["Location", "Name"];
     private static readonly string[] SettingsColumns = ["SettingsModule", "Name", "Scope", "ScopeId"];
 
     /// <inheritdoc />

@@ -8,17 +8,20 @@ using DryIoc;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace Oxygen.Editor.Data.Tests;
 
 [ExcludeFromCodeCoverage]
-public partial class DatabaseTests : TestSuiteWithAssertions
+public class DatabaseTests : TestSuiteWithAssertions
 {
     private readonly SqliteConnection dbConnection = new("Data Source=:memory:");
     private bool disposed;
 
-    protected DatabaseTests()
+    public DatabaseTests()
     {
+        LoggingLevelSwitch.MinimumLevel = LogEventLevel.Information;
         var loggerFactory = this.Container.Resolve<ILoggerFactory>();
         this.Container.RegisterInstance(
             new DbContextOptionsBuilder<PersistentState>()
@@ -43,12 +46,7 @@ public partial class DatabaseTests : TestSuiteWithAssertions
         db.Database.Migrate();
     }
 
-    protected IContainer Container { get; } = CommonTestEnv.TestContainer.CreateChild();
-
-    /// <summary>
-    /// Disposes the resources used by the <see cref="DatabaseSchemaTests"/> class.
-    /// </summary>
-    public new void Dispose() => this.Dispose(disposing: true);
+    protected IContainer Container { get; } = TestContainer.CreateChild();
 
     /// <summary>
     /// Disposes the resources used by the <see cref="DatabaseSchemaTests"/> class.

@@ -5,7 +5,7 @@
 using System.Collections.Concurrent;
 using Oxygen.Editor.Data.Settings;
 
-namespace Oxygen.Editor.Data.Internal;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Manages observable notifications for setting changes.

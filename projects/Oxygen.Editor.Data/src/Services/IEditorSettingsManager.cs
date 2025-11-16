@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Data.Settings;
 
-namespace Oxygen.Editor.Data;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Provides methods for managing settings in the Oxygen Editor.
@@ -18,9 +18,10 @@ public interface IEditorSettingsManager
     /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
     /// <param name="value">The value of the setting.</param>
     /// <param name="settingContext">Optional <see cref="SettingContext"/> for scope resolution.</param>
+    /// <param name="progress">Optional progress reporter for save operations.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task completing when the value has been persisted.</returns>
-    public Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, CancellationToken ct = default);
+    public Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Loads a typed setting for a specific key and scope.
@@ -28,9 +29,10 @@ public interface IEditorSettingsManager
     /// <typeparam name="T">The type of the setting value.</typeparam>
     /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
     /// <param name="settingContext">Optional scope for load; if null, Application scope will be used.</param>
+    /// <param name="progress">Optional progress reporter for load operations.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The setting value or <see langword="null"/> if not found.</returns>
-    public Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default);
+    public Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Loads a typed setting for a specific key and returns the provided default value if it does not exist.
@@ -40,27 +42,9 @@ public interface IEditorSettingsManager
     /// <param name="defaultValue">The default value to return if the setting does not exist.</param>
     /// <returns>The loaded value or the supplied default if no stored value exists.</returns>
     /// <param name="settingContext">Optional scope for load.</param>
+    /// <param name="progress">Optional progress reporter for load operations.</param>
     /// <param name="ct">Cancellation token.</param>
-    public Task<T> LoadSettingAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, CancellationToken ct = default);
-
-    /// <summary>
-    /// Resolve a setting value by searching hierarchical scopes: Project → Application → model default.
-    /// </summary>
-    /// <typeparam name="T">The expected type of the setting.</typeparam>
-    /// <param name="key">Typed setting key.</param>
-    /// <param name="projectId">Optional project identifier to use as the project scope.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The resolved value or the default value for the type.</returns>
-    public Task<T> ResolveSettingAsync<T>(SettingKey<T> key, string? projectId = null, CancellationToken ct = default);
-
-    /// <summary>
-    /// Apply a batch of setting changes in an atomic transaction.
-    /// </summary>
-    /// <param name="configure">Action to configure the batch.</param>
-    /// <param name="progress">Optional progress callback.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes once the batch is committed.</returns>
-    public Task SaveSettingsAsync(Action<ISettingsBatch> configure, IProgress<SettingsSaveProgress>? progress = null, CancellationToken ct = default);
+    public Task<T> LoadSettingOrDefaultAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns a typed observable that emits events whenever the specific setting changes.
@@ -81,30 +65,17 @@ public interface IEditorSettingsManager
     public Task<IReadOnlyList<SettingScope>> GetDefinedScopesAsync<T>(SettingKey<T> key, string? projectId = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Saves a typed setting value using a <see cref="SettingDescriptor{T}"/> to perform validation before persistence.
-    /// </summary>
-    /// <typeparam name="T">The type of the setting value.</typeparam>
-    /// <param name="descriptor">Descriptor containing the typed key and validators.</param>
-    /// <param name="value">The value to save.</param>
-    /// <param name="settingContext">Optional scope context.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes once the value has been persisted.</returns>
-    public Task SaveSettingAsync<T>(SettingDescriptor<T> descriptor, T value, SettingContext? settingContext = null, CancellationToken ct = default);
-
-    /// <summary>
     /// Get descriptors grouped by category for all known settings descriptor sets.
     /// </summary>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>A dictionary mapping category names to lists of descriptors.</returns>
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>>> GetDescriptorsByCategoryAsync(CancellationToken ct = default);
+    public IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>> GetDescriptorsByCategory();
 
     /// <summary>
     /// Search descriptors by free-text query matching key, display name, description or category.
     /// </summary>
     /// <param name="searchTerm">The search term to match against descriptors.</param>
-    /// <param name="ct">Cancellation token.</param>
     /// <returns>List of matching descriptors.</returns>
-    public Task<IReadOnlyList<ISettingDescriptor>> SearchDescriptorsAsync(string searchTerm, CancellationToken ct = default);
+    public IReadOnlyList<ISettingDescriptor> SearchDescriptors(string searchTerm);
 
     /// <summary>
     /// Returns a list of known keys persisted in the database in the form 'Module/Name'.
@@ -117,18 +88,20 @@ public interface IEditorSettingsManager
     /// Returns all persisted values for a specific key across all scopes.
     /// </summary>
     /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="progress">Optional progress reporter for the load operation.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>List of tuples containing Scope, ScopeId and value as raw object.</returns>
-    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, CancellationToken ct = default);
+    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Returns all persisted values for a specific key across all scopes deserialized into <typeparamref name="T"/>.
     /// </summary>
     /// <typeparam name="T">The type to deserialize values to.</typeparam>
     /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="progress">Optional progress reporter for the typed load operation.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>List of tuples containing Scope, ScopeId and typed value.</returns>
-    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, CancellationToken ct = default);
+    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
     /// <summary>
     /// Attempts to get values for a key deserialized to <typeparamref name="T"/>.
@@ -136,9 +109,18 @@ public interface IEditorSettingsManager
     /// </summary>
     /// <typeparam name="T">The type to deserialize the persisted values to.</typeparam>
     /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="progress">Optional progress reporter for the try-get operation.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A typed result with details on success, values and any errors.</returns>
-    public Task<TryGetAllValuesResult<T>> TryGetAllValuesAsync<T>(string key, CancellationToken ct = default);
+    public Task<TryGetAllValuesResult<T>> TryGetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default);
 
-    // Legacy/per-module change handler registration is intentionally removed in v-next.
+    /// <summary>
+    /// Returns the timestamp when a setting was last updated for a specific key and scope.
+    /// </summary>
+    /// <typeparam name="T">The type of the setting value.</typeparam>
+    /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
+    /// <param name="settingContext">Optional scope for query; application scope will be used if null.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The <see cref="DateTime"/> when the setting was last updated or <see langword="null"/> if it doesn't exist.</returns>
+    public Task<DateTime?> GetLastUpdatedTimeAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default);
 }

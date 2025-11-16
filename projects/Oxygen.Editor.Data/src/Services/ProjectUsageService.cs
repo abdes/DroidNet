@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
-namespace Oxygen.Editor.Data;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Provides services for managing project usage data, including retrieving, updating, and validating project usage records.
@@ -165,8 +165,15 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
         var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
         if (projectUsage != null)
         {
-            _ = context.ProjectUsageRecords.Remove(projectUsage);
-            _ = await context.SaveChangesAsync().ConfigureAwait(true);
+            // Ensure we remove the tracked entity from the current context
+            var tracked = await context.ProjectUsageRecords
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(true);
+            if (tracked != null)
+            {
+                _ = context.ProjectUsageRecords.Remove(tracked);
+                _ = await context.SaveChangesAsync().ConfigureAwait(true);
+            }
+
             cache.Remove(CacheKeyPrefix + name + "_" + location);
         }
     }

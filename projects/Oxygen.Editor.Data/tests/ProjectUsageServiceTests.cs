@@ -8,13 +8,14 @@ using AwesomeAssertions;
 using DryIoc;
 using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 
 namespace Oxygen.Editor.Data.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(ProjectUsageService))]
-public partial class ProjectUsageServiceTests : DatabaseTests
+public class ProjectUsageServiceTests : DatabaseTests
 {
     private const string CacheKeyPrefix = "ProjectUsage_";
 
@@ -44,7 +45,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
                 new() { Name = "Project3", Location = "Location3", LastUsedOn = DateTime.Now.AddDays(-2) },
             };
             context.ProjectUsageRecords.AddRange(projects);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var result = await service.GetMostRecentlyUsedProjectsAsync().ConfigureAwait(false);
@@ -69,7 +70,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "Project1", Location = "Location1" };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
@@ -94,7 +95,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "Project1", Location = "Location1", TimesOpened = 1 };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.UpdateProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
@@ -141,7 +142,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
                 ContentBrowserState = "OldState",
             };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.UpdateContentBrowserStateAsync("Project1", "Location1", "NewState").ConfigureAwait(false);
@@ -190,7 +191,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
                 LastOpenedScene = "OldScene",
             };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.UpdateLastOpenedSceneAsync("Project1", "Location1", "NewScene").ConfigureAwait(false);
@@ -234,7 +235,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "OldName", Location = "OldLocation" };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.UpdateProjectNameAndLocationAsync("OldName", "OldLocation", "NewName", "NewLocation").ConfigureAwait(false);
@@ -259,7 +260,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "OldName", Location = "OldLocation" };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var act = async () => await service.UpdateProjectNameAndLocationAsync("OldName", "OldLocation", string.Empty).ConfigureAwait(false);
@@ -281,7 +282,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "OldName", Location = "OldLocation" };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var act = async () => await service.UpdateProjectNameAndLocationAsync("OldName", "OldLocation", "NewName", string.Empty).ConfigureAwait(false);
@@ -350,7 +351,7 @@ public partial class ProjectUsageServiceTests : DatabaseTests
 
             var project = new ProjectUsage { Name = "Project1", Location = "Location1" };
             _ = context.ProjectUsageRecords.Add(project);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.DeleteProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
@@ -358,6 +359,51 @@ public partial class ProjectUsageServiceTests : DatabaseTests
             // Assert
             var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
             _ = result.Should().BeNull();
+        }
+    }
+
+    [TestMethod]
+    public async Task UpdateProjectUsageAsync_ConcurrentIncrements_ResultsInCorrectCount()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var context = scope.Resolve<PersistentState>();
+            var service = scope.Resolve<ProjectUsageService>();
+
+            var project = new ProjectUsage { Name = "Project1", Location = "Location1" };
+            _ = context.ProjectUsageRecords.Add(project);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
+
+            var tasks = Enumerable.Range(0, 10).Select(_ => service.UpdateProjectUsageAsync("Project1", "Location1"));
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
+            _ = result!.TimesOpened.Should().Be(10);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteProjectUsageAsync_RemovesCacheEntry()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var service = scope.Resolve<ProjectUsageService>();
+            var cache = scope.Resolve<IMemoryCache>();
+
+            // Use the service to create the DB record and cache entry
+            await service.UpdateProjectUsageAsync("Project2", "Location2").ConfigureAwait(false);
+            const string cacheKey = CacheKeyPrefix + "Project2_Location2";
+
+            // ensure DB and cache were seeded correctly
+            var seeded = await service.GetProjectUsageAsync("Project2", "Location2").ConfigureAwait(false);
+            _ = seeded.Should().NotBeNull();
+            _ = seeded!.Id.Should().BePositive();
+
+            await service.DeleteProjectUsageAsync("Project2", "Location2").ConfigureAwait(false);
+            var cached = cache.Get<ProjectUsage>(cacheKey);
+            _ = cached.Should().BeNull();
         }
     }
 }

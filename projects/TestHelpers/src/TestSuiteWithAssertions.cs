@@ -41,7 +41,7 @@ namespace DroidNet.TestHelpers;
 /// </code>
 /// </example>
 [DoNotParallelize]
-public abstract class TestSuiteWithAssertions : IDisposable
+public abstract class TestSuiteWithAssertions : CommonTestEnv, IDisposable
 {
     private readonly TraceListenerCollection? originalTraceListeners;
 

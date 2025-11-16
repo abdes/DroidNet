@@ -9,8 +9,9 @@
 using System.ComponentModel.DataAnnotations;
 using System.Drawing;
 using Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Data.Validation;
 
-namespace Oxygen.Editor.Data.Models;
+namespace Oxygen.Editor.Data.Tests;
 
 /// <summary>
 /// Generated partial class providing descriptor registration for ExampleSettings.

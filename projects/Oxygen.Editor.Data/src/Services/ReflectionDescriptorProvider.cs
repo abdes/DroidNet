@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reflection;
+using Oxygen.Editor.Data.Settings;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Provides setting descriptors by scanning assemblies for <see cref="SettingsDescriptorSet"/> subclasses via reflection.
@@ -33,13 +34,12 @@ public sealed class ReflectionDescriptorProvider : IDescriptorProvider
 
             foreach (var type in types)
             {
-                if (type is null || !type.IsSubclassOf(typeof(SettingsDescriptorSet)))
+                if (type?.IsSubclassOf(typeof(SettingsDescriptorSet)) != true)
                 {
                     continue;
                 }
 
-                var properties = type.GetProperties(BindingFlags.Public | BindingFlags.Static);
-                foreach (var property in properties)
+                foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.Static))
                 {
                     if (!property.PropertyType.IsGenericType)
                     {

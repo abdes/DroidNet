@@ -5,7 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// A simple thread-safe implementation of <see cref="IObservable{T}"/> for broadcasting values to observers.
@@ -89,21 +89,12 @@ internal sealed class SimpleSubject<T> : IObservable<T>
     /// <summary>
     /// Handles unsubscription of observers from the subject.
     /// </summary>
-    private sealed class Unsubscriber : IDisposable
+    /// <param name="observers">The collection of observers.</param>
+    /// <param name="id">The unique identifier for the observer.</param>
+    private sealed class Unsubscriber(ConcurrentDictionary<Guid, IObserver<T>> observers, Guid id) : IDisposable
     {
-        private readonly ConcurrentDictionary<Guid, IObserver<T>> observers;
-        private readonly Guid id;
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Unsubscriber"/> class.
-        /// </summary>
-        /// <param name="observers">The collection of observers.</param>
-        /// <param name="id">The unique identifier for the observer.</param>
-        public Unsubscriber(ConcurrentDictionary<Guid, IObserver<T>> observers, Guid id)
-        {
-            this.observers = observers;
-            this.id = id;
-        }
+        private readonly ConcurrentDictionary<Guid, IObserver<T>> observers = observers;
+        private readonly Guid id = id;
 
         /// <summary>
         /// Removes the observer from the collection.

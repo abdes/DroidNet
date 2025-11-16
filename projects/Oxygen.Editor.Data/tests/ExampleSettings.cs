@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
-using Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Validation;
 
-namespace Oxygen.Editor.Data.Models;
+namespace Oxygen.Editor.Data.Tests;
 
 /// <summary>
 /// Example concrete settings class for testing the descriptor registration pattern.

@@ -9,13 +9,14 @@ using DryIoc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 
 namespace Oxygen.Editor.Data.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(TemplateUsageService))]
-public partial class TemplateUsageServiceTests : DatabaseTests
+public class TemplateUsageServiceTests : DatabaseTests
 {
     public TemplateUsageServiceTests()
     {
@@ -53,7 +54,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
                 new() { Location = "Location3", LastUsedOn = DateTime.Now.AddDays(-2) },
             };
             context.TemplatesUsageRecords.AddRange(templates);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var result = await service.GetMostRecentlyUsedTemplatesAsync().ConfigureAwait(false);
@@ -78,7 +79,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
 
             var template = new TemplateUsage { Location = "Location1" };
             _ = context.TemplatesUsageRecords.Add(template);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var result = await service.GetTemplateUsageAsync("Location1").ConfigureAwait(false);
@@ -102,7 +103,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
 
             var template = new TemplateUsage { Location = "Location1", TimesUsed = 1 };
             _ = context.TemplatesUsageRecords.Add(template);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.UpdateTemplateUsageAsync("Location1").ConfigureAwait(false);
@@ -162,7 +163,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
 
             var template = new TemplateUsage { Location = "Location1", LastUsedOn = DateTime.Now };
             _ = context.TemplatesUsageRecords.Add(template);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             var result = await service.HasRecentlyUsedTemplatesAsync().ConfigureAwait(false);
@@ -201,7 +202,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
 
             var template = new TemplateUsage { Location = "Location1" };
             _ = context.TemplatesUsageRecords.Add(template);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
             await service.DeleteTemplateUsageAsync("Location1").ConfigureAwait(false);
@@ -249,7 +250,7 @@ public partial class TemplateUsageServiceTests : DatabaseTests
             // Seed the database with an existing template
             var template = new TemplateUsage { Location = "Location1", TimesUsed = 1 };
             _ = context.TemplatesUsageRecords.Add(template);
-            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Also set the cache to verify it gets updated
             _ = memoryCache.Set($"{TemplateUsageService.CacheKeyPrefix}Location1", template);
@@ -261,6 +262,71 @@ public partial class TemplateUsageServiceTests : DatabaseTests
             var result = memoryCache.Get<TemplateUsage>($"{TemplateUsageService.CacheKeyPrefix}Location1");
             _ = result.Should().NotBeNull();
             _ = result!.TimesUsed.Should().Be(2);
+        }
+    }
+
+    [TestMethod]
+    public async Task UpdateTemplateUsageAsync_ConcurrentIncrements_ResultsInCorrectCount()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var context = scope.Resolve<PersistentState>();
+            var service = scope.Resolve<TemplateUsageService>();
+
+            var template = new TemplateUsage { Location = "LocationConcurrent" };
+            _ = context.TemplatesUsageRecords.Add(template);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
+
+            var tasks = Enumerable.Range(0, 5).Select(_ => service.UpdateTemplateUsageAsync("LocationConcurrent"));
+            await Task.WhenAll(tasks).ConfigureAwait(false);
+
+            var result = await service.GetTemplateUsageAsync("LocationConcurrent").ConfigureAwait(false);
+            _ = result!.TimesUsed.Should().Be(5);
+        }
+    }
+
+    [TestMethod]
+    public async Task GetTemplateUsageAsync_ReturnedObjectIsClone_CacheNotModifiedByConsumer()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var service = scope.Resolve<TemplateUsageService>();
+            var memoryCache = scope.Resolve<IMemoryCache>();
+
+            var template = new TemplateUsage { Location = "Location1", TimesUsed = 1 };
+            _ = memoryCache.Set(TemplateUsageService.CacheKeyPrefix + "Location1", template);
+
+            var obj = await service.GetTemplateUsageAsync("Location1").ConfigureAwait(false);
+            obj!.TimesUsed = 999; // mutate the returned object
+
+            var obj2 = await service.GetTemplateUsageAsync("Location1").ConfigureAwait(false);
+            _ = obj2!.TimesUsed.Should().Be(1);
+        }
+    }
+
+    [TestMethod]
+    public async Task DeleteTemplateUsageAsync_RemovesCacheEntry()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var service = scope.Resolve<TemplateUsageService>();
+            var memoryCache = scope.Resolve<IMemoryCache>();
+
+            // Seed DB and cache
+            var context = scope.Resolve<PersistentState>();
+            var template = new TemplateUsage { Location = "ToDelete" };
+            _ = context.TemplatesUsageRecords.Add(template);
+            _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
+
+            const string cacheKey = TemplateUsageService.CacheKeyPrefix + "ToDelete";
+            _ = memoryCache.Set(cacheKey, new TemplateUsage { Location = "ToDelete", TimesUsed = 1 });
+
+            await service.DeleteTemplateUsageAsync("ToDelete").ConfigureAwait(false);
+            var cached = memoryCache.Get<TemplateUsage>(cacheKey);
+            _ = cached.Should().BeNull();
         }
     }
 }

@@ -5,7 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data.Validation;
 
 /// <summary>
 /// Validation attribute for <see cref="System.Drawing.Size"/>.
@@ -42,7 +42,7 @@ public sealed class SizeBoundsAttribute : ValidationAttribute
     public int HeightMax { get; }
 
     /// <inheritdoc/>
-    public override bool IsValid(object? value) => this.IsValid(value, null) == ValidationResult.Success;
+    public override bool IsValid(object? value) => this.IsValid(value, validationContext: null) == ValidationResult.Success;
 
     /// <inheritdoc/>
     protected override ValidationResult? IsValid(object? value, ValidationContext? validationContext)

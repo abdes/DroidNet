@@ -6,7 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Drawing;
 using System.Globalization;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data.Validation;
 
 /// <summary>
 /// Validation attribute for <see cref="System.Drawing.Point"/> and <see cref="System.Drawing.Size"/>
@@ -48,7 +48,7 @@ public sealed class PointBoundsAttribute : ValidationAttribute
     /// </summary>
     /// <param name="value">The value to evaluate.</param>
     /// <returns>True when the value is null (valid) or when <see cref="System.Drawing.Point"/> coordinates lie within bounds.</returns>
-    public override bool IsValid(object? value) => this.IsValid(value, null) == ValidationResult.Success;
+    public override bool IsValid(object? value) => this.IsValid(value, validationContext: null) == ValidationResult.Success;
 
     /// <summary>
     /// Validates the provided value and returns a <see cref="ValidationResult"/>. Returns failure for null values (enforces presence) and for values not within the configured bounds.

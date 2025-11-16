@@ -24,4 +24,11 @@ public class TestEnv : CommonTestEnv
     public static void Close()
     {
     }
+
+    /// <summary>
+    /// Verifies that the conventions are satisfied.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    [TestMethod]
+    public Task VerifyConventionsSatisfied() => VerifyChecks.Run();
 }

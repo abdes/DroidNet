@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reflection;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Models;
@@ -37,7 +38,7 @@ public static class ModuleSettingsExtensions
             }
 
             // Only persist properties that have a descriptor registered for them
-            var descriptorsByCategory = await manager.GetDescriptorsByCategoryAsync(ct).ConfigureAwait(false);
+            var descriptorsByCategory = manager.GetDescriptorsByCategory();
             var descriptor = descriptorsByCategory.Values
                 .SelectMany(v => v)
                 .FirstOrDefault(d => string.Equals(d.Name, propertyName, StringComparison.Ordinal));
@@ -59,7 +60,7 @@ public static class ModuleSettingsExtensions
         }
 
         settings.ClearModifiedPropertiesInternal();
-        settings.SetDirtyInternal(false);
+        settings.SetDirtyInternal(value: false);
     }
 
     /// <summary>
@@ -75,12 +76,12 @@ public static class ModuleSettingsExtensions
         IEditorSettingsManager manager,
         CancellationToken ct = default)
     {
-        settings.SetIsLoadedInternal(false);
+        settings.SetIsLoadedInternal(value: false);
 
         foreach (var property in settings.GetType().GetProperties())
         {
             // Descriptor-first: check if a descriptor exists for this property by name
-            var descriptorsByCategory = await manager.GetDescriptorsByCategoryAsync(ct).ConfigureAwait(false);
+            var descriptorsByCategory = manager.GetDescriptorsByCategory();
             var descriptor = descriptorsByCategory.Values
                 .SelectMany(v => v)
                 .FirstOrDefault(d => string.Equals(d.Name, property.Name, StringComparison.Ordinal));
@@ -95,13 +96,13 @@ public static class ModuleSettingsExtensions
             {
                 var defaultValue = property.GetValue(settings);
 
-                // Find the LoadSettingAsync<T>(SettingKey<T>, T defaultValue, SettingContext?, CancellationToken) method
+                // Find the LoadSettingOrDefaultAsync<T>(SettingKey<T>, T defaultValue, SettingContext?, IProgress<SettingsProgress>?, CancellationToken) method
                 var matching = typeof(IEditorSettingsManager)
                     .GetMethods()
                     .FirstOrDefault(m =>
-                        string.Equals(m.Name, nameof(IEditorSettingsManager.LoadSettingAsync), StringComparison.Ordinal) &&
+                        string.Equals(m.Name, nameof(IEditorSettingsManager.LoadSettingOrDefaultAsync), StringComparison.Ordinal) &&
                         m.IsGenericMethod &&
-                        m.GetParameters().Length == 4);
+                        m.GetParameters().Length == 5);
 
                 if (matching != null)
                 {
@@ -111,8 +112,9 @@ public static class ModuleSettingsExtensions
                     var key = Activator.CreateInstance(keyType, settings.ModuleName, property.Name) ??
                               throw new InvalidOperationException("Failed to construct SettingKey");
 
-                    // Call LoadSettingAsync<T>(SettingKey<T>, T defaultValue, SettingContext?, CancellationToken)
-                    var task = (Task)genericMethod.Invoke(manager, [key, defaultValue, null, ct])!;
+                    // Call LoadSettingOrDefaultAsync<T>(SettingKey<T>, T defaultValue, SettingContext?, IProgress<SettingsProgress>?, CancellationToken)
+                    var invokeResult = genericMethod.Invoke(manager, [key, defaultValue, null, null, ct]);
+                    var task = (Task)(invokeResult ?? throw new InvalidOperationException("Reflection invoke returned null"));
                     await task.ConfigureAwait(false);
 
                     var resultProperty = task.GetType().GetProperty("Result");
@@ -131,8 +133,48 @@ public static class ModuleSettingsExtensions
 
         settings.OnLoadedInternal();
 
-        settings.SetDirtyInternal(false);
-        settings.SetIsLoadedInternal(true);
+        settings.SetDirtyInternal(value: false);
+        settings.SetIsLoadedInternal(value: true);
+    }
+
+    /// <summary>
+    /// Returns the timestamp when a property on the module settings was last updated in the persistent store.
+    /// </summary>
+    /// <param name="settings">The module settings instance.</param>
+    /// <param name="propertyName">The name of the property to query metadata for.</param>
+    /// <param name="manager">The settings manager to query.</param>
+    /// <param name="settingContext">Optional setting context for scoping (application/project).</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The timestamp when the property was last updated or null if not found.</returns>
+    public static async Task<DateTime?> GetLastUpdatedTimeAsync(
+        this ModuleSettings settings,
+        string propertyName,
+        IEditorSettingsManager manager,
+        SettingContext? settingContext = null,
+        CancellationToken ct = default)
+    {
+        var propertyInfo = settings.GetType().GetProperty(propertyName)
+            ?? throw new ArgumentException($"Property '{propertyName}' not found on type '{settings.GetType().Name}'", nameof(propertyName));
+
+        // Build typed SettingKey<T> using instance ModuleName and property name for persistence
+        var keyType = typeof(SettingKey<>).MakeGenericType(propertyInfo.PropertyType);
+        var key = Activator.CreateInstance(keyType, settings.ModuleName, propertyInfo.Name) ??
+                  throw new InvalidOperationException("Failed to construct SettingKey");
+
+        // Find the GetLastUpdatedTimeAsync<T>(SettingKey<T>, SettingContext?, CancellationToken) method
+        var matching = typeof(IEditorSettingsManager)
+            .GetMethods()
+            .FirstOrDefault(m =>
+                string.Equals(m.Name, nameof(IEditorSettingsManager.GetLastUpdatedTimeAsync), StringComparison.Ordinal) &&
+                m.IsGenericMethod &&
+                m.GetParameters().Length == 3)
+            ?? throw new InvalidOperationException("GetLastUpdatedTimeAsync method not found on IEditorSettingsManager");
+        var genericMethod = matching.MakeGenericMethod(propertyInfo.PropertyType);
+        var invokeResult = genericMethod.Invoke(manager, [key, settingContext, ct]);
+        var task = (Task)(invokeResult ?? throw new InvalidOperationException("Reflection invoke returned null"));
+        await task.ConfigureAwait(false);
+        var resultProperty = task.GetType().GetProperty("Result");
+        return resultProperty != null ? (DateTime?)resultProperty.GetValue(task) : null;
     }
 
     private static async Task SavePropertyAsync(
@@ -154,7 +196,7 @@ public static class ModuleSettingsExtensions
                   throw new InvalidOperationException("Failed to construct SettingKey");
 
         // Validate using descriptor validators
-        var validatorsObj = descriptor.GetType().GetProperty(nameof(SettingDescriptor<object>.Validators))?.GetValue(descriptor);
+        var validatorsObj = descriptor.GetType().GetProperty(nameof(SettingDescriptor<>.Validators))?.GetValue(descriptor);
         var validationResults = new List<System.ComponentModel.DataAnnotations.ValidationResult>();
         if (validatorsObj is System.Collections.IEnumerable validators)
         {
@@ -191,12 +233,14 @@ public static class ModuleSettingsExtensions
         object? value,
         CancellationToken ct)
     {
+        // (key, value, SettingContext?, IProgress<SettingsProgress>?, CancellationToken)
         var method = typeof(IEditorSettingsManager).GetMethods()
-            .Where(m => string.Equals(m.Name, nameof(IEditorSettingsManager.SaveSettingAsync), StringComparison.Ordinal) && m.IsGenericMethod)
-            .First(m => m.GetParameters().Length == 4);
+                    .First(m =>
+                        string.Equals(m.Name, nameof(IEditorSettingsManager.SaveSettingAsync), StringComparison.Ordinal)
+                        && m.IsGenericMethod && m.GetParameters().Length == 5);
 
         var generic = method.MakeGenericMethod(propertyType);
-        var task = (Task)generic.Invoke(manager, [key, value, null, ct])!;
-        return task;
+        var invokeResult = generic.Invoke(manager, [key, value, null, null, ct]);
+        return (Task)(invokeResult ?? throw new InvalidOperationException("Reflection invoke returned null"));
     }
 }
