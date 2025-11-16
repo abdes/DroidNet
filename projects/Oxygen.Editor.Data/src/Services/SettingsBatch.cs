@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Data.Settings;
+
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Represents a transactional batch of settings operations.
@@ -14,7 +16,7 @@ internal sealed class SettingsBatch : ISettingsBatch
 
     private readonly EditorSettingsManager manager;
     private readonly List<BatchItem> items = [];
-    private readonly IProgress<SettingsSaveProgress>? progress;
+    private readonly IProgress<SettingsProgress>? progress;
     private bool disposed;
 
     /// <summary>
@@ -24,7 +26,7 @@ internal sealed class SettingsBatch : ISettingsBatch
     /// <param name="context">The context (scope) for all batch operations.</param>
     /// <param name="progress">Optional progress reporter.</param>
     /// <exception cref="InvalidOperationException">Thrown when attempting to create a nested batch.</exception>
-    public SettingsBatch(EditorSettingsManager manager, SettingContext context, IProgress<SettingsSaveProgress>? progress)
+    public SettingsBatch(EditorSettingsManager manager, SettingContext context, IProgress<SettingsProgress>? progress)
     {
         // Forbid nested batches - they don't work correctly with AsyncLocal in async contexts
         if (CurrentBatch.Value != null)

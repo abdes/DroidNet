@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Data.Settings;
+
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Result for TryGetAllValuesAsync containing typed scope values and optional errors.

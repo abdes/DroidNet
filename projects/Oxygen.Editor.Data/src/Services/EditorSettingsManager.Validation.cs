@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel.DataAnnotations;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data;
@@ -90,7 +91,7 @@ public partial class EditorSettingsManager
         }
 
         var results = new List<ValidationResult>();
-        var key = type.GetProperty(nameof(SettingDescriptor<object>.Key))?.GetValue(descriptor);
+        var key = type.GetProperty(nameof(SettingDescriptor<>.Key))?.GetValue(descriptor);
         var validationContext = new ValidationContext(key ?? descriptor) { MemberName = descriptor.Name };
 
         foreach (ValidationAttribute validator in validators)

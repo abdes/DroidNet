@@ -25,8 +25,6 @@ public class ExampleSettingsTests : DatabaseTests
         this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
-    public TestContext TestContext { get; set; }
-
     [TestMethod]
     public async Task WindowPositionShouldHaveDescriptor()
     {
@@ -34,7 +32,7 @@ public class ExampleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var grouped = await mgr.GetDescriptorsByCategoryAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            var grouped = mgr.GetDescriptorsByCategory();
             _ = grouped.Should().ContainKey("Layout");
             var layout = grouped["Layout"];
             _ = layout.Select(d => d.Name).Should().Contain("WindowPosition");
@@ -48,7 +46,7 @@ public class ExampleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var grouped = await mgr.GetDescriptorsByCategoryAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            var grouped = mgr.GetDescriptorsByCategory();
             _ = grouped.Should().ContainKey("Layout");
             var layout = grouped["Layout"];
             _ = layout.Select(d => d.Name).Should().Contain("WindowSize");
@@ -64,7 +62,7 @@ public class ExampleSettingsTests : DatabaseTests
             var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new ExampleSettings();
 
-            var act = () => moduleSettings.WindowPosition = new Point(-1, -1);
+            Action act = () => moduleSettings.WindowPosition = new Point(-1, -1);
 
             _ = act.Should().Throw<ValidationException>().WithMessage("X and Y coordinates must be non-negative.");
         }
@@ -79,33 +77,9 @@ public class ExampleSettingsTests : DatabaseTests
             var settingsManager = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new ExampleSettings();
 
-            var act = () => moduleSettings.WindowSize = new Size(0, 0);
+            Action act = () => moduleSettings.WindowSize = new Size(0, 0);
 
             _ = act.Should().Throw<ValidationException>().WithMessage("Width and Height must be positive.");
-        }
-    }
-
-    [TestMethod]
-    public async Task SaveUsingDescriptorShouldValidate()
-    {
-        var scope = this.Container.OpenScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var mgr = scope.Resolve<EditorSettingsManager>();
-            var descriptors = await mgr.GetDescriptorsByCategoryAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-            var layout = descriptors["Layout"];
-            var wp = layout.First(d => string.Equals(d.Name, "WindowPosition", System.StringComparison.Ordinal));
-            var ws = layout.First(d => string.Equals(d.Name, "WindowSize", System.StringComparison.Ordinal));
-
-            // Attempt to save invalid values using descriptor-based save
-            var invalidPos = new System.Drawing.Point(-1, -1);
-            var invalidSize = new System.Drawing.Size(0, 0);
-
-            var act1 = () => mgr.SaveSettingAsync((SettingDescriptor<System.Drawing.Point>)wp, invalidPos, ct: this.TestContext.CancellationToken);
-            _ = await act1.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(false);
-
-            var act2 = () => mgr.SaveSettingAsync((SettingDescriptor<System.Drawing.Size>)ws, invalidSize, ct: this.TestContext.CancellationToken);
-            _ = await act2.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(false);
         }
     }
 
@@ -116,15 +90,16 @@ public class ExampleSettingsTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var moduleSettings = new ExampleSettings();
+            var moduleSettings = new ExampleSettings
+            {
+                WindowPosition = new Point(123, 456),
+                WindowSize = new Size(800, 600),
+            };
 
-            moduleSettings.WindowPosition = new Point(123, 456);
-            moduleSettings.WindowSize = new Size(800, 600);
+            await moduleSettings.SaveAsync(mgr, ct: this.CancellationToken).ConfigureAwait(false);
 
-            await moduleSettings.SaveAsync(mgr).ConfigureAwait(false);
-
-            var savedPos = await mgr.LoadSettingAsync(new SettingKey<Point>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowPosition))).ConfigureAwait(false);
-            var savedSize = await mgr.LoadSettingAsync(new SettingKey<Size>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowSize))).ConfigureAwait(false);
+            var savedPos = await mgr.LoadSettingAsync(new SettingKey<Point>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowPosition)), ct: this.CancellationToken).ConfigureAwait(false);
+            var savedSize = await mgr.LoadSettingAsync(new SettingKey<Size>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowSize)), ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = savedPos.Should().Be(new Point(123, 456));
             _ = savedSize.Should().Be(new Size(800, 600));
@@ -140,10 +115,10 @@ public class ExampleSettingsTests : DatabaseTests
             var mgr = scope.Resolve<EditorSettingsManager>();
             var moduleSettings = new ExampleSettings();
 
-            await mgr.SaveSettingAsync(new SettingKey<Point>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowPosition)), new Point(33, 44)).ConfigureAwait(false);
-            await mgr.SaveSettingAsync(new SettingKey<Size>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowSize)), new Size(1024, 768)).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(new SettingKey<Point>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowPosition)), new Point(33, 44), ct: this.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(new SettingKey<Size>("Oxygen.Editor.Data.Example", nameof(moduleSettings.WindowSize)), new Size(1024, 768), ct: this.CancellationToken).ConfigureAwait(false);
 
-            await moduleSettings.LoadAsync(mgr).ConfigureAwait(false);
+            await moduleSettings.LoadAsync(mgr, ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = moduleSettings.WindowPosition.Should().Be(new Point(33, 44));
             _ = moduleSettings.WindowSize.Should().Be(new Size(1024, 768));

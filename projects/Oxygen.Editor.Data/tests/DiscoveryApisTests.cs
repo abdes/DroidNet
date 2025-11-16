@@ -8,6 +8,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
 using DryIoc;
+using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Tests;
@@ -28,7 +30,101 @@ public class DiscoveryApisTests : DatabaseTests
         this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
-    public TestContext TestContext { get; set; }
+    [TestMethod]
+    public async Task GetAllValuesAsync_InvalidFormat_ThrowsFormatException()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+
+            var act = async () => await mgr.GetAllValuesAsync("InvalidKey", ct: this.CancellationToken).ConfigureAwait(false);
+            _ = await act.Should().ThrowAsync<FormatException>().ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
+    public async Task TryGetAllValuesAsync_EmptyOrWhitespaceKey_ReturnsErrors()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+
+            var res = await mgr.TryGetAllValuesAsync<int>(" ", ct: this.CancellationToken).ConfigureAwait(false);
+            _ = res.Success.Should().BeFalse();
+            _ = res.Errors.Should().Contain(s => s.Contains("Key is null or whitespace"));
+        }
+    }
+
+    [TestMethod]
+    public async Task LoadSettingAsync_WithInvalidJson_ThrowsJsonException()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+            var ctx = scope.Resolve<PersistentState>();
+
+            // Insert a module setting with invalid JSON
+            _ = ctx.Settings.Add(new ModuleSetting
+            {
+                SettingsModule = "Discovery",
+                Name = "Malformed",
+                JsonValue = "not-json",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+            });
+
+            _ = await ctx.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
+
+            var act = async () => await mgr.LoadSettingAsync<int>(new SettingKey<int>("Discovery", "Malformed"), ct: this.CancellationToken).ConfigureAwait(false);
+            _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
+    public async Task TryGetAllValuesAsync_InvalidKeyFormat_ReturnsErrors()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+
+            var res = await mgr.TryGetAllValuesAsync<string>("InvalidKey", ct: this.CancellationToken).ConfigureAwait(false);
+            _ = res.Success.Should().BeFalse();
+            _ = res.Errors.Should().Contain(s => s.Contains("Invalid setting key"));
+        }
+    }
+
+    [TestMethod]
+    public async Task GetAllValuesAsync_WhitespaceKey_ReturnsEmptyList()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+
+            var list = await mgr.GetAllValuesAsync(" ", ct: this.CancellationToken).ConfigureAwait(false);
+            _ = list.Should().BeEmpty();
+        }
+    }
+
+    [TestMethod]
+    public async Task GetAllKeysAsync_ReturnsDistinctKeys()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var mgr = scope.Resolve<EditorSettingsManager>();
+
+            await mgr.SaveSettingAsync(new SettingKey<string?>("Discovery", "Dup"), "A", SettingContext.Application(), ct: this.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(new SettingKey<string?>("Discovery", "Dup"), "B", SettingContext.Project("proj1"), ct: this.CancellationToken).ConfigureAwait(false);
+
+            var keys = await mgr.GetAllKeysAsync(this.CancellationToken).ConfigureAwait(false);
+            _ = keys.Should().ContainSingle(k => k == "Discovery/Dup");
+        }
+    }
 
     [TestMethod]
     public async Task GetDescriptorsByCategoryAsync_ShouldReturnGroupedDescriptors()
@@ -38,7 +134,7 @@ public class DiscoveryApisTests : DatabaseTests
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
 
-            var grouped = await mgr.GetDescriptorsByCategoryAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            var grouped = mgr.GetDescriptorsByCategory();
 
             _ = grouped.Should().NotBeNull();
             _ = grouped.Should().ContainKey("General");
@@ -60,13 +156,13 @@ public class DiscoveryApisTests : DatabaseTests
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
 
-            var res1 = await mgr.SearchDescriptorsAsync("Hello", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var res1 = mgr.SearchDescriptors("Hello");
             _ = res1.Select(d => d.Name).Should().Contain("Hello");
 
-            var res2 = await mgr.SearchDescriptorsAsync("Count Display", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var res2 = mgr.SearchDescriptors("Count Display");
             _ = res2.Select(d => d.Name).Should().Contain("Count");
 
-            var res3 = await mgr.SearchDescriptorsAsync("Opacity", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var res3 = mgr.SearchDescriptors("Opacity");
             _ = res3.Select(d => d.Name).Should().Contain("Opacity");
         }
     }
@@ -79,10 +175,10 @@ public class DiscoveryApisTests : DatabaseTests
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
 
-            await mgr.SaveSettingAsync(new Settings.SettingKey<string>("Discovery", "Key1"), "Val1", ct: this.TestContext.CancellationToken).ConfigureAwait(false);
-            await mgr.SaveSettingAsync(new Settings.SettingKey<string>("Discovery", "Key2"), "Val2", ct: this.TestContext.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(new SettingKey<string?>("Discovery", "Key1"), "Val1", ct: this.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(new SettingKey<string?>("Discovery", "Key2"), "Val2", ct: this.CancellationToken).ConfigureAwait(false);
 
-            var keys = await mgr.GetAllKeysAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+            var keys = await mgr.GetAllKeysAsync(this.CancellationToken).ConfigureAwait(false);
             _ = keys.Should().Contain(["Discovery/Key1", "Discovery/Key2"]);
         }
     }
@@ -94,12 +190,12 @@ public class DiscoveryApisTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var key = new Settings.SettingKey<string>("Discovery", "ScopedKey");
+            var key = new SettingKey<string?>("Discovery", "ScopedKey");
 
-            await mgr.SaveSettingAsync(key, "appVal", SettingContext.Application(), this.TestContext.CancellationToken).ConfigureAwait(false);
-            await mgr.SaveSettingAsync(key, "projVal", SettingContext.Project("proj1"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(key, "appVal", SettingContext.Application(), ct: this.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(key, "projVal", SettingContext.Project("proj1"), ct: this.CancellationToken).ConfigureAwait(false);
 
-            var all = await mgr.GetAllValuesAsync("Discovery/ScopedKey", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var all = await mgr.GetAllValuesAsync("Discovery/ScopedKey", ct: this.CancellationToken).ConfigureAwait(false);
             _ = all.Should().HaveCount(2);
 
             var app = all.First(i => i.scope == SettingScope.Application);
@@ -119,12 +215,12 @@ public class DiscoveryApisTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var key = new Settings.SettingKey<string>("Discovery", "TypedKey");
+            var key = new SettingKey<string?>("Discovery", "TypedKey");
 
-            await mgr.SaveSettingAsync(key, "appVal", SettingContext.Application(), this.TestContext.CancellationToken).ConfigureAwait(false);
-            await mgr.SaveSettingAsync(key, "projVal", SettingContext.Project("proj1"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(key, "appVal", SettingContext.Application(), ct: this.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(key, "projVal", SettingContext.Project("proj1"), ct: this.CancellationToken).ConfigureAwait(false);
 
-            var all = await mgr.GetAllValuesAsync<string>("Discovery/TypedKey", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var all = await mgr.GetAllValuesAsync<string>("Discovery/TypedKey", ct: this.CancellationToken).ConfigureAwait(false);
             _ = all.Should().HaveCount(2);
 
             var app = all.First(i => i.scope == SettingScope.Application);
@@ -142,11 +238,11 @@ public class DiscoveryApisTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var mgr = scope.Resolve<EditorSettingsManager>();
-            var key = new Settings.SettingKey<string>("Discovery", "MismatchedKey");
+            var key = new SettingKey<string?>("Discovery", "MismatchedKey");
 
-            await mgr.SaveSettingAsync(key, "not-a-number", SettingContext.Application(), this.TestContext.CancellationToken).ConfigureAwait(false);
+            await mgr.SaveSettingAsync(key, "not-a-number", SettingContext.Application(), ct: this.CancellationToken).ConfigureAwait(false);
 
-            var result = await mgr.TryGetAllValuesAsync<int>("Discovery/MismatchedKey", this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await mgr.TryGetAllValuesAsync<int>("Discovery/MismatchedKey", ct: this.CancellationToken).ConfigureAwait(false);
             _ = result.Success.Should().BeFalse();
             _ = result.Errors.Should().NotBeEmpty();
             _ = result.Values.Should().ContainSingle();
@@ -159,7 +255,7 @@ public class DiscoveryApisTests : DatabaseTests
     {
         [Display(Name = "Hello Display", Description = "A hello descriptor")]
         [Category("General")]
-        public static SettingDescriptor<string> Hello { get; } = CreateDescriptor<string>("Discovery", "Hello");
+        public static SettingDescriptor<string?> Hello { get; } = CreateDescriptor<string?>("Discovery", "Hello");
 
         [Display(Name = "Count Display")]
         [Category("General")]

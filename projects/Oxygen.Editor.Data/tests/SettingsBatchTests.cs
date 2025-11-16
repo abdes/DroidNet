@@ -8,6 +8,7 @@ using System.Drawing;
 using AwesomeAssertions;
 using DryIoc;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Tests;
@@ -28,9 +29,9 @@ namespace Oxygen.Editor.Data.Tests;
 public class SettingsBatchTests : DatabaseTests
 {
     // Test descriptors for manual batch operations
-    private static readonly SettingDescriptor<string> StringDescriptor = new()
+    private static readonly SettingDescriptor<string?> StringDescriptor = new()
     {
-        Key = new SettingKey<string>("BatchModule", "StringValue"),
+        Key = new SettingKey<string?>("BatchModule", "StringValue"),
         DisplayName = "String Value",
     };
 
@@ -51,9 +52,9 @@ public class SettingsBatchTests : DatabaseTests
         ],
     };
 
-    private static readonly SettingDescriptor<string> ValidatedStringDescriptor = new()
+    private static readonly SettingDescriptor<string?> ValidatedStringDescriptor = new()
     {
-        Key = new SettingKey<string>("ValidationModule", "StringValue"),
+        Key = new SettingKey<string?>("ValidationModule", "StringValue"),
         DisplayName = "Validated String",
         Validators =
         [
@@ -67,7 +68,27 @@ public class SettingsBatchTests : DatabaseTests
         this.Container.Register<EditorSettingsManager>(Reuse.Scoped);
     }
 
-    public TestContext TestContext { get; set; }
+    [TestMethod]
+    public async Task BeginBatch_WithNullValue_DeletesPersistedSetting()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var manager = scope.Resolve<EditorSettingsManager>();
+
+            var key = new SettingKey<string?>("BatchModule", "ToBeDeleted");
+            await manager.SaveSettingAsync(key, "persisted", ct: this.CancellationToken).ConfigureAwait(false);
+
+            var batch = manager.BeginBatch();
+            await using (batch.ConfigureAwait(false))
+            {
+                _ = batch.QueuePropertyChange(new SettingDescriptor<string?>() { Key = key }, value: null);
+            }
+
+            var value = await manager.LoadSettingAsync(key, ct: this.CancellationToken).ConfigureAwait(false);
+            _ = value.Should().BeNull();
+        }
+    }
 
     [TestMethod]
     public async Task BeginBatch_ManualQueueWithDescriptors_CommitsOnDispose()
@@ -84,34 +105,11 @@ public class SettingsBatchTests : DatabaseTests
                 _ = batch.QueuePropertyChange(IntDescriptor, 42);
             }
 
-            var stringValue = await manager.LoadSettingAsync(StringDescriptor.Key).ConfigureAwait(false);
-            var intValue = await manager.LoadSettingAsync(IntDescriptor.Key).ConfigureAwait(false);
+            var stringValue = await manager.LoadSettingAsync(StringDescriptor.Key, ct: this.CancellationToken).ConfigureAwait(false);
+            var intValue = await manager.LoadSettingAsync(IntDescriptor.Key, ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = stringValue.Should().Be("TestValue");
             _ = intValue.Should().Be(42);
-        }
-    }
-
-    [TestMethod]
-    public async Task SaveSettingsAsync_FluentBatchApi_CommitsAtomically()
-    {
-        var scope = this.Container.OpenScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var manager = scope.Resolve<EditorSettingsManager>();
-
-            await manager.SaveSettingsAsync(
-                batch => batch
-                    .QueuePropertyChange(StringDescriptor, "FluentValue")
-                    .QueuePropertyChange(IntDescriptor, 99),
-                null,
-                CancellationToken.None).ConfigureAwait(false);
-
-            var stringValue = await manager.LoadSettingAsync(StringDescriptor.Key).ConfigureAwait(false);
-            var intValue = await manager.LoadSettingAsync(IntDescriptor.Key).ConfigureAwait(false);
-
-            _ = stringValue.Should().Be("FluentValue");
-            _ = intValue.Should().Be(99);
         }
     }
 
@@ -133,10 +131,8 @@ public class SettingsBatchTests : DatabaseTests
             }
 
             // Verify persisted
-            var position = await manager.LoadSettingAsync(
-                new SettingKey<Point>(settings.ModuleName, nameof(settings.WindowPosition))).ConfigureAwait(false);
-            var size = await manager.LoadSettingAsync(
-                new SettingKey<Size>(settings.ModuleName, nameof(settings.WindowSize))).ConfigureAwait(false);
+            var position = await manager.LoadSettingAsync(new SettingKey<Point>(settings.ModuleName, nameof(settings.WindowPosition)), ct: this.CancellationToken).ConfigureAwait(false);
+            var size = await manager.LoadSettingAsync(new SettingKey<Size>(settings.ModuleName, nameof(settings.WindowSize)), ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = position.Should().Be(new Point(100, 100));
             _ = size.Should().Be(new Size(800, 600));
@@ -161,10 +157,8 @@ public class SettingsBatchTests : DatabaseTests
                 settings2.WindowSize = new Size(800, 600);
             }
 
-            var pos = await manager.LoadSettingAsync(
-                new SettingKey<Point>(settings1.ModuleName, nameof(settings1.WindowPosition))).ConfigureAwait(false);
-            var size = await manager.LoadSettingAsync(
-                new SettingKey<Size>(settings2.ModuleName, nameof(settings2.WindowSize))).ConfigureAwait(false);
+            var pos = await manager.LoadSettingAsync(new SettingKey<Point>(settings1.ModuleName, nameof(settings1.WindowPosition)), ct: this.CancellationToken).ConfigureAwait(false);
+            var size = await manager.LoadSettingAsync(new SettingKey<Size>(settings2.ModuleName, nameof(settings2.WindowSize)), ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = pos.Should().Be(new Point(100, 100));
             _ = size.Should().Be(new Size(800, 600));
@@ -178,18 +172,18 @@ public class SettingsBatchTests : DatabaseTests
         await using (scope.ConfigureAwait(false))
         {
             var manager = scope.Resolve<EditorSettingsManager>();
-            var settings = new ExampleSettings();
-
-            // Without batch, property changes mark dirty but don't persist
-            settings.WindowPosition = new Point(300, 300);
+            var settings = new ExampleSettings
+            {
+                // Without batch, property changes mark dirty but don't persist
+                WindowPosition = new Point(300, 300),
+            };
 
             _ = settings.IsDirty.Should().BeTrue();
 
             // Explicit save required when not in a batch
-            await settings.SaveAsync(manager).ConfigureAwait(false);
+            await settings.SaveAsync(manager, ct: this.CancellationToken).ConfigureAwait(false);
 
-            var position = await manager.LoadSettingAsync(
-                new SettingKey<Point>(settings.ModuleName, nameof(settings.WindowPosition))).ConfigureAwait(false);
+            var position = await manager.LoadSettingAsync(new SettingKey<Point>(settings.ModuleName, nameof(settings.WindowPosition)), ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = position.Should().Be(new Point(300, 300));
         }
@@ -203,7 +197,7 @@ public class SettingsBatchTests : DatabaseTests
         {
             var manager = scope.Resolve<EditorSettingsManager>();
             var settings = new ExampleSettings();
-            var projectPath = @"C:\Projects\TestProject";
+            const string projectPath = @"C:\Projects\TestProject";
 
             // Specify scope once, all settings in batch use it automatically
             var batch = manager.BeginBatch(SettingContext.Project(projectPath));
@@ -215,7 +209,8 @@ public class SettingsBatchTests : DatabaseTests
             // Verify saved to project scope
             var position = await manager.LoadSettingAsync(
                 new SettingKey<Point>(settings.ModuleName, nameof(settings.WindowPosition)),
-                SettingContext.Project(projectPath)).ConfigureAwait(false);
+                SettingContext.Project(projectPath),
+                ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = position.Should().Be(new Point(500, 500));
         }
@@ -241,7 +236,7 @@ public class SettingsBatchTests : DatabaseTests
                         settings1.WindowSize = new Size(100, 100);
                     }
                 },
-                this.TestContext.CancellationToken).ConfigureAwait(false);
+                this.CancellationToken).ConfigureAwait(false);
 
             await Task.Run(
                 async () =>
@@ -254,7 +249,7 @@ public class SettingsBatchTests : DatabaseTests
                         settings2.WindowSize = new Size(200, 200);
                     }
                 },
-                this.TestContext.CancellationToken).ConfigureAwait(false);
+                this.CancellationToken).ConfigureAwait(false);
 
             await Task.Run(
                 async () =>
@@ -267,7 +262,7 @@ public class SettingsBatchTests : DatabaseTests
                         settings3.WindowSize = new Size(300, 300);
                     }
                 },
-                this.TestContext.CancellationToken).ConfigureAwait(false);
+                this.CancellationToken).ConfigureAwait(false);
 
             // Verify all batches committed to their respective scopes
             var (pos1, size1) = await LoadSettingsAsync(manager, SettingContext.Project("Project1")).ConfigureAwait(false);
@@ -298,8 +293,8 @@ public class SettingsBatchTests : DatabaseTests
                 _ = batch.QueuePropertyChange(ValidatedStringDescriptor, "Valid Value");
             }
 
-            var intValue = await manager.LoadSettingAsync(ValidatedIntDescriptor.Key).ConfigureAwait(false);
-            var stringValue = await manager.LoadSettingAsync(ValidatedStringDescriptor.Key).ConfigureAwait(false);
+            var intValue = await manager.LoadSettingAsync(ValidatedIntDescriptor.Key, ct: this.CancellationToken).ConfigureAwait(false);
+            var stringValue = await manager.LoadSettingAsync(ValidatedStringDescriptor.Key, ct: this.CancellationToken).ConfigureAwait(false);
 
             _ = intValue.Should().Be(50);
             _ = stringValue.Should().Be("Valid Value");
@@ -325,57 +320,8 @@ public class SettingsBatchTests : DatabaseTests
 
             var exception = await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(false);
             _ = exception.Which.Message.Should().Contain("Batch validation failed");
-            _ = exception.Which.Results.Should().HaveCount(1);
+            _ = exception.Which.Results.Should().ContainSingle();
             _ = exception.Which.Results[0].ErrorMessage.Should().Be("Value must be between 1 and 100");
-        }
-    }
-
-    [TestMethod]
-    public async Task SaveSettingsAsync_WithMultipleInvalidValues_AggregatesErrors()
-    {
-        var scope = this.Container.OpenScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var manager = scope.Resolve<EditorSettingsManager>();
-
-            var act = async () => await manager.SaveSettingsAsync(
-                batch => batch
-                    .QueuePropertyChange(ValidatedIntDescriptor, 200) // Out of range
-                    .QueuePropertyChange(ValidatedStringDescriptor, "AB"), // Too short
-                null,
-                CancellationToken.None).ConfigureAwait(false);
-
-            var exception = await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(false);
-            _ = exception.Which.Results.Should().HaveCount(2);
-            var messages = exception.Which.Results.Select(r => r.ErrorMessage).ToList();
-            _ = messages.Should().Contain("Value must be between 1 and 100");
-            _ = messages.Should().Contain("Length must be between 3 and 50");
-        }
-    }
-
-    [TestMethod]
-    public async Task SaveSettingsAsync_WithMixedValidAndInvalid_RollsBackAll()
-    {
-        var scope = this.Container.OpenScope();
-        await using (scope.ConfigureAwait(false))
-        {
-            var manager = scope.Resolve<EditorSettingsManager>();
-
-            var act = async () => await manager.SaveSettingsAsync(
-                batch => batch
-                    .QueuePropertyChange(ValidatedIntDescriptor, 25) // Valid
-                    .QueuePropertyChange(ValidatedStringDescriptor, "XX"), // Invalid
-                null,
-                CancellationToken.None).ConfigureAwait(false);
-
-            _ = await act.Should().ThrowAsync<SettingsValidationException>().ConfigureAwait(false);
-
-            // Verify nothing was saved (atomic rollback)
-            var intValue = await manager.LoadSettingAsync(ValidatedIntDescriptor.Key).ConfigureAwait(false);
-            var stringValue = await manager.LoadSettingAsync(ValidatedStringDescriptor.Key).ConfigureAwait(false);
-
-            _ = intValue.Should().Be(0); // Default value
-            _ = stringValue.Should().BeNull();
         }
     }
 
@@ -397,7 +343,7 @@ public class SettingsBatchTests : DatabaseTests
                     batch1Captured = batch as SettingsBatch;
                     return Task.CompletedTask;
                 },
-                this.TestContext.CancellationToken);
+                this.CancellationToken);
 
             var task2 = Task.Run(
                 () =>
@@ -406,7 +352,7 @@ public class SettingsBatchTests : DatabaseTests
                     batch2Captured = batch as SettingsBatch;
                     return Task.CompletedTask;
                 },
-                this.TestContext.CancellationToken);
+                this.CancellationToken);
 
             await Task.WhenAll(task1, task2).ConfigureAwait(false);
 
@@ -440,33 +386,90 @@ public class SettingsBatchTests : DatabaseTests
             await using (outerBatch.ConfigureAwait(false))
             {
                 // Attempting to create a nested batch should throw
-                var act = () => manager.BeginBatch();
+                Action act = () => manager.BeginBatch();
 
-                _ = act.Should().Throw<InvalidOperationException>()
-                    .Which.Message.Should().Contain("Nested batches are not supported");
+                _ = act.Should().Throw<InvalidOperationException>().WithMessage("*Nested batches are not supported*");
             }
         }
     }
 
     [TestMethod]
-    public async Task SaveSettingsAsync_WithProgressReporting_ReportsCorrectly()
+    public async Task BeginBatch_QueueAfterDispose_ThrowsObjectDisposedException()
     {
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
         {
             var manager = scope.Resolve<EditorSettingsManager>();
-            var progressReports = new List<SettingsSaveProgress>();
 
-            await manager.SaveSettingsAsync(
-                batch => batch
-                    .QueuePropertyChange(ValidatedIntDescriptor, 30)
-                    .QueuePropertyChange(ValidatedStringDescriptor, "Progress Test"),
-                new Progress<SettingsSaveProgress>(p => progressReports.Add(p)),
-                CancellationToken.None).ConfigureAwait(false);
+            var batch = manager.BeginBatch();
+            await batch.DisposeAsync().ConfigureAwait(false);
 
-            _ = progressReports.Should().NotBeEmpty();
-            _ = progressReports[^1].TotalSettings.Should().Be(2);
-            _ = progressReports[^1].CompletedSettings.Should().Be(2);
+            Action act = () => _ = batch.QueuePropertyChange(StringDescriptor, "value");
+
+            _ = act.Should().Throw<ObjectDisposedException>();
+        }
+    }
+
+    [TestMethod]
+    public async Task BeginBatch_WithFaultySerialization_RollsBackTransaction()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var manager = scope.Resolve<EditorSettingsManager>();
+
+            // Seed a safe setting
+            var safeDescriptor = new SettingDescriptor<string?>() { Key = new SettingKey<string?>("BatchModule", "Safe") };
+            var unsafeDescriptor = new SettingDescriptor<FaultyModel>() { Key = new SettingKey<FaultyModel>("BatchModule", "Faulty") };
+
+            var act = async () =>
+            {
+                var batch = manager.BeginBatch();
+                await using (batch.ConfigureAwait(false))
+                {
+                    _ = batch.QueuePropertyChange(safeDescriptor, "PersistMe");
+                    _ = batch.QueuePropertyChange(unsafeDescriptor, new FaultyModel());
+                }
+            };
+
+            // We expect the batch commit to fail due to a serialization error originating from the faulty model.
+            var exception = await act.Should().ThrowAsync<Exception>().ConfigureAwait(false);
+            var thrown = exception.Which;
+
+            // The serializer might wrap the inner exception; ensure the cause (Bad property throws for testing) is present
+            if (thrown is System.Text.Json.JsonException jsonEx)
+            {
+                _ = jsonEx.InnerException.Should().NotBeNull();
+                _ = jsonEx.InnerException!.Message.Should().Contain("Bad property throws for testing");
+            }
+            else
+            {
+                _ = thrown.Message.Should().Contain("Bad property throws for testing");
+            }
+
+            // Ensure that when the serialization throws, none of the previously queued items are persisted
+            var safeValue = await manager.LoadSettingAsync(new SettingKey<string?>("BatchModule", "Safe"), ct: this.CancellationToken).ConfigureAwait(false);
+            var faultyValue = await manager.LoadSettingAsync(new SettingKey<FaultyModel>("BatchModule", "Faulty"), ct: this.CancellationToken).ConfigureAwait(false);
+            _ = safeValue.Should().BeNull();
+            _ = faultyValue.Should().BeNull();
+        }
+    }
+
+    [TestMethod]
+    public async Task BeginBatch_SetPropertyWithNoDescriptor_ThrowsInvalidOperationException()
+    {
+        var scope = this.Container.OpenScope();
+        await using (scope.ConfigureAwait(false))
+        {
+            var manager = scope.Resolve<EditorSettingsManager>();
+            var settings = new NoDescriptorSettings();
+
+            var batch = manager.BeginBatch();
+            await using (batch.ConfigureAwait(false))
+            {
+                var act = () => settings.MissingDescriptor = "Value";
+                _ = act.Should().Throw<InvalidOperationException>();
+            }
         }
     }
 
@@ -479,5 +482,40 @@ public class SettingsBatchTests : DatabaseTests
             new SettingKey<Size>("Oxygen.Editor.Data.Example", "WindowSize"),
             context).ConfigureAwait(false);
         return (pos, size);
+    }
+
+    /// <summary>
+    ///     A model whose property throws when enumerated/serialized to force JSON serialization to
+    ///     fail.
+    /// </summary>
+    private sealed class FaultyModel
+    {
+        private readonly int marker = -1;
+
+        public string Bad
+        {
+            get
+            {
+                _ = this.marker;
+                throw new InvalidOperationException("Bad property throws for testing");
+            }
+        }
+    }
+
+    private sealed class NoDescriptorSettings : ModuleSettings
+    {
+        private string? missingDescriptor;
+
+        public NoDescriptorSettings()
+            : base("BatchModuleNoDescriptor")
+        {
+        }
+
+        [Persisted]
+        public string? MissingDescriptor
+        {
+            get => this.missingDescriptor;
+            set => this.SetProperty(ref this.missingDescriptor, value);
+        }
     }
 }

@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data.Settings;
+using Oxygen.Editor.Data.Settings;
+
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Strategy interface for discovering and providing setting descriptors.

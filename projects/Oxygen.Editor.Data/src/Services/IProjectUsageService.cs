@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Data.Models;
 
-namespace Oxygen.Editor.Data;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Specifies a service for managing and retrieving project usage data.

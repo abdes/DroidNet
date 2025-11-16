@@ -5,7 +5,7 @@
 using System.Collections.Concurrent;
 using Oxygen.Editor.Data.Settings;
 
-namespace Oxygen.Editor.Data.Internal;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Manages in-memory caching of setting values to improve performance.
@@ -62,4 +62,10 @@ internal sealed class SettingsCache
     {
         this.cache.Clear();
     }
+
+    /// <summary>
+    /// Removes the cache value for the specified key.
+    /// </summary>
+    /// <param name="cacheKey">The cache key to remove.</param>
+    public void Remove(string cacheKey) => _ = this.cache.TryRemove(cacheKey, out _);
 }

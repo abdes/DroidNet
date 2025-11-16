@@ -99,7 +99,7 @@ public class DesignTimePersistentStateFactoryTests
     public void CreateDbContext_WithDbPathSpecified_UsesSpecifiedPath()
     {
         // Arrange
-        var testPath = "C:\\CustomPath\\MyDatabase.db";
+        const string testPath = "C:\\CustomPath\\MyDatabase.db";
         var args = new[] { $"--db-path={testPath}" };
         var factory = new DesignTimePersistentStateFactory();
 
@@ -134,7 +134,7 @@ public class DesignTimePersistentStateFactoryTests
     public void CreateDbContext_WithModeAndDbPathButNotInMemory_DoesNotThrow()
     {
         // Arrange - mode and db-path can coexist, db-path takes precedence
-        var testPath = "C:\\test.db";
+        const string testPath = "C:\\test.db";
         var args = new[] { "--mode=real", $"--db-path={testPath}" };
         var factory = new DesignTimePersistentStateFactory();
 

@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Models;
@@ -148,7 +149,7 @@ public abstract class ModuleSettings(string moduleName) : INotifyPropertyChanged
         this.IsDirty = true;
 
         // If we're in a batch context, queue the change instead of persisting immediately
-        var batch = Settings.SettingsBatch.Current;
+        var batch = SettingsBatch.Current;
         if (batch != null)
         {
             this.QueuePropertyChangeInBatch(propertyName, value, batch);

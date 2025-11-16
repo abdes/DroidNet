@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Oxygen.Editor.Data.Models;
 
-namespace Oxygen.Editor.Data;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Provides services for managing template usage data, including retrieving, updating, and validating template usage records.
@@ -51,7 +51,7 @@ public class TemplateUsageService : ITemplateUsageService
                 .ToListAsync().ConfigureAwait(false);
 
             // Return detached clones
-            return records.Select(Clone).ToList();
+            return records.ConvertAll(Clone);
         }
         finally
         {
@@ -177,13 +177,11 @@ public class TemplateUsageService : ITemplateUsageService
     }
 
     private static TemplateUsage Clone(TemplateUsage src)
-    {
-        return new TemplateUsage
+        => new()
         {
             Id = src.Id,
             Location = src.Location,
             TimesUsed = src.TimesUsed,
             LastUsedOn = src.LastUsedOn,
         };
-    }
 }

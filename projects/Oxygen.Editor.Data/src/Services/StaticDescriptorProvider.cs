@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using Oxygen.Editor.Data.Settings;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data.Services;
 
 /// <summary>
 /// Provides setting descriptors from an explicit static registration.
@@ -35,8 +36,9 @@ public sealed class StaticDescriptorProvider : IDescriptorProvider
         var key = $"{descriptor.Key.SettingsModule}:{descriptor.Key.Name}";
         _ = this.descriptors.AddOrUpdate(
             key,
-            descriptor,
-            (_, _) => descriptor);
+            static (_, factory) => factory,
+            static (_, _, factory) => factory,
+            descriptor);
     }
 
     /// <inheritdoc/>

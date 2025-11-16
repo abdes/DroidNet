@@ -4,8 +4,8 @@
 
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Oxygen.Editor.Data.Internal;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data;
@@ -34,7 +34,7 @@ namespace Oxygen.Editor.Data;
 /// await settingsManager.SaveSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<Point>("MyModule", "WindowPosition"), new Point(100, 100));
 ///
 /// // Load a setting
-/// var windowPosition = await settingsManager.LoadSettingAsync<Point>(new Oxygen.Editor.Data.Settings.SettingKey<Point>("MyModule", "WindowPosition"));
+/// var windowPosition = await settingsManager.LoadSettingOrDefaultAsync<Point>(new Oxygen.Editor.Data.Settings.SettingKey<Point>("MyModule", "WindowPosition"));
 /// ]]>
 /// </example>
 public partial class EditorSettingsManager(PersistentState context, IDescriptorProvider? descriptorProvider = null) : IEditorSettingsManager
@@ -64,43 +64,16 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     public static StaticDescriptorProvider StaticProvider => LazyStaticProvider.Value;
 
     /// <summary>
-    /// Resolves a setting across scopes: Project -> Application -> default.
-    /// </summary>
-    /// <typeparam name="T">The type of the expected setting value.</typeparam>
-    /// <param name="key">Typed setting key.</param>
-    /// <param name="projectId">Optional project scope id.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>The resolved setting value, or default(T) if not present in any scope.</returns>
-    public async Task<T> ResolveSettingAsync<T>(SettingKey<T> key, string? projectId = null, CancellationToken ct = default)
-    {
-        if (!string.IsNullOrEmpty(projectId))
-        {
-            var projectValue = await this.LoadSettingAsync(key, SettingContext.Project(projectId), ct).ConfigureAwait(false);
-            if (projectValue is not null)
-            {
-                return projectValue;
-            }
-        }
-
-        var appValue = await this.LoadSettingAsync(key, SettingContext.Application(), ct).ConfigureAwait(false);
-        if (appValue is not null)
-        {
-            return appValue;
-        }
-
-        return default!;
-    }
-
-    /// <summary>
     /// Saves a typed setting value for the provided key and scope.
     /// </summary>
     /// <typeparam name="T">The type of the setting value.</typeparam>
     /// <param name="key">Typed setting key.</param>
     /// <param name="value">The value to save.</param>
     /// <param name="settingContext">Optional scope context.</param>
+    /// <param name="progress">Optional progress reporter for save operations.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>A task that completes once the value has been persisted.</returns>
-    public async Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, CancellationToken ct = default)
+    public async Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var jsonValue = JsonSerializer.Serialize(value, JsonSerializerOptions);
@@ -133,16 +106,11 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
 
         _ = await this.context.SaveChangesAsync(ct).ConfigureAwait(false);
 
+        // Report a single-save operation as a 1-of-1 save progress.
+        progress?.Report(new SettingsProgress(1, 1, key.SettingsModule, key.Name));
+
         this.cache.Set(cacheKey, value);
         this.notifier.NotifyChange(key.SettingsModule, key.Name, key, default, value, scope, scopeId);
-    }
-
-    /// <inheritdoc/>
-    public async Task SaveSettingAsync<T>(SettingDescriptor<T> descriptor, T value, SettingContext? settingContext = null, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        ValidateSetting(descriptor, value);
-        await this.SaveSettingAsync(descriptor.Key, value, settingContext, ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -151,9 +119,10 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     /// <typeparam name="T">The type of the setting value.</typeparam>
     /// <param name="key">Typed setting key.</param>
     /// <param name="settingContext">Optional scope context.</param>
+    /// <param name="progress">Optional progress reporter for load operations.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The deserialized value or <see langword="null"/> if not present.</returns>
-    public async Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default)
+    public async Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         var scope = settingContext?.Scope ?? SettingScope.Application;
         var scopeId = settingContext?.ScopeId;
@@ -168,11 +137,16 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
 
         if (setting is null)
         {
+            // No persisted value, report zero total to indicate nothing loaded.
+            progress?.Report(new SettingsProgress(0, 0, key.SettingsModule, key.Name));
             return default;
         }
 
         var value = setting.JsonValue is null ? default : JsonSerializer.Deserialize<T>(setting.JsonValue, JsonSerializerOptions);
         this.cache.Set(cacheKey, value);
+
+        // Report single-setting load progress: 1 of 1
+        progress?.Report(new SettingsProgress(1, 1, key.SettingsModule, key.Name));
         return value;
     }
 
@@ -183,11 +157,12 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     /// <param name="key">Typed setting key.</param>
     /// <param name="defaultValue">The default value to return if not present.</param>
     /// <param name="settingContext">Optional scope context.</param>
+    /// <param name="progress">Optional progress reporter for load operations.</param>
     /// <param name="ct">Cancellation token.</param>
     /// <returns>The deserialized value or the provided default when not present.</returns>
-    public async Task<T> LoadSettingAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, CancellationToken ct = default)
+    public async Task<T> LoadSettingOrDefaultAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
-        var value = await this.LoadSettingAsync(key, settingContext, ct).ConfigureAwait(false);
+        var value = await this.LoadSettingAsync(key, settingContext, progress: progress, ct: ct).ConfigureAwait(false);
         return value is null ? defaultValue : value;
     }
 
@@ -214,70 +189,20 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         return scopes;
     }
 
-    // Legacy API removed in v-next. Consumers should use WhenSettingChanged<T> to observe changes.
-
-    /// <summary>
-    /// Creates a batch transaction for saving multiple settings atomically.
-    /// Uses RAII pattern - dispose the batch to commit.
-    /// </summary>
-    /// <param name="context">The context (scope) for all batch operations. Defaults to Application scope.</param>
-    /// <param name="progress">Optional progress reporter.</param>
-    /// <returns>
-    /// An <see cref="ISettingsBatch"/> instance representing the batch transaction.
-    /// Dispose the returned object to commit the batch.
-    /// </returns>
-    public ISettingsBatch BeginBatch(SettingContext? context = null, IProgress<SettingsSaveProgress>? progress = null)
-        => new SettingsBatch(this, context ?? SettingContext.Application(), progress);
-
-    /// <summary>
-    /// Save a batch of settings in a single transaction.
-    /// Legacy API - prefer using <see cref="BeginBatch"/> with RAII pattern.
-    /// </summary>
-    /// <param name="configure">Action to configure the batch to save or remove settings.</param>
-    /// <param name="progress">Optional progress callback used to report progress.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes once the batch has been committed.</returns>
-    /// <exception cref="SettingsValidationException">Thrown when any batch item fails validation.</exception>
-    public async Task SaveSettingsAsync(Action<ISettingsBatch> configure, IProgress<SettingsSaveProgress>? progress = null, CancellationToken ct = default)
-    {
-        var batch = this.BeginBatch(progress: progress);
-        await using (batch.ConfigureAwait(false))
-        {
-            configure(batch);
-        }
-    }
-
-    /// <inheritdoc/>
-    public Task<IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>>> GetDescriptorsByCategoryAsync(CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        var dict = this.GetDescriptorsByCategory();
-        return Task.FromResult<IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>>>(dict);
-    }
-
-    /// <inheritdoc/>
-    public Task<IReadOnlyList<ISettingDescriptor>> SearchDescriptorsAsync(string searchTerm, CancellationToken ct = default)
-    {
-        ct.ThrowIfCancellationRequested();
-        var matches = this.SearchDescriptors(searchTerm);
-        return Task.FromResult<IReadOnlyList<ISettingDescriptor>>(matches);
-    }
-
     /// <inheritdoc/>
     public async Task<IReadOnlyList<string>> GetAllKeysAsync(CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        var keys = await this.context.Settings.Select(s => s.SettingsModule + "/" + s.Name).Distinct().ToListAsync(ct).ConfigureAwait(false);
-        return keys;
+        return await this.context.Settings.Select(s => s.SettingsModule + "/" + s.Name).Distinct().ToListAsync(ct).ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(key))
         {
-            return Array.Empty<(SettingScope, string?, object?)>();
+            return [];
         }
 
         var parts = key.Split('/', 2);
@@ -290,23 +215,26 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         var name = parts[1];
         var query = this.context.Settings.Where(ms => ms.SettingsModule == module && ms.Name == name);
         var results = await query.Select(ms => new { ms.Scope, ms.ScopeId, ms.JsonValue }).ToListAsync(ct).ConfigureAwait(false);
+        var total = results.Count;
         var list = new List<(SettingScope, string?, object?)>(results.Count);
-        foreach (var r in results)
+        for (var i = 0; i < results.Count; ++i)
         {
+            var r = results[i];
             var val = r.JsonValue is null ? null : JsonSerializer.Deserialize<object>(r.JsonValue, JsonSerializerOptions);
             list.Add((r.Scope, r.ScopeId, val));
+            progress?.Report(new SettingsProgress(total, i + 1, module, name));
         }
 
         return list;
     }
 
     /// <inheritdoc/>
-    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, CancellationToken ct = default)
+    public async Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(key))
         {
-            return Array.Empty<(SettingScope, string?, T?)>();
+            return [];
         }
 
         var parts = key.Split('/', 2);
@@ -319,18 +247,21 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         var name = parts[1];
         var query = this.context.Settings.Where(ms => ms.SettingsModule == module && ms.Name == name);
         var results = await query.Select(ms => new { ms.Scope, ms.ScopeId, ms.JsonValue }).ToListAsync(ct).ConfigureAwait(false);
+        var total = results.Count;
         var list = new List<(SettingScope, string?, T?)>(results.Count);
-        foreach (var r in results)
+        for (var i = 0; i < results.Count; ++i)
         {
+            var r = results[i];
             var val = r.JsonValue is null ? default : JsonSerializer.Deserialize<T>(r.JsonValue, JsonSerializerOptions);
             list.Add((r.Scope, r.ScopeId, val));
+            progress?.Report(new SettingsProgress(total, i + 1, module, name));
         }
 
         return list;
     }
 
     /// <inheritdoc/>
-    public async Task<TryGetAllValuesResult<T>> TryGetAllValuesAsync<T>(string key, CancellationToken ct = default)
+    public async Task<TryGetAllValuesResult<T>> TryGetAllValuesAsync<T>(string key, IProgress<SettingsProgress>? progress = null, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
         var errors = new List<string>();
@@ -339,26 +270,28 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         if (string.IsNullOrWhiteSpace(key))
         {
             errors.Add("Key is null or whitespace");
-            return new TryGetAllValuesResult<T>(false, scopedValues, errors);
+            return new TryGetAllValuesResult<T>(Success: false, scopedValues, errors);
         }
 
         var parts = key.Split('/', 2);
         if (parts.Length != 2)
         {
             errors.Add($"Invalid setting key: '{key}'. Expected format: Module/Name");
-            return new TryGetAllValuesResult<T>(false, scopedValues, errors);
+            return new TryGetAllValuesResult<T>(Success: false, scopedValues, errors);
         }
 
         var module = parts[0];
         var name = parts[1];
         var query = this.context.Settings.Where(ms => ms.SettingsModule == module && ms.Name == name);
         var results = await query.Select(ms => new { ms.Scope, ms.ScopeId, ms.JsonValue }).ToListAsync(ct).ConfigureAwait(false);
-
-        foreach (var r in results)
+        var total = results.Count;
+        for (var i = 0; i < results.Count; ++i)
         {
+            var r = results[i];
             if (r.JsonValue is null)
             {
                 scopedValues.Add(new ScopedValue<T>(r.Scope, r.ScopeId, default));
+                progress?.Report(new SettingsProgress(total, i + 1, module, name));
                 continue;
             }
 
@@ -366,25 +299,49 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
             {
                 var val = JsonSerializer.Deserialize<T>(r.JsonValue, JsonSerializerOptions);
                 scopedValues.Add(new ScopedValue<T>(r.Scope, r.ScopeId, val));
+                progress?.Report(new SettingsProgress(total, i + 1, module, name));
             }
             catch (System.Text.Json.JsonException ex)
             {
                 errors.Add($"Failed to deserialize value for {key} at scope {r.Scope}{(r.ScopeId is null ? string.Empty : $"({r.ScopeId})")}: {ex.Message}");
                 scopedValues.Add(new ScopedValue<T>(r.Scope, r.ScopeId, default));
+                progress?.Report(new SettingsProgress(total, i + 1, module, name));
             }
             catch (NotSupportedException ex)
             {
                 errors.Add($"Failed to deserialize value for {key} at scope {r.Scope}{(r.ScopeId is null ? string.Empty : $"({r.ScopeId})")}: {ex.Message}");
                 scopedValues.Add(new ScopedValue<T>(r.Scope, r.ScopeId, default));
+                progress?.Report(new SettingsProgress(total, i + 1, module, name));
             }
             catch (InvalidOperationException ex)
             {
                 errors.Add($"Failed to deserialize value for {key} at scope {r.Scope}{(r.ScopeId is null ? string.Empty : $"({r.ScopeId})")}: {ex.Message}");
                 scopedValues.Add(new ScopedValue<T>(r.Scope, r.ScopeId, default));
+                progress?.Report(new SettingsProgress(total, i + 1, module, name));
             }
         }
 
         return new TryGetAllValuesResult<T>(errors.Count == 0, scopedValues, errors);
+    }
+
+    /// <summary>
+    /// Returns when a setting was last updated for the specified typed key and scope.
+    /// </summary>
+    /// <typeparam name="T">The type of the setting value.</typeparam>
+    /// <param name="key">Typed setting key.</param>
+    /// <param name="settingContext">Optional scope context for the setting.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>
+    /// The <see cref="DateTime"/> when the setting was last updated, or <see langword="null"/> if the setting does not exist.
+    /// </returns>
+    public async Task<DateTime?> GetLastUpdatedTimeAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default)
+    {
+        ct.ThrowIfCancellationRequested();
+        var scope = settingContext?.Scope ?? SettingScope.Application;
+        var scopeId = settingContext?.ScopeId;
+
+        var setting = await this.FindSettingAsync(key.SettingsModule, key.Name, scope, scopeId, ct).ConfigureAwait(false);
+        return setting?.UpdatedAt;
     }
 
     /// <summary>
@@ -394,43 +351,6 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
     /// This method clears all cached settings, forcing subsequent load operations to retrieve values from the database.
     /// </remarks>
     internal void ClearCache() => this.cache.Clear();
-
-    /// <summary>
-    /// Commits a batch of settings operations atomically.
-    /// </summary>
-    /// <param name="items">The batch items to commit.</param>
-    /// <param name="progress">Optional progress reporter.</param>
-    /// <param name="ct">Cancellation token.</param>
-    /// <returns>A task that completes when the batch is committed.</returns>
-    /// <exception cref="SettingsValidationException">Thrown when validation fails.</exception>
-    internal async Task CommitBatchAsync(IReadOnlyList<BatchItem> items, IProgress<SettingsSaveProgress>? progress, CancellationToken ct)
-    {
-        ValidateBatchItems(items);
-
-        var transaction = await this.context.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
-        await using (transaction.ConfigureAwait(false))
-        {
-            try
-            {
-                var total = items.Count;
-                var index = 0;
-                foreach (var item in items)
-                {
-                    index++;
-                    await this.ProcessBatchItemAsync(item.Module, item.Name, item.Value, item.Scope, item.ScopeId, ct).ConfigureAwait(false);
-                    _ = await this.context.SaveChangesAsync(ct).ConfigureAwait(false);
-                    progress?.Report(new SettingsSaveProgress(total, index, item.Module));
-                }
-
-                await transaction.CommitAsync(ct).ConfigureAwait(false);
-            }
-            catch
-            {
-                await transaction.RollbackAsync(ct).ConfigureAwait(false);
-                throw;
-            }
-        }
-    }
 
     /// <summary>
     /// Finds a setting entity in the database.
@@ -447,8 +367,7 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         SettingScope scope,
         string? scopeId,
         CancellationToken ct)
-    {
-        return await this.context.Settings
+        => await this.context.Settings
             .FirstOrDefaultAsync(
                 ms => ms.SettingsModule == module &&
                       ms.Name == name &&
@@ -456,7 +375,6 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
                       ms.ScopeId == scopeId,
                 ct)
             .ConfigureAwait(false);
-    }
 
     /// <summary>
     /// Processes a single batch item for save or delete.
@@ -469,12 +387,16 @@ public partial class EditorSettingsManager(PersistentState context, IDescriptorP
         string? scopeId,
         CancellationToken ct)
     {
+        var cacheKey = SettingsCache.GenerateCacheKey(module, name, scope, scopeId);
         if (value is null)
         {
             var existing = await this.FindSettingAsync(module, name, scope, scopeId, ct).ConfigureAwait(false);
             if (existing != null)
             {
                 _ = this.context.Settings.Remove(existing);
+
+                // Remove cache entry to avoid returning stale values
+                this.cache.Remove(cacheKey);
             }
         }
         else

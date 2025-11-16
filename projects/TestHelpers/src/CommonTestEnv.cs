@@ -16,20 +16,20 @@ using Serilog.Templates;
 namespace DroidNet.TestHelpers;
 
 /// <summary>
-/// Contains global initialization for Verify, the IoC container, and logging.
+///     Contains global initialization for Verify, the IoC container, and logging.
 /// </summary>
-[TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("Test Environment")]
 public class CommonTestEnv : VerifyBase
 {
     /// <summary>
-    /// Gets or sets the IoC container used for testing.
+    ///     Gets or sets the IoC container used for testing.
     /// </summary>
     public static IContainer TestContainer { get; set; } = new Container();
 
     /// <summary>
-    /// Gets the logging level switch for the Seriog logger, which can be used to change the logging level at runtime.
+    ///     Gets the logging level switch for the Seriog logger, which can be used to change the
+    ///     logging level at runtime.
     /// </summary>
     /// <example>
     /// <code><![CDATA[
@@ -45,26 +45,25 @@ public class CommonTestEnv : VerifyBase
     public static LoggingLevelSwitch LoggingLevelSwitch { get; } = new(LogEventLevel.Warning);
 
     /// <summary>
-    /// Verifies that the conventions are satisfied.
+    ///     Gets the cancellation token for the current test context.
     /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    [TestMethod]
-    public Task VerifyConventionsSatisfied() => VerifyChecks.Run();
+    protected CancellationToken CancellationToken => this.TestContext.CancellationToken;
 
     /// <summary>
-    /// Configures logging for the specified IoC container.
+    ///     Configures logging for the specified IoC container.
     /// </summary>
     /// <param name="container">The IoC container to configure logging for.</param>
     protected static void ConfigureLogging(IContainer container)
     {
+        var template = new ExpressionTemplate(
+                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
+                    new CultureInfo("en-US"));
         Log.Logger = new LoggerConfiguration()
             .Destructure.UsingAttributes()
             .MinimumLevel.ControlledBy(LoggingLevelSwitch)
             .Enrich.FromLogContext()
-            .WriteTo.Debug(
-                new ExpressionTemplate(
-                    "[{@t:HH:mm:ss} {@l:u3} ({Substring(SourceContext, LastIndexOf(SourceContext, '.') + 1)})] {@m:lj}\n{@x}",
-                    new CultureInfo("en-US")))
+            .WriteTo.Console(template)
+            .WriteTo.Debug(template)
             /*.WriteTo.Seq("http://localhost:5341/")*/
             .CreateLogger();
 
@@ -94,7 +93,7 @@ public class CommonTestEnv : VerifyBase
     }
 
     /// <summary>
-    /// Configures Verify for the test environment.
+    ///     Configures Verify for the test environment.
     /// </summary>
     protected static void ConfigureVerify() => VerifyDiffPlex.Initialize();
 }

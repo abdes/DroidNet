@@ -15,16 +15,15 @@ public partial class EditorSettingsManager
     /// Groups descriptors by category.
     /// </summary>
     /// <returns>A dictionary mapping category names to descriptor lists.</returns>
-    private Dictionary<string, IReadOnlyList<ISettingDescriptor>> GetDescriptorsByCategory()
+    public IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>> GetDescriptorsByCategory()
     {
         var descriptors = this.descriptorProvider.EnumerateDescriptors().ToList();
-        var grouped = descriptors
+        return descriptors
             .GroupBy(d => d.Category ?? string.Empty, StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
-                g => (IReadOnlyList<ISettingDescriptor>)g.ToList(),
+                g => (IReadOnlyList<ISettingDescriptor>)[.. g],
                 StringComparer.Ordinal);
-        return grouped;
     }
 
     /// <summary>
@@ -32,17 +31,17 @@ public partial class EditorSettingsManager
     /// </summary>
     /// <param name="searchTerm">The search term (case-insensitive).</param>
     /// <returns>Matching descriptors.</returns>
-    private List<ISettingDescriptor> SearchDescriptors(string searchTerm)
+    public IReadOnlyList<ISettingDescriptor> SearchDescriptors(string searchTerm)
     {
         var descriptors = this.descriptorProvider.EnumerateDescriptors();
 
         if (string.IsNullOrEmpty(searchTerm))
         {
-            return descriptors.ToList();
+            return [.. descriptors];
         }
 
         var term = searchTerm.Trim();
-        var comparer = StringComparison.OrdinalIgnoreCase;
+        const StringComparison comparer = StringComparison.OrdinalIgnoreCase;
         var matches = descriptors
             .Where(d =>
                 d.SettingsModule.Contains(term, comparer) ||

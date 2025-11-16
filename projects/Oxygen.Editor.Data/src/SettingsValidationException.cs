@@ -4,7 +4,7 @@
 
 using System.ComponentModel.DataAnnotations;
 
-namespace Oxygen.Editor.Data.Settings;
+namespace Oxygen.Editor.Data;
 
 /// <summary>
 /// Represents one or more validation failures when trying to save a setting that does not meet configured validators.
