@@ -132,6 +132,30 @@ public partial class DatabaseSchemaTests : DatabaseTests
     }
 
     /// <summary>
+    /// Verifies that the indexes defined in the initial migration exist.
+    /// </summary>
+    [TestMethod]
+    public void DatabaseHasIndexes()
+    {
+        using var scope = this.Container.OpenScope();
+        var db = scope.Resolve<PersistentState>();
+
+        using var command = db.Database.GetDbConnection().CreateCommand();
+
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type='index' AND name='IX_ProjectsUsage_Location_Name';";
+        var projectsIndex = command.ExecuteScalar() as string;
+        _ = projectsIndex.Should().Be("IX_ProjectsUsage_Location_Name");
+
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type='index' AND name='IX_TemplatesUsageRecords_Location';";
+        var templatesIndex = command.ExecuteScalar() as string;
+        _ = templatesIndex.Should().Be("IX_TemplatesUsageRecords_Location");
+
+        command.CommandText = "SELECT name FROM sqlite_master WHERE type='index' AND name='IX_Settings_SettingsModule_Name_Scope_ScopeId';";
+        var settingsIndex = command.ExecuteScalar() as string;
+        _ = settingsIndex.Should().Be("IX_Settings_SettingsModule_Name_Scope_ScopeId");
+    }
+
+    /// <summary>
     /// Verifies that a ModuleSetting can be added and retrieved.
     /// </summary>
     [TestMethod]
@@ -142,8 +166,8 @@ public partial class DatabaseSchemaTests : DatabaseTests
 
         var moduleSetting = new ModuleSetting
         {
-            ModuleName = "TestModule",
-            Key = "TestKey",
+            SettingsModule = "TestModule",
+            Name = "TestKey",
             JsonValue = "{\"setting\":\"value\"}",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -152,7 +176,7 @@ public partial class DatabaseSchemaTests : DatabaseTests
         _ = db.Settings.Add(moduleSetting);
         _ = db.SaveChanges();
 
-        var retrievedSetting = db.Settings.Single(ms => ms.ModuleName == "TestModule" && ms.Key == "TestKey");
+        var retrievedSetting = db.Settings.Single(ms => ms.SettingsModule == "TestModule" && ms.Name == "TestKey");
         _ = retrievedSetting.Should().NotBeNull();
         _ = retrievedSetting.JsonValue.Should().Be("{\"setting\":\"value\"}");
     }

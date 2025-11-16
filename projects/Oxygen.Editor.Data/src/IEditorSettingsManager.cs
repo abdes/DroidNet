@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Data.Settings;
+
 namespace Oxygen.Editor.Data;
 
 /// <summary>
@@ -10,53 +12,133 @@ namespace Oxygen.Editor.Data;
 public interface IEditorSettingsManager
 {
     /// <summary>
-    /// Saves a setting for a specific module.
+    /// Saves a typed setting for a specific key and scope.
     /// </summary>
     /// <typeparam name="T">The type of the setting value.</typeparam>
-    /// <param name="moduleName">The name of the module.</param>
-    /// <param name="key">The key for the setting.</param>
+    /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
     /// <param name="value">The value of the setting.</param>
-    /// <returns>A task that represents the asynchronous save operation.</returns>
-    /// <remarks>
-    /// This method serializes the setting value to JSON and stores it in the database. It also updates the cache
-    /// and notifies any registered change handlers.
-    /// </remarks>
-    public Task SaveSettingAsync<T>(string moduleName, string key, T value);
+    /// <param name="settingContext">Optional <see cref="SettingContext"/> for scope resolution.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task completing when the value has been persisted.</returns>
+    public Task SaveSettingAsync<T>(SettingKey<T> key, T value, SettingContext? settingContext = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Loads a setting for a specific module.
+    /// Loads a typed setting for a specific key and scope.
     /// </summary>
     /// <typeparam name="T">The type of the setting value.</typeparam>
-    /// <param name="moduleName">The name of the module.</param>
-    /// <param name="key">The key for the setting.</param>
-    /// <returns>A task that represents the asynchronous load operation. The task result contains the setting value, or <see langword="null"/> if the setting does not exist.</returns>
-    /// <remarks>
-    /// This method retrieves the setting value from the cache if available. Otherwise, it loads the value from the database
-    /// and updates the cache.
-    /// </remarks>
-    public Task<T?> LoadSettingAsync<T>(string moduleName, string key);
+    /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
+    /// <param name="settingContext">Optional scope for load; if null, Application scope will be used.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The setting value or <see langword="null"/> if not found.</returns>
+    public Task<T?> LoadSettingAsync<T>(SettingKey<T> key, SettingContext? settingContext = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Loads a setting for a specific module, returning a default value if the setting does not exist.
+    /// Loads a typed setting for a specific key and returns the provided default value if it does not exist.
     /// </summary>
     /// <typeparam name="T">The type of the setting value.</typeparam>
-    /// <param name="moduleName">The name of the module.</param>
-    /// <param name="key">The key for the setting.</param>
+    /// <param name="key">Typed setting key containing SettingsModule and Name.</param>
     /// <param name="defaultValue">The default value to return if the setting does not exist.</param>
-    /// <returns>A task that represents the asynchronous load operation. The task result contains the setting value, or the default value if the setting does not exist.</returns>
-    /// <remarks>
-    /// This method is similar to <see cref="LoadSettingAsync{T}(string,string)"/>, but it returns a specified default value if the setting does not exist.
-    /// </remarks>
-    public Task<T> LoadSettingAsync<T>(string moduleName, string key, T defaultValue);
+    /// <returns>The loaded value or the supplied default if no stored value exists.</returns>
+    /// <param name="settingContext">Optional scope for load.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public Task<T> LoadSettingAsync<T>(SettingKey<T> key, T defaultValue, SettingContext? settingContext = null, CancellationToken ct = default);
 
     /// <summary>
-    /// Registers a change handler for a specific setting.
+    /// Resolve a setting value by searching hierarchical scopes: Project → Application → model default.
     /// </summary>
-    /// <param name="moduleName">The name of the module.</param>
-    /// <param name="key">The key for the setting.</param>
-    /// <param name="handler">The handler to be invoked when the setting changes.</param>
-    /// <remarks>
-    /// The change handler is invoked with the new value of the setting whenever it is updated.
-    /// </remarks>
-    public void RegisterChangeHandler(string moduleName, string key, Action<string> handler);
+    /// <typeparam name="T">The expected type of the setting.</typeparam>
+    /// <param name="key">Typed setting key.</param>
+    /// <param name="projectId">Optional project identifier to use as the project scope.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>The resolved value or the default value for the type.</returns>
+    public Task<T> ResolveSettingAsync<T>(SettingKey<T> key, string? projectId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Apply a batch of setting changes in an atomic transaction.
+    /// </summary>
+    /// <param name="configure">Action to configure the batch.</param>
+    /// <param name="progress">Optional progress callback.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task that completes once the batch is committed.</returns>
+    public Task SaveSettingsAsync(Action<ISettingsBatch> configure, IProgress<SettingsSaveProgress>? progress = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns a typed observable that emits events whenever the specific setting changes.
+    /// </summary>
+    /// <typeparam name="T">The expected type of the setting value.</typeparam>
+    /// <param name="key">Typed setting key.</param>
+    /// <returns>An <see cref="IObservable{T}"/> that emits setting change events for the specified key.</returns>
+    public IObservable<SettingChangedEvent<T>> WhenSettingChanged<T>(SettingKey<T> key);
+
+    /// <summary>
+    /// Returns the scopes defined for the given setting key, optionally limited to a specific project ID.
+    /// </summary>
+    /// <typeparam name="T">The type of the setting value.</typeparam>
+    /// <param name="key">The typed setting key to query for definitions.</param>
+    /// <param name="projectId">Optional project id to filter project scope entries.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A list of scopes where the setting is defined.</returns>
+    public Task<IReadOnlyList<SettingScope>> GetDefinedScopesAsync<T>(SettingKey<T> key, string? projectId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Saves a typed setting value using a <see cref="SettingDescriptor{T}"/> to perform validation before persistence.
+    /// </summary>
+    /// <typeparam name="T">The type of the setting value.</typeparam>
+    /// <param name="descriptor">Descriptor containing the typed key and validators.</param>
+    /// <param name="value">The value to save.</param>
+    /// <param name="settingContext">Optional scope context.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A task that completes once the value has been persisted.</returns>
+    public Task SaveSettingAsync<T>(SettingDescriptor<T> descriptor, T value, SettingContext? settingContext = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// Get descriptors grouped by category for all known settings descriptor sets.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A dictionary mapping category names to lists of descriptors.</returns>
+    public Task<IReadOnlyDictionary<string, IReadOnlyList<ISettingDescriptor>>> GetDescriptorsByCategoryAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Search descriptors by free-text query matching key, display name, description or category.
+    /// </summary>
+    /// <param name="searchTerm">The search term to match against descriptors.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of matching descriptors.</returns>
+    public Task<IReadOnlyList<ISettingDescriptor>> SearchDescriptorsAsync(string searchTerm, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns a list of known keys persisted in the database in the form 'Module/Name'.
+    /// </summary>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of keys.</returns>
+    public Task<IReadOnlyList<string>> GetAllKeysAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all persisted values for a specific key across all scopes.
+    /// </summary>
+    /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of tuples containing Scope, ScopeId and value as raw object.</returns>
+    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, object? value)>> GetAllValuesAsync(string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns all persisted values for a specific key across all scopes deserialized into <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize values to.</typeparam>
+    /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>List of tuples containing Scope, ScopeId and typed value.</returns>
+    public Task<IReadOnlyList<(SettingScope scope, string? scopeId, T? value)>> GetAllValuesAsync<T>(string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// Attempts to get values for a key deserialized to <typeparamref name="T"/>.
+    /// Returns a result with success flag and error messages for failed conversions.
+    /// </summary>
+    /// <typeparam name="T">The type to deserialize the persisted values to.</typeparam>
+    /// <param name="key">The key to query in the form 'Module/Name'.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>A typed result with details on success, values and any errors.</returns>
+    public Task<TryGetAllValuesResult<T>> TryGetAllValuesAsync<T>(string key, CancellationToken ct = default);
+
+    // Legacy/per-module change handler registration is intentionally removed in v-next.
 }

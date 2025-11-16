@@ -30,12 +30,18 @@ namespace Oxygen.Editor.Data.Migrations
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Key")
+                    b.Property<int>("Scope")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScopeId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("ModuleName")
+                    b.Property<string>("SettingsModule")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("TEXT");
@@ -45,7 +51,7 @@ namespace Oxygen.Editor.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ModuleName", "Key")
+                    b.HasIndex("SettingsModule", "Name", "Scope", "ScopeId")
                         .IsUnique();
 
                     b.ToTable("Settings");

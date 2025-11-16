@@ -7,6 +7,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using Oxygen.Editor.Data.Settings;
 
 namespace Oxygen.Editor.Data.Models;
 
@@ -18,10 +19,9 @@ namespace Oxygen.Editor.Data.Models;
 /// functionality for managing module settings. It includes methods to save and load settings, as
 /// well as properties to track the state of the settings.
 /// <para>
-/// Properties marked with the <see cref="PersistedAttribute"/> will be saved and loaded by the
-/// <see cref="EditorSettingsManager"/>. These properties are automatically persisted to and retrieved from
-/// the underlying storage when the <see cref="SaveAsync"/> and <see cref="LoadAsync"/> methods are
-/// called.
+/// Properties will be saved and loaded only when they are registered via a <see cref="SettingDescriptor{T}"/>.
+/// This class intentionally does not fall back to attribute-based persistence; only descriptors control
+/// persistence and validation behavior.
 /// </para>
 /// <para>
 /// The <see cref="IsLoaded"/> property indicates whether the settings have been successfully loaded, and the <see cref="IsDirty"/> property indicates whether the settings have been modified since they were last loaded or saved.
@@ -32,26 +32,26 @@ namespace Oxygen.Editor.Data.Models;
 /// <![CDATA[
 /// public class MyModuleSettings : ModuleSettings
 /// {
-///     [Persisted]
+///     // This setting requires a SettingDescriptor to be persisted.
 ///     public int MySetting { get; set; }
 ///
-///     public MyModuleSettings(EditorSettingsManager settingsManager, string moduleName)
-///         : base(settingsManager, moduleName)
+///     public MyModuleSettings(string moduleName)
+///         : base(moduleName)
 ///     {
 ///     }
 /// }
 ///
 /// // Usage
 /// var settingsManager = new EditorSettingsManager(context);
-/// var mySettings = new MyModuleSettings(settingsManager, "MyModule");
-/// await mySettings.LoadAsync();
+/// var mySettings = new MyModuleSettings("MyModule");
+/// await mySettings.LoadAsync(settingsManager);
 /// mySettings.MySetting = 42;
-/// await mySettings.SaveAsync();
+/// await mySettings.SaveAsync(settingsManager);
 /// ]]>
 /// </example>
-public abstract class ModuleSettings(IEditorSettingsManager settingsManager, string moduleName) : INotifyPropertyChanged
+public abstract class ModuleSettings(string moduleName) : INotifyPropertyChanged
 {
-    private readonly HashSet<string> modifiedProperties = [];
+    private readonly HashSet<string> modifiedProperties = new(StringComparer.Ordinal);
     private bool isLoaded;
     private bool isDirty = true;
 
@@ -65,109 +65,55 @@ public abstract class ModuleSettings(IEditorSettingsManager settingsManager, str
     public string ModuleName { get; } = moduleName;
 
     /// <summary>
-    /// Gets a value indicating whether the settings have been loaded.
+    /// Gets or sets a value indicating whether the module settings have been loaded.
     /// </summary>
     public bool IsLoaded
     {
         get => this.isLoaded;
-        private set => this.SetProperty(ref this.isLoaded, value);
+        protected set => this.SetProperty(ref this.isLoaded, value);
     }
 
     /// <summary>
-    /// Gets a value indicating whether the settings have been modified.
+    /// Gets or sets a value indicating whether the module settings have been modified.
     /// </summary>
     public bool IsDirty
     {
         get => this.isDirty;
-        private set => this.SetProperty(ref this.isDirty, value);
+        protected set => this.SetProperty(ref this.isDirty, value);
     }
 
     /// <summary>
-    /// Saves the settings asynchronously.
+    /// Gets the collection of modified property names (for extension methods).
     /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if a property cannot be saved.</exception>
-    public async Task SaveAsync()
-    {
-        this.OnSaving();
-
-        foreach (var property in this.modifiedProperties)
-        {
-            var propertyInfo = this.GetType().GetProperty(property);
-            if (propertyInfo?.GetCustomAttribute<PersistedAttribute>() != null)
-            {
-                try
-                {
-                    var value = propertyInfo.GetValue(this);
-                    if (value != null)
-                    {
-                        await settingsManager.SaveSettingAsync(this.ModuleName, property, value).ConfigureAwait(true);
-                    }
-                }
-                catch (Exception ex) when (ex is ArgumentException or TargetException or MethodAccessException or TargetInvocationException)
-                {
-                    throw new InvalidOperationException($"Failed to save property '{property}'", ex);
-                }
-            }
-        }
-
-        this.modifiedProperties.Clear();
-        this.IsDirty = false;
-    }
+    /// <returns>The set of modified property names.</returns>
+    internal IReadOnlyCollection<string> GetModifiedPropertiesInternal() => this.modifiedProperties;
 
     /// <summary>
-    /// Loads the settings asynchronously.
+    /// Clears the collection of modified property names (for extension methods).
     /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    /// <exception cref="InvalidOperationException">Thrown if a property cannot be loaded.</exception>
-    public async Task LoadAsync()
-    {
-        this.IsLoaded = false;
+    internal void ClearModifiedPropertiesInternal() => this.modifiedProperties.Clear();
 
-        foreach (var property in this.GetType().GetProperties())
-        {
-            if (property.GetCustomAttribute<PersistedAttribute>() == null)
-            {
-                continue;
-            }
+    /// <summary>
+    /// Sets the IsLoaded property (for extension methods).
+    /// </summary>
+    /// <param name="value">The new value for IsLoaded.</param>
+    internal void SetIsLoadedInternal(bool value) => this.isLoaded = value;
 
-            try
-            {
-                var defaultValue = property.GetValue(this);
+    /// <summary>
+    /// Sets the IsDirty property (for extension methods).
+    /// </summary>
+    /// <param name="value">The new value for IsDirty.</param>
+    internal void SetDirtyInternal(bool value) => this.isDirty = value;
 
-                // Find the LoadSettingAsync<T>(string, string, T) method
-                var loadSettingMethods = typeof(IEditorSettingsManager)
-                    .GetMethods()
-                    .Where(m => m.Name == nameof(IEditorSettingsManager.LoadSettingAsync) &&
-                                m.IsGenericMethod &&
-                                m.GetParameters().Length == 3)
-                    .ToArray();
+    /// <summary>
+    /// Calls the OnSaving protected method (for extension methods).
+    /// </summary>
+    internal void OnSavingInternal() => this.OnSaving();
 
-                if (loadSettingMethods.Length > 0)
-                {
-                    var genericMethod = loadSettingMethods[0].MakeGenericMethod(property.PropertyType);
-                    var task = genericMethod.Invoke(settingsManager, [this.ModuleName, property.Name, defaultValue]) as Task;
-                    await task!.ConfigureAwait(true);
-
-                    var resultProperty = task.GetType().GetProperty("Result");
-                    if (resultProperty != null)
-                    {
-                        var value = resultProperty.GetValue(task);
-                        property.SetValue(this, value);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is ArgumentException or TargetException or MethodAccessException or TargetInvocationException)
-            {
-                throw new InvalidOperationException($"Failed to load property '{property.Name}'", ex);
-            }
-        }
-
-        this.OnLoaded();
-
-        this.IsDirty = false;
-        this.IsLoaded = true;
-    }
+    /// <summary>
+    /// Calls the OnLoaded protected method (for extension methods).
+    /// </summary>
+    internal void OnLoadedInternal() => this.OnLoaded();
 
     /// <summary>
     /// Sets the value of a property and raises the <see cref="PropertyChanged"/> event.
@@ -183,7 +129,8 @@ public abstract class ModuleSettings(IEditorSettingsManager settingsManager, str
             return;
         }
 
-        // Validate the property value
+        // Validate the property value. For Point/Size validation, a dedicated attribute is used
+        // (PointBoundsAttribute) instead of RangeAttribute which is not compatible with non-primitive value types.
         var validationContext = new ValidationContext(this) { MemberName = propertyName };
         Validator.ValidateProperty(value, validationContext);
 
@@ -199,12 +146,31 @@ public abstract class ModuleSettings(IEditorSettingsManager settingsManager, str
 
         this.modifiedProperties.Add(propertyName);
         this.IsDirty = true;
+
+        // If we're in a batch context, queue the change instead of persisting immediately
+        var batch = Settings.SettingsBatch.Current;
+        if (batch != null)
+        {
+            this.QueuePropertyChangeInBatch(propertyName, value, batch);
+        }
     }
+
+    /// <summary>
+    /// Returns whether a property was marked as modified since the last save or load.
+    /// </summary>
+    /// <returns>True if the property was modified; otherwise false.</returns>
+    /// <param name="propertyName">The name of the property to check.</param>
+    protected bool IsPropertyModified(string propertyName) => this.modifiedProperties.Contains(propertyName);
+
+    /// <summary>
+    /// Clears the set of modified properties. This is typically done after a successful save.
+    /// </summary>
+    protected void ClearModifiedProperties() => this.modifiedProperties.Clear();
 
     /// <summary>
     /// Called before the settings are saved.
     /// </summary>
-    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the dervided classes")]
+    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the derived classes")]
     protected virtual void OnSaving()
     {
     }
@@ -212,8 +178,31 @@ public abstract class ModuleSettings(IEditorSettingsManager settingsManager, str
     /// <summary>
     /// Called after the settings are loaded.
     /// </summary>
-    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the dervided classes")]
+    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the derived classes")]
     protected virtual void OnLoaded()
     {
+    }
+
+    /// <summary>
+    /// Queues a property change in the active batch.
+    /// </summary>
+    /// <typeparam name="T">The type of the property value.</typeparam>
+    /// <param name="propertyName">The name of the property.</param>
+    /// <param name="value">The new value.</param>
+    /// <param name="batch">The batch to queue the change in.</param>
+    private void QueuePropertyChangeInBatch<T>(string propertyName, T? value, SettingsBatch batch)
+    {
+        var descriptorField = this.GetType()
+            .GetNestedType("Descriptors", BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.Static)
+            ?.GetField(propertyName, BindingFlags.Public | BindingFlags.Static);
+
+        if (descriptorField?.GetValue(null) is not SettingDescriptor<T> descriptor)
+        {
+            throw new InvalidOperationException(
+                $"No descriptor found for property '{propertyName}' in {this.GetType().Name}. "
+                + "Properties must have a corresponding descriptor in the nested Descriptors class to be persisted.");
+        }
+
+        _ = batch.QueuePropertyChange(descriptor, value!);
     }
 }

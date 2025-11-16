@@ -11,10 +11,30 @@ namespace Oxygen.Editor.Data.Migrations;
 /// <inheritdoc />
 public partial class InitialCreate : Migration
 {
-    private static readonly string[] Columns = ["Location", "Name"];
+    private static readonly string[] Columns = new[] { "Location", "Name" };
+    private static readonly string[] SettingsColumns = ["SettingsModule", "Name", "Scope", "ScopeId"];
 
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
+    {
+        CreateProjectsUsageTable(migrationBuilder);
+        CreateTemplatesUsageRecordsTable(migrationBuilder);
+        CreateSettingsTable(migrationBuilder);
+        CreateIndexes(migrationBuilder);
+    }
+
+    /// <inheritdoc />
+    protected override void Down(MigrationBuilder migrationBuilder)
+    {
+        _ = migrationBuilder.DropTable(
+            name: "ProjectsUsage");
+        _ = migrationBuilder.DropTable(
+            name: "TemplatesUsageRecords");
+        _ = migrationBuilder.DropTable(
+            name: "Settings");
+    }
+
+    private static void CreateProjectsUsageTable(MigrationBuilder migrationBuilder)
     {
         _ = migrationBuilder.CreateTable(
             name: "ProjectsUsage",
@@ -30,7 +50,10 @@ public partial class InitialCreate : Migration
                 ContentBrowserState = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_ProjectsUsage", columns: x => x.Id));
+    }
 
+    private static void CreateTemplatesUsageRecordsTable(MigrationBuilder migrationBuilder)
+    {
         _ = migrationBuilder.CreateTable(
             name: "TemplatesUsageRecords",
             columns: table => new
@@ -42,7 +65,29 @@ public partial class InitialCreate : Migration
                 TimesUsed = table.Column<int>(type: "INTEGER", nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_TemplatesUsageRecords", columns: x => x.Id));
+    }
 
+    private static void CreateSettingsTable(MigrationBuilder migrationBuilder)
+    {
+        _ = migrationBuilder.CreateTable(
+            name: "Settings",
+            columns: table => new
+            {
+                Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    .Annotation(name: "Sqlite:Autoincrement", value: true),
+                SettingsModule = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
+                Name = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
+                Scope = table.Column<int>(type: "INTEGER", nullable: false),
+                ScopeId = table.Column<string>(type: "TEXT", nullable: true),
+                JsonValue = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: true),
+                CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+            },
+            constraints: table => table.PrimaryKey(name: "PK_Settings", columns: x => x.Id));
+    }
+
+    private static void CreateIndexes(MigrationBuilder migrationBuilder)
+    {
         _ = migrationBuilder.CreateIndex(
             name: "IX_ProjectsUsage_Location_Name",
             table: "ProjectsUsage",
@@ -54,15 +99,11 @@ public partial class InitialCreate : Migration
             table: "TemplatesUsageRecords",
             column: "Location",
             unique: true);
-    }
 
-    /// <inheritdoc />
-    protected override void Down(MigrationBuilder migrationBuilder)
-    {
-        _ = migrationBuilder.DropTable(
-            name: "ProjectsUsage");
-
-        _ = migrationBuilder.DropTable(
-            name: "TemplatesUsageRecords");
+        _ = migrationBuilder.CreateIndex(
+            name: "IX_Settings_SettingsModule_Name_Scope_ScopeId",
+            table: "Settings",
+            columns: SettingsColumns,
+            unique: true);
     }
 }
