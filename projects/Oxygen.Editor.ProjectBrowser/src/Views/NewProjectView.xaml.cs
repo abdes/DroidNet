@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -52,9 +53,10 @@ public sealed partial class NewProjectView
                     dialog.ViewModel.SelectedLocation.Path)
                 .ConfigureAwait(true);
 
-            if (success)
+            if (!success)
             {
                 // TODO: display an error message
+                Debug.WriteLine("Failed to create new project from template");
             }
         }
     }

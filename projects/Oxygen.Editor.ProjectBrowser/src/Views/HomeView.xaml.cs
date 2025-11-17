@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -75,6 +76,7 @@ public sealed partial class HomeView
             if (!success)
             {
                 // TODO: display an error message
+                Debug.WriteLine("Failed to create new project from template");
             }
         }
     }
