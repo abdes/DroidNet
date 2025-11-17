@@ -32,6 +32,7 @@ internal sealed partial class KnownLocationToIconGlyphConverter : IValueConverte
                 KnownLocations.Documents => "\uEC25",
                 KnownLocations.Desktop => "\uE7F4",
                 KnownLocations.Downloads => "\uEC27",
+                KnownLocations.LocalProjects => "\uE838",
                 KnownLocations.ThisComputer => "\uEC4E",
                 KnownLocations.OneDrive => "\uE8F7",
                 _ => throw new InvalidEnumArgumentException(nameof(value), (int)value, typeof(KnownLocations)),
