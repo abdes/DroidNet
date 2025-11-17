@@ -41,20 +41,20 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
         var compilationAndPropsAndOptions = compilationAndProps.Combine(context.AnalyzerConfigOptionsProvider);
         context.RegisterSourceOutput(compilationAndPropsAndOptions, static (spc, data) =>
         {
-            var ((compilation, properties), optionsProvider) = data;
-
-            // Respect an explicit opt-out first; users can set the property in their project file.
-            const string BuildPropertyName = "build_property.DroidNetOxygenEditorData_GenerateSettingDescriptors";
-            if (optionsProvider.GlobalOptions.TryGetValue(BuildPropertyName, out var optOut))
-            {
-                if (string.Equals(optOut, "false", StringComparison.OrdinalIgnoreCase) || string.Equals(optOut, "0", StringComparison.OrdinalIgnoreCase))
-                {
-                    return; // opted out
-                }
-            }
-
             try
             {
+                var ((compilation, properties), optionsProvider) = data;
+
+                // Respect an explicit opt-out first; users can set the property in their project file.
+                const string BuildPropertyName = "build_property.DroidNetOxygenEditorData_GenerateSettingDescriptors";
+                if (optionsProvider.GlobalOptions.TryGetValue(BuildPropertyName, out var optOut))
+                {
+                    if (string.Equals(optOut, "false", StringComparison.OrdinalIgnoreCase) || string.Equals(optOut, "0", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return; // opted out
+                    }
+                }
+
                 var asmName = compilation.AssemblyName ?? "GeneratedAssembly";
 
                 // Report that the generator has started to help debugging
@@ -63,6 +63,7 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
             }
             catch (Exception ex)
             {
+                // Only include the exception message in the diagnostic to avoid stack traces in test output.
                 Diagnostics.Report(spc, Diagnostics.GeneratorFailure, Location.None, ex.Message);
             }
         });
@@ -183,6 +184,7 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
             IsPublic = containingType.DeclaredAccessibility == Accessibility.Public,
             IsSealed = containingType.IsSealed,
             ModuleName = moduleNameValue,
+            FullName = BuildFullTypeName(containingType),
         };
 
         return typeModel;
@@ -284,6 +286,18 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
             }
 
             var nsName = containingType.ContainingNamespace?.ToDisplayString() ?? string.Empty;
+
+            // Skip nested types: only top-level ModuleSettings are supported. If a nested type has persisted properties, report an error diagnostic.
+            if (containingType.ContainingType != null)
+            {
+                foreach (var p in kv.Value)
+                {
+                    Diagnostics.Report(spc, Diagnostics.PersistedPropertyNested, p.Locations.FirstOrDefault(), p.Name, containingType.Name);
+                }
+
+                continue;
+            }
+
             if (!namespaces.TryGetValue(nsName, out var nsModel))
             {
                 nsModel = new NamespaceModel { Name = nsName };
@@ -314,6 +328,13 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
         }
 
         return namespaces;
+    }
+
+    private static string BuildFullTypeName(INamedTypeSymbol containingType)
+    {
+        // For now the generated descriptor types are emitted as top-level partial classes named by the containing type's simple name.
+        // Use the simple type name so the generated registration matches the generated type name.
+        return containingType.Name;
     }
 
     private static void RenderAndAddSource(SourceProductionContext spc, GeneratorModel model, string asmName)
@@ -486,6 +507,10 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
         public bool IsSealed { get; set; }
 
         public string ModuleName { get; set; } = string.Empty;
+
+        // Full name includes the nested outer type names (e.g. "Outer.Inner").
+        // Used for fully-qualified references outside the namespace.
+        public string FullName { get; set; } = string.Empty;
 
         public List<PropertyModel> Properties { get; set; } = [];
     }

@@ -32,19 +32,6 @@ public sealed partial class PublicSettings
         };
     }
 }
-
-/// <summary>
-/// Module initializer that registers PublicSettings descriptors on assembly load.
-/// </summary>
-file static class PublicSettingsInitializer
-{
-    [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void Initialize()
-    {
-        EditorSettingsManager.StaticProvider.Register(PublicSettings.Descriptors.Value);
-    }
-}
-
 internal partial class InternalSettings
 {
     /// <summary>
@@ -64,13 +51,14 @@ internal partial class InternalSettings
 }
 
 /// <summary>
-/// Module initializer that registers InternalSettings descriptors on assembly load.
+/// Assembly-level module initializer that registers all descriptors for this assembly on load.
 /// </summary>
-file static class InternalSettingsInitializer
+file static class DescriptorsInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(InternalSettings.Descriptors.Name);
+        EditorSettingsManager.StaticProvider.Register(Testing.PublicSettings.Descriptors.Value);
+        EditorSettingsManager.StaticProvider.Register(Testing.InternalSettings.Descriptors.Name);
     }
 }

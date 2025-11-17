@@ -5,11 +5,11 @@
 namespace Oxygen.Editor.Data;
 
 /// <summary>
-/// Indicates that a property should be persisted by the <see cref="EditorSettingsManager"/>.
+/// Indicates that a property should be persisted by the `EditorSettingsManager`.
 /// </summary>
 /// <remarks>
 /// The <see cref="PersistedAttribute"/> is used to mark properties in a class that should be saved
-/// and loaded by the <see cref="EditorSettingsManager"/>.
+/// and loaded by the `EditorSettingsManager`.
 /// </remarks>
 /// <example>
 /// <para><strong>Example Usage</strong></para>
@@ -19,18 +19,18 @@ namespace Oxygen.Editor.Data;
 ///     [Persisted]
 ///     public int MySetting { get; set; }
 ///
-///     public MyModuleSettings(EditorSettingsManager settingsManager, string moduleName)
-///         : base(settingsManager, moduleName)
+///     public MyModuleSettings(string moduleName)
+///         : base(moduleName)
 ///     {
 ///     }
 /// }
 ///
 /// // Usage
 /// var settingsManager = new EditorSettingsManager(context);
-/// var mySettings = new MyModuleSettings(settingsManager, "MyModule");
-/// await mySettings.LoadAsync();
+/// var mySettings = new MyModuleSettings("MyModule");
+/// await mySettings.LoadAsync(settingsManager);
 /// mySettings.MySetting = 42;
-/// await mySettings.SaveAsync();
+/// await mySettings.SaveAsync(settingsManager);
 /// ]]>
 /// </example>
 [AttributeUsage(AttributeTargets.Property)]

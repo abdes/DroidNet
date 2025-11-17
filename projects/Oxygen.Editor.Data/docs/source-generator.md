@@ -4,6 +4,13 @@
 
 The Settings Source Generator automatically creates setting descriptors and registration code from properties marked with `[Persisted]` attributes, eliminating boilerplate and ensuring type safety between property declarations and their descriptors.
 
+### Scope & Goals
+
+- Generate typed `SettingDescriptor<T>` fields for all `[Persisted]` properties on `ModuleSettings` subclasses.
+- Emit a single file-scoped assembly-level module initializer that registers descriptors for the entire assembly with `EditorSettingsManager.StaticProvider` at assembly load.
+- Preserve Display/Category metadata and validation attributes so the app and UI can use them for display and validation.
+- Surface helpful diagnostics for common misuses so developers can fix issues quickly.
+
 ## Architecture
 
 ### Design Principles
@@ -15,7 +22,7 @@ The Settings Source Generator automatically creates setting descriptors and regi
 
 ### Component Diagram
 
-```
+```text
 ┌─────────────────────────────────┐
 │   ModuleSettings Class          │
 │   + [Persisted] Properties      │
@@ -27,9 +34,9 @@ The Settings Source Generator automatically creates setting descriptors and regi
 │   Source Generator              │
 │   • Scans [Persisted] attrs     │
 │   • Extracts validation attrs   │
-│   • Generates descriptors       │
-└────────────┬────────────────────┘
-             │
+- Error if class not partial: `OXGNPG001: ModuleSettings class must be declared partial`
+- Error if ModuleName missing: `OXGNPG002: Class must define 'private new const string ModuleName'`
+- Error if ModuleName not const: `OXGNPG003: ModuleName must be a compile-time constant`
              ▼
 ┌─────────────────────────────────┐
 │   Generated .Generated.cs       │
@@ -37,6 +44,17 @@ The Settings Source Generator automatically creates setting descriptors and regi
 │   • Module initializer          │
 └─────────────────────────────────┘
 ```
+
+### Non-goals & Constraints
+
+- The generator does not change runtime serialization behavior - it only generates descriptors that rely on `EditorSettingsManager` at runtime. The generator will not register runtime converters automatically — converters must be registered with the manager or available globally.
+- The generator will not process private/internal property accessors; properties with non-public accessors will be emitted but generate a warning and may not be persisted at runtime.
+- The generator does not generate UI code nor localizable strings beyond preserving `Display` attributes supplied by the developer.
+
+### Supported serialization
+
+- `EditorSettingsManager` uses `System.Text.Json` with `JsonSerializerOptions` contained in the manager. The generator requires that property types are serializable by `System.Text.Json` or that custom `JsonConverter` instances are available in the runtime configuration.
+- For types requiring custom converters (e.g., `Point`, `Size`), rely on existing converters configured for the application or add converter types in `JsonSerializerOptions`.
 
 ## Input: Developer Code
 
@@ -59,6 +77,11 @@ public sealed partial class ExampleSettings : ModuleSettings
     [SizeBounds(1, int.MaxValue, 1, int.MaxValue, ErrorMessage = "Dimensions must be positive")]
     public Size WindowSize { get; set; }
 }
+
+### Notes on usage
+- Make the class `partial` so generated code can merge correctly.
+- The generator uses `private new const string ModuleName` to build typed `SettingKey<T>` constants. The name must be a compile-time constant string literal.
+- Properties decorated with `[Persisted]` must be `public`, have both getter and setter, and be JSON serializable.
 ```
 
 ## Output: Generated Code
@@ -109,16 +132,22 @@ public sealed partial class ExampleSettings
     }
 }
 
-file static class ExampleSettingsInitializer
+file static class DescriptorsInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(ExampleSettings.Descriptors.WindowPosition);
-        EditorSettingsManager.StaticProvider.Register(ExampleSettings.Descriptors.WindowSize);
+        EditorSettingsManager.StaticProvider.Register(Oxygen.Editor.Data.Models.ExampleSettings.Descriptors.WindowPosition);
+        EditorSettingsManager.StaticProvider.Register(Oxygen.Editor.Data.Models.ExampleSettings.Descriptors.WindowSize);
     }
 }
 ```
+
+#### File and namespace conventions
+
+- Generated files are named `{ClassName}.Generated.cs`. The generated code is placed in the same namespace as the original class.
+- Descriptors are nested in an `internal static class Descriptors` declared within the original partial class so they are discoverable by `ModuleSettings` at runtime.
+- The module initializer is `file static` to avoid naming collisions and to make the generated registration run as soon as the assembly loads.
 
 ## Generator Requirements
 
@@ -130,11 +159,16 @@ file static class ExampleSettingsInitializer
 - Class must be `partial`
 - Class must define `private new const string ModuleName`
 
+#### Implementation details
+
+- The incremental source generator inspects `TypeDeclarationSyntax` nodes and builds a semantic model to check for `ModuleSettings` derivation, `partial` modifier, and presence of `ModuleName` constant.
+- The generator emits diagnostics on the syntax/semantic nodes so the errors/warnings appear in the IDE.
+
 **Diagnostics:**
 
-- Error if class not partial: `SETGEN001: ModuleSettings class must be declared partial`
-- Error if ModuleName missing: `SETGEN002: Class must define 'private new const string ModuleName'`
-- Error if ModuleName not const: `SETGEN003: ModuleName must be a compile-time constant`
+- Error if class not partial: `OXGNPG001: ModuleSettings class must be declared partial`
+- Error if ModuleName missing: `OXGNPG002: Class must define 'private new const string ModuleName'`
+- Error if ModuleName not const: `OXGNPG003: ModuleName must be a compile-time constant`
 
 ### 2. Property Scanning
 
@@ -145,11 +179,17 @@ file static class ExampleSettingsInitializer
 - Property must have both getter and setter
 - Property type must be serializable
 
+#### Supported property shapes
+
+- Primitive types (string, numeric, bool), structs (e.g., `Point`, `Size`) and collections such as `List<T>` (where T itself is serializable) are supported when `System.Text.Json` can (de)serialize them.
+- If a type requires a custom converter, ensure converters are registered in `EditorSettingsManager` `JsonSerializerOptions` or use a serializer wrapper accepted by the manager.
+
 **Diagnostics:**
 
-- Warning if property not public: `SETGEN101: [Persisted] property must be public`
-- Warning if property read-only: `SETGEN102: [Persisted] property must have a setter`
-- Error if type not serializable: `SETGEN103: Property type must be JSON-serializable`
+- Warning if property not public: `OXGNPG101: [Persisted] property must be public`
+- Warning if property read-only: `OXGNPG102: [Persisted] property must have a setter`
+- Error if type not serializable: `OXGNPG103: Property type must be JSON-serializable`
+- Error if `[Persisted]` is used on a property inside a nested `ModuleSettings` class: `OXGNPG104: Nested ModuleSettings classes are not supported`
 
 ### 3. Attribute Extraction
 
@@ -188,9 +228,13 @@ file static class ExampleSettingsInitializer
 - Generate as array: `new ValidationAttribute[] { ... }`
 - Support multiple validators per property
 
+#### Implementation details
+
+- The generator mirrors validator construction by preserving constructor arguments and property initializers (e.g., `ErrorMessage`) into the generated `ValidationAttribute` initializer. It does not attempt to interpret validation semantics at generation time; validation occurs at runtime when `EditorSettingsManager` calls validators during `SaveSettingAsync`.
+
 **Diagnostics:**
 
-- Warning if validator has no parameters: `SETGEN201: Validator with no constraints has no effect`
+- Warning if validator has no parameters: `OXGNPG201: Validator with no constraints has no effect`
 
 ### 4. Descriptor Generation
 
@@ -201,6 +245,11 @@ file static class ExampleSettingsInitializer
 - Key module = `ModuleName` constant
 - Key name = `nameof(PropertyName)`
 - Descriptors nested in `internal static class Descriptors`
+
+#### Additional descriptor rules
+
+- Generated descriptors include `DisplayName`, `Description`, `Category` and `Validators` from attributes. If Display `Name` or `Description` is not present, the generator uses `nameof(property)` and null respectively.
+- When creating the `SettingKey<T>` we generate `new SettingKey<T>(ModuleName, nameof(Property))` to be robust to refactoring.
 
 **Type Mapping:**
 
@@ -224,6 +273,11 @@ public List<string> Tags { get; set; }
 - Annotate with `[ModuleInitializer]`
 - Register all descriptors with `EditorSettingsManager.StaticProvider.Register(...)`
 - One initializer per settings class
+
+Implementation details
+
+- The module initializer registers each generated `SettingDescriptor<T>` with `EditorSettingsManager.StaticProvider.Register(...)` so descriptors are available early in the app lifecycle.
+- The generator avoids any runtime ordering assumptions: registration is idempotent and thread-safe thanks to `ConcurrentDictionary` usage in the provider.
 
 **Example:**
 
@@ -250,16 +304,21 @@ file static class ExampleSettingsInitializer
 
 ### Compilation Errors (Block Build)
 
-- `SETGEN001`: Class not partial
-- `SETGEN002`: ModuleName constant missing
-- `SETGEN003`: ModuleName not const
-- `SETGEN103`: Property type not serializable
+- `OXGNPG001`: Class not partial
+- `OXGNPG002`: ModuleName constant missing
+- `OXGNPG003`: ModuleName not const
+- `OXGNPG103`: Property type not serializable
+
+Diagnostic improvements (suggestions)
+
+- When possible, provide a code fix suggestion: If a class is missing `partial`, offer a recommended quick fix to add `partial`. If `ModuleName` is missing, provide a template line for insertion: `private new const string ModuleName = "Your.Module.Name";`.
+- Consider adding an analyzer to detect duplicate manual `.Generated.cs` files and suggest migration.
 
 ### Warnings (Allow Build)
 
-- `SETGEN101`: Non-public [Persisted] property
-- `SETGEN102`: Read-only [Persisted] property
-- `SETGEN201`: Validator with no constraints
+- `OXGNPG101`: Non-public [Persisted] property
+- `OXGNPG102`: Read-only [Persisted] property
+- `OXGNPG201`: Validator with no constraints
 
 ## Testing Strategy
 
@@ -287,6 +346,11 @@ public void GeneratesDescriptorForPersistedProperty()
 }
 ```
 
+#### Integration concerns
+
+- The unit tests use Roslyn Source Generators test helpers to assert that generated code compiles and contains expected descriptors.
+- Integration tests assert that `EditorSettingsManager.StaticProvider` contains descriptors and that validator attributes are executed at runtime when saving values.
+
 ### Integration Tests
 
 ```csharp
@@ -311,6 +375,10 @@ public async Task GeneratedValidator_IsExecuted()
 }
 ```
 
+#### CI and developer testing
+
+- Add generator tests to CI to run on every pull request; prefer running generator-specific tests separately for speed. They are present under `projects/Oxygen.Editor.Data/Generators/tests`.
+
 ## Migration Path
 
 ### Phase 1: Manual Implementation (Current)
@@ -330,6 +398,12 @@ public async Task GeneratedValidator_IsExecuted()
 - Remove manual `.Generated.cs` files
 - Add analyzer to warn if manual files detected
 - Update documentation
+
+#### Migration checklist
+
+1. Remove manual `{ClassName}.Generated.cs` files after the generator is enabled and the project builds successfully.
+2. Ensure custom validators and converters are registered at runtime (Json converters in `EditorSettingsManager.JsonSerializerOptions`).
+3. Run integration tests to ensure descriptors are correctly discovered and validators executed as before.
 
 ## Benefits
 

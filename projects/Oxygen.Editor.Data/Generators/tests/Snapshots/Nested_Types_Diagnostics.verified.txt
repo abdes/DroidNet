@@ -1,14 +1,12 @@
 ﻿{
-  Outputs: [
-    {
-      HintName: Descriptors.Tests.g.cs,
-      Hash: 6664c10a7b6d04bbc2ccd44966daa7388f0274641674ce50abb076d9f1d9fb01
-    }
-  ],
   Diagnostics: [
     {
       Id: OXGNPG000,
       Message: Oxygen.Editor.Data.Generator started processing class 'Tests'
+    },
+    {
+      Id: OXGNPG104,
+      Message: Property 'Nested' in nested class 'Inner' is marked with [Persisted] but nested ModuleSettings classes are not supported
     }
   ]
 }

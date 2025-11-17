@@ -33,13 +33,13 @@ public sealed partial class MissingSetterSettings
 }
 
 /// <summary>
-/// Module initializer that registers MissingSetterSettings descriptors on assembly load.
+/// Assembly-level module initializer that registers all descriptors for this assembly on load.
 /// </summary>
-file static class MissingSetterSettingsInitializer
+file static class DescriptorsInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(MissingSetterSettings.Descriptors.Name);
+        EditorSettingsManager.StaticProvider.Register(Testing.MissingSetterSettings.Descriptors.Name);
     }
 }
