@@ -441,6 +441,12 @@ public partial class ProjectBrowserService : IProjectBrowserService
                     locationKey,
                     this.finder.UserDesktop)
                 .ConfigureAwait(true),
+
+            KnownLocations.LocalProjects => await LocationFromLocalFolderPathAsync(
+                    locationKey,
+                    this.finder.LocalProjects)
+                .ConfigureAwait(true),
+
             _ => throw new InvalidEnumArgumentException(nameof(locationKey), (int)locationKey, typeof(KnownLocations)),
         };
 

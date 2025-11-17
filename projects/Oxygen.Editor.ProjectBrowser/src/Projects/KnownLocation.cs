@@ -81,6 +81,7 @@ public class KnownLocation(
             case KnownLocations.Downloads:
             case KnownLocations.Documents:
             case KnownLocations.Desktop:
+            case KnownLocations.LocalProjects:
             default:
                 var thisFolder = await storage.GetFolderFromPathAsync(this.Location, cancellationToken).ConfigureAwait(true);
                 await foreach (var item in thisFolder.GetItemsAsync(cancellationToken).ConfigureAwait(true))

@@ -39,4 +39,9 @@ public enum KnownLocations
     /// The user Desktop folder.
     /// </summary>
     Desktop = 5,
+
+    /// <summary>
+    /// The local projects folder (Oxygen Editor local storage).
+    /// </summary>
+    LocalProjects = 6,
 }

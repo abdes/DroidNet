@@ -79,6 +79,7 @@ public partial class KnownLocationsListView : ListView
                 KnownLocations.Documents => "User Folders",
                 KnownLocations.Downloads => "User Folders",
                 KnownLocations.OneDrive => "User Folders",
+                KnownLocations.LocalProjects => "Local Storage",
                 KnownLocations.ThisComputer => "This Computer",
                 _ => throw new System.ComponentModel.InvalidEnumArgumentException(nameof(loc), (int)loc.Key, typeof(KnownLocations)),
             }))
@@ -92,7 +93,8 @@ public partial class KnownLocationsListView : ListView
                 {
                     "Recent Projects" => 0,
                     "User Folders" => 1,
-                    "This Computer" => 2,
+                    "Local Storage" => 2,
+                    "This Computer" => 3,
                     _ => throw new ArgumentException($"unexpected known locations group key: {group.Key}", nameof(group)),
                 },
                 Key = group.Key,
