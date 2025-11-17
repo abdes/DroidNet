@@ -79,7 +79,8 @@ public sealed partial class RecentProjectsList
     /// <summary>
     /// Sets the collection of recent projects.
     /// </summary>
-    public ObservableCollection<IProjectInfo> RecentProjects // TODO: This should become a dependency property
+    // TODO: This control should have a ViewModel, and it should get the collection from there.
+    public ObservableCollection<IProjectInfo> RecentProjects
     {
         set
         {

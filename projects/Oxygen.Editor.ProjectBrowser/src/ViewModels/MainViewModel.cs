@@ -24,10 +24,10 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
     private IActiveRoute? activeRoute;
 
     [ObservableProperty]
-    private object? currentNavigation;
+    public partial object? CurrentNavigation { get; set; }
 
     [ObservableProperty]
-    private int selectedItemIndex = InvalidItemIndex;
+    public partial int SelectedItemIndex { get; set; } = InvalidItemIndex;
 
     /// <summary>
     /// Gets the list of navigation items.
