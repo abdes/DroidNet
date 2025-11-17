@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
+using System.ComponentModel.DataAnnotations;
 using System.Drawing;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Validation;
@@ -35,6 +37,8 @@ public sealed partial class ExampleSettings : ModuleSettings
     /// Gets or sets the position of the window.
     /// </summary>
     [Persisted]
+    [Display(Name = "Window Position", Description = "The position of the window")]
+    [Category("Layout")]
     [PointBounds(0, int.MaxValue, 0, int.MaxValue, ErrorMessage = "X and Y coordinates must be non-negative.")]
     public Point WindowPosition
     {
@@ -46,6 +50,8 @@ public sealed partial class ExampleSettings : ModuleSettings
     /// Gets or sets the size of the window.
     /// </summary>
     [Persisted]
+    [Display(Name = "Window Size", Description = "The size of the window")]
+    [Category("Layout")]
     [SizeBounds(1, int.MaxValue, 1, int.MaxValue, ErrorMessage = "Width and Height must be positive.")]
     public Size WindowSize
     {

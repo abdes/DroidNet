@@ -1,0 +1,14 @@
+﻿{
+  Outputs: [
+    {
+      HintName: Descriptors.Tests.g.cs,
+      Hash: 93a13fe6ca5d2a48556e16deab2f2439935084ceb318b078950a27817d0c3369
+    }
+  ],
+  Diagnostics: [
+    {
+      Id: OXGNPG000,
+      Message: Oxygen.Editor.Data.Generator started processing class 'Tests'
+    }
+  ]
+}

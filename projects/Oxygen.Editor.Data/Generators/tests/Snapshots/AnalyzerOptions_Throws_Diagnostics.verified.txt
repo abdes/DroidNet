@@ -1,0 +1,15 @@
+﻿{
+  Diagnostics: [
+    {
+      Id: CS8785,
+      Message:
+Generator 'SettingDescriptorGenerator' failed to generate source. It will not contribute to the output and compilation errors may occur as a result. Exception was of type 'InvalidOperationException' with message 'Simulated Options Failure'.
+System.InvalidOperationException: Simulated Options Failure
+   at Oxygen.Editor.Data.Generators.Tests.TestHelper.ThrowingAnalyzerConfigOptions.TryGetValue(String key, String& value) in {ProjectDirectory}TestHelper.cs:line 108
+   at Oxygen.Editor.Data.Generators.SettingDescriptorGenerator.<>c.<Initialize>b__2_2(SourceProductionContext spc, ValueTuple`2 data) in {SolutionDirectory}Generators\src\SettingDescriptorGenerator.cs:line 48
+   at Microsoft.CodeAnalysis.UserFunctionExtensions.<>c__DisplayClass3_0`2.<WrapUserAction>b__0(TInput1 input1, TInput2 input2, CancellationToken token)
+-----
+
+    }
+  ]
+}

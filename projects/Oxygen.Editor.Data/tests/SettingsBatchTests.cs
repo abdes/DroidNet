@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using AwesomeAssertions;
 using DryIoc;
+using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
@@ -511,7 +512,6 @@ public class SettingsBatchTests : DatabaseTests
         {
         }
 
-        [Persisted]
         public string? MissingDescriptor
         {
             get => this.missingDescriptor;

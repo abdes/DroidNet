@@ -1,0 +1,18 @@
+﻿{
+  Outputs: [
+    {
+      HintName: Descriptors.Tests.g.cs,
+      Hash: 26370bc72f606bd0d3496a00ca05e94b97519152750721486e5c476ac20e2f97
+    }
+  ],
+  Diagnostics: [
+    {
+      Id: OXGNPG000,
+      Message: Oxygen.Editor.Data.Generator started processing class 'Tests'
+    },
+    {
+      Id: OXGNPG102,
+      Message: Property 'Name' in class 'MissingSetterSettings' is marked [Persisted] but has no setter
+    }
+  ]
+}

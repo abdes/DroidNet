@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Data.Models;
+namespace Oxygen.Editor.Data;
 
 /// <summary>
 /// Indicates that a property should be persisted by the <see cref="EditorSettingsManager"/>.
