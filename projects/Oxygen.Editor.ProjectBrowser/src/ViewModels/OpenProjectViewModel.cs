@@ -38,21 +38,6 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 
     private SortDescription? byDateSortDescription;
     private SortDescription? byNameSortDescription;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(GoToParentFolderCommand))]
-    private IFolder? currentFolder;
-
-    [ObservableProperty]
-    private string filterText = string.Empty;
-
-    [ObservableProperty]
-    private Dictionary<string, KnownLocation?> locations = [];
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CurrentFolder))]
-    private KnownLocation? selectedLocation;
-
     private bool knownLocationLoaded;
 
     /// <summary>
@@ -83,6 +68,20 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(DefaultSortDirection, new ByNameComparer()));
     }
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(GoToParentFolderCommand))]
+    public partial IFolder? CurrentFolder { get; set; }
+
+    [ObservableProperty]
+    public partial string FilterText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial Dictionary<string, KnownLocation?> Locations { get; set; } = [];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CurrentFolder))]
+    public partial KnownLocation? SelectedLocation { get; set; }
 
     /// <summary>
     /// Gets the list of known locations.

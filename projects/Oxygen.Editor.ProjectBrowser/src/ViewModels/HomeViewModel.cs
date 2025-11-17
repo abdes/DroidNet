@@ -42,7 +42,7 @@ public partial class HomeViewModel(
     private bool preloadedProjects;
 
     [ObservableProperty]
-    private ITemplateInfo? selectedTemplate;
+    public partial ITemplateInfo? SelectedTemplate { get; set; }
 
     /// <summary>
     /// Gets the collection of project templates.

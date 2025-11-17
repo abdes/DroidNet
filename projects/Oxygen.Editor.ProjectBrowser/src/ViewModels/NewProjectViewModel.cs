@@ -34,7 +34,7 @@ public partial class NewProjectViewModel(
     private bool preloaded;
 
     [ObservableProperty]
-    private ITemplateInfo? selectedItem;
+    public partial ITemplateInfo? SelectedItem { get; set; }
 
     /// <summary>
     /// Gets the collection of project templates.

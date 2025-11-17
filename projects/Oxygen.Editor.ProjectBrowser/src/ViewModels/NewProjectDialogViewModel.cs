@@ -12,30 +12,10 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// <summary>
 ///     ViewModel for the New Project dialog in the Oxygen Editor's Project Browser.
 /// </summary>
-public partial class NewProjectDialogViewModel : ObservableObject
+public partial class NewProjectDialogViewModel : ObservableObject, IDisposable
 {
-    // New properties for picker error display
-    [ObservableProperty]
-    private string feedbackMessage = string.Empty;
-
     // cancellation for the auto-hide timer
     private CancellationTokenSource? feedbackMessageCts;
-
-    [ObservableProperty]
-    private bool isFeedbackMessageVisible;
-
-    [ObservableProperty]
-    private IList<QuickSaveLocation> pinnedLocations;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsProjectNameValid))]
-    private string projectName;
-
-    [ObservableProperty]
-    private QuickSaveLocation selectedLocation;
-
-    [ObservableProperty]
-    private ITemplateInfo template;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="NewProjectDialogViewModel" /> class.
@@ -53,6 +33,25 @@ public partial class NewProjectDialogViewModel : ObservableObject
         this.FeedbackMessage = string.Empty;
         this.IsFeedbackMessageVisible = false;
     }
+
+    [ObservableProperty]
+    public partial string FeedbackMessage { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial bool IsFeedbackMessageVisible { get; set; }
+
+    [ObservableProperty]
+    public partial IList<QuickSaveLocation> PinnedLocations { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsProjectNameValid))]
+    public partial string ProjectName { get; set; }
+
+    [ObservableProperty]
+    public partial QuickSaveLocation SelectedLocation { get; set; }
+
+    [ObservableProperty]
+    public partial ITemplateInfo Template { get; set; }
 
     /// <summary>
     ///     Gets a value indicating whether the project name is valid.
@@ -114,6 +113,29 @@ public partial class NewProjectDialogViewModel : ObservableObject
 
         this.IsFeedbackMessageVisible = false;
         this.FeedbackMessage = string.Empty;
+    }
+
+    /// <summary>
+    ///     Releases resources used by the <see cref="NewProjectDialogViewModel"/>.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    ///     Releases unmanaged and optionally managed resources.
+    /// </summary>
+    /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.feedbackMessageCts?.Cancel();
+            this.feedbackMessageCts?.Dispose();
+            this.feedbackMessageCts = null;
+        }
     }
 
     /// <summary>
