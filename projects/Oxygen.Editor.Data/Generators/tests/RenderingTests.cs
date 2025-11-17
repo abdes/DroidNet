@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
+using AwesomeAssertions;
 using Microsoft.CodeAnalysis;
 
 namespace Oxygen.Editor.Data.Generators.Tests;
@@ -195,7 +196,7 @@ public sealed partial class Outer
         public string Nested { get; set; } = string.Empty;
     }
 }
-""", DisplayName = "Renders_Nested_Types")]
+""", DisplayName = "Rejects_Nested_Settings_Types")]
     [DataRow("Array_Typed_Primitive_And_Enum_Arguments", """
 namespace Testing;
 
@@ -340,6 +341,66 @@ public sealed partial class NewlineSettings : Oxygen.Editor.Data.Models.ModuleSe
             Outputs = outputs.Select(o => new { o.HintName }),
             Diagnostics = diagnostics,
         }).UseDirectory("Snapshots").UseFileName($"{testCase}_Diagnostics").ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    public async Task Generates_Sanitized_AssemblyUnique_Initializer_Name()
+    {
+        const string src = RuntimeStub + """
+namespace Testing;
+
+public sealed partial class SanitizeSettings : Oxygen.Editor.Data.Models.ModuleSettings
+{
+    private new const string ModuleName = "Testing";
+    [Oxygen.Editor.Data.Persisted]
+    public string Name { get; set; } = string.Empty;
+}
+""";
+
+        const string asmName = "123-My Complex.Assembly!Name";
+        var driver = TestHelper.CreateGeneratorDriver(src, assemblyName: asmName);
+        var result = driver.GetRunResult();
+        var outputs = result.Results.SelectMany(r => r.GeneratedSources.Select(g => new { g.HintName, Source = g.SourceText.ToString() })).ToArray();
+
+        // Compute expected initializer name using the same sanitizer logic
+        static string Sanitize(string name)
+        {
+            var n = string.IsNullOrEmpty(name) ? "GeneratedAssembly" : name;
+            var sb = new StringBuilder(n.Length);
+            for (var i = 0; i < n.Length; i++)
+            {
+                var ch = n[i];
+                if (char.IsLetterOrDigit(ch) || ch == '_')
+                {
+                    sb.Append(ch);
+                }
+                else
+                {
+                    sb.Append('_');
+                }
+            }
+
+            var safe = sb.ToString();
+            if (char.IsDigit(safe[0]))
+            {
+                safe = "_" + safe;
+            }
+
+            return $"DescriptorsInitializer_{safe}";
+        }
+
+        var expected = Sanitize(asmName);
+
+        if (outputs.Length == 0)
+        {
+            var diags = string.Join("; ", result.Diagnostics.Select(d => $"{d.Id}:{d.GetMessage(System.Globalization.CultureInfo.InvariantCulture)}"));
+            Assert.Fail($"Expected at least one generated source file, but got none. Diagnostics: {diags}");
+        }
+
+        // Ensure the expected initializer class is present in at least one generated file
+        _ = outputs.Should().Contain(
+            o => o.Source.Contains($"file static class {expected}", StringComparison.Ordinal),
+            $"Initializer '{expected}' not found in generated sources");
     }
 
     private static string ComputeHash(string s)

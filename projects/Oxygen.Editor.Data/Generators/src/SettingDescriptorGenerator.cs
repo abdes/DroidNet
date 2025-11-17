@@ -113,6 +113,7 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
         var model = new GeneratorModel
         {
             AssemblyName = asmName,
+            InitializerName = BuildInitializerName(asmName),
             Usings = [.. usings.OrderBy(x => x, StringComparer.Ordinal)],
             Namespaces = [.. namespaces.Values.OrderBy(n => n.Name, StringComparer.Ordinal)],
         };
@@ -330,12 +331,11 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
         return namespaces;
     }
 
+    // For now the generated descriptor types are emitted as top-level partial
+    // classes named by the containing type's simple name. Use the simple type
+    // name so the generated registration matches the generated type name.
     private static string BuildFullTypeName(INamedTypeSymbol containingType)
-    {
-        // For now the generated descriptor types are emitted as top-level partial classes named by the containing type's simple name.
-        // Use the simple type name so the generated registration matches the generated type name.
-        return containingType.Name;
-    }
+        => containingType.Name;
 
     private static void RenderAndAddSource(SourceProductionContext spc, GeneratorModel model, string asmName)
     {
@@ -352,8 +352,65 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
 
     private static string BuildHintFileName(string prefix, string asmName)
     {
-        var safeAsm = string.IsNullOrEmpty(asmName) ? "GeneratedAssembly" : asmName;
+        var safeAsm = BuildFileNameSafe(asmName);
         return $"{prefix}{safeAsm}.g.cs";
+    }
+
+    private static string BuildFileNameSafe(string asmName)
+    {
+        var name = string.IsNullOrEmpty(asmName) ? "GeneratedAssembly" : asmName;
+        var sb = new StringBuilder(name.Length);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var ch = name[i];
+
+            // Allow letters, digits, underscore, dash and dot in file names
+            if (char.IsLetterOrDigit(ch) || ch == '_' || ch == '-' || ch == '.')
+            {
+                sb.Append(ch);
+            }
+            else
+            {
+                sb.Append('_');
+            }
+        }
+
+        var safe = sb.ToString();
+        if (char.IsDigit(safe[0]))
+        {
+            safe = "_" + safe;
+        }
+
+        return safe;
+    }
+
+    private static string BuildInitializerName(string asmName)
+    {
+        var name = string.IsNullOrEmpty(asmName) ? "GeneratedAssembly" : asmName;
+
+        // Replace any invalid characters with underscore; allow letters, digits and underscore only.
+        var sb = new StringBuilder(name.Length);
+        for (var i = 0; i < name.Length; i++)
+        {
+            var ch = name[i];
+            if (char.IsLetterOrDigit(ch) || ch == '_')
+            {
+                sb.Append(ch);
+            }
+            else
+            {
+                sb.Append('_');
+            }
+        }
+
+        var safe = sb.ToString();
+
+        if (char.IsDigit(safe[0]))
+        {
+            safe = "_" + safe;
+        }
+
+        return $"DescriptorsInitializer_{safe}";
     }
 
     private static string GetEmbeddedResource(string path)
@@ -485,6 +542,8 @@ public sealed class SettingDescriptorGenerator : IIncrementalGenerator
     private sealed class GeneratorModel
     {
         public string AssemblyName { get; set; } = string.Empty;
+
+        public string InitializerName { get; set; } = string.Empty;
 
         public List<string> Usings { get; set; } = [];
 
