@@ -132,7 +132,7 @@ public sealed partial class ExampleSettings
     }
 }
 
-file static class DescriptorsInitializer
+    file static class DescriptorsInitializer_{SanitizedAssemblyName}
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
@@ -145,7 +145,7 @@ file static class DescriptorsInitializer
 
 #### File and namespace conventions
 
-- Generated files are named `{ClassName}.Generated.cs`. The generated code is placed in the same namespace as the original class.
+file static class DescriptorsInitializer_{SanitizedAssemblyName}
 - Descriptors are nested in an `internal static class Descriptors` declared within the original partial class so they are discoverable by `ModuleSettings` at runtime.
 - The module initializer is `file static` to avoid naming collisions and to make the generated registration run as soon as the assembly loads.
 
@@ -269,10 +269,10 @@ public List<string> Tags { get; set; }
 
 **Must:**
 
-- Create file-scoped static class: `file static class {ClassName}Initializer`
+- Create a file-scoped, assembly-unique static class: `file static class DescriptorsInitializer_{SanitizedAssemblyName}`
 - Annotate with `[ModuleInitializer]`
 - Register all descriptors with `EditorSettingsManager.StaticProvider.Register(...)`
-- One initializer per settings class
+- One initializer file per generated assembly
 
 Implementation details
 
@@ -282,7 +282,7 @@ Implementation details
 **Example:**
 
 ```csharp
-file static class ExampleSettingsInitializer
+file static class DescriptorsInitializer_YourAssemblyName
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()

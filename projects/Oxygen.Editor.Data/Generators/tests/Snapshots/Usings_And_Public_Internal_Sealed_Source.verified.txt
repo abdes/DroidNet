@@ -53,7 +53,7 @@ internal partial class InternalSettings
 /// <summary>
 /// Assembly-level module initializer that registers all descriptors for this assembly on load.
 /// </summary>
-file static class DescriptorsInitializer
+file static class DescriptorsInitializer_Tests
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
