@@ -17,6 +17,7 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// <summary>
 /// The ViewModel for the StartNewPage.
 /// </summary>
+/// <param name="router">The router for navigating between views.</param>
 /// <param name="templateService">The template service to be used to access project templates.</param>
 /// <param name="projectBrowserService">The project service to be used to access and manipulate projects.</param>
 /// <param name="loggerFactory">
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
 /// </param>
 public partial class NewProjectViewModel(
+    IRouter router,
     ITemplatesService templateService,
     IProjectBrowserService projectBrowserService,
     ILoggerFactory? loggerFactory = null)
@@ -55,7 +57,14 @@ public partial class NewProjectViewModel(
     {
         Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
-        return await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        var result = await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
+        if (!result)
+        {
+            return false;
+        }
+
+        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        return true;
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
