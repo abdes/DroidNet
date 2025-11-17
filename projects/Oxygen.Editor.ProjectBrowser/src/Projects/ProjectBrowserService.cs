@@ -10,6 +10,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
+using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Projects;
@@ -44,6 +46,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
     private readonly IOxygenPathFinder finder;
     private readonly IProjectManagerService projectManager;
     private readonly NativeStorageProvider localStorage;
+    private readonly IEditorSettingsManager settingsManager;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
     private readonly IProjectUsageService projectUsage;
@@ -82,12 +85,13 @@ public partial class ProjectBrowserService : IProjectBrowserService
         this.templateUsage = templateUsage;
         this.projectManager = projectManager;
         this.finder = finder;
+        this.settingsManager = settingsManager;
 
         this.lazySettings = new Lazy<Task<ProjectBrowserSettings>>(
             async () =>
             {
-                var settings = new ProjectBrowserSettings(settingsManager);
-                await settings.LoadAsync().ConfigureAwait(true);
+                var settings = new ProjectBrowserSettings();
+                await settings.LoadAsync(settingsManager).ConfigureAwait(true);
                 return settings;
             });
 
@@ -343,7 +347,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         try
         {
             this.Settings.LastSaveLocation = location;
-            await this.Settings.SaveAsync().ConfigureAwait(true);
+            await this.Settings.SaveAsync(this.settingsManager).ConfigureAwait(true);
         }
         catch (Exception ex)
         {

@@ -25,6 +25,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
+using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -100,6 +101,10 @@ public static partial class Program
 
                 var dbPath = container.Resolve<IOxygenPathFinder>().StateDatabasePath;
                 Log.Information("DB path: {DbPath}", dbPath);
+
+                // Apply pending migrations to ensure database schema is up to date
+                var persistentState = container.Resolve<PersistentState>();
+                persistentState.Database.MigrateAsync().GetAwaiter().GetResult();
 
                 RegisterViewsAndViewModels(container);
             }
@@ -236,8 +241,15 @@ public static partial class Program
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
         container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
-        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Transient);
-        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Transient);
+
+        // Register editor data persistence services
+        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton);
+        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);
+        container.RegisterDelegate<ITemplateUsageService>(
+            resolver => new TemplateUsageService(
+                () => resolver.Resolve<PersistentState>(),
+                resolver.Resolve<IMemoryCache>()),
+            Reuse.Singleton);
 
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
@@ -250,7 +262,6 @@ public static partial class Program
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
-        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton);
         container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Transient);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 
