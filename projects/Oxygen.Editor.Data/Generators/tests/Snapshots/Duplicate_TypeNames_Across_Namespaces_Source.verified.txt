@@ -31,19 +31,6 @@ public sealed partial class DuplicateNames
         };
     }
 }
-
-/// <summary>
-/// Module initializer that registers DuplicateNames descriptors on assembly load.
-/// </summary>
-file static class DuplicateNamesInitializer
-{
-    [System.Runtime.CompilerServices.ModuleInitializer]
-    internal static void Initialize()
-    {
-        EditorSettingsManager.StaticProvider.Register(DuplicateNames.Descriptors.Name);
-    }
-}
-
 namespace Two;
 public sealed partial class DuplicateNames
 {
@@ -64,13 +51,14 @@ public sealed partial class DuplicateNames
 }
 
 /// <summary>
-/// Module initializer that registers DuplicateNames descriptors on assembly load.
+/// Assembly-level module initializer that registers all descriptors for this assembly on load.
 /// </summary>
-file static class DuplicateNamesInitializer
+file static class DescriptorsInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(DuplicateNames.Descriptors.Age);
+        EditorSettingsManager.StaticProvider.Register(One.DuplicateNames.Descriptors.Name);
+        EditorSettingsManager.StaticProvider.Register(Two.DuplicateNames.Descriptors.Age);
     }
 }

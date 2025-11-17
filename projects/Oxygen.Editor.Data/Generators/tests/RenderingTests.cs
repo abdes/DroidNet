@@ -231,6 +231,23 @@ public sealed partial class ArrayNamedArgSettings : Oxygen.Editor.Data.Models.Mo
     public string Name { get; set; }
 }
 """, DisplayName = "Renders_Validators_With_ArrayNamedArgs")]
+    [DataRow("Multiple_Classes", """
+namespace Testing;
+
+public sealed partial class SettingsOne : Oxygen.Editor.Data.Models.ModuleSettings
+{
+    private new const string ModuleName = "SettingsOne";
+    [Oxygen.Editor.Data.Persisted]
+    public string Name { get; set; } = string.Empty;
+}
+
+public sealed partial class SettingsTwo : Oxygen.Editor.Data.Models.ModuleSettings
+{
+    private new const string ModuleName = "SettingsTwo";
+    [Oxygen.Editor.Data.Persisted]
+    public int Age { get; set; }
+}
+""", DisplayName = "Renders_Multiple_Classes")]
     public async Task Renders(string testCaseName, string sourceCode)
         => await this.RunGeneratorTestAsync(testCaseName, RuntimeStub + sourceCode).ConfigureAwait(false);
 

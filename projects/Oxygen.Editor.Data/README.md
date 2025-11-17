@@ -74,43 +74,53 @@ The module uses Entity Framework Core with SQLite for local-first, zero-configur
 
 ### High-Level Design
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│  (ViewModels, Controllers, UI Components)                    │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Service Layer                             │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────┐│
-│  │EditorSettings    │  │ProjectUsage      │  │TemplateUsage││
-│  │Manager           │  │Service           │  │Service       ││
-│  └────────┬─────────┘  └────────┬─────────┘  └─────┬──────┘│
-│           │                     │                    │        │
-│           └─────────────────────┼────────────────────┘        │
-│                                 │                             │
-│                    ┌────────────▼──────────────┐              │
-│                    │  Caching Layer             │              │
-│                    │  (MemoryCache/Dictionary)  │              │
-│                    └────────────┬──────────────┘              │
-└─────────────────────────────────┼───────────────────────────┘
-                                  │
-                                  ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Data Access Layer (EF Core)                 │
-│                    PersistentState (DbContext)               │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
-│  │ Settings     │  │ ProjectsUsage│  │ TemplatesUsage   │  │
-│  │ (DbSet)      │  │ (DbSet)      │  │ Records (DbSet)  │  │
-│  └──────────────┘  └──────────────┘  └──────────────────┘  │
-└─────────────────────────────────────┬───────────────────────┘
-                                      │
-                                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                       SQLite Database                        │
-│                   PersistentState.db                         │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    %% Application Layer
+    subgraph App["Application Layer"]
+        direction TB
+        A["ViewModels<br/>Controllers<br/>UI Components"]
+    end
+
+    %% Service Layer - arranged in columns
+    subgraph Services["Service Layer"]
+        direction LR
+        SM["EditorSettingsManager"]
+        PU["ProjectUsageService"]
+        TU["TemplateUsageService"]
+    end
+
+    %% Caching Layer
+    subgraph Cache["Caching Layer"]
+        direction TB
+        CacheNode["MemoryCache / Dictionary"]
+    end
+
+    %% Data Access Layer (EF Core)
+    subgraph DAL["Data Access Layer (EF Core)"]
+        direction LR
+        DB["PersistentState<br/>(DbContext)"]
+        S["Settings<br/>(DbSet)"]
+        P["ProjectUsageRecords<br/>(DbSet)"]
+        T["TemplatesUsageRecords<br/>(DbSet)"]
+    end
+
+    SQL["SQLite Database<br/>PersistentState.db"]
+
+    %% Connections
+    A --> SM
+    A --> PU
+    A --> TU
+
+    SM --> CacheNode
+    PU --> CacheNode
+    TU --> CacheNode
+
+    CacheNode --> DB
+    DB --> S
+    DB --> P
+    DB --> T
+    DB --> SQL
 ```
 
 ### Design Patterns
@@ -300,11 +310,17 @@ var theme = await settingsManager.LoadSettingAsync<string>(new Oxygen.Editor.Dat
 var height = await settingsManager.LoadSettingAsync(new Oxygen.Editor.Data.Settings.SettingKey<int>("MyModule", "WindowHeight"), 1080);
 ```
 
-**Custom settings class with [Persisted] attributes:**
+**Custom settings class with [Persisted] attributes (and generated descriptors):**
 
 ```csharp
-public class EditorSettings : ModuleSettings
+public sealed partial class EditorSettings : ModuleSettings
 {
+    // IMPORTANT: To use the settings source generator, make the class `partial` and define a
+    // private new const string ModuleName that will be used to generate typed SettingKeys.
+    private new const string ModuleName = "Oxygen.Editor.Data.Editor";
+
+    public EditorSettings() : base(ModuleName) { }
+
     [Persisted]
     public string Theme { get; set; } = "Light";
 
@@ -316,50 +332,45 @@ public class EditorSettings : ModuleSettings
 
     // Not persisted (no attribute)
     public bool IsDirtyFlag { get; set; }
-
-    public EditorSettings(IEditorSettingsManager manager)
-        : base(manager, "Editor")
-    {
-    }
 }
 
 // Usage
-var settings = new EditorSettings(settingsManager);
-await settings.LoadAsync();
+var settings = new EditorSettings();
+await settings.LoadAsync(settingsManager);
 
 settings.Theme = "Dark";
 settings.AutoSaveInterval = 600;
 
 if (settings.IsDirty)
 {
-    await settings.SaveAsync();
+    await settings.SaveAsync(settingsManager);
 }
 ```
 
 **Windowed module settings:**
 
 ```csharp
-public class DockingModuleSettings : WindowedModuleSettings
+public sealed partial class DockingModuleSettings : WindowedModuleSettings
 {
+    private new const string ModuleName = "Oxygen.Editor.Data.Docking";
+
+    public DockingModuleSettings() : base(ModuleName) { }
+
     [Persisted]
     public string LayoutFile { get; set; } = "default.layout";
-
-    public DockingModuleSettings(IEditorSettingsManager manager)
-        : base(manager, "Docking")
-    {
-    }
+    // WindowPosition and WindowSize are automatically persisted/described
 }
 
 // Usage
-var settings = new DockingModuleSettings(settingsManager);
-await settings.LoadAsync();
+var settings = new DockingModuleSettings();
+await settings.LoadAsync(settingsManager);
 
 // WindowPosition and WindowSize are automatically persisted
 settings.WindowPosition = new Point(100, 100);
 settings.WindowSize = new Size(1920, 1080);
 settings.LayoutFile = "custom.layout";
 
-await settings.SaveAsync();
+await settings.SaveAsync(settingsManager);
 ```
 
 **Change notifications:**
@@ -375,6 +386,21 @@ using var subscription = settingsManager
         // Update UI
     });
 ```
+
+---
+
+### Settings Source Generator
+
+This project provides a compile-time source generator that automatically builds typed `SettingDescriptor<T>` instances and registers them with the static provider.
+
+Highlights:
+
+- The generator scans `partial` classes that inherit from `ModuleSettings` and require a `private new const string ModuleName` to build keys.
+- For each property annotated with `[Persisted]`, the generator emits a typed `SettingDescriptor<T>` and registers it via a file-scoped module initializer.
+- `Display`, `Category`, and validation attributes are preserved in the generated descriptors.
+- Diagnostic codes: errors like `SETGEN001`/`SETGEN002`/`SETGEN103` and warnings like `SETGEN101`/`SETGEN102`/`SETGEN201` help guide correct usage.
+
+See `projects/Oxygen.Editor.Data/docs/source-generator.md` for the full design and `projects/Oxygen.Editor.Data/Generators/README.md` for a compact developer summary.
 
 ## Data Model
 
@@ -562,6 +588,13 @@ See [`.github/instructions/csharp_coding_style.instructions.md`](../../.github/i
 - **Integration Tests** — Full service layer with in-memory SQLite database
 - **Migration Tests** — Verify Up/Down migrations apply cleanly
 
+### Generator Tests
+
+- Descriptor generation for persisted properties
+- Diagnostics produced for invalid classes or properties
+- Integration scenarios to ensure descriptors are registered and validator attributes run at runtime
+Be sure to run these tests during changes to the generator itself.
+
 **Test framework:** MSTest with AwesomeAssertions
 
 **Mocking:** Moq for service dependencies, `Testably.Abstractions.Testing` for filesystem
@@ -571,6 +604,9 @@ See [`.github/instructions/csharp_coding_style.instructions.md`](../../.github/i
 ```powershell
 # Run all tests
 dotnet test projects/Oxygen.Editor.Data/tests
+
+# Run generator tests only
+dotnet test projects/Oxygen.Editor.Data/Generators/tests
 
 # Run with coverage
 dotnet test projects/Oxygen.Editor.Data/tests /p:CollectCoverage=true
@@ -589,6 +625,12 @@ Contributions are welcome! This project follows DroidNet repository conventions.
    ```
 
 2. **Make changes following coding standards**
+
+     - If you modify the source generator or attribute code, run generator unit tests:
+
+         ```powershell
+         dotnet test projects/Oxygen.Editor.Data/Generators/tests
+         ```
 
 3. **Add tests** (when test infrastructure exists)
 

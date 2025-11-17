@@ -14,16 +14,33 @@ using System.Runtime.CompilerServices;
 #nullable enable
 
 namespace Testing;
-public sealed partial class NullableSettings
+public sealed partial class SettingsOne
 {
     /// <summary>
-    /// Setting descriptors for NullableSettings properties.
+    /// Setting descriptors for SettingsOne properties.
     /// </summary>
     internal static class Descriptors
     {
-        public static readonly SettingDescriptor<int?> NullableInt = new()
+        public static readonly SettingDescriptor<string> Name = new()
         {
-            Key = new SettingKey<int?>(ModuleName, nameof(NullableInt)),
+            Key = new SettingKey<string>(ModuleName, nameof(Name)),
+            DisplayName = null,
+            Description = null,
+            Category = null,
+            Validators = new ValidationAttribute[] {  },
+        };
+    }
+}
+public sealed partial class SettingsTwo
+{
+    /// <summary>
+    /// Setting descriptors for SettingsTwo properties.
+    /// </summary>
+    internal static class Descriptors
+    {
+        public static readonly SettingDescriptor<int> Age = new()
+        {
+            Key = new SettingKey<int>(ModuleName, nameof(Age)),
             DisplayName = null,
             Description = null,
             Category = null,
@@ -40,6 +57,7 @@ file static class DescriptorsInitializer
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(Testing.NullableSettings.Descriptors.NullableInt);
+        EditorSettingsManager.StaticProvider.Register(Testing.SettingsOne.Descriptors.Name);
+        EditorSettingsManager.StaticProvider.Register(Testing.SettingsTwo.Descriptors.Age);
     }
 }

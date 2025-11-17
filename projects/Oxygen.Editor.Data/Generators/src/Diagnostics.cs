@@ -113,6 +113,17 @@ internal static class Diagnostics
         isEnabledByDefault: true);
 
     /// <summary>
+    /// Diagnostic error for properties on nested ModuleSettings classes decorated with Persisted.
+    /// </summary>
+    public static readonly DiagnosticDescriptor PersistedPropertyNested = new(
+        id: "OXGNPG104",
+        title: "Nested ModuleSettings are not supported",
+        messageFormat: "Property '{0}' in nested class '{1}' is marked with [Persisted] but nested ModuleSettings classes are not supported",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
     /// Diagnostic warning when a ValidationAttribute has no meaningful parameters.
     /// </summary>
     public static readonly DiagnosticDescriptor ValidatorNoEffect = new(

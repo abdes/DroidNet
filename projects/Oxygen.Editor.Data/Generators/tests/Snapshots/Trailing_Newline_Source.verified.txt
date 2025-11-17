@@ -33,13 +33,13 @@ public sealed partial class NewlineSettings
 }
 
 /// <summary>
-/// Module initializer that registers NewlineSettings descriptors on assembly load.
+/// Assembly-level module initializer that registers all descriptors for this assembly on load.
 /// </summary>
-file static class NewlineSettingsInitializer
+file static class DescriptorsInitializer
 {
     [System.Runtime.CompilerServices.ModuleInitializer]
     internal static void Initialize()
     {
-        EditorSettingsManager.StaticProvider.Register(NewlineSettings.Descriptors.Name);
+        EditorSettingsManager.StaticProvider.Register(Testing.NewlineSettings.Descriptors.Name);
     }
 }

@@ -2,7 +2,7 @@
   Outputs: [
     {
       HintName: Descriptors.Tests.g.cs,
-      Hash: caaf532c6af22f20b71236f0bdc4ff46ff82410ea5748c91b179cfc36857ef02
+      Hash: ba380537a130e29d5d85ef86ef0d1c0a4bf42815f5db90162deb2124029fcaef
     }
   ],
   Diagnostics: [
