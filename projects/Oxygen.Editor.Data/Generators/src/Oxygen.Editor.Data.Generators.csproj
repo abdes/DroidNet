@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+How to setup source generator project
+https://stackoverflow.com/questions/74915263/c-sharp-source-generator-filenotfoundexception-could-not-load-file-or-assembly
+https://github.com/dotnet/roslyn/issues/52017#issuecomment-1046216200
+https://github.com/amis92/csharp-source-generators
+-->
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+
+        <!--
+            Must override this to false from the Directory.Build.props or Nuget will refuse to make
+            the package because we are not shipping the assembly in the usual lib directory for a
+            generator. Instead we ship it in the analyzers/dotnet/cs directory.
+        -->
+        <IncludeSymbols>false</IncludeSymbols>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <DevelopmentDependency>true</DevelopmentDependency>
+
+        <Title>
+            Source generator for setting descriptors used for Oxygen Editor persistence of its
+            module settings.
+        </Title>
+        <Description>Generates setting descriptors for Oxygen Editor module settings.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>localization;oxygen;editor;data;persistent;generator</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+
+        <RootNamespace>Oxygen.Editor.Data.Generators</RootNamespace>
+        <!-- Indicate this is an analyzer package -->
+        <PackageType>Analyzer</PackageType>
+    </PropertyGroup>
+
+    <!-- Suppress warning about including analyzer assemblies in the lib folder -->
+    <PropertyGroup>
+        <NoWarn>NU5128</NoWarn>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <None Remove="Templates\**\*.hbs" />
+        <EmbeddedResource Include="Templates\**\*.hbs" />
+    </ItemGroup>
+
+    <!-- Required for any analyzer / generator -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all"
+            IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    </ItemGroup>
+
+    <!-- Required for laoding the analyzers dependencies, when the analyzer is being used as a project reference -->
+    <ItemGroup>
+        <PackageReference Include="System.Runtime.Loader" PrivateAssets="all" />
+    </ItemGroup>
+
+    <!--
+        Generator external dependencies. These must all be referenced with GeneratePathProperty="true"
+        and PrivateAssets="all". Runtime dependencies are embedded to keep consuming project outputs
+        clean while ensuring the analyzer can load them at runtime.
+
+        NOTE: May need to also add any transitive dependencies.
+    -->
+    <ItemGroup>
+        <PackageReference Include="Handlebars.Net" GeneratePathProperty="true" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Reference the attributes from the generator to compile against them. -->
+        <!-- Ensure we specify PrivateAssets so the NuGet doesn't have any dependencies on that package. -->
+        <ProjectReference
+            Include="$(ProjectsRoot)\Oxygen.Editor.Data\Attributes\src\Oxygen.Editor.Data.Generators.Attributes.csproj"
+            PrivateAssets="all" />
+    </ItemGroup>
+
+    <!--
+        Embed the dependency so the generator can always load it (project references, shadow copy).
+        Also pack the raw DLL in analyzers/dotnet/cs so Roslyn can find it when consuming the NuGet.
+        Keeping both ensures every scenario (local dev, CI, NuGet consumers) resolves Handlebars.
+    -->
+    <ItemGroup Condition=" '$(PKGHandlebars_Net)' != '' ">
+        <EmbeddedResource Include="$(PKGHandlebars_Net)\lib\netstandard2.0\Handlebars.dll">
+            <LogicalName>Oxygen.Editor.Data.Generators.Dependencies.Handlebars.dll</LogicalName>
+        </EmbeddedResource>
+        <None Include="$(PKGHandlebars_Net)\lib\netstandard2.0\Handlebars.dll"
+            Pack="true"
+            PackagePath="analyzers/dotnet/cs"
+            Visible="false" />
+    </ItemGroup>
+
+    <!--
+        Ensure the analyzer dll is included under the 'analyzers/dotnet/cs' folder in the generated
+        NuGet package. We will also add the '.pdb' file if symbols are being included.
+    -->
+    <PropertyGroup>
+        <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+    </PropertyGroup>
+    <Target Name="GetDependencyTargetPaths" BeforeTargets="Pack">
+        <ItemGroup>
+            <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true"
+                PackagePath="analyzers/dotnet/cs" Visible="false" />
+            <!-- The repo's Common.props controls IncludeSymbols, so we only add it if present. -->
+            <None Include="$([System.IO.Path]::Combine('$(OutputPath)','$(AssemblyName).pdb'))"
+                Condition="'$(IncludeSymbols)' == 'true'" Pack="true"
+                PackagePath="analyzers/dotnet/cs" Visible="false" />
+        </ItemGroup>
+    </Target>
+
+</Project>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!-- https://andrewlock.net/creating-a-source-generator-part-8-solving-the-source-generator-marker-attribute-problem-part2/ -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>netstandard2.0</TargetFrameworks>
+
+        <Title>Attributes for Oxygen.Editor.Data generators</Title>
+        <Description>Contains the implementation of the annotation Attributes for Oxygen.Editor.Data generators.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>localization;oxygen;editor;data;persistent;generator</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+
+        <RootNamespace>Oxygen.Editor.Data</RootNamespace>
+    </PropertyGroup>
+
+</Project>

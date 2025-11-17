@@ -1,0 +1,13 @@
+﻿{
+  Outputs: [
+    {
+      HintName: Descriptors.Tests.g.cs
+    }
+  ],
+  Diagnostics: [
+    {
+      Id: OXGNPG000,
+      Message: Oxygen.Editor.Data.Generator started processing class 'Tests'
+    }
+  ]
+}
