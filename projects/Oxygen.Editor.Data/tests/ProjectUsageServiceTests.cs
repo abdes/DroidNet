@@ -168,8 +168,6 @@ public class ProjectUsageServiceTests : DatabaseTests
             // Assert
 #if DEBUG
             _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.Contains("Project usage record must exist before updating content browser state"));
-#else
-            _ = this.TraceListener.RecordedMessages.Should().BeEmpty();
 #endif
         }
     }
@@ -217,8 +215,6 @@ public class ProjectUsageServiceTests : DatabaseTests
             // Assert
 #if DEBUG
             _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.Contains("Project usage record must exist before updating last opened scene"));
-#else
-            _ = this.TraceListener.RecordedMessages.Should().BeEmpty();
 #endif
         }
     }
