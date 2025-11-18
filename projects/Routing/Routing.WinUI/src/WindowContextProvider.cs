@@ -40,6 +40,8 @@ namespace DroidNet.Routing.WinUI;
 /// <seealso cref="HostBuilderExtensions.ConfigureRouter"/>
 internal sealed class WindowContextProvider(IContainer container) : IContextProvider<NavigationContext>
 {
+    private readonly IContainer container = container;
+
     /// <inheritdoc />
     public event EventHandler<ContextEventArgs>? ContextChanged;
 
@@ -49,9 +51,9 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
     /// <inheritdoc />
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
-    /// <inheritdoc cref="ContextForTarget(Target, NavigationContext?)"/>
-    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null)
-        => this.ContextForTarget(target, currentContext as NavigationContext);
+    /// <inheritdoc />
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null, NavigationOptions? options = null)
+        => this.ContextForTarget(target, currentContext as NavigationContext, options);
 
     /// <summary>
     /// Creates a navigation context for the specified target.
@@ -60,6 +62,7 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
     /// <param name="currentContext">
     /// The current navigation context, if any. Used to optimize context reuse.
     /// </param>
+    /// <param name="options">The navigation options for this navigation, if any. Used to extract target-replacement instructions.</param>
     /// <returns>
     /// A navigation context for the specified target. If <paramref name="currentContext"/> refers
     /// to the same window as would be created for <paramref name="target"/>, returns the current
@@ -76,23 +79,28 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
     /// context lifecycle events.
     /// </para>
     /// </remarks>
-    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
+    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null, NavigationOptions? options = null)
     {
         Debug.Assert(
             currentContext is null or WindowNavigationContext,
             "expecting the router context to have been created by me");
 
-        var window = container.Resolve<Window>(serviceKey: target);
+        var window = this.container.Resolve<Window>(serviceKey: target);
 
         // If the current context is valid, and we're getting the same Window
         // instance than what we currently have, we just reuse the current
         // context as if the target were "_self".
-        if (currentContext != null && (currentContext as WindowNavigationContext)?.Window == window)
+        if (currentContext != null && Equals((currentContext as WindowNavigationContext)?.Window, window))
         {
             return currentContext;
         }
 
-        var context = new WindowNavigationContext(target, window);
+        // Extract ReplaceTarget from FullNavigation options if present
+        var replaceTarget = (options as FullNavigation)?.ReplaceTarget ?? false;
+
+        // Pass the current context's window as FromTarget (the source window)
+        var sourceWindow = (currentContext as WindowNavigationContext)?.Window;
+        var context = new WindowNavigationContext(target, window, sourceWindow, replaceTarget);
         this.ContextCreated?.Invoke(this, new ContextEventArgs(context));
         window.Activated += (_, args) =>
         {
@@ -115,9 +123,16 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
     /// </summary>
     /// <param name="context">The context to activate.</param>
     /// <remarks>
+    /// <para>
     /// When a context is activated, its associated window is brought to the foreground using
     /// the WinUI window activation API. This triggers the window's Activated event, which in
     /// turn raises the appropriate context change notifications.
+    /// </para>
+    /// <para>
+    /// If the context has ReplaceTarget set to true, the window for the FromTarget will be closed
+    /// before activating the new context. This is used in multi-window scenarios where the source
+    /// window should close when navigating to a new window.
+    /// </para>
     /// </remarks>
     public void ActivateContext(INavigationContext context)
     {
@@ -125,6 +140,12 @@ internal sealed class WindowContextProvider(IContainer container) : IContextProv
 
         if (context is WindowNavigationContext c)
         {
+            // If ReplaceTarget is set and FromTarget is a window, close the source window
+            if (c.ReplaceTarget && c.FromTarget is Window sourceWindow)
+            {
+                sourceWindow.Close();
+            }
+
             c.Window.Activate();
         }
     }

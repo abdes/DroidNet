@@ -51,14 +51,14 @@ internal sealed partial class LocalRouterContextProvider : IContextProvider<Navi
     public event EventHandler<ContextEventArgs>? ContextDestroyed;
 
     /// <inheritdoc/>
-    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null)
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null, NavigationOptions? options = null)
         => this.theContext;
 
     /// <inheritdoc/>
     public void ActivateContext(INavigationContext context) => _ = context;
 
     /// <inheritdoc/>
-    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
+    public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null, NavigationOptions? options = null)
         => this.theContext;
 
     /// <inheritdoc/>
