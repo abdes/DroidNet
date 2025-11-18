@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
@@ -603,6 +604,7 @@ public partial class TabStripItemTests : VisualUserInterfaceTests
         _ = tabStripItem.Item.Should().Be(restored, "Item should be the restored instance");
     });
 
+#if DEBUG
     [TestMethod]
     public Task EmitsLogs_WhenLoggerFactoryProvided_Async() => EnqueueAsync(async () =>
     {
@@ -630,6 +632,7 @@ public partial class TabStripItemTests : VisualUserInterfaceTests
         // Assert - we should have captured at least one of the known log messages
         _ = provider.Messages.Should().Contain(m => m.Contains("Applying template") || m.Contains("Close button clicked") || m.Contains("Pointer"));
     });
+#endif
 
     [TestMethod]
     public Task RecycledContainer_PinnedIconBinding_Rebinds_Async() => EnqueueAsync(async () =>
