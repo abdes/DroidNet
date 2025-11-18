@@ -137,7 +137,7 @@ public sealed class RouterOptimizerTests : IDisposable
         newParams.AddOrUpdate("id", "2");
 
         var previousRoute = CreateRoute("root", OutletName.Primary, typeof(TestHostViewModel), new TestHostViewModel(), previousParams);
-        var newRoute = CreateRoute("root", OutletName.Primary, typeof(TestHostViewModel), null, newParams);
+        var newRoute = CreateRoute("root", OutletName.Primary, typeof(TestHostViewModel), instance: null, newParams);
 
         // Act
         this.InvokeMarkAlreadyActivatedRoutes(newRoute, previousRoute);
@@ -196,7 +196,7 @@ public sealed class RouterOptimizerTests : IDisposable
         var newRoute = CreateRoute("root", OutletName.Primary, typeof(TestHostViewModel));
 
         // Act
-        this.InvokeMarkAlreadyActivatedRoutes(newRoute, null);
+        this.InvokeMarkAlreadyActivatedRoutes(newRoute, previous: null);
 
         // Assert
         _ = newRoute.IsActivated.Should().BeFalse();
@@ -220,8 +220,8 @@ public sealed class RouterOptimizerTests : IDisposable
                 Children = new Routes([]),
             },
             Outlet = outlet,
-            Params = parameters ?? new Parameters(),
-            QueryParams = queryParameters ?? new Parameters(),
+            Params = parameters ?? [],
+            QueryParams = queryParameters ?? [],
             Segments = [],
             SegmentGroup = new UrlSegmentGroup([]),
             ViewModel = instance ?? viewModelType,
@@ -245,7 +245,7 @@ public sealed class RouterOptimizerTests : IDisposable
         public string Serialize(IUrlTree tree) => string.Empty;
     }
 
-    private sealed class TestContextProvider : IContextProvider<NavigationContext>
+    private sealed class TestContextProvider : IContextProvider<NavigationContext>, IContextProvider
     {
         public event EventHandler<ContextEventArgs>? ContextChanged
         {
@@ -266,25 +266,26 @@ public sealed class RouterOptimizerTests : IDisposable
         }
 
         public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null)
-            => currentContext ?? new NavigationContext(target, new object());
+        {
+            _ = this;
+            return currentContext ?? new NavigationContext(target, new object());
+        }
 
-        INavigationContext IContextProvider.ContextForTarget(Target target, INavigationContext? currentContext)
-            => this.ContextForTarget(target, currentContext as NavigationContext);
+        public NavigationContext ContextForTarget(Target target, NavigationContext? currentContext = null, NavigationOptions? options = null)
+            => this.ContextForTarget(target, currentContext);
+
+        INavigationContext IContextProvider.ContextForTarget(Target target, INavigationContext? currentContext, NavigationOptions? options)
+            => this.ContextForTarget(target, currentContext as NavigationContext, options);
 
         public void ActivateContext(NavigationContext context)
         {
         }
 
         void IContextProvider.ActivateContext(INavigationContext context)
-        {
-        }
+            => this.ActivateContext((NavigationContext)context);
     }
 
-    private sealed class TestHostViewModel
-    {
-    }
+    private sealed class TestHostViewModel;
 
-    private sealed class TestChildViewModel
-    {
-    }
+    private sealed class TestChildViewModel;
 }
