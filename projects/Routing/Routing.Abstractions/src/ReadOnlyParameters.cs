@@ -78,6 +78,15 @@ public class ReadOnlyParameters : IParameters
     /// <inheritdoc/>
     public string?[]? GetValues(string name) => this.parameters.GetValues(name);
 
+    /// <inheritdoc />
+    public bool Equals(IParameters? other) => this.parameters.Equals(other);
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => obj is IParameters other && this.Equals(other);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => this.parameters.GetHashCode();
+
     /// <summary>
     /// Gets an enumerator that iterates through the parameters collection.
     /// </summary>

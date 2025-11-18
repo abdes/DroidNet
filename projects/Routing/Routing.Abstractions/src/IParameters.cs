@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+
 namespace DroidNet.Routing;
 
 /// <summary>
@@ -88,7 +90,7 @@ namespace DroidNet.Routing;
 /// that multiple values are handled correctly, either as comma-separated lists or repeated parameters.
 /// </para>
 /// </remarks>
-public interface IParameters : IEnumerable<Parameter>
+public interface IParameters : IEnumerable<Parameter>, IEquatable<IParameters>
 {
     /// <summary>
     /// Gets the number of distinct parameter names in the collection.
