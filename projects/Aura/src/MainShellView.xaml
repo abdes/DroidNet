@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="DroidNet.Aura.MainShellView"
@@ -46,7 +46,7 @@
         <Grid
             x:Name="CustomTitleBar"
             Background="Transparent"
-            Visibility="{x:Bind ViewModel.Context.Decorations.ChromeEnabled, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
+            Visibility="{x:Bind ViewModel.ShowCustomTitleBar, Mode=OneWay, Converter={StaticResource BoolToVis}, FallbackValue=Visible}">
             <Grid.RowDefinitions>
                 <RowDefinition x:Name="TitleBarRow" />
                 <RowDefinition x:Name="DocumentTabsRow" />
