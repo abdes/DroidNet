@@ -17,7 +17,7 @@ public class RouteActivatorTests
     private const string TestTarget = "test-target";
     private readonly Mock<DummyRouteActivator> activatorMock;
     private readonly AbstractRouteActivator activator;
-    private readonly Mock<NavigationContext> contextMock = new(Target.Main, TestTarget);
+    private readonly Mock<NavigationContext> contextMock = new([Target.Main, TestTarget, new object(), false]);
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RouteActivatorTests"/> class.
