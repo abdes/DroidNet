@@ -71,6 +71,7 @@ public sealed class RouterContextManager : IDisposable
     /// The target for which to get the router context. This can be <see langword="null"/>, <see cref="Target.Self"/>,
     /// <see cref="Target.Main"/>, or any other application-specific target name.
     /// </param>
+    /// <param name="options">The navigation options for this navigation, if any. Used to extract target-replacement instructions.</param>
     /// <returns>
     /// The <see cref="NavigationContext"/> for the specified target.
     /// </returns>
@@ -81,7 +82,7 @@ public sealed class RouterContextManager : IDisposable
     /// other target, the method returns a new context for the specified target, created by the
     /// route activator.
     /// </remarks>
-    public NavigationContext GetContextForTarget(Target? target)
+    public NavigationContext GetContextForTarget(Target? target, NavigationOptions? options = null)
     {
         if (target?.IsSelf != false)
         {
@@ -91,7 +92,7 @@ public sealed class RouterContextManager : IDisposable
             return this.currentContext ?? this.MainContext;
         }
 
-        return target.IsMain ? this.MainContext : this.contextProvider.ContextForTarget(target, this.currentContext);
+        return target.IsMain ? this.MainContext : this.contextProvider.ContextForTarget(target, this.currentContext, options);
     }
 
     /// <inheritdoc />

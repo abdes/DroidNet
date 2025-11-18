@@ -410,7 +410,7 @@ public sealed partial class Router : IRouter, IDisposable
         try
         {
             // Get a context for the target.
-            var context = this.contextManager.GetContextForTarget(options.Target);
+            var context = this.contextManager.GetContextForTarget(options.Target, options);
 
             // Save the previous state for route optimization
             var previousState = context.State;

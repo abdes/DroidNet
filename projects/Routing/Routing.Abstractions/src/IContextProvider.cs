@@ -59,11 +59,12 @@ public interface IContextProvider
     /// </summary>
     /// <param name="target">The navigation target requiring a context.</param>
     /// <param name="currentContext">The currently active context, if any.</param>
+    /// <param name="options">The navigation options for this navigation, if any. Used to extract target-replacement instructions.</param>
     /// <returns>
     /// A navigation context for the specified target. May return the current context
     /// if appropriate for the target.
     /// </returns>
-    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null);
+    public INavigationContext ContextForTarget(Target target, INavigationContext? currentContext = null, NavigationOptions? options = null);
 
     /// <summary>
     /// Activates the specified navigation context.
@@ -88,11 +89,12 @@ public interface IContextProvider<T> : IContextProvider
     /// </summary>
     /// <param name="target">The navigation target requiring a context.</param>
     /// <param name="currentContext">The currently active context, if any.</param>
+    /// <param name="options">The navigation options for this navigation, if any. Used to extract target-replacement instructions.</param>
     /// <returns>
     /// A navigation context of type <typeparamref name="T"/> for the specified target. May return
     /// the current context if appropriate for the target.
     /// </returns>
-    public T ContextForTarget(Target target, T? currentContext = null);
+    public T ContextForTarget(Target target, T? currentContext = null, NavigationOptions? options = null);
 
     /// <summary>
     /// Activates the specified navigation context.

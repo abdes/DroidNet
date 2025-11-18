@@ -39,11 +39,13 @@ internal sealed class WindowNavigationContext : NavigationContext
     /// </summary>
     /// <param name="targetKey">The target key for the navigation happening within this context.</param>
     /// <param name="window">The window instance this context is bound to.</param>
+    /// <param name="fromTarget">The source target window from which this navigation originated, if any.</param>
+    /// <param name="replaceTarget">Whether the source target should be closed when this context is activated.</param>
     /// <exception cref="ArgumentNullException">
     /// Thrown if <paramref name="window"/> is <see langword="null"/>.
     /// </exception>
-    public WindowNavigationContext(Target targetKey, Window window)
-        : base(targetKey, window)
+    public WindowNavigationContext(Target targetKey, Window window, object? fromTarget = null, bool replaceTarget = false)
+        : base(targetKey, window, fromTarget, replaceTarget)
     {
         this.windowTitle = window.Title;
         window.Closed += (_, _) => this.windowClosed = true;

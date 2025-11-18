@@ -19,4 +19,14 @@ namespace DroidNet.Routing;
 /// preventing any inconsistencies that might arise from incremental updates.
 /// </para>
 /// </remarks>
-public class FullNavigation : NavigationOptions;
+public class FullNavigation : NavigationOptions
+{
+    /// <summary>
+    /// Gets a value indicating whether the source target should be closed when this navigation is activated.
+    /// </summary>
+    /// <value>
+    /// True if the source target (typically <see cref="Target.Self"/>) should be closed when the new
+    /// target is activated in a multi-window scenario. False if no target should be closed during activation.
+    /// </value>
+    public bool ReplaceTarget { get; init; }
+}
