@@ -17,17 +17,14 @@ namespace Oxygen.Editor.Data.Services;
 /// This service is designed to work with the <see cref="PersistentState"/> context to manage project usage data.
 /// It uses an <see cref="IMemoryCache"/> to cache project usage data for improved performance.
 /// </remarks>
-/// <param name="context">The database context to be used by the service.</param>
-/// <param name="cache">The memory cache to be used by the service.</param>
 /// <example>
 /// <para><strong>Example Usage:</strong></para>
 /// <code><![CDATA[
 /// var contextOptions = new DbContextOptionsBuilder<PersistentState>()
 ///     .UseInMemoryDatabase(databaseName: "TestDatabase")
 ///     .Options;
-/// var context = new PersistentState(contextOptions);
 /// var cache = new MemoryCache(new MemoryCacheOptions());
-/// var service = new ProjectUsageService(context, cache);
+/// var service = new ProjectUsageService(() => new PersistentState(contextOptions), cache);
 ///
 /// // Add or update a project usage record
 /// await service.UpdateProjectUsageAsync("Project1", "Location1");
@@ -46,97 +43,182 @@ namespace Oxygen.Editor.Data.Services;
 /// await service.UpdateProjectNameAndLocationAsync("Project1", "Location1", "NewProject1", "NewLocation1");
 /// ]]></code>
 /// </example>
-public class ProjectUsageService(PersistentState context, IMemoryCache cache) : IProjectUsageService
+public class ProjectUsageService : IProjectUsageService
 {
     /// <summary>
     /// The prefix to be used for cache keys related to project usage data.
     /// </summary>
     internal const string CacheKeyPrefix = "ProjectUsage_";
 
-    /// <inheritdoc />
-    public async Task<bool> HasRecentlyUsedProjectsAsync() => await context.ProjectUsageRecords.AnyAsync().ConfigureAwait(true);
+    private readonly Func<PersistentState> contextFactory;
+    private readonly IMemoryCache cache;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ProjectUsageService"/> class.
+    /// </summary>
+    /// <param name="contextFactory">Factory used to create new <see cref="PersistentState"/> instances.</param>
+    /// <param name="cache">Shared cache used to store project usage records.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "null checking is required")]
+    public ProjectUsageService(Func<PersistentState> contextFactory, IMemoryCache cache)
+    {
+        this.contextFactory = contextFactory ?? throw new ArgumentNullException(nameof(contextFactory));
+        this.cache = cache ?? throw new ArgumentNullException(nameof(cache));
+    }
 
     /// <inheritdoc />
-    public async Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10) => await context.ProjectUsageRecords
-            .OrderByDescending(p => p.LastUsedOn)
-            .Take((int)sizeLimit > 0 ? (int)sizeLimit : 10)
-            .ToListAsync().ConfigureAwait(true);
+    public async Task<bool> HasRecentlyUsedProjectsAsync()
+    {
+        var context = this.contextFactory();
+        try
+        {
+            return await context.ProjectUsageRecords.AnyAsync().ConfigureAwait(false);
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10)
+    {
+        var context = this.contextFactory();
+        try
+        {
+            var records = await context.ProjectUsageRecords
+                .AsNoTracking()
+                .OrderByDescending(p => p.LastUsedOn)
+                .Take((int)sizeLimit > 0 ? (int)sizeLimit : 10)
+                .ToListAsync().ConfigureAwait(false);
+
+            return records.ConvertAll(Clone);
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     /// <inheritdoc />
     public async Task<ProjectUsage?> GetProjectUsageAsync(string name, string location)
     {
-        var cacheKey = CacheKeyPrefix + name + "_" + location;
-        if (cache.TryGetValue(cacheKey, out ProjectUsage? projectUsage))
+        var cacheKey = CreateCacheKey(name, location);
+        if (this.cache.TryGetValue(cacheKey, out ProjectUsage? cached))
         {
-            return projectUsage;
+            return cached == null ? null : Clone(cached);
         }
 
-        projectUsage = await context.ProjectUsageRecords
-            .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(true);
-
-        if (projectUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            _ = cache.Set(cacheKey, projectUsage);
-        }
+            var projectUsage = await context.ProjectUsageRecords
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
 
-        return projectUsage;
+            if (projectUsage == null)
+            {
+                return null;
+            }
+
+            var detached = Clone(projectUsage);
+            _ = this.cache.Set(cacheKey, detached);
+            return Clone(detached);
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
     public async Task UpdateProjectUsageAsync(string name, string location)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
-        if (projectUsage != null)
-        {
-            projectUsage.TimesOpened++;
-            projectUsage.LastUsedOn = DateTime.Now;
-        }
-        else
-        {
-            ValidateProjectNameAndLocation(name, location);
+        ValidateProjectNameAndLocation(name, location);
+        var cacheKey = CreateCacheKey(name, location);
 
-            projectUsage = new ProjectUsage
+        var context = this.contextFactory();
+        try
+        {
+            var tracked = await context.ProjectUsageRecords
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
+
+            if (tracked != null)
             {
-                Name = name,
-                Location = location,
-                TimesOpened = 1,
-                LastUsedOn = DateTime.Now,
-            };
-            _ = context.ProjectUsageRecords.Add(projectUsage);
-        }
+                tracked.TimesOpened++;
+                tracked.LastUsedOn = DateTime.Now;
+            }
+            else
+            {
+                var cached = this.cache.Get<ProjectUsage>(cacheKey);
+                tracked = new ProjectUsage
+                {
+                    Name = name,
+                    Location = location,
+                    TimesOpened = (cached?.TimesOpened ?? 0) + 1,
+                    LastUsedOn = DateTime.Now,
+                    LastOpenedScene = cached?.LastOpenedScene ?? string.Empty,
+                    ContentBrowserState = cached?.ContentBrowserState ?? string.Empty,
+                };
+                _ = context.ProjectUsageRecords.Add(tracked);
+            }
 
-        _ = await context.SaveChangesAsync().ConfigureAwait(true);
-        _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = this.cache.Set(cacheKey, Clone(tracked));
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
     public async Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
-
-        if (projectUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            projectUsage.ContentBrowserState = contentBrowserState;
-            _ = await context.SaveChangesAsync().ConfigureAwait(true);
-            _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
-        }
+            var tracked = await context.ProjectUsageRecords
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
 
-        Debug.Assert(projectUsage != null, "Project usage record must exist before updating content browser state (did you call UpdateProjectUsageAsync() before).");
+            if (tracked == null)
+            {
+                Debug.Fail("Project usage record must exist before updating content browser state (did you call UpdateProjectUsageAsync() before).");
+                return;
+            }
+
+            tracked.ContentBrowserState = contentBrowserState;
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = this.cache.Set(CreateCacheKey(name, location), Clone(tracked));
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
     public async Task UpdateLastOpenedSceneAsync(string name, string location, string lastOpenedScene)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
-
-        if (projectUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            projectUsage.LastOpenedScene = lastOpenedScene;
-            _ = await context.SaveChangesAsync().ConfigureAwait(true);
-            _ = cache.Set(CacheKeyPrefix + name + "_" + location, projectUsage);
-        }
+            var tracked = await context.ProjectUsageRecords
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
 
-        Debug.Assert(projectUsage != null, "Project usage record must exist before updating last opened scene (did you call UpdateProjectUsageAsync() before).");
+            if (tracked == null)
+            {
+                Debug.Fail("Project usage record must exist before updating last opened scene (did you call UpdateProjectUsageAsync() before).");
+                return;
+            }
+
+            tracked.LastOpenedScene = lastOpenedScene;
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            _ = this.cache.Set(CreateCacheKey(name, location), Clone(tracked));
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -144,37 +226,56 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
     {
         ValidateProjectNameAndLocation(newName, newLocation ?? oldLocation);
 
-        var projectUsage = await this.GetProjectUsageAsync(oldName, oldLocation).ConfigureAwait(true);
-        if (projectUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            projectUsage.Name = newName;
-            if (!string.IsNullOrEmpty(newLocation))
+            var tracked = await context.ProjectUsageRecords
+                .FirstOrDefaultAsync(p => p.Name == oldName && p.Location == oldLocation).ConfigureAwait(false);
+
+            if (tracked == null)
             {
-                projectUsage.Location = newLocation;
+                return;
             }
 
-            _ = await context.SaveChangesAsync().ConfigureAwait(true);
-            _ = cache.Set(CacheKeyPrefix + newName + "_" + (newLocation ?? oldLocation), projectUsage);
-            cache.Remove(CacheKeyPrefix + oldName + "_" + oldLocation);
+            tracked.Name = newName;
+            if (!string.IsNullOrEmpty(newLocation))
+            {
+                tracked.Location = newLocation;
+            }
+
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+
+            var updatedKey = CreateCacheKey(tracked.Name, tracked.Location);
+            _ = this.cache.Set(updatedKey, Clone(tracked));
+            this.cache.Remove(CreateCacheKey(oldName, oldLocation));
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
     public async Task DeleteProjectUsageAsync(string name, string location)
     {
-        var projectUsage = await this.GetProjectUsageAsync(name, location).ConfigureAwait(true);
-        if (projectUsage != null)
+        var context = this.contextFactory();
+        try
         {
-            // Ensure we remove the tracked entity from the current context
             var tracked = await context.ProjectUsageRecords
-                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(true);
-            if (tracked != null)
+                .FirstOrDefaultAsync(p => p.Name == name && p.Location == location).ConfigureAwait(false);
+
+            if (tracked == null)
             {
-                _ = context.ProjectUsageRecords.Remove(tracked);
-                _ = await context.SaveChangesAsync().ConfigureAwait(true);
+                return;
             }
 
-            cache.Remove(CacheKeyPrefix + name + "_" + location);
+            _ = context.ProjectUsageRecords.Remove(tracked);
+            _ = await context.SaveChangesAsync().ConfigureAwait(false);
+            this.cache.Remove(CreateCacheKey(name, location));
+        }
+        finally
+        {
+            await context.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -196,4 +297,18 @@ public class ProjectUsageService(PersistentState context, IMemoryCache cache) : 
             throw new ValidationException("The project location cannot be empty.");
         }
     }
+
+    private static string CreateCacheKey(string name, string location) => CacheKeyPrefix + name + "_" + location;
+
+    private static ProjectUsage Clone(ProjectUsage source)
+        => new()
+        {
+            Id = source.Id,
+            Name = source.Name,
+            Location = source.Location,
+            TimesOpened = source.TimesOpened,
+            LastUsedOn = source.LastUsedOn,
+            LastOpenedScene = source.LastOpenedScene,
+            ContentBrowserState = source.ContentBrowserState,
+        };
 }
