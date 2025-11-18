@@ -30,7 +30,19 @@ public class DatabaseTests : TestSuiteWithAssertions
                 .EnableSensitiveDataLogging()
                 .UseSqlite(this.dbConnection)
                 .Options);
-        this.Container.Register<PersistentState>(Reuse.Scoped);
+
+        // Register the EF DbContext as transient so each Resolve gets a fresh `PersistentState` instance.
+        // Reasons:
+        // - Isolation: a new DbContext per resolution avoids shared change-tracking, cached entities, and leaked state
+        //   between tests or between resolves inside a test, making tests deterministic.
+        // - Safety: DbContext is not thread-safe; short-lived instances reduce accidental concurrent use of the same
+        //   instance.
+        // - Cleanup: `allowDisposableTransient: true` lets the test container dispose transient `IDisposable`
+        //   instances (the DbContext) when the container is disposed, preventing resource leaks without
+        //   requiring explicit scope management in each test.
+        // Note: If a test needs a single shared DbContext across multiple resolutions to represent a unit-of-work,
+        // consider using `Reuse.Scoped` and explicitly creating/disposing a scope for that scenario.
+        this.Container.Register<PersistentState>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
 
         this.dbConnection.Open();
 
