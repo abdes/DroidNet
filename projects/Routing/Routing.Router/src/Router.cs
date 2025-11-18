@@ -83,7 +83,8 @@ public sealed partial class Router : IRouter, IDisposable
                 .Select(e => new ContextChanged(e.EventArgs.Context)),
             this.eventSource);
 
-        _ = this.Events.Subscribe(e => LogRouterEvent(this.logger, e));
+        _ = this.Events.Subscribe(e => this.LogRouterEvent(e));
+        this.contextProvider.ContextDestroyed += this.OnContextDestroyed;
     }
 
     /// <inheritdoc />
@@ -154,7 +155,7 @@ public sealed partial class Router : IRouter, IDisposable
         }
         catch (Exception ex)
         {
-            LogNavigationFailed(this.logger, ex);
+            this.LogNavigationFailed(ex);
             this.eventSource.OnNext(new NavigationError(options));
         }
     }
@@ -167,6 +168,7 @@ public sealed partial class Router : IRouter, IDisposable
             return;
         }
 
+        this.contextProvider.ContextDestroyed -= this.OnContextDestroyed;
         this.eventSource.Dispose();
         this.isDisposed = true;
     }
@@ -383,29 +385,6 @@ public sealed partial class Router : IRouter, IDisposable
     }
 
     /// <summary>
-    /// Optimizes the activation of routes in the given context.
-    /// </summary>
-    /// <param name="context">The router context in which to optimize route activation.</param>
-    /// <remarks>
-    /// This method is intended to improve the efficiency of route activation by reusing previously
-    /// activated routes in the router state.
-    /// </remarks>
-    /// TODO(abdes) implement OptimizeRouteActivation
-    private static void OptimizeRouteActivation(NavigationContext context) => _ = context;
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "{RouterEvent}")]
-    private static partial void LogRouterEvent(ILogger logger, RouterEvent routerEvent);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Navigation failed!")]
-    private static partial void LogNavigationFailed(ILogger logger, Exception ex);
-
-    /// <summary>
     /// Navigates to the specified URL tree with the given navigation options.
     /// </summary>
     /// <param name="urlTree">The URL tree representing the target navigation path.</param>
@@ -433,6 +412,9 @@ public sealed partial class Router : IRouter, IDisposable
             // Get a context for the target.
             var context = this.contextManager.GetContextForTarget(options.Target);
 
+            // Save the previous state for route optimization
+            var previousState = context.State;
+
             // If the navigation is relative, resolve the url tree into an
             // absolute one.
             if (options.RelativeTo is not null)
@@ -446,8 +428,12 @@ public sealed partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new RoutesRecognized(urlTree));
 
-            // TODO: eventually optimize reuse of previously activated routes in the router state
-            OptimizeRouteActivation(context);
+            // Optimize route activation by reusing previously activated routes, but only do it if
+            // we are navigating within the same target).
+            if (options.Target is null || options.Target == context.NavigationTargetKey)
+            {
+                this.OptimizeRouteActivation(context, previousState);
+            }
 
             this.eventSource.OnNext(new ActivationStarted(options, context));
 
@@ -471,8 +457,72 @@ public sealed partial class Router : IRouter, IDisposable
         }
         catch (Exception ex)
         {
-            LogNavigationFailed(this.logger, ex);
+            this.LogNavigationFailed(ex);
             this.eventSource.OnNext(new NavigationError(options));
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Best effort cleanup, so catch all exceptions")]
+    private void OnContextDestroyed(object? sender, ContextEventArgs args)
+    {
+        _ = sender; // Unused
+        if (args.Context is not { } context)
+        {
+            return;
+        }
+
+        if (context.State is null)
+        {
+            return;
+        }
+
+        var targetName = context.NavigationTargetKey.Name;
+        this.LogContextCleanupStarted(targetName);
+
+        try
+        {
+            DisposeRouteTree(context.State.RootNode);
+            this.LogContextCleanupCompleted(targetName);
+        }
+        catch (Exception ex)
+        {
+            this.LogContextCleanupFailed(targetName, ex);
+        }
+        finally
+        {
+            if (context is NavigationContext navigationContext)
+            {
+                navigationContext.State = null;
+                navigationContext.RouteActivationObserver = null;
+            }
+        }
+
+        void DisposeRouteTree(IActiveRoute route)
+        {
+            foreach (var child in route.Children)
+            {
+                DisposeRouteTree(child);
+            }
+
+            if (route is not ActiveRoute activeRoute)
+            {
+                return;
+            }
+
+            if (activeRoute.ViewModel is IDisposable disposable)
+            {
+                try
+                {
+                    disposable.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    this.LogViewModelDisposeFailed(activeRoute, ex);
+                }
+            }
+
+            activeRoute.ViewModel = null;
+            activeRoute.IsActivated = false;
         }
     }
 }

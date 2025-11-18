@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Collections;
+using System.Linq;
 
 namespace DroidNet.Routing;
 
@@ -162,6 +164,74 @@ public class Parameters : IParameters
     /// After this operation, <see cref="Count"/> will be 0 and <see cref="IsEmpty"/> will be <see langword="true"/>.
     /// </remarks>
     public void Clear() => this.parameters.Clear();
+
+    /// <summary>
+    /// Determines whether this parameter collection is equal to another.
+    /// </summary>
+    /// <param name="other">The parameter collection to compare with this instance.</param>
+    /// <returns>True if both collections contain the same parameters with identical values; otherwise, false.</returns>
+    /// <remarks>
+    /// Two parameter collections are considered equal if they contain the same number of parameters
+    /// and each parameter in this collection has a matching parameter in the other collection with
+    /// an identical value. The comparison is case-insensitive for parameter names but case-sensitive
+    /// for parameter values.
+    /// </remarks>
+    public bool Equals(IParameters? other)
+    {
+        if (other is null)
+        {
+            return false;
+        }
+
+        // If both are empty, they're equal
+        if (this.IsEmpty && other.IsEmpty)
+        {
+            return true;
+        }
+
+        // If they have different counts, they're not equal
+        if (this.Count != other.Count)
+        {
+            return false;
+        }
+
+        // Compare each parameter by enumerating
+        foreach (var param in this)
+        {
+            if (!other.TryGetValue(param.Name, out var otherValue))
+            {
+                return false;
+            }
+
+            if (!string.Equals(param.Value, otherValue, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => obj is IParameters other && this.Equals(other);
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        if (this.IsEmpty)
+        {
+            return 0;
+        }
+
+        HashCode hash = default;
+        foreach (var pair in this.parameters.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            hash.Add(pair.Key, StringComparer.OrdinalIgnoreCase);
+            hash.Add(pair.Value ?? string.Empty, StringComparer.Ordinal);
+        }
+
+        return hash.ToHashCode();
+    }
 
     /// <summary>
     /// Creates an immutable view of the parameters collection.
