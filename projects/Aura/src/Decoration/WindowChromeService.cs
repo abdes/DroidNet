@@ -137,7 +137,7 @@ public sealed partial class WindowChromeService
 
         // Setup border and title bar presence
         var hasBorder = decoration?.WithBorder ?? true;
-        var hasTitleBar = decoration?.TitleBar is not null;
+        var hasTitleBar = decoration?.TitleBar is not null || buttons is not null;
 
         presenter?.SetBorderAndTitleBar(hasBorder: hasBorder, hasTitleBar: hasTitleBar);
 

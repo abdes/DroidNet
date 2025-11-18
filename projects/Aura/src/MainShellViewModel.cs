@@ -20,7 +20,6 @@ using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel;
@@ -57,6 +56,9 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
+    private WindowContext? currentContext;
+    private PropertyChangedEventHandler? contextPropertyChangedHandler;
+    private bool showCustomTitleBar;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MainShellViewModel"/> class.
@@ -117,7 +119,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
                             .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
                     }
 
-                    this.SetupWindowTitleBar();
                     this.UpdateMenuFromWindowContext();
                 });
     }
@@ -181,6 +182,16 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public partial WindowContext? Context { get; set; }
 
     /// <summary>
+    /// Gets a value indicating whether the custom title bar should be visible for the current window context.
+    /// False when chrome is disabled or when there is no title bar configuration on the decorations.
+    /// </summary>
+    public bool ShowCustomTitleBar
+    {
+        get => this.showCustomTitleBar;
+        private set => this.SetProperty(ref this.showCustomTitleBar, value);
+    }
+
+    /// <summary>
     /// Gets the icon source for the window title bar.
     /// </summary>
     public IconSource IconSource => new BitmapIconSource()
@@ -215,6 +226,11 @@ public partial class MainShellViewModel : AbstractOutletContainer
         if (disposing)
         {
             this.appearanceSettingsService.PropertyChanged -= this.AppearanceSettings_PropertyChanged;
+            if (this.currentContext is not null && this.contextPropertyChangedHandler is not null)
+            {
+                this.currentContext.PropertyChanged -= this.contextPropertyChangedHandler;
+                this.contextPropertyChangedHandler = null;
+            }
         }
 
         this.isDisposed = true;
@@ -354,6 +370,41 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.MainMenu = windowContext?.MenuSource;
     }
 
+    partial void OnContextChanged(WindowContext? value)
+    {
+        // Unsubscribe previous context's event handler if present
+        if (this.currentContext is not null && this.contextPropertyChangedHandler is not null)
+        {
+            this.currentContext.PropertyChanged -= this.contextPropertyChangedHandler;
+            this.contextPropertyChangedHandler = null;
+        }
+
+        // Track new context and subscribe to changes
+        this.currentContext = value;
+        if (this.currentContext is not null)
+        {
+            this.contextPropertyChangedHandler = (_, e) =>
+            {
+                if (string.Equals(e.PropertyName, nameof(WindowContext.Decorations), StringComparison.Ordinal))
+                {
+                    this.UpdateShowCustomTitleBar(this.currentContext);
+                }
+            };
+
+            this.currentContext.PropertyChanged += this.contextPropertyChangedHandler;
+        }
+
+        // Compute initial value now
+        this.UpdateShowCustomTitleBar(this.currentContext);
+    }
+
+    private void UpdateShowCustomTitleBar(WindowContext? context)
+    {
+        var show = context?.Decorations?.ChromeEnabled == true
+                   && context?.Decorations?.TitleBar is not null;
+        this.ShowCustomTitleBar = show;
+    }
+
     /// <summary>
     /// Initializes the settings menu flyout with theme options.
     /// </summary>
@@ -417,25 +468,6 @@ public partial class MainShellViewModel : AbstractOutletContainer
         {
             UpdateThemesSelectedItem(this.themesMenuItem, activeItem);
         }
-    }
-
-    /// <summary>
-    /// Sets up the window title bar with custom decorations and enhancements.
-    /// </summary>
-    private void SetupWindowTitleBar()
-    {
-        Debug.Assert(this.Window is not null, "an activated ViewModel must always have a Window");
-
-        // Only extend content into title bar if chrome is enabled
-        var chromeEnabled = this.Context?.Decorations?.ChromeEnabled ?? true;
-
-        if (chromeEnabled)
-        {
-            this.Window.ExtendsContentIntoTitleBar = chromeEnabled;
-            this.Window.AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
-        }
-
-        this.LogWindowTitleBarSetup(chromeEnabled);
     }
 
     /// <summary>

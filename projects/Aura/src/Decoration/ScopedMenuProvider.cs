@@ -4,7 +4,6 @@
 
 using DroidNet.Controls.Menus;
 using DryIoc;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace DroidNet.Aura.Decoration;
 
