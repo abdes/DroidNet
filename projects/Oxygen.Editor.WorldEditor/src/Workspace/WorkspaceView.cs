@@ -7,4 +7,10 @@ namespace Oxygen.Editor.WorldEditor.Workspace;
 /// <summary>
 /// A view for the World Editor workspace. Simply a docking workspace view.
 /// </summary>
-public partial class WorkspaceView : DockingWorkspaceView;
+public sealed partial class WorkspaceView : DockingWorkspaceView
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkspaceView"/> class.
+    /// </summary>
+    public WorkspaceView() => this.InitializeComponent();
+}

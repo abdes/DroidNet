@@ -82,7 +82,7 @@ public partial class HomeViewModel(
             return false;
         }
 
-        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return true;
@@ -105,7 +105,7 @@ public partial class HomeViewModel(
 
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
 
-        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return true;
@@ -116,24 +116,14 @@ public partial class HomeViewModel(
     /// </summary>
     [RelayCommand]
     private async Task MoreTemplatesAsync()
-    {
-        if (this.activeRoute is not null)
-        {
-            await router.NavigateAsync("new", new PartialNavigation() { RelativeTo = this.activeRoute.Parent }).ConfigureAwait(true);
-        }
-    }
+        => await router.NavigateAsync("/pb/new").ConfigureAwait(true);
 
     /// <summary>
     /// Navigates to the view for more projects.
     /// </summary>
     [RelayCommand]
     private async Task MoreProjectsAsync()
-    {
-        if (this.activeRoute is not null)
-        {
-            await router.NavigateAsync("open", new PartialNavigation() { RelativeTo = this.activeRoute.Parent }).ConfigureAwait(true);
-        }
-    }
+        => await router.NavigateAsync("/pb/open").ConfigureAwait(true);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
     private async Task PreloadRecentTemplatesAsync()

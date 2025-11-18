@@ -8,7 +8,6 @@ using System.Reflection;
 using DroidNet.Config;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;

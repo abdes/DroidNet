@@ -63,7 +63,7 @@ public partial class NewProjectViewModel(
             return false;
         }
 
-        await router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
         return true;
     }
 

@@ -9,7 +9,6 @@ using DroidNet.Resources.Generator.Localized_a870a544;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Core.Services;
-using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
