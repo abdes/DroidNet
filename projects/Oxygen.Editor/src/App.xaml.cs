@@ -104,7 +104,7 @@ public partial class App
                     async () =>
                     {
                         Debug.WriteLine("Launch activation ==> navigate to project browser");
-                        await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = Target.Main }).ConfigureAwait(true);
+                        await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = new Target { Name = "wnd-pb" } }).ConfigureAwait(true);
                     }))
             .Concat()
             .Subscribe();

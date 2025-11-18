@@ -7,7 +7,6 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewModels1="using:Oxygen.Editor.ProjectBrowser.ViewModels"
-    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
     mc:Ignorable="d">
 
     <!--  ViewModel will never be null under standard operation conditions  -->
@@ -38,7 +37,11 @@
                     Padding="28,20,28,20"
                     AccessKey="{x:Bind AccessKey}"
                     Tag="{x:Bind TargetViewModel.FullName}">
-                    <Grid RowDefinitions="64,*">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="64" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Viewbox>
                             <FontIcon Glyph="{x:Bind Icon}" />
                         </Viewbox>

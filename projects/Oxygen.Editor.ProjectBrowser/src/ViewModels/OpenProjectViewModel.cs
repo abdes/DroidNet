@@ -135,7 +135,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
             return false;
         }
 
-        await this.router.NavigateAsync("/we", new FullNavigation()).ConfigureAwait(true);
+        await this.router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
         return true;
     }
 

@@ -102,7 +102,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            await router.NavigateAsync(navItem.Path, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
+            await router.NavigateAsync($"/pb/{navItem.Path}").ConfigureAwait(true);
         }
     }
 
@@ -116,7 +116,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            await router.NavigateAsync(SettingsItemPath, new PartialNavigation() { RelativeTo = this.activeRoute }).ConfigureAwait(true);
+            await router.NavigateAsync("/pb/settings").ConfigureAwait(true);
         }
     }
 

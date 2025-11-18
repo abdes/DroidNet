@@ -33,7 +33,8 @@ public abstract partial class DockingWorkspaceViewModel(
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "logging code is source generated")]
     private readonly ILogger logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
 
-    private readonly IContainer childContainer = container.WithRegistrationsCopy();
+    private readonly IContainer childContainer = container.CreateChild();
+
     private readonly List<RoutedDockable> deferredDockables = [];
 
     private CompositeDisposable? localRouterEventsSub;
@@ -146,12 +147,22 @@ public abstract partial class DockingWorkspaceViewModel(
 
         if (disposing)
         {
+            // Release the center dock dockable
+            if (this.centerDock is not null)
+            {
+                Dockable.FromId(this.CenterOutletName)?.Dispose();
+                this.centerDock.Dispose();
+            }
+
+            // Release all dockables that were created for this workspace
+            foreach (var dockable in this.deferredDockables)
+            {
+                dockable.Dispose();
+            }
+
+            this.deferredDockables.Clear();
             this.childContainer.Dispose();
             this.localRouterEventsSub?.Dispose();
-
-            // Should be disposed by the Docker, but we do it here in case something
-            // went wrong during setup
-            this.centerDock?.Dispose();
         }
 
         this.disposed = true;

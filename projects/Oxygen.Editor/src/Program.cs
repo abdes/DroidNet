@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
-using DroidNet.Aura.Theming;
+using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Coordinates;
@@ -103,7 +103,7 @@ public static partial class Program
                 Log.Information("DB path: {DbPath}", dbPath);
 
                 // Apply pending migrations to ensure database schema is up to date
-                var persistentState = container.Resolve<PersistentState>();
+                using var persistentState = container.Resolve<PersistentState>();
                 persistentState.Database.MigrateAsync().GetAwaiter().GetResult();
 
                 RegisterViewsAndViewModels(container);
@@ -139,14 +139,22 @@ public static partial class Program
             [
                 new Route
                 {
-                    // The project browser is the root of a navigation view with multiple pages.
+                    Path = "we",
+                    MatchMethod = PathMatch.Prefix,
+                    ViewModelType = typeof(WorkspaceViewModel),
+                },
+                new Route
+                {
                     Path = "pb",
+                    MatchMethod = PathMatch.Prefix,
                     ViewModelType = typeof(MainViewModel),
                     Children = new Routes(
                     [
                         new Route
                         {
-                            Path = "home", MatchMethod = PathMatch.Prefix, ViewModelType = typeof(HomeViewModel),
+                            Path = "home",
+                            MatchMethod = PathMatch.Prefix,
+                            ViewModelType = typeof(HomeViewModel),
                         },
                         new Route
                         {
@@ -169,11 +177,6 @@ public static partial class Program
                         },
                         */
                     ]),
-                },
-                new Route
-                {
-                    // The project browser is the root of a navigation view with multiple pages.
-                    Path = "we", ViewModelType = typeof(WorkspaceViewModel),
                 },
             ]),
         },
@@ -217,7 +220,7 @@ public static partial class Program
                         .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
                         .EnableDetailedErrors()
                         .EnableSensitiveDataLogging()
-                    .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
+                        .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
                     .Options);
             },
             Reuse.Transient);
@@ -240,16 +243,29 @@ public static partial class Program
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
-        container.Register<IMemoryCache, MemoryCache>(Reuse.Singleton);
+        RegisterEditorDataServices(container);
 
-        // Register editor data persistence services
+        /*
+         * Set up the view model to view converters. We're using the standard
+         * converter, and a custom one with fall back if the view cannot be located.
+         */
+        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
+        container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
+
+        container.Register<DockPanelViewModel>(Reuse.Transient);
+        container.Register<DockPanel>(Reuse.Transient);
+
+        ConfigureWindows(container);
+        RegisterViewsAndViewModels(container);
+    }
+
+    private static void RegisterEditorDataServices(IContainer container)
+    {
+        container.RegisterDelegate<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()), Reuse.Singleton, setup: Setup.With(preventDisposal: true));
+
         container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton);
         container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);
-        container.RegisterDelegate<ITemplateUsageService>(
-            resolver => new TemplateUsageService(
-                () => resolver.Resolve<PersistentState>(),
-                resolver.Resolve<IMemoryCache>()),
-            Reuse.Singleton);
+        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Singleton);
 
         // TODO: use keyed registration and parameter name to key mappings
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
@@ -262,48 +278,59 @@ public static partial class Program
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
-        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Transient);
+        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
 
         // Register the project instance using a delegate that will request the currently open project from the project browser service.
         container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);
+    }
 
-        container.Register<IAppThemeModeService, AppThemeModeService>();
-
+    private static void ConfigureWindows(IContainer container)
+    {
         /*
-         * Set up the view model to view converters. We're using the standard
-         * converter, and a custom one with fall back if the view cannot be located.
+         * Configure the Application's Windows. Each window represents a target in which to open the requested url.
+         * Now we create the instances via the registered IWindowFactory and annotate them with the window category
+         * that matches the target Name. This enables the Aura window manager to apply category-specific decoration.
          */
-        container.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
-        container.Register<IValueConverter, ViewModelToView>(Reuse.Singleton, serviceKey: "VmToView");
 
-        container.Register<DockPanelViewModel>(Reuse.Transient);
-        container.Register<DockPanel>(Reuse.Transient);
+        // In Oxygen Editor, we don't really have a "Main" window - all windows are created equally.
+        container.Register<MainWindow>(Reuse.Transient);
 
-        /*
-         * Configure the Application's Windows. Each window represents a target in which to open the requested url. The
-         * target name is the key used when registering the window type.
-         *
-         * There should always be a Window registered for the special target <c>_main</c>.
-         */
-        container.Register<Window, MainWindow>(Reuse.Transient, serviceKey: Target.Main);
+        // Workspace window
+        container.RegisterDelegate<Window>(
+            resolverContext =>
+            {
+                var windowFactory = resolverContext.Resolve<IWindowFactory>();
+                var category = new WindowCategory("wnd-we");
+                return windowFactory.CreateDecoratedWindow<MainWindow>(category).GetAwaiter().GetResult();
+            },
+            Reuse.Transient,
+            serviceKey: new Target { Name = "wnd-we" });
 
-        // Views and ViewModels
-        RegisterViewsAndViewModels(container);
+        // Project Browser window
+        container.RegisterDelegate<Window>(
+            resolverContext =>
+            {
+                var windowFactory = resolverContext.Resolve<IWindowFactory>();
+                var category = new WindowCategory("wnd-pb");
+                return windowFactory.CreateDecoratedWindow<MainWindow>(category).GetAwaiter().GetResult();
+            },
+            Reuse.Transient,
+            serviceKey: new Target { Name = "wnd-pb" });
     }
 
     private static void RegisterViewsAndViewModels(IContainer container)
     {
-        container.Register<MainShellViewModel>(Reuse.Singleton);
-        container.Register<MainShellView>(Reuse.Singleton);
+        container.Register<MainShellViewModel>(Reuse.Transient);
+        container.Register<MainShellView>(Reuse.Transient);
 
-        container.Register<MainViewModel>(Reuse.Singleton);
+        container.Register<MainViewModel>(Reuse.Transient);
         container.Register<MainView>(Reuse.Transient);
-        container.Register<HomeViewModel>(Reuse.Singleton);
+        container.Register<HomeViewModel>(Reuse.Transient);
         container.Register<HomeView>(Reuse.Transient);
-        container.Register<NewProjectViewModel>(Reuse.Singleton);
+        container.Register<NewProjectViewModel>(Reuse.Transient);
         container.Register<NewProjectView>(Reuse.Transient);
-        container.Register<OpenProjectViewModel>(Reuse.Singleton);
+        container.Register<OpenProjectViewModel>(Reuse.Transient);
         container.Register<OpenProjectView>(Reuse.Transient);
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);
