@@ -218,6 +218,7 @@
 
             <!--  Folder/File list view  -->
             <ListView
+                x:Name="FilesList"
                 Grid.Row="3"
                 IsItemClickEnabled="True"
                 ItemClick="ListView_OnItemClickAsync"

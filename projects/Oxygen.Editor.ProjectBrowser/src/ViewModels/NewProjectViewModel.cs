@@ -38,13 +38,17 @@ public partial class NewProjectViewModel(
     [ObservableProperty]
     public partial ITemplateInfo? SelectedItem { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsActivating { get; set; }
+
     /// <summary>
     /// Gets the collection of project templates.
     /// </summary>
     public ObservableCollection<ITemplateInfo> Templates { get; } = [];
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => await this.PreloadTemplatesAsync().ConfigureAwait(true);
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+        => await this.PreloadTemplatesAsync().ConfigureAwait(true);
 
     /// <summary>
     /// Creates a new project from the specified template.
@@ -57,17 +61,29 @@ public partial class NewProjectViewModel(
     {
         Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
 
+        this.IsActivating = true;
+
         var result = await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
         if (!result)
         {
+            this.IsActivating = false;
             return false;
         }
 
-        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation()
+        {
+            Target = new Target { Name = "wnd-we" },
+            ReplaceTarget = true,
+        }).ConfigureAwait(true);
+
         return true;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    /// <summary>
+    /// Resets the activation state to allow further project operations.
+    /// </summary>
+    internal void ResetActivationState() => this.IsActivating = false;
+
     private async Task PreloadTemplatesAsync()
     {
         if (this.preloaded)
@@ -80,10 +96,12 @@ public partial class NewProjectViewModel(
             await this.LoadTemplatesAsync().ConfigureAwait(true);
             this.preloaded = true;
         }
+#pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
             this.LogPreloadingTemplatesError(ex);
         }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     /// <summary>
@@ -100,9 +118,13 @@ public partial class NewProjectViewModel(
         }
     }
 
+#pragma warning disable SA1204 // Static elements should appear before instance elements
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to preload templates during ViewModel activation")]
-    private partial void LogPreloadingTemplatesError(Exception ex);
+    private static partial void LogPreloadingTemplatesError(ILogger logger, Exception ex);
+
+    private void LogPreloadingTemplatesError(Exception ex) => LogPreloadingTemplatesError(this.logger, ex);
+#pragma warning restore SA1204 // Static elements should appear before instance elements
 }

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="Oxygen.Editor.ProjectBrowser.Controls.RecentProjectsList"
@@ -30,7 +30,7 @@
                         Width="72"
                         Height="48"
                         VerticalAlignment="Top"
-                        Source="{x:Bind Path=Thumbnail}"
+                        Source="{x:Bind Thumbnail, Mode=OneWay}"
                         Stretch="Fill" />
                 </Border>
                 <Grid Grid.Column="1" Margin="20,0,0,0">
@@ -79,7 +79,7 @@
             VerticalAlignment="Center"
             Background="Transparent"
             BorderThickness="0"
-            Command="{x:Bind ToggleSortByNameCommand}">
+            Command="{x:Bind ViewModel.ToggleSortByNameCommand, Mode=OneWay}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Margin="0,0,20,0" Text="Name" />
                 <FontIcon FontSize="14" Glyph="&#xE8CB;" />
@@ -93,7 +93,7 @@
             VerticalAlignment="Center"
             Background="Transparent"
             BorderThickness="0"
-            Command="{x:Bind ToggleSortByLastUsedOnCommand}">
+            Command="{x:Bind ViewModel.ToggleSortByLastUsedOnCommand, Mode=OneWay}">
             <StackPanel Orientation="Horizontal">
                 <TextBlock Margin="0,0,20,0" Text="Date Modified" />
                 <FontIcon FontSize="14" Glyph="&#xE8CB;" />
@@ -109,6 +109,7 @@
             BorderThickness="0,0,0,1" />
 
         <ListView
+            x:Name="ProjectsListView"
             Grid.Row="2"
             Grid.Column="0"
             Grid.ColumnSpan="3"
@@ -119,7 +120,7 @@
             IsItemClickEnabled="True"
             ItemClick="OnProjectItemClicked"
             ItemTemplate="{StaticResource RecentProjectTemplate}"
-            ItemsSource="{x:Bind advancedProjectItems, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.ItemsView, Mode=OneWay}"
             PreviewKeyDown="OnListViewKeyDown" />
     </Grid>
 </UserControl>

@@ -53,6 +53,9 @@ public partial class NewProjectDialogViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial ITemplateInfo Template { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsActivating { get; set; }
+
     /// <summary>
     ///     Gets a value indicating whether the project name is valid.
     /// </summary>
@@ -123,6 +126,11 @@ public partial class NewProjectDialogViewModel : ObservableObject, IDisposable
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    ///     Resets the activation state.
+    /// </summary>
+    internal void ResetActivationState() => this.IsActivating = false;
 
     /// <summary>
     ///     Releases unmanaged and optionally managed resources.

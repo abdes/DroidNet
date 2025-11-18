@@ -16,9 +16,9 @@ using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 #pragma warning disable IDE0001 // Simplify Names
 using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
+#pragma warning restore IDE0001 // Simplify Names
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
-#pragma warning restore IDE0001 // Simplify Names
 
 /// <summary>
 /// ViewModel for the Open Project view in the Oxygen Editor's Project Browser.
@@ -77,6 +77,9 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     public partial string FilterText { get; set; } = string.Empty;
 
     [ObservableProperty]
+    public partial bool IsActivating { get; set; }
+
+    [ObservableProperty]
     public partial Dictionary<string, KnownLocation?> Locations { get; set; } = [];
 
     [ObservableProperty]
@@ -96,7 +99,13 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     private ObservableCollection<IStorageItem> FileList { get; } = [];
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext) => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
+    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+        => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
+
+    /// <summary>
+    /// Resets the activation state to allow further project activation.
+    /// </summary>
+    internal void ResetActivationState() => this.IsActivating = false;
 
     /// <summary>
     /// Changes the current folder to the specified path.
@@ -129,13 +138,21 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     [RelayCommand]
     private async Task<bool> OpenProjectFileAsync(string location)
     {
+        this.IsActivating = true;
+
         var result = await this.projectBrowser.OpenProjectAsync(location).ConfigureAwait(true);
         if (!result)
         {
+            this.IsActivating = false;
             return false;
         }
 
-        await this.router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
+        await this.router.NavigateAsync("/we", new FullNavigation()
+        {
+            Target = new Target { Name = "wnd-we" },
+            ReplaceTarget = true,
+        }).ConfigureAwait(true);
+
         return true;
     }
 
