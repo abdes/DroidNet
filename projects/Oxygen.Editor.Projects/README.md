@@ -1,41 +1,121 @@
 # Oxygen Editor Projects
 
-This module contains the core, UI-independent definitions and logic for Oxygen
-projects: scenes, nodes, components, categories and project management. It is
-intended to be consumed by editor UI layers and other tooling that need to load,
-save and manipulate Oxygen project data.
+Core, UI-independent module providing abstractions and utilities for manipulating Oxygen projects, including scene management, node hierarchies, components, and serialization.
 
-## Projects overview
+## Overview
 
-An Oxygen project groups one or more scenes and related metadata. This project
-library provides types and services to:
+Oxygen Editor Projects is a foundational library for the Oxygen game engine editor that provides:
 
-- Represent scenes, nodes and components in memory.
-- Serialize/deserialize projects and scenes to/from JSON.
-- Manage project lifecycle (create, open, save) via `ProjectManagerService`.
-- Provide tests and helpers to validate model behavior.
+- **Scene and node management**: In-memory representation of game scenes, nodes, and component hierarchies
+- **Serialization**: JSON-based persistence for projects and scenes with polymorphic component support
+- **Project lifecycle**: High-level APIs for creating, loading, and saving Oxygen projects
+- **Data abstractions**: Type-safe interfaces for projects, scenes, and components
 
-Important: Project metadata now includes a stable `Id` (GUID) that is required
-in the project JSON. The loader validates that `Id` is present and non-empty;
-missing or empty `Id` values will cause deserialization to fail.
+The module is UI-agnostic and .NET-focused, designed to be consumed by editor UI layers, tools, and other services that need to manipulate Oxygen project data.
 
-The project targets .NET 8 and is UI-agnostic: rendering and editor UI are
-implemented elsewhere.
+## Technology Stack
 
-## Repository structure
+| Technology | Version | Purpose |
+|---|---|---|
+| **.NET** | 9.0 (Windows 10.0.26100.0) | Target framework |
+| **C#** | 13 (preview) | Language with nullable reference types, ImplicitUsings |
+| **System.Linq.Async** | Latest | Async LINQ support |
+| **Microsoft.Extensions.Logging** | Latest | Logging abstractions |
+| **Microsoft.Extensions.Options** | Latest | Configuration patterns |
 
-- `src/` - Core types and services:
-  - `Scene.cs`, `SceneNode.cs`, `Component` and concrete components such as
-    `Transform.cs`, `GameComponent.cs`.
-  - `Category.cs` - organizational categories used by the editor.
-  - `ProjectManagerService.cs` - high-level project management API
-    (load/save/create projects and scenes).
-  - `SceneJsonConverter.cs` - custom JSON converter used for (de)serializing
-    scene graphs.
+## Architecture
 
-- `tests/` - Unit tests for the core model and services.
+The module follows a layered architecture with clear separation of concerns:
 
-- `Resources/` - shared resources and helpers used by the project packages.
+```text
+┌─────────────────────────────────────┐
+│  External Consumers                 │
+│  (Editor UI, Tools, Tooling)        │
+└────────────────┬────────────────────┘
+                 │
+    ┌────────────▼────────────┐
+    │  ProjectManagerService  │
+    │  (Lifecycle API)        │
+    └────────────┬────────────┘
+                 │
+    ┌────────────▼────────────────┐
+    │  Core Models & Converters   │
+    │  - Scene / SceneNode        │
+    │  - Component / Transform    │
+    │  - SceneJsonConverter       │
+    │  - Category                 │
+    └────────────┬────────────────┘
+                 │
+    ┌────────────▼────────────────┐
+    │  Storage & Serialization    │
+    │  (Oxygen.Editor.Storage)    │
+    └─────────────────────────────┘
+```
+
+**Key design principles:**
+
+- **UI-agnostic**: No WinUI or rendering dependencies; strictly data model and serialization
+- **Immutable metadata**: Project `Id` (GUID) is required and stable
+- **Polymorphic serialization**: Component types are discoverable via `type` property in JSON
+- **Async-first**: All I/O operations are async for responsiveness
+
+## Project Structure
+
+```text
+src/
+  ├── Scene.cs                 # Root scene container
+  ├── SceneNode.cs             # Hierarchical node in a scene
+  ├── Component.cs             # Base component class
+  ├── Transform.cs             # Position, rotation, scale component
+  ├── GameComponent.cs         # Game-specific component
+  ├── GameObject.cs            # Scene node wrapper
+  ├── Category.cs              # Organizational categories
+  ├── CategoryJsonConverter.cs # Category serialization
+  ├── SceneJsonConverter.cs    # Scene graph serialization
+  ├── Project.cs               # Project model
+  ├── ProjectInfo.cs           # Project metadata
+  ├── ProjectManagerService.cs # Lifecycle management
+  ├── IProject.cs              # Project interface
+  ├── IProjectInfo.cs          # Project metadata interface
+  ├── IProjectManagerService.cs# Service interface
+  ├── Constants.cs             # Shared constants
+  └── Utils/                   # Utility helpers
+  └── Strings/                 # Localization & string resources
+  └── Properties/              # Assembly info
+
+tests/
+  └── [MSTest unit tests]      # Model and service validation
+
+Resources/
+  └── [Shared resources]       # Helpers and resources
+```
+
+## Key Features
+
+### Scene and Node Management
+
+- **Hierarchical scenes**: Organize game objects in tree structures with parent-child relationships
+- **Node types**: Support for different scene node categories (Actors, Props, UI, etc.)
+- **Properties**: Extendable node attributes and metadata
+
+### Component System
+
+- **Transform component**: Position, rotation, scale for 3D/2D placement
+- **Game components**: Custom game logic containers
+- **Polymorphic serialization**: Component types tracked in JSON for correct deserialization
+
+### Project Lifecycle
+
+- **Create**: Initialize new projects with metadata and initial scenes
+- **Load**: Deserialize projects and scenes from JSON with validation
+- **Save**: Serialize projects and scenes with proper formatting
+- **Dirty tracking**: Monitor project state changes for save prompts
+
+### Serialization & Formats
+
+- **JSON-based**: Human-readable, versionable project and scene files
+- **Graph support**: Handles cyclic references and node relationships
+- **Validation**: Ensures required fields (e.g., project `Id`) are present
 
 ## JSON formats
 
