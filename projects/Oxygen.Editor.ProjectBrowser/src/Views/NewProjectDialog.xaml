@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <ContentDialog
     x:Class="Oxygen.Editor.ProjectBrowser.Views.NewProjectDialog"
@@ -47,7 +47,7 @@
         </DataTemplate>
     </ContentDialog.Resources>
 
-    <Grid Width="500">
+    <Grid x:Name="DialogContentGrid" Width="500">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />

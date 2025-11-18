@@ -18,6 +18,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 public sealed partial class NewProjectView
 {
     private readonly IProjectBrowserService projectBrowser;
+    private Control? templatesGridControl;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="NewProjectView"/> class.
@@ -28,6 +29,41 @@ public sealed partial class NewProjectView
         this.InitializeComponent();
 
         this.projectBrowser = projectBrowser;
+        this.Loaded += this.OnNewProjectViewLoaded;
+    }
+
+    /// <summary>
+    /// Handles the Loaded event to capture the grid reference and subscribe to IsActivating changes.
+    /// </summary>
+    private void OnNewProjectViewLoaded(object sender, RoutedEventArgs e)
+    {
+        this.templatesGridControl = this.FindName("TemplatesGridControl") as Control;
+        if (this.ViewModel is not null && this.templatesGridControl is not null)
+        {
+            this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+        }
+    }
+
+    /// <summary>
+    /// Handles property changes on the ViewModel to update grid state.
+    /// </summary>
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(NewProjectViewModel.IsActivating), StringComparison.Ordinal))
+        {
+            this.UpdateControlState();
+        }
+    }
+
+    /// <summary>
+    /// Updates the control enabled state based on IsActivating.
+    /// </summary>
+    private void UpdateControlState()
+    {
+        if (this.templatesGridControl is not null && this.ViewModel is not null)
+        {
+            this.templatesGridControl.IsEnabled = !this.ViewModel.IsActivating;
+        }
     }
 
     /// <summary>
@@ -47,16 +83,26 @@ public sealed partial class NewProjectView
 
         if (result == ContentDialogResult.Primary)
         {
-            var success = await this.ViewModel.NewProjectFromTemplate(
-                    template,
-                    dialog.ViewModel.ProjectName,
-                    dialog.ViewModel.SelectedLocation.Path)
-                .ConfigureAwait(true);
-
-            if (!success)
+            try
             {
-                // TODO: display an error message
-                Debug.WriteLine("Failed to create new project from template");
+                dialog.ViewModel.IsActivating = true;
+                var success = await this.ViewModel.NewProjectFromTemplate(
+                        template,
+                        dialog.ViewModel.ProjectName,
+                        dialog.ViewModel.SelectedLocation.Path)
+                    .ConfigureAwait(true);
+
+                if (!success)
+                {
+                    // TODO: display an error message
+                    Debug.WriteLine("Failed to create new project from template");
+                    dialog.ViewModel.ResetActivationState();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                Debug.WriteLine("Creating new project was cancelled");
+                dialog.ViewModel.ResetActivationState();
             }
         }
     }

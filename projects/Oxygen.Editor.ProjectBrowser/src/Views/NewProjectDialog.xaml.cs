@@ -19,6 +19,8 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 /// </summary>
 public sealed partial class NewProjectDialog
 {
+    private Grid? contentGrid;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="NewProjectDialog" /> class.
     /// </summary>
@@ -35,6 +37,8 @@ public sealed partial class NewProjectDialog
 
         // attach InfoBar close handler
         this.FeedbackMessageInfoBar.CloseButtonClick += (_, __) => this.ViewModel.ClosePickerError();
+
+        this.Loaded += this.OnDialogLoaded;
     }
 
     /// <summary>
@@ -42,13 +46,30 @@ public sealed partial class NewProjectDialog
     /// </summary>
     public NewProjectDialogViewModel ViewModel { get; set; }
 
-    [LibraryImport("user32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial IntPtr GetForegroundWindow();
+    private void OnDialogLoaded(object sender, RoutedEventArgs e)
+    {
+        this.contentGrid = this.FindName("DialogContentGrid") as Grid;
+        if (this.ViewModel is not null)
+        {
+            this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+        }
+    }
 
-    [LibraryImport("user32.dll")]
-    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
-    private static partial IntPtr GetActiveWindow();
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(NewProjectDialogViewModel.IsActivating), StringComparison.Ordinal))
+        {
+            this.UpdateDialogState();
+        }
+    }
+
+    private void UpdateDialogState()
+    {
+        if (this.contentGrid is not null && this.ViewModel is not null)
+        {
+            this.contentGrid.IsHitTestVisible = !this.ViewModel.IsActivating;
+        }
+    }
 
     /// <summary>
     ///     Handles the click event of a location item.
@@ -88,6 +109,7 @@ public sealed partial class NewProjectDialog
             this.ViewModel.SetLocationCommand.Execute(location);
             this.LocationExpander.IsExpanded = false;
         }
+#pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
         {
             // show the error message in the ViewModel-bound InfoBar and log
@@ -96,5 +118,16 @@ public sealed partial class NewProjectDialog
             // Ideally also log the exception to application telemetry
             Debug.WriteLine(ex);
         }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
+
+#pragma warning disable SA1204 // Static elements should appear before instance elements
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial IntPtr GetForegroundWindow();
+
+    [LibraryImport("user32.dll")]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial IntPtr GetActiveWindow();
+#pragma warning restore SA1204 // Static elements should appear before instance elements
 }

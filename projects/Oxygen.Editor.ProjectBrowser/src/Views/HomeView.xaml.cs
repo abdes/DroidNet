@@ -10,6 +10,7 @@ using Oxygen.Editor.ProjectBrowser.Controls;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
@@ -20,6 +21,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 public sealed partial class HomeView
 {
     private readonly IProjectBrowserService projectBrowser;
+    private readonly RecentProjectsListViewModel? recentProjectsListViewModel;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HomeView"/> class.
@@ -29,6 +31,37 @@ public sealed partial class HomeView
     {
         this.projectBrowser = projectBrowser;
         this.InitializeComponent();
+
+        // Setup the RecentProjectsList control with its ViewModel
+        var defaultThumbnail = $"ms-appx:///{typeof(ProjectInfo).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
+        this.recentProjectsListViewModel = new RecentProjectsListViewModel(defaultThumbnail);
+        this.RecentProjectsListControl.ViewModel = this.recentProjectsListViewModel;
+
+        Debug.WriteLine("[HomeView] RecentProjectsList ViewModel initialized");
+
+        // Wire up the HomeViewModel's DataContextChanged to sync RecentProjects
+        this.Loaded += this.OnHomeViewLoaded;
+    }
+
+    /// <summary>
+    /// Handles the Loaded event to wire up the HomeViewModel's RecentProjects to the RecentProjectsListViewModel.
+    /// </summary>
+    private void OnHomeViewLoaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    {
+        Debug.WriteLine("[HomeView] OnHomeViewLoaded called");
+        var viewModel = this.ViewModel;
+        if (viewModel is not null && this.recentProjectsListViewModel is not null)
+        {
+            Debug.WriteLine($"[HomeView] Wiring RecentProjects collection: Current Count={viewModel.RecentProjects.Count}");
+
+            // Set the HomeViewModel's RecentProjects collection directly.
+            // The RecentProjectsListViewModel will transform and display items as they're added/removed.
+            this.recentProjectsListViewModel.SetRecentProjects(viewModel.RecentProjects);
+        }
+        else
+        {
+            Debug.WriteLine($"[HomeView] Cannot wire in OnLoaded: viewModel is null={viewModel is null}, recentProjectsListViewModel is null={this.recentProjectsListViewModel is null}");
+        }
     }
 
     /// <summary>
@@ -40,11 +73,26 @@ public sealed partial class HomeView
     {
         _ = sender;
 
-        var success = await this.ViewModel!.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(true);
-        if (!success)
+        try
         {
-            // TODO: display an error message
+            var success = await this.ViewModel!.OpenProjectAsync(args.ProjectInfo).ConfigureAwait(true);
+            if (!success)
+            {
+                Debug.WriteLine($"[HomeView] Failed to open project: {args.ProjectInfo.Name}");
+
+                // Show error and reset activation state
+                this.recentProjectsListViewModel?.ResetActivationState();
+            }
+
+            // If success, the router will navigate away and close this window, so no need to reset
         }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[HomeView] Exception opening project: {ex.Message}");
+            this.recentProjectsListViewModel?.ResetActivationState();
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     /// <summary>

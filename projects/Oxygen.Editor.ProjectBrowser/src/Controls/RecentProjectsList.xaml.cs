@@ -2,58 +2,22 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections;
-using System.Collections.ObjectModel;
-using System.ComponentModel;
 using System.Diagnostics;
-using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.WinUI.Collections;
-using DroidNet.Collections;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media.Imaging;
-using Oxygen.Editor.Projects;
 using Windows.System;
-using static Oxygen.Editor.ProjectBrowser.Controls.ProjectItemWithThumbnail;
-using SortDescription = CommunityToolkit.WinUI.Collections.SortDescription;
-using SortDirection = CommunityToolkit.WinUI.Collections.SortDirection;
 
 namespace Oxygen.Editor.ProjectBrowser.Controls;
 
 /// <summary>
 /// A user control that displays a list of recent projects with sorting options by name or last used date.
+/// This control uses MVVM pattern with <see cref="RecentProjectsListViewModel"/>.
 /// </summary>
-public sealed partial class RecentProjectsList
+public sealed partial class RecentProjectsList : UserControl
 {
-    /// <summary>
-    /// A <see cref="IComparer"/> used when sorting recent projects by <see cref="IProjectInfo.LastUsedOn">last used date/time</see>.
-    /// </summary>
-    private static readonly ByLastUsedOnComparer SortByLastUsedOn = new();
-
-    /// <summary>
-    /// A <see cref="IComparer"/> used when sorting recent projects by <see cref="IProjectInfo.Name">name</see>.
-    /// </summary>
-    private static readonly ByNameComparer SortByName = new();
-
-    /// <summary>
-    /// The <see cref="RecentProjects"/> property gets a collection of <see cref="IProjectInfo"/>, but the control
-    /// needs to display a more visually attractive item for each project, including its thumbnail. For that reason, we
-    /// need to transform on the fly each item into a <see cref="ProjectItemWithThumbnail"/>.
-    /// </summary>
-    private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? projectItems;
-
-    /// <summary>
-    /// The <see cref="AdvancedCollectionView"/> provides sorting and filtering, and wraps the <see cref="projectItems"/>
-    /// collection. This is the collection that should be used in UI binding and it should be bound with <see cref="BindingDirection.OneWay"/>,
-    /// as it is recreated every time the <see cref="RecentProjects"/> property is set.
-    /// </summary>
-    private AdvancedCollectionView advancedProjectItems = [];
-
-    /// <summary>
-    /// When not <see langword="null"/>, specifies the current sorting mode of the recent projects list, either
-    /// <see cref="SortByName"/> or <see cref="SortByLastUsedOn"/>.
-    /// </summary>
-    private SortDescription? sortDescription;
+    private RecentProjectsListViewModel? cachedViewModel;
+    private ListView? projectsListView;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="RecentProjectsList"/> class.
@@ -61,65 +25,75 @@ public sealed partial class RecentProjectsList
     public RecentProjectsList()
     {
         this.InitializeComponent();
+        this.Loaded += this.OnRecentProjectsListLoaded;
+        Debug.WriteLine("[RecentProjectsList] Control initialized");
     }
 
     /// <summary>
     /// Occurs when a project item in the list is activated by the user.
     /// </summary>
-    [Browsable(true)]
-    [Category("Action")]
-    [Description("Invoked when user activates a project item in the list")]
     public event EventHandler<ProjectItemActivatedEventArgs>? ItemActivated;
 
     /// <summary>
-    /// Gets or sets a value indicating whether the project item should be activated on double-tap.
+    /// Gets or sets the ViewModel for this control.
     /// </summary>
-    public bool ActivateOnDoubleTap { get; set; }
-
-    /// <summary>
-    /// Sets the collection of recent projects.
-    /// </summary>
-    // TODO: This control should have a ViewModel, and it should get the collection from there.
-    public ObservableCollection<IProjectInfo> RecentProjects
+    internal RecentProjectsListViewModel? ViewModel
     {
-        set
+        get => this.cachedViewModel;
+        set => this.OnViewModelChanged(value);
+    }
+
+    private void OnRecentProjectsListLoaded(object sender, RoutedEventArgs e)
+    {
+        // Capture the ListView reference for IsEnabled binding
+        this.projectsListView = this.FindName("ProjectsListView") as ListView;
+        if (this.projectsListView is not null)
         {
-            this.projectItems?.Dispose();
-            this.projectItems = value.Transform(
-                p =>
-                {
-                    var thumbUri = DefaultProjectThumbnail;
-                    if (p is { Location: not null, Thumbnail: not null })
-                    {
-                        var thumbFilePath = Path.GetFullPath(Path.Combine(p.Location, p.Thumbnail));
-                        if (File.Exists(thumbFilePath))
-                        {
-                            thumbUri = thumbFilePath;
-                        }
-                    }
-
-                    var bitmap = new BitmapImage(new Uri(thumbUri));
-
-                    return new ProjectItemWithThumbnail()
-                    {
-                        ProjectInfo = p,
-                        Thumbnail = bitmap,
-                    };
-                });
-
-            // Create the sortable collection and initialize its sorting criteria.
-            this.advancedProjectItems = new AdvancedCollectionView(this.projectItems, isLiveShaping: true);
-
-            this.sortDescription ??= new SortDescription(SortDirection.Descending, SortByLastUsedOn);
-            this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
+            this.UpdateListViewState();
+            Debug.WriteLine("[RecentProjectsList] ListView captured");
         }
     }
 
     /// <summary>
-    /// Gets the default project thumbnail URI.
+    /// Handles changes to the ViewModel property.
     /// </summary>
-    private static string DefaultProjectThumbnail { get; }
-        = $"ms-appx:///{typeof(ProjectInfo).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
+    /// <param name="viewModel">The new ViewModel instance.</param>
+    private void OnViewModelChanged(RecentProjectsListViewModel? viewModel)
+    {
+        // Unsubscribe from old ViewModel
+        if (this.cachedViewModel is not null)
+        {
+            this.cachedViewModel.ItemActivated -= this.OnViewModelItemActivated;
+            this.cachedViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;
+        }
+
+        // Update and subscribe to new ViewModel
+        this.cachedViewModel = viewModel;
+        if (this.cachedViewModel is not null)
+        {
+            this.cachedViewModel.ItemActivated += this.OnViewModelItemActivated;
+            this.cachedViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+
+            // Update ListView state initially
+            this.UpdateListViewState();
+        }
+    }
+
+    private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (string.Equals(e.PropertyName, nameof(RecentProjectsListViewModel.IsActivating), StringComparison.Ordinal))
+        {
+            this.UpdateListViewState();
+        }
+    }
+
+    private void UpdateListViewState()
+    {
+        if (this.projectsListView is not null && this.ViewModel is not null)
+        {
+            this.projectsListView.IsEnabled = !this.ViewModel.IsActivating;
+        }
+    }
 
     /// <summary>
     /// Handles the double-tap event on a project item.
@@ -129,16 +103,22 @@ public sealed partial class RecentProjectsList
     private void OnProjectItemDoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
         _ = args; // unused
+        Debug.WriteLine("[RecentProjectsList] OnProjectItemDoubleTapped called");
 
-        if (!this.ActivateOnDoubleTap)
+        var listView = (ListView)sender;
+        var selectedItem = (ProjectItemWithThumbnail?)listView.SelectedItem;
+        if (selectedItem is null)
         {
+            Debug.WriteLine("[RecentProjectsList] OnProjectItemDoubleTapped: No selected item");
             return;
         }
 
-        var listView = (ListView)sender;
-        var selectedItem = (ProjectItemWithThumbnail)listView.SelectedItem;
-
-        this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(selectedItem.ProjectInfo));
+        var vm = this.ViewModel;
+        if (vm?.ActivateProjectCommand is not null)
+        {
+            Debug.WriteLine($"[RecentProjectsList] OnProjectItemDoubleTapped: Executing ActivateProjectCommand for {selectedItem.ProjectInfo.Name}");
+            vm.ActivateProjectCommand.Execute(selectedItem);
+        }
     }
 
     /// <summary>
@@ -148,48 +128,20 @@ public sealed partial class RecentProjectsList
     /// <param name="args">The event data.</param>
     private void OnProjectItemClicked(object sender, ItemClickEventArgs args)
     {
-        _ = sender; // unused
-
-        if (this.ActivateOnDoubleTap)
+        Debug.WriteLine("[RecentProjectsList] OnProjectItemClicked called");
+        var item = (ProjectItemWithThumbnail?)args.ClickedItem;
+        if (item is null)
         {
+            Debug.WriteLine("[RecentProjectsList] OnProjectItemClicked: No clicked item");
             return;
         }
 
-        var item = (ProjectItemWithThumbnail)args.ClickedItem;
-        this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(item.ProjectInfo));
-    }
-
-    /// <summary>
-    /// Toggles the sorting of the recent projects list by last used date.
-    /// </summary>
-    [RelayCommand]
-    private void ToggleSortByLastUsedOn()
-    {
-        var direction = this.sortDescription?.Comparer is ByLastUsedOnComparer
-            ? this.sortDescription.Direction == SortDirection.Descending
-                ? SortDirection.Ascending
-                : SortDirection.Descending
-            : SortDirection.Descending;
-        this.sortDescription = new SortDescription(direction, SortByLastUsedOn);
-
-        this.advancedProjectItems.SortDescriptions.Clear();
-        this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
-    }
-
-    /// <summary>
-    /// Toggles the sorting of the recent projects list by name.
-    /// </summary>
-    [RelayCommand]
-    private void ToggleSortByName()
-    {
-        var direction = this.sortDescription?.Comparer is ByNameComparer
-            ? this.sortDescription.Direction == SortDirection.Descending
-                ? SortDirection.Ascending
-                : SortDirection.Descending
-            : SortDirection.Ascending;
-        this.sortDescription = new SortDescription(direction, SortByName);
-        this.advancedProjectItems.SortDescriptions.Clear();
-        this.advancedProjectItems.SortDescriptions.Add(this.sortDescription);
+        var vm = this.ViewModel;
+        if (vm?.ActivateProjectCommand is not null)
+        {
+            Debug.WriteLine($"[RecentProjectsList] OnProjectItemClicked: Executing ActivateProjectCommand for {item.ProjectInfo.Name}");
+            vm.ActivateProjectCommand.Execute(item);
+        }
     }
 
     /// <summary>
@@ -199,13 +151,34 @@ public sealed partial class RecentProjectsList
     /// <param name="eventArgs">The event data.</param>
     private void OnListViewKeyDown(object sender, KeyRoutedEventArgs eventArgs)
     {
+        Debug.WriteLine($"[RecentProjectsList] OnListViewKeyDown: Key={eventArgs.Key}");
         if (eventArgs.Key is VirtualKey.Enter or VirtualKey.Space)
         {
             var listView = (ListView)sender;
-            var selectedItem = (ProjectItemWithThumbnail)listView.SelectedItem;
+            var selectedItem = (ProjectItemWithThumbnail?)listView.SelectedItem;
+            if (selectedItem is null)
+            {
+                Debug.WriteLine("[RecentProjectsList] OnListViewKeyDown: No selected item");
+                return;
+            }
 
-            Debug.WriteLine("Item clicked");
-            this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(selectedItem.ProjectInfo));
+            var vm = this.ViewModel;
+            if (vm?.ActivateProjectCommand is not null)
+            {
+                Debug.WriteLine($"[RecentProjectsList] OnListViewKeyDown: Executing ActivateProjectCommand for {selectedItem.ProjectInfo.Name}");
+                vm.ActivateProjectCommand.Execute(selectedItem);
+            }
         }
+    }
+
+    /// <summary>
+    /// Handles the ItemActivated event from the ViewModel.
+    /// </summary>
+    /// <param name="sender">The source of the event.</param>
+    /// <param name="args">The event data.</param>
+    private void OnViewModelItemActivated(object? sender, RecentProjectActivatedEventArgs args)
+    {
+        Debug.WriteLine($"[RecentProjectsList] OnViewModelItemActivated: Project={args.Item.ProjectInfo.Name}");
+        this.ItemActivated?.Invoke(this, new ProjectItemActivatedEventArgs(args.Item.ProjectInfo));
     }
 }

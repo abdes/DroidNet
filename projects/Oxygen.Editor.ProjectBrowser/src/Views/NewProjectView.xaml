@@ -45,6 +45,7 @@
                 </Grid.RowDefinitions>
 
                 <pb:TemplatesGridView
+                    x:Name="TemplatesGridControl"
                     VerticalAlignment="Top"
                     IsItemClickEnabled="False"
                     ItemsSource="{x:Bind ViewModel.Templates}"

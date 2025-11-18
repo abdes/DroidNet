@@ -73,9 +73,9 @@
                     BorderBrush="{ThemeResource ControlStrokeColorDefault}"
                     BorderThickness="0,0,0,1">
                     <pb:RecentProjectsList
+                        x:Name="RecentProjectsListControl"
                         VerticalAlignment="Top"
-                        ItemActivated="OnRecentProjectOpenAsync"
-                        RecentProjects="{x:Bind ViewModel.RecentProjects, Mode=OneWay, FallbackValue={}}" />
+                        ItemActivated="OnRecentProjectOpenAsync" />
 
                     <!--  Bottom Border Only  -->
                 </Border>

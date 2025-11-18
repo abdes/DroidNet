@@ -82,7 +82,7 @@ public partial class HomeViewModel(
             return false;
         }
 
-        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" }, ReplaceTarget = true }).ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return true;
@@ -105,7 +105,11 @@ public partial class HomeViewModel(
 
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
 
-        await router.NavigateAsync("/we", new FullNavigation() { Target = new Target { Name = "wnd-we" } }).ConfigureAwait(true);
+        await router.NavigateAsync("/we", new FullNavigation()
+        {
+            Target = new Target { Name = "wnd-we" },
+            ReplaceTarget = true,
+        }).ConfigureAwait(true);
 
         // TODO: returning a bool here is weird. we should through on error and retrun void
         return true;
@@ -194,22 +198,30 @@ public partial class HomeViewModel(
     [RelayCommand]
     private async Task LoadRecentProjectsAsync()
     {
+        Debug.WriteLine("[HomeViewModel] LoadRecentProjectsAsync starting");
+        Debug.WriteLine($"[HomeViewModel] Current RecentProjects.Count={this.RecentProjects.Count}");
+
         // Track the recent projects loaded from the project browser service in
-        // a dictionary for fast lookup.
-        var recentlyUsedProjectDict = new Dictionary<IProjectInfo, IProjectInfo>();
+        // a dictionary keyed by project Id for fast lookup. Using Guid avoids
+        // accidental reference-equality comparisons when the dictionary is
+        // typed against the interface `IProjectInfo`.
+        var recentlyUsedProjectDict = new Dictionary<Guid, IProjectInfo>();
 
         // Update existing items and add new items in the RecentProjects collection
         await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
-            recentlyUsedProjectDict.Add(projectInfo, projectInfo);
+            Debug.WriteLine($"[HomeViewModel] Service project: Id={projectInfo.Id}, Name={projectInfo.Name}, LastUsedOn={projectInfo.LastUsedOn}");
+            recentlyUsedProjectDict.Add(projectInfo.Id, projectInfo);
 
             var existingItem = this.RecentProjects.FirstOrDefault(item => item.Equals(projectInfo));
             if (existingItem != null)
             {
+                Debug.WriteLine($"[HomeViewModel] Update existing item LastUsedOn: Id={existingItem.Id}, Name={existingItem.Name}, Old={existingItem.LastUsedOn} New={projectInfo.LastUsedOn}");
                 existingItem.LastUsedOn = projectInfo.LastUsedOn;
             }
             else
             {
+                Debug.WriteLine($"[HomeViewModel] Add new RecentProject: Id={projectInfo.Id}, Name={projectInfo.Name}");
                 this.RecentProjects.Add(projectInfo); // Add new item
             }
         }
@@ -217,11 +229,14 @@ public partial class HomeViewModel(
         // Remove items not in the collection obtained from the project browser
         for (var index = this.RecentProjects.Count - 1; index >= 0; index--)
         {
-            if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index]))
+            if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index].Id))
             {
+                Debug.WriteLine($"[HomeViewModel] Remove RecentProject (not in DB results): Id={this.RecentProjects[index].Id}, Name={this.RecentProjects[index].Name}");
                 this.RecentProjects.RemoveAt(index);
             }
         }
+
+        Debug.WriteLine($"[HomeViewModel] LoadRecentProjectsAsync complete. RecentProjects.Count={this.RecentProjects.Count}");
     }
 
     [LoggerMessage(
