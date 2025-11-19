@@ -335,7 +335,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     /// </summary>
     private static class ManagedWindowFactory
     {
-        public static IManagedWindow CreateForWindow(Window window) => new ManagedWindow()
+        public static ManagedWindow CreateForWindow(Window window) => new()
         {
             DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
             Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
