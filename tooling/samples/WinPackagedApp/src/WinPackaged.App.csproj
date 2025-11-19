@@ -32,7 +32,6 @@
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="WinUIEx" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
