@@ -41,10 +41,10 @@ Aura serves as the outer layer of your application, providing a polished, custom
 
 Aura integrates with several DroidNet components:
 
-- **DroidNet.Config** - Configuration management
-- **DroidNet.Controls.Menus** - Menu system integration
-- **DroidNet.Hosting** - Application hosting and lifecycle
-- **DroidNet.Routing** - URI-based navigation
+- **DroidNet.Config** - Configuration management and `ISettingsService<T>` wrappers
+- **DroidNet.Controls.Menus** - Menu system integration (`IMenuProvider` / `IMenuSource`)
+- **DroidNet.Hosting** - Application hosting and lifecycle (wires the DryIoc container)
+- **DroidNet.Routing** - URI-based navigation and activation events
 - **DroidNet.Mvvm.Generators** - Custom MVVM source generators
 
 ## Project Architecture
@@ -117,7 +117,7 @@ Decorations are resolved from `WindowDecorationOptions` and may include details 
 ### Architecture Highlights
 
 - **Reactive Programming** - Uses System.Reactive (Rx) for event handling
-- **Dependency Injection** - All services are registered and injected via DryIoc
+- **Dependency Injection** - Primary integration via DryIoc; use the `IContainer.WithAura()` extension to register Aura features
 - **Source Generators** - Leverages custom MVVM generators for boilerplate reduction
 - **Outlet-Based Navigation** - Integrates with DroidNet routing for view composition
 
@@ -256,7 +256,7 @@ Aura/
 - **Manager-Tracked Windows** - Use `IWindowManagerService` to register and track windows; windows are represented by `ManagedWindow` which exposes `Id`, `Category`, `Decorations`, `MenuSource`, `Metadata`, `PresenterState` and other helpful properties.
 - **Lifecycle Events & Observables** - Subscribe to lifecycle events via `IWindowManagerService.WindowEvents` (an `IObservable<WindowLifecycleEvent>`) or async event handlers (`PresenterStateChanging`, `PresenterStateChanged`, `WindowClosing`, `WindowClosed`, `WindowBoundsChanged`). Event types include: `WindowLifecycleEventType.Created`, `WindowLifecycleEventType.Activated`, `WindowLifecycleEventType.Deactivated`, and `WindowLifecycleEventType.Closed`.
 - **Programmatic Control** - Programmatically activate, minimize, maximize, restore and close windows using the manager API (`ActivateWindow`, `MinimizeWindowAsync`, `MaximizeWindowAsync`, `RestoreWindowAsync`, `CloseWindowAsync`).
-- **Metadata & Menu Providers** - Attach arbitrary metadata to windows using `SetMetadataAsync` and integrate UI menus using `IMenuProvider` when decoration contains a menu provider ID.
+- **Metadata & Menu Providers** - Attach arbitrary metadata to windows using `SetMetadata` and integrate UI menus using `IMenuProvider` when decoration contains a menu provider ID.
 - **Router Integration** - The `WindowManagerService` integrates with the `IRouter` to automatically track windows created by route targets and attach route metadata.
 
 ### 🎯 MVVM Architecture
@@ -275,9 +275,14 @@ Aura/
 
 ### 🔧 Dependency Injection
 
-- **Service Registration** - Easy service configuration via Host builder
+- **Container registration** - Use the `IContainer.WithAura()` DryIoc extension to register Aura core services and optional features (`AuraOptions`). Hosting integration in `DroidNet.Hosting` wires the application container to the host when used.
 - **Scoped Lifetimes** - Proper service lifetime management
 - **Factory Support** - Custom factory patterns for complex dependencies
+
+### Documents & TabStrip Drag
+
+- **Document integration** - Aura expects the host application to implement `IDocumentService` (see `src/Documents/IDocumentService.cs`). Aura's `DocumentTabPresenter` wires the document events to the `TabStrip` control and forwards user interactions (selection, close, detach) back to the application-level document service.
+- **Tab tear-out & drag** - The `TabStrip` control supports reordering, tear-out (creating a new host window), cross-window drag and drop, and a coordinated `ITabDragCoordinator`/`IDragVisualService` pair for rich visuals and resilient cross-window dragging. See `src/Drag/README.md` for the full specification and event contract (e.g. `TabCloseRequested`, `TabDragImageRequest`, `TabTearOutRequested`, `TabDragComplete`).
 
 ## Development Workflow
 
@@ -338,28 +343,33 @@ dotnet run --project samples/SingleWindow/Aura.SingleWindow.App.csproj
     <PackageReference Include="DroidNet.Aura" Version="1.0.0-alpha" />
     ```
 
-2. **Configure services** in your `Program.cs`:
+2. **Register Aura into your DryIoc container.** Aura exposes a fluent `WithAura()` extension on `DryIoc.IContainer` to register mandatory services and optional features via `AuraOptions`:
 
     ```csharp
-    var bootstrap = new Bootstrapper(args);
-    bootstrap.Configure()
-        .WithLoggingAbstraction()
-        .WithConfiguration(...)
-        .WithMvvm()
-        .WithRouting(routes)
-        .WithWinUI<App>()
-        .WithAppServices(services =>
-        {
-            // Register Aura services
-            services.AddSingleton<IAppThemeModeService, AppThemeModeService>();
-            services.AddSingleton<AppearanceSettingsService>();
-            // Register windowing services
-            services.AddSingleton<IWindowManagerService, WindowManagerService>();
-            services.AddSingleton<IWindowFactory, DefaultWindowFactory>();
-        });
+    using DryIoc;
+
+    var container = new Container();
+
+    // Minimal registration (mandatory services only)
+    container.WithAura();
+
+    // Full registration with optional features
+    container.WithAura(options => options
+        .WithDecorationSettings()
+        .WithAppearanceSettings()
+        .WithBackdropService()
+        .WithThemeModeService()
+        .WithDrag()
+    );
+
+    // Register windows for factory resolution
+    container.AddWindow<RoutedWindow>();
+
+    // Register menu providers separately as singletons implementing IMenuProvider
+    // container.Register<IMenuProvider>(Made.Of(() => new MenuProvider(...)), Reuse.Singleton);
     ```
 
-3. **Use MainShellView** as your root:
+3. **Use `MainShellView`** as your root view in XAML. The sample uses a host `Window` with the shell view inserted as content:
 
     ```xaml
     <local:MainWindow
