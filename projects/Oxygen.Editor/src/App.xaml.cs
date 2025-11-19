@@ -44,6 +44,7 @@ public partial class App
     /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
     /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
     /// <param name="chromeService">The chrome service for automatic chrome application.</param>
+    /// <param name="placementService">The window placement service for restoring and saving window positions.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service
@@ -62,12 +63,15 @@ public partial class App
         IWindowManagerService windowManager,
         IAppThemeModeService themeModeService,
         WindowBackdropService backdropService,
-        WindowChromeService chromeService)
+        WindowChromeService chromeService,
+        WindowPlacementService placementService)
     {
         _ = windowManager; // Unused; injected only for early initialization
         _ = backdropService; // Unused; injected only for early initialization
         _ = themeModeService; // Unused; injected only to instantiate it early
         _ = chromeService; // Unused; injected only to instantiate it early
+
+        _ = placementService; // autonomous service
 
         // Create the DispatcherScheduler for the UI thread
         this.hostingContext = hostingContext;

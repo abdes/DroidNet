@@ -243,6 +243,9 @@ public static partial class Program
         container.Register<NativeStorageProvider>(Reuse.Singleton);
         container.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
+        // Window placement service
+        container.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
+
         RegisterEditorDataServices(container);
 
         /*
