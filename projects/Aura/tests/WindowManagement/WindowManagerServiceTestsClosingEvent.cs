@@ -3,9 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.InteropServices;
 using AwesomeAssertions;
+using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
 using Microsoft.UI;
+using Microsoft.UI.Xaml;
+using WinRT.Interop;
 
 namespace DroidNet.Aura.Tests;
 
@@ -15,7 +19,7 @@ namespace DroidNet.Aura.Tests;
 [TestClass]
 [TestCategory("UITest")]
 [ExcludeFromCodeCoverage]
-public class WindowManagerServiceTestsClosingEvent : WindowManagerServiceTestsBase
+public partial class WindowManagerServiceTestsClosingEvent : WindowManagerServiceTestsBase
 {
     [TestMethod]
     public Task WindowClosing_IsFiredBeforeClose_Async() => EnqueueAsync(async () =>
@@ -282,6 +286,57 @@ public class WindowManagerServiceTestsClosingEvent : WindowManagerServiceTestsBa
     });
 
     [TestMethod]
+    public Task WindowClose_CLoseButton_RaisesClosingAndClosed_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var testWindow = MakeSmallWindow();
+
+        var sut = this.CreateService();
+        var closingCount = 0;
+        var closedCount = 0;
+        WindowId? closingWindowId = null;
+        WindowId? closedWindowId = null;
+
+        sut.WindowClosing += (sender, args) =>
+        {
+            closingCount++;
+            closingWindowId = args.WindowId;
+            return Task.CompletedTask;
+        };
+
+        sut.WindowClosed += (sender, args) =>
+        {
+            closedCount++;
+            closedWindowId = args.WindowId;
+            return Task.CompletedTask;
+        };
+
+        try
+        {
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+
+            // Ensure window is shown/activated like a real user scenario
+            await testWindow.DispatcherQueue.EnqueueAsync(testWindow.Activate).ConfigureAwait(true);
+            await Task.Delay(50, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            // Act - simulate user hitting the system close button via WM_CLOSE
+            await SendSystemCloseAsync(testWindow).ConfigureAwait(true);
+            await Task.Delay(200, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            // Assert - both events fire exactly once for the same window
+            _ = closingCount.Should().Be(1);
+            _ = closedCount.Should().Be(1);
+            _ = closingWindowId.Should().Be(context.Id);
+            _ = closedWindowId.Should().Be(context.Id);
+            _ = sut.OpenWindows.Should().BeEmpty();
+        }
+        finally
+        {
+            sut.Dispose();
+        }
+    });
+
+    [TestMethod]
     public Task WindowClosing_AsyncHandler_AwaitsCompletion_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -392,4 +447,24 @@ public class WindowManagerServiceTestsClosingEvent : WindowManagerServiceTestsBa
             sut.Dispose();
         }
     });
+
+    private static Task SendSystemCloseAsync(Window window) => window.DispatcherQueue.EnqueueAsync(() =>
+    {
+        var hwnd = WindowNative.GetWindowHandle(window);
+        if (hwnd == 0)
+        {
+            throw new InvalidOperationException("Unable to retrieve window handle for WM_CLOSE simulation.");
+        }
+
+        _ = PostMessage(hwnd, WmClose, 0, 0);
+    });
+
+#pragma warning disable SA1201 // Elements should appear in the correct order
+    private const uint WmClose = 0x0010;
+#pragma warning restore SA1201 // Elements should appear in the correct order
+
+    [LibraryImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool PostMessage(nint hWnd, uint msg, nuint wParam, nint lParam);
 }

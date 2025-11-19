@@ -10,6 +10,7 @@ using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 namespace DroidNet.Samples.WinPackagedApp;
@@ -23,6 +24,7 @@ public partial class App
     private readonly IRouter router;
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
+    private readonly IWindowManagerService windowManager;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="App" /> class.
@@ -50,12 +52,16 @@ public partial class App
     {
         // Force WindowManagerService initialization BEFORE navigation starts
         // This ensures it subscribes to router events before the main window is created
-        _ = windowManager;
         _ = themeModeService;
 
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
+        this.windowManager = windowManager;
+
+        // Subscribe to window closing events to request confirmation
+        this.windowManager.WindowClosing += this.OnWindowClosingAsync;
+
         this.InitializeComponent();
     }
 
@@ -77,6 +83,25 @@ public partial class App
         catch (NavigationFailedException)
         {
             this.lifetime.StopApplication();
+        }
+    }
+
+    private async System.Threading.Tasks.Task OnWindowClosingAsync(object? sender, WindowClosingEventArgs e)
+    {
+        var dialog = new ContentDialog
+        {
+            Title = "Confirm Close",
+            Content = "Are you sure you want to close this window?",
+            PrimaryButtonText = "Yes",
+            CloseButtonText = "No",
+            DefaultButton = ContentDialogButton.Close,
+            XamlRoot = this.windowManager.ActiveWindow?.Window.Content.XamlRoot,
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            e.Cancel = true;
         }
     }
 }
