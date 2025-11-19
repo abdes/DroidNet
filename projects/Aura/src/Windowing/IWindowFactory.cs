@@ -31,7 +31,7 @@ namespace DroidNet.Aura.Windowing;
 ///     features such as presenter configuration, window placement, and custom chrome behavior.</para>
 /// </remarks>
 /// <seealso cref="WindowCategory"/>
-/// <seealso cref="WindowContext"/>
+/// <seealso cref="ManagedWindow"/>
 /// <seealso cref="IWindowManagerService"/>
 public interface IWindowFactory
 {
@@ -41,9 +41,6 @@ public interface IWindowFactory
     /// <typeparam name="TWindow">
     ///     The window type to create. Must be registered in the dependency injection container.
     /// </typeparam>
-    /// <param name="metadata">
-    ///     Optional metadata to associate with the window. Will be available in the managed <see cref="WindowContext"/>.
-    /// </param>
     /// <returns>
     ///     An instance of <typeparamref name="TWindow"/> with constructor dependencies resolved from the DI container.
     /// </returns>
@@ -51,7 +48,7 @@ public interface IWindowFactory
     ///     This generic overload provides compile-time type safety and requires an explicit registration for
     ///     <typeparamref name="TWindow"/> in the container. Use this when the window type is known at the call site.
     /// </remarks>
-    public Task<TWindow> CreateWindow<TWindow>(IReadOnlyDictionary<string, object>? metadata = null)
+    public Task<TWindow> CreateWindow<TWindow>()
         where TWindow : Window;
 
     /// <summary>
@@ -59,9 +56,6 @@ public interface IWindowFactory
     /// </summary>
     /// <param name="key">
     ///     The key identifying a keyed <see cref="Window"/> registration in the dependency injection container.
-    /// </param>
-    /// <param name="metadata">
-    ///     Optional metadata to associate with the window. Will be available in the managed <see cref="WindowContext"/>.
     /// </param>
     /// <returns>
     ///     A <see cref="Window"/> instance resolved from the container using the provided key.
@@ -71,7 +65,7 @@ public interface IWindowFactory
     ///     cref="Window"/> implementations to be registered and distinguished by key. Use this when the specific window
     ///     implementation is determined by configuration, user input, or other runtime conditions.
     /// </remarks>
-    public Task<Window> CreateWindow(string key, IReadOnlyDictionary<string, object>? metadata = null);
+    public Task<Window> CreateWindow(string key);
 
     /// <summary>
     ///     Creates a window of the specified type with automatic decoration for the given category.
@@ -82,9 +76,6 @@ public interface IWindowFactory
     /// <param name="category">
     ///     The <see cref="WindowCategory"/> that determines decoration applied to the created window. Decoration
     ///     settings are resolved from the Aura configuration for the specified category.
-    /// </param>
-    /// <param name="metadata">
-    ///     Optional metadata to associate with the window. Will be available in the managed <see cref="WindowContext"/>.
     /// </param>
     /// <returns>
     ///     A new instance of <typeparamref name="TWindow"/> with dependencies resolved and category-specific decoration
@@ -99,6 +90,6 @@ public interface IWindowFactory
     ///     Decoration is applied after the window is fully created and initialized, ensuring all constructor-injected
     ///     dependencies and property bindings are established before decoration logic runs.</para>
     /// </remarks>
-    public Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null)
+    public Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category)
         where TWindow : Window;
 }

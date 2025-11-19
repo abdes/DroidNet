@@ -118,13 +118,13 @@ public class DependencyInjectionExtensionsTests
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Used as a type argument for DI registration tests; not directly instantiated.")]
     private sealed class TestWindowFactory : IWindowFactory
     {
-        public Task<TWindow> CreateWindow<TWindow>(IReadOnlyDictionary<string, object>? metadata = null)
+        public Task<TWindow> CreateWindow<TWindow>()
             where TWindow : Microsoft.UI.Xaml.Window => Task.FromResult<TWindow>(null!);
 
-        public Task<Microsoft.UI.Xaml.Window> CreateWindow(string key, IReadOnlyDictionary<string, object>? metadata = null)
+        public Task<Microsoft.UI.Xaml.Window> CreateWindow(string key)
             => Task.FromResult<Microsoft.UI.Xaml.Window>(null!);
 
-        public Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null)
+        public Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category)
             where TWindow : Microsoft.UI.Xaml.Window => Task.FromResult<TWindow>(null!);
     }
 }

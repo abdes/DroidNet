@@ -38,7 +38,6 @@ public static class DependencyInjectionExtensions
     ///     <para><strong>Mandatory Services (Always Registered):</strong></para>
     ///     <list type="bullet">
     ///     <item><description><see cref="IWindowFactory"/> - Factory for creating window instances</description></item>
-    ///     <item><description><see cref="IWindowContextFactory"/> - Factory for creating window contexts</description></item>
     ///     <item><description><see cref="IWindowManagerService"/> - Core window management service</description></item>
     ///     </list>
     ///     <para><strong>Optional Services (Via Configuration):</strong></para>
@@ -48,7 +47,7 @@ public static class DependencyInjectionExtensions
     ///     <para><strong>Menu Providers:</strong></para>
     ///     <para>
     ///     Menu providers are registered separately using standard DI patterns. Register them as singletons
-    ///     implementing <see cref="Decoration.IMenuProvider"/> anywhere in your startup code.
+    ///     implementing <see cref="IMenuProvider"/> anywhere in your startup code.
     ///     </para>
     /// </remarks>
     /// <example>
@@ -132,7 +131,6 @@ public static class DependencyInjectionExtensions
         }
 
         // Register window context factory and window manager service
-        container.Register<IWindowContextFactory, WindowContextFactory>(Reuse.Singleton);
         container.Register<IWindowManagerService, WindowManagerService>(Reuse.Singleton);
     }
 

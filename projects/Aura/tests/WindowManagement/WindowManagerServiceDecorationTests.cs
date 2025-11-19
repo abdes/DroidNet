@@ -42,7 +42,6 @@ namespace DroidNet.Aura.Tests.WindowManagement;
 public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 {
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
-    private IWindowContextFactory windowContextFactory = null!;
     private HostingContext hostingContext = null!;
 
     /// <summary>
@@ -59,12 +58,6 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         _ = this.mockLoggerFactory
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(Mock.Of<ILogger>());
-
-        // Create real context factory (no mocking, we need real menu provider resolution)
-        this.windowContextFactory = new WindowContextFactory(
-            Mock.Of<ILogger<WindowContextFactory>>(),
-            this.mockLoggerFactory.Object,
-            []);
 
         // Create hosting context with real dispatcher
         var dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -87,13 +80,13 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         try
         {
@@ -110,7 +103,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         {
             if (context != null)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
             else
             {
@@ -131,13 +124,13 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
     {
         // Arrange - No decoration settings service
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: null); // No service
 
         var window = MakeSmallWindow();
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         try
         {
@@ -152,7 +145,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         {
             if (context != null)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
             else
             {
@@ -176,12 +169,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
-        var createdContexts = new ConcurrentBag<WindowContext>();
+        var createdContexts = new ConcurrentBag<ManagedWindow>();
         var createdWindows = new List<Window>();
 
         try
@@ -219,7 +212,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             // Cleanup all windows
             foreach (var context in createdContexts)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
 
             windowManager.Dispose();
@@ -238,13 +231,13 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Main);
 
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         try
         {
@@ -260,7 +253,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         {
             if (context != null)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
             else
             {
@@ -283,13 +276,13 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Tool);
 
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         try
         {
@@ -305,7 +298,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         {
             if (context != null)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
             else
             {
@@ -328,13 +321,13 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         var settingsService = CreateMockSettingsService(WindowCategory.Document);
 
         var windowManager = new WindowManagerService(
-            this.windowContextFactory,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         try
         {
@@ -350,7 +343,7 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         {
             if (context != null)
             {
-                _ = await windowManager.CloseWindowAsync(context).ConfigureAwait(true);
+                _ = await windowManager.CloseWindowAsync(context.Id).ConfigureAwait(true);
             }
             else
             {

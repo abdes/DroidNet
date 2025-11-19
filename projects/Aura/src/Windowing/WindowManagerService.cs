@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
+using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
@@ -15,59 +16,57 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
+using Windows.Foundation;
 
 namespace DroidNet.Aura.Windowing;
 
 /// <summary>
 ///     Coordinates Aura-managed windows within a WinUI 3 host.
 /// </summary>
-/// <remarks>
-///     The service tracks windows supplied by the application, decorates them using configured
-///     settings, applies appearance updates, and publishes lifecycle events. While it wires up
-///     activation/closure handlers and offers helpers for closing or requesting activation, showing
-///     the window remains an application decision.
-/// </remarks>
 public sealed partial class WindowManagerService : IWindowManagerService
 {
     private readonly ILogger<WindowManagerService> logger;
-    private readonly IWindowContextFactory windowContextFactory;
+    private readonly IEnumerable<IMenuProvider> menuProviders;
     private readonly ISettingsService<IWindowDecorationSettings>? decorationSettingsService;
     private readonly DispatcherQueue dispatcherQueue;
 
-    private readonly ConcurrentDictionary<WindowId, WindowContext> windows = new();
+    private readonly ConcurrentDictionary<WindowId, ManagedWindow> windows = new();
     private readonly Subject<WindowLifecycleEvent> windowEventsSubject = new();
+    private readonly Subject<WindowMetadataChange> metadataChangedSubject = new();
     private readonly IDisposable? routerContextCreatedSubscription;
     private readonly IDisposable? routerContextDestroyedSubscription;
 
-    private WindowContext? activeWindow;
+    private ManagedWindow? activeWindow;
     private bool isDisposed;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="WindowManagerService"/> class.
+    /// Initializes a new instance of the <see cref="WindowManagerService"/> class.
+    /// Coordinates Aura-managed windows within a WinUI 3 host, providing registration,
+    /// activation, decoration, and lifecycle management for windows.
     /// </summary>
-    /// <param name="windowContextFactory">Factory responsible for creating <see cref="WindowContext"/> instances.</param>
-    /// <param name="hostingContext">Provides access to the application dispatcher and related WinUI services.</param>
-    /// <param name="loggerFactory">Optional logger factory used to create a category logger.</param>
-    /// <param name="router">Optional router used to auto-register windows created via navigation.</param>
-    /// <param name="decorationSettingsService">Optional service resolving decoration metadata by window category.</param>
+    /// <param name="hostingContext">The hosting context containing dispatcher and application references.</param>
+    /// <param name="menuProviders">A collection of menu providers for window menus.</param>
+    /// <param name="loggerFactory">Optional logger factory for logging window manager events.</param>
+    /// <param name="router">Optional router for integration with navigation events.</param>
+    /// <param name="decorationSettingsService">Optional settings service for window decoration configuration.</param>
     public WindowManagerService(
-        IWindowContextFactory windowContextFactory,
         HostingContext hostingContext,
+        IEnumerable<IMenuProvider> menuProviders,
         ILoggerFactory? loggerFactory = null,
         IRouter? router = null,
         ISettingsService<IWindowDecorationSettings>? decorationSettingsService = null)
     {
-        ArgumentNullException.ThrowIfNull(windowContextFactory);
         ArgumentNullException.ThrowIfNull(hostingContext);
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
+        ArgumentNullException.ThrowIfNull(menuProviders);
 
         this.logger = loggerFactory?.CreateLogger<WindowManagerService>() ?? NullLogger<WindowManagerService>.Instance;
-        this.windowContextFactory = windowContextFactory;
+        this.menuProviders = menuProviders;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.decorationSettingsService = decorationSettingsService;
 
-        // Integrate with router if available to track router-created windows
         if (router is not null)
         {
             this.routerContextCreatedSubscription = router.Events
@@ -89,23 +88,38 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <inheritdoc />
+    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanging;
+
+    /// <inheritdoc />
+    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanged;
+
+    /// <inheritdoc />
+    public event AsyncEventHandler<WindowClosingEventArgs>? WindowClosing;
+
+    /// <inheritdoc />
+    public event AsyncEventHandler<WindowClosedEventArgs>? WindowClosed;
+
+    /// <inheritdoc />
+    public event AsyncEventHandler<WindowBoundsChangedEventArgs>? WindowBoundsChanged;
+
+    /// <inheritdoc />
+    public ManagedWindow? ActiveWindow => this.activeWindow;
+
+    /// <inheritdoc />
+    public IReadOnlyCollection<ManagedWindow> OpenWindows => this.windows.Values.ToList().AsReadOnly();
+
+    /// <inheritdoc />
     public IObservable<WindowLifecycleEvent> WindowEvents => this.windowEventsSubject.AsObservable();
 
     /// <inheritdoc />
-    public WindowContext? ActiveWindow => this.activeWindow;
+    public IObservable<WindowMetadataChange> MetadataChanged => this.metadataChangedSubject.AsObservable();
 
     /// <inheritdoc />
-    public IReadOnlyCollection<WindowContext> OpenWindows => this.windows.Values.ToList().AsReadOnly();
+    public async Task<ManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null)
+        => await this.RegisterDecoratedWindowAsync(window, WindowCategory.System, metadata).ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<WindowContext> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null)
-        => await this.RegisterDecoratedWindowAsync(
-            window,
-            WindowCategory.System,
-            metadata).ConfigureAwait(false);
-
-    /// <inheritdoc />
-    public async Task<WindowContext> RegisterDecoratedWindowAsync(
+    public async Task<ManagedWindow> RegisterDecoratedWindowAsync(
         Window window,
         WindowCategory category,
         IReadOnlyDictionary<string, object>? metadata = null)
@@ -113,43 +127,46 @@ public sealed partial class WindowManagerService : IWindowManagerService
         ArgumentNullException.ThrowIfNull(window);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        // Check if window is already registered
         if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
         {
             throw new InvalidOperationException("Window is already registered with the window manager");
         }
 
-        WindowContext? context = null;
+        ManagedWindow? context = null;
 
         await this.dispatcherQueue.EnqueueAsync(() =>
         {
             try
             {
-                // Resolve decoration using the configured priority system.
                 var resolvedDecoration = this.ResolveDecoration(window.AppWindow.Id, category);
+                context = this.CreateManagedWindow(window, category, resolvedDecoration, metadata);
 
-                context = this.windowContextFactory.Create(window, category, resolvedDecoration, metadata);
-
-                // Register window events
                 this.RegisterWindowEvents(context);
 
-                // Add to collection
                 if (!this.windows.TryAdd(context.Id, context))
                 {
                     throw new InvalidOperationException($"Failed to register window with ID {context.Id.Value}");
                 }
 
                 this.LogWindowRegistered(context.Id, category);
+                this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Created, context));
 
-                // Publish event
-                this.PublishEvent(WindowLifecycleEventType.Created, context);
-
-                // Ensure chrome settings are in place before the application decides to show the window.
-                // ExtendsContentIntoTitleBar must be set before window.Show() for backdrop to work.
                 if (resolvedDecoration?.ChromeEnabled == true)
                 {
                     window.ExtendsContentIntoTitleBar = true;
                 }
+
+                // Initialize state
+                if (window.AppWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    context.PresenterState = presenter.State;
+                }
+
+                context.CurrentBounds = new Windows.Graphics.RectInt32(
+                    window.AppWindow.Position.X,
+                    window.AppWindow.Position.Y,
+                    window.AppWindow.Size.Width,
+                    window.AppWindow.Size.Height);
             }
             catch (Exception ex)
             {
@@ -159,15 +176,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         }).ConfigureAwait(true);
 
         return context ?? throw new InvalidOperationException("Window registration failed");
-    }
-
-    /// <inheritdoc />
-    public async Task<bool> CloseWindowAsync(WindowContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        ObjectDisposedException.ThrowIf(this.isDisposed, this);
-
-        return await this.CloseWindowAsync(context.Id).ConfigureAwait(true);
     }
 
     /// <inheritdoc />
@@ -181,34 +189,40 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return false;
         }
 
-        var result = false;
+        // Raise Closing event
+        var args = new WindowClosingEventArgs();
+        if (this.WindowClosing != null)
+        {
+            await this.WindowClosing.Invoke(this, args).ConfigureAwait(true);
+        }
 
-#pragma warning disable CA1031 // Window closing should not propagate to callers
+        if (args.Cancel)
+        {
+            return false;
+        }
+
+        var result = false;
         await this.dispatcherQueue.EnqueueAsync(() =>
         {
-            try
-            {
-                this.LogClosingWindow(windowId);
-                context.Window.Close();
-                result = true;
-            }
-            catch (Exception ex)
-            {
-                this.LogCloseWindowFailed(ex, windowId);
-            }
+            this.LogClosingWindow(windowId);
+            context.Window.Close();
+            result = true;
         }).ConfigureAwait(true);
-#pragma warning restore CA1031 // Window closing should not propagate to callers
 
         return result;
     }
 
     /// <inheritdoc />
-    public void ActivateWindow(WindowContext context)
+    public async Task CloseAllWindowsAsync()
     {
-        ArgumentNullException.ThrowIfNull(context);
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
 
-        this.ActivateWindow(context.Id);
+        var windowIds = this.windows.Keys.ToList();
+        this.LogClosingAllWindows(windowIds.Count);
+        foreach (var windowId in windowIds)
+        {
+            _ = await this.CloseWindowAsync(windowId).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -222,60 +236,164 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-#pragma warning disable CA1031 // Window activation errors should be logged, not thrown
         _ = this.dispatcherQueue.TryEnqueue(() =>
         {
             try
             {
                 if (!this.windows.TryGetValue(windowId, out var targetContext))
                 {
-                    this.LogActivateMissingWindow(windowId);
                     return;
                 }
 
                 targetContext.Window.Activate();
             }
+#pragma warning disable CA1031 // Do not catch general exception types
             catch (Exception ex)
             {
                 this.LogActivateWindowFailed(ex, windowId);
             }
+#pragma warning restore CA1031 // Do not catch general exception types
         });
-#pragma warning restore CA1031 // Window activation errors should be logged, not thrown
     }
 
     /// <inheritdoc />
-    public WindowContext? GetWindow(WindowId windowId)
+    public ManagedWindow? GetWindow(WindowId windowId)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
         return this.windows.TryGetValue(windowId, out var context) ? context : null;
     }
 
     /// <inheritdoc />
-    public IReadOnlyCollection<WindowContext> GetWindowsByCategory(WindowCategory category)
+    public async Task MinimizeWindowAsync(WindowId windowId)
     {
-        ObjectDisposedException.ThrowIf(this.isDisposed, this);
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
 
-        return this.windows.Values
-            .Where(w => w.Category.Equals(category))
-            .ToList()
-            .AsReadOnly();
+        await this.dispatcherQueue.EnqueueAsync(() =>
+        {
+            if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                var oldState = window.PresenterState;
+                const OverlappedPresenterState newState = OverlappedPresenterState.Minimized;
+                var oldBounds = window.CurrentBounds;
+                var proposedRestored = window.RestoredBounds;
+
+                this.RaisePresenterStateChanging(window, newState);
+
+                presenter.Minimize();
+
+                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
+            }
+        }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public async Task CloseAllWindowsAsync()
+    public async Task MaximizeWindowAsync(WindowId windowId)
     {
-        ObjectDisposedException.ThrowIf(this.isDisposed, this);
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
 
-        this.LogClosingAllWindows(this.windows.Count);
+        await this.dispatcherQueue.EnqueueAsync(() =>
+        {
+            if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                var oldState = window.PresenterState;
+                const OverlappedPresenterState newState = OverlappedPresenterState.Maximized;
+                var oldBounds = window.CurrentBounds;
+                var proposedRestored = window.RestoredBounds;
 
-        // Capture immutable snapshot of window IDs to ensure deterministic closure
-        // even as the collection mutates during concurrent window removal
-        var windowIds = this.windows.Keys.ToArray();
-        var closeTasks = windowIds.Select(this.CloseWindowAsync);
-        _ = await Task.WhenAll(closeTasks).ConfigureAwait(true);
+                this.RaisePresenterStateChanging(window, newState);
+
+                presenter.Maximize();
+                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
+            }
+        }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
+    public async Task RestoreWindowAsync(WindowId windowId)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
+
+        await this.dispatcherQueue.EnqueueAsync(() =>
+        {
+            if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                var oldState = window.PresenterState;
+                const OverlappedPresenterState newState = OverlappedPresenterState.Restored;
+                var oldBounds = window.CurrentBounds;
+                var proposedRestored = window.RestoredBounds;
+
+                this.RaisePresenterStateChanging(window, newState);
+
+                presenter.Restore();
+                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public Task SetMetadataAsync(WindowId windowId, string key, object? value)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return Task.CompletedTask;
+        }
+
+        object? oldValue = null;
+        var newValue = value;
+
+        lock (window)
+        {
+            var currentMetadata = window.Metadata != null
+                ? new Dictionary<string, object>(window.Metadata, StringComparer.Ordinal)
+                : new Dictionary<string, object>(StringComparer.Ordinal);
+
+            if (currentMetadata.TryGetValue(key, out var existingValue))
+            {
+                oldValue = existingValue;
+            }
+
+            if (Equals(oldValue, newValue))
+            {
+                return Task.CompletedTask;
+            }
+
+            if (newValue == null)
+            {
+                _ = currentMetadata.Remove(key);
+            }
+            else
+            {
+                currentMetadata[key] = newValue;
+            }
+
+            window.Metadata = currentMetadata;
+        }
+
+        this.metadataChangedSubject.OnNext(new WindowMetadataChange(windowId, key, oldValue, newValue));
+        this.LogMetadataChanged(windowId, key);
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task RemoveMetadataAsync(WindowId windowId, string key) => this.SetMetadataAsync(windowId, key, value: null);
+
+    /// <inheritdoc />
+    public Task<object?> TryGetMetadataValueAsync(WindowId windowId, string key)
+        => this.windows.TryGetValue(windowId, out var window) && window.Metadata != null && window.Metadata.TryGetValue(key, out var value)
+            ? Task.FromResult<object?>(value)
+            : Task.FromResult<object?>(null);
+
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (this.isDisposed)
@@ -283,31 +401,237 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        this.LogServiceDisposing();
-
+        this.isDisposed = true;
+        this.metadataChangedSubject.OnCompleted();
+        this.metadataChangedSubject.Dispose();
         this.windowEventsSubject.OnCompleted();
         this.windowEventsSubject.Dispose();
         this.windows.Clear();
-
         this.routerContextCreatedSubscription?.Dispose();
         this.routerContextDestroyedSubscription?.Dispose();
-
-        this.isDisposed = true;
     }
 
-    /// <summary>
-    ///     Handles router context creation events by registering the routed window.
-    /// </summary>
-    /// <param name="evt">Details about the navigation context that was created.</param>
+    private static Windows.Graphics.RectInt32 GetCurrentBounds(ManagedWindow context)
+        => new(
+            context.Window.AppWindow.Position.X,
+            context.Window.AppWindow.Position.Y,
+            context.Window.AppWindow.Size.Width,
+            context.Window.AppWindow.Size.Height);
+
+    private ManagedWindow CreateManagedWindow(
+        Window window,
+        WindowCategory category,
+        WindowDecorationOptions? decoration = null,
+        IReadOnlyDictionary<string, object>? metadata = null)
+    {
+        var context = new ManagedWindow
+        {
+            Id = window.AppWindow.Id,
+            Window = window,
+            Category = category,
+            CreatedAt = DateTimeOffset.UtcNow,
+            Decorations = decoration,
+            Metadata = metadata,
+        };
+
+        // Log creation (using existing logger)
+        this.LogWindowCreated(context);
+
+        if (decoration is not { Menu.MenuProviderId: { } menuProviderId })
+        {
+            return context;
+        }
+
+        var provider = this.menuProviders.FirstOrDefault(p => string.Equals(
+            p.ProviderId,
+            menuProviderId,
+            StringComparison.Ordinal));
+
+        if (provider is not null)
+        {
+            context.SetMenuSource(provider.CreateMenuSource());
+            this.LogMenuSourceCreated(menuProviderId, context);
+        }
+        else
+        {
+            this.LogMenuProviderNotFound(menuProviderId, context);
+        }
+
+        return context;
+    }
+
+    private void RegisterWindowEvents(ManagedWindow context)
+    {
+        var window = context.Window;
+        var windowId = context.Id;
+
+        window.Activated += (_, _) => this.OnWindowActivated(windowId);
+        window.Closed += (_, _) => this.OnWindowClosed(windowId);
+
+        window.AppWindow.Changed += AppWindowChangedHandler;
+        context.Cleanup = () => window.AppWindow.Changed -= AppWindowChangedHandler;
+
+        void AppWindowChangedHandler(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (args.DidPresenterChange)
+            {
+                this.OnPresenterChanged(windowId);
+            }
+
+            if (args.DidSizeChange || args.DidPositionChange)
+            {
+                this.OnBoundsChanged(windowId);
+            }
+        }
+    }
+
+    private void OnWindowActivated(WindowId windowId)
+    {
+        if (!this.windows.TryGetValue(windowId, out var currentContext))
+        {
+            return;
+        }
+
+        if (this.activeWindow?.Id == windowId)
+        {
+            return;
+        }
+
+        var updatedContext = currentContext.WithActivationState(true);
+        _ = this.windows.TryUpdate(windowId, updatedContext, currentContext);
+
+        if (this.activeWindow is { } previousActive && previousActive.Id != windowId)
+        {
+            var deactivatedContext = previousActive.WithActivationState(false);
+            _ = this.windows.TryUpdate(deactivatedContext.Id, deactivatedContext, previousActive);
+            this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Deactivated, deactivatedContext));
+        }
+
+        this.activeWindow = updatedContext;
+        this.LogWindowActivated(windowId);
+        this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Activated, updatedContext));
+    }
+
+    private void OnWindowClosed(WindowId windowId)
+    {
+        if (!this.windows.TryRemove(windowId, out var context))
+        {
+            return;
+        }
+
+        this.LogWindowClosed(context.Id);
+
+        context.Cleanup?.Invoke();
+
+        this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Closed, context));
+
+        if (this.activeWindow?.Id == windowId)
+        {
+            this.activeWindow = null;
+        }
+
+        _ = this.WindowClosed?.Invoke(this, new WindowClosedEventArgs());
+    }
+
+    private void OnPresenterChanged(WindowId windowId)
+    {
+        if (!this.windows.TryGetValue(windowId, out var context))
+        {
+            return;
+        }
+
+        if (context.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            var oldState = context.PresenterState;
+            var newState = presenter.State;
+            if (oldState != newState)
+            {
+                if (oldState == OverlappedPresenterState.Restored &&
+                    (newState == OverlappedPresenterState.Maximized || newState == OverlappedPresenterState.Minimized))
+                {
+                    context.RestoredBounds = context.CurrentBounds;
+                }
+
+                var oldBounds = GetCurrentBounds(context);
+                var newBounds = GetCurrentBounds(context);
+
+                context.PresenterState = newState;
+                this.LogPresenterStateChanged(windowId, oldState, newState);
+                _ = this.PresenterStateChanged?.Invoke(this, new PresenterStateChangeEventArgs(oldState, newState, oldBounds, newBounds, context.RestoredBounds));
+            }
+        }
+    }
+
+    private void RaisePresenterStateChanging(ManagedWindow context, OverlappedPresenterState newState)
+    {
+        var oldState = context.PresenterState;
+        var oldBounds = context.CurrentBounds;
+        var proposedRestored = context.RestoredBounds;
+        _ = this.PresenterStateChanging?.Invoke(this, new PresenterStateChangeEventArgs(oldState, newState, oldBounds, newBounds: null, proposedRestored));
+    }
+
+    private void EnsurePresenterStateChangedIfNeeded(ManagedWindow context, OverlappedPresenterState oldState, OverlappedPresenterState expectedFinalState, OverlappedPresenter presenter, Windows.Graphics.RectInt32 oldBounds)
+    {
+        _ = this.dispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                var ctx = context;
+                if (this.windows.TryGetValue(ctx.Id, out var current) && current.PresenterState == oldState)
+                {
+                    var finalState = presenter.State;
+                    if (finalState == expectedFinalState)
+                    {
+                        var newBounds = GetCurrentBounds(ctx);
+                        current.PresenterState = finalState;
+                        this.LogPresenterStateChanged(ctx.Id, oldState, finalState);
+                        _ = this.PresenterStateChanged?.Invoke(this, new PresenterStateChangeEventArgs(oldState, finalState, oldBounds, newBounds, current.RestoredBounds));
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                this.LogActivateWindowFailed(ex, context.Id);
+            }
+        });
+    }
+
+    private void OnBoundsChanged(WindowId windowId)
+    {
+        if (!this.windows.TryGetValue(windowId, out var context))
+        {
+            return;
+        }
+
+        var oldBounds = context.CurrentBounds;
+        var newBounds = new Windows.Graphics.RectInt32(
+            context.Window.AppWindow.Position.X,
+            context.Window.AppWindow.Position.Y,
+            context.Window.AppWindow.Size.Width,
+            context.Window.AppWindow.Size.Height);
+        context.CurrentBounds = newBounds;
+        _ = this.WindowBoundsChanged?.Invoke(this, new WindowBoundsChangedEventArgs(oldBounds, newBounds));
+    }
+
+    private WindowDecorationOptions? ResolveDecoration(WindowId windowId, WindowCategory category)
+    {
+        if (this.decorationSettingsService is not null)
+        {
+            this.LogDecorationResolvedFromSettings(windowId, category);
+            return this.decorationSettingsService.Settings.GetEffectiveDecoration(category);
+        }
+
+        this.LogNoDecorationResolved(windowId);
+        return null;
+    }
+
     private void OnRouterContextCreated(ContextCreated evt)
     {
-        // Only handle window-based navigation contexts
         if (evt.Context?.NavigationTarget is not Window window)
         {
             return;
         }
 
-        // Check if already tracked
         if (this.windows.Values.Any(wc => ReferenceEquals(wc.Window, window)))
         {
             this.LogRouterWindowAlreadyTracked(evt.Context.NavigationTargetKey.Name);
@@ -315,20 +639,15 @@ public sealed partial class WindowManagerService : IWindowManagerService
         }
 
         var targetName = evt.Context.NavigationTargetKey.Name;
-
-        // TODO: revise the router target type to ensure consistency with window management
         var windowCategory = evt.Context.NavigationTargetKey.IsMain ? WindowCategory.Main : WindowCategory.Secondary;
-
         this.LogTrackingRouterWindow(targetName);
 
-        // Register the window - RegisterWindowAsync will handle UI thread marshalling
         var metadata = new Dictionary<string, object>(StringComparer.Ordinal)
         {
             ["RoutingTarget"] = targetName,
             ["CreatedByRouter"] = true,
         };
 
-#pragma warning disable CA1031 // Router window tracking failures should be logged, not thrown
         _ = this.RegisterDecoratedWindowAsync(window, windowCategory, metadata)
             .ContinueWith(
                 task =>
@@ -339,135 +658,13 @@ public sealed partial class WindowManagerService : IWindowManagerService
                     }
                 },
                 TaskScheduler.Default);
-#pragma warning restore CA1031
     }
 
-    /// <summary>
-    ///     Handles router context destruction events.
-    /// </summary>
-    /// <param name="evt">Details about the navigation context that was destroyed.</param>
     private void OnRouterContextDestroyed(ContextDestroyed evt)
     {
-        // The window.Closed event handler will have already removed it from tracking
         if (evt.Context?.NavigationTarget is Window)
         {
             this.LogRouterWindowDestroyed(evt.Context.NavigationTargetKey.Name);
         }
     }
-
-    /// <summary>
-    ///     Hooks up activation and closure handlers for a newly registered window.
-    /// </summary>
-    /// <param name="context">The window context to watch.</param>
-    private void RegisterWindowEvents(WindowContext context)
-    {
-        var window = context.Window;
-        var windowId = context.Id;
-
-        window.Activated += (_, _) => this.OnWindowActivated(windowId);
-        window.Closed += (_, _) => this.OnWindowClosed(windowId);
-    }
-
-    /// <summary>
-    ///     Updates tracked state and publishes notifications when a window becomes active.
-    /// </summary>
-    /// <param name="windowId">The identifier of the activated window.</param>
-    private void OnWindowActivated(WindowId windowId)
-    {
-        while (true)
-        {
-            if (!this.windows.TryGetValue(windowId, out var currentContext))
-            {
-                return;
-            }
-
-            if (this.activeWindow?.Id == windowId)
-            {
-                return;
-            }
-
-            var updatedContext = currentContext.WithActivationState(true);
-
-            if (!this.windows.TryUpdate(windowId, updatedContext, currentContext))
-            {
-                // Retry if another thread modified the context concurrently.
-                continue;
-            }
-
-            // Deactivate previously active window if it differs from the current one.
-            if (this.activeWindow is { } previousActive && previousActive.Id != windowId)
-            {
-                var deactivatedContext = previousActive.WithActivationState(false);
-                if (this.windows.TryUpdate(deactivatedContext.Id, deactivatedContext, previousActive))
-                {
-                    this.PublishEvent(WindowLifecycleEventType.Deactivated, deactivatedContext);
-                }
-            }
-
-            this.activeWindow = updatedContext;
-            this.PublishEvent(WindowLifecycleEventType.Activated, updatedContext);
-            return;
-        }
-    }
-
-    /// <summary>
-    ///     Removes a closed window from the tracking dictionary and emits lifecycle events.
-    /// </summary>
-    /// <param name="windowId">The identifier of the closed window.</param>
-    private void OnWindowClosed(WindowId windowId)
-    {
-        if (!this.windows.TryRemove(windowId, out var context))
-        {
-            return;
-        }
-
-        this.LogWindowClosed(context.Id);
-
-        if (this.activeWindow?.Id == windowId)
-        {
-            this.activeWindow = null;
-        }
-
-        this.PublishEvent(WindowLifecycleEventType.Closed, context);
-    }
-
-    /// <summary>
-    ///     Raises the specified window lifecycle event for observers.
-    /// </summary>
-    /// <param name="eventType">The event to publish.</param>
-    /// <param name="context">The window context tied to the event.</param>
-    private void PublishEvent(WindowLifecycleEventType eventType, WindowContext context)
-    {
-        var lifecycleEvent = WindowLifecycleEvent.Create(eventType, context);
-        this.windowEventsSubject.OnNext(lifecycleEvent);
-    }
-
-    /// <summary>
-    ///     Resolves decoration instructions using the configured priority system.
-    /// </summary>
-    /// <param name="windowId">The window identifier used for logging purposes.</param>
-    /// <param name="category">The window category to look up.</param>
-    /// <returns>The resolved <see cref="Decoration.WindowDecorationOptions"/>, or null when no decoration applies.</returns>
-    private Decoration.WindowDecorationOptions? ResolveDecoration(
-        WindowId windowId,
-        WindowCategory category)
-    {
-        // Tier 2: Settings registry lookup (includes persisted overrides and code-defined defaults)
-        if (this.decorationSettingsService is not null)
-        {
-            // TODO: listen for changes on the decoration settings service and update the context accordingly as long as it is not isDisposed
-            this.LogDecorationResolvedFromSettings(windowId, category);
-            return this.decorationSettingsService.Settings.GetEffectiveDecoration(category);
-        }
-
-        // Tier 3: No decoration available
-        this.LogNoDecorationResolved(windowId);
-        return null;
-    }
-
-    /// <summary>
-    ///     Returns an immutable snapshot of the current window contexts.
-    /// </summary>
-    /// <returns>An immutable list of tracked window contexts.</returns>
-    private WindowContext[] GetWindowSnapshot() => [.. this.windows.Values];
 }

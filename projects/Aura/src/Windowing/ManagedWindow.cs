@@ -14,15 +14,15 @@ namespace DroidNet.Aura.Windowing;
 ///     Encapsulates metadata and state information for a managed window.
 /// </summary>
 /// <remarks>
-///     When decoration specifies a menu via <see cref="Decoration.WindowDecorationOptions.Menu"/>,
-///     the WindowContext will resolve the menu provider from the service provider during creation
+///     When decoration specifies a menu via <see cref="WindowDecorationOptions.Menu"/>,
+///     the ManagedWindow will resolve the menu provider from the service provider during creation
 ///     and store the resulting <see cref="IMenuSource"/> for the lifetime of the window.
 /// <para>
 ///     Menu sources are lightweight data structures that do not require explicit disposal. They
-///     will be garbage collected when the WindowContext is no longer referenced.
+///     will be garbage collected when the ManagedWindow is no longer referenced.
 /// </para>
 /// </remarks>
-public sealed partial class WindowContext : ObservableObject
+public sealed partial class ManagedWindow : ObservableObject
 {
     private IMenuSource? menuSource;
 
@@ -65,7 +65,7 @@ public sealed partial class WindowContext : ObservableObject
     /// <summary>
     ///     Gets the optional metadata for custom window properties.
     /// </summary>
-    public IReadOnlyDictionary<string, object>? Metadata { get; init; }
+    public IReadOnlyDictionary<string, object>? Metadata { get; internal set; }
 
     /// <summary>
     ///     Gets the timestamp when the window was created.
@@ -78,11 +78,32 @@ public sealed partial class WindowContext : ObservableObject
     public DateTimeOffset? LastActivatedAt { get; private set; }
 
     /// <summary>
+    ///     Gets the current state of the window presenter.
+    /// </summary>
+    public Microsoft.UI.Windowing.OverlappedPresenterState PresenterState { get; internal set; }
+
+    /// <summary>
+    ///     Gets the current on-screen bounds of the window.
+    /// </summary>
+    public Windows.Graphics.RectInt32 CurrentBounds { get; internal set; }
+
+    /// <summary>
+    ///     Gets the bounds to restore to when leaving the Minimized or Maximized state.
+    ///     Only meaningful when not in Restored state.
+    /// </summary>
+    public Windows.Graphics.RectInt32? RestoredBounds { get; internal set; }
+
+    /// <summary>
+    ///     Gets or sets an action to execute when the window is closed, used for cleanup.
+    /// </summary>
+    internal Action? Cleanup { get; set; }
+
+    /// <summary>
     ///     Updates the activation state of this window context.
     /// </summary>
     /// <param name="isActive">Whether the window is active.</param>
-    /// <returns>A new <see cref="WindowContext"/> with updated activation state.</returns>
-    public WindowContext WithActivationState(bool isActive)
+    /// <returns>A new <see cref="ManagedWindow"/> with updated activation state.</returns>
+    internal ManagedWindow WithActivationState(bool isActive)
     {
         this.IsActive = isActive;
         this.LastActivatedAt = isActive ? DateTimeOffset.UtcNow : this.LastActivatedAt;
@@ -94,7 +115,7 @@ public sealed partial class WindowContext : ObservableObject
     /// </summary>
     /// <param name="menuSource">The menu source to set.</param>
     /// <remarks>
-    ///     This method is intended to be called by <see cref="IWindowContextFactory"/>
+    ///     This method is intended to be called by <see cref="IWindowFactory"/>
     ///     implementations during context initialization.
     /// </remarks>
     internal void SetMenuSource(IMenuSource menuSource)

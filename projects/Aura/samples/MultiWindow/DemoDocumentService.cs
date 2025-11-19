@@ -43,7 +43,7 @@ internal sealed class DemoDocumentService : IDocumentService
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <inheritdoc/>
-    public Task<Guid> OpenDocumentAsync(WindowContext window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public Task<Guid> OpenDocumentAsync(ManagedWindow window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         var id = metadata?.DocumentId ?? Guid.NewGuid();
         var meta = metadata ?? new DemoDocumentMetadata { DocumentId = id, Title = "Untitled" };
@@ -56,7 +56,7 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public async Task<bool> CloseDocumentAsync(WindowContext window, Guid documentId, bool force = false)
+    public async Task<bool> CloseDocumentAsync(ManagedWindow window, Guid documentId, bool force = false)
     {
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
@@ -88,7 +88,7 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowContext window, Guid documentId)
+    public Task<IDocumentMetadata?> DetachDocumentAsync(ManagedWindow window, Guid documentId)
     {
         if (this.docs.TryRemove(documentId, out var metadata))
         {
@@ -100,7 +100,7 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public Task<bool> AttachDocumentAsync(WindowContext targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public Task<bool> AttachDocumentAsync(ManagedWindow targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         this.docs[metadata.DocumentId] = metadata;
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindow, metadata, indexHint));
@@ -108,7 +108,7 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public Task<bool> UpdateMetadataAsync(WindowContext window, Guid documentId, IDocumentMetadata metadata)
+    public Task<bool> UpdateMetadataAsync(ManagedWindow window, Guid documentId, IDocumentMetadata metadata)
     {
         if (!this.docs.ContainsKey(documentId))
         {
@@ -123,7 +123,7 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public Task<bool> SelectDocumentAsync(WindowContext window, Guid documentId)
+    public Task<bool> SelectDocumentAsync(ManagedWindow window, Guid documentId)
     {
         if (!this.docs.TryGetValue(documentId, out var metadata))
         {

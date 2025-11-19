@@ -40,17 +40,17 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
     }
 
     /// <inheritdoc/>
-    public async Task<TWindow> CreateWindow<TWindow>(IReadOnlyDictionary<string, object>? metadata = null)
+    public async Task<TWindow> CreateWindow<TWindow>()
         where TWindow : Window
     {
-        this.LogCreateWindow(typeof(TWindow), widthMetadata: metadata != null);
+        this.LogCreateWindow(typeof(TWindow));
 
         try
         {
             var window = this.container.Resolve<TWindow>();
 
             // Register the created window with the window manager.
-            _ = await this.windowManagerService.RegisterWindowAsync(window, metadata).ConfigureAwait(false);
+            _ = await this.windowManagerService.RegisterWindowAsync(window).ConfigureAwait(false);
 
             this.LogWindowCreated(typeof(TWindow));
             return window;
@@ -63,10 +63,10 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
     }
 
     /// <inheritdoc/>
-    public async Task<Window> CreateWindow(string key, IReadOnlyDictionary<string, object>? metadata = null)
+    public async Task<Window> CreateWindow(string key)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(key);
-        this.LogCreateKeyedWindow(key, widthMetadata: metadata != null);
+        this.LogCreateKeyedWindow(key);
 
         try
         {
@@ -74,9 +74,9 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
             var window = this.container.Resolve<Window>(key);
 
             // Register the created window with the window manager.
-            _ = await this.windowManagerService.RegisterWindowAsync(window, metadata).ConfigureAwait(false);
+            _ = await this.windowManagerService.RegisterWindowAsync(window).ConfigureAwait(false);
 
-            this.LogKeyedWindowCreated(key, window.GetType(), widthMetadata: metadata != null);
+            this.LogKeyedWindowCreated(key, window.GetType());
             return window;
         }
         catch (Exception ex)
@@ -87,18 +87,18 @@ public sealed partial class DefaultWindowFactory : IWindowFactory
     }
 
     /// <inheritdoc/>
-    public async Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null)
+    public async Task<TWindow> CreateDecoratedWindow<TWindow>(WindowCategory category)
         where TWindow : Window
     {
-        this.LogCreateDecoratedWindow(category, widthMetadata: metadata != null);
+        this.LogCreateDecoratedWindow(category);
 
         try
         {
             // Create the window using the generic method
             var window = this.container.Resolve<TWindow>();
-            _ = await this.windowManagerService.RegisterDecoratedWindowAsync(window, category, metadata).ConfigureAwait(false);
+            _ = await this.windowManagerService.RegisterDecoratedWindowAsync(window, category).ConfigureAwait(false);
 
-            this.LogDecoratedWindowCreated(category, window.GetType(), widthMetadata: metadata != null);
+            this.LogDecoratedWindowCreated(category, window.GetType());
             return window;
         }
         catch (Exception ex)
