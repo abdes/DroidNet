@@ -83,7 +83,7 @@ public sealed partial class Router : IRouter, IDisposable
                 .Select(e => new ContextChanged(e.EventArgs.Context)),
             this.eventSource);
 
-        _ = this.Events.Subscribe(e => this.LogRouterEvent(e));
+        _ = this.Events.Subscribe(this.LogRouterEvent);
         this.contextProvider.ContextDestroyed += this.OnContextDestroyed;
     }
 
