@@ -16,7 +16,6 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Windows.Foundation;
 using Windows.Graphics;
-using WinUIEx;
 using GridLength = Microsoft.UI.Xaml.GridLength;
 
 namespace DroidNet.Aura;
@@ -96,32 +95,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
     /// <summary>
     /// Gets the minimum width of the window.
     /// </summary>
-    public double MinWindowWidth
-    {
-        get => this.minWindowWidth;
-        private set
-        {
-            if (Math.Abs(this.minWindowWidth - value) < 0.5f)
-            {
-                return;
-            }
-
-            this.minWindowWidth = value;
-            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.MinWindowWidth)));
-
-            // Ensure the host window enforces the computed minimum width.
-            // Assign unconditionally to avoid cases where the window's MinWidth was never
-            // updated (or updated with an incompatible unit) and the user can resize below
-            // the intended minimum. The operation is cheap and idempotent from the app's
-            // perspective; the platform will clamp it if necessary.
-            if (this.ViewModel?.Window is WindowEx wnd) // TODO: eliminate the need for WindowEx
-            {
-                // Use a ceiling to avoid fractional DIP rounding issues that the host
-                // windowing subsystem might ignore; enforce an integer DIP minimum.
-                wnd.MinWidth = Math.Ceiling(this.MinWindowWidth);
-            }
-        }
-    }
+    public double MinWindowWidth => this.minWindowWidth;
 
     private void InitializeLogger(object? sender, ViewModelChangedEventArgs<MainShellViewModel> args)
     {
@@ -333,11 +307,26 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     private void SetWindowMinWidth()
     {
-        this.MinWindowWidth = this.IconColumn.ActualWidth +
+        var computedMinWidth = this.IconColumn.ActualWidth +
                       this.PrimaryCommands.ActualWidth + this.DragColumn.MinWidth +
                       this.SecondaryCommands.ActualWidth +
                       this.SystemReservedRight.Width.Value;
-        this.LogSetWindowMinWidth();
+        if (Math.Abs(this.minWindowWidth - computedMinWidth) >= 0.5f)
+        {
+            this.minWindowWidth = computedMinWidth;
+            this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.MinWindowWidth)));
+
+            // Ensure the host window enforces the computed minimum width through the shared
+            // window manager so presenter constraints stay in sync with Aura's window state.
+            if (this.ViewModel?.WindowManagerService is { } windowManager && this.ViewModel?.Context is { } managedWindow)
+            {
+                var enforcedMinimumWidth = (int)Math.Ceiling(computedMinWidth);
+                var minimumHeight = managedWindow.MinimumHeight;
+                _ = windowManager.SetWindowMinimumSizeAsync(managedWindow.Id, enforcedMinimumWidth, minimumHeight);
+            }
+
+            this.LogSetWindowMinWidth();
+        }
     }
 
     /// <summary>

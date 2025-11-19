@@ -35,7 +35,6 @@
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Converters" />
-        <PackageReference Include="WinUIEx" />
     </ItemGroup>
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />

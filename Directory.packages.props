@@ -59,7 +59,6 @@
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.10" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.10" />
-    <PackageVersion Include="WinUIEx" Version="2.9.0" />
     <PackageVersion Include="WinRT.Runtime" Version="2.2.0" />
   </ItemGroup>
   <!-- Tooling -->
