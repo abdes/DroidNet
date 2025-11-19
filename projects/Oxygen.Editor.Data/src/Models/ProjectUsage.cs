@@ -4,7 +4,6 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 namespace Oxygen.Editor.Data.Models;
@@ -25,7 +24,6 @@ public class ProjectUsage
     /// Gets the unique identifier for the project usage record.
     /// </summary>
     [Key]
-    [SuppressMessage("ReSharper", "UnusedMember.Global", Justification = "used by EF Core")]
     public int Id { get; init; }
 
     /// <summary>
