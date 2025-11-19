@@ -166,14 +166,10 @@ public static partial class Program
          */
 
         // The Main Window is a singleton registered for the special Target.Main
-        container.Register<Window, MainWindow>(Reuse.Singleton, serviceKey: Target.Main);
+        container.Register<Window, RoutedWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
         container.Register<DockPanelViewModel>(Reuse.Transient);
         container.Register<DockPanel>(Reuse.Transient);
-
-        // The Main Window is a singleton and its content can be re-assigned as needed. It is registered with a key that
-        // corresponding to name of the special target <see cref="Target.Main" />.
-        container.Register<MainWindow>(Reuse.Singleton);
 
         container.Register<MainShellViewModel>(Reuse.Singleton);
         container.Register<MainShellView>(Reuse.Singleton);

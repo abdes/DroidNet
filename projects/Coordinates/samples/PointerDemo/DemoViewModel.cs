@@ -162,7 +162,7 @@ public partial class DemoViewModel(SpatialMapperFactory spatialMapperFactory, IW
         this.windowEventsSubscription = this.windowManagerService.WindowEvents.Subscribe(this.OnWindowLifecycleEvent);
     }
 
-    private void HandleWindowActivation(WindowContext context)
+    private void HandleWindowActivation(ManagedWindow context)
     {
         if (this.trackedElement is null)
         {

@@ -294,7 +294,7 @@ public static partial class Program
          */
 
         // In Oxygen Editor, we don't really have a "Main" window - all windows are created equally.
-        container.Register<MainWindow>(Reuse.Transient);
+        container.Register<RoutedWindow>(Reuse.Transient);
 
         // Workspace window
         container.RegisterDelegate<Window>(
@@ -302,7 +302,7 @@ public static partial class Program
             {
                 var windowFactory = resolverContext.Resolve<IWindowFactory>();
                 var category = new WindowCategory("wnd-we");
-                return windowFactory.CreateDecoratedWindow<MainWindow>(category).GetAwaiter().GetResult();
+                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
             },
             Reuse.Transient,
             serviceKey: new Target { Name = "wnd-we" });
@@ -313,7 +313,7 @@ public static partial class Program
             {
                 var windowFactory = resolverContext.Resolve<IWindowFactory>();
                 var category = new WindowCategory("wnd-pb");
-                return windowFactory.CreateDecoratedWindow<MainWindow>(category).GetAwaiter().GetResult();
+                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
             },
             Reuse.Transient,
             serviceKey: new Target { Name = "wnd-pb" });
