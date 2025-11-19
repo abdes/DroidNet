@@ -84,7 +84,7 @@ public class WindowCategoryTests
         // Deserialize back
         var deserialized = JsonSerializer.Deserialize<Dictionary<WindowCategory, string>>(json, options);
         _ = deserialized.Should().NotBeNull();
-        _ = deserialized!.Count.Should().Be(2);
+        _ = deserialized!.Should().HaveCount(2);
         _ = deserialized[WindowCategory.Main].Should().Be("main window");
         _ = deserialized[WindowCategory.Tool].Should().Be("tool window");
     }

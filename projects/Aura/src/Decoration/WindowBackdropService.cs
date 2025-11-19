@@ -77,7 +77,7 @@ public sealed partial class WindowBackdropService : IDisposable
     ///     Applies backdrop to a single window context.
     /// </summary>
     /// <param name="context">The window context to apply backdrop to.</param>
-    public void ApplyBackdrop(ManagedWindow context)
+    public void ApplyBackdrop(IManagedWindow context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -121,7 +121,7 @@ public sealed partial class WindowBackdropService : IDisposable
     ///     Applies backdrops to windows matching a predicate.
     /// </summary>
     /// <param name="predicate">Predicate to filter which windows should have backdrops applied.</param>
-    public void ApplyBackdrop(Func<ManagedWindow, bool> predicate)
+    public void ApplyBackdrop(Func<IManagedWindow, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
 

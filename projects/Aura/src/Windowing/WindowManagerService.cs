@@ -18,7 +18,6 @@ using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
-using Windows.Foundation;
 
 namespace DroidNet.Aura.Windowing;
 
@@ -88,9 +87,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <inheritdoc />
-    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanging;
-
-    /// <inheritdoc />
     public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanged;
 
     /// <inheritdoc />
@@ -103,10 +99,10 @@ public sealed partial class WindowManagerService : IWindowManagerService
     public event AsyncEventHandler<WindowBoundsChangedEventArgs>? WindowBoundsChanged;
 
     /// <inheritdoc />
-    public ManagedWindow? ActiveWindow => this.activeWindow;
+    public IManagedWindow? ActiveWindow => this.activeWindow;
 
     /// <inheritdoc />
-    public IReadOnlyCollection<ManagedWindow> OpenWindows => this.windows.Values.ToList().AsReadOnly();
+    public IReadOnlyCollection<IManagedWindow> OpenWindows => this.windows.Values.ToList().AsReadOnly();
 
     /// <inheritdoc />
     public IObservable<WindowLifecycleEvent> WindowEvents => this.windowEventsSubject.AsObservable();
@@ -115,11 +111,11 @@ public sealed partial class WindowManagerService : IWindowManagerService
     public IObservable<WindowMetadataChange> MetadataChanged => this.metadataChangedSubject.AsObservable();
 
     /// <inheritdoc />
-    public async Task<ManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null)
+    public async Task<IManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null)
         => await this.RegisterDecoratedWindowAsync(window, WindowCategory.System, metadata).ConfigureAwait(false);
 
     /// <inheritdoc />
-    public async Task<ManagedWindow> RegisterDecoratedWindowAsync(
+    public async Task<IManagedWindow> RegisterDecoratedWindowAsync(
         Window window,
         WindowCategory category,
         IReadOnlyDictionary<string, object>? metadata = null)
@@ -151,22 +147,13 @@ public sealed partial class WindowManagerService : IWindowManagerService
                 this.LogWindowRegistered(context.Id, category);
                 this.windowEventsSubject.OnNext(WindowLifecycleEvent.Create(WindowLifecycleEventType.Created, context));
 
+                // Initialize RestoredBounds with current bounds
+                context.RestoredBounds = context.CurrentBounds;
+
                 if (resolvedDecoration?.ChromeEnabled == true)
                 {
                     window.ExtendsContentIntoTitleBar = true;
                 }
-
-                // Initialize state
-                if (window.AppWindow.Presenter is OverlappedPresenter presenter)
-                {
-                    context.PresenterState = presenter.State;
-                }
-
-                context.CurrentBounds = new Windows.Graphics.RectInt32(
-                    window.AppWindow.Position.X,
-                    window.AppWindow.Position.Y,
-                    window.AppWindow.Size.Width,
-                    window.AppWindow.Size.Height);
             }
             catch (Exception ex)
             {
@@ -190,7 +177,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         }
 
         // Raise Closing event
-        var args = new WindowClosingEventArgs();
+        var args = new WindowClosingEventArgs { WindowId = windowId };
         if (this.WindowClosing != null)
         {
             await this.WindowClosing.Invoke(this, args).ConfigureAwait(true);
@@ -257,7 +244,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     }
 
     /// <inheritdoc />
-    public ManagedWindow? GetWindow(WindowId windowId)
+    public IManagedWindow? GetWindow(WindowId windowId)
     {
         ObjectDisposedException.ThrowIf(this.isDisposed, this);
         return this.windows.TryGetValue(windowId, out var context) ? context : null;
@@ -271,22 +258,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        await this.dispatcherQueue.EnqueueAsync(() =>
-        {
-            if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
-            {
-                var oldState = window.PresenterState;
-                const OverlappedPresenterState newState = OverlappedPresenterState.Minimized;
-                var oldBounds = window.CurrentBounds;
-                var proposedRestored = window.RestoredBounds;
-
-                this.RaisePresenterStateChanging(window, newState);
-
-                presenter.Minimize();
-
-                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
-            }
-        }).ConfigureAwait(false);
+        await window.MinimizeAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -297,21 +269,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        await this.dispatcherQueue.EnqueueAsync(() =>
-        {
-            if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
-            {
-                var oldState = window.PresenterState;
-                const OverlappedPresenterState newState = OverlappedPresenterState.Maximized;
-                var oldBounds = window.CurrentBounds;
-                var proposedRestored = window.RestoredBounds;
-
-                this.RaisePresenterStateChanging(window, newState);
-
-                presenter.Maximize();
-                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
-            }
-        }).ConfigureAwait(false);
+        await window.MaximizeAsync().ConfigureAwait(false);
     }
 
     /// <inheritdoc />
@@ -322,29 +280,72 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        await this.dispatcherQueue.EnqueueAsync(() =>
+        await window.RestoreAsync().ConfigureAwait(false);
+
+        // Manually trigger presenter state change notification since WinUI doesn't always
+        // fire AppWindow.Changed.DidPresenterChange for minimize→restore transitions
+        this.OnPresenterChanged(windowId);
+    }
+
+    /// <inheritdoc />
+    public async Task MoveWindowAsync(WindowId windowId, Windows.Graphics.PointInt32 position)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
+
+        await window.MoveAsync(position).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task ResizeWindowAsync(WindowId windowId, Windows.Graphics.SizeInt32 size)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
+
+        await window.ResizeAsync(size).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetWindowBoundsAsync(WindowId windowId, Windows.Graphics.RectInt32 bounds)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
+
+        await window.SetBoundsAsync(bounds).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task SetWindowMinimumSizeAsync(WindowId windowId, int? minimumWidth, int? minimumHeight)
+    {
+        if (!this.windows.TryGetValue(windowId, out var window))
+        {
+            return;
+        }
+
+        await window.DispatcherQueue.EnqueueAsync(() =>
         {
             if (window.Window.AppWindow.Presenter is OverlappedPresenter presenter)
             {
-                var oldState = window.PresenterState;
-                const OverlappedPresenterState newState = OverlappedPresenterState.Restored;
-                var oldBounds = window.CurrentBounds;
-                var proposedRestored = window.RestoredBounds;
-
-                this.RaisePresenterStateChanging(window, newState);
-
-                presenter.Restore();
-                this.EnsurePresenterStateChangedIfNeeded(window, oldState, newState, presenter, oldBounds);
+                presenter.PreferredMinimumWidth = minimumWidth;
+                presenter.PreferredMinimumHeight = minimumHeight;
+                window.MinimumWidth = minimumWidth;
+                window.MinimumHeight = minimumHeight;
             }
         }).ConfigureAwait(false);
     }
 
     /// <inheritdoc />
-    public Task SetMetadataAsync(WindowId windowId, string key, object? value)
+    public void SetMetadata(WindowId windowId, string key, object? value)
     {
         if (!this.windows.TryGetValue(windowId, out var window))
         {
-            return Task.CompletedTask;
+            return;
         }
 
         object? oldValue = null;
@@ -363,7 +364,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
             if (Equals(oldValue, newValue))
             {
-                return Task.CompletedTask;
+                return;
             }
 
             if (newValue == null)
@@ -380,18 +381,16 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         this.metadataChangedSubject.OnNext(new WindowMetadataChange(windowId, key, oldValue, newValue));
         this.LogMetadataChanged(windowId, key);
-
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
-    public Task RemoveMetadataAsync(WindowId windowId, string key) => this.SetMetadataAsync(windowId, key, value: null);
+    public void RemoveMetadata(WindowId windowId, string key) => this.SetMetadata(windowId, key, value: null);
 
     /// <inheritdoc />
-    public Task<object?> TryGetMetadataValueAsync(WindowId windowId, string key)
+    public object? TryGetMetadataValue(WindowId windowId, string key)
         => this.windows.TryGetValue(windowId, out var window) && window.Metadata != null && window.Metadata.TryGetValue(key, out var value)
-            ? Task.FromResult<object?>(value)
-            : Task.FromResult<object?>(null);
+            ? value
+            : null;
 
     /// <inheritdoc/>
     public void Dispose()
@@ -411,13 +410,6 @@ public sealed partial class WindowManagerService : IWindowManagerService
         this.routerContextDestroyedSubscription?.Dispose();
     }
 
-    private static Windows.Graphics.RectInt32 GetCurrentBounds(ManagedWindow context)
-        => new(
-            context.Window.AppWindow.Position.X,
-            context.Window.AppWindow.Position.Y,
-            context.Window.AppWindow.Size.Width,
-            context.Window.AppWindow.Size.Height);
-
     private ManagedWindow CreateManagedWindow(
         Window window,
         WindowCategory category,
@@ -427,6 +419,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
         var context = new ManagedWindow
         {
             Id = window.AppWindow.Id,
+            DispatcherQueue = this.dispatcherQueue,
             Window = window,
             Category = category,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -530,7 +523,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
             this.activeWindow = null;
         }
 
-        _ = this.WindowClosed?.Invoke(this, new WindowClosedEventArgs());
+        _ = this.WindowClosed?.Invoke(this, new WindowClosedEventArgs { WindowId = windowId });
     }
 
     private void OnPresenterChanged(WindowId windowId)
@@ -540,60 +533,25 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        if (context.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+        if (context.Window.AppWindow.Presenter is not OverlappedPresenter presenter)
         {
-            var oldState = context.PresenterState;
-            var newState = presenter.State;
-            if (oldState != newState)
-            {
-                if (oldState == OverlappedPresenterState.Restored &&
-                    (newState == OverlappedPresenterState.Maximized || newState == OverlappedPresenterState.Minimized))
-                {
-                    context.RestoredBounds = context.CurrentBounds;
-                }
-
-                var oldBounds = GetCurrentBounds(context);
-                var newBounds = GetCurrentBounds(context);
-
-                context.PresenterState = newState;
-                this.LogPresenterStateChanged(windowId, oldState, newState);
-                _ = this.PresenterStateChanged?.Invoke(this, new PresenterStateChangeEventArgs(oldState, newState, oldBounds, newBounds, context.RestoredBounds));
-            }
+            return;
         }
-    }
 
-    private void RaisePresenterStateChanging(ManagedWindow context, OverlappedPresenterState newState)
-    {
-        var oldState = context.PresenterState;
-        var oldBounds = context.CurrentBounds;
-        var proposedRestored = context.RestoredBounds;
-        _ = this.PresenterStateChanging?.Invoke(this, new PresenterStateChangeEventArgs(oldState, newState, oldBounds, newBounds: null, proposedRestored));
-    }
+        var state = presenter.State;
+        var bounds = context.CurrentBounds;
 
-    private void EnsurePresenterStateChangedIfNeeded(ManagedWindow context, OverlappedPresenterState oldState, OverlappedPresenterState expectedFinalState, OverlappedPresenter presenter, Windows.Graphics.RectInt32 oldBounds)
-    {
-        _ = this.dispatcherQueue.TryEnqueue(() =>
+        // If transitioning to Restored state (from Max/Min), sync RestoredBounds with actual position
+        // This handles cases where user bypasses WindowManager and restores directly via AppWindow API
+        if (state == OverlappedPresenterState.Restored)
         {
-            try
-            {
-                var ctx = context;
-                if (this.windows.TryGetValue(ctx.Id, out var current) && current.PresenterState == oldState)
-                {
-                    var finalState = presenter.State;
-                    if (finalState == expectedFinalState)
-                    {
-                        var newBounds = GetCurrentBounds(ctx);
-                        current.PresenterState = finalState;
-                        this.LogPresenterStateChanged(ctx.Id, oldState, finalState);
-                        _ = this.PresenterStateChanged?.Invoke(this, new PresenterStateChangeEventArgs(oldState, finalState, oldBounds, newBounds, current.RestoredBounds));
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                this.LogActivateWindowFailed(ex, context.Id);
-            }
-        });
+            context.RestoredBounds = bounds;
+        }
+
+        this.LogPresenterStateChanged(windowId, state, state);
+        _ = this.PresenterStateChanged?.Invoke(
+            this,
+            new PresenterStateChangeEventArgs(windowId, state, bounds));
     }
 
     private void OnBoundsChanged(WindowId windowId)
@@ -603,14 +561,16 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return;
         }
 
-        var oldBounds = context.CurrentBounds;
-        var newBounds = new Windows.Graphics.RectInt32(
-            context.Window.AppWindow.Position.X,
-            context.Window.AppWindow.Position.Y,
-            context.Window.AppWindow.Size.Width,
-            context.Window.AppWindow.Size.Height);
-        context.CurrentBounds = newBounds;
-        _ = this.WindowBoundsChanged?.Invoke(this, new WindowBoundsChangedEventArgs(oldBounds, newBounds));
+        var bounds = context.CurrentBounds;
+
+        // Update RestoredBounds if window is in Restored state (user is adjusting their preferred size/position)
+        if (context.Window.AppWindow.Presenter is OverlappedPresenter presenter &&
+            presenter.State == OverlappedPresenterState.Restored)
+        {
+            context.RestoredBounds = bounds;
+        }
+
+        _ = this.WindowBoundsChanged?.Invoke(this, new WindowBoundsChangedEventArgs(windowId, bounds));
     }
 
     private WindowDecorationOptions? ResolveDecoration(WindowId windowId, WindowCategory category)

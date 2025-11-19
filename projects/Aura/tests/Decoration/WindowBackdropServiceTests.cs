@@ -293,6 +293,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
 
         var context1 = new ManagedWindow
         {
+            DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
             Id = new Microsoft.UI.WindowId(1),
             Window = window1,
             Category = WindowCategory.Main,
@@ -301,6 +302,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         };
         var context2 = new ManagedWindow
         {
+            DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
             Id = new Microsoft.UI.WindowId(2),
             Window = window2,
             Category = WindowCategory.Tool,
@@ -468,6 +470,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
     private static ManagedWindow CreateManagedWindow(Window window, WindowDecorationOptions? decoration)
         => new()
         {
+            DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
             Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
             Window = window,
             Category = new WindowCategory("Test"),

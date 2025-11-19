@@ -17,10 +17,10 @@ public sealed partial class DocumentTabPresenter : IDisposable
 {
     private readonly Controls.TabStrip tabStrip;
     private readonly IDocumentService documentService;
-    private readonly ManagedWindow hostWindow;
+    private readonly IManagedWindow hostWindow;
     private readonly DispatcherQueue dispatcher;
     private readonly ILogger logger;
-    private readonly Dictionary<Guid, Controls.TabItem> tabMap = new();
+    private readonly Dictionary<Guid, Controls.TabItem> tabMap = [];
     private bool isUpdatingSelectionFromService;
 
     /// <summary>
@@ -31,7 +31,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
     /// <param name="hostWindow">The host window context that owns the presented tabs.</param>
     /// <param name="dispatcher">The dispatcher used to marshal UI updates.</param>
     /// <param name="logger">Optional logger.</param>
-    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentService documentService, ManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null)
+    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentService documentService, IManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null)
     {
         this.tabStrip = tabStrip ?? throw new ArgumentNullException(nameof(tabStrip));
         this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));

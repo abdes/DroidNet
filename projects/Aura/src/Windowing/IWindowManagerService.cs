@@ -21,11 +21,6 @@ public interface IWindowManagerService : IDisposable
 #pragma warning disable CA1003 // Use generic event handler instances
 #pragma warning disable MA0046 // Use EventHandler<T> to declare events
     /// <summary>
-    ///     Occurs when a window's presenter state is about to change.
-    /// </summary>
-    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanging;
-
-    /// <summary>
     ///     Occurs when a window's presenter state has changed.
     /// </summary>
     public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanged;
@@ -60,12 +55,12 @@ public interface IWindowManagerService : IDisposable
     /// <summary>
     ///     Gets the currently active window, if any.
     /// </summary>
-    public ManagedWindow? ActiveWindow { get; }
+    public IManagedWindow? ActiveWindow { get; }
 
     /// <summary>
     ///     Gets a collection of all currently open windows.
     /// </summary>
-    public IReadOnlyCollection<ManagedWindow> OpenWindows { get; }
+    public IReadOnlyCollection<IManagedWindow> OpenWindows { get; }
 
     /// <summary>
     ///     Registers a new window with the manager.
@@ -74,9 +69,9 @@ public interface IWindowManagerService : IDisposable
     /// <param name="metadata">Optional initial metadata.</param>
     /// <returns>
     ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
-    ///     The task result contains the <see cref="ManagedWindow"/> created for the registered window.
+    ///     The task result contains the <see cref="IManagedWindow"/> created for the registered window.
     /// </returns>
-    public Task<ManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null);
+    public Task<IManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null);
 
     /// <summary>
     ///     Registers a new window with the manager and applies category-based decoration.
@@ -86,9 +81,9 @@ public interface IWindowManagerService : IDisposable
     /// <param name="metadata">Optional initial metadata.</param>
     /// <returns>
     ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
-    ///     The task result contains the <see cref="ManagedWindow"/> created for the registered window.
+    ///     The task result contains the <see cref="IManagedWindow"/> created for the registered window.
     /// </returns>
-    public Task<ManagedWindow> RegisterDecoratedWindowAsync(Window window, WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null);
+    public Task<IManagedWindow> RegisterDecoratedWindowAsync(Window window, WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null);
 
     /// <summary>
     ///     Closes a managed window.
@@ -117,8 +112,8 @@ public interface IWindowManagerService : IDisposable
     ///     Retrieves the managed window context for a given ID.
     /// </summary>
     /// <param name="windowId">The ID of the window to retrieve.</param>
-    /// <returns>The <see cref="ManagedWindow"/> if found; otherwise, null.</returns>
-    public ManagedWindow? GetWindow(WindowId windowId);
+    /// <returns>The <see cref="IManagedWindow"/> if found; otherwise, null.</returns>
+    public IManagedWindow? GetWindow(WindowId windowId);
 
     /// <summary>
     ///     Minimizes the specified window.
@@ -142,30 +137,81 @@ public interface IWindowManagerService : IDisposable
     public Task RestoreWindowAsync(WindowId windowId);
 
     /// <summary>
+    ///     Moves the specified window to a new screen position.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to move.</param>
+    /// <param name="position">The new screen position.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public Task MoveWindowAsync(WindowId windowId, Windows.Graphics.PointInt32 position);
+
+    /// <summary>
+    ///     Resizes the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to resize.</param>
+    /// <param name="size">The new window size.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public Task ResizeWindowAsync(WindowId windowId, Windows.Graphics.SizeInt32 size);
+
+    /// <summary>
+    ///     Sets the bounds (position and size) of the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to manipulate.</param>
+    /// <param name="bounds">The desired bounds for the window.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public Task SetWindowBoundsAsync(WindowId windowId, Windows.Graphics.RectInt32 bounds);
+
+    /// <summary>
+    ///     Sets the minimum size constraints for the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window.</param>
+    /// <param name="minimumWidth">The minimum width constraint, or <see langword="null"/> to remove the constraint.</param>
+    /// <param name="minimumHeight">The minimum height constraint, or <see langword="null"/> to remove the constraint.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <remarks>
+    ///     These constraints affect both user resizing and programmatic resize operations.
+    ///     Only works for windows with an <see cref="Microsoft.UI.Windowing.OverlappedPresenter"/>.
+    /// </remarks>
+    public Task SetWindowMinimumSizeAsync(WindowId windowId, int? minimumWidth, int? minimumHeight);
+
+    /// <summary>
+    ///     Returns a JSON placement string describing the window's current virtual desktop bounds
+    ///     and the monitor work area at the time of capture. The string is suitable for persisting
+    ///     and later restoring via <see cref="RestoreWindowPlacementAsync"/>.
+    /// </summary>
+    /// <param name="windowId">The ID of the window.</param>
+    /// <returns>A JSON string describing the placement, or <see langword="null"/> if the window is not found.</returns>
+    public string? GetWindowPlacementString(WindowId windowId);
+
+    /// <summary>
+    ///     Restores a window placement previously obtained from <see cref="GetWindowPlacementString"/>.
+    ///     The implementation will attempt to place the window on the same monitor if available,
+    ///     or fall back to a visible monitor if the original monitor is no longer connected.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to restore.</param>
+    /// <param name="placement">The placement JSON string previously returned by <see cref="GetWindowPlacementString"/>.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    public Task RestoreWindowPlacementAsync(WindowId windowId, string placement);
+
+    /// <summary>
     ///     Sets a metadata value for a window.
     /// </summary>
     /// <param name="windowId">The ID of the window.</param>
     /// <param name="key">The metadata key.</param>
     /// <param name="value">The metadata value.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public Task SetMetadataAsync(WindowId windowId, string key, object? value);
+    public void SetMetadata(WindowId windowId, string key, object? value);
 
     /// <summary>
     ///     Removes a metadata value from a window.
     /// </summary>
     /// <param name="windowId">The ID of the window.</param>
     /// <param name="key">The metadata key.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
-    public Task RemoveMetadataAsync(WindowId windowId, string key);
+    public void RemoveMetadata(WindowId windowId, string key);
 
     /// <summary>
     ///     Tries to get a metadata value for a window.
     /// </summary>
     /// <param name="windowId">The ID of the window.</param>
     /// <param name="key">The metadata key.</param>
-    /// <returns>
-    ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
-    ///     The task result contains the metadata value if found; otherwise, <see langword="null"/>.
-    /// </returns>
-    public Task<object?> TryGetMetadataValueAsync(WindowId windowId, string key);
+    /// <returns>The metadata value if found; otherwise, <see langword="null"/>.</returns>
+    public object? TryGetMetadataValue(WindowId windowId, string key);
 }

@@ -31,7 +31,7 @@ namespace DroidNet.Aura.Windowing;
 ///     features such as presenter configuration, window placement, and custom chrome behavior.</para>
 /// </remarks>
 /// <seealso cref="WindowCategory"/>
-/// <seealso cref="ManagedWindow"/>
+/// <seealso cref="IManagedWindow"/>
 /// <seealso cref="IWindowManagerService"/>
 public interface IWindowFactory
 {

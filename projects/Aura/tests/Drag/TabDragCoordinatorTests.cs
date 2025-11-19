@@ -64,7 +64,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, initialElementPoint, new Point(0, 0));
 
         // Assert
-        _ = factoryInvocations.Should().HaveCount(1);
+        _ = factoryInvocations.Should().ContainSingle();
         _ = factoryInvocations[0].window.Should().Be(VisualUserInterfaceTestsApp.MainWindow);
         _ = factoryInvocations[0].element.Should().Be(visualElement, "factory should be called with the visual element, not the TabStrip interface");
 
@@ -360,7 +360,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Assert
         tabStripMock.Verify(s => s.TearOutTab(draggedItem, It.IsAny<SpatialPoint<ScreenSpace>>()), Times.Once());
-        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Once());
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, destinationStrip: null, newIndex: null), Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -462,7 +462,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         var registered = GetRegisteredStrips(coordinator);
         _ = registered.Should().Contain(secondStripMock.Object, "second strip should be registered");
         _ = registered.Should().Contain(thirdStripMock.Object, "third strip should be registered");
-        _ = registered.Count.Should().Be(2, "exactly two strips should be registered");
+        _ = registered.Should().HaveCount(2, "exactly two strips should be registered");
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -559,7 +559,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
 
         // Assert: hitStrip is not null but finalDropIndex is null => error case
         _ = nullReturningStrategy.CompleteCalled.Should().BeTrue();
-        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Once());
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, destinationStrip: null, newIndex: null), Times.Once());
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
@@ -657,6 +657,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
             var wmMock = new Mock<IWindowManagerService>();
             var windowContext = new ManagedWindow
             {
+                DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
                 Id = Win32Interop.GetWindowIdFromWindow(WindowNative.GetWindowHandle(VisualUserInterfaceTestsApp.MainWindow)),
                 Window = VisualUserInterfaceTestsApp.MainWindow,
                 Category = WindowCategory.System,

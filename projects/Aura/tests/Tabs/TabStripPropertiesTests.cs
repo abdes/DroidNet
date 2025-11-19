@@ -64,7 +64,7 @@ public class TabStripPropertiesTests : TabStripTestsBase
         var tabStrip = new TestableTabStrip();
 
         // Assert
-        _ = tabStrip.MaxItemWidth.Should().BeGreaterThan(0, "MaxItemWidth should have a positive default value");
+        _ = tabStrip.MaxItemWidth.Should().BePositive("MaxItemWidth should have a positive default value");
     });
 
     [TestMethod]
@@ -89,7 +89,7 @@ public class TabStripPropertiesTests : TabStripTestsBase
         var tabStrip = new TestableTabStrip();
 
         // Assert
-        _ = tabStrip.PreferredItemWidth.Should().BeGreaterThan(0, "PreferredItemWidth should have a positive default value");
+        _ = tabStrip.PreferredItemWidth.Should().BePositive("PreferredItemWidth should have a positive default value");
     });
 
     [TestMethod]
@@ -164,7 +164,7 @@ public class TabStripPropertiesTests : TabStripTestsBase
         var tabStrip = new TestableTabStrip();
 
         // Assert
-        _ = tabStrip.DragThreshold.Should().BeGreaterThan(0, "DragThreshold should have a positive default value");
+        _ = tabStrip.DragThreshold.Should().BePositive("DragThreshold should have a positive default value");
     });
 
     [TestMethod]

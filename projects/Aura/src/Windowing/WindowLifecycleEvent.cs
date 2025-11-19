@@ -38,7 +38,7 @@ public enum WindowLifecycleEventType
 /// <param name="Timestamp">When the event occurred.</param>
 public sealed record WindowLifecycleEvent(
     WindowLifecycleEventType EventType,
-    ManagedWindow Context,
+    IManagedWindow Context,
     DateTimeOffset Timestamp)
 {
     /// <summary>
@@ -47,6 +47,6 @@ public sealed record WindowLifecycleEvent(
     /// <param name="eventType">The type of event.</param>
     /// <param name="context">The window context.</param>
     /// <returns>A new <see cref="WindowLifecycleEvent"/>.</returns>
-    public static WindowLifecycleEvent Create(WindowLifecycleEventType eventType, ManagedWindow context)
+    public static WindowLifecycleEvent Create(WindowLifecycleEventType eventType, IManagedWindow context)
         => new(eventType, context, DateTimeOffset.UtcNow);
 }
