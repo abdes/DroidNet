@@ -61,6 +61,34 @@ public sealed partial class WindowManagerService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "CloseWindowAsync timed out waiting for window {windowId} to close.")]
+    private static partial void LogCloseWindowTimeout(ILogger logger, ulong windowId);
+
+    private void LogCloseWindowTimeout(WindowId windowId)
+        => LogCloseWindowTimeout(this.logger, windowId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "A close operation is already in progress for window {windowId}.")]
+    private static partial void LogCloseAlreadyInProgress(ILogger logger, ulong windowId);
+
+    private void LogCloseAlreadyInProgress(WindowId windowId)
+        => LogCloseAlreadyInProgress(this.logger, windowId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Close operation for window {windowId} was cancelled.")]
+    private static partial void LogCloseWindowCancelled(ILogger logger, ulong windowId);
+
+    [Conditional("DEBUG")]
+    private void LogCloseWindowCancelled(WindowId windowId)
+        => LogCloseWindowCancelled(this.logger, windowId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to activate the window with ID {windowId}.")]
     private static partial void LogActivateWindowFailed(ILogger logger, Exception exception, ulong windowId);

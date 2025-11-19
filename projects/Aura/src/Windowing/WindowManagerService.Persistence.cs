@@ -21,7 +21,7 @@ public sealed partial class WindowManagerService
             return null;
         }
 
-        var bounds = window.CurrentBounds;
+        var bounds = window.RestoredBounds;
 
         // Use the window center to resolve the monitor work area
         var centerX = bounds.X + (bounds.Width / 2);

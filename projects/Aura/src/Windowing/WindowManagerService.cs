@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using CommunityToolkit.WinUI;
@@ -32,6 +33,7 @@ public sealed partial class WindowManagerService : IWindowManagerService
     private readonly DispatcherQueue dispatcherQueue;
 
     private readonly ConcurrentDictionary<WindowId, ManagedWindow> windows = new();
+    private readonly ConcurrentDictionary<WindowId, CloseOperation> pendingCloseOperations = new();
     private readonly Subject<WindowLifecycleEvent> windowEventsSubject = new();
     private readonly Subject<WindowMetadataChange> metadataChangedSubject = new();
     private readonly IDisposable? routerContextCreatedSubscription;
@@ -176,27 +178,47 @@ public sealed partial class WindowManagerService : IWindowManagerService
             return false;
         }
 
-        // Raise Closing event
-        var args = new WindowClosingEventArgs { WindowId = windowId };
-        if (this.WindowClosing != null)
+        var closeOperation = CloseOperation.ManagerInitiated();
+        if (!this.pendingCloseOperations.TryAdd(windowId, closeOperation))
         {
-            await this.WindowClosing.Invoke(this, args).ConfigureAwait(true);
-        }
-
-        if (args.Cancel)
-        {
+            // Another close operation is already in progress
+            this.LogCloseAlreadyInProgress(windowId);
             return false;
         }
 
-        var result = false;
-        await this.dispatcherQueue.EnqueueAsync(() =>
+        try
         {
-            this.LogClosingWindow(windowId);
-            context.Window.Close();
-            result = true;
-        }).ConfigureAwait(true);
+            var wasCancelled = await this.InvokeWindowClosingAsync(windowId, closeOperation).ConfigureAwait(false);
+            if (wasCancelled)
+            {
+                this.LogCloseWindowCancelled(windowId);
+                closeOperation.CompletionSource?.TrySetCanceled();
+                _ = this.pendingCloseOperations.TryRemove(windowId, out _);
+                return false;
+            }
 
-        return result;
+            closeOperation.AllowImmediateClose = true;
+
+            await this.dispatcherQueue.EnqueueAsync(context.Window.Close).ConfigureAwait(false);
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            _ = this.pendingCloseOperations.TryRemove(windowId, out _);
+            closeOperation.CompletionSource?.TrySetException(ex);
+            throw;
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+        try
+        {
+            return await (closeOperation.CompletionSource ?? throw new InvalidOperationException("Missing completion source for managed close"))
+                .Task.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
     }
 
     /// <inheritdoc />
@@ -460,9 +482,14 @@ public sealed partial class WindowManagerService : IWindowManagerService
 
         window.Activated += (_, _) => this.OnWindowActivated(windowId);
         window.Closed += (_, _) => this.OnWindowClosed(windowId);
-
+        window.AppWindow.Closing += AppWindowClosingHandler;
         window.AppWindow.Changed += AppWindowChangedHandler;
-        context.Cleanup = () => window.AppWindow.Changed -= AppWindowChangedHandler;
+
+        context.Cleanup = () =>
+        {
+            window.AppWindow.Changed -= AppWindowChangedHandler;
+            window.AppWindow.Closing -= AppWindowClosingHandler;
+        };
 
         void AppWindowChangedHandler(AppWindow sender, AppWindowChangedEventArgs args)
         {
@@ -475,6 +502,58 @@ public sealed partial class WindowManagerService : IWindowManagerService
             {
                 this.OnBoundsChanged(windowId);
             }
+        }
+
+        // Hook the AppWindow.Closing event to surface close requests via our cancelable event and to coordinate
+        // with programmatic close operations.
+        async void AppWindowClosingHandler(AppWindow sender, AppWindowClosingEventArgs e)
+        {
+            this.LogClosingWindow(windowId);
+
+            var closeOperation = this.pendingCloseOperations.GetOrAdd(
+                windowId,
+                _ => CloseOperation.UserInitiated());
+
+            if (closeOperation.AllowImmediateClose)
+            {
+                e.Cancel = false;
+                return;
+            }
+
+            e.Cancel = true;
+
+            var wasCancelled = await this.InvokeWindowClosingAsync(windowId, closeOperation).ConfigureAwait(false);
+            if (wasCancelled)
+            {
+                this.LogCloseWindowCancelled(windowId);
+
+                if (!closeOperation.IsUserInitiated)
+                {
+                    closeOperation.CompletionSource?.TrySetCanceled();
+                }
+
+                _ = this.pendingCloseOperations.TryRemove(windowId, out _);
+                return;
+            }
+
+            closeOperation.AllowImmediateClose = true;
+
+            try
+            {
+                await this.dispatcherQueue.EnqueueAsync(window.Close).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch (Exception exception)
+            {
+                if (!closeOperation.IsUserInitiated)
+                {
+                    closeOperation.CompletionSource?.TrySetException(exception);
+                }
+
+                _ = this.pendingCloseOperations.TryRemove(windowId, out _);
+                throw;
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
         }
     }
 
@@ -521,6 +600,12 @@ public sealed partial class WindowManagerService : IWindowManagerService
         if (this.activeWindow?.Id == windowId)
         {
             this.activeWindow = null;
+        }
+
+        // Complete any pending close operation
+        if (this.pendingCloseOperations.TryRemove(windowId, out var closeOperation))
+        {
+            closeOperation.CompletionSource?.TrySetResult(true);
         }
 
         _ = this.WindowClosed?.Invoke(this, new WindowClosedEventArgs { WindowId = windowId });
@@ -626,5 +711,49 @@ public sealed partial class WindowManagerService : IWindowManagerService
         {
             this.LogRouterWindowDestroyed(evt.Context.NavigationTargetKey.Name);
         }
+    }
+
+    private async Task<bool> InvokeWindowClosingAsync(WindowId windowId, CloseOperation closeOperation)
+    {
+        if (closeOperation.HasRaisedClosingEvent)
+        {
+            return closeOperation.WasCancelled;
+        }
+
+        closeOperation.HasRaisedClosingEvent = true;
+
+        var closingArgs = new WindowClosingEventArgs { WindowId = windowId };
+        if (this.WindowClosing is not null)
+        {
+            await this.WindowClosing.Invoke(this, closingArgs).ConfigureAwait(false);
+        }
+
+        closeOperation.WasCancelled = closingArgs.Cancel;
+        return closeOperation.WasCancelled;
+    }
+
+    private sealed class CloseOperation
+    {
+        private CloseOperation(bool isUserInitiated, TaskCompletionSource<bool>? completionSource)
+        {
+            this.IsUserInitiated = isUserInitiated;
+            this.CompletionSource = completionSource;
+        }
+
+        public bool IsUserInitiated { get; }
+
+        public TaskCompletionSource<bool>? CompletionSource { get; }
+
+        public bool HasRaisedClosingEvent { get; set; }
+
+        public bool AllowImmediateClose { get; set; }
+
+        public bool WasCancelled { get; set; }
+
+        public static CloseOperation ManagerInitiated()
+            => new(false, new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously));
+
+        public static CloseOperation UserInitiated()
+            => new(true, completionSource: null);
     }
 }

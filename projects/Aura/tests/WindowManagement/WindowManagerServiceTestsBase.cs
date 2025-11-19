@@ -24,8 +24,6 @@ public abstract class WindowManagerServiceTestsBase : VisualUserInterfaceTests
 
     protected HostingContext HostingContext { get; private set; } = null!;
 
-    protected Mock<ILoggerFactory> MockLoggerFactory { get; private set; } = null!;
-
     [TestInitialize]
     public Task InitializeAsync() => EnqueueAsync(async () =>
     {
@@ -38,13 +36,6 @@ public abstract class WindowManagerServiceTestsBase : VisualUserInterfaceTests
             Application = Application.Current,
             DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(DispatcherQueue.GetForCurrentThread()),
         };
-
-        // Setup mocks
-        this.MockLoggerFactory = new Mock<ILoggerFactory>();
-
-        // Logger factory returns null logger
-        _ = this.MockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
-            .Returns(Mock.Of<ILogger>());
     });
 
     /// <summary>
@@ -73,5 +64,5 @@ public abstract class WindowManagerServiceTestsBase : VisualUserInterfaceTests
         => new(
             this.HostingContext,
             [],
-            this.MockLoggerFactory.Object);
+            this.LoggerFactory);
 }
