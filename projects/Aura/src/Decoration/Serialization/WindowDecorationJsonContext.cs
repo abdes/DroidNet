@@ -39,6 +39,7 @@ namespace DroidNet.Aura.Decoration.Serialization;
         typeof(WindowCategoryJsonConverter),
         typeof(JsonStringEnumConverter<BackdropKind>),
         typeof(JsonStringEnumConverter<DragRegionBehavior>),
+        typeof(WindowDecorationOptionsDictionaryJsonConverter),
     ])]
 [JsonSerializable(typeof(WindowDecorationSettings))]
 [JsonSerializable(typeof(WindowDecorationOptions))]
