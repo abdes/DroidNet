@@ -13,11 +13,13 @@ public partial class InitialCreate : Migration
 {
     private static readonly string[] Columns = ["Location", "Name"];
     private static readonly string[] SettingsColumns = ["SettingsModule", "Name", "Scope", "ScopeId"];
+    private static readonly string[] WindowPlacementColumns = ["PlacementKey"];
 
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         CreateProjectsUsageTable(migrationBuilder);
+        CreateWindowPlacementsTable(migrationBuilder);
         CreateTemplatesUsageRecordsTable(migrationBuilder);
         CreateSettingsTable(migrationBuilder);
         CreateIndexes(migrationBuilder);
@@ -27,6 +29,8 @@ public partial class InitialCreate : Migration
     protected override void Down(MigrationBuilder migrationBuilder)
     {
         _ = migrationBuilder.DropTable(
+            name: "WindowPlacements");
+        _ = migrationBuilder.DropTable(
             name: "ProjectsUsage");
         _ = migrationBuilder.DropTable(
             name: "TemplatesUsageRecords");
@@ -34,9 +38,20 @@ public partial class InitialCreate : Migration
             name: "Settings");
     }
 
+    private static void CreateWindowPlacementsTable(MigrationBuilder migrationBuilder)
+        => _ = migrationBuilder.CreateTable(
+            name: "WindowPlacements",
+            columns: table => new
+            {
+                Id = table.Column<int>(type: "INTEGER", nullable: false)
+                    .Annotation(name: "Sqlite:Autoincrement", value: true),
+                PlacementKey = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
+                PlacementData = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
+            },
+            constraints: table => table.PrimaryKey(name: "PK_WindowPlacements", columns: x => x.Id));
+
     private static void CreateProjectsUsageTable(MigrationBuilder migrationBuilder)
-    {
-        _ = migrationBuilder.CreateTable(
+        => _ = migrationBuilder.CreateTable(
             name: "ProjectsUsage",
             columns: table => new
             {
@@ -50,11 +65,9 @@ public partial class InitialCreate : Migration
                 ContentBrowserState = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_ProjectsUsage", columns: x => x.Id));
-    }
 
     private static void CreateTemplatesUsageRecordsTable(MigrationBuilder migrationBuilder)
-    {
-        _ = migrationBuilder.CreateTable(
+        => _ = migrationBuilder.CreateTable(
             name: "TemplatesUsageRecords",
             columns: table => new
             {
@@ -65,11 +78,9 @@ public partial class InitialCreate : Migration
                 TimesUsed = table.Column<int>(type: "INTEGER", nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_TemplatesUsageRecords", columns: x => x.Id));
-    }
 
     private static void CreateSettingsTable(MigrationBuilder migrationBuilder)
-    {
-        _ = migrationBuilder.CreateTable(
+        => _ = migrationBuilder.CreateTable(
             name: "Settings",
             columns: table => new
             {
@@ -84,7 +95,6 @@ public partial class InitialCreate : Migration
                 UpdatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_Settings", columns: x => x.Id));
-    }
 
     private static void CreateIndexes(MigrationBuilder migrationBuilder)
     {
@@ -92,6 +102,12 @@ public partial class InitialCreate : Migration
             name: "IX_ProjectsUsage_Location_Name",
             table: "ProjectsUsage",
             columns: Columns,
+            unique: true);
+
+        _ = migrationBuilder.CreateIndex(
+            name: "IX_WindowPlacements_PlacementKey",
+            table: "WindowPlacements",
+            columns: WindowPlacementColumns,
             unique: true);
 
         _ = migrationBuilder.CreateIndex(
