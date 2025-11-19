@@ -66,7 +66,7 @@ public static class DependencyInjectionExtensions
     ///     );
     ///
     ///     // Register custom windows
-    ///     container.AddWindow&lt;MainWindow&gt;();
+    ///     container.AddWindow&lt;RoutedWindow&gt;();
     ///
     ///     // Menu providers registered separately
     ///     container.Register&lt;IMenuProvider&gt;(

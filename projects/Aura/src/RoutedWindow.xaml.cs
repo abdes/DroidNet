@@ -6,35 +6,39 @@ using System.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura;
 
 /// <summary>
-/// Represents the main window of the user interface.
+///     A <see cref="Window"/>, that can be the target of a routed navigation. Acts as an <see
+///     cref="IOutletContainer"/>, with a single outlet that can host the window's main content.
 /// </summary>
-public sealed partial class MainWindow : IOutletContainer, INotifyPropertyChanged
+/// <seealso cref="MainShellViewModel"/>
+/// <seealso cref="IOutletContainer"/>
+/// <seealso cref="IRouter"/>
+public sealed partial class RoutedWindow : IOutletContainer, INotifyPropertyChanged
 {
     private object? contentViewModel;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="MainWindow" /> class.
+    /// Initializes a new instance of the <see cref="RoutedWindow" /> class.
     /// </summary>
     /// <remarks>
-    /// This window is created and activated when the application is launched. This approach ensures
-    /// that window creation and destruction are managed by the application itself. This is crucial
-    /// in applications where multiple windows exist, as it might not be clear which window is the
-    /// main one, which impacts the UI lifetime. The window does not have a view model and does not
-    /// need one. Windows are solely responsible for window-specific tasks, while the 'shell' view
-    /// inside the window handles loading the appropriate content based on the active route or state
-    /// of the application.
+    ///     This window is created and activated when the application is launched. This approach
+    ///     ensures that window creation and destruction are managed by the application itself. This
+    ///     is crucial in applications where multiple windows exist, as it might not be clear which
+    ///     window is the main one, which impacts the UI lifetime. The window does not have a view
+    ///     model and does not need one. Windows are solely responsible for window-specific tasks,
+    ///     while the 'shell' view inside the window handles loading the appropriate content based
+    ///     on the active route or state of the application.
     /// </remarks>
-    public MainWindow()
+    public RoutedWindow()
     {
         this.InitializeComponent();
 
-        var workArea = DisplayArea.Primary.WorkArea;
-
         /*
+        var workArea = DisplayArea.Primary.WorkArea;
         this.AppWindow.MoveAndResize(
             new RectInt32((workArea.Width - width) / 2, (workArea.Height - height) / 2, width, height),
             DisplayArea.Primary);
