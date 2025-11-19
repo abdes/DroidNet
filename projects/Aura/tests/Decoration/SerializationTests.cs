@@ -319,4 +319,137 @@ public class SerializationTests
         _ = deserialized[WindowCategory.Main].Category.Should().Be(WindowCategory.Main);
         _ = deserialized[WindowCategory.Tool].Category.Should().Be(WindowCategory.Tool);
     }
+
+    [TestMethod]
+    public void DictionarySerialization_OmitsInnerCategory_AndDeserializesCategory()
+    {
+        // Arrange
+        var dict = new Dictionary<WindowCategory, WindowDecorationOptions>
+        {
+            [WindowCategory.Main] = new WindowDecorationOptions
+            {
+                Category = WindowCategory.Main,
+                ChromeEnabled = true,
+                WithBorder = false,
+            },
+        };
+
+        var options = new JsonSerializerOptions { TypeInfoResolver = WindowDecorationJsonContext.Default };
+
+        // Act
+        var json = JsonSerializer.Serialize(dict, options);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Assert - dictionary has category as property name
+        _ = root.TryGetProperty("main", out var mainEl).Should().BeTrue();
+
+        // inner object must NOT contain a `category` property
+        _ = mainEl.TryGetProperty("category", out _).Should().BeFalse();
+
+        // Deserializing should restore the Category on the value
+        var deserialized = JsonSerializer.Deserialize<Dictionary<WindowCategory, WindowDecorationOptions>>(json, options);
+        _ = deserialized.Should().NotBeNull();
+        _ = deserialized!.TryGetValue(WindowCategory.Main, out var val).Should().BeTrue();
+        _ = val.Should().NotBeNull();
+        _ = val.Category.Equals(WindowCategory.Main).Should().BeTrue();
+    }
+
+    [TestMethod]
+    public void DictionaryDeserialization_InjectsMissingCategory_FromKey()
+    {
+        // Arrange - incoming JSON lacks inner category information
+        const string json = """
+            {
+              "main": {
+                "chromeEnabled": true,
+                "withBorder": false
+              }
+            }
+            """;
+
+        // Act
+        var deserialized = JsonSerializer.Deserialize<Dictionary<WindowCategory, WindowDecorationOptions>>(json, this.jsonOptions);
+
+        // Assert
+        _ = deserialized.Should().NotBeNull();
+        _ = deserialized!.TryGetValue(WindowCategory.Main, out var value).Should().BeTrue();
+        _ = value.Should().NotBeNull();
+        _ = value.Category.Should().Be(WindowCategory.Main);
+        _ = value.WithBorder.Should().BeFalse();
+    }
+
+    [TestMethod]
+    public void DictionaryDeserialization_Throws_WhenEmbeddedCategoryDiffersFromKey()
+    {
+        // Arrange - embedded category conflicts with dictionary key
+        const string json = """
+            {
+              "main": {
+                "category": "tool"
+              }
+            }
+            """;
+
+        // Act
+        var act = () => JsonSerializer.Deserialize<Dictionary<WindowCategory, WindowDecorationOptions>>(json, this.jsonOptions);
+
+        // Assert
+        _ = act.Should().Throw<JsonException>()
+            .WithMessage("*does not match embedded category*");
+    }
+
+    [TestMethod]
+    public void DictionaryDeserialization_Throws_WhenValueIsNotAnObject()
+    {
+        // Arrange - value is a string instead of object
+        const string json = """
+            {
+              "main": "invalid"
+            }
+            """;
+
+        // Act
+        var act = () => JsonSerializer.Deserialize<Dictionary<WindowCategory, WindowDecorationOptions>>(json, this.jsonOptions);
+
+        // Assert
+        _ = act.Should().Throw<JsonException>()
+            .WithMessage("*Expected object for WindowDecorationOptions value*");
+    }
+
+    [TestMethod]
+    public void DictionarySerialization_WritesNull_WhenDictionaryIsNull()
+    {
+        // Arrange
+        Dictionary<WindowCategory, WindowDecorationOptions>? dictionary = null;
+
+        // Act
+        var json = JsonSerializer.Serialize(dictionary, this.jsonOptions);
+
+        // Assert
+        _ = json.Should().Be("null");
+    }
+
+    [TestMethod]
+    public void StandaloneSerialization_IncludesCategoryProperty()
+    {
+        // Arrange
+        var value = new WindowDecorationOptions
+        {
+            Category = WindowCategory.Tool,
+            ChromeEnabled = false,
+            WithBorder = true,
+        };
+
+        // Act
+        var json = JsonSerializer.Serialize(value, SharedOptions);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        // Assert - standalone object must contain category property
+        _ = root.TryGetProperty("category", out var catEl).Should().BeTrue();
+        _ = catEl.GetString().Should().Be(WindowCategory.Tool.Value);
+    }
 }

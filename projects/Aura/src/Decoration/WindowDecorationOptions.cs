@@ -29,9 +29,10 @@ public sealed record WindowDecorationOptions
     /// </value>
     /// <remarks>
     ///     Used for applying category-specific defaults, grouping windows, and enforcing validation
-    ///     rules (e.g., primary windows require a Close button).
+    ///     rules (e.g., primary windows require a Close button). Set during the deserialization process
+    ///     of the whole dictionary of categories.
     /// </remarks>
-    public required WindowCategory Category { get; init; } // TODO: do not serialize
+    public WindowCategory Category { get; init; }
 
     /// <summary>
     ///     Gets a value indicating whether Aura-provided window chrome is enabled.
