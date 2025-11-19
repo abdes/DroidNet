@@ -18,92 +18,154 @@ namespace DroidNet.Aura.Windowing;
 /// </remarks>
 public interface IWindowManagerService : IDisposable
 {
+#pragma warning disable CA1003 // Use generic event handler instances
+#pragma warning disable MA0046 // Use EventHandler<T> to declare events
     /// <summary>
-    ///     Gets an observable stream of window lifecycle events emitted for every registered window.
+    ///     Occurs when a window's presenter state is about to change.
+    /// </summary>
+    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanging;
+
+    /// <summary>
+    ///     Occurs when a window's presenter state has changed.
+    /// </summary>
+    public event AsyncEventHandler<PresenterStateChangeEventArgs>? PresenterStateChanged;
+
+    /// <summary>
+    ///     Occurs when a window is closing. Can be cancelled.
+    /// </summary>
+    public event AsyncEventHandler<WindowClosingEventArgs>? WindowClosing;
+
+    /// <summary>
+    ///     Occurs when a window has been closed.
+    /// </summary>
+    public event AsyncEventHandler<WindowClosedEventArgs>? WindowClosed;
+
+    /// <summary>
+    ///     Occurs when a window's bounds have changed.
+    /// </summary>
+    public event AsyncEventHandler<WindowBoundsChangedEventArgs>? WindowBoundsChanged;
+#pragma warning restore CA1003 // Use generic event handler instances
+#pragma warning restore MA0046 // Use EventHandler<T> to declare events
+
+    /// <summary>
+    ///     Gets occurs when a window's metadata has changed.
+    /// </summary>
+    public IObservable<WindowMetadataChange> MetadataChanged { get; }
+
+    /// <summary>
+    ///     Gets an observable stream of window lifecycle events.
     /// </summary>
     public IObservable<WindowLifecycleEvent> WindowEvents { get; }
 
     /// <summary>
-    ///     Gets the context of the window that is currently active, if one has focus.
+    ///     Gets the currently active window, if any.
     /// </summary>
-    public WindowContext? ActiveWindow { get; }
+    public ManagedWindow? ActiveWindow { get; }
 
     /// <summary>
-    ///     Gets a snapshot of all windows currently tracked by the manager.
+    ///     Gets a collection of all currently open windows.
     /// </summary>
-    public IReadOnlyCollection<WindowContext> OpenWindows { get; }
+    public IReadOnlyCollection<ManagedWindow> OpenWindows { get; }
 
     /// <summary>
-    ///     Registers an already-created window using the default <see cref="WindowCategory.System"/> classification.
+    ///     Registers a new window with the manager.
     /// </summary>
     /// <param name="window">The window instance to register.</param>
-    /// <param name="metadata">Optional metadata to associate with the window.</param>
-    /// <returns>The <see cref="WindowContext"/> created for the registered window.</returns>
-    /// <exception cref="InvalidOperationException">
-    ///     Thrown when the window is already registered or when registration fails.
-    /// </exception>
-    public Task<WindowContext> RegisterWindowAsync(
-        Window window,
-        IReadOnlyDictionary<string, object>? metadata = null);
+    /// <param name="metadata">Optional initial metadata.</param>
+    /// <returns>
+    ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
+    ///     The task result contains the <see cref="ManagedWindow"/> created for the registered window.
+    /// </returns>
+    public Task<ManagedWindow> RegisterWindowAsync(Window window, IReadOnlyDictionary<string, object>? metadata = null);
 
     /// <summary>
-    ///     Registers an already-created window with explicit classification and optional decoration metadata.
+    ///     Registers a new window with the manager and applies category-based decoration.
     /// </summary>
     /// <param name="window">The window instance to register.</param>
-    /// <param name="category">Window category identifier. Use constants from <see cref="WindowCategory"/>.</param>
-    /// <param name="metadata">Optional metadata to associate with the window.</param>
-    /// <returns>The <see cref="WindowContext"/> created for the registered window.</returns>
-    /// <exception cref="InvalidOperationException">
-    ///     Thrown when the window is already registered or when registration fails.
-    /// </exception>
-    public Task<WindowContext> RegisterDecoratedWindowAsync(
-        Window window,
-        WindowCategory category,
-        IReadOnlyDictionary<string, object>? metadata = null);
+    /// <param name="category">The category to assign to the window.</param>
+    /// <param name="metadata">Optional initial metadata.</param>
+    /// <returns>
+    ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
+    ///     The task result contains the <see cref="ManagedWindow"/> created for the registered window.
+    /// </returns>
+    public Task<ManagedWindow> RegisterDecoratedWindowAsync(Window window, WindowCategory category, IReadOnlyDictionary<string, object>? metadata = null);
 
     /// <summary>
-    ///     Closes a specific window by its context.
+    ///     Closes a managed window.
     /// </summary>
-    /// <param name="context">The window context to close.</param>
-    /// <returns>True if the window was successfully closed; otherwise, false.</returns>
-    public Task<bool> CloseWindowAsync(WindowContext context);
-
-    /// <summary>
-    ///     Closes a window by its unique identifier.
-    /// </summary>
-    /// <param name="windowId">The unique identifier of the window to close.</param>
-    /// <returns>True if the window was found and closed; otherwise, false.</returns>
+    /// <param name="windowId">The ID of the window to close.</param>
+    /// <returns>
+    ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
+    ///     The task result contains <see langword="true"/> if the window was closed; otherwise,
+    ///     <see langword="false"/>.
+    /// </returns>
     public Task<bool> CloseWindowAsync(WindowId windowId);
 
     /// <summary>
-    ///     Requests activation for a specific window context.
-    /// </summary>
-    /// <param name="context">The window context to activate.</param>
-    public void ActivateWindow(WindowContext context);
-
-    /// <summary>
-    ///     Requests activation for a window by its unique identifier.
-    /// </summary>
-    /// <param name="windowId">The unique identifier of the window to activate.</param>
-    public void ActivateWindow(WindowId windowId);
-
-    /// <summary>
-    ///     Attempts to find a window context by its identifier.
-    /// </summary>
-    /// <param name="windowId">The unique identifier of the window.</param>
-    /// <returns>The <see cref="WindowContext"/> if found; otherwise, null.</returns>
-    public WindowContext? GetWindow(WindowId windowId);
-
-    /// <summary>
-    ///     Returns the subset of tracked windows that match a given category.
-    /// </summary>
-    /// <param name="category">The window category to filter by. Use constants from <see cref="WindowCategory"/>.</param>
-    /// <returns>A collection of matching window contexts.</returns>
-    public IReadOnlyCollection<WindowContext> GetWindowsByCategory(WindowCategory category);
-
-    /// <summary>
-    ///     Initiates closure of every window currently tracked by the manager.
+    ///     Closes all managed windows.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     public Task CloseAllWindowsAsync();
+
+    /// <summary>
+    ///     Activates (brings to foreground) a managed window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to activate.</param>
+    public void ActivateWindow(WindowId windowId);
+
+    /// <summary>
+    ///     Retrieves the managed window context for a given ID.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to retrieve.</param>
+    /// <returns>The <see cref="ManagedWindow"/> if found; otherwise, null.</returns>
+    public ManagedWindow? GetWindow(WindowId windowId);
+
+    /// <summary>
+    ///     Minimizes the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to minimize.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task MinimizeWindowAsync(WindowId windowId);
+
+    /// <summary>
+    ///     Maximizes the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to maximize.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task MaximizeWindowAsync(WindowId windowId);
+
+    /// <summary>
+    ///     Restores the specified window to its previous state (from Minimized or Maximized).
+    /// </summary>
+    /// <param name="windowId">The ID of the window to restore.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task RestoreWindowAsync(WindowId windowId);
+
+    /// <summary>
+    ///     Sets a metadata value for a window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window.</param>
+    /// <param name="key">The metadata key.</param>
+    /// <param name="value">The metadata value.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task SetMetadataAsync(WindowId windowId, string key, object? value);
+
+    /// <summary>
+    ///     Removes a metadata value from a window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window.</param>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task RemoveMetadataAsync(WindowId windowId, string key);
+
+    /// <summary>
+    ///     Tries to get a metadata value for a window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window.</param>
+    /// <param name="key">The metadata key.</param>
+    /// <returns>
+    ///     A <see cref="Task{TResult}"/> that represents the asynchronous operation.
+    ///     The task result contains the metadata value if found; otherwise, <see langword="null"/>.
+    /// </returns>
+    public Task<object?> TryGetMetadataValueAsync(WindowId windowId, string key);
 }

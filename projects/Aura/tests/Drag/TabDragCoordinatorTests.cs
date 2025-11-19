@@ -655,7 +655,7 @@ public class TabDragCoordinatorTests : VisualUserInterfaceTests
         if (windowManager == null)
         {
             var wmMock = new Mock<IWindowManagerService>();
-            var windowContext = new WindowContext
+            var windowContext = new ManagedWindow
             {
                 Id = Win32Interop.GetWindowIdFromWindow(WindowNative.GetWindowHandle(VisualUserInterfaceTestsApp.MainWindow)),
                 Window = VisualUserInterfaceTestsApp.MainWindow,

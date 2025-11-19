@@ -11,6 +11,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Tests;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Moq;
 
@@ -28,7 +29,6 @@ namespace DroidNet.Aura.Tests;
 [ExcludeFromCodeCoverage]
 public class WindowManagerServiceTests : VisualUserInterfaceTests
 {
-    private Mock<IWindowContextFactory> mockWindowContextFactory = null!;
     private HostingContext hostingContext = null!;
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
 
@@ -48,30 +48,11 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
         };
 
         // Setup mocks
-        this.mockWindowContextFactory = new Mock<IWindowContextFactory>();
         this.mockLoggerFactory = new Mock<ILoggerFactory>();
 
         // Logger factory returns null logger
         _ = this.mockLoggerFactory.Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(Mock.Of<ILogger>());
-
-        // Setup window context factory to create contexts
-        _ = this.mockWindowContextFactory
-            .Setup(f => f.Create(
-                It.IsAny<Window>(),
-                It.IsAny<WindowCategory>(),
-                It.IsAny<WindowDecorationOptions?>(),
-                It.IsAny<IReadOnlyDictionary<string, object>?>()))
-            .Returns<Window, WindowCategory, WindowDecorationOptions?, IReadOnlyDictionary<string, object>?>(
-                (window, category, decoration, metadata) => new WindowContext
-                {
-                    Id = window.AppWindow.Id,
-                    Window = window,
-                    Category = category,
-                    CreatedAt = DateTimeOffset.UtcNow,
-                    Decorations = decoration,
-                    Metadata = metadata,
-                });
     });
 
     [TestMethod]
@@ -210,34 +191,6 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             _ = context.Metadata.Should().HaveCount(2);
             _ = context.Metadata["Key1"].Should().Be("Value1");
             _ = context.Metadata["Key2"].Should().Be(42);
-        }
-        finally
-        {
-            testWindow.Close();
-            sut.Dispose();
-        }
-    });
-
-    [TestMethod]
-    public Task RegisterWindowAsync_WhenContextFactoryFails_ThrowsInvalidOperationException_Async() => EnqueueAsync(async () =>
-    {
-        // Arrange
-        _ = this.mockWindowContextFactory
-            .Setup(f => f.Create(
-                It.IsAny<Window>(),
-                It.IsAny<WindowCategory>(),
-                It.IsAny<WindowDecorationOptions?>(),
-                It.IsAny<IReadOnlyDictionary<string, object>?>()))
-            .Throws(new InvalidOperationException("Factory failure"));
-
-        var sut = this.CreateService();
-        var testWindow = MakeSmallWindow();
-
-        try
-        {
-            // Act & Assert
-            var act = async () => await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
-            _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(true);
         }
         finally
         {
@@ -475,6 +428,134 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
             // Assert
             _ = events.Should().Contain(e => e.EventType == WindowLifecycleEventType.Activated);
+        }
+        finally
+        {
+            testWindow.Close();
+            sut.Dispose();
+        }
+    });
+
+    [TestMethod]
+    public Task MinimizeWindowAsync_RaisesPresenterStateEvents_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var testWindow = MakeSmallWindow();
+
+        var sut = this.CreateService();
+        var changing = new List<PresenterStateChangeEventArgs>();
+        var changed = new List<PresenterStateChangeEventArgs>();
+        sut.PresenterStateChanging += (s, e) =>
+        {
+            changing.Add(e);
+            return Task.CompletedTask;
+        };
+        sut.PresenterStateChanged += (s, e) =>
+        {
+            changed.Add(e);
+            return Task.CompletedTask;
+        };
+
+        try
+        {
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            changing.Clear();
+            changed.Clear();
+
+            // Act
+            await sut.MinimizeWindowAsync(context.Id).ConfigureAwait(true);
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            // Assert
+            _ = changing.Should().Contain(e => e.NewState == OverlappedPresenterState.Minimized);
+            _ = changed.Should().Contain(e => e.NewState == OverlappedPresenterState.Minimized);
+        }
+        finally
+        {
+            testWindow.Close();
+            sut.Dispose();
+        }
+    });
+
+    [TestMethod]
+    public Task MaximizeWindowAsync_RaisesPresenterStateEvents_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var testWindow = MakeSmallWindow();
+
+        var sut = this.CreateService();
+        var changing = new List<PresenterStateChangeEventArgs>();
+        var changed = new List<PresenterStateChangeEventArgs>();
+        sut.PresenterStateChanging += (s, e) =>
+        {
+            changing.Add(e);
+            return Task.CompletedTask;
+        };
+        sut.PresenterStateChanged += (s, e) =>
+        {
+            changed.Add(e);
+            return Task.CompletedTask;
+        };
+
+        try
+        {
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            changing.Clear();
+            changed.Clear();
+
+            // Act
+            await sut.MaximizeWindowAsync(context.Id).ConfigureAwait(true);
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            // Assert
+            _ = changing.Should().Contain(e => e.NewState == OverlappedPresenterState.Maximized);
+            _ = changed.Should().Contain(e => e.NewState == OverlappedPresenterState.Maximized);
+        }
+        finally
+        {
+            testWindow.Close();
+            sut.Dispose();
+        }
+    });
+
+    [TestMethod]
+    public Task RestoreWindowAsync_RaisesPresenterStateEvents_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var testWindow = MakeSmallWindow();
+
+        var sut = this.CreateService();
+        var changing = new List<PresenterStateChangeEventArgs>();
+        var changed = new List<PresenterStateChangeEventArgs>();
+        sut.PresenterStateChanging += (s, e) =>
+        {
+            changing.Add(e);
+            return Task.CompletedTask;
+        };
+        sut.PresenterStateChanged += (s, e) =>
+        {
+            changed.Add(e);
+            return Task.CompletedTask;
+        };
+
+        try
+        {
+            var context = await sut.RegisterDecoratedWindowAsync(testWindow, new("Test")).ConfigureAwait(true);
+            await WaitForRenderAsync().ConfigureAwait(true);
+            changing.Clear();
+            changed.Clear();
+
+            // Act - minimize then restore
+            await sut.MinimizeWindowAsync(context.Id).ConfigureAwait(true);
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(true);
+            await sut.RestoreWindowAsync(context.Id).ConfigureAwait(true);
+            await Task.Delay(250, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            // Assert - expect at least one restore entry
+            _ = changing.Should().Contain(e => e.NewState == OverlappedPresenterState.Restored);
+            _ = changed.Should().Contain(e => e.NewState == OverlappedPresenterState.Restored);
         }
         finally
         {
@@ -791,7 +872,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
             _ = await sut.RegisterDecoratedWindowAsync(window3, WindowCategory.Tool).ConfigureAwait(true);
 
             // Act
-            var toolWindows = sut.GetWindowsByCategory(WindowCategory.Tool);
+            var toolWindows = sut.OpenWindows.Where(w => w.Category == WindowCategory.Tool).ToList();
 
             // Assert
             _ = toolWindows.Should().HaveCount(2);
@@ -892,7 +973,7 @@ public class WindowManagerServiceTests : VisualUserInterfaceTests
 
     private WindowManagerService CreateService()
         => new(
-            this.mockWindowContextFactory.Object,
             this.hostingContext,
+            Enumerable.Empty<IMenuProvider>(),
             this.mockLoggerFactory.Object);
 }

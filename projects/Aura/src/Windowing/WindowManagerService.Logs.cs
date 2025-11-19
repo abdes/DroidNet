@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
+using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura.Windowing;
 
@@ -51,15 +52,6 @@ public sealed partial class WindowManagerService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to close the window with ID {windowId}.")]
-    private static partial void LogCloseWindowFailed(ILogger logger, Exception exception, ulong windowId);
-
-    private void LogCloseWindowFailed(Exception exception, WindowId windowId)
-        => LogCloseWindowFailed(this.logger, exception, windowId.Value);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "An attempt was made to activate a non-existent window with ID {windowId}.")]
     private static partial void LogActivateMissingWindow(ILogger logger, ulong windowId);
@@ -93,15 +85,6 @@ public sealed partial class WindowManagerService
 
     private void LogWindowClosed(WindowId windowId)
         => LogWindowClosed(this.logger, windowId.Value);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to apply the theme to the window with ID {windowId}.")]
-    private static partial void LogThemeApplyFailed(ILogger logger, Exception exception, ulong windowId);
-
-    private void LogThemeApplyFailed(Exception exception, WindowId windowId)
-        => LogThemeApplyFailed(this.logger, exception, windowId.Value);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -180,15 +163,6 @@ public sealed partial class WindowManagerService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "The decoration was resolved explicitly for the window with ID {windowId}.")]
-    private static partial void LogDecorationResolvedExplicit(ILogger logger, ulong windowId);
-
-    private void LogDecorationResolvedExplicit(WindowId windowId)
-        => LogDecorationResolvedExplicit(this.logger, windowId.Value);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "The decoration was resolved from settings for the window with ID {windowId} and category {category}.")]
     private static partial void LogDecorationResolvedFromSettings(ILogger logger, ulong windowId, string category);
@@ -206,4 +180,60 @@ public sealed partial class WindowManagerService
     [Conditional("DEBUG")]
     private void LogNoDecorationResolved(WindowId windowId)
         => LogNoDecorationResolved(this.logger, windowId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Created managed window with ID {windowId} for window of type {windowType}.")]
+    private static partial void LogWindowCreated(ILogger logger, ulong windowId, string windowType);
+
+    private void LogWindowCreated(ManagedWindow context)
+        => LogWindowCreated(this.logger, context.Id.Value, context.Window.GetType().Name);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Created menu source from provider {providerId} for window {windowId}.")]
+    private static partial void LogMenuSourceCreated(ILogger logger, string providerId, ulong windowId);
+
+    [Conditional("DEBUG")]
+    private void LogMenuSourceCreated(string providerId, ManagedWindow context)
+        => LogMenuSourceCreated(this.logger, providerId, context.Id.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Menu provider {providerId} not found for window {windowId}.")]
+    private static partial void LogMenuProviderNotFound(ILogger logger, string providerId, ulong windowId);
+
+    private void LogMenuProviderNotFound(string providerId, ManagedWindow context)
+        => LogMenuProviderNotFound(this.logger, providerId, context.Id.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Window {windowId} activated.")]
+    private static partial void LogWindowActivated(ILogger logger, ulong windowId);
+
+    private void LogWindowActivated(WindowId windowId)
+        => LogWindowActivated(this.logger, windowId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Window {windowId} presenter state changed from {oldState} to {newState}.")]
+    private static partial void LogPresenterStateChanged(ILogger logger, ulong windowId, OverlappedPresenterState oldState, OverlappedPresenterState newState);
+
+    private void LogPresenterStateChanged(WindowId windowId, OverlappedPresenterState oldState, OverlappedPresenterState newState)
+        => LogPresenterStateChanged(this.logger, windowId.Value, oldState, newState);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Metadata {key} changed for window {windowId}.")]
+    private static partial void LogMetadataChanged(ILogger logger, string key, ulong windowId);
+
+    [Conditional("DEBUG")]
+    private void LogMetadataChanged(WindowId windowId, string key)
+        => LogMetadataChanged(this.logger, key, windowId.Value);
 }

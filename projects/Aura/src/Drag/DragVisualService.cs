@@ -36,7 +36,7 @@ public partial class DragVisualService : IDragVisualService
     private readonly DispatcherQueue dispatcherQueue;
     private readonly Lock syncLock = new();
     private readonly bool suppressOverlay;
-    private readonly DroidNet.Coordinates.RawSpatialMapperFactory spatialMapperFactory;
+    private readonly RawSpatialMapperFactory spatialMapperFactory;
 
     private DragSessionToken? activeToken;
     private DragVisualDescriptor? activeDescriptor;

@@ -89,6 +89,31 @@ Extends `SettingsService<AppearanceSettings>` to:
 - Notify observers of theme changes
 - Provide `IAppearanceSettings` interface
 
+#### Window Manager & Window Factory
+
+The windowing subsystem provides a consistent, testable API for creating, registering, and managing WinUI `Window` instances.
+
+- `IWindowFactory` / `DefaultWindowFactory` — a DI-friendly factory that resolves windows from the container (including keyed registrations) and optionally applies decorations based on a `WindowCategory`.
+- `IWindowManagerService` / `WindowManagerService` — coordinates windows that are registered with Aura, exposing programmatic control and lifecycle events. It tracks windows as `ManagedWindow` contexts which contain metadata, decoration details, and presenter state.
+
+Key responsibilities of the manager and factory include:
+
+- Creating and registering windows with DI and the manager (generic or keyed resolution).
+- Applying category-specific decoration and menu integration via configured `WindowDecorationOptions`.
+- Exposing lifecycle events and observables for creation, activation, deactivation, presenter state change, bounds changes and closure.
+- Managing per-window metadata and menu providers resolved from DI.
+- Integrating with the `IRouter` for windows created by route targets so router-based windows are automatically tracked.
+
+A `ManagedWindow` is the context object representing a registered window. It exposes:
+
+- `Id` — the unique `WindowId` for programmatic lookup.
+- `Window` — the underlying WinUI `Window` instance.
+- `Category`, `Decorations` and `MenuSource` — decoration metadata and any created menu source (via `IMenuProvider`).
+- `PresenterState`, `CurrentBounds`, and optional `RestoredBounds` — current presenter state and bounds management.
+- `Metadata` — a dictionary for custom values attached to a specific window that consumers can query or change via the manager API.
+
+Decorations are resolved from `WindowDecorationOptions` and may include details like custom chrome, backdrop preferences, and menu provider identifiers. When a menu provider ID is present in the decoration, the menu provider is resolved from DI and a `MenuSource` is created and attached to the `ManagedWindow` context for the lifetime of the window.
+
 ### Architecture Highlights
 
 - **Reactive Programming** - Uses System.Reactive (Rx) for event handling
@@ -198,6 +223,7 @@ Aura/
 │   ├── MainWindow.xaml          # Main window host
 │   ├── AppThemeModeService.cs   # Theme management service
 │   ├── AppearanceSettings*.cs   # Settings infrastructure
+│   ├── Windowing/               # Window manager, factories and related types
 │   ├── Assets/                  # Icons and resources
 │   └── Themes/                  # Theme resource dictionaries
 ├── samples/
@@ -223,6 +249,15 @@ Aura/
 - **Adaptive Layouts** - Responsive design that adapts to window size
 - **Menu Integration** - Built-in menu bar and flyout support
 - **Drag Regions** - Proper window dragging areas
+
+### 🪟 Window Management & Lifecycle
+
+- **DI-based Window Creation** - Use `IWindowFactory` to resolve windows using DI. The `DefaultWindowFactory` supports generic creation, keyed registrations, and decorated window creation using `WindowCategory`.
+- **Manager-Tracked Windows** - Use `IWindowManagerService` to register and track windows; windows are represented by `ManagedWindow` which exposes `Id`, `Category`, `Decorations`, `MenuSource`, `Metadata`, `PresenterState` and other helpful properties.
+- **Lifecycle Events & Observables** - Subscribe to lifecycle events via `IWindowManagerService.WindowEvents` (an `IObservable<WindowLifecycleEvent>`) or async event handlers (`PresenterStateChanging`, `PresenterStateChanged`, `WindowClosing`, `WindowClosed`, `WindowBoundsChanged`). Event types include: `WindowLifecycleEventType.Created`, `WindowLifecycleEventType.Activated`, `WindowLifecycleEventType.Deactivated`, and `WindowLifecycleEventType.Closed`.
+- **Programmatic Control** - Programmatically activate, minimize, maximize, restore and close windows using the manager API (`ActivateWindow`, `MinimizeWindowAsync`, `MaximizeWindowAsync`, `RestoreWindowAsync`, `CloseWindowAsync`).
+- **Metadata & Menu Providers** - Attach arbitrary metadata to windows using `SetMetadataAsync` and integrate UI menus using `IMenuProvider` when decoration contains a menu provider ID.
+- **Router Integration** - The `WindowManagerService` integrates with the `IRouter` to automatically track windows created by route targets and attach route metadata.
 
 ### 🎯 MVVM Architecture
 
@@ -318,6 +353,9 @@ dotnet run --project samples/SingleWindow/Aura.SingleWindow.App.csproj
             // Register Aura services
             services.AddSingleton<IAppThemeModeService, AppThemeModeService>();
             services.AddSingleton<AppearanceSettingsService>();
+            // Register windowing services
+            services.AddSingleton<IWindowManagerService, WindowManagerService>();
+            services.AddSingleton<IWindowFactory, DefaultWindowFactory>();
         });
     ```
 
@@ -426,6 +464,46 @@ public partial class MyCustomShellViewModel : MainShellViewModel
     [ObservableProperty]
     private string customProperty;
 }
+```
+
+### Window Management Examples
+
+Create a decorated window using the DI-friendly factory (factory registers the window with the manager automatically):
+
+```csharp
+var windowFactory = serviceProvider.GetRequiredService<IWindowFactory>();
+var window = await windowFactory.CreateDecoratedWindow<MyWindow>(WindowCategory.Main);
+// Show / activate the window
+window.Activate();
+```
+
+Register a manually created window with the manager and attach metadata:
+
+```csharp
+var windowManager = serviceProvider.GetRequiredService<IWindowManagerService>();
+var context = await windowManager.RegisterDecoratedWindowAsync(window, WindowCategory.Secondary, new Dictionary<string, object>
+{
+    ["CreatedBy"] = "ManualHost",
+    ["RoutingTarget"] = "Settings",
+});
+
+// Set metadata and close the window through the manager
+await windowManager.SetMetadataAsync(context.Id, "LastSeenUser", "user123");
+await windowManager.CloseWindowAsync(context.Id);
+```
+
+Subscribe to lifecycle events and presenter state changes:
+
+```csharp
+var subscription = windowManager.WindowEvents.Subscribe(evt =>
+{
+    Console.WriteLine($"Window {evt.Context.Id.Value} lifecycle: {evt.EventType}");
+});
+
+windowManager.PresenterStateChanged += async (s, e) =>
+{
+    Console.WriteLine($"Presenter state changed from {e.OldState} to {e.NewState}");
+};
 ```
 
 ## Coding Standards

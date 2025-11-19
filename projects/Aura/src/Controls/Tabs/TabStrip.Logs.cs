@@ -806,7 +806,7 @@ public partial class TabStrip
     private static partial void LogPointerMovedImpl(ILogger logger, double X, double Y, double Delta);
 
     [Conditional("DEBUG")]
-    private void LogPointerMoved(TabStripItem item, Windows.Foundation.Point position, double delta)
+    private void LogPointerMoved(TabStripItem item, Point position, double delta)
     {
         if (this.logger is ILogger logger)
         {
@@ -896,7 +896,7 @@ public partial class TabStrip
     private static partial void LogCoordinatorDragMovedImpl(ILogger logger, double X, double Y);
 
     [Conditional("DEBUG")]
-    private void LogCoordinatorDragMoved(Windows.Foundation.Point screenPoint)
+    private void LogCoordinatorDragMoved(Point screenPoint)
     {
         if (this.logger is ILogger logger)
         {
@@ -911,7 +911,7 @@ public partial class TabStrip
     private static partial void LogCoordinatorDragEndedImpl(ILogger logger, double X, double Y, int DestHash, int NewIndex);
 
     [Conditional("DEBUG")]
-    private void LogCoordinatorDragEnded(Windows.Foundation.Point screenPoint, TabStrip? destination, int? newIndex)
+    private void LogCoordinatorDragEnded(Point screenPoint, TabStrip? destination, int? newIndex)
     {
         if (this.logger is ILogger logger)
         {

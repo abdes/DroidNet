@@ -72,7 +72,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.None,
         };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -101,7 +101,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.Mica,
         };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -131,7 +131,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.MicaAlt,
         };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -163,7 +163,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Category = new WindowCategory("Test"),
             Backdrop = BackdropKind.Acrylic,
         };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -188,7 +188,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
     {
         // Arrange
         var window = MakeSmallWindow("Test Window");
-        var context = CreateWindowContext(window, decoration: null);
+        var context = CreateManagedWindow(window, decoration: null);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -218,7 +218,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         {
             Category = new WindowCategory("Test"),
         };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -251,11 +251,11 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         // Window 3 with default backdrop (None)
         var decoration3 = new WindowDecorationOptions { Category = new WindowCategory("Test") };
 
-        var context1 = CreateWindowContext(window1, decoration1);
-        var context2 = CreateWindowContext(window2, decoration2);
-        var context3 = CreateWindowContext(window3, decoration3);
+        var context1 = CreateManagedWindow(window1, decoration1);
+        var context2 = CreateManagedWindow(window2, decoration2);
+        var context3 = CreateManagedWindow(window3, decoration3);
 
-        var openWindows = new List<WindowContext> { context1, context2, context3 };
+        var openWindows = new List<ManagedWindow> { context1, context2, context3 };
         _ = this.mockWindowManager.Setup(m => m.OpenWindows).Returns(openWindows.AsReadOnly());
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
@@ -291,7 +291,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         var decoration1 = new WindowDecorationOptions { Category = WindowCategory.Main, Backdrop = BackdropKind.Mica };
         var decoration2 = new WindowDecorationOptions { Category = WindowCategory.Tool, Backdrop = BackdropKind.Acrylic };
 
-        var context1 = new WindowContext
+        var context1 = new ManagedWindow
         {
             Id = new Microsoft.UI.WindowId(1),
             Window = window1,
@@ -299,7 +299,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             CreatedAt = DateTimeOffset.UtcNow,
             Decorations = decoration1,
         };
-        var context2 = new WindowContext
+        var context2 = new ManagedWindow
         {
             Id = new Microsoft.UI.WindowId(2),
             Window = window2,
@@ -308,7 +308,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
             Decorations = decoration2,
         };
 
-        var openWindows = new List<WindowContext> { context1, context2 };
+        var openWindows = new List<ManagedWindow> { context1, context2 };
         _ = this.mockWindowManager.Setup(m => m.OpenWindows).Returns(openWindows.AsReadOnly());
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
@@ -336,7 +336,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -364,7 +364,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         using var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -392,7 +392,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         // Arrange
         var window = MakeSmallWindow("Test Window");
         var decoration = new WindowDecorationOptions { Category = new WindowCategory("Test"), Backdrop = BackdropKind.Mica };
-        var context = CreateWindowContext(window, decoration);
+        var context = CreateManagedWindow(window, decoration);
 
         var sut = new WindowBackdropService(this.mockWindowManager.Object, this.mockLoggerFactory.Object);
 
@@ -465,7 +465,7 @@ public partial class WindowBackdropServiceTests : VisualUserInterfaceTests, IDis
         this.disposed = true;
     }
 
-    private static WindowContext CreateWindowContext(Window window, WindowDecorationOptions? decoration)
+    private static ManagedWindow CreateManagedWindow(Window window, WindowDecorationOptions? decoration)
         => new()
         {
             Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),

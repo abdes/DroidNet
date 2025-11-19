@@ -347,7 +347,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
 
         // Convert to logical screen space
-        var point = new Windows.Foundation.Point(cursorPos.X, cursorPos.Y).AsPhysicalScreen();
+        var point = new Point(cursorPos.X, cursorPos.Y).AsPhysicalScreen();
         return this.dragContext.SpatialMapper.Convert<PhysicalScreenSpace, ScreenSpace>(point);
     }
 
@@ -526,7 +526,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 return;
             }
 
-            var candidate = new Windows.Foundation.Point(cursorPos.X, cursorPos.Y).AsPhysicalScreen();
+            var candidate = new Point(cursorPos.X, cursorPos.Y).AsPhysicalScreen();
 
             // Check if position changed (compare physical pixels)
             if (Math.Abs(candidate.Point.X - this.lastCursorPosition.Point.X) > 0.5

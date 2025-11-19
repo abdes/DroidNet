@@ -56,7 +56,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
-    private WindowContext? currentContext;
+    private ManagedWindow? currentContext;
     private PropertyChangedEventHandler? contextPropertyChangedHandler;
     private bool showCustomTitleBar;
 
@@ -112,14 +112,14 @@ public partial class MainShellViewModel : AbstractOutletContainer
                 {
                     this.Window = (Window)@event.Context.NavigationTarget;
 
-                    // Look up the WindowContext for this window
+                    // Look up the ManagedWindow for this window
                     if (this.windowManagerService is not null)
                     {
                         this.Context = this.windowManagerService.OpenWindows
                             .FirstOrDefault(wc => ReferenceEquals(wc.Window, this.Window));
                     }
 
-                    this.UpdateMenuFromWindowContext();
+                    this.UpdateMenuFromManagedWindow();
                 });
     }
 
@@ -151,7 +151,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the menu source consumed by menu controls.
     /// </summary>
     /// <remarks>
-    /// This property returns the menu from the WindowContext if available (which comes from the registered
+    /// This property returns the menu from the ManagedWindow if available (which comes from the registered
     /// menu provider for the Main window category), otherwise falls back to the default settings menu.
     /// </remarks>
     [ObservableProperty]
@@ -174,12 +174,12 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// Gets the window context associated with this view model.
     /// </summary>
     /// <remarks>
-    /// This property provides access to the WindowContext which contains the window's
+    /// This property provides access to the ManagedWindow which contains the window's
     /// decoration options, menu source, and other metadata. It is populated during
     /// the first ActivationComplete event.
     /// </remarks>
     [ObservableProperty]
-    public partial WindowContext? Context { get; set; }
+    public partial ManagedWindow? Context { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the custom title bar should be visible for the current window context.
@@ -348,13 +348,13 @@ public partial class MainShellViewModel : AbstractOutletContainer
     }
 
     /// <summary>
-    /// Updates the MainMenu property from the WindowContext's MenuSource.
+    /// Updates the MainMenu property from the ManagedWindow's MenuSource.
     /// </summary>
     /// <remarks>
     /// This method looks up the window context from the window manager service and uses
     /// the menu source from the context if available. Falls back to the settings menu otherwise.
     /// </remarks>
-    private void UpdateMenuFromWindowContext()
+    private void UpdateMenuFromManagedWindow()
     {
         if (this.Window is null || this.windowManagerService is null)
         {
@@ -370,7 +370,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.MainMenu = windowContext?.MenuSource;
     }
 
-    partial void OnContextChanged(WindowContext? value)
+    partial void OnContextChanged(ManagedWindow? value)
     {
         // Unsubscribe previous context's event handler if present
         if (this.currentContext is not null && this.contextPropertyChangedHandler is not null)
@@ -385,7 +385,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         {
             this.contextPropertyChangedHandler = (_, e) =>
             {
-                if (string.Equals(e.PropertyName, nameof(WindowContext.Decorations), StringComparison.Ordinal))
+                if (string.Equals(e.PropertyName, nameof(ManagedWindow.Decorations), StringComparison.Ordinal))
                 {
                     this.UpdateShowCustomTitleBar(this.currentContext);
                 }
@@ -398,7 +398,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.UpdateShowCustomTitleBar(this.currentContext);
     }
 
-    private void UpdateShowCustomTitleBar(WindowContext? context)
+    private void UpdateShowCustomTitleBar(ManagedWindow? context)
     {
         var show = context?.Decorations?.ChromeEnabled == true
                    && context?.Decorations?.TitleBar is not null;

@@ -12,12 +12,12 @@ namespace DroidNet.Aura.Documents;
 /// <summary>
 ///     Event arguments for <see cref="IDocumentService.DocumentOpened"/>.
 /// </summary>
-public sealed class DocumentOpenedEventArgs(WindowContext window, IDocumentMetadata metadata, int indexHint, bool shouldSelect) : EventArgs
+public sealed class DocumentOpenedEventArgs(ManagedWindow window, IDocumentMetadata metadata, int indexHint, bool shouldSelect) : EventArgs
 {
     /// <summary>
     ///     Gets the window in which the document was opened.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>
     ///     Gets the application-provided metadata for the opened document.
@@ -40,14 +40,14 @@ public sealed class DocumentOpenedEventArgs(WindowContext window, IDocumentMetad
 ///     Event arguments used when a document is about to be closed. Handlers may register
 ///     asynchronous veto tasks using <see cref="AddVetoTask"/> to prevent the close.
 /// </summary>
-public sealed class DocumentClosingEventArgs(WindowContext window, IDocumentMetadata metadata, bool force) : EventArgs
+public sealed class DocumentClosingEventArgs(ManagedWindow window, IDocumentMetadata metadata, bool force) : EventArgs
 {
     private readonly List<Task<bool>> vetoTasks = [];
 
     /// <summary>
     ///     Gets the window (in which the document is open) that triggered the close request.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>
     ///     Gets the application-provided document metadata for which the close was requested.
@@ -120,12 +120,12 @@ public sealed class DocumentClosingEventArgs(WindowContext window, IDocumentMeta
 /// <summary>
 ///     Event arguments raised after a document has been closed.
 /// </summary>
-public sealed class DocumentClosedEventArgs(WindowContext window, IDocumentMetadata metadata) : EventArgs
+public sealed class DocumentClosedEventArgs(ManagedWindow window, IDocumentMetadata metadata) : EventArgs
 {
     /// <summary>
     ///     Gets the window (in which the document is open) that triggered the close request.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>
     ///     Gets the metadata for the document that was closed.
@@ -137,12 +137,12 @@ public sealed class DocumentClosedEventArgs(WindowContext window, IDocumentMetad
 ///     Event arguments raised when a document is detached from a window (for example, the user
 ///     initiated a tear-out operation).
 /// </summary>
-public sealed class DocumentDetachedEventArgs(WindowContext window, IDocumentMetadata metadata) : EventArgs
+public sealed class DocumentDetachedEventArgs(ManagedWindow window, IDocumentMetadata metadata) : EventArgs
 {
     /// <summary>
     ///     Gets the window (in which the document is attached) that triggered the detach request.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>
     ///     Gets the metadata for the detached document.
@@ -154,12 +154,12 @@ public sealed class DocumentDetachedEventArgs(WindowContext window, IDocumentMet
 ///     Event arguments raised when a document is attached to a window (for example, dropped into
 ///     another window's TabStrip as part of a tear-out attach).
 /// </summary>
-public sealed class DocumentAttachedEventArgs(WindowContext window, IDocumentMetadata metadata, int indexHint) : EventArgs
+public sealed class DocumentAttachedEventArgs(ManagedWindow window, IDocumentMetadata metadata, int indexHint) : EventArgs
 {
     /// <summary>
     ///     Gets the target window, to which the document was attached.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>Gets the metadata for the attached document.</summary>
     public IDocumentMetadata Metadata { get; } = metadata;
@@ -174,12 +174,12 @@ public sealed class DocumentAttachedEventArgs(WindowContext window, IDocumentMet
 /// <summary>
 ///     Event arguments raised when application-provided metadata for a document changes.
 /// </summary>
-public sealed class DocumentMetadataChangedEventArgs(WindowContext window, IDocumentMetadata newMetadata) : EventArgs
+public sealed class DocumentMetadataChangedEventArgs(ManagedWindow window, IDocumentMetadata newMetadata) : EventArgs
 {
     /// <summary>
     ///     Gets the window (in which the document is open) where the metadata change occurred.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>Gets the updated metadata content.</summary>
     public IDocumentMetadata NewMetadata { get; } = newMetadata;
@@ -188,12 +188,12 @@ public sealed class DocumentMetadataChangedEventArgs(WindowContext window, IDocu
 /// <summary>
 ///     Event arguments raised when the application activates (selects) a document in a window.
 /// </summary>
-public sealed class DocumentActivatedEventArgs(WindowContext window, Guid documentId) : EventArgs
+public sealed class DocumentActivatedEventArgs(ManagedWindow window, Guid documentId) : EventArgs
 {
     /// <summary>
     ///     Gets the window (in which the document is open) where the activation occurred.
     /// </summary>
-    public WindowContext Window { get; } = window;
+    public ManagedWindow Window { get; } = window;
 
     /// <summary>Gets the identifier of the document that was activated.</summary>
     public Guid DocumentId { get; } = documentId;

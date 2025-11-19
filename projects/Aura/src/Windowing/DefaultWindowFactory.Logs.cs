@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Windowing;
@@ -13,19 +12,16 @@ namespace DroidNet.Aura.Windowing;
 public sealed partial class DefaultWindowFactory
 {
     [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Creating window of type {WindowType} with metadata: {WidthMetadata}.")]
-    private static partial void LogCreateWindow(ILogger logger, string windowType, bool widthMetadata);
+        Message = "Creating window of type: {WindowType}")]
+    private static partial void LogCreateWindow(ILogger logger, string windowType);
 
-    [Conditional("DEBUG")]
-    private void LogCreateWindow(Type windowType, bool widthMetadata)
-        => LogCreateWindow(this.logger, windowType.FullName ?? "<unknown>", widthMetadata);
+    private void LogCreateWindow(Type windowType)
+        => LogCreateWindow(this.logger, windowType.FullName ?? "<unknown>");
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Created window of type {WindowType}.")]
+        Level = LogLevel.Debug,
+        Message = "Window created successfully: {WindowType}")]
     private static partial void LogWindowCreated(ILogger logger, string windowType);
 
     private void LogWindowCreated(Type windowType)
@@ -34,63 +30,57 @@ public sealed partial class DefaultWindowFactory
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Failed to create window of type {WindowType}.")]
+        Message = "Failed to create window of type: {WindowType}")]
     private static partial void LogCreateWindowFailed(ILogger logger, Exception exception, string windowType);
 
     private void LogCreateWindowFailed(Exception exception, Type windowType)
         => LogCreateWindowFailed(this.logger, exception, windowType.FullName ?? "<unknown>");
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Creating keyed window with key {Key} and metadata: {WidthMetadata}.")]
-    private static partial void LogCreateKeyedWindow(ILogger logger, string key, bool widthMetadata);
+        Message = "Creating keyed window with key: {Key}")]
+    private static partial void LogCreateKeyedWindow(ILogger logger, string key);
 
-    [Conditional("DEBUG")]
-    private void LogCreateKeyedWindow(string key, bool widthMetadata)
-        => LogCreateKeyedWindow(this.logger, key, widthMetadata);
+    private void LogCreateKeyedWindow(string key)
+        => LogCreateKeyedWindow(this.logger, key);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Created keyed window with key {Key} of type {WindowType} and metadata: {WidthMetadata}.")]
-    private static partial void LogKeyedWindowCreated(ILogger logger, string key, string windowType, bool widthMetadata);
+        Level = LogLevel.Debug,
+        Message = "Keyed window created successfully. Key: {Key}, Type: {WindowType}")]
+    private static partial void LogKeyedWindowCreated(ILogger logger, string key, string windowType);
 
-    private void LogKeyedWindowCreated(string key, Type windowType, bool widthMetadata)
-        => LogKeyedWindowCreated(this.logger, key, windowType.FullName ?? "<unknown>", widthMetadata);
+    private void LogKeyedWindowCreated(string key, Type windowType)
+        => LogKeyedWindowCreated(this.logger, key, windowType.FullName ?? "<unknown>");
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Failed to create keyed window with key {Key}.")]
+        Message = "Failed to create keyed window with key: {Key}")]
     private static partial void LogCreateKeyedWindowFailed(ILogger logger, Exception exception, string key);
 
     private void LogCreateKeyedWindowFailed(Exception exception, string key)
         => LogCreateKeyedWindowFailed(this.logger, exception, key);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Creating decorated window for category {Category} with metadata: {WidthMetadata}.")]
-    private static partial void LogCreateDecoratedWindow(ILogger logger, WindowCategory category, bool widthMetadata);
+        Message = "Creating decorated window. Category: {Category}")]
+    private static partial void LogCreateDecoratedWindow(ILogger logger, string category);
 
-    [Conditional("DEBUG")]
-    private void LogCreateDecoratedWindow(WindowCategory category, bool widthMetadata)
-        => LogCreateDecoratedWindow(this.logger, category, widthMetadata);
+    private void LogCreateDecoratedWindow(WindowCategory category)
+        => LogCreateDecoratedWindow(this.logger, category.Value);
 
     [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Created decorated window for category {Category} of type {WindowType} with metadata: {WidthMetadata}.")]
-    private static partial void LogDecoratedWindowCreated(ILogger logger, WindowCategory category, string windowType, bool widthMetadata);
+        Level = LogLevel.Debug,
+        Message = "Decorated window created successfully. Category: {Category}, Type: {WindowType}")]
+    private static partial void LogDecoratedWindowCreated(ILogger logger, string category, string windowType);
 
-    private void LogDecoratedWindowCreated(WindowCategory category, Type windowType, bool widthMetadata)
-        => LogDecoratedWindowCreated(this.logger, category, windowType.FullName ?? "<unknown>", widthMetadata);
+    private void LogDecoratedWindowCreated(WindowCategory category, Type windowType)
+        => LogDecoratedWindowCreated(this.logger, category.Value, windowType.FullName ?? "<unknown>");
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Failed to create decorated window of type {WindowType} for category {Category}.")]
+        Message = "Failed to create decorated window. Category: {Category}, Type: {WindowType}")]
     private static partial void LogCreateDecoratedWindowFailed(ILogger logger, Exception exception, string windowType, string category);
 
     private void LogCreateDecoratedWindowFailed(Exception exception, Type windowType, string category)
