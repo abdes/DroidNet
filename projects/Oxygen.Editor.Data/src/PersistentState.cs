@@ -42,4 +42,9 @@ public class PersistentState(DbContextOptions<PersistentState> options) : DbCont
     /// Gets or sets the DbSet for module settings.
     /// </summary>
     internal DbSet<ModuleSetting> Settings { get; set; }
+
+    /// <summary>
+    /// Gets or sets the DbSet for window placement records.
+    /// </summary>
+    internal DbSet<WindowPlacements> WindowPlacements { get; set; }
 }
