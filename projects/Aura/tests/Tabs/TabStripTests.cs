@@ -153,7 +153,7 @@ public class TabStripTests : TabStripTestsBase
 
         // Assert
         _ = tabStrip.Items.Should().Contain(item, "Added item should be in Items collection");
-        _ = tabStrip.Items.Count.Should().Be(1, "Items count should increase");
+        _ = tabStrip.Items.Should().ContainSingle("Items count should increase");
     });
 
     [TestMethod]
@@ -169,7 +169,7 @@ public class TabStripTests : TabStripTestsBase
 
         // Assert
         _ = tabStrip.Items.Should().NotContain(itemToRemove, "Removed item should not be in collection");
-        _ = tabStrip.Items.Count.Should().Be(2, "Items count should decrease");
+        _ = tabStrip.Items.Should().HaveCount(2, "Items count should decrease");
     });
 
     [TestMethod]
@@ -200,8 +200,8 @@ public class TabStripTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items[1].Should().Be(newItem, "Item should be at the specified index");
-        _ = tabStrip.Items.Count.Should().Be(4, "Total count should increase");
+        _ = tabStrip.Items.Should().HaveElementAt(1, newItem, "Item should be at the specified index");
+        _ = tabStrip.Items.Should().HaveCount(4, "Total count should increase");
     });
 
     [TestMethod]
@@ -217,9 +217,9 @@ public class TabStripTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items[1].Should().Be(newItem, "Item should be replaced");
+        _ = tabStrip.Items.Should().HaveElementAt(1, newItem, "Item should be replaced");
         _ = tabStrip.Items.Should().NotContain(oldItem, "Old item should not be in collection");
-        _ = tabStrip.Items.Count.Should().Be(3, "Total count should remain the same");
+        _ = tabStrip.Items.Should().HaveCount(3, "Total count should remain the same");
     });
 
     [TestMethod]
@@ -248,7 +248,7 @@ public class TabStripTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Count.Should().Be(1);
-        _ = tabStrip.Items[0].Should().Be(firstItem);
+        _ = tabStrip.Items.Should().ContainSingle();
+        _ = tabStrip.Items.Should().HaveElementAt(0, firstItem);
     });
 }

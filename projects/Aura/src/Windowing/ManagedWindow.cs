@@ -3,9 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura.Windowing;
@@ -22,81 +25,162 @@ namespace DroidNet.Aura.Windowing;
 ///     will be garbage collected when the ManagedWindow is no longer referenced.
 /// </para>
 /// </remarks>
-public sealed partial class ManagedWindow : ObservableObject
+internal sealed partial class ManagedWindow : ObservableObject, IManagedWindow
 {
     private IMenuSource? menuSource;
 
-    /// <summary>
-    ///     Gets the unique identifier for the window.
-    /// </summary>
+    /// <inheritdoc/>
     public required WindowId Id { get; init; }
 
-    /// <summary>
-    ///     Gets the WinUI Window instance.
-    /// </summary>
+    /// <inheritdoc/>
+    public required DispatcherQueue DispatcherQueue { get; init; }
+
+    /// <inheritdoc/>
     public required Window Window { get; init; }
 
-    /// <summary>
-    ///     Gets a value indicating whether the window is currently active.
-    /// </summary>
+    /// <inheritdoc/>
     public bool IsActive { get; private set; }
 
-    /// <summary>
-    ///     Gets the category of the window.
-    /// </summary>
+    /// <inheritdoc/>
     public required WindowCategory? Category { get; init; }
 
-    /// <summary>
-    ///     Gets the optional decoration options for the window.
-    /// </summary>
+    /// <inheritdoc/>
     [ObservableProperty]
     public partial WindowDecorationOptions? Decorations { get; set; }
 
-    /// <summary>
-    ///     Gets the menu source for this window, if one was created from a menu provider.
-    /// </summary>
-    /// <remarks>
-    ///     This property returns the menu source that was created during window initialization
-    ///     based on the decoration's menu options. Returns null if no menu was specified or if the
-    ///     menu provider could not be found.
-    /// </remarks>
+    /// <inheritdoc/>
     public IMenuSource? MenuSource => this.menuSource;
 
-    /// <summary>
-    ///     Gets the optional metadata for custom window properties.
-    /// </summary>
-    public IReadOnlyDictionary<string, object>? Metadata { get; internal set; }
+    /// <inheritdoc/>
+    IReadOnlyDictionary<string, object>? IManagedWindow.Metadata => this.Metadata;
 
-    /// <summary>
-    ///     Gets the timestamp when the window was created.
-    /// </summary>
+    /// <inheritdoc/>
     public required DateTimeOffset CreatedAt { get; init; }
 
-    /// <summary>
-    ///     Gets the timestamp of the most recent activation.
-    /// </summary>
+    /// <inheritdoc/>
     public DateTimeOffset? LastActivatedAt { get; private set; }
 
-    /// <summary>
-    ///     Gets the current state of the window presenter.
-    /// </summary>
-    public Microsoft.UI.Windowing.OverlappedPresenterState PresenterState { get; internal set; }
+    /// <inheritdoc/>
+    public Windows.Graphics.RectInt32 CurrentBounds
+        => new(
+            this.Window.AppWindow.Position.X,
+            this.Window.AppWindow.Position.Y,
+            this.Window.AppWindow.Size.Width,
+            this.Window.AppWindow.Size.Height);
+
+    /// <inheritdoc/>
+    public Windows.Graphics.RectInt32 RestoredBounds { get; internal set; }
+
+    /// <inheritdoc/>
+    public int? MinimumWidth { get; internal set; }
+
+    /// <inheritdoc/>
+    public int? MinimumHeight { get; internal set; }
 
     /// <summary>
-    ///     Gets the current on-screen bounds of the window.
+    ///     Gets or sets the optional metadata for custom window properties.
     /// </summary>
-    public Windows.Graphics.RectInt32 CurrentBounds { get; internal set; }
-
-    /// <summary>
-    ///     Gets the bounds to restore to when leaving the Minimized or Maximized state.
-    ///     Only meaningful when not in Restored state.
-    /// </summary>
-    public Windows.Graphics.RectInt32? RestoredBounds { get; internal set; }
+    internal IReadOnlyDictionary<string, object>? Metadata { get; set; }
 
     /// <summary>
     ///     Gets or sets an action to execute when the window is closed, used for cleanup.
     /// </summary>
     internal Action? Cleanup { get; set; }
+
+    /// <inheritdoc/>
+    public bool IsMinimized()
+        => this.Window.AppWindow.Presenter is OverlappedPresenter presenter
+            && presenter.State == OverlappedPresenterState.Minimized;
+
+    /// <inheritdoc/>
+    public bool IsMaximized()
+        => this.Window.AppWindow.Presenter is OverlappedPresenter presenter
+            && presenter.State == OverlappedPresenterState.Maximized;
+
+    /// <inheritdoc/>
+    public bool IsFullScreen()
+        => this.Window.AppWindow.Presenter is FullScreenPresenter;
+
+    /// <inheritdoc/>
+    public bool IsCompactOverlay()
+        => this.Window.AppWindow.Presenter is CompactOverlayPresenter;
+
+    /// <inheritdoc/>
+    public async Task MinimizeAsync()
+    {
+        await this.DispatcherQueue.EnqueueAsync(() =>
+        {
+            if (this.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                // Capture current bounds before minimizing if in Restored state
+                if (presenter.State == OverlappedPresenterState.Restored)
+                {
+                    this.RestoredBounds = this.CurrentBounds;
+                }
+
+                presenter.Minimize();
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task MaximizeAsync()
+    {
+        await this.DispatcherQueue.EnqueueAsync(() =>
+        {
+            if (this.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                // Capture current bounds before maximizing if in Restored state
+                if (presenter.State == OverlappedPresenterState.Restored)
+                {
+                    this.RestoredBounds = this.CurrentBounds;
+                }
+
+                presenter.Maximize();
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task RestoreAsync()
+    {
+        await this.DispatcherQueue.EnqueueAsync(() =>
+        {
+            if (this.Window.AppWindow.Presenter is OverlappedPresenter presenter)
+            {
+                presenter.Restore();
+
+                // After restoring, apply saved RestoredBounds if they differ from current bounds
+                var restoredBounds = this.RestoredBounds;
+                if (restoredBounds != this.CurrentBounds)
+                {
+                    this.Window.AppWindow.MoveAndResize(restoredBounds);
+                }
+            }
+        }).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task MoveAsync(Windows.Graphics.PointInt32 position)
+    {
+        await this.DispatcherQueue.EnqueueAsync(() => this.Window.AppWindow.Move(position)).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task ResizeAsync(Windows.Graphics.SizeInt32 size)
+    {
+        await this.DispatcherQueue.EnqueueAsync(() => this.Window.AppWindow.Resize(size)).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
+    public async Task SetBoundsAsync(Windows.Graphics.RectInt32 bounds)
+    {
+        await this.DispatcherQueue.EnqueueAsync(() =>
+        {
+            this.Window.AppWindow.Move(new Windows.Graphics.PointInt32 { X = bounds.X, Y = bounds.Y });
+            this.Window.AppWindow.Resize(new Windows.Graphics.SizeInt32 { Width = bounds.Width, Height = bounds.Height });
+        }).ConfigureAwait(false);
+    }
 
     /// <summary>
     ///     Updates the activation state of this window context.

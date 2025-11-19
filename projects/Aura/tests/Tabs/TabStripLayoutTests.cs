@@ -138,7 +138,7 @@ public class TabStripLayoutTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         var initialOffset = scrollHost.HorizontalOffset;
-        _ = initialOffset.Should().BeGreaterThan(0, "Should be scrolled to the right");
+        _ = initialOffset.Should().BePositive("Should be scrolled to the right");
 
         var leftButton = tabStrip.GetOverflowLeftButton();
         _ = leftButton.Should().NotBeNull();
@@ -194,7 +194,7 @@ public class TabStripLayoutTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = _ = scrollHost.ScrollableWidth.Should().BeGreaterThan(0, "With many tabs, content should be scrollable");
+        _ = _ = scrollHost.ScrollableWidth.Should().BePositive("With many tabs, content should be scrollable");
     });
 
     [TestMethod]
@@ -205,7 +205,7 @@ public class TabStripLayoutTests : TabStripTestsBase
         var scrollHost = tabStrip.GetScrollHost();
         _ = scrollHost.Should().NotBeNull();
         var initialScrollableWidth = _ = scrollHost.ScrollableWidth;
-        _ = initialScrollableWidth.Should().BeGreaterThan(0);
+        _ = initialScrollableWidth.Should().BePositive();
 
         // Act - Remove most tabs
         while (tabStrip.Items.Count > 3)

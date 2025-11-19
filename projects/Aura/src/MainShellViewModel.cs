@@ -56,7 +56,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
-    private ManagedWindow? currentContext;
+    private IManagedWindow? currentContext;
     private PropertyChangedEventHandler? contextPropertyChangedHandler;
     private bool showCustomTitleBar;
 
@@ -179,7 +179,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// the first ActivationComplete event.
     /// </remarks>
     [ObservableProperty]
-    public partial ManagedWindow? Context { get; set; }
+    public partial IManagedWindow? Context { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether the custom title bar should be visible for the current window context.
@@ -370,7 +370,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.MainMenu = windowContext?.MenuSource;
     }
 
-    partial void OnContextChanged(ManagedWindow? value)
+    partial void OnContextChanged(IManagedWindow? value)
     {
         // Unsubscribe previous context's event handler if present
         if (this.currentContext is not null && this.contextPropertyChangedHandler is not null)
@@ -398,7 +398,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.UpdateShowCustomTitleBar(this.currentContext);
     }
 
-    private void UpdateShowCustomTitleBar(ManagedWindow? context)
+    private void UpdateShowCustomTitleBar(IManagedWindow? context)
     {
         var show = context?.Decorations?.ChromeEnabled == true
                    && context?.Decorations?.TitleBar is not null;

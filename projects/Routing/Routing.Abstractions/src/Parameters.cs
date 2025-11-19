@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Collections;
-using System.Linq;
 
 namespace DroidNet.Routing;
 

@@ -161,7 +161,7 @@ public class TabStripDragTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert - Should complete without error
-        _ = tabStrip.Items.Count.Should().Be(3, "collection should be unchanged");
+        _ = tabStrip.Items.Should().HaveCount(3, "collection should be unchanged");
     });
 
     [TestMethod]
@@ -229,7 +229,7 @@ public class TabStripDragTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Count.Should().Be(initialCount - 1, "item should be removed");
+        _ = tabStrip.Items.Should().HaveCount(initialCount - 1, "item should be removed");
         _ = tabStrip.Items.Should().NotContain(itemToRemove, "specific item should be removed");
     });
 
@@ -246,8 +246,8 @@ public class TabStripDragTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Count.Should().Be(initialCount + 1, "item should be added");
-        _ = tabStrip.Items[1].Should().Be(newItem, "item should be at specified index");
+        _ = tabStrip.Items.Should().HaveCount(initialCount + 1, "item should be added");
+        _ = tabStrip.Items.Should().HaveElementAt(1, newItem, "item should be at specified index");
     });
 
     [TestMethod]
@@ -262,8 +262,8 @@ public class TabStripDragTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items[3].Should().Be(itemToMove, "item should be at new index");
-        _ = tabStrip.Items.Count.Should().Be(5, "count should remain same");
+        _ = tabStrip.Items.Should().HaveElementAt(3, itemToMove, "item should be at new index");
+        _ = tabStrip.Items.Should().HaveCount(5, "count should remain same");
     });
 
     [TestMethod]
@@ -293,7 +293,7 @@ public class TabStripDragTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items[2].Should().Be(itemToMove, "item should be moved");
+        _ = tabStrip.Items.Should().HaveElementAt(2, itemToMove, "item should be moved");
         _ = removeCount.Should().Be(0, "MoveItem should not trigger Remove event");
         _ = addCount.Should().Be(0, "MoveItem should not trigger Add event");
     });
@@ -313,7 +313,7 @@ public class TabStripDragTests : TabStripTestsBase
         // Assert
         _ = result.CurrentStatus.Should().Be(RealizationResult.Status.Realized, "realization should succeed");
         _ = result.Container.Should().NotBeNull("container should be realized");
-        _ = tabStrip.Items[1].Should().Be(newItem, "item should be inserted");
+        _ = tabStrip.Items.Should().HaveElementAt(1, newItem, "item should be inserted");
     });
 
     [TestMethod]
@@ -327,7 +327,7 @@ public class TabStripDragTests : TabStripTestsBase
 
         // Assert
         _ = snapshot.Should().NotBeNull();
-        _ = snapshot.Count.Should().BeGreaterThan(0, "snapshot should contain items");
+        _ = snapshot.Count.Should().BePositive("snapshot should contain items");
 
         for (var i = 1; i < snapshot.Count; i++)
         {
@@ -350,7 +350,7 @@ public class TabStripDragTests : TabStripTestsBase
         foreach (var item in snapshot)
         {
             _ = item.ItemIndex.Should().BeGreaterThanOrEqualTo(0, "ItemIndex should be valid");
-            _ = item.Width.Should().BeGreaterThan(0, "Width should be positive");
+            _ = item.Width.Should().BePositive("Width should be positive");
             _ = item.LayoutOrigin.Should().NotBeNull("LayoutOrigin should be set");
         }
     });

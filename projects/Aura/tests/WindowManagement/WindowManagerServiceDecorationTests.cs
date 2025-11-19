@@ -17,7 +17,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Moq;
 
-namespace DroidNet.Aura.Tests.WindowManagement;
+namespace DroidNet.Aura.Tests;
 
 /// <summary>
 /// Integration tests for <see cref="WindowManagerService"/> decoration resolution.
@@ -81,12 +81,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        ManagedWindow? context = null;
+        IManagedWindow? context = null;
 
         try
         {
@@ -125,12 +125,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
         // Arrange - No decoration settings service
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: null); // No service
 
         var window = MakeSmallWindow();
-        ManagedWindow? context = null;
+        IManagedWindow? context = null;
 
         try
         {
@@ -170,11 +170,11 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
-        var createdContexts = new ConcurrentBag<ManagedWindow>();
+        var createdContexts = new ConcurrentBag<IManagedWindow>();
         var createdWindows = new List<Window>();
 
         try
@@ -232,12 +232,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        ManagedWindow? context = null;
+        IManagedWindow? context = null;
 
         try
         {
@@ -247,7 +247,9 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
             // Assert
             _ = context.Decorations.Should().NotBeNull();
             _ = context.Decorations.Category.Should().Be(WindowCategory.Main);
-            _ = context.Decorations.TitleBar?.Height.Should().Be(40.0); // Main characteristic
+            var tb = context.Decorations.TitleBar;
+            _ = tb.Should().NotBeNull();
+            _ = tb.Height.Should().Be(40.0); // Main characteristic
         }
         finally
         {
@@ -277,12 +279,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        ManagedWindow? context = null;
+        IManagedWindow? context = null;
 
         try
         {
@@ -322,12 +324,12 @@ public class WindowManagerServiceDecorationTests : VisualUserInterfaceTests
 
         var windowManager = new WindowManagerService(
             this.hostingContext,
-            Enumerable.Empty<IMenuProvider>(),
+            [],
             this.mockLoggerFactory.Object,
             decorationSettingsService: settingsService.Object);
 
         var window = MakeSmallWindow();
-        ManagedWindow? context = null;
+        IManagedWindow? context = null;
 
         try
         {

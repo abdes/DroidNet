@@ -93,7 +93,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        _ = result.Items.Should().HaveCount(1);
+        _ = result.Items.Should().ContainSingle();
         _ = result.Items[0].Width.Should().Be(120);
     }
 
@@ -224,7 +224,7 @@ public class TabStripLayoutManagerTests
         var result = manager.ComputeLayout(request);
 
         // Assert
-        _ = result.Items.Should().HaveCount(1);
+        _ = result.Items.Should().ContainSingle();
         _ = result.Items[0].Width.Should().Be(120);
     }
 

@@ -45,12 +45,12 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var meta = new TestDocumentMetadata { Title = "Doc 1" };
 
         // Act
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
 
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Should().HaveCount(1);
+        _ = tabStrip.Items.Should().ContainSingle();
         var added = tabStrip.Items[0];
         _ = added.ContentId.Should().Be(id);
         _ = added.Header.Should().Be(meta.Title);
@@ -69,7 +69,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 2" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - request close from tabSplitter
@@ -96,7 +96,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "VetoDoc" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Add a veto handler
@@ -111,7 +111,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         // Assert - close was vetoed
         _ = ds.CloseCallCount.Should().Be(1);
         _ = ds.ClosedIds.Should().NotContain(id);
-        _ = tabStrip.Items.Should().HaveCount(1);
+        _ = tabStrip.Items.Should().ContainSingle();
     });
 
     [TestMethod]
@@ -126,7 +126,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "ForceDoc" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Add a veto handler that would normally veto
@@ -138,7 +138,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         // Assert - closed despite veto
         _ = ds.ClosedIds.Should().Contain(id);
-        _ = tabStrip.Items.Should().HaveCount(0);
+        _ = tabStrip.Items.Should().BeEmpty();
     });
 
     [TestMethod]
@@ -153,7 +153,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 3" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - close the doc from service
@@ -161,7 +161,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Should().HaveCount(0);
+        _ = tabStrip.Items.Should().BeEmpty();
         _ = ds.ClosedIds.Should().Contain(id);
     });
 
@@ -179,11 +179,11 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var meta = new TestDocumentMetadata { Title = "Attached Doc" };
 
         // Act
-        _ = await ds.AttachDocumentAsync(ctx, meta, -1, true).ConfigureAwait(true);
+        _ = await ds.AttachDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Should().HaveCount(1);
+        _ = tabStrip.Items.Should().ContainSingle();
         var added = tabStrip.Items[0];
         _ = added.Header.Should().Be(meta.Title);
     });
@@ -200,7 +200,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc to Detach" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(true);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act
@@ -208,7 +208,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Assert
-        _ = tabStrip.Items.Should().HaveCount(0);
+        _ = tabStrip.Items.Should().BeEmpty();
     });
 
     [TestMethod]
@@ -223,7 +223,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 4" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - select via service
@@ -248,7 +248,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 5" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - update metadata
@@ -274,7 +274,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 2" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Act - request detach from tabStrip (simulate tear-out start)
@@ -299,7 +299,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "SvcVetoDoc" };
-        var id = await ds.OpenDocumentAsync(ctx, meta, -1, true).ConfigureAwait(false);
+        var id = await ds.OpenDocumentAsync(ctx, meta, -1, shouldSelect: true).ConfigureAwait(false);
         await WaitForRenderCompletion().ConfigureAwait(true);
 
         // Add a veto handler
@@ -312,7 +312,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         // Assert - close was vetoed
         _ = result.Should().BeFalse();
         _ = ds.ClosedIds.Should().NotContain(id);
-        _ = tabStrip.Items.Should().HaveCount(1);
+        _ = tabStrip.Items.Should().ContainSingle();
     });
 
     private static async Task WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
@@ -330,12 +330,14 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     }
 
     /// <summary>
-    /// Helper to create a ManagedWindow for tests (avoids using the IManagedWindowFactory dependency). This mirrors the minimal parts of the window context used by DocumentTabPresenter.
+    /// Helper to create a ManagedWindow for tests (avoids using the ManagedWindowFactory dependency).
+    /// This mirrors the minimal parts of the window context used by DocumentTabPresenter.
     /// </summary>
     private static class ManagedWindowFactory
     {
-        public static ManagedWindow CreateForWindow(Window window) => new()
+        public static IManagedWindow CreateForWindow(Window window) => new ManagedWindow()
         {
+            DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
             Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
             Window = window,
             Category = new WindowCategory("Test"),
@@ -345,7 +347,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
     private sealed class TestDocumentService : IDocumentService
     {
-        private readonly Dictionary<Guid, IDocumentMetadata> store = new();
+        private readonly Dictionary<Guid, IDocumentMetadata> store = [];
 
         public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
 
@@ -367,7 +369,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         public int CloseCallCount { get; private set; }
 
-        public Task<Guid> OpenDocumentAsync(ManagedWindow window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+        public Task<Guid> OpenDocumentAsync(IManagedWindow window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
         {
             var id = metadata.DocumentId == Guid.Empty ? Guid.NewGuid() : metadata.DocumentId;
 
@@ -390,7 +392,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
                     DocumentId = id,
                     Title = metadata.Title ?? string.Empty,
                     IconUri = metadata is { } ? metadata!.IconUri : null,
-                    IsDirty = metadata is { } ? metadata!.IsDirty : false,
+                    IsDirty = metadata is { } && metadata!.IsDirty,
                     IsPinnedHint = metadata is { } && metadata!.IsPinnedHint,
                 };
             }
@@ -402,7 +404,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             return Task.FromResult(id);
         }
 
-        public async Task<bool> CloseDocumentAsync(ManagedWindow window, Guid documentId, bool force = false)
+        public async Task<bool> CloseDocumentAsync(IManagedWindow window, Guid documentId, bool force = false)
         {
             this.CloseCallCount++;
 
@@ -427,24 +429,24 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             this.DocumentClosed?.Invoke(this, closed);
             this.ClosedIds.Add(documentId);
 
-            this.store.Remove(documentId);
+            _ = this.store.Remove(documentId);
             return true;
         }
 
-        public Task<IDocumentMetadata?> DetachDocumentAsync(ManagedWindow window, Guid documentId)
+        public Task<IDocumentMetadata?> DetachDocumentAsync(IManagedWindow window, Guid documentId)
         {
             if (!this.store.TryGetValue(documentId, out var metadata))
             {
                 return Task.FromResult<IDocumentMetadata?>(null);
             }
 
-            this.store.Remove(documentId);
+            _ = this.store.Remove(documentId);
             this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(window, metadata));
             this.DetachedIds.Add(documentId);
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
 
-        public Task<bool> AttachDocumentAsync(ManagedWindow targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+        public Task<bool> AttachDocumentAsync(IManagedWindow targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
         {
             // Add to store and fire attached
             var id = metadata.DocumentId == Guid.Empty ? Guid.NewGuid() : metadata.DocumentId;
@@ -453,7 +455,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             return Task.FromResult(true);
         }
 
-        public Task<bool> UpdateMetadataAsync(ManagedWindow window, Guid documentId, IDocumentMetadata metadata)
+        public Task<bool> UpdateMetadataAsync(IManagedWindow window, Guid documentId, IDocumentMetadata metadata)
         {
             // Ensure the metadata contains the document id so the presenter can find the tab.
             IDocumentMetadata effective;
@@ -469,8 +471,8 @@ public class DocumentTabPresenterTests : TabStripTestsBase
                     DocumentId = documentId,
                     Title = metadata.Title ?? string.Empty,
                     IconUri = metadata is { } ? metadata!.IconUri : null,
-                    IsDirty = metadata is { } ? metadata!.IsDirty : false,
-                    IsPinnedHint = metadata is { } ? metadata!.IsPinnedHint : false,
+                    IsDirty = metadata is { } && metadata!.IsDirty,
+                    IsPinnedHint = metadata is { } && metadata!.IsPinnedHint,
                 };
             }
 
@@ -479,7 +481,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             return Task.FromResult(true);
         }
 
-        public Task<bool> SelectDocumentAsync(ManagedWindow window, Guid documentId)
+        public Task<bool> SelectDocumentAsync(IManagedWindow window, Guid documentId)
         {
             this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(window, documentId));
             return Task.FromResult(true);

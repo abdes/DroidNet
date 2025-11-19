@@ -180,7 +180,7 @@ public class TabStripCollectionTests : TabStripTestsBase
         // Assert
         _ = tabStrip.PinnedItemsView.Count.Should().Be(1, "Pinned view should decrease");
         _ = tabStrip.PinnedItemsView.Should().NotContain(pinnedItem);
-        _ = tabStrip.Items.Count.Should().Be(2);
+        _ = tabStrip.Items.Should().HaveCount(2);
     });
 
     [TestMethod]
@@ -237,6 +237,6 @@ public class TabStripCollectionTests : TabStripTestsBase
         // Assert
         _ = tabStrip.PinnedItemsView.Should().Contain(newPinnedItem);
         _ = tabStrip.PinnedItemsView.Count.Should().Be(3);
-        _ = tabStrip.Items.Count.Should().Be(5);
+        _ = tabStrip.Items.Should().HaveCount(5);
     });
 }

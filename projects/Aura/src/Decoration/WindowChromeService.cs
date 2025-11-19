@@ -60,7 +60,7 @@ public sealed partial class WindowChromeService
     ///     Applies chrome settings to a window based on its decoration options.
     /// </summary>
     /// <param name="context">The window context to apply chrome to.</param>
-    public void ApplyChrome(ManagedWindow context)
+    public void ApplyChrome(IManagedWindow context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -93,7 +93,7 @@ public sealed partial class WindowChromeService
     ///     Applies chrome to windows matching a predicate.
     /// </summary>
     /// <param name="predicate">Predicate to filter which windows should have chrome applied.</param>
-    public void ApplyChrome(Func<ManagedWindow, bool> predicate)
+    public void ApplyChrome(Func<IManagedWindow, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
 

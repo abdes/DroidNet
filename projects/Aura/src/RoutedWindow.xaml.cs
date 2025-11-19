@@ -5,7 +5,6 @@
 using System.ComponentModel;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Aura;

@@ -240,7 +240,7 @@ public partial class MenuProviderTests
 
         // Assert
         _ = menuSource.Should().NotBeNull();
-        _ = menuSource.Items.Should().HaveCount(1);
+        _ = menuSource.Items.Should().ContainSingle();
         _ = menuSource.Items[0].Text.Should().Be("Command");
         _ = menuSource.Items[0].Command.Should().BeSameAs(testService.TestCommand);
     }
@@ -336,7 +336,7 @@ public partial class MenuProviderTests
 
         // Assert
         _ = menuSource.Should().NotBeNull();
-        _ = menuSource.Items.Should().HaveCount(1);
+        _ = menuSource.Items.Should().ContainSingle();
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.OrderingRules", "SA1201:Elements should appear in the correct order", Justification = "better for test file organization")]

@@ -6,6 +6,7 @@
 #pragma warning disable SA1402 // File may only contain a single type
 
 using System.ComponentModel;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura.Windowing;
@@ -27,61 +28,31 @@ namespace DroidNet.Aura.Windowing;
 public delegate Task AsyncEventHandler<TEventArgs>(object? sender, TEventArgs e);
 
 /// <summary>
-///     Provides data for the <see cref="IWindowManagerService.PresenterStateChanging"/> and
-///     <see cref="IWindowManagerService.PresenterStateChanged"/> events. This type conveys the
-///     current and next overlapped presenter states and both the old and new bounds where applicable.
+///     Provides data for the <see cref="IWindowManagerService.PresenterStateChanged"/> event.
+///     Conveys the current overlapped presenter state and associated bounds after a state transition.
 /// </summary>
-/// <remarks>
-///     This type is used both for pre-transition (<c>PresenterStateChanging</c>) and
-///     post-transition (<c>PresenterStateChanged</c>) notifications. Handlers listening to the
-///     pre-transition event can inspect <see cref="ProposedRestoredBounds"/> to determine the
-///     intended restored location and size.
-/// </remarks>
-/// <param name="oldState">The current or previous presenter state for the window (e.g., Normal, Minimized, Maximized).</param>
-/// <param name="newState">The presenter state that the window is transitioning to.</param>
-/// <param name="oldBounds">The current window bounds before the transition, if available.</param>
-/// <param name="newBounds">The window bounds after the transition, if available.</param>
-/// <param name="proposedRestoredBounds">
-///     For pre-transition events, the proposed restored bounds (nullable) describing the intended
-///     restored window rectangle.
-/// </param>
+/// <param name="windowId">The identifier of the window whose presenter state changed.</param>
+/// <param name="state">The current presenter state (e.g., Restored, Minimized, Maximized).</param>
+/// <param name="bounds">The current window bounds, if available.</param>
 public sealed class PresenterStateChangeEventArgs(
-    OverlappedPresenterState oldState,
-    OverlappedPresenterState newState,
-    Windows.Graphics.RectInt32? oldBounds = null,
-    Windows.Graphics.RectInt32? newBounds = null,
-    Windows.Graphics.RectInt32? proposedRestoredBounds = null) : EventArgs
+    WindowId windowId,
+    OverlappedPresenterState state,
+    Windows.Graphics.RectInt32? bounds = null) : EventArgs
 {
     /// <summary>
-    ///     Gets the overlapped presenter state that the window was in prior to the transition.
+    ///     Gets the identifier of the window whose presenter state changed.
     /// </summary>
-    public OverlappedPresenterState OldState { get; } = oldState;
+    public WindowId WindowId { get; } = windowId;
 
     /// <summary>
-    ///     Gets the overlapped presenter state that the window is entering as part of the transition.
+    ///     Gets the current overlapped presenter state of the window.
     /// </summary>
-    public OverlappedPresenterState NewState { get; } = newState;
+    public OverlappedPresenterState State { get; } = state;
 
     /// <summary>
-    ///     Gets the bounds of the window before the transition occurred, if available; otherwise <see langword="null"/>.
+    ///     Gets the current bounds of the window, if available; otherwise <see langword="null"/>.
     /// </summary>
-    public Windows.Graphics.RectInt32? OldBounds { get; } = oldBounds;
-
-    /// <summary>
-    ///     Gets the bounds of the window after the transition occurred, if available; otherwise <see langword="null"/>.
-    /// </summary>
-    public Windows.Graphics.RectInt32? NewBounds { get; } = newBounds;
-
-    /// <summary>
-    ///     Gets, for pre-transition notifications, the proposed restored bounds. This value can be
-    ///     used by handlers that need to learn the intended restored rectangle without requiring
-    ///     access to the <see cref="OldBounds"/> or <see cref="NewBounds"/> values.
-    /// </summary>
-    /// <remarks>
-    ///     This value is nullable and provided for consumers that need the intended restored
-    ///     rectangle without relying on <see cref="OldBounds"/> or <see cref="NewBounds"/>.
-    /// </remarks>
-    public Windows.Graphics.RectInt32? ProposedRestoredBounds { get; } = proposedRestoredBounds;
+    public Windows.Graphics.RectInt32? Bounds { get; } = bounds;
 }
 
 /// <summary>
@@ -91,33 +62,44 @@ public sealed class PresenterStateChangeEventArgs(
 ///     Inherits from <see cref="CancelEventArgs"/>, allowing handlers to cancel the close operation
 ///     by setting <see cref="CancelEventArgs.Cancel"/> to <see langword="true"/>.
 /// </remarks>
-public sealed class WindowClosingEventArgs : CancelEventArgs;
+public sealed class WindowClosingEventArgs : CancelEventArgs
+{
+    /// <summary>
+    ///     Gets the ID of the window being closed.
+    /// </summary>
+    public required WindowId WindowId { get; init; }
+}
 
 /// <summary>
 ///     Event data for the <see cref="IWindowManagerService.WindowClosed"/> event.
 /// </summary>
 /// <remarks>
-///     Fired after a window has completed closing. This type contains no additional information;
-///     use <see cref="IWindowManagerService"/> if you need to query window metadata after close.
+///     Fired after a window has completed closing.
 /// </remarks>
-public sealed class WindowClosedEventArgs : EventArgs;
+public sealed class WindowClosedEventArgs : EventArgs
+{
+    /// <summary>
+    ///     Gets the ID of the window that was closed.
+    /// </summary>
+    public required WindowId WindowId { get; init; }
+}
 
 /// <summary>
 ///     Event data for the <see cref="IWindowManagerService.WindowBoundsChanged"/> event.
 /// </summary>
-/// <param name="oldBounds">The window bounds before the change.</param>
-/// <param name="newBounds">The window bounds after the change.</param>
-public sealed class WindowBoundsChangedEventArgs(Windows.Graphics.RectInt32 oldBounds, Windows.Graphics.RectInt32 newBounds) : EventArgs
+/// <param name="windowId">The identifier of the window whose bounds changed.</param>
+/// <param name="bounds">The current window bounds after the change.</param>
+public sealed class WindowBoundsChangedEventArgs(WindowId windowId, Windows.Graphics.RectInt32 bounds) : EventArgs
 {
     /// <summary>
-    ///     Gets the bounds of the window before the change occurred.
+    ///     Gets the identifier of the window whose bounds changed.
     /// </summary>
-    public Windows.Graphics.RectInt32 OldBounds { get; } = oldBounds;
+    public WindowId WindowId { get; } = windowId;
 
     /// <summary>
-    ///     Gets the bounds of the window after the change occurred.
+    ///     Gets the current bounds of the window.
     /// </summary>
-    public Windows.Graphics.RectInt32 NewBounds { get; } = newBounds;
+    public Windows.Graphics.RectInt32 Bounds { get; } = bounds;
 }
 
 /// <summary>
@@ -132,7 +114,7 @@ public sealed class WindowMetadataChange(Microsoft.UI.WindowId windowId, string 
     /// <summary>
     ///     Gets the identifier of the window whose metadata changed.
     /// </summary>
-    public Microsoft.UI.WindowId WindowId { get; } = windowId;
+    public WindowId WindowId { get; } = windowId;
 
     /// <summary>
     ///     Gets the metadata key that changed.

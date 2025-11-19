@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.IO;
 using System.Reflection;
 using System.Runtime.Loader;
 
