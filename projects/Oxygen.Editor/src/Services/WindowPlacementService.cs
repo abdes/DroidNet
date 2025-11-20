@@ -33,6 +33,7 @@ namespace Oxygen.Editor.Services;
 ///     `WindowManagerService` and provided to it when it needs to be restored.
 ///     </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "injected into public Application class")]
 public sealed partial class WindowPlacementService : IDisposable
 {
     private readonly ILogger logger;
