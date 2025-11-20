@@ -254,6 +254,11 @@ Aura/
 
 - **DI-based Window Creation** - Use `IWindowFactory` to resolve windows using DI. The `DefaultWindowFactory` supports generic creation, keyed registrations, and decorated window creation using `WindowCategory`.
 - **Manager-Tracked Windows** - Use `IWindowManagerService` to register and track windows; windows are represented by `ManagedWindow` which exposes `Id`, `Category`, `Decorations`, `MenuSource`, `Metadata`, `PresenterState` and other helpful properties.
+- **Placement Persistence** - Aura can save and restore window layout and presenter state. When you record a window’s placement, Aura captures its last “normal” size and position (even if currently maximized or minimized), the relevant monitor work area, and whether it was restored, maximized, minimized, or full screen. This information is serialized as a JSON blob, which you can store in your preferred settings or profile system. When restoring, Aura reads the blob, clamps or centers the bounds to keep the window visible, applies the geometry, and then reapplies the presenter state—so windows return exactly as you left them, without flicker or misplaced sizing.
+
+    > **Note**
+    >
+    > Aura provides the serialization and restore logic; you control where and how the placement data is persisted.
 - **Lifecycle Events & Observables** - Subscribe to lifecycle events via `IWindowManagerService.WindowEvents` (an `IObservable<WindowLifecycleEvent>`) or async event handlers (`PresenterStateChanging`, `PresenterStateChanged`, `WindowClosing`, `WindowClosed`, `WindowBoundsChanged`). Event types include: `WindowLifecycleEventType.Created`, `WindowLifecycleEventType.Activated`, `WindowLifecycleEventType.Deactivated`, and `WindowLifecycleEventType.Closed`.
 - **Programmatic Control** - Programmatically activate, minimize, maximize, restore and close windows using the manager API (`ActivateWindow`, `MinimizeWindowAsync`, `MaximizeWindowAsync`, `RestoreWindowAsync`, `CloseWindowAsync`).
 - **Metadata & Menu Providers** - Attach arbitrary metadata to windows using `SetMetadata` and integrate UI menus using `IMenuProvider` when decoration contains a menu provider ID.

@@ -4,15 +4,46 @@
 
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using CommunityToolkit.WinUI;
 using Microsoft.UI;
+using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura.Windowing;
 
 /// <summary>
 ///     Window placement persistence helpers for <see cref="WindowManagerService"/>.
 /// </summary>
+/// <remarks>
+///     When Aura records your window layout, it looks at the window’s last “normal” size and
+///     position (even if you currently have it minimized or maximized). It figures out which
+///     monitor that rectangle belongs to so it can keep the right work area in mind, then notes
+///     whether you left the window restored, maximized, minimized, or in full screen. All of that
+///     gets written into a small JSON blob whenever the window manager asks for placement data, so
+///     whatever persistence store you use (settings, profile sync, etc.) can remember both the
+///     geometry and the presenter state.
+///     <para>
+///     When Aura restores a window, it reads that blob back in. It first verifies the saved bounds,
+///     clamps or centers them so they stay on-screen relative to the monitor that was active
+///     before, and applies those bounds as the new “restore” rectangle. Only after the bounds are
+///     locked in does Aura reapply the presenter: full screen if that’s what you used last time,
+///     otherwise maximized, minimized, or simply restored. The result is that your windows come
+///     back exactly how you left them, without flashing through the wrong size or losing their
+///     preferred position.
+///     </para><para>
+///     NOTE: The actual persistence mechanism (where you store the JSON blob) is up to you. This
+///     class just provides the means to serialize and deserialize/apply the placement data.
+///     </para>
+/// </remarks>
 public sealed partial class WindowManagerService
 {
+    private enum WindowPlacementPresenterState
+    {
+        Restored,
+        Maximized,
+        Minimized,
+        FullScreen,
+    }
+
     /// <inheritdoc />
     public string? GetWindowPlacementString(WindowId windowId)
     {
@@ -22,6 +53,7 @@ public sealed partial class WindowManagerService
         }
 
         var bounds = window.RestoredBounds;
+        var presenterState = GetPersistedPresenterState(window);
 
         // Use the window center to resolve the monitor work area
         var centerX = bounds.X + (bounds.Width / 2);
@@ -43,6 +75,7 @@ public sealed partial class WindowManagerService
         {
             Bounds = new { bounds.X, bounds.Y, bounds.Width, bounds.Height },
             MonitorWorkArea = new { mi.rcWork.Left, mi.rcWork.Top, mi.rcWork.Right, mi.rcWork.Bottom },
+            PresenterState = presenterState.ToString(),
             SavedAt = DateTimeOffset.UtcNow,
         };
 
@@ -57,7 +90,7 @@ public sealed partial class WindowManagerService
             return;
         }
 
-        if (!this.windows.ContainsKey(windowId))
+        if (!this.windows.TryGetValue(windowId, out var window))
         {
             return;
         }
@@ -71,6 +104,10 @@ public sealed partial class WindowManagerService
             {
                 return;
             }
+
+            var presenterState = TryGetPresenterState(root, out var parsedState)
+                ? parsedState
+                : WindowPlacementPresenterState.Restored;
 
             // Resolve monitor by saved rect center and get monitor info
             var centerX = saved.X + (saved.Width / 2);
@@ -97,7 +134,9 @@ public sealed partial class WindowManagerService
                 finalRect = new Windows.Graphics.RectInt32 { X = x, Y = y, Width = width, Height = height };
             }
 
+            window.RestoredBounds = finalRect;
             await this.SetWindowBoundsAsync(windowId, finalRect).ConfigureAwait(false);
+            await ApplyPresenterStateAsync(window, presenterState).ConfigureAwait(false);
         }
         catch (JsonException)
         {
@@ -146,4 +185,61 @@ public sealed partial class WindowManagerService
 
         return mi;
     }
+
+    private static bool TryGetPresenterState(JsonElement root, out WindowPlacementPresenterState state)
+    {
+        state = WindowPlacementPresenterState.Restored;
+        if (!root.TryGetProperty("PresenterState", out var stateElement) || stateElement.ValueKind != JsonValueKind.String)
+        {
+            return false;
+        }
+
+        var value = stateElement.GetString();
+        return !string.IsNullOrWhiteSpace(value) && Enum.TryParse(value, ignoreCase: true, out state);
+    }
+
+    private static WindowPlacementPresenterState GetPersistedPresenterState(ManagedWindow window)
+        => window.IsFullScreen()
+            ? WindowPlacementPresenterState.FullScreen
+            : window.IsMinimized()
+                ? WindowPlacementPresenterState.Minimized
+                : window.IsMaximized()
+                    ? WindowPlacementPresenterState.Maximized
+                    : WindowPlacementPresenterState.Restored;
+
+    private static async Task ApplyPresenterStateAsync(ManagedWindow window, WindowPlacementPresenterState presenterState)
+    {
+        switch (presenterState)
+        {
+            case WindowPlacementPresenterState.FullScreen:
+                await SetFullScreenPresenterAsync(window).ConfigureAwait(false);
+                break;
+            case WindowPlacementPresenterState.Maximized:
+                await window.MaximizeAsync().ConfigureAwait(false);
+                break;
+            case WindowPlacementPresenterState.Minimized:
+                await window.MinimizeAsync().ConfigureAwait(false);
+                break;
+            default:
+                await window.RestoreAsync().ConfigureAwait(false);
+                break;
+        }
+    }
+
+    private static async Task SetFullScreenPresenterAsync(ManagedWindow window)
+        => await window.DispatcherQueue.EnqueueAsync(() =>
+        {
+            var appWindow = window.Window.AppWindow;
+            try
+            {
+                appWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+            }
+            catch (Exception ex) when (ex is NotSupportedException or ArgumentException)
+            {
+                if (appWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    presenter.Maximize();
+                }
+            }
+        }).ConfigureAwait(false);
 }
