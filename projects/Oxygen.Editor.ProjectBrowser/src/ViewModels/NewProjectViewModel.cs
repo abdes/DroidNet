@@ -116,6 +116,12 @@ public partial class NewProjectViewModel(
         {
             this.Templates.Add(template);
         }
+
+        // Select the first template by default, if available
+        if (this.Templates.Count > 0)
+        {
+            this.SelectedItem = this.Templates[0];
+        }
     }
 
 #pragma warning disable SA1204 // Static elements should appear before instance elements
