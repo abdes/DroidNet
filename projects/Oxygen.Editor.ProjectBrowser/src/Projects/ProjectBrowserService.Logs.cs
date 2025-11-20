@@ -96,4 +96,54 @@ public partial class ProjectBrowserService
 
     private void LogFailedProjectCleanupError(string location, Exception ex)
         => LogFailedProjectCleanupError(this.logger, location, ex);
+
+    // Copy template assets logging
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Begin copying template assets from '{TemplateRoot}' to '{DestinationRoot}'.")]
+    private static partial void LogBeginCopyTemplateAssets(ILogger logger, string templateRoot, string destinationRoot);
+
+    private void LogBeginCopyTemplateAssets(string templateRoot, string destinationRoot)
+        => LogBeginCopyTemplateAssets(this.logger, templateRoot, destinationRoot);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Created directory: '{DirectoryPath}'.")]
+    private static partial void LogCreatedDirectory(ILogger logger, string directoryPath);
+
+    [Conditional("DEBUG")]
+    private void LogCreatedDirectory(string directoryPath)
+        => LogCreatedDirectory(this.logger, directoryPath);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Copied file: '{SourceFile}' -> '{DestinationFile}'.")]
+    private static partial void LogCopiedFile(ILogger logger, string sourceFile, string destinationFile);
+
+    [Conditional("DEBUG")]
+    private void LogCopiedFile(string sourceFile, string destinationFile)
+        => LogCopiedFile(this.logger, sourceFile, destinationFile);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Skipped template metadata file: '{FileName}'.")]
+    private static partial void LogSkippedTemplateMetadataFile(ILogger logger, string fileName);
+
+    [Conditional("DEBUG")]
+    private void LogSkippedTemplateMetadataFile(string fileName)
+        => LogSkippedTemplateMetadataFile(this.logger, fileName);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Enumerating directory: '{DirectoryPath}'.")]
+    private static partial void LogEnumeratingDirectory(ILogger logger, string directoryPath);
+
+    [Conditional("DEBUG")]
+    private void LogEnumeratingDirectory(string directoryPath)
+        => LogEnumeratingDirectory(this.logger, directoryPath);
 }
