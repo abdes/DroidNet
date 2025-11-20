@@ -29,8 +29,6 @@ internal sealed partial class ProjectBrowserSettings : ModuleSettings
 {
     private new const string ModuleName = "Oxygen.Editor.ProjectBrowser";
 
-    private Point windowPosition = new(100, 100);
-    private Size windowSize = new(800, 600);
     private string lastSaveLocation = string.Empty;
 
     /// <summary>
@@ -39,36 +37,6 @@ internal sealed partial class ProjectBrowserSettings : ModuleSettings
     public ProjectBrowserSettings()
         : base(ModuleName)
     {
-    }
-
-    /// <summary>
-    /// Gets or sets the window position.
-    /// </summary>
-    /// <value>
-    /// A <see cref="Point"/> representing the window position.
-    /// </value>
-    [Persisted]
-    [Display(Name = "Window Position", Description = "The position of the Project Browser window")]
-    [Category("Layout")]
-    public Point WindowPosition
-    {
-        get => this.windowPosition;
-        set => this.SetProperty(ref this.windowPosition, value);
-    }
-
-    /// <summary>
-    /// Gets or sets the window size.
-    /// </summary>
-    /// <value>
-    /// A <see cref="Size"/> representing the window size.
-    /// </value>
-    [Persisted]
-    [Display(Name = "Window Size", Description = "The size of the Project Browser window")]
-    [Category("Layout")]
-    public Size WindowSize
-    {
-        get => this.windowSize;
-        set => this.SetProperty(ref this.windowSize, value);
     }
 
     /// <summary>
