@@ -87,4 +87,13 @@ public partial class ProjectBrowserService
 
     private void LogFailedToUpdateTemplateUsage(string templateLocation, Exception ex)
         => LogFailedToUpdateTemplateUsage(this.logger, templateLocation, ex);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Could not cleanup after failed project creation at: {Location}")]
+    private static partial void LogFailedProjectCleanupError(ILogger logger, string location, Exception ex);
+
+    private void LogFailedProjectCleanupError(string location, Exception ex)
+        => LogFailedProjectCleanupError(this.logger, location, ex);
 }
