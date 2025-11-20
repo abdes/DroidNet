@@ -22,7 +22,7 @@ namespace Oxygen.Editor.Services;
 ///     its application to windows.
 /// </summary>
 /// <remarks>
-///     This is a perliminary implementation that currently handle placement of the `ProjectBrowser`
+///     This is a working implementation that currently handle placement of the `ProjectBrowser`
 ///     and `WroldEditor` windows. Identification of the windows relies on the fact that we use
 ///     routed navigation, and wach window will be associated with a navigation context. The
 ///     Navigation URL is used to identify the window type, and the placement information is stored
@@ -43,7 +43,7 @@ public sealed partial class WindowPlacementService : IDisposable
     private readonly IDisposable routerSubscription;
     private readonly Func<PersistentState> contextFactory;
 
-    private readonly Dictionary<WindowId, WindowPlacementInfo> windows = [];
+    private readonly Dictionary<WindowId, PlacementInfo> windows = [];
     private bool isDisposed;
 
     /// <summary>
@@ -61,11 +61,11 @@ public sealed partial class WindowPlacementService : IDisposable
         this.router = router;
         this.contextFactory = contextFactory;
 
-        this.windowManager.WindowClosed += this.OnWindowClosed;
-        this.windowManager.WindowClosing += this.OnWindowClosing;
+        this.windowManager.WindowClosed += this.StopTrackingWindow;
+        this.windowManager.WindowClosing += this.TrySavePlacement;
         this.wmSubscription = this.windowManager.WindowEvents
             .Where(e => e.EventType == WindowLifecycleEventType.Created)
-            .Subscribe(e => this.OnWindowCreated(e.Context));
+            .Subscribe(e => this.TryRestorePlacementForNewWindow(e.Context));
 
         this.routerSubscription = this.router.Events
             .OfType<ActivationStarted>() // At this stage we have the window, the URL, and no outlets have been activated yet
@@ -78,8 +78,10 @@ public sealed partial class WindowPlacementService : IDisposable
                     return;
                 }
 
-                this.OnNavigationContextCreated(e.Context);
+                this.TryRestorePlacementOnNavigation(e.Context);
             });
+
+        this.LogCreated();
     }
 
     /// <inheritdoc/>
@@ -110,8 +112,8 @@ public sealed partial class WindowPlacementService : IDisposable
             // No managed state (managed objects) to dispose of.
         }
 
-        this.windowManager.WindowClosed -= this.OnWindowClosed;
-        this.windowManager.WindowClosing -= this.OnWindowClosing;
+        this.windowManager.WindowClosed -= this.StopTrackingWindow;
+        this.windowManager.WindowClosing -= this.TrySavePlacement;
 
         this.wmSubscription.Dispose();
         this.routerSubscription.Dispose();
@@ -119,7 +121,7 @@ public sealed partial class WindowPlacementService : IDisposable
         this.isDisposed = true;
     }
 
-    private async Task OnWindowClosing(object? sender, WindowClosingEventArgs args)
+    private async Task TrySavePlacement(object? sender, WindowClosingEventArgs args)
     {
         // Check if we are tracking placement for such window (we should be).
         _ = this.windows.TryGetValue(args.WindowId, out var placementInfo);
@@ -130,19 +132,20 @@ public sealed partial class WindowPlacementService : IDisposable
         if (placement is not null)
         {
             Debug.Assert(placementInfo.Key is not null, message: $"WindowPlacementService: unexpected null placement key for window (Id={args.WindowId.Value}).");
-            await this.TrySaveWindowPlacementAsync(placementInfo.Key, placement).ConfigureAwait(false);
+            await this.TrySavePlacementAsync(placementInfo.Key, placement).ConfigureAwait(false);
         }
     }
 
-    private async Task OnWindowClosed(object? sender, WindowClosedEventArgs args)
+    private async Task StopTrackingWindow(object? sender, WindowClosedEventArgs args)
         => _ = this.windows.Remove(args.WindowId);
 
-    private async void OnWindowCreated(IManagedWindow managed)
+    private async void TryRestorePlacementForNewWindow(IManagedWindow managed)
     {
         // Check if the window has already been placed (unlikely, but to be sure).
         _ = this.windows.TryGetValue(managed.Id, out var placementInfo);
-        if (placementInfo?.IsPLaced == true)
+        if (placementInfo?.IsPlaced == true)
         {
+            this.LogAlreadyPlaced(managed.Id.Value);
             return;
         }
 
@@ -155,58 +158,59 @@ public sealed partial class WindowPlacementService : IDisposable
             if (placementKey is null)
             {
                 // No placement key found, we cannot restore placement.
+                this.LogNoPlacementKey(managed.Id.Value);
                 return;
             }
 
-            placementInfo = new WindowPlacementInfo
+            placementInfo = new PlacementInfo
             {
                 Key = placementKey,
-                IsPLaced = false,
+                IsPlaced = false,
             };
             this.windows[managed.Id] = placementInfo;
         }
 
         // at this point we have a placement info, but it is not placed yet.
-        await this.TryRestoreWindowPlacementAsync(managed.Id, placementInfo).ConfigureAwait(false);
+        await this.TryRestorePlacementAsync(managed.Id, placementInfo).ConfigureAwait(false);
     }
 
     // Try to find a placement record for this context, and if found and not applied, set its
     // placement key to the navigation URL. If not found (unlikley), add a new record.
-    private async void OnNavigationContextCreated(INavigationContext context)
+    private async void TryRestorePlacementOnNavigation(INavigationContext context)
     {
         if (context.NavigationTarget is not Window window || context.State is null)
         {
+            // Not interested in this context.
             return;
         }
 
         var windowId = window.AppWindow.Id;
         _ = this.windows.TryGetValue(windowId, out var placementInfo);
-        if (placementInfo?.IsPLaced == true)
+        if (placementInfo?.IsPlaced == true)
         {
+            this.LogAlreadyPlaced(windowId.Value);
             return;
         }
 
         if (placementInfo is null)
         {
-            placementInfo = new WindowPlacementInfo
+            placementInfo = new PlacementInfo
             {
                 Key = context.State.Url,
-                IsPLaced = false,
+                IsPlaced = false,
             };
             this.windows[windowId] = placementInfo;
         }
 
         // at this point we have a placement info, but it is not placed yet.
-        await this.TryRestoreWindowPlacementAsync(windowId, placementInfo).ConfigureAwait(false);
+        await this.TryRestorePlacementAsync(windowId, placementInfo).ConfigureAwait(false);
     }
 
-    private async Task TryRestoreWindowPlacementAsync(WindowId windowId, WindowPlacementInfo placement)
+    private async Task TryRestorePlacementAsync(WindowId windowId, PlacementInfo placement)
     {
-        if (placement?.Key is null)
-        {
-            return;
-        }
+        Debug.Assert(placement?.Key is not null, "WindowPlacementService: unexpected null placement key.");
 
+        this.LogRestoringPlacement(windowId.Value, placement.Key);
         var context = this.contextFactory();
         try
         {
@@ -216,11 +220,12 @@ public sealed partial class WindowPlacementService : IDisposable
 
             if (record is null || string.IsNullOrEmpty(record.PlacementData))
             {
+                this.LogNoPlacementData(windowId.Value, placement.Key);
                 return;
             }
 
             await this.windowManager.RestoreWindowPlacementAsync(windowId, record.PlacementData).ConfigureAwait(false);
-            placement.IsPLaced = true;
+            placement.IsPlaced = true;
         }
         finally
         {
@@ -228,8 +233,9 @@ public sealed partial class WindowPlacementService : IDisposable
         }
     }
 
-    private async Task TrySaveWindowPlacementAsync(string key, string placement)
+    private async Task TrySavePlacementAsync(string key, string placement)
     {
+        this.LogSavingPlacement(key, placement);
         var context = this.contextFactory();
         try
         {
@@ -258,10 +264,10 @@ public sealed partial class WindowPlacementService : IDisposable
         }
     }
 
-    private class WindowPlacementInfo
+    private sealed class PlacementInfo
     {
         public string? Key { get; set; }
 
-        public bool IsPLaced { get; set; }
+        public bool IsPlaced { get; set; }
     }
 }
