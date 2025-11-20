@@ -163,10 +163,11 @@ public sealed partial class WindowManagerService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
+        Level = LogLevel.Debug,
         Message = "A router window is already being tracked for the target {targetName}.")]
     private static partial void LogRouterWindowAlreadyTracked(ILogger logger, string targetName);
 
+    [Conditional("DEBUG")]
     private void LogRouterWindowAlreadyTracked(string targetName)
         => LogRouterWindowAlreadyTracked(this.logger, targetName);
 
