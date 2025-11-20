@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -33,7 +32,7 @@ public sealed partial class NewProjectView
     }
 
     /// <summary>
-    /// Handles the Loaded event to capture the grid reference and subscribe to IsActivating changes.
+    /// Handles the Loaded event to capture the grid reference and subscribe to IsBusy changes.
     /// </summary>
     private void OnNewProjectViewLoaded(object sender, RoutedEventArgs e)
     {
@@ -56,7 +55,7 @@ public sealed partial class NewProjectView
     }
 
     /// <summary>
-    /// Updates the control enabled state based on IsActivating.
+    /// Updates the control enabled state based on IsBusy.
     /// </summary>
     private void UpdateControlState()
     {
@@ -83,25 +82,16 @@ public sealed partial class NewProjectView
 
         if (result == ContentDialogResult.Primary)
         {
-            try
-            {
-                dialog.ViewModel.IsActivating = true;
-                var success = await this.ViewModel.NewProjectFromTemplate(
-                        template,
-                        dialog.ViewModel.ProjectName,
-                        dialog.ViewModel.SelectedLocation.Path)
-                    .ConfigureAwait(true);
+            dialog.ViewModel.IsActivating = true;
+            var success = await this.ViewModel.NewProjectFromTemplate(
+                    template,
+                    dialog.ViewModel.ProjectName,
+                    dialog.ViewModel.SelectedLocation.Path)
+                .ConfigureAwait(true);
 
-                if (!success)
-                {
-                    // TODO: display an error message
-                    Debug.WriteLine("Failed to create new project from template");
-                    dialog.ViewModel.ResetActivationState();
-                }
-            }
-            catch (OperationCanceledException)
+            if (!success)
             {
-                Debug.WriteLine("Creating new project was cancelled");
+                // TODO: display an error message
                 dialog.ViewModel.ResetActivationState();
             }
         }

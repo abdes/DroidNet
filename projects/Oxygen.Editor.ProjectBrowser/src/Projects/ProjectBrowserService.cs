@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using DroidNet.Resources.Generator.Localized_a870a544;
 using Microsoft.Extensions.Logging;
@@ -132,17 +131,17 @@ public partial class ProjectBrowserService : IProjectBrowserService
         string projectName,
         string atLocationPath)
     {
-        Debug.WriteLine($"New project from template: {templateInfo.Category.Name}/{templateInfo.Name} with name `{projectName}` in location `{atLocationPath}`");
+        this.LogNewProjectFromTemplate(templateInfo.Category.Name, templateInfo.Name, projectName, atLocationPath);
 
         if (!await this.CanCreateProjectAsync(projectName, atLocationPath).ConfigureAwait(true))
         {
-            Debug.WriteLine($"Cannot create a new project with name `{projectName}` at: {atLocationPath}");
+            this.LogCannotCreateNewProject(projectName, atLocationPath);
             return false;
         }
 
         if (string.IsNullOrEmpty(templateInfo.Location))
         {
-            Debug.WriteLine($"Invalid template location: {templateInfo.Location}");
+            this.LogInvalidTemplateLocation(templateInfo.Location);
             return false;
         }
 
@@ -178,7 +177,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Project creation failed: {ex.Message}");
+            this.LogProjectCreationFailed(ex);
         }
 
         return false;
@@ -207,9 +206,10 @@ public partial class ProjectBrowserService : IProjectBrowserService
 
         void UpdateProjectManifest(string projectFolderPath, string newName)
         {
+            string? projectOxyPath = null;
             try
             {
-                var projectOxyPath = Path.Combine(projectFolderPath, "Project.oxy");
+                projectOxyPath = Path.Combine(projectFolderPath, Constants.ProjectFileName);
                 if (!File.Exists(projectOxyPath))
                 {
                     return;
@@ -244,7 +244,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Failed to patch Project.oxy: {ex.Message}");
+                this.LogFailedToPatchProjectManifest(projectOxyPath, ex);
             }
         }
 
@@ -284,7 +284,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Open project  failed: {ex.Message}");
+            this.LogOpenProjectFailed(ex);
             return false;
         }
     }
@@ -341,6 +341,17 @@ public partial class ProjectBrowserService : IProjectBrowserService
     public async Task<KnownLocation[]> GetKnownLocationsAsync()
         => await this.lazyLocations.Value.ConfigureAwait(true);
 
+    /// <inheritdoc/>
+    public async Task<ProjectBrowserSettings> GetSettingsAsync()
+        => await this.lazySettings.Value.ConfigureAwait(false);
+
+    /// <inheritdoc/>
+    public async Task SaveSettingsAsync()
+    {
+        var settings = await this.lazySettings.Value.ConfigureAwait(false);
+        await settings.SaveAsync(this.settingsManager).ConfigureAwait(false);
+    }
+
     private async Task TryUpdateLastSaveLocation(string location)
     {
         try
@@ -350,7 +361,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to update entry from the most recently used projects: {ex.Message}");
+            this.LogFailedToUpdateLastSaveLocation(ex);
             throw;
         }
     }
@@ -380,7 +391,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Failed to update template usage for `{templateLocation}`: {ex.Message}");
+            this.LogFailedToUpdateTemplateUsage(templateLocation, ex);
         }
     }
 
@@ -406,14 +417,14 @@ public partial class ProjectBrowserService : IProjectBrowserService
         {
             KnownLocations.RecentProjects => new KnownLocation(
                 locationKey,
-                "Recent Projects".L(),
+                "PB_Locations_RecentProjects".L(),
                 string.Empty,
                 this.localStorage,
                 this),
 
             KnownLocations.ThisComputer => new KnownLocation(
                 locationKey,
-                "This Computer".L(),
+                "PB_Locations_ThisComputer".L(),
                 string.Empty,
                 this.localStorage,
                 this),

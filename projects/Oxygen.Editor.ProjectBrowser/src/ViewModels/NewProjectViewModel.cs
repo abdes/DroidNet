@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
@@ -59,13 +58,14 @@ public partial class NewProjectViewModel(
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was created successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> NewProjectFromTemplate(ITemplateInfo template, string projectName, string location)
     {
-        Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
+        this.LogNewProjectFromTemplate(template, projectName, location);
 
         this.IsActivating = true;
 
         var result = await projectBrowserService.NewProjectFromTemplate(template, projectName, location).ConfigureAwait(true);
         if (!result)
         {
+            this.LogNewProjectFailed();
             this.IsActivating = false;
             return false;
         }
@@ -123,14 +123,4 @@ public partial class NewProjectViewModel(
             this.SelectedItem = this.Templates[0];
         }
     }
-
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to preload templates during ViewModel activation")]
-    private static partial void LogPreloadingTemplatesError(ILogger logger, Exception ex);
-
-    private void LogPreloadingTemplatesError(Exception ex) => LogPreloadingTemplatesError(this.logger, ex);
-#pragma warning restore SA1204 // Static elements should appear before instance elements
 }
