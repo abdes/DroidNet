@@ -15,6 +15,7 @@
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="CommunityToolkit.WinUI.Collections" />
         <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
@@ -52,9 +53,7 @@
         symbol -->
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <!-- Add generator as an analyzer (development time only) -->
-        <ProjectReference
-            Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj"
-            OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>
@@ -67,16 +66,6 @@
         <Content Include="Assets\Images\**\*">
         <CopyToOutputDirectory>Never</CopyToOutputDirectory>
         </Content>
-    </ItemGroup>
-
-    <ItemGroup>
-      <None Remove="Controls\KnownLocationsListView.xaml" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <Page Update="Controls\KnownLocationsListView.xaml">
-        <Generator>MSBuild:Compile</Generator>
-      </Page>
     </ItemGroup>
 
 </Project>

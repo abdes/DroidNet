@@ -4,7 +4,6 @@
 
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Drawing;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 
@@ -25,11 +24,13 @@ namespace Oxygen.Editor.ProjectBrowser;
 /// the <see cref="PersistedAttribute"/> and metadata attributes applied to the properties.
 /// </para>
 /// </remarks>
-internal sealed partial class ProjectBrowserSettings : ModuleSettings
+public sealed partial class ProjectBrowserSettings : ModuleSettings
 {
     private new const string ModuleName = "Oxygen.Editor.ProjectBrowser";
 
     private string lastSaveLocation = string.Empty;
+    private string openViewColumnWidths = string.Empty;
+    private string homeViewColumnWidths = string.Empty;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectBrowserSettings"/> class.
@@ -52,5 +53,27 @@ internal sealed partial class ProjectBrowserSettings : ModuleSettings
     {
         get => this.lastSaveLocation;
         set => this.SetProperty(ref this.lastSaveLocation, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the column widths for the Open Project view.
+    /// </summary>
+    [Persisted]
+    [Browsable(false)]
+    public string OpenViewColumnWidths
+    {
+        get => this.openViewColumnWidths;
+        set => this.SetProperty(ref this.openViewColumnWidths, value);
+    }
+
+    /// <summary>
+    /// Gets or sets the column widths for the Home view (Recent Projects).
+    /// </summary>
+    [Persisted]
+    [Browsable(false)]
+    public string HomeViewColumnWidths
+    {
+        get => this.homeViewColumnWidths;
+        set => this.SetProperty(ref this.homeViewColumnWidths, value);
     }
 }

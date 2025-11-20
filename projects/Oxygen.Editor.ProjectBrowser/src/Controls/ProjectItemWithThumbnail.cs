@@ -95,7 +95,6 @@ internal sealed partial class ProjectItemWithThumbnail : ObservableObject
         {
             var bmp = new BitmapImage(new Uri(defaultThumbnail));
             this.Thumbnail = bmp;
-            Debug.WriteLine($"[ProjectItemWithThumbnail] SetDefaultThumbnail applied for Project={this.ProjectInfo?.Name}, DefaultUri={defaultThumbnail}");
         }
         catch (UriFormatException)
         {
@@ -124,37 +123,26 @@ internal sealed partial class ProjectItemWithThumbnail : ObservableObject
             }
 
             var randomAccessStream = await file.OpenReadAsync();
-            Debug.WriteLine($"[ProjectItemWithThumbnail] Opened stream for file {file?.Path} for project {this.ProjectInfo?.Name}");
 
             var bmp = new BitmapImage();
 
             // Prefer to set the UriSource on the BitmapImage. This avoids dispatcher marshalling
             // and simplifies runtime behavior when using binding in XAML.
             var pathStr = file?.Path ?? path;
-            Debug.WriteLine($"[ProjectItemWithThumbnail] Using UriSource for Project={this.ProjectInfo?.Name}, Uri=" + (pathStr ?? "(null)"));
             if (!string.IsNullOrEmpty(pathStr))
             {
-                try
+                // If path is a ms-appx: URI, use it directly; otherwise convert local file path to a file URI.
+                if (Uri.TryCreate(pathStr, UriKind.Absolute, out var uri2) && string.Equals(uri2.Scheme, "ms-appx", StringComparison.OrdinalIgnoreCase))
                 {
-                    // If path is a ms-appx: URI, use it directly; otherwise convert local file path to a file URI.
-                    if (Uri.TryCreate(pathStr, UriKind.Absolute, out var uri2) && string.Equals(uri2.Scheme, "ms-appx", StringComparison.OrdinalIgnoreCase))
-                    {
-                        bmp.UriSource = uri2;
-                    }
-                    else
-                    {
-                        bmp.UriSource = new Uri(PathToFileUri(pathStr));
-                    }
+                    bmp.UriSource = uri2;
+                }
+                else
+                {
+                    bmp.UriSource = new Uri(PathToFileUri(pathStr));
+                }
 
-                    this.Thumbnail = bmp;
-                    return true;
-                }
-#pragma warning disable CA1031 // Do not catch general exception types
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"[ProjectItemWithThumbnail] Failed to create Uri for path {pathStr}: {ex.Message}");
-                }
-#pragma warning restore CA1031 // Do not catch general exception types
+                this.Thumbnail = bmp;
+                return true;
             }
 
             return false;

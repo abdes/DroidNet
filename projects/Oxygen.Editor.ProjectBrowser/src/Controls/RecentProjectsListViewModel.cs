@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.WinUI.Collections;
 using DroidNet.Collections;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ProjectBrowser.Controls;
@@ -19,28 +22,48 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 /// </summary>
 internal partial class RecentProjectsListViewModel : ObservableObject
 {
+    private readonly IProjectBrowserService projectBrowser;
+    private readonly ILogger logger;
     private readonly ProjectItemWithThumbnail.ByNameComparer byNameComparer = new();
     private readonly ProjectItemWithThumbnail.ByLastUsedOnComparer byLastUsedComparer = new();
     private SortDescription? currentSortDescription;
     private DynamicObservableCollection<IProjectInfo, ProjectItemWithThumbnail>? transformedItems;
 
+    // Column widths
+    private double nameColumnWidth = 400.0;
+    private double dateColumnWidth = 150.0;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="RecentProjectsListViewModel"/> class.
     /// </summary>
+    /// <param name="projectBrowser">The project browser service.</param>
     /// <param name="defaultThumbnailUri">The default thumbnail URI to use when no thumbnail is available.</param>
-    public RecentProjectsListViewModel(string defaultThumbnailUri)
+    /// <param name="loggerFactory">
+    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
+    /// </param>
+    public RecentProjectsListViewModel(IProjectBrowserService projectBrowser, string defaultThumbnailUri, ILoggerFactory? loggerFactory = null)
     {
+        this.logger = loggerFactory?.CreateLogger<RecentProjectsListViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<RecentProjectsListViewModel>();
+
+        this.projectBrowser = projectBrowser;
         this.DefaultThumbnailUri = defaultThumbnailUri;
         this.ItemsView = new AdvancedCollectionView(new ObservableCollection<ProjectItemWithThumbnail>(), isLiveShaping: true);
         this.currentSortDescription ??= new SortDescription(SortDirection.Descending, this.byLastUsedComparer);
         this.ItemsView.SortDescriptions.Add(this.currentSortDescription);
-        Debug.WriteLine($"[RecentProjectsListViewModel] Initialized: ItemsView.Source.Hash={this.ItemsView.Source?.GetHashCode()}");
+
+        this.LoadColumnWidthsAsync();
+
+        this.LogInitialized(this.ItemsView.Source?.GetHashCode());
     }
 
     /// <summary>
     /// Event invoked when a project item is activated in the ViewModel.
     /// </summary>
     public event EventHandler<RecentProjectActivatedEventArgs>? ItemActivated;
+
+    [ObservableProperty]
+    public partial ProjectItemWithThumbnail? SelectedProject { get; set; }
 
     /// <summary>
     /// Gets or sets the default thumbnail URI.
@@ -57,8 +80,52 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     /// <summary>
     /// Gets a value indicating whether a project activation is in progress.
     /// </summary>
+    [NotifyPropertyChangedFor(nameof(IsNotBusy))]
     [ObservableProperty]
-    public partial bool IsActivating { get; set; }
+    public partial bool IsBusy { get; set; }
+
+    /// <summary>
+    /// Gets a value indicating whether no project activation is currently in progress.
+    /// </summary>
+    public bool IsNotBusy => !this.IsBusy;
+
+    /// <summary>
+    /// Gets or sets the pixel width of the name column.
+    /// </summary>
+    public double NameColumnWidth
+    {
+        get => this.nameColumnWidth;
+        set => this.SetProperty(ref this.nameColumnWidth, Math.Max(48.0, value));
+    }
+
+    /// <summary>
+    /// Gets or sets the pixel width of the date column.
+    /// </summary>
+    public double DateColumnWidth
+    {
+        get => this.dateColumnWidth;
+        set => this.SetProperty(ref this.dateColumnWidth, Math.Max(48.0, value));
+    }
+
+    /// <summary>
+    /// Persists the column widths to the local settings.
+    /// </summary>
+    public async void SaveColumnWidths()
+    {
+        try
+        {
+            var value = $"Name:{this.NameColumnWidth.ToString(CultureInfo.InvariantCulture)};LastModifiedDate:{this.DateColumnWidth.ToString(CultureInfo.InvariantCulture)}";
+            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            settings.HomeViewColumnWidths = value;
+            await this.projectBrowser.SaveSettingsAsync().ConfigureAwait(true);
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            this.LogFailedToSave(ex.Message);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
 
     /// <summary>
     /// Sets the source collection of recent projects and transforms them for display.
@@ -91,13 +158,44 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     /// <summary>
     /// Re-enables activation after command execution completes (success or failure).
     /// </summary>
-    internal void ResetActivationState()
+    public void ResetActivationState() => this.IsBusy = false;
+
+    private async void LoadColumnWidthsAsync()
     {
-        this.IsActivating = false;
+        try
+        {
+            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var widths = settings.HomeViewColumnWidths;
+            if (!string.IsNullOrEmpty(widths))
+            {
+                var parts = widths.Split(';');
+                foreach (var part in parts)
+                {
+                    var kvp = part.Split(':');
+                    if (kvp.Length == 2 && double.TryParse(kvp[1], CultureInfo.InvariantCulture, out var width))
+                    {
+                        if (string.Equals(kvp[0], "Name", StringComparison.Ordinal))
+                        {
+                            this.NameColumnWidth = width;
+                        }
+                        else if (string.Equals(kvp[0], "LastModifiedDate", StringComparison.Ordinal))
+                        {
+                            this.DateColumnWidth = width;
+                        }
+                    }
+                }
+            }
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            this.LogFailedToLoad(ex.Message);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
     }
 
     /// <summary>
-    /// Command to activate a project item. Sets IsActivating to true while executing.
+    /// Command to activate a project item. Sets IsBusy to true while executing.
     /// </summary>
     [RelayCommand]
     private void ActivateProject(ProjectItemWithThumbnail? item)
@@ -107,8 +205,8 @@ internal partial class RecentProjectsListViewModel : ObservableObject
             return;
         }
 
-        Debug.WriteLine($"[RecentProjectsListViewModel] ActivateProject: Project={item.ProjectInfo.Name}");
-        this.IsActivating = true;
+        this.LogActivatingProject(item.ProjectInfo.Name);
+        this.IsBusy = true;
         this.ItemActivated?.Invoke(this, new RecentProjectActivatedEventArgs(item));
     }
 
@@ -125,7 +223,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
         this.currentSortDescription = new SortDescription(direction, this.byNameComparer);
         this.ItemsView.SortDescriptions.Clear();
         this.ItemsView.SortDescriptions.Add(this.currentSortDescription);
-        Debug.WriteLine($"[RecentProjectsListViewModel] ToggleSortByName: Now sort comparer={this.currentSortDescription.Comparer.GetType().Name}, Direction={this.currentSortDescription.Direction}, ItemsView.Count={this.ItemsView.Count}");
+        this.LogTogglingSortByName(this.currentSortDescription.Comparer.GetType().Name, this.currentSortDescription.Direction.ToString(), this.ItemsView.Count);
     }
 
     /// <summary>
@@ -141,6 +239,6 @@ internal partial class RecentProjectsListViewModel : ObservableObject
         this.currentSortDescription = new SortDescription(direction, this.byLastUsedComparer);
         this.ItemsView.SortDescriptions.Clear();
         this.ItemsView.SortDescriptions.Add(this.currentSortDescription);
-        Debug.WriteLine($"[RecentProjectsListViewModel] ToggleSortByLastUsedOn: Now sort comparer={this.currentSortDescription.Comparer.GetType().Name}, Direction={this.currentSortDescription.Direction}, ItemsView.Count={this.ItemsView.Count}");
+        this.LogTogglingSortByLastUsedOn(this.currentSortDescription.Comparer.GetType().Name, this.currentSortDescription.Direction.ToString(), this.ItemsView.Count);
     }
 }

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,14 +18,14 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 
 /// <summary>
-/// ViewModel for the Home view in the Oxygen Editor's Project Browser.
+///     ViewModel for the Home view in the Oxygen Editor's Project Browser.
 /// </summary>
 /// <param name="router">The router for navigating between views.</param>
 /// <param name="templateService">The service for managing project templates.</param>
 /// <param name="projectBrowser">The service for managing projects.</param>
 /// <param name="loggerFactory">
-/// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
-/// cannot be obtained, a <see cref="NullLogger" /> is used silently.
+///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
 /// </param>
 public partial class HomeViewModel(
     HostingContext hostingContext,
@@ -35,7 +34,7 @@ public partial class HomeViewModel(
     IProjectBrowserService projectBrowser,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IRoutingAware
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<HomeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<HomeViewModel>();
 
     private IActiveRoute? activeRoute;
     private bool preloadedTemplates;
@@ -54,6 +53,11 @@ public partial class HomeViewModel(
     /// </summary>
     public ObservableCollection<IProjectInfo> RecentProjects { get; } = [];
 
+    /// <summary>
+    /// Gets the <see cref="ILoggerFactory"/> used to obtain an <see cref="ILogger"/> instance for logging.
+    /// </summary>
+    internal ILoggerFactory? LoggerFactory => loggerFactory;
+
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -71,7 +75,7 @@ public partial class HomeViewModel(
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was created successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> NewProjectFromTemplate(ITemplateInfo template, string projectName, string location)
     {
-        Debug.WriteLine($"New project from template: {template.Category.Name}/{template.Name} with name `{projectName}` in location `{location}`");
+        this.LogNewProjectFromTemplate(template.Category.Name, template.Name, projectName, location);
 
         this.preloadedProjects = false; // Refresh recent projects next time we are activated
         this.preloadedTemplates = false; // Refresh recent templates next time we are activated
@@ -95,7 +99,7 @@ public partial class HomeViewModel(
     /// <returns>A task that represents the asynchronous operation. The task result is <see langword="true"/> if the project was opened successfully; otherwise, <see langword="false"/>.</returns>
     public async Task<bool> OpenProjectAsync(IProjectInfo projectInfo)
     {
-        Debug.WriteLine($"Opening project with name `{projectInfo.Name}` in location `{projectInfo.Location}`");
+        this.LogOpenProject(projectInfo.Name, projectInfo.Location ?? string.Empty);
 
         var result = await projectBrowser.OpenProjectAsync(projectInfo).ConfigureAwait(true);
         if (!result)
@@ -198,8 +202,7 @@ public partial class HomeViewModel(
     [RelayCommand]
     private async Task LoadRecentProjectsAsync()
     {
-        Debug.WriteLine("[HomeViewModel] LoadRecentProjectsAsync starting");
-        Debug.WriteLine($"[HomeViewModel] Current RecentProjects.Count={this.RecentProjects.Count}");
+        this.LogUpdatingRecentProjects(this.RecentProjects.Count);
 
         // Track the recent projects loaded from the project browser service in
         // a dictionary keyed by project Id for fast lookup. Using Guid avoids
@@ -210,18 +213,16 @@ public partial class HomeViewModel(
         // Update existing items and add new items in the RecentProjects collection
         await foreach (var projectInfo in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
-            Debug.WriteLine($"[HomeViewModel] Service project: Id={projectInfo.Id}, Name={projectInfo.Name}, LastUsedOn={projectInfo.LastUsedOn}");
+            this.LogGotProjectInfo(projectInfo.Id, projectInfo.Name, projectInfo.LastUsedOn);
             recentlyUsedProjectDict.Add(projectInfo.Id, projectInfo);
 
             var existingItem = this.RecentProjects.FirstOrDefault(item => item.Equals(projectInfo));
             if (existingItem != null)
             {
-                Debug.WriteLine($"[HomeViewModel] Update existing item LastUsedOn: Id={existingItem.Id}, Name={existingItem.Name}, Old={existingItem.LastUsedOn} New={projectInfo.LastUsedOn}");
                 existingItem.LastUsedOn = projectInfo.LastUsedOn;
             }
             else
             {
-                Debug.WriteLine($"[HomeViewModel] Add new RecentProject: Id={projectInfo.Id}, Name={projectInfo.Name}");
                 this.RecentProjects.Add(projectInfo); // Add new item
             }
         }
@@ -231,23 +232,11 @@ public partial class HomeViewModel(
         {
             if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index].Id))
             {
-                Debug.WriteLine($"[HomeViewModel] Remove RecentProject (not in DB results): Id={this.RecentProjects[index].Id}, Name={this.RecentProjects[index].Name}");
+                this.LogPurgeRecentProjectItem(this.RecentProjects[index].Id, this.RecentProjects[index].Name);
                 this.RecentProjects.RemoveAt(index);
             }
         }
 
-        Debug.WriteLine($"[HomeViewModel] LoadRecentProjectsAsync complete. RecentProjects.Count={this.RecentProjects.Count}");
+        this.LogCompletedLoadingRecentProjects(this.RecentProjects.Count);
     }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to preload recently used templates during ViewModel activation")]
-    private partial void LogPreloadingRecentTemplatesError(Exception ex);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to preload recently used projects during ViewModel activation")]
-    private partial void LogPreloadingRecentProjectsError(Exception ex);
 }

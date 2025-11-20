@@ -4,6 +4,7 @@
 
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -39,6 +40,12 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     private SortDescription? byDateSortDescription;
     private SortDescription? byNameSortDescription;
     private bool knownLocationLoaded;
+    private bool isLoadingLocation;
+
+    // Column widths for the file list view; kept as fields for internal storage and to
+    // ensure fields are defined before constructors (style rules).
+    private double nameColumnWidth = 420.0;
+    private double dateColumnWidth = 160.0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="OpenProjectViewModel"/> class.
@@ -56,7 +63,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         IProjectBrowserService projectBrowser,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
+        this.logger = loggerFactory?.CreateLogger<OpenProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<OpenProjectViewModel>();
         this.router = router;
 
         this.storageProvider = storageProvider;
@@ -67,6 +74,24 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.AdvancedFileList = new AdvancedCollectionView(this.FileList, isLiveShaping: true);
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(DefaultSortDirection, new ByNameComparer()));
+    }
+
+    /// <summary>
+    /// Gets or sets the pixel width of the name column in the file list.
+    /// </summary>
+    public double NameColumnWidth
+    {
+        get => this.nameColumnWidth;
+        set => this.SetProperty(ref this.nameColumnWidth, Math.Max(48.0, value));
+    }
+
+    /// <summary>
+    /// Gets or sets the pixel width of the date column in the file list.
+    /// </summary>
+    public double DateColumnWidth
+    {
+        get => this.dateColumnWidth;
+        set => this.SetProperty(ref this.dateColumnWidth, Math.Max(48.0, value));
     }
 
     [ObservableProperty]
@@ -100,12 +125,72 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
-        => await this.LoadKnownLocationsAsync().ConfigureAwait(true);
+    {
+        await this.LoadKnownLocationsAsync().ConfigureAwait(true);
+        await this.LoadColumnWidthsAsync().ConfigureAwait(true);
+    }
+
+    /// <summary>
+    /// Persists the column widths to the local settings.
+    /// </summary>
+    public async void SaveColumnWidths()
+    {
+        try
+        {
+            var value = $"Name:{this.NameColumnWidth.ToString(CultureInfo.InvariantCulture)};LastModifiedDate:{this.DateColumnWidth.ToString(CultureInfo.InvariantCulture)}";
+            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            settings.OpenViewColumnWidths = value;
+            await this.projectBrowser.SaveSettingsAsync().ConfigureAwait(true);
+            this.LogSavedColumnWidths();
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            // Ignore persistence errors but log them
+            this.LogFailedToSaveColumnWidths(ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
 
     /// <summary>
     /// Resets the activation state to allow further project activation.
     /// </summary>
     internal void ResetActivationState() => this.IsActivating = false;
+
+    private async Task LoadColumnWidthsAsync()
+    {
+        try
+        {
+            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var widths = settings.OpenViewColumnWidths;
+            if (!string.IsNullOrEmpty(widths))
+            {
+                this.LogLoadedColumnWidths(widths);
+                foreach (var part in widths.Split(';'))
+                {
+                    var kvp = part.Split(':');
+                    if (kvp.Length == 2 && double.TryParse(kvp[1], CultureInfo.InvariantCulture, out var width))
+                    {
+                        if (string.Equals(kvp[0], "Name", StringComparison.Ordinal))
+                        {
+                            this.NameColumnWidth = width;
+                        }
+                        else if (string.Equals(kvp[0], "LastModifiedDate", StringComparison.Ordinal))
+                        {
+                            this.DateColumnWidth = width;
+                        }
+                    }
+                }
+            }
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception ex)
+        {
+            // Ignore persistence errors but log them
+            this.LogFailedToLoadColumnWidths(ex);
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+    }
 
     /// <summary>
     /// Changes the current folder to the specified path.
@@ -144,6 +229,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         if (!result)
         {
             this.IsActivating = false;
+            this.LogFailedToOpenProjectFile(location);
             return false;
         }
 
@@ -182,6 +268,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.AdvancedFileList.SortDescriptions.RemoveAt(1);
         this.byDateSortDescription = null;
         this.AdvancedFileList.SortDescriptions.Add(this.byNameSortDescription);
+        this.LogToggledSort();
     }
 
     /// <summary>
@@ -200,6 +287,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.AdvancedFileList.SortDescriptions.RemoveAt(1);
         this.byNameSortDescription = null;
         this.AdvancedFileList.SortDescriptions.Add(this.byDateSortDescription);
+        this.LogToggledSort();
     }
 
     /// <summary>
@@ -224,17 +312,30 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     [RelayCommand]
     private async Task SelectLocationAsync(KnownLocation location)
     {
-        this.SelectedLocation = location;
-        this.FileList.Clear();
-        await foreach (var item in location.GetItems().ConfigureAwait(true))
+        if (this.isLoadingLocation && this.SelectedLocation == location)
         {
-            this.FileList.Add(item);
+            return;
         }
 
-        this.CurrentFolder =
-            location.Location.Length == 0
-                ? null
-                : await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
+        try
+        {
+            this.isLoadingLocation = true;
+            this.SelectedLocation = location;
+            this.FileList.Clear();
+            await foreach (var item in location.GetItems().ConfigureAwait(true))
+            {
+                this.FileList.Add(item);
+            }
+
+            this.CurrentFolder =
+                string.IsNullOrEmpty(location.Location)
+                    ? null
+                    : await this.storageProvider.GetFolderFromPathAsync(location.Location).ConfigureAwait(true);
+        }
+        finally
+        {
+            this.isLoadingLocation = false;
+        }
     }
 
     /// <summary>
@@ -243,10 +344,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// <param name="value">The new value of the SelectedLocation property.</param>
     partial void OnSelectedLocationChanged(KnownLocation? value)
     {
-        if (value != null)
-        {
-            SelectLocationCommand.Execute(value);
-        }
+        // Intentionally left empty. Logic moved to SelectLocationAsync to support reloading.
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
@@ -257,6 +355,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
             return;
         }
 
+        this.LogLoadingKnownLocations();
         try
         {
             this.KnownLocations = await this.projectBrowser.GetKnownLocationsAsync().ConfigureAwait(true);
@@ -274,12 +373,6 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// <returns><see langword="true"/> if the current folder has a parent folder; otherwise, <see langword="false"/>.</returns>
     private bool CurrentFolderHasParent()
         => this.CurrentFolder is INestedItem;
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to preload known locations during ViewModel activation")]
-    private partial void LogLoadingKnownLocationsError(Exception ex);
 
     /// <summary>
     /// Compares storage items by whether they are folders or files.

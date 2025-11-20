@@ -78,4 +78,16 @@ public interface IProjectBrowserService
     /// This Computer, OneDrive, Downloads, Documents, and Desktop.
     /// </returns>
     public Task<KnownLocation[]> GetKnownLocationsAsync();
+
+    /// <summary>
+    /// Gets the project browser settings.
+    /// </summary>
+    /// <returns>The project browser settings.</returns>
+    public Task<ProjectBrowserSettings> GetSettingsAsync();
+
+    /// <summary>
+    /// Saves the project browser settings.
+    /// </summary>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task SaveSettingsAsync();
 }

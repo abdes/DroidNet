@@ -1,15 +1,19 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 
 <UserControl
     x:Class="Oxygen.Editor.ProjectBrowser.Controls.RecentProjectsList"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="using:DroidNet.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:local="using:Oxygen.Editor.ProjectBrowser.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
     <UserControl.Resources>
+        <converters:DoubleToGridLengthConverter x:Key="DoubleToGridLengthConverter" />
+        <local:BindingProxy x:Key="ViewModelProxy" Data="{x:Bind ViewModel}" />
+
         <!--  Icon + Props tile  -->
         <DataTemplate x:Key="RecentProjectTemplate" x:DataType="local:ProjectItemWithThumbnail">
             <Grid
@@ -19,8 +23,8 @@
                 BorderThickness="0,0,0,1">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="80" />
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="{Binding Data.NameColumnWidth, Source={StaticResource ViewModelProxy}, Converter={StaticResource DoubleToGridLengthConverter}}" />
+                    <ColumnDefinition Width="{Binding Data.DateColumnWidth, Source={StaticResource ViewModelProxy}, Converter={StaticResource DoubleToGridLengthConverter}}" />
                 </Grid.ColumnDefinitions>
                 <Border
                     Grid.Column="0"
@@ -58,69 +62,102 @@
     </UserControl.Resources>
 
     <!--  Recent projects list header  -->
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="60" />
-            <ColumnDefinition Width="2*" />
-            <ColumnDefinition Width="1*" />
-        </Grid.ColumnDefinitions>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Enabled"
+        VerticalScrollBarVisibility="Disabled"
+        VerticalScrollMode="Disabled">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <!--  Sort column headers  -->
-        <!--  By Name  -->
-        <Button
-            Grid.Row="0"
-            Grid.Column="1"
-            Margin="44,0,0,0"
-            VerticalAlignment="Center"
-            Background="Transparent"
-            BorderThickness="0"
-            Command="{x:Bind ViewModel.ToggleSortByNameCommand, Mode=OneWay}">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Margin="0,0,20,0" Text="Name" />
-                <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-            </StackPanel>
-        </Button>
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="80" />
+                    <ColumnDefinition Width="{x:Bind ViewModel.NameColumnWidth, Converter={StaticResource DoubleToGridLengthConverter}, Mode=TwoWay}" />
+                    <ColumnDefinition Width="{x:Bind ViewModel.DateColumnWidth, Converter={StaticResource DoubleToGridLengthConverter}, Mode=TwoWay}" />
+                </Grid.ColumnDefinitions>
 
-        <!--  By date modified  -->
-        <Button
-            Grid.Row="0"
-            Grid.Column="2"
-            VerticalAlignment="Center"
-            Background="Transparent"
-            BorderThickness="0"
-            Command="{x:Bind ViewModel.ToggleSortByLastUsedOnCommand, Mode=OneWay}">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Margin="0,0,20,0" Text="Date Modified" />
-                <FontIcon FontSize="14" Glyph="&#xE8CB;" />
-            </StackPanel>
-        </Button>
+                <!--  Sort column headers  -->
+                <!--  By Name  -->
+                <Button
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    HorizontalContentAlignment="Left"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ToggleSortByNameCommand, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Margin="20,0,0,0" Text="Name" />
+                        <FontIcon
+                            Margin="20,0,20,0"
+                            FontSize="14"
+                            Glyph="&#xE8CB;" />
+                    </StackPanel>
+                </Button>
 
-        <Border
-            Grid.Row="1"
-            Grid.Column="0"
-            Grid.ColumnSpan="3"
-            Margin="15,0,15,20"
-            BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
-            BorderThickness="0,0,0,1" />
+                <local:ColumnResizer
+                    Grid.Column="1"
+                    ResizeCompleted="{x:Bind ViewModel.SaveColumnWidths}"
+                    TargetWidth="{x:Bind ViewModel.NameColumnWidth, Mode=TwoWay}" />
 
-        <ListView
-            x:Name="ProjectsListView"
-            Grid.Row="2"
-            Grid.Column="0"
-            Grid.ColumnSpan="3"
-            HorizontalAlignment="Stretch"
-            VerticalAlignment="Stretch"
-            BorderThickness="0"
-            DoubleTapped="OnProjectItemDoubleTapped"
-            IsItemClickEnabled="True"
-            ItemClick="OnProjectItemClicked"
-            ItemTemplate="{StaticResource RecentProjectTemplate}"
-            ItemsSource="{x:Bind ViewModel.ItemsView, Mode=OneWay}"
-            PreviewKeyDown="OnListViewKeyDown" />
-    </Grid>
+                <!--  By date modified  -->
+                <Button
+                    Grid.Column="2"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Center"
+                    HorizontalContentAlignment="Left"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ToggleSortByLastUsedOnCommand, Mode=OneWay}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Date Modified" />
+                        <FontIcon
+                            Margin="20,0,20,0"
+                            FontSize="14"
+                            Glyph="&#xE8CB;" />
+                    </StackPanel>
+                </Button>
+
+                <local:ColumnResizer
+                    Grid.Column="2"
+                    ResizeCompleted="{x:Bind ViewModel.SaveColumnWidths}"
+                    TargetWidth="{x:Bind ViewModel.DateColumnWidth, Mode=TwoWay}" />
+            </Grid>
+
+            <Border
+                Grid.Row="1"
+                Margin="15,0,15,20"
+                BorderBrush="{ThemeResource SystemControlForegroundBaseLowBrush}"
+                BorderThickness="0,0,0,1" />
+
+            <ListView
+                x:Name="ProjectsListView"
+                Grid.Row="2"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                BorderThickness="0"
+                DoubleTapped="OnProjectItemDoubleTapped"
+                IsEnabled="{x:Bind ViewModel.IsNotBusy, Mode=OneWay}"
+                IsItemClickEnabled="True"
+                ItemClick="OnProjectItemClicked"
+                ItemTemplate="{StaticResource RecentProjectTemplate}"
+                ItemsSource="{x:Bind ViewModel.ItemsView, Mode=OneWay}"
+                PreviewKeyDown="OnListViewKeyDown"
+                ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                ScrollViewer.HorizontalScrollMode="Disabled"
+                SelectedItem="{x:Bind ViewModel.SelectedProject, Mode=TwoWay}">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+            </ListView>
+        </Grid>
+    </ScrollViewer>
 </UserControl>
