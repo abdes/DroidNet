@@ -11,7 +11,6 @@ using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data.Models;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.ProjectBrowser.Templates;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
@@ -78,7 +77,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         IEditorSettingsManager settingsManager,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<NewProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<NewProjectViewModel>();
+        this.logger = loggerFactory?.CreateLogger<ProjectBrowserService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectBrowserService>();
         this.projectUsage = projectUsage;
         this.templateUsage = templateUsage;
         this.projectManager = projectManager;
@@ -466,10 +465,4 @@ public partial class ProjectBrowserService : IProjectBrowserService
             return new KnownLocation(key, folder.Name, folder.Location, this.localStorage, this);
         }
     }
-
-    [LoggerMessage(
-        EventId = 1000,
-        Level = LogLevel.Error,
-        Message = "Could not cleanup after failed project creation at: {Location}")]
-    private partial void LogFailedProjectCleanupError(string location, Exception ex);
 }
