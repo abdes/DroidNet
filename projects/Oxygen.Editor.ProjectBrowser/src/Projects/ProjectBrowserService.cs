@@ -156,7 +156,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
             await projectFolder.CreateAsync().ConfigureAwait(true);
 
             // Copy all content from template to the new project folder
-            CopyTemplateAssetsToProject();
+            await CopyTemplateAssetsToProjectAsync(CancellationToken.None).ConfigureAwait(true);
 
             // After copying the template assets, patch Project.oxy at the project root (if present)
             UpdateProjectManifest(projectFolder.Location, projectName);
@@ -181,26 +181,55 @@ public partial class ProjectBrowserService : IProjectBrowserService
 
         return false;
 
-        void CopyTemplateAssetsToProject()
+        async Task CopyTemplateAssetsToProjectAsync(CancellationToken cancellationToken)
         {
-            // TODO: fix this to implement recursive copying of the template using async enumeration with cancellation
-            _ = Parallel.ForEach(
-                templateDirInfo.GetDirectories("*", SearchOption.AllDirectories),
-                srcInfo => Directory.CreateDirectory(
-                    projectFolder.Location + srcInfo.FullName[templateDirInfo.FullName.Length..]));
+            // Recursively enumerate directories and files using an async iterator so we can honor cancellation.
+            this.LogBeginCopyTemplateAssets(templateDirInfo.FullName, projectFolder.Location);
+            await foreach (var entry in EnumerateTemplateEntriesAsync(templateDirInfo, cancellationToken).ConfigureAwait(true))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
 
-            _ = Parallel.ForEach(
-                templateDirInfo.GetFiles("*", SearchOption.AllDirectories),
-                srcInfo =>
+                var relativePath = entry.FullName[templateDirInfo.FullName.Length..].TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var targetPath = Path.Combine(projectFolder.Location, relativePath);
+
+                if (entry is DirectoryInfo)
                 {
-                    if (!string.Equals(srcInfo.Name, "Template.json", StringComparison.Ordinal))
-                    {
-                        File.Copy(
-                            srcInfo.FullName,
-                            projectFolder.Location + srcInfo.FullName[templateDirInfo.FullName.Length..],
-                            overwrite: true);
-                    }
-                });
+                    Directory.CreateDirectory(targetPath);
+                    this.LogCreatedDirectory(targetPath);
+                }
+                else if (entry is FileInfo file && !string.Equals(file.Name, "Template.json", StringComparison.Ordinal))
+                {
+                    _ = file.CopyTo(targetPath, overwrite: true);
+                    this.LogCopiedFile(file.FullName, targetPath);
+                }
+                else if (entry is FileInfo skipped && string.Equals(skipped.Name, "Template.json", StringComparison.Ordinal))
+                {
+                    this.LogSkippedTemplateMetadataFile(skipped.FullName);
+                }
+            }
+        }
+
+        async IAsyncEnumerable<FileSystemInfo> EnumerateTemplateEntriesAsync(
+            DirectoryInfo root,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
+            // Depth-first traversal: yield directory, then recurse, then files.
+            foreach (var dir in root.EnumerateDirectories())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                this.LogEnumeratingDirectory(dir.FullName);
+                yield return dir;
+                await foreach (var nested in EnumerateTemplateEntriesAsync(dir, cancellationToken).ConfigureAwait(false))
+                {
+                    yield return nested;
+                }
+            }
+
+            foreach (var file in root.EnumerateFiles())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                yield return file;
+            }
         }
 
         void UpdateProjectManifest(string projectFolderPath, string newName)
