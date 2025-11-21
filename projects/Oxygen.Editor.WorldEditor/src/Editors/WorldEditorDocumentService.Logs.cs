@@ -113,4 +113,16 @@ public partial class WorldEditorDocumentService
     [Conditional("DEBUG")]
     private void LogDocumentActivatedInvoked(object windowId, Guid documentId)
         => LogDocumentActivatedInvoked(this.logger, windowId, documentId);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Warning, Message = "OpenDocumentAsync aborted: WindowId: {WindowId}, DocumentId: {DocumentId}")]
+    private static partial void LogDocumentOpenAborted(ILogger logger, object windowId, Guid documentId);
+
+    private void LogDocumentOpenAborted(object windowId, Guid documentId)
+        => LogDocumentOpenAborted(this.logger, windowId, documentId);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Warning, Message = "AttachDocumentAsync aborted: WindowId: {WindowId}, DocumentId: {DocumentId}")]
+    private static partial void LogAttachDocumentAborted(ILogger logger, object windowId, Guid documentId);
+
+    private void LogAttachDocumentAborted(object windowId, Guid documentId)
+        => LogAttachDocumentAborted(this.logger, windowId, documentId);
 }

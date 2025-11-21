@@ -9,12 +9,8 @@ namespace Oxygen.Editor.WorldEditor.Editors;
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject
+public partial class SceneEditorViewModel(SceneDocumentMetadata metadata) : ObservableObject
 {
-    public SceneEditorViewModel(SceneDocumentMetadata metadata)
-    {
-        this.Metadata = metadata;
-    }
-
-    public SceneDocumentMetadata Metadata { get; }
+    [ObservableProperty]
+    public partial SceneDocumentMetadata Metadata { get; set; } = metadata;
 }
