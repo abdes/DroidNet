@@ -49,10 +49,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var projectFile = await projectFolder.GetDocumentAsync(Constants.ProjectFileName).ConfigureAwait(true);
             var json = await projectFile.ReadAllTextAsync().ConfigureAwait(true);
             var projectInfo = ProjectInfo.FromJson(json);
-            if (projectInfo != null)
-            {
-                projectInfo.Location = projectFolderPath;
-            }
+            _ = projectInfo?.Location = projectFolderPath;
 
             return projectInfo;
         }
@@ -105,7 +102,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return false;
         }
 
-        var project = new Project(projectInfo) { Name = projectInfo.Name };
+        var project = new Project(projectInfo) { Name = projectInfo.Name, Id = projectInfo.Id };
         try
         {
             await this.LoadProjectScenesAsync(project).ConfigureAwait(true);
@@ -235,9 +232,21 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         project.Scenes.Clear();
         await foreach (var item in scenes.ConfigureAwait(true))
         {
-            var sceneName = item.Name[..item.Name.LastIndexOf('.')];
-            var scene = new Scene(project) { Name = sceneName };
-            project.Scenes.Add(scene);
+            try
+            {
+                var json = await item.ReadAllTextAsync().ConfigureAwait(true);
+                var scene = Scene.FromJson(json, project);
+                if (scene != null)
+                {
+                    // Clear nodes to maintain lazy loading behavior (nodes are loaded in LoadSceneAsync)
+                    scene.Nodes.Clear();
+                    project.Scenes.Add(scene);
+                }
+            }
+            catch (Exception ex)
+            {
+                this.CouldNotLoadSceneMetadata(ex, item.Location);
+            }
         }
     }
 
@@ -316,4 +325,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         Level = LogLevel.Error,
         Message = "Could not save scene `{sceneName}`; {error}")]
     partial void CouldNotSaveScene(string sceneName, string error);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "Failed to load scene metadata from {ScenePath}")]
+    partial void CouldNotLoadSceneMetadata(Exception ex, string ScenePath);
 }

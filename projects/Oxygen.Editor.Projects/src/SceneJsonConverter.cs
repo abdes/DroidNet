@@ -31,7 +31,13 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         }
 
         var name = nameElement.ToString();
-        var scene = new Scene(project) { Name = name };
+
+        var id = sceneElement.TryGetProperty(nameof(GameObject.Id), out var idElement) &&
+                 idElement.TryGetGuid(out var parsedId)
+            ? parsedId
+            : Guid.NewGuid();
+
+        var scene = new Scene(project) { Name = name, Id = id };
 
         if (!sceneElement.TryGetProperty(nameof(Scene.Nodes), out var entitiesElement) ||
             entitiesElement.ValueKind != JsonValueKind.Array)
@@ -58,6 +64,7 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         writer.WriteStartObject();
 
         writer.WriteString(nameof(GameObject.Name), value.Name);
+        writer.WriteString(nameof(GameObject.Id), value.Id);
 
         writer.WritePropertyName(nameof(Scene.Nodes));
         JsonSerializer.Serialize(writer, value.Nodes, options);
