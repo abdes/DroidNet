@@ -45,8 +45,6 @@ public sealed partial class DocumentTabPresenter : IDisposable
             this.tabStrip.WindowId = this.hostWindow.Id;
         }
 
-        this.logger.LogDebug("DocumentTabPresenter initialized. HostWindowId: {HostWindowId}, TabStrip.WindowId set to: {TabStripWindowId}, TabStrip Hash: {Hash}", this.hostWindow.Id.Value, this.tabStrip.WindowId.Value, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this.tabStrip));
-
         this.documentService.DocumentOpened += this.OnDocumentOpened;
         this.documentService.DocumentClosed += this.OnDocumentClosed;
         this.documentService.DocumentDetached += this.OnDocumentDetached;
@@ -62,8 +60,6 @@ public sealed partial class DocumentTabPresenter : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
-        this.logger.LogDebug("DocumentTabPresenter disposed. HostWindowId: {HostWindowId}, TabStrip Hash: {Hash}", this.hostWindow.Id.Value, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this.tabStrip));
-
         this.documentService.DocumentOpened -= this.OnDocumentOpened;
         this.documentService.DocumentClosed -= this.OnDocumentClosed;
         this.documentService.DocumentDetached -= this.OnDocumentDetached;
