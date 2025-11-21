@@ -2,12 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
 using DroidNet.Mvvm.Generators;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     Represents the view for editing transform properties in the World Editor.
+/// </summary>
 [ViewModel(typeof(TransformViewModel))]
 public partial class TransformView
 {

@@ -6,7 +6,14 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.Messages;
 
+/// <summary>
+/// Message indicating that the selection of scene nodes has changed.
+/// </summary>
+/// <param name="selectedEntities">The list of selected <see cref="SceneNode"/> entities.</param>
 internal class SceneNodeSelectionChangedMessage(IList<SceneNode> selectedEntities)
 {
+    /// <summary>
+    /// Gets the list of selected <see cref="SceneNode"/> entities.
+    /// </summary>
     public IList<SceneNode> SelectedEntities { get; } = selectedEntities;
 }

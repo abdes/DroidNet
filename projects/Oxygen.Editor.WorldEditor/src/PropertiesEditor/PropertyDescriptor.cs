@@ -6,13 +6,25 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     Represents metadata and state for a property in the properties editor, including visibility and enabled state.
+/// </summary>
 public partial class PropertyDescriptor : ObservableObject
 {
-    [ObservableProperty]
-    private bool isEnabled = true;
-
-    [ObservableProperty]
-    private bool isVisible = true;
-
+    /// <summary>
+    ///     Gets the name of the property represented by this descriptor.
+    /// </summary>
     public required string Name { get; init; }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the property is enabled for editing.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the property is visible in the editor UI.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsVisible { get; set; } = true;
 }

@@ -10,21 +10,13 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <summary>
 /// The ViewModel for the <see cref="ListLayoutView"/> view.
 /// </summary>
-public partial class ListLayoutViewModel : AssetsLayoutViewModel
+/// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
+public partial class ListLayoutViewModel(AssetsIndexingService assetsIndexingService) : AssetsLayoutViewModel
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ListLayoutViewModel"/> class.
-    /// </summary>
-    /// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
-    public ListLayoutViewModel(AssetsIndexingService assetsIndexingService)
-    {
-        this.Assets = assetsIndexingService.Assets;
-    }
-
     /// <summary>
     /// Gets the collection of game assets.
     /// </summary>
-    public ObservableCollection<GameAsset> Assets { get; }
+    public ObservableCollection<GameAsset> Assets { get; } = assetsIndexingService.Assets;
 
     /// <summary>
     /// Invokes the item.

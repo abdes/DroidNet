@@ -7,9 +7,14 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+/// Base class for property editors for component sections in the details panel.
+/// </summary>
 public abstract partial class ComponentPropertyEditor : ObservableObject, IDetailsSection, IPropertyEditor<SceneNode>
 {
-    [ObservableProperty] private bool isExpanded = true;
+    /// <inheritdoc />
+    [ObservableProperty]
+    public partial bool IsExpanded { get; set; } = true;
 
     /// <inheritdoc />
     public abstract string Header { get; }

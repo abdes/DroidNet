@@ -7,30 +7,43 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///    Logging methods for <see cref="SceneNodeEditorViewModel"/>.
+/// </summary>
 public partial class SceneNodeEditorViewModel
 {
-    [LoggerMessage(EventId = 3710, Level = LogLevel.Debug, Message = "Constructed SceneNodeEditorViewModel with {InitialItemCount} items.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Constructed SceneNodeEditorViewModel with {InitialItemCount} items.")]
     private static partial void LogConstructed(ILogger logger, int InitialItemCount);
 
-    [LoggerMessage(EventId = 3711, Level = LogLevel.Debug, Message = "SceneNode selection changed. New count: {NewCount}.")]
-    private static partial void LogSelectionChanged(ILogger logger, int NewCount);
-
-    [LoggerMessage(EventId = 3712, Level = LogLevel.Debug, Message = "SceneNodeEditorViewModel disposed.")]
-    private static partial void LogDisposed(ILogger logger);
-
-    [LoggerMessage(EventId = 3713, Level = LogLevel.Debug, Message = "Filtered property editors: before={Before}, after={After}.")]
-    private static partial void LogFiltered(ILogger logger, int Before, int After);
-
-    // Instance wrappers are provided on the ViewModel partial and call the static methods
-    // using the protected Logger property exposed by the base class.
     [Conditional("DEBUG")]
     private void LogConstructed(int initialItemCount) => LogConstructed(this.logger, initialItemCount);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Selection changed. New item count: {NewCount}.")]
+    private static partial void LogSelectionChanged(ILogger logger, int NewCount);
 
     [Conditional("DEBUG")]
     private void LogSelectionChanged(int newCount) => LogSelectionChanged(this.logger, newCount);
 
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "SceneNodeEditorViewModel disposed.")]
+    private static partial void LogDisposed(ILogger logger);
+
     [Conditional("DEBUG")]
     private void LogDisposed() => LogDisposed(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Filtered properties. Before: {Before}, After: {After}.")]
+    private static partial void LogFiltered(ILogger logger, int Before, int After);
 
     [Conditional("DEBUG")]
     private void LogFiltered(int before, int after) => LogFiltered(this.logger, before, after);

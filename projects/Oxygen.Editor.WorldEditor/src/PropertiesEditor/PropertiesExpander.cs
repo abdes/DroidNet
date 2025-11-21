@@ -8,6 +8,9 @@ using Microsoft.UI.Xaml.Input;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+/// Represents a custom expander control for property editing in the Oxygen World Editor.
+/// </summary>
 [TemplatePart(Name = RootGridPartName, Type = typeof(Grid))]
 [TemplatePart(Name = ActionIconPresenterHolderPartName, Type = typeof(Viewbox))]
 [TemplatePart(Name = HeaderPresenterPartName, Type = typeof(ContentPresenter))]

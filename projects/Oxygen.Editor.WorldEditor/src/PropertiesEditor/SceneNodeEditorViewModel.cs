@@ -12,6 +12,9 @@ using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     ViewModel for editing properties of selected SceneNode entities in the World Editor.
+/// </summary>
 public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, IDisposable
 {
     private static readonly IDictionary<Type, IPropertyEditor<SceneNode>> AllPropertyEditors =
@@ -24,6 +27,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private ICollection<SceneNode> items;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
+    /// </summary>
+    /// <param name="hosting">The hosting context for WinUI dispatching.</param>
+    /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
+    /// <param name="messenger">The messenger for MVVM messaging.</param>
+    /// <param name="loggerFactory">Optional logger factory for diagnostics.</param>
     public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {

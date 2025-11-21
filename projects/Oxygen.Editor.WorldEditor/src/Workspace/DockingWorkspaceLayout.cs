@@ -31,9 +31,6 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     private readonly ILogger logger;
     private IDisposable? layoutChangedSub;
 
-    [ObservableProperty]
-    private UIElement content = new Grid();
-
     /// <summary>
     /// Initializes a new instance of the <see cref="DockingWorkspaceLayout"/> class.
     /// </summary>
@@ -110,6 +107,12 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
             }
         }
     }
+
+    /// <summary>
+    ///     Gets or sets the content of the workspace layout.
+    /// </summary>
+    [ObservableProperty]
+    public partial UIElement Content { get; set; } = new Grid();
 
     /// <summary>
     /// Gets or sets the active route for the workspace layout.

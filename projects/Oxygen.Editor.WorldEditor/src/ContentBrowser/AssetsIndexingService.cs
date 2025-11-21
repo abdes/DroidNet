@@ -18,7 +18,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <param name="projectManager">The project manager service.</param>
 /// <param name="hostingContext">The hosting context for the application.</param>
 /// <param name="contentBrowserState">The content browser state to track selected folders.</param>
-public sealed class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext, ContentBrowserState contentBrowserState) : IDisposable
+public sealed partial class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext, ContentBrowserState contentBrowserState) : IDisposable
 {
     private readonly Subject<GameAsset> assetSubject = new();
     private IDisposable? subscription;
@@ -96,6 +96,11 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         // Handle the error (e.g., log it, show a message to the user, etc.)
         Debug.WriteLine($"Error occurred: {ex.Message}");
 
+    private static bool IsScenesPath(string relativePath)
+        => relativePath.Equals("Scenes", StringComparison.OrdinalIgnoreCase)
+           || relativePath.StartsWith("Scenes/", StringComparison.OrdinalIgnoreCase)
+           || relativePath.StartsWith("Scenes\\", StringComparison.OrdinalIgnoreCase);
+
     private async Task LoadProjectScenesDirect()
     {
         Debug.Assert(projectManager.CurrentProject is not null, "current project should be initialized");
@@ -148,34 +153,6 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
         }
     }
 
-    private async Task LoadProjectScenesAsync()
-    {
-        Debug.Assert(projectManager.CurrentProject is not null, "current project should be initialized");
-
-        try
-        {
-            foreach (var scene in projectManager.CurrentProject.Scenes)
-            {
-                var sceneAsset = new GameAsset(scene.Name, $"Scenes/{scene.Name}")
-                {
-                    AssetType = AssetType.Scene,
-                };
-                this.assetSubject.OnNext(sceneAsset);
-            }
-        }
-#pragma warning disable CA1031 // exceptions forwarded to subscribers via OnError
-        catch (Exception ex)
-        {
-            this.assetSubject.OnError(ex);
-        }
-#pragma warning restore CA1031
-
-        await Task.CompletedTask.ConfigureAwait(false);
-    }
-
-    private async Task LoadFileSystemAssetsAsync(bool excludeScenesFolder = false)
-        => await this.BackgroundIndexerAsync(excludeScenesFolder).ConfigureAwait(true);
-
     private async Task BackgroundIndexerAsync(bool excludeScenesFolder = false)
     {
         Debug.Assert(projectManager.CurrentProject is not null, "current should be initialized");
@@ -210,7 +187,7 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
     {
         foreach (var selectedPath in contentBrowserState.SelectedFolders)
         {
-            if (string.IsNullOrEmpty(selectedPath) || selectedPath == ".")
+            if (string.IsNullOrEmpty(selectedPath) || string.Equals(selectedPath, ".", StringComparison.Ordinal))
             {
                 continue; // Skip empty path (project root) for file system indexing
             }
@@ -310,7 +287,7 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
     {
         foreach (var selectedPath in contentBrowserState.SelectedFolders)
         {
-            if (string.IsNullOrEmpty(selectedPath) || selectedPath == ".")
+            if (string.IsNullOrEmpty(selectedPath) || string.Equals(selectedPath, ".", StringComparison.Ordinal))
             {
                 continue; // Skip empty path (project root) for file system indexing
             }
@@ -356,11 +333,6 @@ public sealed class AssetsIndexingService(IProjectManagerService projectManager,
             }
         }
     }
-
-    private static bool IsScenesPath(string relativePath)
-        => relativePath.Equals("Scenes", StringComparison.OrdinalIgnoreCase)
-           || relativePath.StartsWith("Scenes/", StringComparison.OrdinalIgnoreCase)
-           || relativePath.StartsWith("Scenes\\", StringComparison.OrdinalIgnoreCase);
 
     private async Task IndexFolderDocumentsOnlyAsync(IFolder folder)
     {

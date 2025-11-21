@@ -7,9 +7,15 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///   Logging methods for <see cref="TransformViewModel"/>.
+/// </summary>
 public partial class TransformViewModel
 {
-    [LoggerMessage(EventId = 3700, Level = LogLevel.Trace, Message = "[TransformViewModel] Constructed (HasLoggerFactory={HasFactory})")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "[TransformViewModel] Constructed (HasLoggerFactory={HasFactory})")]
     private static partial void LogConstructed(ILogger logger, bool hasFactory);
 
     private void LogConstructed()
@@ -20,7 +26,10 @@ public partial class TransformViewModel
         }
     }
 
-    [LoggerMessage(EventId = 3701, Level = LogLevel.Trace, Message = "[TransformViewModel] UpdateValues called (Count={Count})")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "[TransformViewModel] Updating values for {Count} selected items")]
     private static partial void LogUpdateValues(ILogger logger, int count);
 
     [Conditional("DEBUG")]
@@ -32,7 +41,10 @@ public partial class TransformViewModel
         }
     }
 
-    [LoggerMessage(EventId = 3702, Level = LogLevel.Trace, Message = "[TransformViewModel] Applying property {Property} value {Value} to {TargetCount} items")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "[TransformViewModel] Applying change: {Property} = {Value} to {TargetCount} items")]
     private static partial void LogApplyingChange(ILogger logger, string property, float value, int targetCount);
 
     [Conditional("DEBUG")]
@@ -44,7 +56,10 @@ public partial class TransformViewModel
         }
     }
 
-    [LoggerMessage(EventId = 3703, Level = LogLevel.Error, Message = "[TransformViewModel] Apply failed for {Property}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "[TransformViewModel] Failed to apply change to property {Property}.")]
     private static partial void LogApplyFailed(ILogger logger, string property, Exception exception);
 
     private void LogApplyFailed(string property, Exception ex)

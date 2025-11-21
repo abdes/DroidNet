@@ -4,6 +4,9 @@
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     Provides events for expanded and collapsed states in the properties expander.
+/// </summary>
 public partial class PropertiesExpander
 {
     /// <summary>
