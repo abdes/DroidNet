@@ -42,7 +42,7 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
     /// Observable property bound to the editable text box used to rename the item(s).
     /// </summary>
     [ObservableProperty]
-    private string? name;
+    public partial string? Name { get; set; }
 
     /// <summary>
     /// Gets the type of the items being edited. Can be used to show a custom icon or othe indication in the UI.
@@ -204,4 +204,53 @@ public abstract partial class MultiSelectionDetails<T>(ILoggerFactory? loggerFac
             entity.Name = value;
         }
     }
+
+#pragma warning disable SA1204 // Static elements should appear before instance elements
+
+    [LoggerMessage(
+        EventId = 3601,
+        Level = LogLevel.Trace,
+        Message = "[MultiSelectionDetails: `{ItemsType}`] Items collection updated (Count={Count})")]
+    private static partial void LogItemsCollectionUpdated(ILogger logger, string itemsType, int count);
+
+    private void LogItemsCollectionUpdated()
+        => LogItemsCollectionUpdated(this.logger, typeof(T).Name ?? "<Unknown>", this.items.Count);
+
+    [LoggerMessage(
+        EventId = 3602,
+        Level = LogLevel.Trace,
+        Message = "[MultiSelectionDetails: `{ItemsType}`] Refreshed properties (HasItems={HasItems}, ItemsCount={Count}, NameMixed={NameMixed})")]
+    private static partial void LogRefreshedProperties(ILogger logger, string itemsType, bool hasItems, int count, string? nameMixed);
+
+    private void LogRefreshedProperties(string? nameMixed)
+        => LogRefreshedProperties(this.logger, typeof(T).Name ?? "<Unknown>", this.HasItems, this.ItemsCount, nameMixed);
+
+    [LoggerMessage(
+        EventId = 3603,
+        Level = LogLevel.Trace,
+        Message = "[MultiSelectionDetails: `{ItemsType}`] Property editors updated (EditorsCount={EditorsCount})")]
+    private static partial void LogPropertyEditorsUpdated(ILogger logger, string itemsType, int editorsCount);
+
+    private void LogPropertyEditorsUpdated()
+        => LogPropertyEditorsUpdated(this.logger, typeof(T).Name ?? "<Unknown>", this.PropertyEditors?.Count ?? 0);
+
+    [LoggerMessage(
+        EventId = 3604,
+        Level = LogLevel.Trace,
+        Message = "[MultiSelectionDetails: `{ItemsType}`] Property editor values updated (EditorsCount={EditorsCount})")]
+    private static partial void LogPropertyEditorsValuesUpdated(ILogger logger, string itemsType, int editorsCount);
+
+    private void LogPropertyEditorsValuesUpdated()
+        => LogPropertyEditorsValuesUpdated(this.logger, typeof(T).Name ?? "<Unknown>", this.PropertyEditors?.Count ?? 0);
+
+    [LoggerMessage(
+        EventId = 3605,
+        Level = LogLevel.Trace,
+        Message = "[MultiSelectionDetails: `{ItemsType}`] Name propagated to items (NewName={NewName}, ItemsCount={ItemsCount})")]
+    private static partial void LogNamePropagated(ILogger logger, string itemsType, string? newName, int itemsCount);
+
+    private void LogNamePropagated(string? newName)
+        => LogNamePropagated(this.logger, typeof(T).Name ?? "<Unknown>", newName, this.ItemsCount);
+
+#pragma warning restore SA1204 // Static elements should appear before instance elements
 }

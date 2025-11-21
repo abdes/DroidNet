@@ -5,10 +5,11 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-// To learn more about WinUI, the WinUI project structure,
-// and more about our project templates, see: http://aka.ms/winui-project-info.
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     Represents the view for editing a scene node in the properties editor.
+/// </summary>
 [ViewModel(typeof(SceneNodeEditorViewModel))]
 public sealed partial class SceneNodeEditorView : UserControl
 {

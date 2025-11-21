@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
@@ -21,14 +22,12 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
-/// <param name="projectLayoutViewModel">The project layout view model for tree navigation.</param>
 public partial class AssetsViewModel(
     IProject currentProject,
     AssetsIndexingService assetsIndexingService,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
-    IProjectManagerService projectManagerService,
-    ProjectLayoutViewModel projectLayoutViewModel) : AbstractOutletContainer, IRoutingAware, IDisposable
+    IProjectManagerService projectManagerService) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
     private bool isInitialized;
@@ -42,13 +41,6 @@ public partial class AssetsViewModel(
     ///     Gets the converter for converting view models to views.
     /// </summary>
     public ViewModelToView VmToViewConverter { get; } = vmToViewConverter;
-
-    /// <inheritdoc />
-    public new void Dispose()
-    {
-        this.Dispose(true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
@@ -73,9 +65,39 @@ public partial class AssetsViewModel(
         await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
     }
 
+    /// <summary>
+    ///     Releases the unmanaged resources used by the <see cref="AssetsViewModel" /> and optionally releases the managed
+    ///     resources.
+    /// </summary>
+    /// <param name="disposing">
+    ///     true to release both managed and unmanaged resources; false to release only unmanaged
+    ///     resources.
+    /// </param>
+    protected new virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                // Cleanup event subscriptions
+                contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
+                this.PropertyChanging -= this.OnLayoutViewModelChanging;
+                this.PropertyChanged -= this.OnLayoutViewModelChanged;
+
+                // Cleanup layout view model if necessary
+                if (this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
+                {
+                    layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
+                }
+            }
+
+            this.disposed = true;
+        }
+    }
+
     private async void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(ContentBrowserState.SelectedFolders))
+        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
             Debug.WriteLine(
                 $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
@@ -106,7 +128,7 @@ public partial class AssetsViewModel(
         {
             // Navigate into the folder
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.Location}");
-            await this.NavigateToFolder(args.InvokedItem.Location);
+            await this.NavigateToFolder(args.InvokedItem.Location).ConfigureAwait(false);
         }
     }
 
@@ -161,6 +183,7 @@ public partial class AssetsViewModel(
 
                 // TODO: Could add success notification here
             }
+
             // TODO: Show error message to user about scene creation failure
         }
         catch (Exception ex)
@@ -180,7 +203,7 @@ public partial class AssetsViewModel(
         // For now, create a default name. In a full implementation,
         // this would show a dialog to get the scene name from the user.
         var sceneCount = currentProject.Scenes.Count;
-        var defaultName = $"NewScene{sceneCount + 1}";
+        var defaultName = string.Create(CultureInfo.InvariantCulture, $"NewScene{sceneCount + 1}");
 
         await this.CreateNewSceneAsync(defaultName).ConfigureAwait(true);
     }
@@ -200,36 +223,6 @@ public partial class AssetsViewModel(
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
         {
             layoutViewModel.ItemInvoked += this.OnAssetItemInvoked;
-        }
-    }
-
-    /// <summary>
-    ///     Releases the unmanaged resources used by the <see cref="AssetsViewModel" /> and optionally releases the managed
-    ///     resources.
-    /// </summary>
-    /// <param name="disposing">
-    ///     true to release both managed and unmanaged resources; false to release only unmanaged
-    ///     resources.
-    /// </param>
-    protected new virtual void Dispose(bool disposing)
-    {
-        if (!this.disposed)
-        {
-            if (disposing)
-            {
-                // Cleanup event subscriptions
-                contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
-                this.PropertyChanging -= this.OnLayoutViewModelChanging;
-                this.PropertyChanged -= this.OnLayoutViewModelChanged;
-
-                // Cleanup layout view model if necessary
-                if (this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
-                {
-                    layoutViewModel.ItemInvoked -= this.OnAssetItemInvoked;
-                }
-            }
-
-            this.disposed = true;
         }
     }
 }

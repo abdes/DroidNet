@@ -12,7 +12,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// Represents the state of the content browser, including selected folders and the project root path.
 /// This is a passive data holder that is updated by ViewModels.
 /// </summary>
-public sealed class ContentBrowserState(IProject currentProject) : INotifyPropertyChanged
+public sealed partial class ContentBrowserState(IProject currentProject) : INotifyPropertyChanged
 {
     /// <summary>
     /// Occurs when a property changes.
@@ -66,7 +66,7 @@ public sealed class ContentBrowserState(IProject currentProject) : INotifyProper
     {
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(this.ProjectRootPath);
         this.SelectedFolders.Clear();
-        this.SelectedFolders.Add(pathRelativeToProjectRoot);
+        _ = this.SelectedFolders.Add(pathRelativeToProjectRoot);
         this.OnPropertyChanged(nameof(this.SelectedFolders));
     }
 
@@ -92,8 +92,9 @@ public sealed class ContentBrowserState(IProject currentProject) : INotifyProper
         this.SelectedFolders.Clear();
         foreach (var path in relativePaths)
         {
-            this.SelectedFolders.Add(path);
+            _ = this.SelectedFolders.Add(path);
         }
+
         this.OnPropertyChanged(nameof(this.SelectedFolders));
     }
 
@@ -109,7 +110,5 @@ public sealed class ContentBrowserState(IProject currentProject) : INotifyProper
     }
 
     private void OnPropertyChanged(string propertyName)
-    {
-        this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-    }
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

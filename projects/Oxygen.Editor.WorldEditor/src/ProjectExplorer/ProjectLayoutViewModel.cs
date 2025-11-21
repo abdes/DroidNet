@@ -23,7 +23,10 @@ namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
 /// </summary>
 /// <param name="projectManager">The project manager service.</param>
 /// <param name="contentBrowserState">The state of the content browser.</param>
-/// <param name="loggerFactory">The logger factory to create loggers.</param>
+/// <param name="loggerFactory">
+///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+///     process. If <see langword="null" />, logging is disabled.
+/// </param>
 public partial class ProjectLayoutViewModel(
     IProjectManagerService projectManager,
     ContentBrowserState contentBrowserState,
@@ -43,8 +46,8 @@ public partial class ProjectLayoutViewModel(
     /// </summary>
     public void Dispose()
     {
-        contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
-        this.projectRoot?.Dispose();
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     /// <inheritdoc />
@@ -57,7 +60,7 @@ public partial class ProjectLayoutViewModel(
 
         // Suppress tree selection changes while restoring from route and initializing tree
         this.suppressTreeSelectionEvents = true;
-        Debug.WriteLine("[ProjectLayoutViewModel] OnNavigatedToAsync: suppressTreeSelectionEvents = true");
+        this.LogSuppressTreeSelectionEvents(value: true);
 
         try
         {
@@ -73,189 +76,16 @@ public partial class ProjectLayoutViewModel(
         finally
         {
             this.suppressTreeSelectionEvents = false;
-            Debug.WriteLine("[ProjectLayoutViewModel] OnNavigatedToAsync: suppressTreeSelectionEvents = false");
+            this.LogSuppressTreeSelectionEvents(value: false);
         }
-    }
-
-    /// <inheritdoc />
-    protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
-    {
-        base.OnSelectionModelChanged(oldValue);
-
-        // Unsubscribe from old selection model
-        if (oldValue is not null)
-        {
-            oldValue.PropertyChanged -= this.OnTreeSelectionChanged;
-        }
-
-        // Subscribe to new selection model
-        if (this.SelectionModel is not null)
-        {
-            this.SelectionModel.PropertyChanged += this.OnTreeSelectionChanged;
-        }
-    }
-
-    private void RestoreState()
-    {
-        Debug.Assert(this.activeRoute is not null, "should have an active route");
-
-        Debug.WriteLine("[ProjectLayoutViewModel] RestoreState: Restoring from URL query parameters");
-
-        // CLEAR existing selection first - this is the key fix!
-        contentBrowserState.SelectedFolders.Clear();
-
-        var selectedFolders = this.activeRoute.QueryParams.GetValues("selected");
-        if (selectedFolders is not null)
-        {
-            foreach (var relativePath in selectedFolders)
-            {
-                if (!string.IsNullOrEmpty(relativePath))
-                {
-                    Debug.WriteLine($"[ProjectLayoutViewModel] RestoreState: Adding folder from URL: {relativePath}");
-                    _ = contentBrowserState.SelectedFolders.Add(relativePath);
-                }
-            }
-        }
-
-        Debug.WriteLine(
-            $"[ProjectLayoutViewModel] RestoreState: Final ContentBrowserState.SelectedFolders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
-    }
-
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types",
-        Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
-    private async Task PreloadRecentTemplatesAsync()
-    {
-        try
-        {
-            if (this.projectRoot is null)
-            {
-                // The following method will do sanity checks on the current project and its info. On successful return, we have
-                // guarantee the project info is valid and has a valid location for the project root folder.
-                var projectInfo = this.GetCurrentProjectInfo() ??
-                                  throw new InvalidOperationException("Project Layout used with no CurrentProject");
-
-                // Create the root TreeItem for the project root folder.
-                var storage = projectManager.GetCurrentProjectStorageProvider();
-                var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-                this.projectRoot =
-                    new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, true) { IsExpanded = true };
-            }
-
-            // Preload the project folders
-            await this.LoadProjectAsync().ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.LogPreloadingProjectFoldersError(ex);
-        }
-    }
-
-    /// <summary>
-    ///     Loads the project asynchronously, starting with the project root folder, and continuing with children that are part
-    ///     of the
-    ///     initial selection set. The selection set can be provided via the navigation URL as query parameters.
-    /// </summary>
-    /// <returns>
-    ///     A <see cref="Task" /> object representing the asynchronous work.
-    /// </returns>
-    [RelayCommand]
-    private async Task LoadProjectAsync()
-    {
-        Debug.Assert(this.projectRoot is not null, "project root node should be initialized");
-        Debug.Assert(this.activeRoute is not null, "should have an active route");
-
-        // We will expand the entire project tree
-        await this.InitializeRootAsync(this.projectRoot, false).ConfigureAwait(true);
-    }
-
-    private IProjectInfo? GetCurrentProjectInfo()
-    {
-        var projectInfo = projectManager.CurrentProject?.ProjectInfo;
-
-        if (projectInfo is null)
-        {
-            this.LogNoCurrentProject();
-        }
-#if DEBUG
-        else
-        {
-            Debug.Assert(
-                projectInfo.Location is not null,
-                "current project must be set, have a valid ProjectInfo and a valid Location");
-        }
-#endif
-
-        return projectInfo;
-    }
-
-    /// <summary>
-    ///     Navigates to and selects the specified folder in the tree.
-    ///     This is the entry point for programmatic navigation from other ViewModels.
-    /// </summary>
-    /// <param name="folder">The folder to navigate to and select.</param>
-    public async Task NavigateToFolderAsync(IFolder folder)
-    {
-        if (this.projectRoot == null)
-        {
-            return;
-        }
-
-        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-        var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot);
-        if (folderAdapter != null)
-        {
-            // Use the tree control's selection API to properly select the folder
-            this.ClearAndSelectItem(folderAdapter);
-            // The tree control will handle updating ContentBrowserState through FolderTreeItemAdapter
-        }
-    }
-
-    /// <summary>
-    ///     Recursively finds a folder adapter by its relative path.
-    /// </summary>
-    /// <param name="currentAdapter">The current adapter to search from.</param>
-    /// <param name="targetPath">The target relative path to find.</param>
-    /// <returns>The folder adapter if found, null otherwise.</returns>
-    private async Task<FolderTreeItemAdapter?> FindFolderAdapterAsync(FolderTreeItemAdapter currentAdapter,
-        string targetPath)
-    {
-        // Get the relative path of the current adapter
-        var currentPath = currentAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-
-        // Normalize paths for comparison (handle . for root)
-        if (currentPath == ".")
-        {
-            currentPath = "";
-        }
-
-        if (targetPath == ".")
-        {
-            targetPath = "";
-        }
-
-        if (string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase))
-        {
-            return currentAdapter;
-        }
-
-        // Search in children
-        var children = await currentAdapter.Children;
-        foreach (var child in children.OfType<FolderTreeItemAdapter>())
-        {
-            var result = await this.FindFolderAdapterAsync(child, targetPath);
-            if (result != null)
-            {
-                return result;
-            }
-        }
-
-        return null;
     }
 
     /// <summary>
     ///     Refreshes the project explorer tree by recreating the root node and reinitializing the tree view.
     ///     Preserves the current selection from ContentBrowserState.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous refresh operation.</returns>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
     public async Task RefreshTreeAsync()
     {
         // Rebuild the project root to force a fresh load of children
@@ -277,18 +107,18 @@ public partial class ProjectLayoutViewModel(
             this.projectRoot?.Dispose();
 
             this.projectRoot =
-                new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, true) { IsExpanded = true };
+                new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true) { IsExpanded = true };
 
             // Reinitialize the tree UI
-            await this.InitializeRootAsync(this.projectRoot, false).ConfigureAwait(true);
+            await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
 
             // Allow selection changes to flow again for the explicit selection we apply next
             this.suppressTreeSelectionEvents = false;
 
             // Reapply previous selection if it still exists, prioritizing non-root paths
             var candidates = previousSelection
-                .Where(p => !string.IsNullOrEmpty(p) && p != ".")
-                .OrderBy(p => p, StringComparer.Ordinal)
+                .Where(p => !string.IsNullOrEmpty(p) && !string.Equals(p, ".", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
                 .ToList();
 
             FolderTreeItemAdapter? target = null;
@@ -320,29 +150,233 @@ public partial class ProjectLayoutViewModel(
     }
 
     /// <summary>
+    ///     Navigates to and selects the specified folder in the tree.
+    ///     This is the entry point for programmatic navigation from other ViewModels.
+    /// </summary>
+    /// <param name="folder">The folder to navigate to and select.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous refresh operation.</returns>
+    public async Task NavigateToFolderAsync(IFolder folder)
+    {
+        if (this.projectRoot == null)
+        {
+            return;
+        }
+
+        var pathRelativeToProjectRoot = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+        var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot).ConfigureAwait(true);
+        if (folderAdapter != null)
+        {
+            // Use the tree control's selection API to properly select the folder
+            // The tree control will handle updating ContentBrowserState through FolderTreeItemAdapter
+            this.ClearAndSelectItem(folderAdapter);
+        }
+    }
+
+    /// <summary>
+    ///     Protected dispose pattern implementation.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose; false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
+            this.projectRoot?.Dispose();
+        }
+
+        // No unmanaged resources to clean up.
+    }
+
+    /// <inheritdoc />
+    protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
+    {
+        base.OnSelectionModelChanged(oldValue);
+
+        // Unsubscribe from old selection model
+        if (oldValue is not null)
+        {
+            oldValue.PropertyChanged -= this.OnTreeSelectionChanged;
+        }
+
+        // Subscribe to new selection model
+        if (this.SelectionModel is not null)
+        {
+            this.SelectionModel.PropertyChanged += this.OnTreeSelectionChanged;
+        }
+    }
+
+    /// <summary>
+    ///     Recursively sets the IsSelected property on tree items.
+    /// </summary>
+    private static async Task SetTreeItemSelectionRecursively(FolderTreeItemAdapter adapter, bool isSelected)
+    {
+        adapter.IsSelected = isSelected;
+
+        var children = await adapter.Children.ConfigureAwait(true);
+        foreach (var child in children.OfType<FolderTreeItemAdapter>())
+        {
+            await SetTreeItemSelectionRecursively(child, isSelected).ConfigureAwait(true);
+        }
+    }
+
+    private void RestoreState()
+    {
+        Debug.Assert(this.activeRoute is not null, "should have an active route");
+
+        this.LogRestoreStateStart();
+
+        // CLEAR existing selection first - this is the key fix!
+        contentBrowserState.SelectedFolders.Clear();
+
+        var selectedFolders = this.activeRoute.QueryParams.GetValues("selected");
+        if (selectedFolders is not null)
+        {
+            foreach (var relativePath in selectedFolders)
+            {
+                if (!string.IsNullOrEmpty(relativePath))
+                {
+                    this.LogRestoreStateAddFolder(relativePath);
+                    _ = contentBrowserState.SelectedFolders.Add(relativePath);
+                }
+            }
+        }
+
+        this.LogRestoreStateFinal(string.Join(", ", contentBrowserState.SelectedFolders));
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
+    private async Task PreloadRecentTemplatesAsync()
+    {
+        try
+        {
+            if (this.projectRoot is null)
+            {
+                // The following method will do sanity checks on the current project and its info. On successful return, we have
+                // guarantee the project info is valid and has a valid location for the project root folder.
+                var projectInfo = this.GetCurrentProjectInfo() ??
+                                  throw new InvalidOperationException("Project Layout used with no CurrentProject");
+
+                // Create the root TreeItem for the project root folder.
+                var storage = projectManager.GetCurrentProjectStorageProvider();
+                var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
+                this.projectRoot =
+                    new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true) { IsExpanded = true };
+            }
+
+            // Preload the project folders
+            await this.LoadProjectAsync().ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            this.LogPreloadingProjectFoldersError(ex);
+        }
+    }
+
+    /// <summary>
+    ///     Loads the project asynchronously, starting with the project root folder, and continuing with children that are part
+    ///     of the
+    ///     initial selection set. The selection set can be provided via the navigation URL as query parameters.
+    /// </summary>
+    /// <returns>
+    ///     A <see cref="Task" /> object representing the asynchronous work.
+    /// </returns>
+    [RelayCommand]
+    private async Task LoadProjectAsync()
+    {
+        Debug.Assert(this.projectRoot is not null, "project root node should be initialized");
+        Debug.Assert(this.activeRoute is not null, "should have an active route");
+
+        // We will expand the entire project tree
+        await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
+    }
+
+    private IProjectInfo? GetCurrentProjectInfo()
+    {
+        var projectInfo = projectManager.CurrentProject?.ProjectInfo;
+
+        if (projectInfo is null)
+        {
+            this.LogNoCurrentProject();
+        }
+#if DEBUG
+        else
+        {
+            Debug.Assert(
+                projectInfo.Location is not null,
+                "current project must be set, have a valid ProjectInfo and a valid Location");
+        }
+#endif
+
+        return projectInfo;
+    }
+
+    /// <summary>
+    ///     Recursively finds a folder adapter by its relative path.
+    /// </summary>
+    /// <param name="currentAdapter">The current adapter to search from.</param>
+    /// <param name="targetPath">The target relative path to find.</param>
+    /// <returns>The folder adapter if found, null otherwise.</returns>
+    private async Task<FolderTreeItemAdapter?> FindFolderAdapterAsync(
+        FolderTreeItemAdapter currentAdapter,
+        string targetPath)
+    {
+        // Get the relative path of the current adapter
+        var currentPath = currentAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+
+        // Normalize paths for comparison (handle . for root)
+        if (string.Equals(currentPath, ".", StringComparison.Ordinal))
+        {
+            currentPath = string.Empty;
+        }
+
+        if (string.Equals(targetPath, ".", StringComparison.Ordinal))
+        {
+            targetPath = string.Empty;
+        }
+
+        if (string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return currentAdapter;
+        }
+
+        // Search in children
+        var children = await currentAdapter.Children.ConfigureAwait(true);
+        foreach (var child in children.OfType<FolderTreeItemAdapter>())
+        {
+            var result = await this.FindFolderAdapterAsync(child, targetPath).ConfigureAwait(true);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     ///     Handles tree selection changes and updates ContentBrowserState accordingly.
     ///     This prevents duplicate history entries by using atomic operations.
     /// </summary>
     private void OnTreeSelectionChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Debug.WriteLine(
-            $"[ProjectLayoutViewModel] OnTreeSelectionChanged called: PropertyName={e.PropertyName}, isUpdatingFromState={this.isUpdatingFromState}, suppressTreeSelectionEvents={this.suppressTreeSelectionEvents}");
+        this.LogTreeSelectionChanged(e.PropertyName, this.isUpdatingFromState, this.suppressTreeSelectionEvents);
 
         // Only handle SelectedIndex changes for MultipleSelectionModel to avoid infinite loops
         // SelectedIndex changes when the selection changes, so we only need to listen to this one property
-        if (this.isUpdatingFromState || this.suppressTreeSelectionEvents ||
-            e.PropertyName != nameof(MultipleSelectionModel<ITreeItem>.SelectedIndex) ||
-            this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        if (this.isUpdatingFromState
+            || this.suppressTreeSelectionEvents
+            || !string.Equals(e.PropertyName, nameof(MultipleSelectionModel<>.SelectedIndex), StringComparison.Ordinal)
+            || this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
         {
-            Debug.WriteLine(
-                $"[ProjectLayoutViewModel] OnTreeSelectionChanged - early return. isUpdatingFromState={this.isUpdatingFromState}, suppressTreeSelectionEvents={this.suppressTreeSelectionEvents}, PropertyName={e.PropertyName}, SelectionModel type={this.SelectionModel?.GetType().Name}");
+            this.LogTreeSelectionChangedEarlyReturn(
+                this.isUpdatingFromState,
+                this.suppressTreeSelectionEvents,
+                e.PropertyName,
+                this.SelectionModel?.GetType().Name);
             return;
         }
 
-        Debug.WriteLine(
-            $"[ProjectLayoutViewModel] Tree selection changed, updating ContentBrowserState. SelectedIndices count: {multipleSelection.SelectedIndices.Count}");
-        this.logger.LogDebug("Tree selection changed, updating ContentBrowserState. SelectedIndices count: {Count}",
-            multipleSelection.SelectedIndices.Count);
+        this.LogTreeSelectionChangedUpdatingState(multipleSelection.SelectedIndices.Count);
 
         // Get currently selected folder adapters from ALL selected indices
         var selectedFolders = multipleSelection.SelectedIndices
@@ -351,16 +385,13 @@ public partial class ProjectLayoutViewModel(
             .Select(adapter => adapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath))
             .ToList();
 
-        Debug.WriteLine($"[ProjectLayoutViewModel] Selected folders: [{string.Join(", ", selectedFolders)}]");
-        this.logger.LogDebug("Selected folders: [{Folders}]", string.Join(", ", selectedFolders));
+        this.LogSelectedFolders(string.Join(", ", selectedFolders));
 
         // Update ContentBrowserState
-        Debug.WriteLine(
-            $"[ProjectLayoutViewModel] Updating ContentBrowserState with {selectedFolders.Count} selected folders");
-        this.logger.LogDebug("Updating ContentBrowserState with {Count} selected folders", selectedFolders.Count);
+        this.LogUpdatingContentBrowserState(selectedFolders.Count);
         contentBrowserState.SetSelectedFolders(selectedFolders);
 
-        Debug.WriteLine("[ProjectLayoutViewModel] ContentBrowserState updated successfully");
+        this.LogContentBrowserStateUpdated();
     }
 
     /// <summary>
@@ -368,16 +399,12 @@ public partial class ProjectLayoutViewModel(
     /// </summary>
     private async void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Debug.WriteLine(
-            $"[ProjectLayoutViewModel] OnContentBrowserStatePropertyChanged called: PropertyName={e.PropertyName}");
+        this.LogContentBrowserStatePropertyChanged(e.PropertyName);
 
-        if (e.PropertyName == nameof(ContentBrowserState.SelectedFolders))
+        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
-            Debug.WriteLine(
-                $"[ProjectLayoutViewModel] ContentBrowserState.SelectedFolders changed. New selection: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
-            this.logger.LogDebug("ContentBrowserState.SelectedFolders changed. New selection: [{Folders}]",
-                string.Join(", ", contentBrowserState.SelectedFolders));
-            await this.UpdateTreeSelectionFromStateAsync();
+            this.LogContentBrowserStateSelectedFoldersChanged(string.Join(", ", contentBrowserState.SelectedFolders));
+            await this.UpdateTreeSelectionFromStateAsync().ConfigureAwait(true);
         }
     }
 
@@ -389,25 +416,23 @@ public partial class ProjectLayoutViewModel(
     {
         if (this.projectRoot == null)
         {
-            Debug.WriteLine(
-                "[ProjectLayoutViewModel] UpdateTreeSelectionFromStateAsync - projectRoot is null, returning");
+            this.LogUpdateTreeSelectionProjectRootNull();
             return;
         }
 
-        Debug.WriteLine("[ProjectLayoutViewModel] Updating tree selection from ContentBrowserState");
-        this.logger.LogDebug("Updating tree selection from ContentBrowserState");
+        this.LogUpdateTreeSelectionStart();
 
         try
         {
             this.isUpdatingFromState = true;
-            Debug.WriteLine("[ProjectLayoutViewModel] Set isUpdatingFromState = true");
+            this.LogSetIsUpdatingFromState(value: true);
 
             var selectedPaths = contentBrowserState.SelectedFolders.ToList();
-            Debug.WriteLine($"[ProjectLayoutViewModel] Selected paths to sync: [{string.Join(", ", selectedPaths)}]");
+            this.LogSelectedPathsToSync(string.Join(", ", selectedPaths));
 
             // First, clear all current selections in the tree items
-            await this.ClearAllTreeItemSelections();
-            Debug.WriteLine("[ProjectLayoutViewModel] Cleared all tree item selections");
+            await this.ClearAllTreeItemSelections().ConfigureAwait(true);
+            this.LogClearedTreeItemSelections();
 
             // Then set IsSelected=true for the items that should be selected
             foreach (var path in selectedPaths)
@@ -415,28 +440,28 @@ public partial class ProjectLayoutViewModel(
                 // Skip empty paths - they cause issues
                 if (string.IsNullOrEmpty(path))
                 {
-                    Debug.WriteLine("[ProjectLayoutViewModel] Skipping empty path");
+                    this.LogSkippingEmptyPath();
                     continue;
                 }
 
-                var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, path);
+                var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, path).ConfigureAwait(true);
                 if (folderAdapter != null)
                 {
-                    Debug.WriteLine($"[ProjectLayoutViewModel] Setting IsSelected=true for path: {path}");
+                    this.LogSettingIsSelected(path);
                     folderAdapter.IsSelected = true;
                 }
                 else
                 {
-                    Debug.WriteLine($"[ProjectLayoutViewModel] Could not find folder adapter for path: {path}");
+                    this.LogFolderAdapterNotFound(path);
                 }
             }
 
-            Debug.WriteLine("[ProjectLayoutViewModel] Completed tree selection update from ContentBrowserState");
+            this.LogUpdateTreeSelectionCompleted();
         }
         finally
         {
             this.isUpdatingFromState = false;
-            Debug.WriteLine("[ProjectLayoutViewModel] Set isUpdatingFromState = false");
+            this.LogSetIsUpdatingFromState(value: false);
         }
     }
 
@@ -450,32 +475,6 @@ public partial class ProjectLayoutViewModel(
             return;
         }
 
-        await this.SetTreeItemSelectionRecursively(this.projectRoot, false);
+        await SetTreeItemSelectionRecursively(this.projectRoot, isSelected: false).ConfigureAwait(true);
     }
-
-    /// <summary>
-    ///     Recursively sets the IsSelected property on tree items.
-    /// </summary>
-    private async Task SetTreeItemSelectionRecursively(FolderTreeItemAdapter adapter, bool isSelected)
-    {
-        adapter.IsSelected = isSelected;
-
-        var children = await adapter.Children;
-        foreach (var child in children.OfType<FolderTreeItemAdapter>())
-        {
-            await this.SetTreeItemSelectionRecursively(child, isSelected);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "The project manager service does not have a currently loaded project.")]
-    private partial void LogNoCurrentProject();
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to preload project folders during ViewModel activation.")]
-    private partial void LogPreloadingProjectFoldersError(Exception ex);
 }

@@ -75,7 +75,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     /// </summary>
     public void Dispose()
     {
-        this.Dispose(true);
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
@@ -100,15 +100,18 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
         await foreach (var child in this.Folder.GetFoldersAsync().ConfigureAwait(true).ConfigureAwait(false)
                            .ConfigureAwait(false))
         {
+            FolderTreeItemAdapter? item = null;
             try
             {
-                this.AddChildInternal(
-                    new FolderTreeItemAdapter(this.logger, child, child.Name)
-                    {
-                        // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
-                        // To mark selected items specified in the ActiveRoute query params
-                        IsExpanded = true,
-                    });
+                // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
+                // To mark selected items specified in the ActiveRoute query params
+                item = new FolderTreeItemAdapter(this.logger, child, child.Name)
+                {
+                    IsExpanded = true,
+                };
+
+                this.AddChildInternal(item);
+                item = null;
             }
 #pragma warning disable CA1031 // exceptions will not stop the loading of the rest of the folders
             catch (Exception ex)
@@ -117,6 +120,10 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
                 this.CouldNotLoadProjectFolders(this.Folder.Location, ex.Message);
             }
 #pragma warning restore CA1031
+            finally
+            {
+                item?.Dispose();
+            }
         }
     }
 

@@ -5,21 +5,13 @@
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
-/// Provides data for the <see cref="AssetsLayoutViewModel.ItemInvoked"/> event.
+///     Provides data for the <see cref="AssetsLayoutViewModel.ItemInvoked"/> event.
 /// </summary>
-public class AssetsViewItemInvokedEventArgs : EventArgs
+/// <param name="invokedItem">The item that was invoked.</param>
+public class AssetsViewItemInvokedEventArgs(GameAsset invokedItem) : EventArgs
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="AssetsViewItemInvokedEventArgs"/> class.
+    ///     Gets the item that was invoked.
     /// </summary>
-    /// <param name="invokedItem">The item that was invoked.</param>
-    public AssetsViewItemInvokedEventArgs(GameAsset invokedItem)
-    {
-        this.InvokedItem = invokedItem;
-    }
-
-    /// <summary>
-    /// Gets the item that was invoked.
-    /// </summary>
-    public GameAsset InvokedItem { get; }
+    public GameAsset InvokedItem { get; } = invokedItem;
 }

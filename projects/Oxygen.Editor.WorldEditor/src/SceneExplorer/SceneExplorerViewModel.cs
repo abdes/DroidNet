@@ -39,10 +39,6 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
     private readonly IProjectManagerService projectManager;
     private IDisposable? activationStartedSubscription;
 
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
-    private bool hasUnlockedSelectedItems;
-
     private bool isDisposed;
 
     /// <summary>
@@ -88,6 +84,13 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
     }
 
     /// <summary>
+    ///     Gets or sets a value indicating whether there are unlocked items in the current selection.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
+    public partial bool HasUnlockedSelectedItems { get; set; }
+
+    /// <summary>
     ///     Gets the current scene adapter.
     /// </summary>
     public SceneAdapter? Scene { get; private set; }
@@ -117,9 +120,6 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
 
         this.isDisposed = true;
     }
-
-    private void OnActivationStarted(ActivationStarted e)
-        => _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync);
 
     /// <inheritdoc />
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
@@ -162,6 +162,9 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         await base.RemoveSelectedItems().ConfigureAwait(false);
         UndoRedo.Default[this].EndChangeSet();
     }
+
+    private void OnActivationStarted(ActivationStarted e)
+        => _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync);
 
     [RelayCommand]
     private void Undo() => UndoRedo.Default[this].Undo();
@@ -281,8 +284,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
 
     private void OnSingleSelectionChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.SelectedIndex),
-                StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<>.SelectedIndex), StringComparison.Ordinal))
         {
             return;
         }

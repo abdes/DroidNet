@@ -7,6 +7,9 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+///     Provides dependency properties and property change logic for the PropertiesExpander control.
+/// </summary>
 public partial class PropertiesExpander
 {
     /// <summary>
@@ -72,8 +75,14 @@ public partial class PropertiesExpander
         typeof(PropertiesExpander),
         new PropertyMetadata(defaultValue: null));
 
-    public static readonly DependencyProperty ItemsProperty =
-        DependencyProperty.Register(nameof(Items), typeof(IList<object>), typeof(PropertiesExpander), new PropertyMetadata(null));
+    /// <summary>
+    /// The backing <see cref="DependencyProperty"/> for the <see cref="Items"/> property.
+    /// </summary>
+    public static readonly DependencyProperty ItemsProperty = DependencyProperty.Register(
+        nameof(Items),
+        typeof(IList<object>),
+        typeof(PropertiesExpander),
+        new PropertyMetadata(defaultValue: null));
 
     ///// <summary>
     ///// The backing <see cref="DependencyProperty"/> for the <see cref="ActionIcon"/> property.
@@ -114,6 +123,9 @@ public partial class PropertiesExpander
     /// <summary>
     /// Gets or sets the Header.
     /// </summary>
+    /// <summary>
+    /// Gets or sets the header content for the expander.
+    /// </summary>
     public object Header
     {
         get => this.GetValue(HeaderProperty);
@@ -122,6 +134,9 @@ public partial class PropertiesExpander
 
     /// <summary>
     /// Gets or sets the Content.
+    /// </summary>
+    /// <summary>
+    /// Gets or sets the main content displayed within the expander.
     /// </summary>
     public object Content
     {
@@ -132,6 +147,9 @@ public partial class PropertiesExpander
     /// <summary>
     /// Gets or sets the ItemsFooter.
     /// </summary>
+    /// <summary>
+    /// Gets or sets the UI element displayed as the header for the items section.
+    /// </summary>
     public UIElement ItemsHeader
     {
         get => (UIElement)this.GetValue(ItemsHeaderProperty);
@@ -141,12 +159,18 @@ public partial class PropertiesExpander
     /// <summary>
     /// Gets or sets the ItemsFooter.
     /// </summary>
+    /// <summary>
+    /// Gets or sets the UI element displayed as the footer for the items section.
+    /// </summary>
     public UIElement ItemsFooter
     {
         get => (UIElement)this.GetValue(ItemsFooterProperty);
         set => this.SetValue(ItemsFooterProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the collection of items displayed in the expander.
+    /// </summary>
     public IList<object> Items
     {
         get => (IList<object>)this.GetValue(ItemsProperty);
@@ -155,6 +179,9 @@ public partial class PropertiesExpander
 
     /// <summary>
     /// Gets or sets the Description.
+    /// </summary>
+    /// <summary>
+    /// Gets or sets the description content for the expander, typically shown below the header.
     /// </summary>
     public object Description
     {
@@ -165,6 +192,9 @@ public partial class PropertiesExpander
     /// <summary>
     /// Gets or sets the HeaderIcon.
     /// </summary>
+    /// <summary>
+    /// Gets or sets the icon displayed alongside the header.
+    /// </summary>
     public IconElement? HeaderIcon
     {
         get => (IconElement)this.GetValue(HeaderIconProperty);
@@ -173,6 +203,9 @@ public partial class PropertiesExpander
 
     /// <summary>
     /// Gets or sets a value indicating whether gets or sets the IsExpanded state.
+    /// </summary>
+    /// <summary>
+    /// Gets or sets a value indicating whether the expander is currently expanded.
     /// </summary>
     public bool IsExpanded
     {
@@ -215,6 +248,12 @@ public partial class PropertiesExpander
     //    get => (bool)this.GetValue(IsClickEnabledProperty);
     //    set => this.SetValue(IsClickEnabledProperty, value);
     // }
+
+    /// <summary>
+    /// Called when the <see cref="IsExpanded"/> property changes. Raises <see cref="Expanded"/> or <see cref="Collapsed"/> events.
+    /// </summary>
+    /// <param name="oldValue">The previous value of <see cref="IsExpanded"/>.</param>
+    /// <param name="newValue">The new value of <see cref="IsExpanded"/>.</param>
     protected virtual void OnIsExpandedPropertyChanged(bool oldValue, bool newValue)
     {
         if (newValue)
@@ -228,10 +267,26 @@ public partial class PropertiesExpander
     }
 
     // protected virtual void OnIsClickEnabledPropertyChanged(bool oldValue, bool newValue) => this.OnIsClickEnabledChanged();
+
+    /// <summary>
+    /// Called when the <see cref="HeaderIcon"/> property changes.
+    /// </summary>
+    /// <param name="oldValue">The previous icon value.</param>
+    /// <param name="newValue">The new icon value.</param>
     protected virtual void OnHeaderIconPropertyChanged(IconElement oldValue, IconElement newValue) => this.OnHeaderIconChanged();
 
+    /// <summary>
+    /// Called when the <see cref="Header"/> property changes.
+    /// </summary>
+    /// <param name="oldValue">The previous header value.</param>
+    /// <param name="newValue">The new header value.</param>
     protected virtual void OnHeaderPropertyChanged(object oldValue, object newValue) => this.OnHeaderChanged();
 
+    /// <summary>
+    /// Called when the <see cref="Description"/> property changes.
+    /// </summary>
+    /// <param name="oldValue">The previous description value.</param>
+    /// <param name="newValue">The new description value.</param>
     protected virtual void OnDescriptionPropertyChanged(object oldValue, object newValue) => this.OnDescriptionChanged();
 
     // protected virtual void OnIsActionIconVisiblePropertyChanged(bool oldValue, bool newValue) => this.OnActionIconChanged();

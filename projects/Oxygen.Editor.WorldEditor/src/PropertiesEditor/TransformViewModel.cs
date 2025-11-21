@@ -9,6 +9,13 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
+/// <summary>
+/// ViewModel for editing the transform properties (position, rotation, scale) of selected SceneNode instances.
+/// </summary>
+/// <param name="loggerFactory">
+///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+///     process. If <see langword="null" />, logging is disabled.
+/// </param>
 public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : ComponentPropertyEditor
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
@@ -93,10 +100,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
     public override string Description =>
         "Defines the position, rotation and scale of a Game Object along the X, Y and Z axis.";
 
+    /// <summary>
+    ///     Gets the property descriptor for the Position property.
+    /// </summary>
     public PropertyDescriptor PositionProperty { get; } = new() { Name = "Position" };
 
+    /// <summary>
+    ///     Gets the property descriptor for the Rotation property.
+    /// </summary>
     public PropertyDescriptor RotationProperty { get; } = new() { Name = "Rotation" };
 
+    /// <summary>
+    ///     Gets the property descriptor for the Scale property.
+    /// </summary>
     public PropertyDescriptor ScaleProperty { get; } = new() { Name = "Scale" };
 
     /// <inheritdoc />

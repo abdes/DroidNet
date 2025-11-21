@@ -28,7 +28,7 @@ public sealed partial class ContentBrowserView : UserControl
         var index = items?.IndexOf(args.Item) ?? -1;
         if (index >= 0 && this.ViewModel is ContentBrowserViewModel vm)
         {
-            await vm.NavigateToBreadcrumbAsync(index);
+            await vm.NavigateToBreadcrumbAsync(index).ConfigureAwait(false);
         }
     }
 }
