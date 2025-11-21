@@ -40,6 +40,12 @@ public interface IDragPayload : IEquatable<IDragPayload>
     public string Title { get; }
 
     /// <summary>
+    ///     Gets a value indicating whether the item can be closed.
+    ///     Non-closable items cannot be torn out into new windows.
+    /// </summary>
+    public bool IsClosable { get; }
+
+    /// <summary>
     ///     Produces a shallow clone with a distinct object identity while preserving the underlying
     ///     content references and <see cref="ContentId"/>. The clone enables safe tear-out and
     ///     re-insertion without creating ambiguous object identity.

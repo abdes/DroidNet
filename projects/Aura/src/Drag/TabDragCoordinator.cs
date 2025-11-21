@@ -643,6 +643,12 @@ public partial class TabDragCoordinator : ITabDragCoordinator
             return Task.CompletedTask;
         }
 
+        // Prevent tear-out for non-closable tabs
+        if (!this.dragContext.DraggedItemData.IsClosable)
+        {
+            return Task.CompletedTask;
+        }
+
         if (this.dragContext.TabStrip is not { } activeStrip)
         {
             this.SwitchToTearOutMode(cursor);
