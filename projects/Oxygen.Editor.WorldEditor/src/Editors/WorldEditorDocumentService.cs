@@ -45,7 +45,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <inheritdoc/>
-    public Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public async Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         this.LogOpenDocumentCalled(windowId.Value, metadata.DocumentId);
 
@@ -55,10 +55,36 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
             this.windowDocs[windowId] = docs;
         }
 
+        // Ensure only one Scene document is open per window. If the incoming metadata
+        // is a SceneDocumentMetadata, attempt to close any existing scene document
+        // in this window before opening the new one. If the close is vetoed, abort.
+        if (metadata is SceneDocumentMetadata)
+        {
+            Guid? existingSceneId = null;
+            foreach (var kv in docs)
+            {
+                if (kv.Value is SceneDocumentMetadata)
+                {
+                    existingSceneId = kv.Key;
+                    break;
+                }
+            }
+
+            if (existingSceneId.HasValue)
+            {
+                var closed = await this.CloseDocumentAsync(windowId, existingSceneId.Value, false).ConfigureAwait(false);
+                if (!closed)
+                {
+                    this.LogDocumentOpenAborted(windowId.Value, metadata.DocumentId);
+                    return Guid.Empty;
+                }
+            }
+        }
+
         var assigned = metadata.DocumentId == Guid.Empty ? Guid.NewGuid() : metadata.DocumentId;
         docs[assigned] = metadata;
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
-        return Task.FromResult(assigned);
+        return assigned;
     }
 
     /// <inheritdoc/>
@@ -106,7 +132,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
     }
 
     /// <inheritdoc/>
-    public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public async Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
@@ -116,10 +142,34 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
             this.windowDocs[targetWindowId] = docs;
         }
 
+        // If attaching a Scene document, replace any existing Scene document in the target window.
+        if (metadata is SceneDocumentMetadata)
+        {
+            Guid? existingSceneId = null;
+            foreach (var kv in docs)
+            {
+                if (kv.Value is SceneDocumentMetadata)
+                {
+                    existingSceneId = kv.Key;
+                    break;
+                }
+            }
+
+            if (existingSceneId.HasValue)
+            {
+                var closed = await this.CloseDocumentAsync(targetWindowId, existingSceneId.Value, false).ConfigureAwait(false);
+                if (!closed)
+                {
+                    this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
+                    return false;
+                }
+            }
+        }
+
         docs[metadata.DocumentId] = metadata;
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         this.LogAttached(targetWindowId.Value, metadata.DocumentId);
-        return Task.FromResult(true);
+        return true;
     }
 
     /// <inheritdoc/>

@@ -232,8 +232,18 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
 
     partial void OnActiveEditorChanged(object? value)
     {
-        this.ActiveEditorView = value is null
-            ? null
-            : this.viewLocator.ResolveView(value);
+        if (value is null)
+        {
+            this.ActiveEditorView = null;
+            return;
+        }
+
+        var view = this.viewLocator.ResolveView(value);
+        if (view is DroidNet.Mvvm.IViewFor nonGeneric)
+        {
+            nonGeneric.ViewModel = value;
+        }
+
+        this.ActiveEditorView = view;
     }
 }
