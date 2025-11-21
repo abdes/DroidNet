@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -14,6 +15,7 @@ using DroidNet.Controls;
 using DroidNet.Controls.Selection;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
+using DroidNet.Routing.Events;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
@@ -27,13 +29,15 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 /// <summary>
 ///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.
 /// </summary>
-public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRoutingAware, IDisposable
+public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 {
     private readonly IProject currentProject;
     private readonly DispatcherQueue dispatcher;
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly IMessenger messenger;
+    private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
+    private IDisposable? activationStartedSubscription;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
@@ -46,18 +50,25 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
     /// </summary>
     /// <param name="hostingContext">The hosting context for the application.</param>
     /// <param name="projectManager">The project manager service.</param>
+    /// <param name="messenger">The messenger service used for cross-component communication.</param>
+    /// <param name="router">The router service used for navigation events.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
     /// </param>
-    public SceneExplorerViewModel(HostingContext hostingContext, IProjectManagerService projectManager,
-        IMessenger messenger, ILoggerFactory? loggerFactory = null)
+    public SceneExplorerViewModel(
+        HostingContext hostingContext,
+        IProjectManagerService projectManager,
+        IMessenger messenger,
+        IRouter router,
+        ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.dispatcher = hostingContext.Dispatcher;
         this.projectManager = projectManager;
         this.messenger = messenger;
+        this.router = router;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -73,6 +84,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.ItemAdded += this.OnItemAdded;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
+        this.activationStartedSubscription = this.router.Events.OfType<ActivationStarted>().Subscribe(this.OnActivationStarted);
     }
 
     /// <summary>
@@ -101,13 +113,13 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         this.currentProject.PropertyChanged -= this.OnCurrentProjectPropertyChanged;
 
         this.messenger.UnregisterAll(this);
+        this.activationStartedSubscription?.Dispose();
 
         this.isDisposed = true;
     }
 
-    /// <inheritdoc />
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
-        => await this.LoadActiveSceneAsync().ConfigureAwait(false);
+    private void OnActivationStarted(ActivationStarted e)
+        => _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync);
 
     /// <inheritdoc />
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
@@ -214,6 +226,9 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IRout
         {
             return;
         }
+
+        // Request the document host to open the scene editor
+        _ = this.messenger.Send(new OpenSceneRequestMessage(scene));
 
         this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
         await this.InitializeRootAsync(this.Scene, false).ConfigureAwait(true);

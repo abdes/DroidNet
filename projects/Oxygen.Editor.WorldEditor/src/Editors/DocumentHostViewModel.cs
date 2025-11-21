@@ -2,193 +2,238 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Aura.Documents;
+using DroidNet.Mvvm;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI;
+using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
 
 /// <summary>
-/// The ViewModel for the <see cref="Oxygen.Editor.WorldEditor.Views.TabbedDocumentView"/> view.
-/// Implements a simple document host with windowing support.
+/// The ViewModel for the <see cref="Oxygen.Editor.WorldEditor.Editors.DocumentHostView"/> view.
+/// Orchestrates the interaction between the <see cref="IDocumentService"/> and the editor content.
 /// </summary>
-public partial class DocumentHostViewModel : ObservableObject
+public partial class DocumentHostViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger logger;
 
-    private int newDocumentCounter = 1;
+    private readonly WindowId windowId;
+    private readonly IMessenger messenger;
+    private readonly IViewLocator viewLocator;
+    private readonly Dictionary<Guid, object> activeEditors = [];
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentHostViewModel" /> class.
     /// </summary>
+    /// <param name="documentService">The document service used to manage documents.</param>
+    /// <param name="windowId">The ID of the window that hosts this document host.</param>
+    /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
+    /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="loggerFactory">
-    ///     Optional factory for creating loggers. If provided, enables detailed logging of the
-    ///     recognition process. If <see langword="null" />, logging is disabled.
+    ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
+    ///     process. If <see langword="null" />, logging is disabled.
     /// </param>
-    public DocumentHostViewModel(ILoggerFactory? loggerFactory = null)
+    public DocumentHostViewModel(
+        IDocumentService documentService,
+        WindowId windowId,
+        IViewLocator viewLocator,
+        IMessenger messenger,
+        ILoggerFactory? loggerFactory = null)
     {
+        this.DocumentService = documentService;
+        this.windowId = windowId;
+        this.viewLocator = viewLocator;
+        this.messenger = messenger;
         this.logger = loggerFactory?.CreateLogger<DocumentHostViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DocumentHostViewModel>();
 
-        this.LogConstructed();
+        this.DocumentService.DocumentOpened += this.OnDocumentOpened;
+        this.DocumentService.DocumentClosed += this.OnDocumentClosed;
+        this.DocumentService.DocumentActivated += this.OnDocumentActivated;
 
-        // Commands are generated via CommunityToolkit.Mvvm [RelayCommand] applied to methods.
-        // The generated command properties are exposed under the existing public names
-        // via the wrapper properties below.
+        this.messenger.Register<OpenSceneRequestMessage>(this, this.OnOpenSceneRequested);
 
-        // Example: add an initial document which cannot be closed
-        var initial = new TabbedDocumentItem("Welcome", () => new TextBlock { Text = "Welcome to the editor" }) { IsClosable = false };
-        this.TabbedDocuments.Add(initial);
-        this.SelectedDocumentIndex = 0;
+        this.LogInitialized();
+    }
+
+    [ObservableProperty]
+    public partial object? ActiveEditor { get; set; }
+
+    /// <summary>
+    /// Gets the document service used to manage documents.
+    /// </summary>
+    public IDocumentService DocumentService { get; }
+
+    [ObservableProperty]
+    public partial object? ActiveEditorView { get; private set; }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     /// <summary>
-    /// Raised when the VM has detached a document and the view should open it in a new window.
-    /// The VM is responsible for updating its collection; the view is responsible for creating UI (a window).
+    /// Releases unmanaged and - optionally - managed resources.
     /// </summary>
-    public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached;
-
-    public ObservableCollection<TabbedDocumentItem> TabbedDocuments { get; } = [];
-
-    public TabbedDocumentItem? SelectedDocument
-        => this.SelectedDocumentIndex >= 0 && this.SelectedDocumentIndex < this.TabbedDocuments.Count
-            ? this.TabbedDocuments[this.SelectedDocumentIndex]
-            : null;
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CloseSelectedDocumentCommand))]
-    [NotifyPropertyChangedFor(nameof(SelectedDocument))]
-    public partial int SelectedDocumentIndex { get; set; }
-
-    private static bool CanDetach(TabbedDocumentItem? doc) => doc is { IsClosable: true, IsPinned: false };
-
-    private static bool CanClose(TabbedDocumentItem? doc) => doc is { IsClosable: true };
+    /// <param name="disposing"><see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.LogDisposing();
+            this.messenger.UnregisterAll(this);
+            this.DocumentService.DocumentOpened -= this.OnDocumentOpened;
+            this.DocumentService.DocumentClosed -= this.OnDocumentClosed;
+            this.DocumentService.DocumentActivated -= this.OnDocumentActivated;
+        }
+    }
 
     [RelayCommand]
-    private void AddNewDocument()
+    private async Task AddNewDocumentAsync()
     {
-        var title = $"Document {this.newDocumentCounter++}";
-        var doc = new TabbedDocumentItem(title, () => new TextBlock { Text = title });
-        this.TabbedDocuments.Add(doc);
-        this.LogDocumentAdded(doc);
-        this.SelectedDocumentIndex = this.TabbedDocuments.Count - 1;
-    }
+        this.LogAddNewDocumentAsyncCalled();
 
-    [RelayCommand(CanExecute = nameof(CanClose))]
-    private void CloseDocument(TabbedDocumentItem doc)
-    {
-        ArgumentNullException.ThrowIfNull(doc);
-
-        if (!CanClose(doc))
+        if (this.windowId.Value == 0)
         {
-            this.LogCannotClose(doc);
+            this.LogCannotAddNewDocumentWindowIdInvalid();
             return;
         }
 
-        var index = this.TabbedDocuments.IndexOf(doc);
-        if (index < 0)
+        // Create a new scene document
+        // TODO: In a real scenario, we might prompt for a name or template
+        var metadata = new SceneDocumentMetadata
         {
+            DocumentId = Guid.NewGuid(),
+            Title = "New Scene",
+            IsClosable = true,
+        };
+
+        _ = await this.DocumentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true);
+    }
+
+    private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
+    {
+        this.LogOnOpenSceneRequested(message.Scene.Name, message.Scene.Id);
+
+        if (this.windowId.Value == 0)
+        {
+            this.LogCannotOpenSceneWindowIdInvalid();
+            message.Reply(response: false);
             return;
         }
 
-        if (ReferenceEquals(this.SelectedDocument, doc))
+        // Check if the document is already open
+        var existingDoc = this.activeEditors.Values
+            .OfType<SceneEditorViewModel>()
+            .FirstOrDefault(vm => vm.Metadata.DocumentId == message.Scene.Id);
+
+        if (existingDoc != null)
         {
-            this.SelectPreviousDocumentItem(index);
-        }
+            this.LogReactivatingExistingScene(message.Scene.Name, message.Scene.Id);
 
-        this.TabbedDocuments.RemoveAt(index);
-        this.LogTabbedDocumentClosed(doc);
-    }
+            // Re-create metadata to pass to OpenDocumentAsync, the service should handle re-activation if it tracks by ID.
+            var metadata = new SceneDocumentMetadata
+            {
+                DocumentId = message.Scene.Id,
+                Title = message.Scene.Name,
+                IsClosable = false,
+            };
 
-    [RelayCommand(CanExecute = nameof(CanCloseSelectedDocument))]
-    private void CloseSelectedDocument()
-    {
-        if (this.SelectedDocument is not null)
-        {
-            this.CloseDocument(this.SelectedDocument);
-        }
-    }
-
-    private bool CanCloseSelectedDocument() => CanClose(this.SelectedDocument);
-
-    [RelayCommand(CanExecute = nameof(CanDetach))]
-    private void DetachDocument(TabbedDocumentItem doc)
-    {
-        ArgumentNullException.ThrowIfNull(doc);
-
-        if (!CanClose(doc))
-        {
-            this.LogCannotDetach(doc);
+            _ = await this.DocumentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true);
+            this.LogReactivatedExistingScene(message.Scene.Name, message.Scene.Id);
+            message.Reply(response: true);
             return;
         }
 
-        var index = this.TabbedDocuments.IndexOf(doc);
-        if (index < 0)
+        // Create metadata for the new scene document
+        var metadataNew = new SceneDocumentMetadata
         {
-            return;
-        }
+            DocumentId = message.Scene.Id,
+            Title = message.Scene.Name,
+            IsClosable = false,
+        };
 
-        if (ReferenceEquals(this.SelectedDocument, doc))
-        {
-            this.SelectPreviousDocumentItem(this.TabbedDocuments.IndexOf(doc));
-        }
+        _ = await this.DocumentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
 
-        this.TabbedDocuments.RemoveAt(index);
-        this.LogTabbedDocumentDetached(doc);
+        this.LogOpenedNewScene(message.Scene.Name, message.Scene.Id);
 
-        // notify listeners (view) that a document was detached and UI should create a window for it
-        this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs { Document = doc });
+        message.Reply(response: true);
     }
 
-    [RelayCommand(CanExecute = nameof(CanDetachSelectedDocument))]
-    private void DetachSelectedDocument()
+    private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
-        if (this.SelectedDocument is not null)
+        this.LogOnDocumentOpened(e.Metadata.DocumentId, e.Metadata.GetType().Name);
+
+        // Create the editor ViewModel based on metadata type
+        object? editor = null;
+        if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
-            this.DetachDocument(this.SelectedDocument);
+            editor = new SceneEditorViewModel(sceneMeta);
+        }
+        else
+        {
+            this.LogUnknownMetadataType(e.Metadata.GetType().Name);
+        }
+
+        if (editor != null)
+        {
+            this.activeEditors[e.Metadata.DocumentId] = editor;
+            if (e.ShouldSelect)
+            {
+                this.LogSelectingEditor(e.Metadata.DocumentId);
+                this.ActiveEditor = editor;
+            }
+        }
+        else
+        {
+            this.LogFailedToCreateEditor(e.Metadata.DocumentId);
         }
     }
 
-    private bool CanDetachSelectedDocument() => CanDetach(this.SelectedDocument);
-
-    [RelayCommand]
-    private void AttachDocument(TabbedDocumentItem doc)
+    private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e)
     {
-        ArgumentNullException.ThrowIfNull(doc);
-
-        // Avoid duplicates if the document is already tracked
-        if (this.TabbedDocuments.Contains(doc))
+        this.LogOnDocumentClosed(e.Metadata.DocumentId);
+        if (this.activeEditors.TryGetValue(e.Metadata.DocumentId, out var editor))
         {
-            this.LogDocumentAlreadyAttached(doc);
-            return;
-        }
+            _ = this.activeEditors.Remove(e.Metadata.DocumentId);
+            if (ReferenceEquals(this.ActiveEditor, editor))
+            {
+                this.ActiveEditor = null;
+            }
 
-        this.TabbedDocuments.Add(doc);
-        this.LogDocumentAttached(doc);
-        this.SelectedDocumentIndex = this.TabbedDocuments.Count - 1;
+            if (editor is IDisposable disposable)
+            {
+                disposable.Dispose();
+                this.LogEditorDisposed(e.Metadata.DocumentId);
+            }
+        }
     }
 
-    private void SelectPreviousDocumentItem(int index)
+    private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
-        Debug.Assert(index >= 0, "Index must be non-negative.");
-        Debug.Assert(this.SelectedDocument is not null, "SelectedDocument must not be null when selecting previous document.");
-        Debug.Assert(this.TabbedDocuments.IndexOf(this.SelectedDocument) == index, "given index must correspond to the selected item index.");
+        this.LogOnDocumentActivated(e.DocumentId);
 
-        if (this.TabbedDocuments.Count == 0)
+        if (this.activeEditors.TryGetValue(e.DocumentId, out var editor))
         {
-            this.SelectedDocumentIndex = -1;
-            return;
+            this.ActiveEditor = editor;
         }
-
-        this.SelectedDocumentIndex = index > 0 ? index - 1 : 0;
+        else
+        {
+            this.LogOnDocumentActivatedEditorNotFound(e.DocumentId);
+        }
     }
 
-    // This partial method is automatically called whenever SelectedDocument changes
-    partial void OnSelectedDocumentIndexChanged(int oldValue, int newValue)
+    partial void OnActiveEditorChanged(object? value)
     {
-        this.LogSelectionChanged(oldValue, newValue);
+        this.ActiveEditorView = value is null
+            ? null
+            : this.viewLocator.ResolveView(value);
     }
 }

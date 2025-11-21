@@ -13,28 +13,31 @@ using DroidNet.Routing.WinUI;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Xaml;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.Routing;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
 /// <summary>
-/// Base ViewModel for managing the docking workspace.
+///     Base ViewModel for managing the docking workspace.
 /// </summary>
 /// <param name="container">The parent IoC container to be used to create a child container for this workspace.</param>
-/// <param name="router">The parent router, will only be used for navigation out of the workspace. A local router will be created and used for local navigation inside the workspace.</param>
-/// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled. </param>
+/// <param name="router">
+///     The parent router, will only be used for navigation out of the workspace. A local router will be created and used for local navigation inside the workspace.
+/// </param>
+/// <param name="loggerFactory">
+///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled.
+/// </param>
 public abstract partial class DockingWorkspaceViewModel(
     IContainer container,
     IRouter router,
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware, IOutletContainer, IDisposable
 {
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1823:Avoid unused private fields", Justification = "logging code is source generated")]
     private readonly ILogger logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
 
     private readonly IContainer childContainer = container.CreateChild();
-
     private readonly List<RoutedDockable> deferredDockables = [];
 
     private CompositeDisposable? localRouterEventsSub;
@@ -69,8 +72,15 @@ public abstract partial class DockingWorkspaceViewModel(
     protected abstract IRoutes RoutesConfig { get; }
 
     /// <inheritdoc/>
-    public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
+    public virtual async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
+        if (navigationContext.NavigationTarget is Window window)
+        {
+            // Register the world editor's window id in the local container so
+            // that other components can easily find it.
+            this.childContainer.RegisterInstance(window.AppWindow.Id);
+        }
+
         _ = this.childContainer
             .WithMvvm()
             .WithLocalRouting(
@@ -365,28 +375,4 @@ public abstract partial class DockingWorkspaceViewModel(
             }
         }
     }
-
-    [LoggerMessage(
-    SkipEnabledCheck = true,
-    Level = LogLevel.Information,
-    Message = "Renderer outlet populated with ViewModel: {ViewModel}")]
-    private partial void LogRendererLoaded(object viewModel);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Dockable outlet `{Outlet}` populated with ViewModel: {ViewModel}")]
-    private partial void LogDockableLoaded(OutletName outlet, object viewModel);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Dockable with ID `{DockableId}` trying to dock relative to unknown ID `{RelativeToId}`")]
-    private partial void LogInvalidRelativeDocking(string dockableId, string relativeToId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "An error occurred while loading content for route `{Path}`: {ErrorMessage}")]
-    private partial void LogDockablePlacementError(string? path, string errorMessage);
 }

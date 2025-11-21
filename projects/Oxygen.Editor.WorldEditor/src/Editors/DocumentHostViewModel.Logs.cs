@@ -2,107 +2,124 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
+using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
 
 /// <summary>
-/// The ViewModel for the <see cref="Oxygen.Editor.WorldEditor.Views.TabbedDocumentView"/> view.
-/// Implements a simple document host with windowing support.
+///     Logging methods for <see cref="DocumentHostViewModel" />.
 /// </summary>
-public partial class DocumentHostViewModel : INotifyPropertyChanged
+public partial class DocumentHostViewModel
 {
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "{ClassName} constructed")]
-    private static partial void LogConstructed(ILogger logger, string className);
+    [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "AddNewDocumentAsync called. WindowId: {WindowId}")]
+    private static partial void LogAddNewDocumentAsyncCalled(ILogger logger, object windowId);
 
     [Conditional("DEBUG")]
-    private void LogConstructed()
-        => LogConstructed(this.logger, nameof(DocumentHostViewModel));
+    private void LogAddNewDocumentAsyncCalled()
+        => LogAddNewDocumentAsyncCalled(this.logger, this.windowId.Value);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Document '{Title}' added at position {Index}")]
-    private static partial void LogDocumentAdded(ILogger logger, string title, int index);
+    [LoggerMessage(EventId = 2, Level = LogLevel.Warning, Message = "Cannot add new document: WindowId is invalid.")]
+    private static partial void LogCannotAddNewDocumentWindowIdInvalid(ILogger logger);
 
-    [Conditional("DEBUG")]
-    private void LogDocumentAdded(TabbedDocumentItem doc)
-        => LogDocumentAdded(this.logger, doc.Title, this.GetTabbedDocumentIndex(doc));
+    private void LogCannotAddNewDocumentWindowIdInvalid()
+        => LogCannotAddNewDocumentWindowIdInvalid(this.logger);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Cannot close document '{Title}': IsClosable={IsClosable}")]
-    private static partial void LogCannotClose(ILogger logger, string title, bool isClosable);
+    [LoggerMessage(EventId = 3, Level = LogLevel.Debug, Message = "OnOpenSceneRequested called. Scene: {SceneName} ({SceneId}), WindowId: {WindowId}")]
+    private static partial void LogOnOpenSceneRequested(ILogger logger, string sceneName, Guid sceneId, object windowId);
 
     [Conditional("DEBUG")]
-    private void LogCannotClose(TabbedDocumentItem doc)
-        => LogCannotClose(this.logger, doc.Title, doc.IsClosable);
+    private void LogOnOpenSceneRequested(string sceneName, Guid sceneId)
+        => LogOnOpenSceneRequested(this.logger, sceneName, sceneId, this.windowId.Value);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Tabbed document closed: '{Title}'")]
-    private static partial void LogTabbedDocumentClosed(ILogger logger, string title);
+    [LoggerMessage(EventId = 4, Level = LogLevel.Warning, Message = "Cannot open scene: WindowId is invalid.")]
+    private static partial void LogCannotOpenSceneWindowIdInvalid(ILogger logger);
 
-    [Conditional("DEBUG")]
-    private void LogTabbedDocumentClosed(TabbedDocumentItem doc)
-        => LogTabbedDocumentClosed(this.logger, doc.Title);
+    private void LogCannotOpenSceneWindowIdInvalid()
+        => LogCannotOpenSceneWindowIdInvalid(this.logger);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Cannot detach document '{Title}': IsClosable={IsClosable}, IsPinned={IsPinned}")]
-    private static partial void LogCannotDetach(ILogger logger, string title, bool isClosable, bool isPinned);
+    [LoggerMessage(EventId = 5, Level = LogLevel.Debug, Message = "OnDocumentOpened called. DocumentId: {DocumentId}, Type: {MetadataType}, WindowId: {WindowId}")]
+    private static partial void LogOnDocumentOpened(ILogger logger, Guid documentId, string metadataType, object windowId);
 
     [Conditional("DEBUG")]
-    private void LogCannotDetach(TabbedDocumentItem doc)
-        => LogCannotDetach(this.logger, doc.Title, doc.IsClosable, doc.IsPinned);
+    private void LogOnDocumentOpened(Guid documentId, string metadataType)
+        => LogOnDocumentOpened(this.logger, documentId, metadataType, this.windowId.Value);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Tabbed document '{Title}' detached")]
-    private static partial void LogTabbedDocumentDetached(ILogger logger, string title);
+    [LoggerMessage(EventId = 6, Level = LogLevel.Warning, Message = "Unknown metadata type: {MetadataType}")]
+    private static partial void LogUnknownMetadataType(ILogger logger, string metadataType);
 
-    [Conditional("DEBUG")]
-    private void LogTabbedDocumentDetached(TabbedDocumentItem doc)
-        => LogTabbedDocumentDetached(this.logger, doc.Title);
+    private void LogUnknownMetadataType(string metadataType)
+        => LogUnknownMetadataType(this.logger, metadataType);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Tabbed document '{Title}' is already attached at position {Index}")]
-    private static partial void LogDocumentAlreadyAttached(ILogger logger, string title, int index);
+    [LoggerMessage(EventId = 7, Level = LogLevel.Debug, Message = "Selecting editor for DocumentId: {DocumentId}")]
+    private static partial void LogSelectingEditor(ILogger logger, Guid documentId);
 
     [Conditional("DEBUG")]
-    private void LogDocumentAlreadyAttached(TabbedDocumentItem doc)
-        => LogDocumentAlreadyAttached(this.logger, doc.Title, this.GetTabbedDocumentIndex(doc));
+    private void LogSelectingEditor(Guid documentId)
+        => LogSelectingEditor(this.logger, documentId);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Tabbed document '{Title}' attached at position {Index}")]
-    private static partial void LogDocumentAttached(ILogger logger, string title, int index);
+    [LoggerMessage(EventId = 8, Level = LogLevel.Error, Message = "Failed to create editor for DocumentId: {DocumentId}")]
+    private static partial void LogFailedToCreateEditor(ILogger logger, Guid documentId);
 
-    [Conditional("DEBUG")]
-    private void LogDocumentAttached(TabbedDocumentItem doc)
-        => LogDocumentAttached(this.logger, doc.Title, this.GetTabbedDocumentIndex(doc));
+    private void LogFailedToCreateEditor(Guid documentId)
+        => LogFailedToCreateEditor(this.logger, documentId);
 
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Selection changed from '{From}' at position {FromIndex}, to '{To}' at position {ToIndex}")]
-    private static partial void LogSelectionChanged(ILogger logger, string from, int fromIndex, string to, int toIndex);
+    [LoggerMessage(EventId = 9, Level = LogLevel.Debug, Message = "OnDocumentActivated called. DocumentId: {DocumentId}, WindowId: {WindowId}")]
+    private static partial void LogOnDocumentActivated(ILogger logger, Guid documentId, object windowId);
 
     [Conditional("DEBUG")]
-    private void LogSelectionChanged(int oldIndex, int newIndex)
-    {
-        var from = oldIndex >= 0 && oldIndex < this.TabbedDocuments.Count
-            ? this.TabbedDocuments[oldIndex]
-            : null;
-        var to = newIndex >= 0 && newIndex < this.TabbedDocuments.Count
-            ? this.TabbedDocuments[newIndex]
-            : null;
-        LogSelectionChanged(this.logger, from?.Title ?? "null", oldIndex, to?.Title ?? "null", newIndex);
-    }
+    private void LogOnDocumentActivated(Guid documentId)
+        => LogOnDocumentActivated(this.logger, documentId, this.windowId.Value);
 
-    private int GetTabbedDocumentIndex(TabbedDocumentItem? doc)
-        => doc is null ? -1 : this.TabbedDocuments.IndexOf(doc);
+    [LoggerMessage(EventId = 10, Level = LogLevel.Warning, Message = "OnDocumentActivated: Editor not found for DocumentId: {DocumentId}")]
+    private static partial void LogOnDocumentActivatedEditorNotFound(ILogger logger, Guid documentId);
+
+    private void LogOnDocumentActivatedEditorNotFound(Guid documentId)
+        => LogOnDocumentActivatedEditorNotFound(this.logger, documentId);
+
+    [LoggerMessage(EventId = 11, Level = LogLevel.Debug, Message = "DocumentHostViewModel initialized. WindowId: {WindowId}")]
+    private static partial void LogInitialized(ILogger logger, object windowId);
+
+    [Conditional("DEBUG")]
+    private void LogInitialized()
+        => LogInitialized(this.logger, this.windowId.Value);
+
+    [LoggerMessage(EventId = 12, Level = LogLevel.Debug, Message = "Disposing DocumentHostViewModel. WindowId: {WindowId}")]
+    private static partial void LogDisposing(ILogger logger, object windowId);
+
+    private void LogDisposing()
+        => LogDisposing(this.logger, this.windowId.Value);
+
+    [LoggerMessage(EventId = 13, Level = LogLevel.Debug, Message = "OnDocumentClosed called. DocumentId: {DocumentId}")]
+    private static partial void LogOnDocumentClosed(ILogger logger, Guid documentId);
+
+    private void LogOnDocumentClosed(Guid documentId)
+        => LogOnDocumentClosed(this.logger, documentId);
+
+    [LoggerMessage(EventId = 14, Level = LogLevel.Debug, Message = "Editor disposed for DocumentId: {DocumentId}")]
+    private static partial void LogEditorDisposed(ILogger logger, Guid documentId);
+
+    private void LogEditorDisposed(Guid documentId)
+        => LogEditorDisposed(this.logger, documentId);
+
+    [LoggerMessage(EventId = 15, Level = LogLevel.Debug, Message = "Reactivating existing scene document: {SceneName} ({SceneId})")]
+    private static partial void LogReactivatingExistingScene(ILogger logger, string sceneName, Guid sceneId);
+
+    [Conditional("DEBUG")]
+    private void LogReactivatingExistingScene(string sceneName, Guid sceneId)
+        => LogReactivatingExistingScene(this.logger, sceneName, sceneId);
+
+    [LoggerMessage(EventId = 16, Level = LogLevel.Debug, Message = "Reactivated existing scene document: {SceneName} ({SceneId})")]
+    private static partial void LogReactivatedExistingScene(ILogger logger, string sceneName, Guid sceneId);
+
+    private void LogReactivatedExistingScene(string sceneName, Guid sceneId)
+        => LogReactivatedExistingScene(this.logger, sceneName, sceneId);
+
+    [LoggerMessage(EventId = 17, Level = LogLevel.Debug, Message = "Opened new scene document: {SceneName} ({SceneId})")]
+    private static partial void LogOpenedNewScene(ILogger logger, string sceneName, Guid sceneId);
+
+    [Conditional("DEBUG")]
+    private void LogOpenedNewScene(string sceneName, Guid sceneId)
+        => LogOpenedNewScene(this.logger, sceneName, sceneId);
 }

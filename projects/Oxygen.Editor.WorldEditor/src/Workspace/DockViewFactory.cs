@@ -26,7 +26,7 @@ internal sealed class DockViewFactory(IResolver container) : IDockViewFactory
     /// <inheritdoc/>
     public UIElement CreateViewForDock(IDock dock)
         => dock is CenterDock
-            ? new TabbedDocumentView() { ViewModel = container.Resolve<DocumentHostViewModel>(), }
+            ? new DocumentHostView() { ViewModel = container.Resolve<DocumentHostViewModel>(), }
             : new Border()
             {
                 BorderThickness = new Thickness(0.5),
