@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
+using Microsoft.UI;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
@@ -43,20 +44,20 @@ internal sealed class DemoDocumentService : IDocumentService
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
     /// <inheritdoc/>
-    public Task<Guid> OpenDocumentAsync(IManagedWindow window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         var id = metadata?.DocumentId ?? Guid.NewGuid();
         var meta = metadata ?? new DemoDocumentMetadata { DocumentId = id, Title = "Untitled" };
         var assigned = meta.DocumentId == Guid.Empty ? id : meta.DocumentId;
         this.docs[assigned] = meta;
 
-        Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={(window is not null ? window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}, DocumentId={assigned}, Title='{meta.Title}', ShouldSelect={shouldSelect}");
-        this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(window!, meta, indexHint, shouldSelect));
+        Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={windowId.Value}, DocumentId={assigned}, Title='{meta.Title}', ShouldSelect={shouldSelect}");
+        this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, meta, indexHint, shouldSelect));
         return Task.FromResult(assigned);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> CloseDocumentAsync(IManagedWindow window, Guid documentId, bool force = false)
+    public async Task<bool> CloseDocumentAsync(WindowId windowId, Guid documentId, bool force = false)
     {
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
@@ -67,7 +68,7 @@ internal sealed class DemoDocumentService : IDocumentService
         }
 
         // Fire DocumentClosing and await veto if not forced
-        var closingArgs = new DocumentClosingEventArgs(window, metadata, force);
+        var closingArgs = new DocumentClosingEventArgs(windowId, metadata, force);
         this.DocumentClosing?.Invoke(this, closingArgs);
 
         if (!force)
@@ -83,16 +84,16 @@ internal sealed class DemoDocumentService : IDocumentService
         // Proceed with close
         _ = this.docs.TryRemove(documentId, out _);
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
-        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(window, metadata));
+        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         return true;
     }
 
     /// <inheritdoc/>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(IManagedWindow window, Guid documentId)
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
     {
         if (this.docs.TryRemove(documentId, out var metadata))
         {
-            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(window, metadata));
+            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
 
@@ -100,15 +101,15 @@ internal sealed class DemoDocumentService : IDocumentService
     }
 
     /// <inheritdoc/>
-    public Task<bool> AttachDocumentAsync(IManagedWindow targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
+    public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         this.docs[metadata.DocumentId] = metadata;
-        this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindow, metadata, indexHint));
+        this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public Task<bool> UpdateMetadataAsync(IManagedWindow window, Guid documentId, IDocumentMetadata metadata)
+    public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata)
     {
         if (!this.docs.ContainsKey(documentId))
         {
@@ -118,19 +119,19 @@ internal sealed class DemoDocumentService : IDocumentService
         this.docs[documentId] = metadata;
 
         // For sample, raise DocumentMetadataChanged with the provided window.
-        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(window, metadata));
+        this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(windowId, metadata));
         return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public Task<bool> SelectDocumentAsync(IManagedWindow window, Guid documentId)
+    public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
     {
         if (!this.docs.TryGetValue(documentId, out var metadata))
         {
             return Task.FromResult(false);
         }
 
-        this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(window, documentId));
+        this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
         return Task.FromResult(true);
     }
 
@@ -146,5 +147,7 @@ internal sealed class DemoDocumentService : IDocumentService
         public bool IsDirty { get; set; }
 
         public bool IsPinnedHint { get; set; }
+
+        public bool IsClosable { get; set; } = true;
     }
 }

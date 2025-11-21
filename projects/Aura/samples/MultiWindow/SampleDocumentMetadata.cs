@@ -35,4 +35,7 @@ internal sealed class SampleDocumentMetadata : IDocumentMetadata
     ///     Gets or sets a value indicating whether the document is pinned.
     /// </summary>
     public bool IsPinnedHint { get; set; }
+
+    /// <inheritdoc/>
+    public bool IsClosable { get; set; } = true;
 }

@@ -7,7 +7,6 @@ using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Hosting.WinUI;
-using DryIoc.ImTools;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -107,7 +106,7 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 throw new InvalidOperationException("A drag is already active in this process.");
             }
 
-            var mapper = this.CreateSpatialMapper(stripContainer);
+            var mapper = this.CreateSpatialMapper(source, stripContainer);
             this.dragContext = new DragContext(source, item, hotspotOffsets, stripContainer, draggedElement, mapper);
             var initialPhysicalPosition = mapper.ToPhysicalScreen(initialPosition);
             this.lastCursorPosition = initialPhysicalPosition;
@@ -268,24 +267,20 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
     }
 
-    private ISpatialMapper CreateSpatialMapper(FrameworkElement element)
+    private ISpatialMapper CreateSpatialMapper(ITabStrip strip, FrameworkElement element)
     {
-        Window? window = null;
+        Debug.Assert(strip.WindowId.Value != 0, "TabStrip must have a valid WindowId.");
 
-        if (element.XamlRoot is not null)
+        var window = this.windowManager.GetWindow(strip.WindowId)?.Window;
+
+        if (window is null)
         {
-            window = this.windowManager.OpenWindows.FindFirst(context => context.Window.Content?.XamlRoot == element.XamlRoot)?.Window;
-
-            if (window is null && element.XamlRoot.ContentIslandEnvironment is not null)
-            {
-                var windowIdFromIsland = element.XamlRoot.ContentIslandEnvironment.AppWindowId;
-                window = this.windowManager.OpenWindows.FindFirst(context => context.Id == windowIdFromIsland)?.Window;
-            }
+            Debug.Fail($"Window with Id {strip.WindowId.Value} not found for TabStrip.");
+            this.LogWindowNotFoundForStrip(strip, strip.WindowId.Value);
+            throw new InvalidOperationException($"Unable to locate the hosting window for the supplied TabStrip (WindowId={strip.WindowId.Value}).");
         }
 
-        return window is null
-            ? throw new InvalidOperationException("Unable to locate the hosting window for the supplied TabStrip element. Ensure the element is loaded and registered with the WindowManager before initiating a drag.")
-            : this.spatialMapperFactory(window, element);
+        return this.spatialMapperFactory(window, element);
     }
 
     private bool TryCreateMapperForStrip(ITabStrip strip, out ISpatialMapper mapper, out FrameworkElement container)
@@ -294,12 +289,14 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
         try
         {
-            mapper = this.CreateSpatialMapper(container);
+            mapper = this.CreateSpatialMapper(strip, container);
             return true;
         }
         catch (InvalidOperationException ex)
         {
-            this.LogSpatialMapperCreationFailed(strip, ex);
+            // Log as warning instead of error, as this is expected for stale strips (e.g. closed windows)
+            // that haven't been garbage collected yet.
+            this.LogStaleTabStripSkipped(ex, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(strip));
             mapper = default!;
             return false;
         }
@@ -311,9 +308,10 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         {
             _ = this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
 
-            foreach (var weakRef in this.registeredStrips)
+            // Iterate backwards to prioritize the most recently registered strips (likely the active window)
+            for (var i = this.registeredStrips.Count - 1; i >= 0; i--)
             {
-                if (!weakRef.TryGetTarget(out var strip))
+                if (!this.registeredStrips[i].TryGetTarget(out var strip))
                 {
                     continue;
                 }
@@ -362,9 +360,10 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         {
             _ = this.registeredStrips.RemoveAll(wr => !wr.TryGetTarget(out _));
 
-            foreach (var weakRef in this.registeredStrips)
+            // Iterate backwards to prioritize the most recently registered strips (likely the active window)
+            for (var i = this.registeredStrips.Count - 1; i >= 0; i--)
             {
-                if (!weakRef.TryGetTarget(out var strip))
+                if (!this.registeredStrips[i].TryGetTarget(out var strip))
                 {
                     continue;
                 }

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Windowing;
+using Microsoft.UI;
 
 namespace DroidNet.Aura.Documents;
 
@@ -24,7 +24,7 @@ namespace DroidNet.Aura.Documents;
 ///     await all veto tasks and cancel the close if any veto returns
 ///     <see langword="false"/>.</description></item>
 ///     <item><description>When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI
-///     should call <see cref="CloseDocumentAsync(IManagedWindow,Guid,bool)"/>. Aura does not attempt
+///     should call <see cref="CloseDocumentAsync(WindowId,Guid,bool)"/>. Aura does not attempt
 ///     to close windows - app is responsible for deciding and implementing the policy to close
 ///     windows or detach documents as needed.</description></item>
 /// </list>
@@ -73,56 +73,56 @@ public interface IDocumentService
     ///     (which may equal <see cref="IDocumentMetadata.DocumentId"/> when the
     ///     application supplies it).
     /// </summary>
-    /// <param name="window">The window to add the document to.</param>
+    /// <param name="windowId">The ID of the window to add the document to.</param>
     /// <param name="metadata">The document metadata supplied by the application.</param>
     /// <param name="indexHint">Preferred insertion index; -1 to append.</param>
     /// <param name="shouldSelect">When true the document will be selected after open.</param>
     /// <returns>The created document identifier.</returns>
-    public Task<Guid> OpenDocumentAsync(IManagedWindow window, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
+    public Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
 
     /// <summary>
     ///     Requests close of the specified document. Returns true when the document
     ///     was successfully closed; false if the operation was vetoed by the app.
     /// </summary>
-    /// <param name="window">The window that initiated the close request.</param>
+    /// <param name="windowId">The ID of the window that initiated the close request.</param>
     /// <param name="documentId">The document identifier.</param>
     /// <param name="force">When true, bypasses app-level checks and forces closure.</param>
     /// <returns>True when the document closed; false if the app vetoed the close.</returns>
-    public Task<bool> CloseDocumentAsync(IManagedWindow window, Guid documentId, bool force = false);
+    public Task<bool> CloseDocumentAsync(WindowId windowId, Guid documentId, bool force = false);
 
     /// <summary>
     ///     Detaches a document from its host window as part of a tear-out flow.
     ///     Returns the document metadata when the detach succeeds or null if it fails.
     /// </summary>
-    /// <param name="window">The window from which the document is being detached.</param>
+    /// <param name="windowId">The ID of the window from which the document is being detached.</param>
     /// <param name="documentId">The document identifier to detach.</param>
     /// <returns>The document metadata when detached, or null on failure.</returns>
-    public Task<IDocumentMetadata?> DetachDocumentAsync(IManagedWindow window, Guid documentId);
+    public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId);
 
     /// <summary>
     ///     Attaches an app-provided document to a target window.
     /// </summary>
-    /// <param name="targetWindow">The window to attach the document to.</param>
+    /// <param name="targetWindowId">The ID of the window to attach the document to.</param>
     /// <param name="metadata">The provided document metadata.</param>
     /// <param name="indexHint">Preferred insertion index; -1 to append.</param>
     /// <param name="shouldSelect">When true the document will be selected after attach.</param>
     /// <returns>True when the operation succeeded.</returns>
-    public Task<bool> AttachDocumentAsync(IManagedWindow targetWindow, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
+    public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true);
 
     /// <summary>
     ///     Updates the metadata for an existing document.
     /// </summary>
-    /// <param name="window">The window where the metadata update originates from.</param>
+    /// <param name="windowId">The ID of the window where the metadata update originates from.</param>
     /// <param name="documentId">The id of the document to update.</param>
     /// <param name="metadata">The new metadata content.</param>
     /// <returns>True when the operation succeeded.</returns>
-    public Task<bool> UpdateMetadataAsync(IManagedWindow window, Guid documentId, IDocumentMetadata metadata);
+    public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata);
 
     /// <summary>
     ///     Requests activation (selection) of the document in the specified window.
     /// </summary>
-    /// <param name="window">The window that should host the document selection.</param>
+    /// <param name="windowId">The ID of the window that should host the document selection.</param>
     /// <param name="documentId">The id of the document to select.</param>
     /// <returns>True when the selection was successful.</returns>
-    public Task<bool> SelectDocumentAsync(IManagedWindow window, Guid documentId);
+    public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId);
 }

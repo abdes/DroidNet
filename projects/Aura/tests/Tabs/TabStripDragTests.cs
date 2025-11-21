@@ -477,6 +477,20 @@ public class TabStripDragTests : TabStripTestsBase
         _ = eventNewIndex.Should().Be(1, "event should include new index");
     });
 
+    [TestMethod]
+    public Task Unloaded_UnregistersFromCoordinator_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = await this.CreateAndLoadTabStripAsync(1).ConfigureAwait(true);
+        tabStrip.DragCoordinator = this.mockCoordinator!.Object;
+
+        // Act
+        await UnloadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        // Assert
+        this.mockCoordinator.Verify(c => c.UnregisterTabStrip(tabStrip), Times.Once, "TabStrip should unregister from coordinator when unloaded");
+    });
+
     protected override void TestSetup()
         => this.mockCoordinator = new Mock<ITabDragCoordinator>();
 
