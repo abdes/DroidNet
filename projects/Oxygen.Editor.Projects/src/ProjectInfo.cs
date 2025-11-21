@@ -121,18 +121,11 @@ public class ProjectInfo : IProjectInfo
             throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.");
         }
 
-        var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions);
-        if (obj is null)
-        {
-            throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
-        }
-
-        if (obj.Id == Guid.Empty)
-        {
-            throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.");
-        }
-
-        return obj;
+        var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
+            ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
+        return obj.Id == Guid.Empty
+            ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
+            : (IProjectInfo)obj;
     }
 
     /// <summary>
