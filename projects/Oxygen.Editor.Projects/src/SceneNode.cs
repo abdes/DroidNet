@@ -42,7 +42,7 @@ public partial class SceneNode : GameObject, IDisposable
 
         // Initialize the components collection with the always-present Transform.
         // Use a concrete mutable collection that preserves insertion order.
-        this.Components = new List<GameComponent> { new Transform(this) { Name = nameof(Transform) } };
+        this.Components = [new Transform(this) { Name = nameof(Transform) }];
     }
 
     /// <summary>
@@ -77,7 +77,7 @@ public partial class SceneNode : GameObject, IDisposable
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        this.Dispose(true);
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
 
@@ -161,9 +161,13 @@ public partial class SceneNode : GameObject, IDisposable
 
             var name = nameElement.ToString();
 
+            var id = nodeElement.TryGetProperty(nameof(GameObject.Id), out var idElement) && idElement.TryGetGuid(out var parsedId)
+                ? parsedId
+                : Guid.NewGuid();
+
             var isActive = nodeElement.TryGetProperty(nameof(SceneNode.IsActive), out var isActiveElement) &&
                            isActiveElement.GetBoolean();
-            var sceneNode = new SceneNode(scene) { Name = name };
+            var sceneNode = new SceneNode(scene) { Name = name, Id = id };
 
             if (nodeElement.TryGetProperty(nameof(SceneNode.Components), out var elComponents) &&
                 elComponents.ValueKind == JsonValueKind.Array)
@@ -200,6 +204,7 @@ public partial class SceneNode : GameObject, IDisposable
             writer.WriteStartObject();
 
             writer.WriteString(nameof(SceneNode.Name), value.Name);
+            writer.WriteString(nameof(GameObject.Id), value.Id);
             writer.WriteBoolean(nameof(SceneNode.IsActive), value.IsActive);
 
             writer.WritePropertyName(nameof(SceneNode.Components));

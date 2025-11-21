@@ -33,6 +33,11 @@ public partial class GameObject : INotifyPropertyChanged, INotifyPropertyChangin
     public event PropertyChangingEventHandler? PropertyChanging;
 
     /// <summary>
+    /// Gets the unique identifier for this game object.
+    /// </summary>
+    public Guid Id { get; init; } = Guid.NewGuid();
+
+    /// <summary>
     /// Gets or sets the name of the game object.
     /// </summary>
     /// <exception cref="ArgumentException">Thrown if the name is null, empty, or consists only of white spaces.</exception>
