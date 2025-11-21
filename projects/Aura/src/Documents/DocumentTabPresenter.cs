@@ -39,6 +39,14 @@ public sealed partial class DocumentTabPresenter : IDisposable
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         this.logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DocumentTabPresenter>.Instance;
 
+        // Ensure WindowId is set (redundant if MainShellView sets it, but safe)
+        if (this.tabStrip.WindowId.Value == 0)
+        {
+            this.tabStrip.WindowId = this.hostWindow.Id;
+        }
+
+        this.logger.LogDebug("DocumentTabPresenter initialized. HostWindowId: {HostWindowId}, TabStrip.WindowId set to: {TabStripWindowId}, TabStrip Hash: {Hash}", this.hostWindow.Id.Value, this.tabStrip.WindowId.Value, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this.tabStrip));
+
         this.documentService.DocumentOpened += this.OnDocumentOpened;
         this.documentService.DocumentClosed += this.OnDocumentClosed;
         this.documentService.DocumentDetached += this.OnDocumentDetached;
@@ -54,6 +62,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
+        this.logger.LogDebug("DocumentTabPresenter disposed. HostWindowId: {HostWindowId}, TabStrip Hash: {Hash}", this.hostWindow.Id.Value, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this.tabStrip));
+
         this.documentService.DocumentOpened -= this.OnDocumentOpened;
         this.documentService.DocumentClosed -= this.OnDocumentClosed;
         this.documentService.DocumentDetached -= this.OnDocumentDetached;
@@ -81,7 +91,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        _ = this.documentService.SelectDocumentAsync(this.hostWindow, newItem.ContentId);
+        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, newItem.ContentId);
     }
 
     private async void TabStrip_TabCloseRequested(object? sender, Controls.TabCloseRequestedEventArgs e)
@@ -98,7 +108,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         var id = item.ContentId;
         this.LogDocumentCloseRequested(id);
-        var closed = await this.documentService.CloseDocumentAsync(this.hostWindow, id, force: false).ConfigureAwait(true);
+        var closed = await this.documentService.CloseDocumentAsync(this.hostWindow.Id, id, force: false).ConfigureAwait(true);
         this.LogDocumentCloseVerdict(id, closed);
     }
 
@@ -116,12 +126,12 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         var id = item.ContentId;
         this.LogDocumentDetachRequested(id);
-        _ = await this.documentService.DetachDocumentAsync(this.hostWindow, id).ConfigureAwait(true);
+        _ = await this.documentService.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true);
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
-        if (e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }
@@ -136,7 +146,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             }
 
             var tab = TabItemExtensions.CreateTabItemFromMetadata(docId, e.Metadata);
-            tab.Command = new AsyncRelayCommand(async () => await this.documentService.SelectDocumentAsync(this.hostWindow, docId).ConfigureAwait(true));
+            tab.Command = new AsyncRelayCommand(async () => await this.documentService.SelectDocumentAsync(this.hostWindow.Id, docId).ConfigureAwait(true));
             var insertAt = e.IndexHint < 0 || e.IndexHint > this.tabStrip.Items.Count ? this.tabStrip.Items.Count : e.IndexHint;
             this.tabStrip.Items.Insert(insertAt, tab);
             this.tabMap[docId] = tab;
@@ -149,7 +159,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void OnDocumentAttached(object? sender, DocumentAttachedEventArgs e)
     {
-        if (e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }
@@ -164,7 +174,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             }
 
             var tab = TabItemExtensions.CreateTabItemFromMetadata(docId, e.Metadata);
-            tab.Command = new AsyncRelayCommand(async () => await this.documentService.SelectDocumentAsync(this.hostWindow, docId).ConfigureAwait(true));
+            tab.Command = new AsyncRelayCommand(async () => await this.documentService.SelectDocumentAsync(this.hostWindow.Id, docId).ConfigureAwait(true));
             var insertAt = e.IndexHint < 0 || e.IndexHint > this.tabStrip.Items.Count ? this.tabStrip.Items.Count : e.IndexHint;
             this.tabStrip.Items.Insert(insertAt, tab);
             this.tabMap[docId] = tab;
@@ -177,7 +187,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void OnDocumentDetached(object? sender, DocumentDetachedEventArgs e)
     {
-        if (e.Window is not null && e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }
@@ -201,7 +211,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
     private void OnDocumentClosed(object? sender, DocumentClosedEventArgs e)
     {
         // If the service indicates a global close, apply it. Otherwise only handle for our window.
-        if (e.Window is not null && e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }
@@ -224,7 +234,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void OnDocumentMetadataChanged(object? sender, DocumentMetadataChangedEventArgs e)
     {
-        if (e.Window is not null && e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }
@@ -246,7 +256,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
-        if (e.Window is not null && e.Window != this.hostWindow)
+        if (e.WindowId != this.hostWindow.Id)
         {
             return;
         }

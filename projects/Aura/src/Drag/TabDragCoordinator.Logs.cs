@@ -587,4 +587,32 @@ public partial class TabDragCoordinator
             LogOnDragPositionChangedError(logger, ex);
         }
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "CreateSpatialMapper failed for TabStrip={Strip} (WindowId={WindowId}). Window not found in WindowManager.")]
+    private static partial void LogWindowNotFoundForStrip(ILogger logger, string Strip, ulong WindowId);
+
+    private void LogWindowNotFoundForStrip(ITabStrip strip, ulong windowId)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogWindowNotFoundForStrip(logger, strip.ToString() ?? "null", windowId);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Skipping stale TabStrip (Hash={Hash}) during hit test.")]
+    private static partial void LogStaleTabStripSkipped(ILogger logger, Exception ex, int Hash);
+
+    private void LogStaleTabStripSkipped(Exception ex, int hash)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogStaleTabStripSkipped(logger, ex, hash);
+        }
+    }
 }

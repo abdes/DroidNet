@@ -25,7 +25,7 @@ internal static class TabItemExtensions
         {
             ContentId = contentId,
             Header = metadata?.Title ?? string.Empty,
-            IsClosable = true,
+            IsClosable = metadata?.IsClosable ?? true,
             IsPinned = metadata?.IsPinnedHint ?? false,
         };
 
@@ -51,7 +51,7 @@ internal static class TabItemExtensions
 
         tab.Header = metadata?.Title ?? string.Empty;
         tab.IsPinned = metadata?.IsPinnedHint ?? false;
-        tab.IsClosable = tab.IsClosable; // leave closability as-is unless the app provides a hint
+        tab.IsClosable = metadata?.IsClosable ?? tab.IsClosable;
 
         if (metadata?.IconUri is { } parsedUri)
         {

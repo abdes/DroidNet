@@ -42,4 +42,10 @@ public interface IDocumentMetadata
     ///     authoritative UI state.
     /// </summary>
     public bool IsPinnedHint { get; set; }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the document can be closed by the user.
+    ///     If false, the close button will be hidden or disabled.
+    /// </summary>
+    public bool IsClosable { get; set; }
 }

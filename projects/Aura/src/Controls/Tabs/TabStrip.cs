@@ -12,6 +12,7 @@ using DroidNet.Aura.Drag;
 using DroidNet.Collections;
 using DroidNet.Coordinates;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -139,6 +140,9 @@ public partial class TabStrip : Control, ITabStrip
         // Handle Unloaded to dispose of disposable fields
         this.Unloaded += this.TabStrip_Unloaded;
     }
+
+    /// <inheritdoc/>
+    public WindowId WindowId { get; set; }
 
     /// <summary>
     ///    Gets or sets layout manager used to compute tab widths and layout decisions.
@@ -1066,6 +1070,13 @@ public partial class TabStrip : Control, ITabStrip
         this.pinnedProxy = null;
         this.regularProxy?.Dispose();
         this.regularProxy = null;
+
+        // Unregister from drag coordinator if present
+        if (this.DragCoordinator is { } coordinator)
+        {
+            coordinator.UnregisterTabStrip(this);
+            this.LogCoordinatorUnsubscribed();
+        }
 
         // Log unloading for troubleshooting
         this.LogUnloaded();

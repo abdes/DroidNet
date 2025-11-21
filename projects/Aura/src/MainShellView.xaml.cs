@@ -75,6 +75,14 @@ public sealed partial class MainShellView : INotifyPropertyChanged
             this.ViewModelChanged += this.InitializeLogger;
 
             this.ObserveTitleBar(uiContext);
+
+            // Ensure the TabStrip always has the correct WindowId, even if the DocumentTabPresenter is not created.
+            // This prevents "stale" or "invalid" WindowId issues in the TabDragCoordinator.
+            if (this.ViewModel?.Context is { } managedWindow)
+            {
+                this.DocumentTabStrip.WindowId = managedWindow.Id;
+            }
+
             this.AttachDocumentServiceHandlers();
         };
 
@@ -192,6 +200,14 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         this.DetachDocumentServiceHandlers();
 
         if (ds is null)
+        {
+            this.cachedDocumentService = null;
+            return;
+        }
+
+        // Only create the presenter if the window is configured to show document tabs.
+        // This prevents creating unnecessary presenters for windows like the Project Browser.
+        if (this.ViewModel?.Context?.Decorations?.TitleBar?.WithDocumentTabs != true)
         {
             this.cachedDocumentService = null;
             return;

@@ -234,8 +234,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                     };
 
                     // Open the document for the document window first, then add a tab to the main window
-                    _ = await this.documentService.OpenDocumentAsync(docCtx, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
-                    _ = await this.documentService.OpenDocumentAsync(mainCtx, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                    _ = await this.documentService.OpenDocumentAsync(docCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                    _ = await this.documentService.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
                 }
             }
         }
@@ -406,19 +406,19 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             return;
         }
 
-        var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
+        var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocOpenedAsync(e));
 
         Task OnDocOpenedAsync(DocumentOpenedEventArgs args)
         {
-            Debug.WriteLine($"OnDocOpened: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}, ShouldSelect={args.ShouldSelect}");
+            Debug.WriteLine($"OnDocOpened: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={args.WindowId.Value}, ShouldSelect={args.ShouldSelect}");
             this.documents[args.Metadata.DocumentId] = args.Metadata;
-            if (args.Window is not null && args.ShouldSelect)
+            if (args.ShouldSelect)
             {
-                this.windowActiveDocument[args.Window.Id] = args.Metadata.DocumentId;
+                this.windowActiveDocument[args.WindowId] = args.Metadata.DocumentId;
             }
 
-            if (ReferenceEquals(args.Window, this.windowManager.ActiveWindow))
+            if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = args.Metadata.Title;
                 this.ActiveDocumentIsDirty = args.Metadata.IsDirty;
@@ -435,16 +435,16 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             return;
         }
 
-        var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
+        var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocMetadataChangedAsync(e));
 
         Task OnDocMetadataChangedAsync(DocumentMetadataChangedEventArgs args)
         {
-            Debug.WriteLine($"OnDocMetadataChanged: DocId={args.NewMetadata.DocumentId}, Title='{args.NewMetadata.Title}', IsDirty={args.NewMetadata.IsDirty}, Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+            Debug.WriteLine($"OnDocMetadataChanged: DocId={args.NewMetadata.DocumentId}, Title='{args.NewMetadata.Title}', IsDirty={args.NewMetadata.IsDirty}, Window={args.WindowId.Value}");
 
             this.documents[args.NewMetadata.DocumentId] = args.NewMetadata;
 
-            if (ReferenceEquals(args.Window, this.windowManager.ActiveWindow))
+            if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = args.NewMetadata.Title;
                 this.ActiveDocumentIsDirty = args.NewMetadata.IsDirty;
@@ -461,24 +461,21 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             return;
         }
 
-        var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
+        var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = OnDocActivatedAsync(e));
 
         Task OnDocActivatedAsync(DocumentActivatedEventArgs args)
         {
-            Debug.WriteLine($"OnDocActivated: DocId={args.DocumentId}, Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+            Debug.WriteLine($"OnDocActivated: DocId={args.DocumentId}, Window={args.WindowId.Value}");
 
             if (!this.documents.TryGetValue(args.DocumentId, out var metadata))
             {
                 return Task.CompletedTask;
             }
 
-            if (args.Window is not null)
-            {
-                this.windowActiveDocument[args.Window.Id] = args.DocumentId;
-            }
+            this.windowActiveDocument[args.WindowId] = args.DocumentId;
 
-            if (ReferenceEquals(args.Window, this.windowManager.ActiveWindow))
+            if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = metadata.Title;
                 this.ActiveDocumentIsDirty = metadata.IsDirty;
@@ -509,7 +506,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         // Show a confirmation dialog on the target window's UI thread. We prefer the
         // window in the event args so the dialog is shown on the proper window; fall
         // back to this view model's Window property.
-        var targetWindow = e.Window?.Window ?? this.Window;
+        var targetWindow = this.windowManager.GetWindow(e.WindowId)?.Window ?? this.Window;
         if (targetWindow is null)
         {
             // If there's no UI available for the window, allow close by default.
@@ -559,15 +556,15 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             return;
         }
 
-        var dq = e.Window?.Window?.DispatcherQueue ?? this.dispatcherQueue;
+        var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
         _ = dq.TryEnqueue(() => _ = HandleDocClosedAsync(e));
 
         async Task HandleDocClosedAsync(DocumentClosedEventArgs args)
         {
-            Debug.WriteLine($"OnDocClosed: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={(args.Window is not null ? args.Window.Id.Value.ToString(CultureInfo.InvariantCulture) : "null")}");
+            Debug.WriteLine($"OnDocClosed: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={args.WindowId.Value}");
 
             _ = this.documents.Remove(args.Metadata.DocumentId);
-            if (args.Window == this.windowManager.ActiveWindow)
+            if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = null;
                 this.ActiveDocumentIsDirty = false;

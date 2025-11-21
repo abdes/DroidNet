@@ -27,6 +27,7 @@ internal sealed partial class TabStripMockBuilder
     private Func<SpatialPoint<ElementSpace>, bool>? hitTestFunc;
     private Func<SpatialPoint<ElementSpace>, double, bool>? hitTestThresholdFunc;
     private Rect? bounds;
+    private Microsoft.UI.WindowId windowId;
 
     /// <summary>
     /// Sets the name of the TabStrip.
@@ -36,6 +37,17 @@ internal sealed partial class TabStripMockBuilder
     public TabStripMockBuilder WithName(string value)
     {
         this.name = value;
+        return this;
+    }
+
+    /// <summary>
+    /// Sets the WindowId of the TabStrip.
+    /// </summary>
+    /// <param name="value">The WindowId to use.</param>
+    /// <returns>This builder for fluent chaining.</returns>
+    public TabStripMockBuilder WithWindowId(Microsoft.UI.WindowId value)
+    {
+        this.windowId = value;
         return this;
     }
 
@@ -160,6 +172,9 @@ internal sealed partial class TabStripMockBuilder
         // Setup name
         _ = mock.SetupGet(m => m.Name).Returns(this.name);
 
+        // Setup WindowId
+        _ = mock.SetupGet(m => m.WindowId).Returns(this.windowId);
+
         // Setup GetContainerElement to return a basic Border element
         _ = mock.Setup(m => m.GetContainerElement()).Returns(new Border { Width = actualBounds.Width, Height = actualBounds.Height });
 
@@ -248,6 +263,12 @@ internal sealed partial class TabStripMockBuilder
         private readonly ITabStrip inner = inner ?? throw new ArgumentNullException(nameof(inner));
 
         string ITabStrip.Name => this.inner.Name;
+
+        public Microsoft.UI.WindowId WindowId
+        {
+            get => this.inner.WindowId;
+            set => this.inner.WindowId = value;
+        }
 
         public FrameworkElement GetContainerElement() => this;
 

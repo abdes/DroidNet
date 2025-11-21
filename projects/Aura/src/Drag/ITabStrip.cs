@@ -49,6 +49,12 @@ public interface ITabStrip
     public string Name { get; }
 
     /// <summary>
+    ///     Gets or sets the ID of the window hosting this TabStrip.
+    ///     This is used by the coordinator to resolve the hosting window for spatial mapping.
+    /// </summary>
+    public Microsoft.UI.WindowId WindowId { get; set; }
+
+    /// <summary>
     ///     Performs hit-testing with an inset threshold to determine if a point is well within the TabStrip's bounds.
     /// </summary>
     /// <param name="elementPoint">Point in the tab strip element coordinates space.</param>
