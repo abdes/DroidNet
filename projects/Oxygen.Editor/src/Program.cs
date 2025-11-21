@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
@@ -34,6 +35,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+using Oxygen.Editor.WorldEditor.Editors;
 using Oxygen.Editor.WorldEditor.Workspace;
 using Serilog;
 
@@ -283,6 +285,7 @@ public static partial class Program
 
         container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
+        container.Register<IDocumentService, WorldEditorDocumentService>(Reuse.Singleton);
 
         // Register the project instance using a delegate that will request the currently open project from the project browser service.
         container.RegisterDelegate(resolverContext => resolverContext.Resolve<IProjectManagerService>().CurrentProject);

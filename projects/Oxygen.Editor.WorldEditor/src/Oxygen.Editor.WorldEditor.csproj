@@ -23,6 +23,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />

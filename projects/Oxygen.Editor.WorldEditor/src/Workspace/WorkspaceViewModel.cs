@@ -83,8 +83,10 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     {
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
-        childContainer.Register<DocumentHostViewModel>(Reuse.Transient);
-        childContainer.Register<TabbedDocumentView>(Reuse.Singleton);
+        // DocumentHostViewModel must be a singleton to ensure it is always listening for messages
+        // even if the router hasn't navigated to it yet (e.g. if the layout is loading).
+        childContainer.Register<DocumentHostViewModel>(Reuse.Singleton);
+        childContainer.Register<DocumentHostView>(Reuse.Singleton);
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
@@ -94,6 +96,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
+        childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
     }
