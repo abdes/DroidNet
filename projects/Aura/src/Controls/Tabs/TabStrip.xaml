@@ -71,10 +71,7 @@
                                                 The TranslateTransform on this Grid is used during reorder drag to slide
                                                 the item visually without affecting ItemsRepeater's layout of other items.
                                             -->
-                                            <Grid
-                                                BorderBrush="Beige"
-                                                BorderThickness="1"
-                                                Tag="{Binding Header}">
+                                            <Grid Tag="{Binding Header}">
                                                 <Grid.RenderTransform>
                                                     <TranslateTransform />
                                                 </Grid.RenderTransform>
