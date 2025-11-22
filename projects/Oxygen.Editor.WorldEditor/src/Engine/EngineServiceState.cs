@@ -22,7 +22,7 @@ public enum EngineServiceState
     /// <summary>
     /// The native layer is fully configured in headless mode and awaiting viewport attachments.
     /// </summary>
-    Dormant,
+    Ready,
 
     /// <summary>
     /// The engine loop is running and at least one viewport surface is attached.

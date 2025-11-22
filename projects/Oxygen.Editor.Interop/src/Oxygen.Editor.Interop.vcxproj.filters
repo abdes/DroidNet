@@ -22,6 +22,7 @@
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="Config.h" />
+    <ClInclude Include="SurfaceRegistry.h" />
     <ClInclude Include="SimpleEditorModule.h" />
   </ItemGroup>
   <ItemGroup>

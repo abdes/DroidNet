@@ -5,15 +5,18 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <limits>
 #include <memory>
+#include <unordered_map>
+#include <vector>
+
+#include "SurfaceRegistry.h"
 
 namespace Oxygen::Editor::EngineInterface {
 
 class SimpleEditorModule final : public oxygen::engine::EngineModule {
     OXYGEN_TYPED(SimpleEditorModule)
 public:
-    explicit SimpleEditorModule(std::shared_ptr<oxygen::graphics::Surface> surface);
+    explicit SimpleEditorModule(std::shared_ptr<SurfaceRegistry> registry);
     ~SimpleEditorModule() override;
 
     [[nodiscard]] auto GetName() const noexcept -> std::string_view override { return "SimpleEditorModule"; }
@@ -25,12 +28,14 @@ public:
     auto OnCommandRecord(oxygen::engine::FrameContext& context) -> oxygen::co::Co<> override;
 
 private:
-    auto EnsureSurfaceRegistered(oxygen::engine::FrameContext& context) -> void;
+    auto EnsureSurfacesRegistered(oxygen::engine::FrameContext& context)
+        -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;
+    auto RefreshSurfaceIndices(oxygen::engine::FrameContext& context,
+        const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& snapshot) -> void;
 
-    std::shared_ptr<oxygen::graphics::Surface> surface_;
+    std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
-    bool surface_registered_ { false };
-    size_t surface_index_ { std::numeric_limits<size_t>::max() };
+    std::unordered_map<const oxygen::graphics::Surface*, size_t> surface_indices_;
 };
 
 } // namespace Oxygen::Editor::EngineInterface
