@@ -14,6 +14,7 @@
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="OxygenWorld.cpp" />
+    <ClCompile Include="SimpleEditorModule.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(OxygenEditorInterfaceProject)">
@@ -23,11 +24,15 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="OxygenWorld.h" />
+    <ClInclude Include="SimpleEditorModule.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="vcpkg.json" />
@@ -90,7 +95,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;LOGURU_USE_FMTLIB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
@@ -98,7 +103,7 @@
  %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -108,13 +113,13 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;LOGURU_USE_FMTLIB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

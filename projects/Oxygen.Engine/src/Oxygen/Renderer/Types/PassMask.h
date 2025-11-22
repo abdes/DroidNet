@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/NoStd.h>
 
 namespace oxygen::engine {
 
@@ -65,16 +66,16 @@ class PassMask : public PassMaskBase {
 
 public:
   PassMask(PassMaskBit value = PassMaskBit::kNone)
-    : PassMaskBase(std::to_underlying(value))
+    : PassMaskBase(nostd::to_underlying(value))
   {
   }
 
   PassMask(std::initializer_list<PassMaskBit> flags)
-    : PassMaskBase(std::to_underlying(PassMaskBit::kNone))
+    : PassMaskBase(nostd::to_underlying(PassMaskBit::kNone))
   {
     auto new_value = get();
     for (auto f : flags) {
-      new_value |= std::to_underlying(f);
+      new_value |= nostd::to_underlying(f);
     }
     *this = PassMask(static_cast<PassMaskBit>(new_value));
   }
@@ -86,29 +87,29 @@ public:
 
   bool IsEmpty() const
   {
-    return get() == std::to_underlying(PassMaskBit::kNone);
+    return get() == nostd::to_underlying(PassMaskBit::kNone);
   }
 
   bool IsSet(PassMaskBit flag) const
   {
-    return (get() & std::to_underlying(flag)) == std::to_underlying(flag);
+    return (get() & nostd::to_underlying(flag)) == nostd::to_underlying(flag);
   }
 
   void Set(PassMaskBit flag)
   {
-    auto new_value = get() | std::to_underlying(flag);
+    auto new_value = get() | nostd::to_underlying(flag);
     *this = PassMask { static_cast<PassMaskBit>(new_value) };
   }
 
-  void Clear(PassMaskBit flag)
+  void Unset(PassMaskBit flag)
   {
-    auto new_value = get() & ~std::to_underlying(flag);
+    auto new_value = get() & ~nostd::to_underlying(flag);
     *this = PassMask { static_cast<PassMaskBit>(new_value) };
   }
 
   void Toggle(PassMaskBit flag)
   {
-    auto new_value = get() ^ std::to_underlying(flag);
+    auto new_value = get() ^ nostd::to_underlying(flag);
     *this = PassMask { static_cast<PassMaskBit>(new_value) };
   }
 };

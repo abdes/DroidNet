@@ -234,12 +234,12 @@ auto Renderer::OnCommandRecord(FrameContext& context) -> co::Co<>
   for (const auto& viewRef : context.GetViews()) {
     const auto& view = viewRef.get();
     const auto surface_result = view.GetSurface();
-    if (!surface_result) {
+    if (surface_result.index() != 0) {
       LOG_F(WARNING, "Could not mark surface presentable for view {}: {}",
-        view.GetName(), surface_result.error());
+        view.GetName(), std::get<1>(surface_result));
       continue;
     }
-    const auto& surface = surface_result.value().get();
+    const auto& surface = std::get<0>(surface_result).get();
     auto surfaces = context.GetSurfaces();
     for (size_t i = 0; i < surfaces.size(); ++i) {
       if (surfaces[i].get() == &surface) {

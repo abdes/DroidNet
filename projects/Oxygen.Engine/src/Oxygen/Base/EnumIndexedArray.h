@@ -14,6 +14,8 @@
 #include <compare>
 #include <stdexcept>
 
+#include <Oxygen/Base/NoStd.h>
+
 namespace oxygen {
 
 //! Concept: EnumWithCount
@@ -29,10 +31,10 @@ template<typename E>
 concept EnumWithCount = std::is_enum_v<E> // must be an enum
   // Must have a count value, and it must be > 0
   && requires { { E::kCount } -> std::same_as<E>; }
-  && (std::to_underlying(E::kCount) > 0)
+  && (nostd::to_underlying(E::kCount) > 0)
   // must have a kFirst symbolic value, with underlying `0`
   && requires { { E::kFirst } -> std::same_as<E>; }
-  && (std::to_underlying(E::kFirst) == 0);
+  && (nostd::to_underlying(E::kFirst) == 0);
 
 //! EnumAsIndex: strongly-typed enum index wrapper
 /*!
@@ -64,7 +66,7 @@ public:
   constexpr explicit EnumAsIndex(Enum id) noexcept
     : value_(static_cast<RawIndexType>(id))
   {
-    if !consteval {
+    if (!std::is_constant_evaluated()) {
       if (value_ >= static_cast<RawIndexType>(Enum::kCount)) {
         std::terminate();
       }
@@ -83,9 +85,9 @@ public:
   //! validated index without invoking the runtime-checking public ctor.
   template <Enum V> consteval static EnumAsIndex Checked()
   {
-    static_assert(std::to_underlying(V) < std::to_underlying(Enum::kCount),
+    static_assert(nostd::to_underlying(V) < nostd::to_underlying(Enum::kCount),
       "EnumAsIndex out of range");
-    return EnumAsIndex(static_cast<RawIndexType>(std::to_underlying(V)), 0);
+    return EnumAsIndex(static_cast<RawIndexType>(nostd::to_underlying(V)), 0);
   }
 
   // Deleted default and raw-size constructors enforce invariants.
@@ -205,7 +207,7 @@ private:
     RawIndexType value, std::ptrdiff_t off) noexcept
   {
     const auto raw = static_cast<std::ptrdiff_t>(value) + off;
-    if !consteval {
+    if (!std::is_constant_evaluated()) {
       if (!(raw >= 0 && raw <= static_cast<std::ptrdiff_t>(Enum::kCount))) {
         std::terminate();
       }
@@ -457,11 +459,11 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   // Index with enum (use underlying_type for portability)
   constexpr T& operator[](Enum e) noexcept
   {
-    return data[static_cast<std::size_t>(std::to_underlying(e))];
+    return data[static_cast<std::size_t>(nostd::to_underlying(e))];
   }
   constexpr T const& operator[](Enum e) const noexcept
   {
-    return data[static_cast<std::size_t>(std::to_underlying(e))];
+    return data[static_cast<std::size_t>(nostd::to_underlying(e))];
   }
 
   // Index with numeric index
@@ -492,12 +494,12 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
 
   constexpr T& at(Enum e)
   {
-    return at(static_cast<std::size_t>(std::to_underlying(e)));
+    return at(static_cast<std::size_t>(nostd::to_underlying(e)));
   }
 
   constexpr T const& at(Enum e) const
   {
-    return at(static_cast<std::size_t>(std::to_underlying(e)));
+    return at(static_cast<std::size_t>(nostd::to_underlying(e)));
   }
 
   constexpr T& at(EnumAsIndex<Enum> idx)

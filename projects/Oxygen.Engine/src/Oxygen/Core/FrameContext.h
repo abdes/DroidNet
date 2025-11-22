@@ -47,7 +47,6 @@
 #include <atomic>
 #include <chrono>
 #include <concepts>
-#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -57,6 +56,7 @@
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -194,8 +194,9 @@ public:
 
   ~RenderableView() override = default;
 
+  // NOTE: Not using std:;expected as this header is visible to C++/CLI which is stuck at c++20
   virtual [[nodiscard]] auto GetSurface() const noexcept
-    -> std::expected<std::reference_wrapper<graphics::Surface>, std::string>
+    -> std::variant<std::reference_wrapper<graphics::Surface>, std::string>
     = 0;
   virtual [[nodiscard]] auto Resolve() const noexcept -> View = 0;
 };

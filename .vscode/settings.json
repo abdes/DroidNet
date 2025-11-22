@@ -21,6 +21,15 @@
         "chrono": "cpp",
         "cstdint": "cpp",
         "cmath": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "string": "cpp",
+        "string_view": "cpp",
+        "random": "cpp",
+        "thread": "cpp",
+        "memory": "cpp",
+        "stdexcept": "cpp",
+        "xtr1common": "cpp",
+        "shared_mutex": "cpp",
+        "exception": "cpp"
     }
 }

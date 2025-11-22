@@ -97,6 +97,7 @@ public:
   // Other methods we don't care about
   MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
+  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTextureFromNativeObject, (const TextureDesc&, const NativeResource&), (const, override));

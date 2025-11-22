@@ -8,6 +8,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.Editors;
+using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Output;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
@@ -82,6 +83,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
+        //childContainer.RegisterDelegate<IEngineService>(_ => container.Resolve<IEngineService>(), Reuse.Singleton);
 
         // DocumentHostViewModel must be a singleton to ensure it is always listening for messages
         // even if the router hasn't navigated to it yet (e.g. if the layout is loading).

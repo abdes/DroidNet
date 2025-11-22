@@ -60,6 +60,10 @@ public:
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
+  OXGN_D3D12_NDAPI auto CreateSurfaceFromNative(void* native_handle,
+    observer_ptr<graphics::CommandQueue> command_queue) const
+    -> std::shared_ptr<Surface> override;
+
   OXGN_D3D12_NDAPI auto CreateTexture(const TextureDesc& desc) const
     -> std::shared_ptr<graphics::Texture> override;
 

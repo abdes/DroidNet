@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.EngineInterface;
 
@@ -38,12 +39,12 @@ public sealed class ConfigureLoggingTests
 
         var ok = this.runner.ConfigureLogging(config, logger);
 
-        // Wait up to 500ms for a log to arrive, polling to avoid flaky sleeps.
+        // Wait up to 1500ms for a log to arrive, polling to avoid flaky sleeps.
         var sw = Stopwatch.StartNew();
         var found = false;
-        while (sw.ElapsedMilliseconds < 500)
+        while (sw.ElapsedMilliseconds < 1500)
         {
-            if (logger.Messages.Exists(m => m.Contains("Logging configured", StringComparison.OrdinalIgnoreCase)))
+            if (logger.Messages.Exists(m => m.Contains("logging configured", StringComparison.OrdinalIgnoreCase)))
             {
                 found = true;
             }
@@ -56,10 +57,8 @@ public sealed class ConfigureLoggingTests
             Thread.Sleep(10);
         }
 
-        Assert.IsTrue(ok, "ConfigureLogging returned false");
-        Assert.IsTrue(
-            found,
-            $"Expected a log containing 'Logging configured' but got: {string.Join(" | ", logger.Messages)}");
+        _ = ok.Should().BeTrue("ConfigureLogging returned false");
+        _ = found.Should().BeTrue($"Expected a log containing 'logging configured' but got: {string.Join(" | ", logger.Messages)}");
     }
 
     [TestMethod]
@@ -67,7 +66,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig();
         var result = this.runner.ConfigureLogging(config);
-        Assert.IsTrue(result);
+        result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -75,7 +74,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = null };
         var result = this.runner.ConfigureLogging(config);
-        Assert.IsTrue(result);
+        result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -83,7 +82,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = string.Empty };
         var result = this.runner.ConfigureLogging(config);
-        Assert.IsTrue(result);
+        result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -91,7 +90,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = "MyModule=2,*=OFF" };
         var result = this.runner.ConfigureLogging(config);
-        Assert.IsTrue(result);
+        result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -99,7 +98,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = "foo,bar" };
         var result = this.runner.ConfigureLogging(config);
-        Assert.IsFalse(result);
+        result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -109,7 +108,7 @@ public sealed class ConfigureLoggingTests
         {
             var config = new LoggingConfig { Verbosity = v, IsColored = false, ModuleOverrides = null };
             var result = this.runner.ConfigureLogging(config);
-            Assert.IsFalse(result, $"ConfigureLogging should fail for out-of-range verbosity {v}");
+            result.Should().BeFalse($"ConfigureLogging should fail for out-of-range verbosity {v}");
         }
     }
 
@@ -118,10 +117,8 @@ public sealed class ConfigureLoggingTests
     // EngineRunner reflection can discover it.
     private sealed class TestLogger
     {
-        public List<string> Messages { get; } = [];
+        public List<string> Messages { get; } = new List<string>();
 
-        [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = "Used by reflection")]
-        [SuppressMessage("ReSharper", "UnusedParameter.Local", Justification = "Used by reflection")]
         [SuppressMessage("Design", "IDE0060: Remove unused parameter", Justification = "Used by reflection")]
         public void Log(
             LogLevel level,

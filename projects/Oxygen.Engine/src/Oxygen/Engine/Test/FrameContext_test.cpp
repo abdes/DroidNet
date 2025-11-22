@@ -84,12 +84,11 @@ struct DummyRenderableView final : oxygen::engine::RenderableView {
 
   // Return a static dummy surface reference for tests wrapped in expected
   auto GetSurface() const noexcept
-    -> std::expected<std::reference_wrapper<oxygen::graphics::Surface>,
+    -> std::variant<std::reference_wrapper<oxygen::graphics::Surface>,
       std::string> override
   {
     static DummySurface s;
-    return std::expected<std::reference_wrapper<oxygen::graphics::Surface>,
-      std::string>(std::ref(s));
+    return std::ref(s);
   }
 
   // Return a simple View for resolution; tests don't inspect it deeply

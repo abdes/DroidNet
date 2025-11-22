@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Windows.Input;
+using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
 
@@ -59,17 +60,50 @@ public enum ShadingMode
 public partial class ViewportViewModel : ObservableObject
 {
     private readonly ILoggerFactory? loggerFactory;
+    private readonly IEngineService engineService;
+    private readonly Guid viewportId = Guid.NewGuid();
+    private bool isPrimaryViewport;
+    private int viewportIndex;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ViewportViewModel"/> class.
     /// </summary>
+    /// <param name="documentId">The owning document identifier.</param>
+    /// <param name="engineService">The shared engine service.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public ViewportViewModel(ILoggerFactory? loggerFactory = null)
+    public ViewportViewModel(Guid documentId, IEngineService engineService, ILoggerFactory? loggerFactory = null)
     {
+        this.DocumentId = documentId;
+        this.engineService = engineService;
         this.loggerFactory = loggerFactory;
         this.ViewMenu = this.BuildViewMenu();
         this.ShadingMenu = this.BuildShadingMenu();
     }
+
+    /// <summary>
+    /// Gets the document identifier owning this viewport.
+    /// </summary>
+    public Guid DocumentId { get; }
+
+    /// <summary>
+    /// Gets the unique viewport identifier.
+    /// </summary>
+    public Guid ViewportId => this.viewportId;
+
+    /// <summary>
+    /// Gets the engine service reference, enabling views to request surfaces.
+    /// </summary>
+    public IEngineService EngineService => this.engineService;
+
+    /// <summary>
+    /// Gets the zero-based viewport index in the current layout.
+    /// </summary>
+    public int ViewportIndex => this.viewportIndex;
+
+    /// <summary>
+    /// Gets a value indicating whether this viewport should be considered primary.
+    /// </summary>
+    public bool IsPrimaryViewport => this.isPrimaryViewport;
 
     /// <summary>
     /// Gets or sets the camera type.
@@ -109,6 +143,32 @@ public partial class ViewportViewModel : ObservableObject
     /// Gets the glyph for the maximize/restore button.
     /// </summary>
     public string MaximizeGlyph => this.IsMaximized ? "\uE923" : "\uE922";
+
+    /// <summary>
+    /// Gets the logger factory.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory => this.loggerFactory;
+
+    /// <summary>
+    /// Builds the surface request describing this viewport.
+    /// </summary>
+    /// <param name="tag">Optional diagnostic tag.</param>
+    /// <returns>The surface request payload.</returns>
+    public ViewportSurfaceRequest CreateSurfaceRequest(string? tag = null)
+        => new()
+        {
+            DocumentId = this.DocumentId,
+            ViewportId = this.viewportId,
+            ViewportIndex = this.viewportIndex,
+            IsPrimary = this.isPrimaryViewport,
+            Tag = tag,
+        };
+
+    internal void UpdateLayoutMetadata(int index, bool isPrimary)
+    {
+        this.viewportIndex = index;
+        this.isPrimaryViewport = isPrimary;
+    }
 
     private IMenuSource BuildViewMenu()
     {

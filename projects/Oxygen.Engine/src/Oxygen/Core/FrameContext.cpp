@@ -85,8 +85,9 @@ auto FrameContext::AddView(std::shared_ptr<RenderableView> view) noexcept
 #if !defined(NDEBUG)
   // In debug builds, verify that the view surface is one of the surfaces set in
   // the FrameContext.
-  if (auto surf_res = view->GetSurface()) {
-    const auto& surface = surf_res.value().get();
+  auto surf_res = view->GetSurface();
+  if (surf_res.index() == 0) {
+    const auto& surface = std::get<0>(surf_res).get();
     const bool found = std::ranges::any_of(
       surfaces_, [&](const auto& s) { return s.get() == &surface; });
     if (!found) {
@@ -219,8 +220,9 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
     // Erase-remove idiom: keep views whose surface != removed_surface_ptr
     auto new_end = std::ranges::remove_if(views_, [&](const auto& view_ptr) {
       DCHECK_NOTNULL_F(view_ptr);
-      if (auto surf_res = view_ptr->GetSurface()) {
-        const auto& surf = surf_res.value().get();
+      auto surf_res = view_ptr->GetSurface();
+      if (surf_res.index() == 0) {
+        const auto& surf = std::get<0>(surf_res).get();
         if (&surf == removed_surface_ptr) {
           LOG_F(INFO, "Removing view '{}' due to surface removal",
             view_ptr->GetName());
