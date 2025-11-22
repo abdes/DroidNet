@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.EngineInterface;
@@ -12,23 +12,16 @@ namespace Oxygen.Editor.Interop.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
-[SuppressMessage(
-    "Design",
-    "CA1001:Types that own disposable fields should be disposable",
-    Justification = "MSTest lifecycle takes care of that")]
 [TestCategory(nameof(EngineRunner))]
-public sealed class ConfigureLoggingTests
+public sealed class ConfigureLoggingTests : IDisposable
 {
-    private EngineRunner runner = null!; // Initialized in TestInitialize
+    [SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "It is disposed")]
+    private readonly EngineRunner runner = new();
 
-    [TestInitialize]
-    public void Setup() => this.runner = new EngineRunner();
-
-    [TestCleanup]
-    public void Teardown()
+    public void Dispose()
     {
-        this.runner.Dispose();
-        this.runner = null!;
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 
     [TestMethod]
@@ -38,7 +31,7 @@ public sealed class ConfigureLoggingTests
         var logger = new TestLogger();
 
         var ok = this.runner.ConfigureLogging(config, logger);
-        var found = logger.Messages.Any(
+        var found = logger.Messages.Exists(
             m => m.Contains("logging configured", StringComparison.OrdinalIgnoreCase));
 
         _ = ok.Should().BeTrue("ConfigureLogging returned false");
@@ -50,7 +43,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig();
         var result = this.runner.ConfigureLogging(config);
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -58,7 +51,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = null };
         var result = this.runner.ConfigureLogging(config);
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -66,7 +59,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = string.Empty };
         var result = this.runner.ConfigureLogging(config);
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -74,7 +67,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = "MyModule=2,*=OFF" };
         var result = this.runner.ConfigureLogging(config);
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -82,7 +75,7 @@ public sealed class ConfigureLoggingTests
     {
         var config = new LoggingConfig { Verbosity = 2, IsColored = false, ModuleOverrides = "foo,bar" };
         var result = this.runner.ConfigureLogging(config);
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -92,7 +85,15 @@ public sealed class ConfigureLoggingTests
         {
             var config = new LoggingConfig { Verbosity = v, IsColored = false, ModuleOverrides = null };
             var result = this.runner.ConfigureLogging(config);
-            result.Should().BeFalse($"ConfigureLogging should fail for out-of-range verbosity {v}");
+            _ = result.Should().BeFalse(string.Create(CultureInfo.InvariantCulture, $"ConfigureLogging should fail for out-of-range verbosity {v}"));
+        }
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.runner.Dispose();
         }
     }
 
@@ -101,9 +102,11 @@ public sealed class ConfigureLoggingTests
     // EngineRunner reflection can discover it.
     private sealed class TestLogger : ILogger
     {
-        public List<string> Messages { get; } = new List<string>();
+        public List<string> Messages { get; } = [];
 
-        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+        public IDisposable BeginScope<TState>(TState state)
+            where TState : notnull
+            => NullScope.Instance;
 
         public bool IsEnabled(LogLevel logLevel) => true;
 
@@ -114,10 +117,7 @@ public sealed class ConfigureLoggingTests
             Exception? exception,
             Func<TState, Exception?, string> formatter)
         {
-            if (formatter is null)
-            {
-                throw new ArgumentNullException(nameof(formatter));
-            }
+            ArgumentNullException.ThrowIfNull(formatter);
 
             var text = formatter(state, exception);
             this.Messages.Add(text);
