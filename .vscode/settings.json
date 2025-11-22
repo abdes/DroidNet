@@ -14,5 +14,13 @@
             "color": "#ff0000"
         }
     ],
-    "cmake.sourceDirectory": "F:/projects/DroidNet/projects/Oxygen.Engine"
+    "cmake.sourceDirectory": "F:/projects/DroidNet/projects/Oxygen.Engine",
+    "files.associations": {
+        "algorithm": "cpp",
+        "atomic": "cpp",
+        "chrono": "cpp",
+        "cstdint": "cpp",
+        "cmath": "cpp",
+        "span": "cpp"
+    }
 }

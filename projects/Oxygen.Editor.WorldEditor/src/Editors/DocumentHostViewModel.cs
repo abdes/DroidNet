@@ -22,6 +22,7 @@ namespace Oxygen.Editor.WorldEditor.Editors;
 public partial class DocumentHostViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger logger;
+    private readonly ILoggerFactory? loggerFactory;
 
     private readonly WindowId windowId;
     private readonly IMessenger messenger;
@@ -50,6 +51,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         this.windowId = windowId;
         this.viewLocator = viewLocator;
         this.messenger = messenger;
+        this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<DocumentHostViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DocumentHostViewModel>();
 
         this.DocumentService.DocumentOpened += this.OnDocumentOpened;
@@ -175,7 +177,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         object? editor = null;
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
-            editor = new SceneEditorViewModel(sceneMeta);
+            editor = new SceneEditorViewModel(sceneMeta, this.loggerFactory);
         }
         else
         {
