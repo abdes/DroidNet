@@ -2,12 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Threading.Tasks;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
@@ -25,8 +20,8 @@ public sealed partial class EngineService : IEngineService
     private readonly ILoggerFactory? loggerFactory;
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private readonly SemaphoreSlim leaseGate = new(1, 1);
-    private readonly Dictionary<Guid, int> documentSurfaceCounts = new();
-    private readonly Dictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
+    private readonly Dictionary<Guid, int> documentSurfaceCounts = [];
+    private readonly Dictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = [];
 
     private EngineRunner? engineRunner;
     private EngineContext? engineContext;
@@ -387,7 +382,7 @@ public sealed partial class EngineService : IEngineService
                 this.DestroyEngineContext();
                 this.state = EngineServiceState.Created;
             }
-            else if (this.engineContext != null && this.engineContext.IsValid)
+            else if (this.engineContext?.IsValid == true)
             {
                 this.state = EngineServiceState.Ready;
             }
@@ -456,7 +451,7 @@ public sealed partial class EngineService : IEngineService
             throw new InvalidOperationException("Engine runner not initialized.");
         }
 
-        if (this.engineContext != null && this.engineContext.IsValid)
+        if (this.engineContext?.IsValid == true)
         {
             this.LogContextReused();
             this.state = EngineServiceState.Ready;
@@ -471,7 +466,7 @@ public sealed partial class EngineService : IEngineService
         config.TargetFps = 1;
 
         this.engineContext = this.engineRunner.CreateEngine(config);
-        if (this.engineContext == null || !this.engineContext.IsValid)
+        if (this.engineContext?.IsValid != true)
         {
             throw new InvalidOperationException("Failed to create engine context.");
         }
@@ -547,17 +542,10 @@ public sealed partial class EngineService : IEngineService
             await this.owner.ReleaseLeaseAsync(this).ConfigureAwait(false);
         }
 
-        internal void MarkAttached(SwapChainPanel panel)
-        {
-            this.panel = panel;
-        }
+        internal void MarkAttached(SwapChainPanel panel) => this.panel = panel;
 
-        internal void MarkDetached()
-        {
-            this.panel = null;
-        }
+        internal void MarkDetached() => this.panel = null;
 
-        private void ThrowIfDisposed()
-            => ObjectDisposedException.ThrowIf(this.disposed, this);
+        private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.disposed, this);
     }
 }

@@ -8,7 +8,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.Editors;
-using Oxygen.Editor.WorldEditor.Engine;
+using Oxygen.Editor.WorldEditor.Editors.Scene;
 using Oxygen.Editor.WorldEditor.Output;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;

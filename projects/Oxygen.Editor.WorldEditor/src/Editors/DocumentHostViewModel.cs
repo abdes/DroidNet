@@ -2,9 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -14,6 +11,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Editor.WorldEditor.Editors.Scene;
 using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Messages;
 
@@ -23,7 +21,7 @@ namespace Oxygen.Editor.WorldEditor.Editors;
 /// The ViewModel for the <see cref="Oxygen.Editor.WorldEditor.Editors.DocumentHostView"/> view.
 /// Orchestrates the interaction between the <see cref="IDocumentService"/> and the editor content.
 /// </summary>
-public partial class DocumentHostViewModel : ObservableObject, IDisposable
+public partial class DocumentHostViewModel : ObservableObject, IDisposable // TODO: refactor to use IAsyncDisposable
 {
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
@@ -240,16 +238,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
     }
 
     private async Task ReleaseDocumentSurfacesAsync(Guid documentId)
-    {
-        try
-        {
-            await this.engineService.ReleaseDocumentSurfacesAsync(documentId).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            this.LogSurfaceReleaseFailed(documentId, ex);
-        }
-    }
+        => await this.engineService.ReleaseDocumentSurfacesAsync(documentId).ConfigureAwait(true);
 
     partial void OnActiveEditorChanged(object? value)
     {

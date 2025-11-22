@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.InteropServices;
+
 namespace Oxygen.Editor.WorldEditor.Engine;
 
 /// <summary>
@@ -9,6 +11,7 @@ namespace Oxygen.Editor.WorldEditor.Engine;
 /// </summary>
 /// <param name="DocumentId">The scene document that owns the viewport.</param>
 /// <param name="ViewportId">A unique identifier for the viewport instance.</param>
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct ViewportSurfaceKey(Guid DocumentId, Guid ViewportId)
 {
     /// <summary>
