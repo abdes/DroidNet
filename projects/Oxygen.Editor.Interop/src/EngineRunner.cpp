@@ -263,10 +263,10 @@ namespace Oxygen::Editor::EngineInterface {
     , surface_registry_(nullptr)
   {
     log_handler_ = gcnew LogHandler();
+    this->ui_dispatcher_ = gcnew UiThreadDispatcher();
+    this->render_thread_context_ = gcnew RenderThreadContext();
     this->engine_task_ = nullptr;
     this->engine_completion_source_ = nullptr;
-    this->engine_thread_ = nullptr;
-    this->ui_sync_context_ = nullptr;
     this->active_context_ = nullptr;
     this->state_lock_ = gcnew Object();
   }
@@ -283,6 +283,8 @@ namespace Oxygen::Editor::EngineInterface {
         delete surface_registry_;
         surface_registry_ = nullptr;
       }
+      ui_dispatcher_ = nullptr;
+      render_thread_context_ = nullptr;
       disposed_ = true;
     }
   }
@@ -298,6 +300,8 @@ namespace Oxygen::Editor::EngineInterface {
       delete surface_registry_;
       surface_registry_ = nullptr;
     }
+    ui_dispatcher_ = nullptr;
+    render_thread_context_ = nullptr;
   }
 
   auto EngineRunner::ConfigureLogging(LoggingConfig^ config) -> bool {
@@ -318,10 +322,13 @@ namespace Oxygen::Editor::EngineInterface {
 
   void EngineRunner::CaptureUiSynchronizationContext()
   {
-    auto current = SynchronizationContext::Current;
-    if (current != nullptr) {
-      ui_sync_context_ = current;
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
     }
+
+    auto current = SynchronizationContext::Current;
+    ui_dispatcher_->Capture(current,
+      gcnew String(L"CaptureUiSynchronizationContext() must be invoked on the UI thread."));
   }
 
 
@@ -335,6 +342,10 @@ namespace Oxygen::Editor::EngineInterface {
     if (disposed_) {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
+
+    ui_dispatcher_->CaptureCurrentOrThrow(
+      gcnew String(L"CreateEngine must be invoked on the UI thread. "
+                   L"Call CaptureUiSynchronizationContext() before headless runs."));
 
     try {
       // Translate managed EngineConfig into native config.
@@ -401,11 +412,6 @@ namespace Oxygen::Editor::EngineInterface {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
 
-    auto sync_context = SynchronizationContext::Current;
-    if (sync_context != nullptr) {
-      ui_sync_context_ = sync_context;
-    }
-
     Task^ started_task = nullptr;
 
     Monitor::Enter(state_lock_);
@@ -419,11 +425,9 @@ namespace Oxygen::Editor::EngineInterface {
       engine_completion_source_
         = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
       engine_task_ = engine_completion_source_->Task;
-      engine_thread_
-        = gcnew Thread(gcnew ParameterizedThreadStart(this, &EngineRunner::EngineLoopAdapter));
-      engine_thread_->IsBackground = true;
-      engine_thread_->Name = "OxygenEngineLoop";
-      engine_thread_->Start(ctx);
+      render_thread_context_->Start(
+        gcnew ParameterizedThreadStart(this, &EngineRunner::EngineLoopAdapter),
+        ctx, "OxygenEngineLoop");
       started_task = engine_task_;
     }
     finally {
@@ -458,6 +462,10 @@ namespace Oxygen::Editor::EngineInterface {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
 
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"RegisterSurface requires the UI thread. "
+                   L"Call CreateEngine() on the UI thread first."));
+
     auto& shared = ctx->NativeShared();
     if (!shared) {
       return false;
@@ -469,7 +477,7 @@ namespace Oxygen::Editor::EngineInterface {
 
     auto docString = documentId.ToString();
     auto viewportString = viewportId.ToString();
-    auto displayLabel = displayName != nullptr ? displayName : "(unnamed viewport)";
+    auto displayLabel = displayName != nullptr ? displayName : gcnew String(L"(unnamed viewport)");
     const auto doc = msclr::interop::marshal_as<std::string>(docString);
     const auto view = msclr::interop::marshal_as<std::string>(viewportString);
     const auto disp = msclr::interop::marshal_as<std::string>(displayLabel);
@@ -587,8 +595,10 @@ namespace Oxygen::Editor::EngineInterface {
     try {
       engine_task_ = nullptr;
       active_context_ = nullptr;
-      engine_thread_ = nullptr;
       engine_completion_source_ = nullptr;
+      if (render_thread_context_ != nullptr) {
+        render_thread_context_->Clear();
+      }
     }
     finally {
       Monitor::Exit(state_lock_);
@@ -601,10 +611,9 @@ namespace Oxygen::Editor::EngineInterface {
       return;
     }
 
-    auto ctx = ui_sync_context_;
-    if (ctx != nullptr) {
-      ctx->Post(gcnew SendOrPostCallback(this, &EngineRunner::InvokeAction),
-        action);
+    if (ui_dispatcher_ != nullptr && ui_dispatcher_->IsCaptured) {
+      ui_dispatcher_->Post(
+        gcnew SendOrPostCallback(this, &EngineRunner::InvokeAction), action);
       return;
     }
 
@@ -617,9 +626,8 @@ namespace Oxygen::Editor::EngineInterface {
       return;
     }
 
-    auto ctx = ui_sync_context_;
-    if (ctx != nullptr) {
-      ctx->Post(callback, state);
+    if (ui_dispatcher_ != nullptr && ui_dispatcher_->IsCaptured) {
+      ui_dispatcher_->Post(callback, state);
       return;
     }
 
@@ -632,9 +640,8 @@ namespace Oxygen::Editor::EngineInterface {
       return;
     }
 
-    auto ctx = ui_sync_context_;
-    if (ctx != nullptr) {
-      ctx->Send(callback, state);
+    if (ui_dispatcher_ != nullptr && ui_dispatcher_->IsCaptured) {
+      ui_dispatcher_->Send(callback, state);
       return;
     }
 
@@ -697,7 +704,14 @@ namespace Oxygen::Editor::EngineInterface {
     }
 
     auto state = gcnew SwapChainAttachState(panelPtr, swapChainPtr);
-    DispatchToUi(gcnew SendOrPostCallback(this, &EngineRunner::AttachSwapChainCallback), state);
+    if (ui_dispatcher_ == nullptr || !ui_dispatcher_->IsCaptured) {
+      throw gcnew InvalidOperationException(gcnew String(
+        L"SwapChain attachment requires a captured UI SynchronizationContext. "
+        L"Ensure CreateEngine() was called on the UI thread."));
+    }
+
+    ui_dispatcher_->Post(
+      gcnew SendOrPostCallback(this, &EngineRunner::AttachSwapChainCallback), state);
   }
 
   void EngineRunner::AttachSwapChainCallback(Object^ state)
@@ -761,12 +775,16 @@ namespace Oxygen::Editor::EngineInterface {
         // Ignore exceptions when waiting for shutdown from the finalizer path.
       }
 
+      if (render_thread_context_ != nullptr) {
+        render_thread_context_->Join();
+        render_thread_context_->Clear();
+      }
+
       DispatchToUi(gcnew Action(this, &EngineRunner::ResetSurfaceRegistry));
 
       Monitor::Enter(state_lock_);
       try {
         engine_task_ = nullptr;
-        engine_thread_ = nullptr;
         engine_completion_source_ = nullptr;
         active_context_ = nullptr;
       }

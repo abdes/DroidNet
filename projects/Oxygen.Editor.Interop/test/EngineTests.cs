@@ -19,12 +19,17 @@ namespace Oxygen.Editor.Interop.Tests;
 public sealed class EngineTests
 {
     private EngineRunner runner = null!; // Initialized in TestInitialize
+    private SynchronizationContext? originalContext;
+    private TestSynchronizationContext? uiContext;
 
     public TestContext? TestContext { get; set; }
 
     [TestInitialize]
     public void Setup()
     {
+        this.originalContext = SynchronizationContext.Current;
+        this.uiContext = null;
+
         this.runner = new EngineRunner();
         var ok = this.runner.ConfigureLogging(new LoggingConfig
         {
@@ -40,13 +45,17 @@ public sealed class EngineTests
     {
         this.runner.Dispose();
         this.runner = null!;
+        this.uiContext?.Dispose();
+        SynchronizationContext.SetSynchronizationContext(this.originalContext);
+        this.uiContext = null;
+        this.originalContext = null;
     }
 
     [TestMethod]
     public void CreateEngine_Succeeds_ReturnsValidContext()
     {
         var cfg = new EngineConfig();
-        var ctx = this.runner.CreateEngine(cfg);
+        var ctx = this.CreateEngineUnderTest(cfg);
 
         Assert.IsNotNull(ctx, "CreateEngine should return a non-null context once implemented");
         Assert.IsTrue(ctx.IsValid, "EngineContext should report IsValid = true");
@@ -61,14 +70,28 @@ public sealed class EngineTests
     }
 
     [TestMethod]
+    public void CreateEngine_WithoutSynchronizationContext_ThrowsInvalidOperation()
+    {
+        SynchronizationContext.SetSynchronizationContext(null);
+
+        try
+        {
+            _ = Assert.ThrowsExactly<InvalidOperationException>(() => this.runner.CreateEngine(new EngineConfig()));
+        }
+        finally
+        {
+            this.RestoreUiContext();
+        }
+    }
+
+    [TestMethod]
     public async Task RunEngine_RunsForSomeTime_StopsSuccessfully()
     {
         var token = this.TestContext?.CancellationTokenSource.Token ?? CancellationToken.None;
 
         // Target a modest FPS so frames advance without excess CPU usage.
         var cfg = new EngineConfig { TargetFps = 30 };
-        var ctx = this.runner.CreateEngine(cfg);
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(cfg);
         Assert.IsTrue(ctx.IsValid);
 
         // Run the engine loop using the interop-provided background thread helper.
@@ -90,8 +113,7 @@ public sealed class EngineTests
     public async Task RunEngineAsync_ReturnsNonBlockingTask()
     {
         var cfg = new EngineConfig { TargetFps = 30 };
-        var ctx = this.runner.CreateEngine(cfg);
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(cfg);
 
         var sw = Stopwatch.StartNew();
         var runTask = this.runner.RunEngineAsync(ctx);
@@ -147,8 +169,7 @@ public sealed class EngineTests
     public async Task RunEngineAsync_SubsequentCallWhileRunningThrows()
     {
         var cfg = new EngineConfig { TargetFps = 30 };
-        var ctx = this.runner.CreateEngine(cfg);
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(cfg);
 
         var runTask = this.runner.RunEngineAsync(ctx);
 
@@ -159,6 +180,21 @@ public sealed class EngineTests
         this.runner.StopEngine(ctx);
         var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
         Assert.AreSame(runTask, completed, "Engine should stop after StopEngine.");
+    }
+
+    [TestMethod]
+    public void CaptureUiSynchronizationContext_WithoutSynchronizationContext_ThrowsInvalidOperation()
+    {
+        SynchronizationContext.SetSynchronizationContext(null);
+
+        try
+        {
+            _ = Assert.ThrowsExactly<InvalidOperationException>(() => this.runner.CaptureUiSynchronizationContext());
+        }
+        finally
+        {
+            this.RestoreUiContext();
+        }
     }
 
     [TestMethod]
@@ -176,8 +212,7 @@ public sealed class EngineTests
     [TestMethod]
     public void RunEngineAsync_AfterDispose_ThrowsObjectDisposedException()
     {
-        var ctx = this.runner.CreateEngine(new EngineConfig());
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         this.runner.Dispose();
 
@@ -199,8 +234,7 @@ public sealed class EngineTests
     [TestMethod]
     public void RegisterSurface_WithZeroSwapChainPanel_ThrowsArgumentException()
     {
-        var ctx = this.runner.CreateEngine(new EngineConfig());
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         _ = Assert.ThrowsExactly<ArgumentException>(() =>
             this.runner.RegisterSurface(
@@ -214,8 +248,7 @@ public sealed class EngineTests
     [TestMethod]
     public void RegisterSurface_AfterDispose_ThrowsObjectDisposedException()
     {
-        var ctx = this.runner.CreateEngine(new EngineConfig());
-        Assert.IsNotNull(ctx);
+        var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         this.runner.Dispose();
 
@@ -226,6 +259,35 @@ public sealed class EngineTests
                 Guid.NewGuid(),
                 "Viewport",
                 new IntPtr(1)));
+    }
+
+    [TestMethod]
+    public async Task RegisterSurface_FromNonUiThread_ThrowsInvalidOperationException()
+    {
+        var ctx = this.CreateEngineUnderTest(new EngineConfig());
+
+        var documentId = Guid.NewGuid();
+        var viewportId = Guid.NewGuid();
+
+        var exception = await Task.Run(() =>
+        {
+            try
+            {
+                this.runner.RegisterSurface(
+                    ctx,
+                    documentId,
+                    viewportId,
+                    "Viewport",
+                    new IntPtr(1));
+                return null as InvalidOperationException;
+            }
+            catch (InvalidOperationException ex)
+            {
+                return ex;
+            }
+        }).ConfigureAwait(false);
+
+        Assert.IsNotNull(exception, "RegisterSurface should enforce UI-thread invocation.");
     }
 
     private sealed class TestSynchronizationContext : SynchronizationContext, IDisposable
@@ -270,5 +332,25 @@ public sealed class EngineTests
         {
             this.workItems.Dispose();
         }
+    }
+
+    private void EnsureUiContext()
+    {
+        this.uiContext ??= new TestSynchronizationContext();
+        SynchronizationContext.SetSynchronizationContext(this.uiContext);
+    }
+
+    private void RestoreUiContext()
+    {
+        var contextToRestore = (SynchronizationContext?)this.uiContext ?? this.originalContext;
+        SynchronizationContext.SetSynchronizationContext(contextToRestore);
+    }
+
+    private EngineContext CreateEngineUnderTest(EngineConfig? config = null)
+    {
+        this.EnsureUiContext();
+        var ctx = this.runner.CreateEngine(config ?? new EngineConfig());
+        Assert.IsNotNull(ctx);
+        return ctx;
     }
 }
