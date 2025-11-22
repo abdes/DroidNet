@@ -8,9 +8,8 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.Controls;
 using Oxygen.Editor.WorldEditor.Engine;
-using Oxygen.Editor.WorldEditor.Editors.Scene;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
 /// <summary>
 /// ViewModel for the Scene Editor.
@@ -66,7 +65,7 @@ public partial class SceneEditorViewModel : ObservableObject
         // TODO(oxygen-editor): Support multi-viewport layouts once the engine can
         // safely host multiple instances. For now we intentionally cap the
         // count to a single viewport to avoid spinning up multiple engines.
-        var requiredCount = 1;
+        const int requiredCount = 1;
 
         // Adjust viewports count
         while (this.Viewports.Count < requiredCount)

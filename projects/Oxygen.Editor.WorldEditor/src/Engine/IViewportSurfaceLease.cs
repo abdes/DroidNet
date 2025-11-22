@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Threading;
-using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.WorldEditor.Engine;

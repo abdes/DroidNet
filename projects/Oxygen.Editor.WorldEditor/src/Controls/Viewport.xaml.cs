@@ -2,11 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.WorldEditor.Engine;
 
@@ -15,7 +11,7 @@ namespace Oxygen.Editor.WorldEditor.Controls;
 /// <summary>
 /// A control that displays a 3D viewport with overlay controls.
 /// </summary>
-public sealed partial class Viewport : UserControl
+public sealed partial class Viewport : UserControl // TODO: xaml.cs is doing too much instead of the view model
 {
     private IViewportSurfaceLease? surfaceLease;
     private bool swapChainSizeHooked;

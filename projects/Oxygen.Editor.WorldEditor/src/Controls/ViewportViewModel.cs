@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Windows.Input;
-using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
@@ -59,7 +59,6 @@ public enum ShadingMode
 /// </summary>
 public partial class ViewportViewModel : ObservableObject
 {
-    private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
     private readonly Guid viewportId = Guid.NewGuid();
     private bool isPrimaryViewport;
@@ -70,12 +69,15 @@ public partial class ViewportViewModel : ObservableObject
     /// </summary>
     /// <param name="documentId">The owning document identifier.</param>
     /// <param name="engineService">The shared engine service.</param>
-    /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="loggerFactory">
+    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
+    /// </param>
     public ViewportViewModel(Guid documentId, IEngineService engineService, ILoggerFactory? loggerFactory = null)
     {
         this.DocumentId = documentId;
         this.engineService = engineService;
-        this.loggerFactory = loggerFactory;
+        this.LoggerFactory = loggerFactory;
         this.ViewMenu = this.BuildViewMenu();
         this.ShadingMenu = this.BuildShadingMenu();
     }
@@ -147,7 +149,7 @@ public partial class ViewportViewModel : ObservableObject
     /// <summary>
     /// Gets the logger factory.
     /// </summary>
-    public ILoggerFactory? LoggerFactory => this.loggerFactory;
+    public ILoggerFactory? LoggerFactory { get; }
 
     /// <summary>
     /// Builds the surface request describing this viewport.
@@ -172,7 +174,7 @@ public partial class ViewportViewModel : ObservableObject
 
     private IMenuSource BuildViewMenu()
     {
-        var builder = new MenuBuilder(this.loggerFactory);
+        var builder = new MenuBuilder(this.LoggerFactory);
 
         builder.AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => this.CameraType = CameraType.Perspective));
         builder.AddSeparator();
@@ -188,7 +190,7 @@ public partial class ViewportViewModel : ObservableObject
 
     private IMenuSource BuildShadingMenu()
     {
-        var builder = new MenuBuilder(this.loggerFactory);
+        var builder = new MenuBuilder(this.LoggerFactory);
 
         builder.AddRadioMenuItem("Wireframe", "ShadingMode", this.ShadingMode == ShadingMode.Wireframe, new RelayCommand(() => this.ShadingMode = ShadingMode.Wireframe));
         builder.AddRadioMenuItem("Shaded", "ShadingMode", this.ShadingMode == ShadingMode.Shaded, new RelayCommand(() => this.ShadingMode = ShadingMode.Shaded));

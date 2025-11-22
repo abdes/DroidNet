@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
 /// <summary>
 ///     Metadata for a Scene document, used by Aura document tabs.
