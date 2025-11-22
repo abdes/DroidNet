@@ -76,6 +76,10 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
                     this.LogDocumentOpenAborted(windowId.Value, metadata.DocumentId);
                     return Guid.Empty;
                 }
+
+                // Closing the last document removes the dictionary entry; reacquire it so the
+                // upcoming assignment is tracked in the global windowDocs map.
+                docs = this.GetOrCreateWindowDocuments(windowId);
             }
         }
 
@@ -180,6 +184,9 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
                     this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
                     return false;
                 }
+
+                // Closing may remove the window entry; reacquire to keep the attach tracked.
+                docs = this.GetOrCreateWindowDocuments(targetWindowId);
             }
         }
 
