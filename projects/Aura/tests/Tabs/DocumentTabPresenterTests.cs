@@ -2,8 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Tasks;
 using AwesomeAssertions;
+using DroidNet.Aura.Controls;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
@@ -56,6 +60,93 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         _ = added.ContentId.Should().Be(id);
         _ = added.Header.Should().Be(meta.Title);
         _ = tabStrip.SelectedItem.Should().Be(added);
+    });
+
+    [TestMethod]
+    public Task Constructor_HydratesExistingDocuments_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        var docId = Guid.NewGuid();
+        var metadata = new TestDocumentMetadata { DocumentId = docId, Title = "Preloaded" };
+
+        using var presenter = new DocumentTabPresenter(
+            tabStrip,
+            CreateStatefulServiceMock(ctx.Id, new[] { metadata }, docId).Object,
+            ctx,
+            DispatcherQueue.GetForCurrentThread(),
+            this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = tabStrip.Items.Should().ContainSingle();
+        var hydrated = tabStrip.Items[0];
+        _ = hydrated.ContentId.Should().Be(docId);
+        _ = hydrated.Header.Should().Be(metadata.Title);
+        _ = tabStrip.SelectedItem.Should().Be(hydrated);
+    });
+
+    [TestMethod]
+    public Task Constructor_SelectsActiveDocumentFromState_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        var first = new TestDocumentMetadata { DocumentId = Guid.NewGuid(), Title = "Scene 1" };
+        var second = new TestDocumentMetadata { DocumentId = Guid.NewGuid(), Title = "Scene 2" };
+
+        using var presenter = new DocumentTabPresenter(
+            tabStrip,
+            CreateStatefulServiceMock(ctx.Id, new[] { first, second }, second.DocumentId).Object,
+            ctx,
+            DispatcherQueue.GetForCurrentThread(),
+            this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = tabStrip.Items.Should().HaveCount(2);
+        var selected = tabStrip.SelectedItem as Controls.TabItem;
+        _ = selected.Should().NotBeNull();
+        var active = selected!;
+        _ = active.ContentId.Should().Be(second.DocumentId);
+        _ = active.Header.Should().Be(second.Title);
+    });
+
+    [TestMethod]
+    public Task Constructor_SkipsHydration_WhenStateUnavailable_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        var ds = new TestDocumentService();
+        var meta = new TestDocumentMetadata { Title = "Pre-opened" };
+        _ = await ds.OpenDocumentAsync(ctx.Id, meta, -1, shouldSelect: true).ConfigureAwait(false);
+
+        // Act - instantiate presenter after documents already existed; service lacks IDocumentServiceState
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert - no hydration occurred
+        _ = tabStrip.Items.Should().BeEmpty();
+
+        // When a new document opens after presenter creation, normal behavior still applies
+        var newMeta = new TestDocumentMetadata { Title = "Fresh" };
+        var newId = await ds.OpenDocumentAsync(ctx.Id, newMeta, -1, shouldSelect: true).ConfigureAwait(false);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        _ = tabStrip.Items.Should().ContainSingle();
+        _ = tabStrip.Items[0].ContentId.Should().Be(newId);
     });
 
     [TestMethod]
@@ -344,6 +435,39 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             Category = new WindowCategory("Test"),
             CreatedAt = DateTimeOffset.UtcNow,
         };
+    }
+
+    private static Mock<IDocumentService> CreateStatefulServiceMock(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, Guid? activeDocumentId)
+    {
+        var mock = new Mock<IDocumentService>(MockBehavior.Loose);
+        var stateMock = mock.As<IDocumentServiceState>();
+        stateMock
+            .Setup(s => s.GetOpenDocuments(windowId))
+            .Returns(documents);
+        stateMock
+            .Setup(s => s.GetActiveDocumentId(windowId))
+            .Returns(activeDocumentId);
+
+        _ = mock
+            .Setup(s => s.SelectDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
+            .ReturnsAsync(true);
+        _ = mock
+            .Setup(s => s.CloseDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<bool>()))
+            .ReturnsAsync(true);
+        _ = mock
+            .Setup(s => s.DetachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
+            .ReturnsAsync((IDocumentMetadata?)null);
+        _ = mock
+            .Setup(s => s.OpenDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(Guid.NewGuid());
+        _ = mock
+            .Setup(s => s.AttachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(true);
+        _ = mock
+            .Setup(s => s.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
+            .ReturnsAsync(true);
+
+        return mock;
     }
 
     private sealed class TestDocumentService : IDocumentService

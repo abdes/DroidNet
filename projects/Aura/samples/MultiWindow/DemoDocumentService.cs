@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Concurrent;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Linq;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using Microsoft.UI;
@@ -18,9 +20,10 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 /// documents; it's intentionally small and not intended for production.
 /// </summary>
 [SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
-internal sealed class DemoDocumentService : IDocumentService
+internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceState
 {
-    private readonly ConcurrentDictionary<Guid, IDocumentMetadata> docs = new();
+    private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
+    private readonly Dictionary<WindowId, Guid> activeDocuments = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -49,10 +52,16 @@ internal sealed class DemoDocumentService : IDocumentService
         var id = metadata?.DocumentId ?? Guid.NewGuid();
         var meta = metadata ?? new DemoDocumentMetadata { DocumentId = id, Title = "Untitled" };
         var assigned = meta.DocumentId == Guid.Empty ? id : meta.DocumentId;
-        this.docs[assigned] = meta;
+        var docs = this.GetOrCreateWindowDocuments(windowId);
+        docs[assigned] = meta;
 
         Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={windowId.Value}, DocumentId={assigned}, Title='{meta.Title}', ShouldSelect={shouldSelect}");
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, meta, indexHint, shouldSelect));
+        if (shouldSelect)
+        {
+            this.activeDocuments[windowId] = assigned;
+        }
+
         return Task.FromResult(assigned);
     }
 
@@ -61,7 +70,7 @@ internal sealed class DemoDocumentService : IDocumentService
     {
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
-        if (!this.docs.TryGetValue(documentId, out var metadata))
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
         {
             Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} not found");
             return false;
@@ -82,7 +91,16 @@ internal sealed class DemoDocumentService : IDocumentService
         }
 
         // Proceed with close
-        _ = this.docs.TryRemove(documentId, out _);
+        _ = docs.Remove(documentId);
+        if (docs.Count == 0)
+        {
+            _ = this.windowDocs.Remove(windowId);
+        }
+
+        if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
+        {
+            _ = this.activeDocuments.Remove(windowId);
+        }
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
         this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         return true;
@@ -91,8 +109,18 @@ internal sealed class DemoDocumentService : IDocumentService
     /// <inheritdoc/>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, Guid documentId)
     {
-        if (this.docs.TryRemove(documentId, out var metadata))
+        if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
         {
+            _ = docs.Remove(documentId);
+            if (docs.Count == 0)
+            {
+                _ = this.windowDocs.Remove(windowId);
+            }
+
+            if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
+            {
+                _ = this.activeDocuments.Remove(windowId);
+            }
             this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
@@ -103,7 +131,12 @@ internal sealed class DemoDocumentService : IDocumentService
     /// <inheritdoc/>
     public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
-        this.docs[metadata.DocumentId] = metadata;
+        var docs = this.GetOrCreateWindowDocuments(targetWindowId);
+        docs[metadata.DocumentId] = metadata;
+        if (shouldSelect)
+        {
+            this.activeDocuments[targetWindowId] = metadata.DocumentId;
+        }
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         return Task.FromResult(true);
     }
@@ -111,12 +144,12 @@ internal sealed class DemoDocumentService : IDocumentService
     /// <inheritdoc/>
     public Task<bool> UpdateMetadataAsync(WindowId windowId, Guid documentId, IDocumentMetadata metadata)
     {
-        if (!this.docs.ContainsKey(documentId))
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.ContainsKey(documentId))
         {
             return Task.FromResult(false);
         }
 
-        this.docs[documentId] = metadata;
+        docs[documentId] = metadata;
 
         // For sample, raise DocumentMetadataChanged with the provided window.
         this.DocumentMetadataChanged?.Invoke(this, new DocumentMetadataChangedEventArgs(windowId, metadata));
@@ -126,13 +159,42 @@ internal sealed class DemoDocumentService : IDocumentService
     /// <inheritdoc/>
     public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
     {
-        if (!this.docs.TryGetValue(documentId, out var metadata))
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out _))
         {
             return Task.FromResult(false);
         }
 
+        this.activeDocuments[windowId] = documentId;
         this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
         return Task.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
+    {
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0)
+        {
+            return Array.Empty<IDocumentMetadata>();
+        }
+
+        return docs.Values.ToList();
+    }
+
+    /// <inheritdoc/>
+    public Guid? GetActiveDocumentId(WindowId windowId)
+        => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
+            ? documentId
+            : null;
+
+    private Dictionary<Guid, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
+    {
+        if (!this.windowDocs.TryGetValue(windowId, out var docs))
+        {
+            docs = [];
+            this.windowDocs[windowId] = docs;
+        }
+
+        return docs;
     }
 
     // Minimal metadata type used only by the sample
