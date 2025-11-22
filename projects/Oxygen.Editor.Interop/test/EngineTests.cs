@@ -161,6 +161,73 @@ public sealed class EngineTests
         Assert.AreSame(runTask, completed, "Engine should stop after StopEngine.");
     }
 
+    [TestMethod]
+    public void RunEngine_WithNullContext_ThrowsArgumentNullException()
+    {
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => this.runner.RunEngine(null!));
+    }
+
+    [TestMethod]
+    public void RunEngineAsync_WithNullContext_ThrowsArgumentNullException()
+    {
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() => this.runner.RunEngineAsync(null!));
+    }
+
+    [TestMethod]
+    public void RunEngineAsync_AfterDispose_ThrowsObjectDisposedException()
+    {
+        var ctx = this.runner.CreateEngine(new EngineConfig());
+        Assert.IsNotNull(ctx);
+
+        this.runner.Dispose();
+
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => this.runner.RunEngineAsync(ctx));
+    }
+
+    [TestMethod]
+    public void RegisterSurface_WithNullContext_ThrowsArgumentNullException()
+    {
+        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
+            this.runner.RegisterSurface(
+                null!,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "Viewport",
+                new IntPtr(1)));
+    }
+
+    [TestMethod]
+    public void RegisterSurface_WithZeroSwapChainPanel_ThrowsArgumentException()
+    {
+        var ctx = this.runner.CreateEngine(new EngineConfig());
+        Assert.IsNotNull(ctx);
+
+        _ = Assert.ThrowsExactly<ArgumentException>(() =>
+            this.runner.RegisterSurface(
+                ctx,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "Viewport",
+                IntPtr.Zero));
+    }
+
+    [TestMethod]
+    public void RegisterSurface_AfterDispose_ThrowsObjectDisposedException()
+    {
+        var ctx = this.runner.CreateEngine(new EngineConfig());
+        Assert.IsNotNull(ctx);
+
+        this.runner.Dispose();
+
+        _ = Assert.ThrowsExactly<ObjectDisposedException>(() =>
+            this.runner.RegisterSurface(
+                ctx,
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                "Viewport",
+                new IntPtr(1)));
+    }
+
     private sealed class TestSynchronizationContext : SynchronizationContext, IDisposable
     {
         private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> workItems = new();
