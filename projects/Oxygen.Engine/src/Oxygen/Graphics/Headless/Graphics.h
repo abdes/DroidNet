@@ -45,6 +45,10 @@ public:
     observer_ptr<graphics::CommandQueue> command_queue) const
     -> std::shared_ptr<Surface> override;
 
+  OXGN_HDLS_NDAPI auto CreateSurfaceFromNative(void* native_handle,
+    observer_ptr<graphics::CommandQueue> command_queue) const
+    -> std::shared_ptr<Surface> override;
+
   [[nodiscard]] auto GetShader(std::string_view unique_id) const
     -> std::shared_ptr<IShaderByteCode> override;
 

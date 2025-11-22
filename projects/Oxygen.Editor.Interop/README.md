@@ -55,6 +55,15 @@ The interop layer consists of three main namespaces and classes:
 - **Logging Forwarding:** Optional integration with .NET `ILogger` for unified log capture
 - **Header Isolation:** Public headers (`EngineRunner.h`, `EngineContext.h`) avoid exposing native logging implementation details
 
+### WinUI 3 Integration
+
+The interop layer handles the specific requirements for hosting the DirectX 12 engine within a WinUI 3 `SwapChainPanel`.
+
+- **Separation of Concerns:** The core `Oxygen.Engine` remains unaware of WinUI 3 specifics. It creates a `CompositionSurface` with a standard `IDXGISwapChain`.
+- **Interop Responsibility:** `EngineRunner` acts as the bridge. It accepts the `SwapChainPanel` pointer, retrieves the swap chain from the engine, and performs the necessary COM interface queries to connect them.
+- **ISwapChainPanelNative:** The project explicitly defines and uses the WinUI 3 specific IID (`{63BE0B4D-909D-4652-9C00-5C3EA4763E52}`) for `ISwapChainPanelNative`, which differs from the UWP version.
+- **Threading Model:** The `SetSwapChain` operation is performed within the interop layer. Consumers must ensure `CreateEngine` is called from a thread compatible with the `SwapChainPanel` (typically the UI thread).
+
 ## Project Structure
 
 ```text

@@ -38,6 +38,16 @@ namespace adl_helper {
 
 } // namespace adl_helper
 
+//! Converts an enum to its underlying type.
+/*!
+ * This is a C++23 feature that we backport here for C++20 compatibility.
+ */
+template <typename Enum>
+constexpr auto to_underlying(Enum e) noexcept
+{
+  return static_cast<std::underlying_type_t<Enum>>(e);
+}
+
 //! Project-wide ADL entrypoint: nostd::to_string
 /*!
   `nostd::to_string` centralizes ADL-based conversions for logging and other

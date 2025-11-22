@@ -122,4 +122,10 @@ public partial class DocumentHostViewModel
     [Conditional("DEBUG")]
     private void LogOpenedNewScene(string sceneName, Guid sceneId)
         => LogOpenedNewScene(this.logger, sceneName, sceneId);
+
+    [LoggerMessage(EventId = 18, Level = LogLevel.Warning, Message = "Failed to release engine surfaces for DocumentId: {DocumentId}")]
+    private static partial void LogSurfaceReleaseFailed(ILogger logger, Guid documentId, Exception exception);
+
+    private void LogSurfaceReleaseFailed(Guid documentId, Exception exception)
+        => LogSurfaceReleaseFailed(this.logger, documentId, exception);
 }

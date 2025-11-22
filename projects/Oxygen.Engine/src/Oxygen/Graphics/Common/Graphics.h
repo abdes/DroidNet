@@ -132,6 +132,12 @@ public:
     -> std::shared_ptr<graphics::Surface>
     = 0;
 
+  [[nodiscard]] virtual OXGN_GFX_API auto CreateSurfaceFromNative(
+    void* native_handle,
+    observer_ptr<graphics::CommandQueue> command_queue) const
+    -> std::shared_ptr<graphics::Surface>
+    = 0;
+
   //! Initialize command queues using the provided queue management strategy.
   /*!
   @param queue_strategy The strategy for initializing command queues.

@@ -333,6 +333,12 @@ public:
   {
     return {};
   }
+  [[nodiscard]] auto CreateSurfaceFromNative(
+    void* /*native_handle*/, observer_ptr<CommandQueue>) const
+    -> std::shared_ptr<graphics::Surface> override
+  {
+    return {};
+  }
   [[nodiscard]] auto GetShader(std::string_view) const
     -> std::shared_ptr<graphics::IShaderByteCode> override
   {

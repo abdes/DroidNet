@@ -9,6 +9,7 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 
@@ -130,7 +131,7 @@ auto QueueManager::GetQueueByRole(QueueRole role) const
   DCHECK_LT_F(role, QueueRole::kMax);
   if (role >= QueueRole::kMax) {
     LOG_F(WARNING, "GetQueueByRole called with invalid role: {}",
-      std::to_underlying(role));
+      nostd::to_underlying(role));
     return {};
   }
   // Scan all created queues. Prefer dedicated over all-in-one. Do NOT return

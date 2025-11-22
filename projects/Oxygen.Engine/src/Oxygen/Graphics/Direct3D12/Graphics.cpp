@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/CompositionSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -233,6 +234,25 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const auto surface = std::make_shared<detail::WindowSurface>(
     window_weak, queue->GetCommandQueue(), this);
   CHECK_NOTNULL_F(surface, "Failed to create surface");
+  return std::static_pointer_cast<Surface>(surface);
+}
+
+auto Graphics::CreateSurfaceFromNative(void* native_handle,
+  const observer_ptr<graphics::CommandQueue> command_queue) const
+  -> std::shared_ptr<Surface>
+{
+  // native_handle is unused for CompositionSurface as we create the SwapChain internally
+  // and expose it via GetSwapChain() for the interop layer to connect.
+  DCHECK_NOTNULL_F(command_queue);
+  DCHECK_EQ_F(command_queue->GetTypeId(),
+    graphics::d3d12::CommandQueue::ClassTypeId(),
+    "Invalid command queue class");
+
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
+  const auto* queue = static_cast<CommandQueue*>(command_queue.get());
+  const auto surface = std::make_shared<detail::CompositionSurface>(
+    queue->GetCommandQueue(), this);
+  CHECK_NOTNULL_F(surface, "Failed to create composition surface");
   return std::static_pointer_cast<Surface>(surface);
 }
 

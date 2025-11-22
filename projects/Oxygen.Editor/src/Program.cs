@@ -35,6 +35,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Editors;
 using Oxygen.Editor.WorldEditor.Workspace;
 using Serilog;
@@ -249,6 +250,7 @@ public static partial class Program
         container.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
 
         RegisterEditorDataServices(container);
+        container.Register<IEngineService, EngineService>(Reuse.Singleton);
 
         /*
          * Set up the view model to view converters. We're using the standard

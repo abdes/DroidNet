@@ -7,8 +7,31 @@
 #pragma once
 #pragma managed
 
+#include <memory>
+
 #include "Config.h"
 #include "EngineContext.h"
+
+namespace oxygen::graphics {
+
+namespace System {
+  ref class Action;
+  ref class Object;
+}
+
+namespace System::Threading {
+  ref class SynchronizationContext;
+  ref class Thread;
+  ref class SendOrPostCallback;
+}
+
+namespace System::Threading::Tasks {
+  ref class Task;
+  generic<typename TResult>
+  ref class TaskCompletionSource;
+}
+class Surface;
+}
 
 namespace Oxygen::Editor::EngineInterface {
 
@@ -78,19 +101,43 @@ namespace Oxygen::Editor::EngineInterface {
 
       /// <summary>
       /// Creates and initializes the engine using the supplied configuration.
-      /// (Not yet implemented.)
       /// </summary>
       /// <param name="config">
       /// The engine configuration to use during initialization.
       /// </param>
+      /// <param name="swapChainPanel">
+      /// The native IUnknown pointer to the WinUI 3 SwapChainPanel to render into. If IntPtr::Zero, the engine will run in headless mode or create its own window (depending on config).
+      /// </param>
       /// <returns>
-      /// <see langword="true"/> if creation succeeded; otherwise, <see langword="false"/>.
+      /// A new EngineContext if creation succeeded; otherwise, nullptr.
       /// </returns>
+      auto CreateEngine(EngineConfig^ config, System::IntPtr swapChainPanel) -> EngineContext^;
+
+      /// <summary>
+      /// Creates and initializes the engine using the supplied configuration (headless or default window).
+      /// </summary>
       auto CreateEngine(EngineConfig^ config) -> EngineContext^;
 
       auto RunEngine(EngineContext^ ctx) -> void;
 
+      /// <summary>
+      /// Starts the engine loop on a dedicated background thread and returns a task that
+      /// completes when the engine stops.
+      /// </summary>
+      auto RunEngineAsync(EngineContext^ ctx)
+        -> System::Threading::Tasks::Task^;
+
       auto StopEngine(EngineContext^ ctx) -> void;
+
+      auto ResizeViewport(System::UInt32 width, System::UInt32 height) -> void;
+
+      void CaptureUiSynchronizationContext();
+
+      /// <summary>
+      /// Releases the cached editor surface reference to allow native resources to tear down safely.
+      /// Safe to call multiple times.
+      /// </summary>
+      void ReleaseEditorSurface();
 
     private:
       // Encapsulated logging handler (forward-declared above). This hides any
@@ -98,6 +145,27 @@ namespace Oxygen::Editor::EngineInterface {
       LogHandler^ log_handler_;
 
       bool disposed_;
+      std::shared_ptr<oxygen::graphics::Surface>* editor_surface_;
+
+      System::Threading::Tasks::Task^ engine_task_;
+      System::Threading::Tasks::TaskCompletionSource<bool>^ engine_completion_source_;
+      System::Threading::Thread^ engine_thread_;
+      System::Threading::SynchronizationContext^ ui_sync_context_;
+      EngineContext^ active_context_;
+      System::Object^ state_lock_;
+
+      void EngineLoopAdapter(System::Object^ state);
+      void OnEngineLoopExited();
+      void DispatchToUi(System::Action^ action);
+      void DispatchToUi(System::Threading::SendOrPostCallback^ callback,
+        System::Object^ state);
+      void SendToUi(System::Threading::SendOrPostCallback^ callback,
+        System::Object^ state);
+      void InvokeAction(System::Object^ action);
+      void ResetEditorSurface();
+      void EnsureEngineLoopStopped();
+      void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr);
+      void AttachSwapChainCallback(System::Object^ state);
   };
 
 } // namespace Oxygen::Editor::EngineInterface

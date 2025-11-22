@@ -13,6 +13,10 @@
 #include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/EditorInterface/api_export.h>
 
+namespace oxygen::graphics {
+class Surface;
+}
+
 namespace oxygen::engine::interop {
 
 struct LoggingConfig {
@@ -35,5 +39,12 @@ OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
 
 OXGN_EI_API auto CreateScene(const char* name) -> bool;
 OXGN_EI_API auto RemoveScene(const char* name) -> bool;
+
+OXGN_EI_API auto CreateCompositionSurface(std::shared_ptr<EngineContext> ctx,
+  void** swap_chain_out) -> std::shared_ptr<graphics::Surface>;
+
+OXGN_EI_API auto RequestCompositionSurfaceResize(
+  const std::shared_ptr<graphics::Surface>& surface, uint32_t width,
+  uint32_t height) -> void;
 
 } // namespace oxygen::engine::interop

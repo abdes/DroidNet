@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
@@ -11,6 +14,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
@@ -23,6 +27,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
+    private readonly IEngineService engineService;
 
     private readonly WindowId windowId;
     private readonly IMessenger messenger;
@@ -36,6 +41,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
     /// <param name="windowId">The ID of the window that hosts this document host.</param>
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
+    /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
     ///     process. If <see langword="null" />, logging is disabled.
@@ -45,12 +51,14 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         WindowId windowId,
         IViewLocator viewLocator,
         IMessenger messenger,
+        IEngineService engineService,
         ILoggerFactory? loggerFactory = null)
     {
         this.DocumentService = documentService;
         this.windowId = windowId;
         this.viewLocator = viewLocator;
         this.messenger = messenger;
+        this.engineService = engineService;
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<DocumentHostViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DocumentHostViewModel>();
 
@@ -94,6 +102,11 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
             this.DocumentService.DocumentOpened -= this.OnDocumentOpened;
             this.DocumentService.DocumentClosed -= this.OnDocumentClosed;
             this.DocumentService.DocumentActivated -= this.OnDocumentActivated;
+
+            foreach (var documentId in this.activeEditors.Keys.ToArray())
+            {
+                _ = this.ReleaseDocumentSurfacesAsync(documentId);
+            }
         }
     }
 
@@ -140,15 +153,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         {
             this.LogReactivatingExistingScene(message.Scene.Name, message.Scene.Id);
 
-            // Re-create metadata to pass to OpenDocumentAsync, the service should handle re-activation if it tracks by ID.
-            var metadata = new SceneDocumentMetadata
-            {
-                DocumentId = message.Scene.Id,
-                Title = message.Scene.Name,
-                IsClosable = false,
-            };
-
-            _ = await this.DocumentService.OpenDocumentAsync(this.windowId, metadata).ConfigureAwait(true);
+            _ = await this.DocumentService.SelectDocumentAsync(this.windowId, message.Scene.Id).ConfigureAwait(true);
             this.LogReactivatedExistingScene(message.Scene.Name, message.Scene.Id);
             message.Reply(response: true);
             return;
@@ -177,7 +182,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         object? editor = null;
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
-            editor = new SceneEditorViewModel(sceneMeta, this.loggerFactory);
+            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.loggerFactory);
         }
         else
         {
@@ -215,6 +220,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
                 disposable.Dispose();
                 this.LogEditorDisposed(e.Metadata.DocumentId);
             }
+
+            _ = this.ReleaseDocumentSurfacesAsync(e.Metadata.DocumentId);
         }
     }
 
@@ -229,6 +236,18 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable
         else
         {
             this.LogOnDocumentActivatedEditorNotFound(e.DocumentId);
+        }
+    }
+
+    private async Task ReleaseDocumentSurfacesAsync(Guid documentId)
+    {
+        try
+        {
+            await this.engineService.ReleaseDocumentSurfacesAsync(documentId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            this.LogSurfaceReleaseFailed(documentId, ex);
         }
     }
 

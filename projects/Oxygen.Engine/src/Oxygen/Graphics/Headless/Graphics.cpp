@@ -100,6 +100,13 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
   return std::make_shared<HeadlessSurface>("headless-surface");
 }
 
+auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
+  observer_ptr<graphics::CommandQueue> /*command_queue*/) const
+  -> std::shared_ptr<Surface>
+{
+  return std::make_shared<HeadlessSurface>("headless-surface-from-native");
+}
+
 auto Graphics::GetShader(std::string_view unique_id) const
   -> std::shared_ptr<IShaderByteCode>
 {

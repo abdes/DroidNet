@@ -6,9 +6,9 @@
 
 #pragma once
 
-#include <expected>
 #include <memory>
 #include <optional>
+#include <variant>
 
 #include <glm/glm.hpp>
 
@@ -59,13 +59,12 @@ public:
   }
 
   [[nodiscard]] auto GetSurface() const noexcept
-    -> std::expected<std::reference_wrapper<graphics::Surface>, std::string>
+    -> std::variant<std::reference_wrapper<graphics::Surface>, std::string>
   {
     if (auto surface = surface_.lock()) {
       return std::ref(*surface);
     }
-    return std::unexpected(
-      make_error_code(RendererError::kSurfaceExpired).message());
+    return make_error_code(RendererError::kSurfaceExpired).message();
   }
 
   // Builds a View snapshot from the camera's world transform and projection.
