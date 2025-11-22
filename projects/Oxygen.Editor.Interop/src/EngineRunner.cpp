@@ -8,6 +8,7 @@
 
 #include "EngineRunner.h"
 #include "SimpleEditorModule.h"
+#include "Base/LoguruWrapper.h"
 
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
@@ -29,6 +30,7 @@ using namespace System::Diagnostics;
 using namespace System::Threading;
 using namespace System::Threading::Tasks;
 using namespace Microsoft::Extensions::Logging;
+namespace InteropLogging = Oxygen::Interop::Logging;
 
 // Map native logging verbosity to Microsoft.Extensions.Logging.LogLevel
 // integer.
@@ -87,8 +89,9 @@ namespace Oxygen::Editor::EngineInterface {
     ref class LogHandler sealed {
     public:
       LogHandler()
-        : logger_(nullptr),
-        callback_registered_(false), self_handle_(IntPtr::Zero) {
+        : logger_(nullptr)
+        , callback_registered_(false)
+        , self_handle_(IntPtr::Zero) {
         Runtime::InteropServices::GCHandle h =
           Runtime::InteropServices::GCHandle::Alloc(
             this,
@@ -101,12 +104,19 @@ namespace Oxygen::Editor::EngineInterface {
       !LogHandler() { ReleaseCallback(); }
 
       void SetLogger(Object^ logger) {
+        logger_ = nullptr;
         if (logger == nullptr) {
-            logger_ = nullptr;
-            return;
+          return;
         }
-        // Cast to ILogger directly.
-        logger_ = dynamic_cast<ILogger^>(logger);
+
+        auto ilogger = dynamic_cast<ILogger^>(logger);
+        if (ilogger == nullptr) {
+          throw gcnew ArgumentException(
+            "logger must implement Microsoft.Extensions.Logging.ILogger",
+            "logger");
+        }
+
+        logger_ = ilogger;
       }
 
       bool ConfigureLogging(LoggingConfig^ config) {
@@ -126,11 +136,10 @@ namespace Oxygen::Editor::EngineInterface {
         bool ok = op::ConfigureLogging(native_config);
         if (ok) {
           RegisterCallbackIfNeeded();
+          InteropLogging::Loguru::WriteAndFlush(
+            InteropLogging::Loguru::Verbosity::Verbosity_INFO,
+            gcnew String(L"Oxygen Editor logging configured."));
         }
-        // Log an INFO message, used for testing and also nice to have for the
-        // status.
-        op::LogInfoMessage("Oxygen Editor logging configured.");
-        // Flush so we can see that message right away.
         return ok;
       }
 
@@ -161,15 +170,10 @@ namespace Oxygen::Editor::EngineInterface {
 
           LogLevel lvlValue = MapVerbosityToManagedLevel(message.verbosity);
 
-          // Use the extension method or direct interface call?
-          // ILogger::Log is generic.
-          // void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception^ exception, Func<TState, Exception^, String^>^ formatter);
-
-          // We can use a simple formatter lambda or delegate.
-          // But C++/CLI lambdas to delegates are tricky.
-          // Let's use a static method for formatter.
-
-          logger_->Log<String^>(lvlValue, EventId(0), managedMsg, nullptr, gcnew Func<String^, Exception^, String^>(&LogHandler::Format));
+          if (logger_ != nullptr) {
+            logger_->Log<String^>(lvlValue, EventId(0), managedMsg, nullptr,
+              gcnew Func<String^, Exception^, String^>(&LogHandler::Format));
+          }
         }
         catch (...) {
           /* swallow */

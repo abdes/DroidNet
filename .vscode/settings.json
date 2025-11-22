@@ -32,6 +32,7 @@
         "shared_mutex": "cpp",
         "exception": "cpp",
         "optional": "cpp",
-        "vector": "cpp"
+        "vector": "cpp",
+        "sstream": "cpp"
     }
 }

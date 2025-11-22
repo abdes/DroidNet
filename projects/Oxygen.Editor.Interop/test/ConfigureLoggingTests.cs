@@ -38,24 +38,8 @@ public sealed class ConfigureLoggingTests
         var logger = new TestLogger();
 
         var ok = this.runner.ConfigureLogging(config, logger);
-
-        // Wait up to 1500ms for a log to arrive, polling to avoid flaky sleeps.
-        var sw = Stopwatch.StartNew();
-        var found = false;
-        while (sw.ElapsedMilliseconds < 1500)
-        {
-            if (logger.Messages.Exists(m => m.Contains("logging configured", StringComparison.OrdinalIgnoreCase)))
-            {
-                found = true;
-            }
-
-            if (found)
-            {
-                break;
-            }
-
-            Thread.Sleep(10);
-        }
+        var found = logger.Messages.Any(
+            m => m.Contains("logging configured", StringComparison.OrdinalIgnoreCase));
 
         _ = ok.Should().BeTrue("ConfigureLogging returned false");
         _ = found.Should().BeTrue($"Expected a log containing 'logging configured' but got: {string.Join(" | ", logger.Messages)}");
@@ -115,20 +99,37 @@ public sealed class ConfigureLoggingTests
     // Helper logger used for tests. Must expose a `Log` method with 5 parameters
     // (LogLevel, EventId, object state, Exception exception, formatter) so the
     // EngineRunner reflection can discover it.
-    private sealed class TestLogger
+    private sealed class TestLogger : ILogger
     {
         public List<string> Messages { get; } = new List<string>();
 
-        [SuppressMessage("Design", "IDE0060: Remove unused parameter", Justification = "Used by reflection")]
-        public void Log(
+        public IDisposable BeginScope<TState>(TState state) where TState : notnull => NullScope.Instance;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
             LogLevel level,
             EventId eventId,
-            object state,
+            TState state,
             Exception? exception,
-            Func<object, Exception?, string> formatter)
+            Func<TState, Exception?, string> formatter)
         {
+            if (formatter is null)
+            {
+                throw new ArgumentNullException(nameof(formatter));
+            }
+
             var text = formatter(state, exception);
             this.Messages.Add(text);
+        }
+
+        private sealed class NullScope : IDisposable
+        {
+            public static NullScope Instance { get; } = new NullScope();
+
+            public void Dispose()
+            {
+            }
         }
     }
 }

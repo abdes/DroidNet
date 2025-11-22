@@ -62,10 +62,27 @@ public:
         Verbosity_9 = +9,
     };
 
-    internal :
+internal:
         // The stored delegate ref to be used later
-        LogHandler
-        ^ _handle_log;
+        LogHandler ^ _handle_log;
+        void InvokeHandler(const loguru::Message& message)
+        {
+            if (_handle_log == nullptr)
+            {
+                return;
+            }
+
+            auto wrapper = gcnew MessageWrapper();
+            wrapper->Verbosity = message.verbosity;
+            wrapper->Filename = ToManagedString(message.filename);
+            wrapper->Line = message.line;
+            wrapper->Preamble = ToManagedString(message.preamble);
+            wrapper->Indentation = ToManagedString(message.indentation);
+            wrapper->Prefix = ToManagedString(message.prefix);
+            wrapper->Message = ToManagedString(message.message);
+
+            _handle_log(wrapper);
+        }
 
 private:
     // Native handle of the ref Library class, castable to void *
@@ -105,17 +122,71 @@ public:
         _handle_log = nullptr;
     }
 
-    void LogInfo(String ^ message) { LogMessage(Verbosity::Verbosity_INFO, message); }
-    void LogError(String ^ message) { LogMessage(Verbosity::Verbosity_ERROR, message); }
-    void LogWarning(String ^ message) { LogMessage(Verbosity::Verbosity_WARNING, message); }
+    void LogInfo(String ^ message) { Write(Verbosity::Verbosity_INFO, message); }
+    void LogError(String ^ message) { Write(Verbosity::Verbosity_ERROR, message); }
+    void LogWarning(String ^ message) { Write(Verbosity::Verbosity_WARNING, message); }
     void LogMessage(Verbosity level, String ^ message)
     {
-        // Convert the managed string to a native string
-        const char* native_message = (const char*)(Marshal::StringToHGlobalAnsi(message)).ToPointer();
-        // Log the message
-        loguru::log((loguru::Verbosity)level, __FILE__, __LINE__, native_message);
-        // Free the native string
-        Marshal::FreeHGlobal(IntPtr((void*)native_message));
+        Write(level, message);
+    }
+
+    static void Write(Verbosity level, String ^ message)
+    {
+        LogMessageInternal(level, message, false);
+    }
+
+    static void WriteAndFlush(Verbosity level, String ^ message)
+    {
+        LogMessageInternal(level, message, true);
+    }
+
+    static void Flush()
+    {
+        loguru::flush();
+    }
+
+    static String ^ ToManagedString(const char* value)
+    {
+        return value != nullptr ? gcnew String(value) : nullptr;
+    }
+
+    static void LogMessageInternal(Verbosity level, String ^ message, bool flush)
+    {
+        if (message == nullptr || message->Length == 0)
+        {
+            return;
+        }
+
+        IntPtr buffer = Marshal::StringToHGlobalAnsi(message);
+        const auto native_message = static_cast<const char*>(buffer.ToPointer());
+        loguru::log(static_cast<loguru::Verbosity>(level), __FILE__, __LINE__, native_message);
+        if (flush)
+        {
+            loguru::flush();
+        }
+        Marshal::FreeHGlobal(buffer);
     }
 };
+
+inline void cdecl_log_handler(void* user_data, const loguru::Message& message)
+{
+    if (user_data == nullptr)
+    {
+        return;
+    }
+
+    auto handle = reinterpret_cast<gcroot<Loguru ^>*>(user_data);
+    if (handle == nullptr)
+    {
+        return;
+    }
+
+    Loguru ^ instance = *handle;
+    if (instance == nullptr)
+    {
+        return;
+    }
+
+    instance->InvokeHandler(message);
+}
 } // namespace Oxygen::Interop::Logging
