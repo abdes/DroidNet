@@ -48,6 +48,11 @@
     <TargetFramework>net9.0</TargetFramework>
     <ProjectName>Oxygen.Editor.Interop</ProjectName>
   </PropertyGroup>
+  <PropertyGroup>
+    <_InteropArtifactsPath Condition="'$(ArtifactsPath)' != ''">$([MSBuild]::EnsureTrailingSlash($(ArtifactsPath)))</_InteropArtifactsPath>
+    <_InteropArtifactsPath Condition="'$(_InteropArtifactsPath)' == ''">$([MSBuild]::EnsureTrailingSlash($(MSBuildThisFileDirectory)../../..\artifacts))</_InteropArtifactsPath>
+    <BaseIntermediateOutputPath>$(_InteropArtifactsPath)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
@@ -74,22 +79,30 @@
   <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
+  <PropertyGroup>
+    <_InteropArtifactsPivot Condition="'$(ArtifactsPivots)' != ''">$(ArtifactsPivots)</_InteropArtifactsPivot>
+    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' != ''">$(Configuration)_$(TargetFramework)_$(RuntimeIdentifier)</_InteropArtifactsPivot>
+    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == '' and '$(TargetFramework)' != '' and '$(RuntimeIdentifier)' == ''">$(Configuration)_$(TargetFramework)</_InteropArtifactsPivot>
+    <_InteropArtifactsPivot Condition="'$(_InteropArtifactsPivot)' == ''">$(Configuration)_$(Platform)</_InteropArtifactsPivot>
+    <_InteropOutDir>$(_InteropArtifactsPath)bin\$(MSBuildProjectName)\$(_InteropArtifactsPivot)\</_InteropOutDir>
+    <_InteropIntDir>$(_InteropArtifactsPath)obj\$(MSBuildProjectName)\$(_InteropArtifactsPivot)\</_InteropIntDir>
+  </PropertyGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <TargetName>DroidNet.Oxygen.Editor.Interop</TargetName>
     <LinkIncremental>false</LinkIncremental>
     <CopyLocalProjectReference>true</CopyLocalProjectReference>
     <CopyLocalDebugSymbols>true</CopyLocalDebugSymbols>
-    <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(BaseIntermediateOutputPath)$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(_InteropOutDir)</OutDir>
+    <IntDir>$(_InteropIntDir)</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>DroidNet.Oxygen.Editor.Interop</TargetName>
     <LinkIncremental>false</LinkIncremental>
     <CopyLocalProjectReference>true</CopyLocalProjectReference>
     <CopyLocalDebugSymbols>true</CopyLocalDebugSymbols>
-    <OutDir>$(BaseOutputPath)$(Platform)\$(Configuration)\</OutDir>
-    <IntDir>$(BaseIntermediateOutputPath)$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>$(_InteropOutDir)</OutDir>
+    <IntDir>$(_InteropIntDir)</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
