@@ -5,6 +5,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using Oxygen.Editor.EngineInterface;
 
 namespace Oxygen.Editor.Interop.Tests;
@@ -22,7 +23,7 @@ public sealed class EngineTests
     private SynchronizationContext? originalContext;
     private TestSynchronizationContext? uiContext;
 
-    public TestContext? TestContext { get; set; }
+    public TestContext TestContext { get; set; }
 
     [TestInitialize]
     public void Setup()
@@ -37,7 +38,7 @@ public sealed class EngineTests
             IsColored = false,
             ModuleOverrides = null,
         });
-        Assert.IsTrue(ok, "Logging configuration failed in test setup");
+        _ = ok.Should().BeTrue("Logging configuration failed in test setup");
     }
 
     [TestCleanup]
@@ -57,8 +58,8 @@ public sealed class EngineTests
         var cfg = new EngineConfig();
         var ctx = this.CreateEngineUnderTest(cfg);
 
-        Assert.IsNotNull(ctx, "CreateEngine should return a non-null context once implemented");
-        Assert.IsTrue(ctx.IsValid, "EngineContext should report IsValid = true");
+        _ = ctx.Should().NotBeNull("CreateEngine should return a non-null context once implemented");
+        _ = ctx.IsValid.Should().BeTrue("EngineContext should report IsValid = true");
     }
 
     [TestMethod]
@@ -66,17 +67,19 @@ public sealed class EngineTests
     {
         this.runner.Dispose();
         var cfg = new EngineConfig();
-        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => this.runner.CreateEngine(cfg));
+        var act1 = () => this.runner.CreateEngine(cfg);
+        _ = act1.Should().Throw<ObjectDisposedException>();
     }
 
     [TestMethod]
     public void CreateEngine_WithoutSynchronizationContext_ThrowsInvalidOperation()
     {
-        SynchronizationContext.SetSynchronizationContext(null);
+        SynchronizationContext.SetSynchronizationContext(syncContext: null);
 
         try
         {
-            _ = Assert.ThrowsExactly<InvalidOperationException>(() => this.runner.CreateEngine(new EngineConfig()));
+            var act2 = () => this.runner.CreateEngine(new EngineConfig());
+            _ = act2.Should().Throw<InvalidOperationException>();
         }
         finally
         {
@@ -87,16 +90,16 @@ public sealed class EngineTests
     [TestMethod]
     public async Task RunEngine_RunsForSomeTime_StopsSuccessfully()
     {
-        var token = this.TestContext?.CancellationTokenSource.Token ?? CancellationToken.None;
+        var token = this.TestContext.CancellationToken;
 
         // Target a modest FPS so frames advance without excess CPU usage.
         var cfg = new EngineConfig { TargetFps = 30 };
         var ctx = this.CreateEngineUnderTest(cfg);
-        Assert.IsTrue(ctx.IsValid);
+        _ = ctx.IsValid.Should().BeTrue();
 
         // Run the engine loop using the interop-provided background thread helper.
         var runTask = this.runner.RunEngineAsync(ctx);
-        using var registration = token.Register(() => this.runner.StopEngine(ctx));
+        await using var registration = token.Register(() => this.runner.StopEngine(ctx)).ConfigureAwait(false);
 
         // Let the engine run for some time (cancellable).
         await Task.Delay(TimeSpan.FromMilliseconds(100), token).ConfigureAwait(false);
@@ -105,8 +108,8 @@ public sealed class EngineTests
         this.runner.StopEngine(ctx);
         var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), token)).ConfigureAwait(false);
 
-        Assert.AreSame(runTask, completed, "Engine did not stop within expected timeout after StopEngine");
-        Assert.IsTrue(runTask.IsCompleted, "Engine run task should be completed");
+        _ = runTask.Should().BeSameAs(completed, "Engine did not stop within expected timeout after StopEngine");
+        _ = runTask.IsCompleted.Should().BeTrue("Engine run task should be completed");
     }
 
     [TestMethod]
@@ -117,52 +120,50 @@ public sealed class EngineTests
 
         var sw = Stopwatch.StartNew();
         var runTask = this.runner.RunEngineAsync(ctx);
-        Assert.IsNotNull(runTask);
-        Assert.IsFalse(runTask.IsCompleted, "Engine task should not complete synchronously.");
-        Assert.IsTrue(sw.Elapsed < TimeSpan.FromMilliseconds(200),
-            "RunEngineAsync should return promptly on the calling thread.");
+        _ = runTask.Should().NotBeNull();
+        _ = runTask.IsCompleted.Should().BeFalse("Engine task should not complete synchronously.");
+        _ = sw.Elapsed.Should().BeLessThan(TimeSpan.FromMilliseconds(200), "RunEngineAsync should return promptly on the calling thread.");
 
-        await Task.Delay(TimeSpan.FromMilliseconds(100)).ConfigureAwait(false);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         this.runner.StopEngine(ctx);
-        var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
-        Assert.AreSame(runTask, completed, "Engine did not stop within expected timeout.");
+        var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
+        _ = runTask.Should().BeSameAs(completed, "Engine did not stop within expected timeout.");
     }
 
     [TestMethod]
     public async Task RunEngineAsync_DispatchesCleanupViaSynchronizationContext()
     {
-        using var syncContext = new TestSynchronizationContext();
-        var originalContext = SynchronizationContext.Current;
+        using var syncContext = new TestSynchronizationContext(this.TestContext.CancellationToken);
+        var localOriginalContext = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(syncContext);
 
         try
         {
             var cfg = new EngineConfig { TargetFps = 30 };
             var ctx = this.runner.CreateEngine(cfg);
-            Assert.IsNotNull(ctx);
+            _ = ctx.Should().NotBeNull();
 
             var runTask = this.runner.RunEngineAsync(ctx);
-            Assert.IsNotNull(runTask);
+            _ = runTask.Should().NotBeNull();
 
-            await Task.Delay(TimeSpan.FromMilliseconds(100)).ConfigureAwait(false);
+            await Task.Delay(TimeSpan.FromMilliseconds(100), this.TestContext.CancellationToken).ConfigureAwait(false);
 
             this.runner.StopEngine(ctx);
-            var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
-            Assert.AreSame(runTask, completed, "Engine did not stop within timeout.");
+            var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
+            _ = runTask.Should().BeSameAs(completed, "Engine did not stop within timeout.");
 
             var dispatched = syncContext.TryRunOne(TimeSpan.FromSeconds(1));
-            Assert.IsTrue(dispatched, "Expected cleanup to be posted to synchronization context.");
+            _ = dispatched.Should().BeTrue("Expected cleanup to be posted to synchronization context.");
 
             syncContext.RunAll();
         }
         finally
         {
-            SynchronizationContext.SetSynchronizationContext(originalContext);
+            SynchronizationContext.SetSynchronizationContext(localOriginalContext);
         }
 
-        Assert.IsTrue(syncContext.PostCount > 0,
-            "Engine cleanup should post back to the captured synchronization context.");
+        _ = syncContext.PostCount.Should().BePositive("Engine cleanup should post back to the captured synchronization context.");
     }
 
     [TestMethod]
@@ -173,23 +174,25 @@ public sealed class EngineTests
 
         var runTask = this.runner.RunEngineAsync(ctx);
 
-        _ = Assert.ThrowsExactly<InvalidOperationException>(() => this.runner.RunEngineAsync(ctx));
+        var act3 = () => this.runner.RunEngineAsync(ctx);
+        _ = act3.Should().ThrowAsync<InvalidOperationException>();
 
-        await Task.Delay(TimeSpan.FromMilliseconds(100)).ConfigureAwait(false);
+        await Task.Delay(TimeSpan.FromMilliseconds(100), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         this.runner.StopEngine(ctx);
-        var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2))).ConfigureAwait(false);
-        Assert.AreSame(runTask, completed, "Engine should stop after StopEngine.");
+        var completed = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
+        _ = runTask.Should().BeSameAs(completed, "Engine should stop after StopEngine.");
     }
 
     [TestMethod]
     public void CaptureUiSynchronizationContext_WithoutSynchronizationContext_ThrowsInvalidOperation()
     {
-        SynchronizationContext.SetSynchronizationContext(null);
+        SynchronizationContext.SetSynchronizationContext(syncContext: null);
 
         try
         {
-            _ = Assert.ThrowsExactly<InvalidOperationException>(() => this.runner.CaptureUiSynchronizationContext());
+            var act4 = this.runner.CaptureUiSynchronizationContext;
+            _ = act4.Should().Throw<InvalidOperationException>();
         }
         finally
         {
@@ -200,13 +203,15 @@ public sealed class EngineTests
     [TestMethod]
     public void RunEngine_WithNullContext_ThrowsArgumentNullException()
     {
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() => this.runner.RunEngine(null!));
+        var act5 = () => this.runner.RunEngine(null!);
+        _ = act5.Should().Throw<ArgumentNullException>();
     }
 
     [TestMethod]
     public void RunEngineAsync_WithNullContext_ThrowsArgumentNullException()
     {
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() => this.runner.RunEngineAsync(null!));
+        var act6 = () => this.runner.RunEngineAsync(null!);
+        _ = act6.Should().ThrowAsync<ArgumentNullException>();
     }
 
     [TestMethod]
@@ -216,19 +221,21 @@ public sealed class EngineTests
 
         this.runner.Dispose();
 
-        _ = Assert.ThrowsExactly<ObjectDisposedException>(() => this.runner.RunEngineAsync(ctx));
+        var act7 = () => this.runner.RunEngineAsync(ctx);
+        _ = act7.Should().ThrowAsync<ObjectDisposedException>();
     }
 
     [TestMethod]
     public void RegisterSurface_WithNullContext_ThrowsArgumentNullException()
     {
-        _ = Assert.ThrowsExactly<ArgumentNullException>(() =>
-            this.runner.RegisterSurface(
-                null!,
-                Guid.NewGuid(),
-                Guid.NewGuid(),
-                "Viewport",
-                new IntPtr(1)));
+        var act8 = () => this.runner.RegisterSurface(
+            null!,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Viewport",
+            new IntPtr(1));
+
+        _ = act8.Should().Throw<ArgumentNullException>();
     }
 
     [TestMethod]
@@ -236,13 +243,14 @@ public sealed class EngineTests
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
-        _ = Assert.ThrowsExactly<ArgumentException>(() =>
-            this.runner.RegisterSurface(
-                ctx,
-                Guid.NewGuid(),
-                Guid.NewGuid(),
-                "Viewport",
-                IntPtr.Zero));
+        var act9 = () => this.runner.RegisterSurface(
+            ctx,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Viewport",
+            IntPtr.Zero);
+
+        _ = act9.Should().Throw<ArgumentException>();
     }
 
     [TestMethod]
@@ -252,13 +260,14 @@ public sealed class EngineTests
 
         this.runner.Dispose();
 
-        _ = Assert.ThrowsExactly<ObjectDisposedException>(() =>
-            this.runner.RegisterSurface(
-                ctx,
-                Guid.NewGuid(),
-                Guid.NewGuid(),
-                "Viewport",
-                new IntPtr(1)));
+        var act10 = () => this.runner.RegisterSurface(
+            ctx,
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            "Viewport",
+            new IntPtr(1));
+
+        _ = act10.Should().Throw<ObjectDisposedException>();
     }
 
     [TestMethod]
@@ -273,7 +282,7 @@ public sealed class EngineTests
         {
             try
             {
-                this.runner.RegisterSurface(
+                _ = this.runner.RegisterSurface(
                     ctx,
                     documentId,
                     viewportId,
@@ -287,56 +296,12 @@ public sealed class EngineTests
             }
         }).ConfigureAwait(false);
 
-        Assert.IsNotNull(exception, "RegisterSurface should enforce UI-thread invocation.");
-    }
-
-    private sealed class TestSynchronizationContext : SynchronizationContext, IDisposable
-    {
-        private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> workItems = new();
-        private int postCount;
-
-        public int PostCount => Volatile.Read(ref this.postCount);
-
-        public override void Post(SendOrPostCallback d, object? state)
-        {
-            if (d == null)
-            {
-                throw new ArgumentNullException(nameof(d));
-            }
-
-            this.workItems.Add((d, state));
-            Interlocked.Increment(ref this.postCount);
-        }
-
-        public bool TryRunOne(TimeSpan timeout)
-        {
-            var milliseconds = (int)Math.Min(int.MaxValue, Math.Max(0, timeout.TotalMilliseconds));
-            if (!this.workItems.TryTake(out var work, milliseconds))
-            {
-                return false;
-            }
-
-            work.Callback(work.State);
-            return true;
-        }
-
-        public void RunAll()
-        {
-            while (this.workItems.TryTake(out var work))
-            {
-                work.Callback(work.State);
-            }
-        }
-
-        public void Dispose()
-        {
-            this.workItems.Dispose();
-        }
+        _ = exception.Should().NotBeNull("RegisterSurface should enforce UI-thread invocation.");
     }
 
     private void EnsureUiContext()
     {
-        this.uiContext ??= new TestSynchronizationContext();
+        this.uiContext ??= new TestSynchronizationContext(this.TestContext.CancellationToken);
         SynchronizationContext.SetSynchronizationContext(this.uiContext);
     }
 
@@ -350,7 +315,45 @@ public sealed class EngineTests
     {
         this.EnsureUiContext();
         var ctx = this.runner.CreateEngine(config ?? new EngineConfig());
-        Assert.IsNotNull(ctx);
+        _ = ctx.Should().NotBeNull();
         return ctx;
+    }
+
+    private sealed class TestSynchronizationContext(CancellationToken cancellationToken) : SynchronizationContext, IDisposable
+    {
+        private readonly BlockingCollection<(SendOrPostCallback callback, object? state)> workItems = [];
+        private int postCount;
+
+        public int PostCount => Volatile.Read(ref this.postCount);
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            ArgumentNullException.ThrowIfNull(d);
+
+            this.workItems.Add((d, state), cancellationToken);
+            _ = Interlocked.Increment(ref this.postCount);
+        }
+
+        public bool TryRunOne(TimeSpan timeout)
+        {
+            var milliseconds = (int)Math.Min(int.MaxValue, Math.Max(0, timeout.TotalMilliseconds));
+            if (!this.workItems.TryTake(out var work, milliseconds, cancellationToken))
+            {
+                return false;
+            }
+
+            work.callback(work.state);
+            return true;
+        }
+
+        public void RunAll()
+        {
+            while (this.workItems.TryTake(out var work))
+            {
+                work.callback(work.state);
+            }
+        }
+
+        public void Dispose() => this.workItems.Dispose();
     }
 }
