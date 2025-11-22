@@ -39,9 +39,6 @@
     <ClInclude Include="SimpleEditorModule.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
   </ItemGroup>
-  <ItemGroup>
-    <None Include="vcpkg.json" />
-  </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
     <EnableManagedPackageReferenceSupport>true</EnableManagedPackageReferenceSupport>
@@ -117,8 +114,7 @@
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
-      <AdditionalOptions>/Zc:__cplusplus
- %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;%(AdditionalDependencies)</AdditionalDependencies>

@@ -13,9 +13,9 @@
 
 namespace Oxygen::Editor::EngineInterface {
 
-class SimpleEditorModule final : public oxygen::engine::EngineModule {
+  class SimpleEditorModule final : public oxygen::engine::EngineModule {
     OXYGEN_TYPED(SimpleEditorModule)
-public:
+  public:
     explicit SimpleEditorModule(std::shared_ptr<SurfaceRegistry> registry);
     ~SimpleEditorModule() override;
 
@@ -27,16 +27,16 @@ public:
     auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
     auto OnCommandRecord(oxygen::engine::FrameContext& context) -> oxygen::co::Co<> override;
 
-private:
+  private:
     auto EnsureSurfacesRegistered(oxygen::engine::FrameContext& context)
-        -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;
+      -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;
     auto RefreshSurfaceIndices(oxygen::engine::FrameContext& context,
-        const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& snapshot) -> void;
+      const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& snapshot) -> void;
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
     std::unordered_map<const oxygen::graphics::Surface*, size_t> surface_indices_;
-};
+  };
 
 } // namespace Oxygen::Editor::EngineInterface
 
