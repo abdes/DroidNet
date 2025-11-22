@@ -13,11 +13,11 @@ using namespace System::Numerics;
 
 namespace Oxygen::Interop::World {
 
-public
-ref class OxygenWorld {
-public:
-  static auto CreateScene(String ^ name) -> bool;
-  static auto RemoveSceneNode(String ^ name) -> bool;
-};
+  public
+  ref class OxygenWorld {
+  public:
+    static auto CreateScene(String^ name) -> bool;
+    static auto RemoveSceneNode(String^ name) -> bool;
+  };
 
 } // namespace Oxygen::Interop::World

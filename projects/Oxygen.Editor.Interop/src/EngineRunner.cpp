@@ -22,7 +22,7 @@
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325")) ISwapChainPanelNative : public IUnknown {
-    virtual HRESULT STDMETHODCALLTYPE SetSwapChain(IDXGISwapChain *swapChain) = 0;
+  virtual HRESULT STDMETHODCALLTYPE SetSwapChain(IDXGISwapChain* swapChain) = 0;
 };
 
 using namespace System;
@@ -86,134 +86,134 @@ namespace Oxygen::Editor::EngineInterface {
   // the EngineRunner header doesn't need to include or reference native logging
   // internals.
   public
-    ref class LogHandler sealed {
-    public:
-      LogHandler()
-        : logger_(nullptr)
-        , callback_registered_(false)
-        , self_handle_(IntPtr::Zero) {
-        Runtime::InteropServices::GCHandle h =
-          Runtime::InteropServices::GCHandle::Alloc(
-            this,
-            Runtime::InteropServices::GCHandleType::WeakTrackResurrection);
-        self_handle_ = Runtime::InteropServices::GCHandle::ToIntPtr(h);
+  ref class LogHandler sealed {
+  public:
+    LogHandler()
+      : logger_(nullptr)
+      , callback_registered_(false)
+      , self_handle_(IntPtr::Zero) {
+      Runtime::InteropServices::GCHandle h =
+        Runtime::InteropServices::GCHandle::Alloc(
+          this,
+          Runtime::InteropServices::GCHandleType::WeakTrackResurrection);
+      self_handle_ = Runtime::InteropServices::GCHandle::ToIntPtr(h);
+    }
+
+    ~LogHandler() { ReleaseCallback(); }
+
+    !LogHandler() { ReleaseCallback(); }
+
+    void SetLogger(Object^ logger) {
+      logger_ = nullptr;
+      if (logger == nullptr) {
+        return;
       }
 
-      ~LogHandler() { ReleaseCallback(); }
+      auto ilogger = dynamic_cast<ILogger^>(logger);
+      if (ilogger == nullptr) {
+        throw gcnew ArgumentException(
+          "logger must implement Microsoft.Extensions.Logging.ILogger",
+          "logger");
+      }
 
-      !LogHandler() { ReleaseCallback(); }
+      logger_ = ilogger;
+    }
 
-      void SetLogger(Object^ logger) {
-        logger_ = nullptr;
-        if (logger == nullptr) {
+    bool ConfigureLogging(LoggingConfig^ config) {
+      namespace op = oxygen::engine::interop;
+      op::LoggingConfig native_config{};
+      native_config.verbosity = config->Verbosity;
+      native_config.is_colored = config->IsColored;
+      native_config.vmodules = nullptr;
+      std::string vmodules;
+      if (config->ModuleOverrides != nullptr) {
+        vmodules =
+          msclr::interop::marshal_as<std::string>(config->ModuleOverrides);
+        if (!vmodules.empty()) {
+          native_config.vmodules = vmodules.c_str();
+        }
+      }
+      bool ok = op::ConfigureLogging(native_config);
+      if (ok) {
+        RegisterCallbackIfNeeded();
+        InteropLogging::Loguru::WriteAndFlush(
+          InteropLogging::Loguru::Verbosity::Verbosity_INFO,
+          gcnew String(L"Oxygen Editor logging configured."));
+      }
+      return ok;
+    }
+
+    // Invoked from native forwarder through the GCHandle.
+    void HandleLog(const loguru::Message& message) {
+      try {
+        std::string composed;
+        if (message.preamble && *message.preamble) {
+          composed += message.preamble;
+          composed += ' ';
+        }
+        if (message.prefix && *message.prefix) {
+          composed += message.prefix;
+        }
+        if (message.message && *message.message) {
+          composed += message.message;
+        }
+        auto managedMsg = gcnew String(composed.c_str());
+#if defined(_DEBUG) || !defined(NDEBUG)
+        if (logger_ == nullptr) {
+          Debug::WriteLine(managedMsg);
           return;
         }
-
-        auto ilogger = dynamic_cast<ILogger^>(logger);
-        if (ilogger == nullptr) {
-          throw gcnew ArgumentException(
-            "logger must implement Microsoft.Extensions.Logging.ILogger",
-            "logger");
-        }
-
-        logger_ = ilogger;
-      }
-
-      bool ConfigureLogging(LoggingConfig^ config) {
-        namespace op = oxygen::engine::interop;
-        op::LoggingConfig native_config{};
-        native_config.verbosity = config->Verbosity;
-        native_config.is_colored = config->IsColored;
-        native_config.vmodules = nullptr;
-        std::string vmodules;
-        if (config->ModuleOverrides != nullptr) {
-          vmodules =
-            msclr::interop::marshal_as<std::string>(config->ModuleOverrides);
-          if (!vmodules.empty()) {
-            native_config.vmodules = vmodules.c_str();
-          }
-        }
-        bool ok = op::ConfigureLogging(native_config);
-        if (ok) {
-          RegisterCallbackIfNeeded();
-          InteropLogging::Loguru::WriteAndFlush(
-            InteropLogging::Loguru::Verbosity::Verbosity_INFO,
-            gcnew String(L"Oxygen Editor logging configured."));
-        }
-        return ok;
-      }
-
-      // Invoked from native forwarder through the GCHandle.
-      void HandleLog(const loguru::Message& message) {
-        try {
-          std::string composed;
-          if (message.preamble && *message.preamble) {
-            composed += message.preamble;
-            composed += ' ';
-          }
-          if (message.prefix && *message.prefix) {
-            composed += message.prefix;
-          }
-          if (message.message && *message.message) {
-            composed += message.message;
-          }
-          auto managedMsg = gcnew String(composed.c_str());
-#if defined(_DEBUG) || !defined(NDEBUG)
-          if (logger_ == nullptr) {
-            Debug::WriteLine(managedMsg);
-            return;
-          }
 #else
-          if (logger_ == nullptr)
-            return;
+        if (logger_ == nullptr)
+          return;
 #endif
 
-          LogLevel lvlValue = MapVerbosityToManagedLevel(message.verbosity);
+        LogLevel lvlValue = MapVerbosityToManagedLevel(message.verbosity);
 
-          if (logger_ != nullptr) {
-            logger_->Log<String^>(lvlValue, EventId(0), managedMsg, nullptr,
-              gcnew Func<String^, Exception^, String^>(&LogHandler::Format));
-          }
-        }
-        catch (...) {
-          /* swallow */
+        if (logger_ != nullptr) {
+          logger_->Log<String^>(lvlValue, EventId(0), managedMsg, nullptr,
+            gcnew Func<String^, Exception^, String^>(&LogHandler::Format));
         }
       }
-
-      static String^ Format(String^ state, Exception^ ex) {
-          return state;
+      catch (...) {
+        /* swallow */
       }
+    }
 
-    private:
-      void RegisterCallbackIfNeeded() {
-        if (callback_registered_) {
-          return;
-        }
-        // Register the native forwarder function with loguru.
-        loguru::add_callback("OxygenEditorManagedLogger", &NativeForward,
-          self_handle_.ToPointer(), loguru::Verbosity_MAX);
-        callback_registered_ = true;
+    static String^ Format(String^ state, Exception^ ex) {
+      return state;
+    }
+
+  private:
+    void RegisterCallbackIfNeeded() {
+      if (callback_registered_) {
+        return;
       }
+      // Register the native forwarder function with loguru.
+      loguru::add_callback("OxygenEditorManagedLogger", &NativeForward,
+        self_handle_.ToPointer(), loguru::Verbosity_MAX);
+      callback_registered_ = true;
+    }
 
-      void ReleaseCallback() {
-        if (callback_registered_) {
-          loguru::remove_callback("OxygenEditorManagedLogger");
-          callback_registered_ = false;
-        }
-        if (self_handle_ != IntPtr::Zero) {
-          Runtime::InteropServices::GCHandle h =
-            Runtime::InteropServices::GCHandle::FromIntPtr(self_handle_);
-          if (h.IsAllocated) {
-            h.Free();
-          }
-          self_handle_ = IntPtr::Zero;
-        }
+    void ReleaseCallback() {
+      if (callback_registered_) {
+        loguru::remove_callback("OxygenEditorManagedLogger");
+        callback_registered_ = false;
       }
+      if (self_handle_ != IntPtr::Zero) {
+        Runtime::InteropServices::GCHandle h =
+          Runtime::InteropServices::GCHandle::FromIntPtr(self_handle_);
+        if (h.IsAllocated) {
+          h.Free();
+        }
+        self_handle_ = IntPtr::Zero;
+      }
+    }
 
-      // Instance state
-      ILogger^ logger_;
-      bool callback_registered_;
-      IntPtr self_handle_; // GCHandle to this (for callback user_data)
+    // Instance state
+    ILogger^ logger_;
+    bool callback_registered_;
+    IntPtr self_handle_; // GCHandle to this (for callback user_data)
   };
 
 } // namespace Oxygen::Editor::EngineInterface
@@ -345,7 +345,7 @@ namespace Oxygen::Editor::EngineInterface {
 
     ui_dispatcher_->CaptureCurrentOrThrow(
       gcnew String(L"CreateEngine must be invoked on the UI thread. "
-                   L"Call CaptureUiSynchronizationContext() before headless runs."));
+        L"Call CaptureUiSynchronizationContext() before headless runs."));
 
     try {
       // Translate managed EngineConfig into native config.
@@ -464,7 +464,7 @@ namespace Oxygen::Editor::EngineInterface {
 
     ui_dispatcher_->VerifyAccess(
       gcnew String(L"RegisterSurface requires the UI thread. "
-                   L"Call CreateEngine() on the UI thread first."));
+        L"Call CreateEngine() on the UI thread first."));
 
     auto& shared = ctx->NativeShared();
     if (!shared) {
@@ -484,7 +484,7 @@ namespace Oxygen::Editor::EngineInterface {
 
     std::ostringstream registrationLog;
     registrationLog << "RegisterSurface doc=" << doc << " viewport=" << view
-            << " name='" << disp << "'";
+      << " name='" << disp << "'";
     oxygen::engine::interop::LogInfoMessage(registrationLog.str().c_str());
 
     oxygen::engine::interop::LogInfoMessage("RegisterSurface: creating composition surface.");
@@ -524,7 +524,7 @@ namespace Oxygen::Editor::EngineInterface {
     const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
     std::ostringstream resizeLog;
     resizeLog << "ResizeSurface viewport=" << viewportString << " size="
-              << width << "x" << height;
+      << width << "x" << height;
     oxygen::engine::interop::LogInfoMessage(resizeLog.str().c_str());
 
     oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width,
@@ -684,7 +684,7 @@ namespace Oxygen::Editor::EngineInterface {
 
   auto EngineRunner::ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey
   {
-    SurfaceRegistry::GuidKey key {};
+    SurfaceRegistry::GuidKey key{};
     auto bytes = guid.ToByteArray();
     if (bytes == nullptr || bytes->Length != 16) {
       return key;

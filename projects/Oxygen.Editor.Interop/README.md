@@ -2,246 +2,167 @@
 
 ## Overview
 
-The **Oxygen.Editor.Interop** project provides a C++/C# interoperability layer that bridges the native Oxygen Engine with managed .NET editor applications. It enables the Oxygen Editor to communicate with the native rendering and world management components of the Oxygen Engine through a well-defined managed interface.
+The Oxygen.Editor.Interop project provides a mixed-mode C++/CLI interop layer to let managed .NET
+Editor code interact with the native Oxygen Engine. The project exposes a small, well-defined
+managed API surface used by the editor for engine lifecycle management, logging integration, surface
+registration, and minimal world helpers.
 
-This is a mixed-mode C++/CLI project that exposes native engine functionality to .NET consumers while maintaining clean separation of concerns between the native and managed code.
+This repository contains a compact managed facade (C++/CLI) that owns and marshals native engine
+resources (std::shared_ptr) and implements conversion helpers for configuration types.
 
 ## Technology Stack
 
 - **Language:** C++ (C++/CLI for managed interop) and C#
 - **Platform:** Windows (x64)
-- **Target Framework:** .NET 9.0 (managed), C++/CLI with C++20
+- **Target Framework:** net9.0 (managed), C++/CLI (MSVC v145) with C++20
 - **Build System:** MSBuild / CMake (Premake5)
-- **Key Dependencies:**
-  - `fmt` – C++ formatting library
-  - `glm` – Graphics math library
-  - Oxygen.Engine (native C++ game engine)
-  - Microsoft.WindowsAppSDK (for Windows integration)
+- **Key Dependencies:** fmt, glm, Oxygen.Engine, Microsoft.WindowsAppSDK
 - **Testing:** MSTest for managed tests
 
-## Project Architecture
+## Core components and API surface
 
-### Core Components
+The interop exposes a focused set of managed types (under Oxygen::Editor::EngineInterface and
+Oxygen::Interop::World). The most important pieces are:
 
-The interop layer consists of three main namespaces and classes:
+- EngineRunner (Oxygen::Editor::EngineInterface::EngineRunner)
+  - Primary managed facade used by the editor.
+  - ConfigureLogging(LoggingConfig) -> bool — initialize the native loguru backend.
+  - ConfigureLogging(LoggingConfig, Object logger) -> bool — forward native logs to the provided
+    managed ILogger (the object must implement Microsoft.Extensions.Logging.ILogger).
+  - CreateEngine(EngineConfig) / CreateEngine(EngineConfig, IntPtr swapChainPanel) -> EngineContext
+    — create a native engine context. Passing a non-zero swapChainPanel configures the engine
+    headless and allows swap-chain attachment by the caller.
+  - RunEngine / RunEngineAsync / StopEngine — start and stop the engine run-loop on a dedicated
+    render thread; RunEngineAsync returns a Task that completes when the engine stops.
+  - RegisterSurface / ResizeSurface / UnregisterSurface — UI thread-bound helpers to register and
+    manage per-viewport surfaces.
+  - CaptureUiSynchronizationContext — capture the current SynchronizationContext so headless runs
+    can still post cleanup / dispatch operations back to a known UI context.
 
-#### 1. **EngineRunner** (`Oxygen::Editor::EngineInterface::EngineRunner`)
+- EngineContext (Oxygen::Editor::EngineInterface::EngineContext)
+  - A thin managed wrapper that owns a std::shared_ptr`<native EngineContext>`.
+  - Supports deterministic cleanup (destructor + finalizer) and exposes `IsValid`.
 
-- Main entry point for engine lifecycle management
-- Handles native engine initialization and configuration
-- Manages logging subsystem integration
-- Provides sealed managed wrapper around native engine instance
-- **Key Methods:**
-  - `ConfigureLogging()` – Set up native logging without or with managed ILogger integration
-  - `CreateEngine()` – Instantiate and initialize the native engine
-  - Deterministic cleanup via destructor/finalizer
+- OxygenWorld (Oxygen::Interop::World::OxygenWorld)
+  - A small facade for scene helpers. In the current code this type is a placeholder: CreateScene /
+    RemoveSceneNode are not implemented and return false.
 
-#### 2. **EngineContext** (`Oxygen::Editor::EngineInterface::EngineContext`)
+## Important implementation notes
 
-- Represents a valid native engine instance
-- Provides safe handle to native context with validity checks
-- Supports copy semantics (sharing underlying native resource)
-- Ensures deterministic cleanup when managed reference is released
+- Logging forwarding is implemented by a managed LogHandler which registers a native loguru
+  callback. The bridge uses a GCHandle and a native callback to safely forward native log messages
+  into the managed ILogger via reflection.
+- The project includes a thread-safe native SurfaceRegistry keyed by a 16-byte GUID
+  (`array<uint8_t,16>`) used by the editor module to track surfaces shared with the engine.
+- SimpleEditorModule is an example/utility module registered on the native engine: it snapshots
+  registered surfaces and issues a simple blue clear to any presentable surface during command
+  recording (this is intentionally minimal and can be replaced by real rendering logic).
+- Threading helpers:
+  - UiThreadDispatcher captures and enforces a UI SynchronizationContext for UI-bound operations.
+  - RenderThreadContext manages the dedicated engine render thread used by RunEngineAsync.
 
-#### 3. **OxygenWorld** (`Oxygen::Interop::World::OxygenWorld`)
+## WinUI 3 and swap-chain notes
 
-- Encapsulates world/scene management functionality
-- Bridges editor world operations to native engine representation
+When attaching to a WinUI 3 SwapChainPanel, the code queries `ISwapChainPanelNative` using a
+desktop/WinUI IID defined in EngineRunner.cpp (63AAD0B8-7C24-40FF-85A8-640D944CC325). Callers should
+pass a non-zero IntPtr representing the SwapChainPanel's native pointer and ensure CreateEngine(...)
+is invoked on the UI thread (or capture the UI SynchronizationContext first for headless runs).
 
-### Design Patterns
+## Project layout
 
-- **C++/CLI Managed Refs:** All public types are `ref class` with proper deterministic cleanup (destructor + finalizer pattern)
-- **Config Bridging:** Native configuration structures (`PlatformConfig`, `GraphicsConfig`, `EngineConfig`, `RendererConfig`) are wrapped or marshalled from managed equivalents
-- **Logging Forwarding:** Optional integration with .NET `ILogger` for unified log capture
-- **Header Isolation:** Public headers (`EngineRunner.h`, `EngineContext.h`) avoid exposing native logging implementation details
-
-### WinUI 3 Integration
-
-The interop layer handles the specific requirements for hosting the DirectX 12 engine within a WinUI 3 `SwapChainPanel`.
-
-- **Separation of Concerns:** The core `Oxygen.Engine` remains unaware of WinUI 3 specifics. It creates a `CompositionSurface` with a standard `IDXGISwapChain`.
-- **Interop Responsibility:** `EngineRunner` acts as the bridge. It accepts the `SwapChainPanel` pointer, retrieves the swap chain from the engine, and performs the necessary COM interface queries to connect them.
-- **ISwapChainPanelNative:** The project explicitly defines and uses the WinUI 3 specific IID (`{63BE0B4D-909D-4652-9C00-5C3EA4763E52}`) for `ISwapChainPanelNative`, which differs from the UWP version.
-- **Threading Model:** The `SetSwapChain` operation is performed within the interop layer. Consumers must ensure `CreateEngine` is called from a thread compatible with the `SwapChainPanel` (typically the UI thread).
-
-### Threading Model
-
-- `EngineRunner::CreateEngine` captures the UI thread automatically via `UiThreadDispatcher`. Call it from the main UI thread (WinUI dispatcher) so swap-chain attachment can marshal COM calls safely. Headless scenarios must first invoke `EngineRunner::CaptureUiSynchronizationContext()` on the UI thread to record a dispatcher before starting the engine.
-- UI-facing operations such as `RegisterSurface`, `ResizeSurface`, and swap-chain wiring verify that they execute on the captured UI thread. Calling them from any other thread throws a descriptive `InvalidOperationException` to keep routing mistakes easy to diagnose.
-- The render loop always runs on a dedicated background thread managed by `RenderThreadContext`. `RunEngineAsync` spins up that thread, while `StopEngine`/`EnsureEngineLoopStopped` wait for it to exit before clearing shared resources. This strict separation simplifies upcoming features like background asset streaming or headless simulation because cross-thread assumptions are explicit in helper types.
-
-## Project Structure
-
-```text
+```plaintext
 Oxygen.Editor.Interop/
 ├── src/
-│   ├── EngineRunner.h / .cpp      # Engine lifecycle and logging configuration
-│   ├── EngineContext.h / .cpp     # Native engine instance wrapper
-│   ├── OxygenWorld.h / .cpp       # World/scene management interface
-│   ├── Config.h / .cpp            # Configuration structure bridging
+│   ├── EngineRunner.h / .cpp      # Engine lifecycle, logging configuration and engine loop helpers
+│   ├── EngineContext.h / .cpp     # Managed wrapper for native EngineContext
+│   ├── OxygenWorld.h / .cpp       # Small scene helpers (currently stubs)
+│   ├── Config.h / .cpp            # Managed <-> native configuration marshalling
 │   ├── AssemblyInfo.cpp           # Managed assembly metadata
-│   ├── vcpkg.json                 # vcpkg dependency manifest
-│   └── Base/LoguruWrapper.h       # Logging utility wrapper
+│   ├── vcpkg-configuration.json   # vcpkg config used by builds
+│   ├── Base/LoguruWrapper.h       # Logging bridge used by tests and the LogHandler
+│   ├── UiThreadDispatcher.*       # capture/verify UI SynchronizationContext and enforce UI-thread access
+│   ├── RenderThreadContext.*      # manages the dedicated render thread
+│   ├── SurfaceRegistry.*          # thread-safe native surface registry
+│   └── SimpleEditorModule.*       # example editor module that registers surfaces
 ├── test/
-│   ├── EngineTests.cs             # Managed test suite for interop
+│   ├── EngineTests.cs             # engine lifecycle + threading tests
+│   ├── ConfigureLoggingTests.cs   # logging configuration + forwarding tests
 │   └── Oxygen.Editor.Interop.Tests.csproj
-├── EditorInterop.sln              # Solution file for this interop project
-├── premake5.lua                   # Premake build configuration
+├── EditorInterop.sln
+├── premake5.lua
 └── README.md
 ```
 
-## Getting Started
+## Getting started
 
-### Prerequisites
+Prerequisites:
 
-- **Oxygen Engine Installation:** The interop project assumes the Oxygen.Engine build produces a complete installation at:
-
-  ```text
+- Oxygen Engine build artifacts and headers should be available under:
   $(ProjectRoot)\Oxygen.Engine\out\install
-  ```
+- Add the Oxygen.Engine runtime directory to your PATH (for test runs):
 
-  Ensure this directory is populated with all necessary headers and libraries.
+```powershell
+$env:PATH += ";$(ProjectRoot)\Oxygen.Engine\out\install\bin"
+```
 
-- **PATH Configuration:** Add the directory containing Oxygen Engine DLLs to your system PATH:
+- .NET 9.0 SDK and Visual Studio with MSVC v145 (C++/CLI) installed
+- vcpkg available for native dependencies (see vcpkg-configuration.json)
+
+Build the interop library with MSBuild (use a Visual Studio / Developer Command Prompt where MSBuild
+is available):
+
+```powershell
+# Build the project (example, Debug/x64):
+msbuild .\src\Oxygen.Editor.Interop.vcxproj /p:Configuration=Debug /p:Platform=x64
+
+# Or build the solution:
+msbuild .\EditorInterop.sln /p:Configuration=Debug /p:Platform=x64
+```
+
+## Running tests
+
+The project includes managed MSTest suites that exercise the interop boundary and its threading/logging expectations.
+
+Run tests (use the built test executable directly - do NOT use `dotnet test` or the VS test runner):
+
+- Build the test project with MSBuild (Debug/x64 shown as example):
 
   ```powershell
-  $env:PATH += ";$(ProjectRoot)\Oxygen.Engine\out\install\bin"
+  msbuild .\test\Oxygen.Editor.Interop.Tests.csproj /p:Configuration=Debug /p:Platform=x64
   ```
 
-- **.NET 9.0 SDK:** Required for building managed components and tests
-- **C++ Build Tools:** MSVC v145 (Visual Studio 2022) toolset for C++/CLI compilation
-- **vcpkg:** For native dependency management (fmt, glm)
+- Locate the test runner executable produced by the test project (usually under
+  `artifacts\bin\Oxygen.Editor.Interop.Tests\Debug_net9.0-windows10.0.26100.0\`). For example:
 
-### Building
+  The produced executable is the test runner for the project; run it directly to execute tests (it
+  will return a non-zero exit code on failures). If you want verbose output, the test executable may
+  accept command-line arguments depending on the test runner configured in the project — consult the
+  test project file if you need specific runner flags.
 
-From the interop project directory:
+## Development notes
 
-```powershell
-# Build the C++/CLI interop library
-dotnet build .\src\Oxygen.Editor.Interop.vcxproj
-
-# Or use the solution
-dotnet build .\EditorInterop.sln
-```
-
-To use Premake for build configuration:
-
-```powershell
-premake5 vs2022
-```
-
-### Running Tests
-
-Tests verify the managed interface contracts and engine initialization paths:
-
-```powershell
-# Run all interop tests
-dotnet test .\test\Oxygen.Editor.Interop.Tests.csproj
-
-# Run with verbose logging
-dotnet test .\test\Oxygen.Editor.Interop.Tests.csproj --logger "console;verbosity=detailed"
-```
-
-## Key Features
-
-- **Managed Engine Wrapper:** Expose native Oxygen Engine through managed ref classes (`EngineRunner`, `EngineContext`)
-- **Flexible Logging Configuration:** Support native-only logging or forwarding to .NET `ILogger`
-- **Config Structure Bridging:** Marshal between native and managed configuration types
-- **World/Scene Management:** Provide managed interface to world operations
-- **Deterministic Cleanup:** Proper destructor/finalizer discipline for unmanaged resource safety
-- **Type Safety:** Strong typing across C++/CLI boundaries with compile-time validation
-
-## Development Workflow
-
-### Adding New Engine Features
-
-1. **Define new managed interface** in a header under `src/` (e.g., `NewFeature.h`)
-2. **Implement using C++/CLI** ref classes that wrap native functionality
-3. **Add configuration or context methods** to `EngineRunner` or `EngineContext` as appropriate
-4. **Write managed tests** in `test/EngineTests.cs` to verify the interop boundary
-5. **Update docstrings** with XML comments for IntelliSense integration
-
-### Modifying Configuration
-
-1. Edit bridging code in `Config.h` / `Config.cpp` to add new config fields
-2. Update both native and managed configuration struct definitions
-3. Add marshalling/conversion logic if needed
-4. Verify tests still pass with `dotnet test`
-
-## Coding Standards
-
-This project follows the DroidNet repository conventions:
-
-- **C++:** Modern C++20 with MSVC v145
-- **C#:** C# 13 preview conventions (see `.github/instructions/csharp_coding_style.instructions.md`)
-- **Access Modifiers:** Always explicit (`public`, `private`, `protected`)
-- **Instance Members:** Use `this.` prefix for clarity in C#
-- **XML Documentation:** All public methods must have XML doc comments for IntelliSense
-- **Naming:** PascalCase for managed types/methods, snake_case for native types (following Oxygen.Engine conventions)
-- **Determinism:** All ref classes must have proper destructor + finalizer for resource cleanup
-
-## Testing
-
-Tests are implemented in **MSTest** format and follow the **AAA pattern** (Arrange-Act-Assert):
-
-```csharp
-[TestClass]
-public sealed class EngineTests
-{
-    private EngineRunner runner = null!;
-
-    [TestInitialize]
-    public void Setup() => this.runner = new EngineRunner();
-
-    [TestCleanup]
-    public void Teardown() => this.runner.Dispose();
-
-    [TestMethod]
-    public void CreateEngine_Succeeds_ReturnsValidContext()
-    {
-        // Arrange
-        var cfg = new EngineConfig();
-
-        // Act
-        var ctx = this.runner.CreateEngine(cfg);
-
-        // Assert
-        Assert.IsNotNull(ctx);
-        Assert.IsTrue(ctx.IsValid);
-    }
-}
-```
-
-### Test Naming Convention
-
-- Format: `MethodName_Scenario_ExpectedBehavior`
-- Example: `CreateEngine_Succeeds_ReturnsValidContext`
-
-Run tests with coverage:
-
-```powershell
-dotnet test .\test\Oxygen.Editor.Interop.Tests.csproj /p:CollectCoverage=true
-```
+- When exposing new native functionality, add explicit managed DTOs and conversion helpers in
+  `Config.h` and update the tests.
+- Tests show how to supply a managed logger object (the `TestLogger` in `ConfigureLoggingTests.cs`)
+  that exposes `Log<TState>(...)` so the native-to-managed forwarding path can validate expected
+  messages.
+- EngineRunner enforces UI-thread invocation semantics for UI-bound operations. Use
+  CaptureUiSynchronizationContext when doing headless runs in tests or background-only scenarios.
 
 ## Contributing
 
-When contributing to this interop layer:
-
-1. Ensure all public APIs have XML documentation
-2. Add corresponding managed tests for any new interop boundary
-3. Verify existing tests pass: `dotnet test`
-4. Follow the C# and C++ coding standards referenced above
-5. Keep managed/native separation clear; avoid exposing implementation details
-6. Document any new marshalling or conversion patterns for future maintainers
+Follow the repo coding conventions for C++ (C++20, MSVC) and C# (C# preview features used). Add
+managed tests for any new interop surface and keep the interop surface small and explicit: prefer
+simple, well-documented transformer/conversion helpers rather than complex logic in the bridging
+layer.
 
 ## License
 
-Distributed under the 3-Clause BSD License. See `LICENSE` file for details.
+Distributed under the 3-Clause BSD License. See LICENSE file for details.
 
 ---
 
-## Related Documentation
+## Related documentation
 
-- **Oxygen Engine:** See `projects/Oxygen.Engine/.github/copilot-instructions.md` for native engine architecture
-- **DroidNet Conventions:** See `.github/copilot-instructions.md` and `.github/instructions/csharp_coding_style.instructions.md`
-- **Editor Integration:** Integration patterns with Oxygen.Editor components
+- Oxygen Engine internals: `projects/Oxygen.Engine/.github/copilot-instructions.md`
+- DroidNet repository conventions: `.github/copilot-instructions.md`, `.github/instructions/csharp_coding_style.instructions.md`
