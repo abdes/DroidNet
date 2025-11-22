@@ -30,6 +30,8 @@
         "stdexcept": "cpp",
         "xtr1common": "cpp",
         "shared_mutex": "cpp",
-        "exception": "cpp"
+        "exception": "cpp",
+        "optional": "cpp",
+        "vector": "cpp"
     }
 }

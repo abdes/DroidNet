@@ -11,12 +11,15 @@
 
 #include "Config.h"
 #include "EngineContext.h"
+#include "SurfaceRegistry.h"
 
 namespace oxygen::graphics {
 
 namespace System {
   ref class Action;
   ref class Object;
+  ref class String;
+  value struct Guid;
 }
 
 namespace System::Threading {
@@ -129,15 +132,16 @@ namespace Oxygen::Editor::EngineInterface {
 
       auto StopEngine(EngineContext^ ctx) -> void;
 
-      auto ResizeViewport(System::UInt32 width, System::UInt32 height) -> void;
+      auto RegisterSurface(EngineContext^ ctx, System::Guid documentId,
+        System::Guid viewportId, System::String^ displayName,
+        System::IntPtr swapChainPanel) -> bool;
+
+      auto ResizeSurface(System::Guid viewportId, System::UInt32 width,
+        System::UInt32 height) -> void;
+
+      auto UnregisterSurface(System::Guid viewportId) -> void;
 
       void CaptureUiSynchronizationContext();
-
-      /// <summary>
-      /// Releases the cached editor surface reference to allow native resources to tear down safely.
-      /// Safe to call multiple times.
-      /// </summary>
-      void ReleaseEditorSurface();
 
     private:
       // Encapsulated logging handler (forward-declared above). This hides any
@@ -145,7 +149,7 @@ namespace Oxygen::Editor::EngineInterface {
       LogHandler^ log_handler_;
 
       bool disposed_;
-      std::shared_ptr<oxygen::graphics::Surface>* editor_surface_;
+      std::shared_ptr<SurfaceRegistry>* surface_registry_;
 
       System::Threading::Tasks::Task^ engine_task_;
       System::Threading::Tasks::TaskCompletionSource<bool>^ engine_completion_source_;
@@ -162,7 +166,10 @@ namespace Oxygen::Editor::EngineInterface {
       void SendToUi(System::Threading::SendOrPostCallback^ callback,
         System::Object^ state);
       void InvokeAction(System::Object^ action);
-      void ResetEditorSurface();
+      void ResetSurfaceRegistry();
+      void EnsureSurfaceRegistry();
+      auto GetSurfaceRegistry() -> std::shared_ptr<SurfaceRegistry>;
+      static auto ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey;
       void EnsureEngineLoopStopped();
       void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr);
       void AttachSwapChainCallback(System::Object^ state);

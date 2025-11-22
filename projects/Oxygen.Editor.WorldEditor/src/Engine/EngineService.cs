@@ -29,11 +29,9 @@ public sealed partial class EngineService : IEngineService
     private readonly Dictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
 
     private EngineRunner? engineRunner;
-    private EngineContext? dormantContext;
     private EngineContext? engineContext;
     private Task? engineLoopTask;
     private EngineServiceState state = EngineServiceState.Created;
-    private ViewportSurfaceKey? primaryLeaseKey;
     private bool disposed;
 
     /// <summary>
@@ -64,7 +62,7 @@ public sealed partial class EngineService : IEngineService
     {
         this.ThrowIfDisposed();
 
-        if (this.state is EngineServiceState.Dormant or EngineServiceState.Running)
+        if (this.state is EngineServiceState.Ready or EngineServiceState.Running)
         {
             return;
         }
@@ -72,7 +70,7 @@ public sealed partial class EngineService : IEngineService
         await this.initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (this.state is EngineServiceState.Dormant or EngineServiceState.Running)
+            if (this.state is EngineServiceState.Ready or EngineServiceState.Running)
             {
                 return;
             }
@@ -98,7 +96,7 @@ public sealed partial class EngineService : IEngineService
                 this.LogRunnerInitialized();
             }
 
-            this.EnsureDormantContext();
+            this.EnsureEngineContext();
         }
         catch (Exception ex)
         {
@@ -171,7 +169,6 @@ public sealed partial class EngineService : IEngineService
             leasesSnapshot = this.activeLeases.Values.ToList();
             this.activeLeases.Clear();
             this.documentSurfaceCounts.Clear();
-            this.primaryLeaseKey = null;
         }
         finally
         {
@@ -183,8 +180,8 @@ public sealed partial class EngineService : IEngineService
             lease.MarkDetached();
         }
 
-        await this.StopEngineAsync(transitionToDormant: false).ConfigureAwait(false);
-        this.DestroyDormantContext();
+        await this.StopEngineAsync(keepContextAlive: false).ConfigureAwait(false);
+        this.DestroyEngineContext();
         this.engineRunner?.Dispose();
         this.state = EngineServiceState.Created;
     }
@@ -199,29 +196,54 @@ public sealed partial class EngineService : IEngineService
             throw new InvalidOperationException("Engine runner not initialized.");
         }
 
+        await this.EnsureInitializedAsync(cancellationToken).ConfigureAwait(true);
+
         if (this.engineContext == null)
         {
-            await this.StartEngineForPanelAsync(panel, cancellationToken).ConfigureAwait(true);
-            this.primaryLeaseKey = lease.Key;
-            this.LogPrimaryLeaseSelected(lease.Key.DisplayName);
-            lease.MarkAttached(panel);
-            this.LogLeaseAttached(lease.Key.DisplayName, panel.GetHashCode(), this.state);
-            return;
+            throw new InvalidOperationException("Engine context is not available.");
         }
 
-        if (this.primaryLeaseKey.HasValue && this.primaryLeaseKey != lease.Key)
+        var panelPtr = IntPtr.Zero;
+        try
         {
-            throw new NotSupportedException("Multiple viewport attachments are not supported yet. Native surface multiplexing is pending.");
+            panelPtr = Marshal.GetIUnknownForObject(panel);
+            var registered = this.engineRunner.RegisterSurface(
+                this.engineContext,
+                lease.Key.DocumentId,
+                lease.Key.ViewportId,
+                lease.Key.DisplayName,
+                panelPtr);
+
+            if (!registered)
+            {
+                throw new InvalidOperationException("Failed to register viewport surface with the native engine.");
+            }
+        }
+        finally
+        {
+            if (panelPtr != IntPtr.Zero)
+            {
+                Marshal.Release(panelPtr);
+            }
         }
 
         lease.MarkAttached(panel);
         this.LogLeaseAttached(lease.Key.DisplayName, panel.GetHashCode(), this.state);
+
+        if (this.engineLoopTask == null)
+        {
+            this.LogStartingEngineLoop(panel.GetHashCode());
+            this.state = EngineServiceState.Initializing;
+            this.engineLoopTask = this.engineRunner.RunEngineAsync(this.engineContext);
+        }
+
+        this.state = EngineServiceState.Running;
     }
 
     /// <summary>
     /// Forwards a resize request to the native engine.
     /// </summary>
-    private void ResizeViewport(uint pixelWidth, uint pixelHeight)
+    private void ResizeViewport(ViewportSurfaceKey key, uint pixelWidth, uint pixelHeight)
     {
         if (pixelWidth == 0 || pixelHeight == 0)
         {
@@ -230,7 +252,7 @@ public sealed partial class EngineService : IEngineService
 
         try
         {
-            this.engineRunner?.ResizeViewport(pixelWidth, pixelHeight);
+            this.engineRunner?.ResizeSurface(key.ViewportId, pixelWidth, pixelHeight);
         }
         catch (ObjectDisposedException ex)
         {
@@ -249,8 +271,7 @@ public sealed partial class EngineService : IEngineService
     /// </summary>
     private async ValueTask ReleaseLeaseAsync(ViewportSurfaceLease lease)
     {
-        var shouldStopEngine = false;
-        var wasPrimaryLease = false;
+        var idleCandidate = false;
         var documentCountAfter = 0;
         var totalCountAfter = 0;
 
@@ -281,13 +302,7 @@ public sealed partial class EngineService : IEngineService
                 documentCountAfter = 0;
             }
 
-            if (this.primaryLeaseKey == lease.Key)
-            {
-                this.primaryLeaseKey = null;
-                wasPrimaryLease = true;
-            }
-
-            shouldStopEngine = this.activeLeases.Count == 0;
+            idleCandidate = this.activeLeases.Count == 0;
             totalCountAfter = this.activeLeases.Count;
         }
         finally
@@ -296,13 +311,8 @@ public sealed partial class EngineService : IEngineService
         }
 
         lease.MarkDetached();
-        this.LogLeaseReleased(lease.Key.DisplayName, lease.Key.DocumentId, totalCountAfter, documentCountAfter, wasPrimaryLease, shouldStopEngine);
-
-        if (shouldStopEngine)
-        {
-            this.engineRunner?.ReleaseEditorSurface();
-            await this.StopEngineAsync().ConfigureAwait(false);
-        }
+        this.engineRunner?.UnregisterSurface(lease.Key.ViewportId);
+        this.LogLeaseReleased(lease.Key.DisplayName, lease.Key.DocumentId, totalCountAfter, documentCountAfter, idleCandidate);
     }
 
     private async ValueTask<ViewportSurfaceLease> GetOrCreateLeaseAsync(ViewportSurfaceKey key, CancellationToken cancellationToken)
@@ -359,43 +369,7 @@ public sealed partial class EngineService : IEngineService
     private int GetDocumentSurfaceCount(Guid documentId)
         => this.documentSurfaceCounts.TryGetValue(documentId, out var count) ? count : 0;
 
-    private async ValueTask StartEngineForPanelAsync(SwapChainPanel panel, CancellationToken cancellationToken)
-    {
-        if (this.engineRunner == null)
-        {
-            throw new InvalidOperationException("Engine runner not initialized.");
-        }
-
-        this.LogStartingEngineLoop(panel.GetHashCode());
-        this.DestroyDormantContext();
-        this.state = EngineServiceState.Initializing;
-
-        var config = ConfigFactory.CreateDefaultEngineConfig();
-        var panelPtr = IntPtr.Zero;
-
-        try
-        {
-            panelPtr = Marshal.GetIUnknownForObject(panel);
-            this.engineContext = this.engineRunner.CreateEngine(config, panelPtr);
-        }
-        finally
-        {
-            if (panelPtr != IntPtr.Zero)
-            {
-                Marshal.Release(panelPtr);
-            }
-        }
-
-        if (this.engineContext == null || !this.engineContext.IsValid)
-        {
-            throw new InvalidOperationException("Native engine context creation failed.");
-        }
-
-        this.engineLoopTask = this.engineRunner.RunEngineAsync(this.engineContext);
-        this.state = EngineServiceState.Running;
-    }
-
-    private async ValueTask StopEngineAsync(bool transitionToDormant = true)
+    private async ValueTask StopEngineAsync(bool keepContextAlive = true)
     {
         if (this.engineRunner == null)
         {
@@ -404,17 +378,25 @@ public sealed partial class EngineService : IEngineService
         }
 
         var hasActiveContext = this.engineContext != null;
-        this.LogStopEngineRequested(transitionToDormant, hasActiveContext, this.state);
+        this.LogStopEngineRequested(keepContextAlive, hasActiveContext, this.state);
 
-        if (!hasActiveContext)
+        if (this.engineLoopTask == null || this.engineContext == null)
         {
-            if (!transitionToDormant)
+            if (!keepContextAlive)
             {
-                this.DestroyDormantContext();
+                this.DestroyEngineContext();
+                this.state = EngineServiceState.Created;
+            }
+            else if (this.engineContext != null && this.engineContext.IsValid)
+            {
+                this.state = EngineServiceState.Ready;
+            }
+            else
+            {
+                this.state = EngineServiceState.Created;
             }
 
-            this.state = EngineServiceState.Created;
-            this.LogStopEngineCompleted(transitionToDormant, this.state);
+            this.LogStopEngineCompleted(keepContextAlive, this.state);
             return;
         }
 
@@ -442,15 +424,17 @@ public sealed partial class EngineService : IEngineService
         finally
         {
             this.engineLoopTask = null;
-            this.engineContext = null;
-
-            if (!transitionToDormant)
+            if (keepContextAlive && this.engineContext != null)
             {
-                this.DestroyDormantContext();
+                this.state = EngineServiceState.Ready;
+            }
+            else
+            {
+                this.DestroyEngineContext();
+                this.state = EngineServiceState.Created;
             }
 
-            this.state = EngineServiceState.Created;
-            this.LogStopEngineCompleted(transitionToDormant, this.state);
+            this.LogStopEngineCompleted(keepContextAlive, this.state);
         }
     }
 
@@ -465,17 +449,17 @@ public sealed partial class EngineService : IEngineService
         }
     }
 
-    private void EnsureDormantContext()
+    private void EnsureEngineContext()
     {
         if (this.engineRunner == null)
         {
             throw new InvalidOperationException("Engine runner not initialized.");
         }
 
-        if (this.dormantContext != null && this.dormantContext.IsValid)
+        if (this.engineContext != null && this.engineContext.IsValid)
         {
-            this.LogDormantContextReused();
-            this.state = EngineServiceState.Dormant;
+            this.LogContextReused();
+            this.state = EngineServiceState.Ready;
             return;
         }
 
@@ -483,26 +467,29 @@ public sealed partial class EngineService : IEngineService
         config.Graphics ??= new GraphicsConfigManaged();
         config.Graphics.Headless = true;
 
-        this.dormantContext = this.engineRunner.CreateEngine(config);
-        if (this.dormantContext == null || !this.dormantContext.IsValid)
+        // TODO: temporarirly set FPS at 1 to reduce log throughput
+        config.TargetFps = 1;
+
+        this.engineContext = this.engineRunner.CreateEngine(config);
+        if (this.engineContext == null || !this.engineContext.IsValid)
         {
-            throw new InvalidOperationException("Failed to create dormant engine context.");
+            throw new InvalidOperationException("Failed to create engine context.");
         }
 
-        this.LogDormantContextReady();
-        this.state = EngineServiceState.Dormant;
+        this.LogContextReady();
+        this.state = EngineServiceState.Ready;
     }
 
-    private void DestroyDormantContext()
+    private void DestroyEngineContext()
     {
-        if (this.dormantContext == null)
+        if (this.engineContext == null)
         {
             return;
         }
 
         try
         {
-            this.dormantContext?.Dispose();
+            this.engineContext.Dispose();
         }
         catch (Exception ex)
         {
@@ -510,8 +497,8 @@ public sealed partial class EngineService : IEngineService
         }
         finally
         {
-            this.dormantContext = null;
-            this.LogDormantContextDestroyed();
+            this.engineContext = null;
+            this.LogContextDestroyed();
         }
     }
 
@@ -545,7 +532,7 @@ public sealed partial class EngineService : IEngineService
                 return ValueTask.CompletedTask;
             }
 
-            this.owner.ResizeViewport(pixelWidth, pixelHeight);
+            this.owner.ResizeViewport(this.Key, pixelWidth, pixelHeight);
             return ValueTask.CompletedTask;
         }
 

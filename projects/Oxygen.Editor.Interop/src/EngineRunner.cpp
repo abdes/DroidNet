@@ -17,6 +17,7 @@
 
 #include <dxgi1_2.h>
 #include <sstream>
+#include <string>
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325")) ISwapChainPanelNative : public IUnknown {
@@ -228,38 +229,6 @@ static void InvokeLogHandler(Object^ obj, const loguru::Message& msg) {
   }
 }
 
-namespace {
-
-auto FormatSurfaceState(const char* prefix,
-  const std::shared_ptr<oxygen::graphics::Surface>* surface_ptr)
-  -> std::string
-{
-  std::ostringstream oss;
-  oss << prefix;
-  if (surface_ptr == nullptr) {
-    oss << " editor_surface_=nullptr";
-    return oss.str();
-  }
-
-  oss << " wrapper=" << surface_ptr;
-  if (surface_ptr->get() == nullptr && surface_ptr->use_count() == 0) {
-    oss << " (shared_ptr reset)";
-    return oss.str();
-  }
-
-  oss << " shared_ptr=" << surface_ptr->get();
-  oss << " use_count=" << surface_ptr->use_count();
-  return oss.str();
-}
-
-void LogSurfaceState(const char* prefix,
-  const std::shared_ptr<oxygen::graphics::Surface>* surface_ptr)
-{
-  auto message = FormatSurfaceState(prefix, surface_ptr);
-  oxygen::engine::interop::LogInfoMessage(message.c_str());
-}
-
-}
 // EngineRunner implementation now delegates logging concerns to LogHandler.
 namespace Oxygen::Editor::EngineInterface {
 
@@ -287,7 +256,7 @@ namespace Oxygen::Editor::EngineInterface {
   EngineRunner::EngineRunner()
     : log_handler_(nullptr)
     , disposed_(false)
-    , editor_surface_(nullptr)
+    , surface_registry_(nullptr)
   {
     log_handler_ = gcnew LogHandler();
     this->engine_task_ = nullptr;
@@ -301,13 +270,14 @@ namespace Oxygen::Editor::EngineInterface {
   EngineRunner::~EngineRunner() {
     if (!disposed_) {
       EnsureEngineLoopStopped();
+      ResetSurfaceRegistry();
       if (log_handler_ != nullptr) {
         delete log_handler_;
         log_handler_ = nullptr;
       }
-      if (editor_surface_ != nullptr) {
-        delete editor_surface_;
-        editor_surface_ = nullptr;
+      if (surface_registry_ != nullptr) {
+        delete surface_registry_;
+        surface_registry_ = nullptr;
       }
       disposed_ = true;
     }
@@ -315,9 +285,14 @@ namespace Oxygen::Editor::EngineInterface {
 
   EngineRunner::!EngineRunner() {
     EnsureEngineLoopStopped();
+    ResetSurfaceRegistry();
     if (log_handler_ != nullptr) {
       delete log_handler_;
       log_handler_ = nullptr;
+    }
+    if (surface_registry_ != nullptr) {
+      delete surface_registry_;
+      surface_registry_ = nullptr;
     }
   }
 
@@ -376,44 +351,15 @@ namespace Oxygen::Editor::EngineInterface {
       // Promote unique_ptr to shared_ptr for the managed wrapper lifetime model.
       std::shared_ptr<oxygen::engine::interop::EngineContext> shared(native_unique.release());
 
-      if (swapChainPanel != IntPtr::Zero) {
-        void* native_panel = swapChainPanel.ToPointer();
+      EnsureSurfaceRegistry();
+      auto registry = GetSurfaceRegistry();
+      registry->Clear();
 
-        oxygen::engine::interop::LogInfoMessage("Creating CompositionSurface...");
-
-        void* swap_chain_ptr = nullptr;
-        // Create Surface
-        auto surface = oxygen::engine::interop::CreateCompositionSurface(shared,
-          &swap_chain_ptr);
-        if (surface) {
-          ResetEditorSurface();
-          editor_surface_ = new std::shared_ptr<oxygen::graphics::Surface>(surface);
-          LogSurfaceState("CreateEngine stored editor surface", editor_surface_);
-            // Ensure we delete old weak_ptr before assigning new, and delete only once.
-            if (swap_chain_ptr) {
-             oxygen::engine::interop::LogInfoMessage("CompositionSurface created. Setting SwapChain on Panel...");
-             AttachSwapChain(IntPtr(native_panel), IntPtr(swap_chain_ptr));
-          } else {
-              oxygen::engine::interop::LogInfoMessage("WARNING: CompositionSurface created but no SwapChain returned.");
-          }
-
-          oxygen::engine::interop::LogInfoMessage("Creating SimpleEditorModule...");
-          // Create Module
-          auto module = std::make_unique<SimpleEditorModule>(surface);
-
-          // Register Module
-          if (shared->engine) {
-            oxygen::engine::interop::LogInfoMessage("Registering SimpleEditorModule...");
-            shared->engine->RegisterModule(std::move(module));
-            oxygen::engine::interop::LogInfoMessage("SimpleEditorModule registered.");
-          }
-        } else {
-            oxygen::engine::interop::LogInfoMessage("ERROR: Failed to create CompositionSurface.");
-            ResetEditorSurface();
-        }
-      }
-      else if (editor_surface_ != nullptr) {
-        ResetEditorSurface();
+      if (shared->engine) {
+        oxygen::engine::interop::LogInfoMessage(
+          "Registering SimpleEditorModule with surface registry.");
+        auto module = std::make_unique<SimpleEditorModule>(registry);
+        shared->engine->RegisterModule(std::move(module));
       }
 
       return gcnew EngineContext(shared);
@@ -493,42 +439,96 @@ namespace Oxygen::Editor::EngineInterface {
     oxygen::engine::interop::StopEngine(ctx->NativeShared());
   }
 
-  auto EngineRunner::ResizeViewport(System::UInt32 width, System::UInt32 height)
-    -> void
+  auto EngineRunner::RegisterSurface(EngineContext^ ctx, System::Guid documentId,
+    System::Guid viewportId, System::String^ displayName,
+    IntPtr swapChainPanel) -> bool
   {
-    std::ostringstream oss;
-    oss << "ResizeViewport requested " << width << "x" << height;
-    oxygen::engine::interop::LogInfoMessage(oss.str().c_str());
-
-    if (width == 0 || height == 0) {
-      oxygen::engine::interop::LogInfoMessage(
-        "ResizeViewport ignored: zero dimension request.");
-      return;
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (swapChainPanel == IntPtr::Zero) {
+      throw gcnew ArgumentException(
+        "SwapChainPanel pointer must not be zero.", "swapChainPanel");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
     }
 
-    if (editor_surface_ == nullptr) {
-      oxygen::engine::interop::LogInfoMessage(
-        "ResizeViewport ignored: editor_surface_ wrapper missing.");
-      return;
+    auto& shared = ctx->NativeShared();
+    if (!shared) {
+      return false;
     }
 
-    auto surface = *editor_surface_;
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+
+    auto docString = documentId.ToString();
+    auto viewportString = viewportId.ToString();
+    auto displayLabel = displayName != nullptr ? displayName : "(unnamed viewport)";
+    const auto doc = msclr::interop::marshal_as<std::string>(docString);
+    const auto view = msclr::interop::marshal_as<std::string>(viewportString);
+    const auto disp = msclr::interop::marshal_as<std::string>(displayLabel);
+
+    std::ostringstream registrationLog;
+    registrationLog << "RegisterSurface doc=" << doc << " viewport=" << view
+            << " name='" << disp << "'";
+    oxygen::engine::interop::LogInfoMessage(registrationLog.str().c_str());
+
+    oxygen::engine::interop::LogInfoMessage("RegisterSurface: creating composition surface.");
+    void* swap_chain_ptr = nullptr;
+    auto surface = oxygen::engine::interop::CreateCompositionSurface(shared,
+      &swap_chain_ptr);
     if (!surface) {
       oxygen::engine::interop::LogInfoMessage(
-        "ResizeViewport ignored: shared_ptr not set.");
+        "RegisterSurface failed: CreateCompositionSurface returned null.");
+      return false;
+    }
+
+    registry->RegisterSurface(key, surface);
+
+    if (swap_chain_ptr != nullptr) {
+      AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr));
+    }
+
+    return true;
+  }
+
+  auto EngineRunner::ResizeSurface(System::Guid viewportId, System::UInt32 width,
+    System::UInt32 height) -> void
+  {
+    if (width == 0 || height == 0) {
       return;
     }
 
-    LogSurfaceState("ResizeViewport issuing native resize", editor_surface_);
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+    auto surface = registry->FindSurface(key);
+    if (!surface) {
+      return;
+    }
+
+    const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
+    std::ostringstream resizeLog;
+    resizeLog << "ResizeSurface viewport=" << viewportString << " size="
+              << width << "x" << height;
+    oxygen::engine::interop::LogInfoMessage(resizeLog.str().c_str());
+
     oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width,
       height);
   }
 
-  void EngineRunner::ReleaseEditorSurface()
+  auto EngineRunner::UnregisterSurface(System::Guid viewportId) -> void
   {
-    oxygen::engine::interop::LogInfoMessage(
-      "ReleaseEditorSurface invoked explicitly.");
-    ResetEditorSurface();
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+    const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
+    std::ostringstream unregisterLog;
+    unregisterLog << "UnregisterSurface viewport=" << viewportString;
+    oxygen::engine::interop::LogInfoMessage(unregisterLog.str().c_str());
+    registry->RemoveSurface(key);
   }
 
   void EngineRunner::EngineLoopAdapter(System::Object^ state)
@@ -576,8 +576,8 @@ namespace Oxygen::Editor::EngineInterface {
   void EngineRunner::OnEngineLoopExited()
   {
     oxygen::engine::interop::LogInfoMessage(
-      "OnEngineLoopExited invoked; resetting editor surface.");
-    ResetEditorSurface();
+      "OnEngineLoopExited invoked; clearing surface registry.");
+    ResetSurfaceRegistry();
 
     Monitor::Enter(state_lock_);
     try {
@@ -645,6 +645,47 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
+  void EngineRunner::ResetSurfaceRegistry()
+  {
+    if (surface_registry_ != nullptr && surface_registry_->get() != nullptr) {
+      (*surface_registry_)->Clear();
+    }
+  }
+
+  void EngineRunner::EnsureSurfaceRegistry()
+  {
+    if (surface_registry_ == nullptr) {
+      surface_registry_ =
+        new std::shared_ptr<SurfaceRegistry>(std::make_shared<SurfaceRegistry>());
+      return;
+    }
+
+    if (surface_registry_->get() == nullptr) {
+      *surface_registry_ = std::make_shared<SurfaceRegistry>();
+    }
+  }
+
+  auto EngineRunner::GetSurfaceRegistry() -> std::shared_ptr<SurfaceRegistry>
+  {
+    EnsureSurfaceRegistry();
+    return *surface_registry_;
+  }
+
+  auto EngineRunner::ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey
+  {
+    SurfaceRegistry::GuidKey key {};
+    auto bytes = guid.ToByteArray();
+    if (bytes == nullptr || bytes->Length != 16) {
+      return key;
+    }
+
+    for (int i = 0; i < 16; ++i) {
+      key[static_cast<std::size_t>(i)] = bytes[i];
+    }
+
+    return key;
+  }
+
   void EngineRunner::AttachSwapChain(IntPtr panelPtr, IntPtr swapChainPtr)
   {
     if (panelPtr == IntPtr::Zero || swapChainPtr == IntPtr::Zero) {
@@ -685,16 +726,6 @@ namespace Oxygen::Editor::EngineInterface {
     oxygen::engine::interop::LogInfoMessage("SwapChain attached to panel.");
   }
 
-  void EngineRunner::ResetEditorSurface()
-  {
-    LogSurfaceState("ResetEditorSurface begin", editor_surface_);
-    if (editor_surface_ != nullptr) {
-      delete editor_surface_;
-      editor_surface_ = nullptr;
-    }
-    LogSurfaceState("ResetEditorSurface end", editor_surface_);
-  }
-
   void EngineRunner::EnsureEngineLoopStopped()
   {
     Task^ running_task = nullptr;
@@ -726,7 +757,7 @@ namespace Oxygen::Editor::EngineInterface {
         // Ignore exceptions when waiting for shutdown from the finalizer path.
       }
 
-      DispatchToUi(gcnew Action(this, &EngineRunner::ResetEditorSurface));
+      DispatchToUi(gcnew Action(this, &EngineRunner::ResetSurfaceRegistry));
 
       Monitor::Enter(state_lock_);
       try {

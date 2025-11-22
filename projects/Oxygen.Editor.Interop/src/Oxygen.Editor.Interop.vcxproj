@@ -32,6 +32,7 @@
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="OxygenWorld.h" />
+    <ClInclude Include="SurfaceRegistry.h" />
     <ClInclude Include="SimpleEditorModule.h" />
   </ItemGroup>
   <ItemGroup>

@@ -2,6 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
 using DroidNet.Aura.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,12 +19,13 @@ namespace Oxygen.Editor.WorldEditor.Editors;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = null) : IDocumentService
+public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = null) : IDocumentService, IDocumentServiceState
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<WorldEditorDocumentService>() ?? NullLoggerFactory.Instance.CreateLogger<WorldEditorDocumentService>();
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
+    private readonly Dictionary<WindowId, Guid> activeDocuments = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -49,11 +53,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
     {
         this.LogOpenDocumentCalled(windowId.Value, metadata.DocumentId);
 
-        if (!this.windowDocs.TryGetValue(windowId, out var docs))
-        {
-            docs = [];
-            this.windowDocs[windowId] = docs;
-        }
+        var docs = this.GetOrCreateWindowDocuments(windowId);
 
         // Ensure only one Scene document is open per window. If the incoming metadata
         // is a SceneDocumentMetadata, attempt to close any existing scene document
@@ -84,6 +84,11 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         var assigned = metadata.DocumentId == Guid.Empty ? Guid.NewGuid() : metadata.DocumentId;
         docs[assigned] = metadata;
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
+        if (shouldSelect)
+        {
+            this.activeDocuments[windowId] = assigned;
+        }
+
         return assigned;
     }
 
@@ -109,6 +114,15 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         }
 
         _ = docs.Remove(documentId);
+        if (docs.Count == 0)
+        {
+            _ = this.windowDocs.Remove(windowId);
+        }
+
+        if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
+        {
+            _ = this.activeDocuments.Remove(windowId);
+        }
         this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         this.LogDocumentClosed(windowId.Value, documentId);
         return true;
@@ -122,6 +136,15 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
         {
             _ = docs.Remove(documentId);
+            if (docs.Count == 0)
+            {
+                _ = this.windowDocs.Remove(windowId);
+            }
+
+            if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
+            {
+                _ = this.activeDocuments.Remove(windowId);
+            }
             this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
             this.LogDetached(windowId.Value, documentId);
             return Task.FromResult<IDocumentMetadata?>(metadata);
@@ -136,11 +159,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
     {
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
-        if (!this.windowDocs.TryGetValue(targetWindowId, out var docs))
-        {
-            docs = [];
-            this.windowDocs[targetWindowId] = docs;
-        }
+        var docs = this.GetOrCreateWindowDocuments(targetWindowId);
 
         // If attaching a Scene document, replace any existing Scene document in the target window.
         if (metadata is SceneDocumentMetadata)
@@ -167,6 +186,10 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         }
 
         docs[metadata.DocumentId] = metadata;
+        if (shouldSelect)
+        {
+            this.activeDocuments[targetWindowId] = metadata.DocumentId;
+        }
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         this.LogAttached(targetWindowId.Value, metadata.DocumentId);
         return true;
@@ -200,8 +223,37 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
             return Task.FromResult(false);
         }
 
+        this.activeDocuments[windowId] = documentId;
         this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
         this.LogDocumentActivatedInvoked(windowId.Value, documentId);
         return Task.FromResult(true);
+    }
+
+    /// <inheritdoc/>
+    public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
+    {
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0)
+        {
+            return Array.Empty<IDocumentMetadata>();
+        }
+
+        return docs.Values.ToList();
+    }
+
+    /// <inheritdoc/>
+    public Guid? GetActiveDocumentId(WindowId windowId)
+        => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
+            ? documentId
+            : null;
+
+    private Dictionary<Guid, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
+    {
+        if (!this.windowDocs.TryGetValue(windowId, out var docs))
+        {
+            docs = [];
+            this.windowDocs[windowId] = docs;
+        }
+
+        return docs;
     }
 }
