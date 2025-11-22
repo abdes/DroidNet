@@ -11,7 +11,9 @@
 
 #include "Config.h"
 #include "EngineContext.h"
+#include "RenderThreadContext.h"
 #include "SurfaceRegistry.h"
+#include "UiThreadDispatcher.h"
 
 namespace oxygen::graphics {
 
@@ -151,10 +153,10 @@ namespace Oxygen::Editor::EngineInterface {
       bool disposed_;
       std::shared_ptr<SurfaceRegistry>* surface_registry_;
 
+      UiThreadDispatcher^ ui_dispatcher_;
+      RenderThreadContext^ render_thread_context_;
       System::Threading::Tasks::Task^ engine_task_;
       System::Threading::Tasks::TaskCompletionSource<bool>^ engine_completion_source_;
-      System::Threading::Thread^ engine_thread_;
-      System::Threading::SynchronizationContext^ ui_sync_context_;
       EngineContext^ active_context_;
       System::Object^ state_lock_;
 

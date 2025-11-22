@@ -13,6 +13,8 @@
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="SimpleEditorModule.cpp" />
+    <ClCompile Include="RenderThreadContext.cpp" />
+    <ClCompile Include="UiThreadDispatcher.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="OxygenWorld.h" />
@@ -24,6 +26,8 @@
     <ClInclude Include="Config.h" />
     <ClInclude Include="SurfaceRegistry.h" />
     <ClInclude Include="SimpleEditorModule.h" />
+    <ClInclude Include="RenderThreadContext.h" />
+    <ClInclude Include="UiThreadDispatcher.h" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="World">

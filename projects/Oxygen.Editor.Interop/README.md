@@ -64,6 +64,12 @@ The interop layer handles the specific requirements for hosting the DirectX 12 e
 - **ISwapChainPanelNative:** The project explicitly defines and uses the WinUI 3 specific IID (`{63BE0B4D-909D-4652-9C00-5C3EA4763E52}`) for `ISwapChainPanelNative`, which differs from the UWP version.
 - **Threading Model:** The `SetSwapChain` operation is performed within the interop layer. Consumers must ensure `CreateEngine` is called from a thread compatible with the `SwapChainPanel` (typically the UI thread).
 
+### Threading Model
+
+- `EngineRunner::CreateEngine` captures the UI thread automatically via `UiThreadDispatcher`. Call it from the main UI thread (WinUI dispatcher) so swap-chain attachment can marshal COM calls safely. Headless scenarios must first invoke `EngineRunner::CaptureUiSynchronizationContext()` on the UI thread to record a dispatcher before starting the engine.
+- UI-facing operations such as `RegisterSurface`, `ResizeSurface`, and swap-chain wiring verify that they execute on the captured UI thread. Calling them from any other thread throws a descriptive `InvalidOperationException` to keep routing mistakes easy to diagnose.
+- The render loop always runs on a dedicated background thread managed by `RenderThreadContext`. `RunEngineAsync` spins up that thread, while `StopEngine`/`EnsureEngineLoopStopped` wait for it to exit before clearing shared resources. This strict separation simplifies upcoming features like background asset streaming or headless simulation because cross-thread assumptions are explicit in helper types.
+
 ## Project Structure
 
 ```text
