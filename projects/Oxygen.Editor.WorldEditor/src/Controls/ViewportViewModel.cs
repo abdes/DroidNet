@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -25,16 +24,11 @@ namespace Oxygen.Editor.WorldEditor.Controls;
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
-
-    // Lazy-backed menu sources — build on first access.
     private IMenuSource? viewMenu;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
-
-    // Optional override for the effective theme (set by the view). When present this will be
-    // preferred for ThemeDictionary selection over Application.RequestedTheme.
     private ElementTheme? effectiveThemeOverride;
-
+    private readonly ILogger logger;
     private bool isDisposed;
 
     /// <summary>
@@ -55,12 +49,15 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         this.DocumentId = documentId;
         this.EngineService = engineService;
         this.LoggerFactory = loggerFactory;
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.WorldEditor.Controls.ViewportViewModel");
         this.appearanceSettings = appearanceSettings;
 
         // Seed effective theme from settings and subscribe for changes.
-        Debug.Assert(this.appearanceSettings != null, "appearanceSettings must not be null");
+        ArgumentNullException.ThrowIfNull(this.appearanceSettings);
         this.SetEffectiveTheme(this.appearanceSettings.Settings.AppThemeMode);
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
+        this.ToggleMaximizeCommand = new RelayCommand(() => this.IsMaximized = !this.IsMaximized);
+        this.LogInitialized();
     }
 
     // Overlay view toggles
@@ -73,7 +70,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool ShowToolbar { get; set; }
 
-    // Individual stat toggles
     [ObservableProperty]
     public partial bool Stat1 { get; set; }
 
@@ -83,21 +79,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool Stat3 { get; set; }
 
-    /// <summary>
-    /// Gets or sets the camera type.
-    /// </summary>
     [ObservableProperty]
     public partial CameraType CameraType { get; set; } = CameraType.Perspective;
 
-    /// <summary>
-    /// Gets or sets the shading mode.
-    /// </summary>
     [ObservableProperty]
     public partial ShadingMode ShadingMode { get; set; } = ShadingMode.Wireframe;
 
-    /// <summary>
-    /// Gets or sets a value indicating whether the viewport is maximized.
-    /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MaximizeGlyph))]
     public partial bool IsMaximized { get; set; }
@@ -162,13 +149,20 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; }
 
+
     /// <summary>
     /// Dispose of transient subscriptions.
     /// </summary>
     public void Dispose()
     {
-        this.Dispose(true);
+        this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    partial void OnIsMaximizedChanged(bool oldValue, bool newValue)
+    {
+        // keep MaximizeGlyph synched with IsMaximized
+        this.OnPropertyChanged(nameof(this.MaximizeGlyph));
     }
 
     /// <summary>
@@ -185,6 +179,13 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
             IsPrimary = this.IsPrimaryViewport,
             Tag = tag,
         };
+
+    /// <summary>
+    /// Set the effective theme used for selecting themed resources (Light/Dark).
+    /// Call this from the view (code-behind) using the view's ActualTheme.
+    /// </summary>
+    /// <param name="theme">The theme reported by the view (ActualTheme).</param>
+    public void UpdateTheme(ElementTheme theme) => this.SetEffectiveTheme(theme);
 
     /// <summary>
     /// Updates the layout metadata for the viewport, setting its index and primary status.
@@ -214,23 +215,14 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>
-    /// Set the effective theme used for selecting themed resources (Light/Dark).
-    /// Call this from the view (code-behind) using the view's ActualTheme.
-    /// </summary>
-    /// <param name="theme">The theme reported by the view (ActualTheme).</param>
     private void SetEffectiveTheme(ElementTheme theme)
     {
-        // If menus were already built, rebuild them now so the UI updates
-        // immediately with icons from the new theme. If menus haven't been
-        // built yet we keep them lazy and they'll be created with the correct
-        // theme on first access.
         var hadViewMenu = this.viewMenu is not null;
         var hadShadingMenu = this.shadingMenu is not null;
         var hadLayoutMenu = this.layoutMenu is not null;
 
         this.effectiveThemeOverride = theme;
-        Debug.WriteLine($"[ViewportViewModel] Effective theme override set to {theme}");
+        this.LogEffectiveThemeSet(theme);
 
         try
         {
@@ -251,19 +243,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
                 this.layoutMenu = this.BuildLayoutMenu();
                 this.OnPropertyChanged(nameof(this.LayoutMenu));
             }
-
-            if (hadViewMenu || hadShadingMenu || hadLayoutMenu)
-            {
-                Debug.WriteLine("[ViewportViewModel] Rebuilt menus after effective theme override set.");
-            }
-            else
-            {
-                Debug.WriteLine("[ViewportViewModel] Effective theme set; menus remain lazy until first access.");
-            }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[ViewportViewModel] Error rebuilding menus: {ex}");
+            this.LogMenuRebuildFailed(ex);
         }
     }
 
@@ -279,8 +262,17 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private IconSource? ResolveIcon(string name)
     {
         // The settings service seeds the VM's effective theme; assert it's present.
-        Debug.Assert(!string.IsNullOrWhiteSpace(name), "name must be provided");
-        Debug.Assert(this.effectiveThemeOverride.HasValue, "effectiveThemeOverride must be set by the settings service");
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            this.LogResolveIconEmptyName();
+            return null;
+        }
+
+        if (!this.effectiveThemeOverride.HasValue)
+        {
+            this.LogResolveIconBeforeTheme();
+            return null;
+        }
 
         var app = Application.Current;
         if (app is null)
@@ -315,13 +307,12 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
         _ = builder
             .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => this.CameraType = CameraType.Perspective))
-            .AddSeparator()
-            .AddRadioMenuItem("Top", "CameraType", this.CameraType == CameraType.Top, new RelayCommand(() => this.CameraType = CameraType.Top), icon: null)
-            .AddRadioMenuItem("Bottom", "CameraType", this.CameraType == CameraType.Bottom, new RelayCommand(() => this.CameraType = CameraType.Bottom), icon: null)
-            .AddRadioMenuItem("Left", "CameraType", this.CameraType == CameraType.Left, new RelayCommand(() => this.CameraType = CameraType.Left), icon: null)
-            .AddRadioMenuItem("Right", "CameraType", this.CameraType == CameraType.Right, new RelayCommand(() => this.CameraType = CameraType.Right), icon: null)
-            .AddRadioMenuItem("Front", "CameraType", this.CameraType == CameraType.Front, new RelayCommand(() => this.CameraType = CameraType.Front), icon: null)
-            .AddRadioMenuItem("Back", "CameraType", this.CameraType == CameraType.Back, new RelayCommand(() => this.CameraType = CameraType.Back), icon: null);
+            .AddSeparator();
+
+        foreach (var type in new[] { CameraType.Top, CameraType.Bottom, CameraType.Left, CameraType.Right, CameraType.Front, CameraType.Back })
+        {
+            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => this.CameraType = type));
+        }
 
         return builder.Build();
     }
@@ -330,10 +321,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     {
         var builder = new MenuBuilder(this.LoggerFactory);
 
-        _ = builder
-            .AddRadioMenuItem("Wireframe", "ShadingMode", this.ShadingMode == ShadingMode.Wireframe, new RelayCommand(() => this.ShadingMode = ShadingMode.Wireframe))
-            .AddRadioMenuItem("Shaded", "ShadingMode", this.ShadingMode == ShadingMode.Shaded, new RelayCommand(() => this.ShadingMode = ShadingMode.Shaded))
-            .AddRadioMenuItem("Rendered", "ShadingMode", this.ShadingMode == ShadingMode.Rendered, new RelayCommand(() => this.ShadingMode = ShadingMode.Rendered));
+        foreach (var mode in new[] { ShadingMode.Wireframe, ShadingMode.Shaded, ShadingMode.Rendered })
+        {
+            _ = builder.AddRadioMenuItem(mode.ToString(), "ShadingMode", this.ShadingMode == mode, new RelayCommand(() => this.ShadingMode = mode));
+        }
 
         return builder.Build();
     }
@@ -341,178 +332,61 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private IMenuSource BuildLayoutMenu()
     {
         var builder = new MenuBuilder(this.LoggerFactory);
-
-        // Top-level toggles
-        _ = builder.AddMenuItem(new MenuItemData
-        {
-            Text = "Show FPS",
-            IsCheckable = true,
-            IsChecked = this.ShowFps,
-            AcceleratorText = "Ctrl+Shift+H",
-            Command = new RelayCommand<MenuItemData?>(this.ToggleShowFps),
-        })
-        .AddMenuItem(new MenuItemData
-        {
-            Text = "Show Stats",
-            IsCheckable = true,
-            IsChecked = this.ShowStats,
-            AcceleratorText = "Shift+L",
-            Command = new RelayCommand<MenuItemData?>(this.ToggleShowStats),
-        })
-        .AddSubmenu("Stats", submenu => submenu
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Stat1",
-                IsCheckable = true,
-                IsChecked = this.Stat1,
-                Command = new RelayCommand<MenuItemData?>(this.ToggleStat1),
-            })
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Stat2",
-                IsCheckable = true,
-                IsChecked = this.Stat2,
-                Command = new RelayCommand<MenuItemData?>(this.ToggleStat2),
-            })
-            .AddMenuItem(new MenuItemData
-            {
-                Text = "Stat3",
-                IsCheckable = true,
-                IsChecked = this.Stat3,
-                Command = new RelayCommand<MenuItemData?>(this.ToggleStat3),
-            }))
-        .AddMenuItem(new MenuItemData
-        {
-            Text = "Show Toolbar",
-            IsCheckable = true,
-            IsChecked = this.ShowToolbar,
-            AcceleratorText = "Ctrl+Shift+T",
-            Command = new RelayCommand<MenuItemData?>(this.ToggleShowToolbar),
-        })
-        .AddSeparator();
+        _ = builder.AddMenuItem(this.CreateToggleMenuItem("Show FPS", () => this.ShowFps, v => this.ShowFps = v, "Ctrl+Shift+H"))
+            .AddMenuItem(this.CreateToggleMenuItem("Show Stats", () => this.ShowStats, v => this.ShowStats = v, "Shift+L"))
+            .AddSubmenu("Stats", submenu => submenu
+                .AddMenuItem(this.CreateToggleMenuItem("Stat1", () => this.Stat1, v => this.Stat1 = v))
+                .AddMenuItem(this.CreateToggleMenuItem("Stat2", () => this.Stat2, v => this.Stat2 = v))
+                .AddMenuItem(this.CreateToggleMenuItem("Stat3", () => this.Stat3, v => this.Stat3 = v)))
+            .AddMenuItem(this.CreateToggleMenuItem("Show Toolbar", () => this.ShowToolbar, v => this.ShowToolbar = v, "Ctrl+Shift+T"))
+            .AddSeparator();
 
         // Layouts submenu with grouped panes and themed icons
-        _ = builder.AddSubmenu("Layouts", layouts => layouts
-            .AddMenuItem(
-                "One Pane",
-                new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.OnePane)),
-                this.ResolveIcon("OnePane"))
-            .AddMenuItem(
-                "Four Quadrants",
-                new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourQuad)),
-                this.ResolveIcon("FourQuad"))
-            .AddSubmenu("Two Panes", two => _ = two
-                .AddMenuItem(
-                    "Main Left",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainLeft)),
-                    this.ResolveIcon("TwoMainLeft"))
-                .AddMenuItem(
-                    "Main Right",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainRight)),
-                    this.ResolveIcon("TwoMainRight"))
-                .AddMenuItem(
-                    "Main Top",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainTop)),
-                    this.ResolveIcon("TwoMainTop"))
-                .AddMenuItem(
-                    "Main Bottom",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainBottom)),
-                    this.ResolveIcon("TwoMainBottom")))
-            .AddSubmenu("Three Panes", three => three
-                .AddMenuItem(
-                    "Main Left",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainLeft)),
-                    this.ResolveIcon("ThreeMainLeft"))
-                .AddMenuItem(
-                    "Main Right",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainRight)),
-                    this.ResolveIcon("ThreeMainRight"))
-                .AddMenuItem(
-                    "Main Top",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainTop)),
-                    this.ResolveIcon("ThreeMainTop"))
-                .AddMenuItem(
-                    "Main Bottom",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainBottom)),
-                    this.ResolveIcon("ThreeMainBottom")))
-            .AddSubmenu("Four Panes", four => four
-                .AddMenuItem(
-                    "Main Left",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainLeft)),
-                    this.ResolveIcon("FourMainLeft"))
-                .AddMenuItem(
-                    "Main Right",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainRight)),
-                    this.ResolveIcon("FourMainRight"))
-                .AddMenuItem(
-                    "Main Top",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainTop)),
-                    this.ResolveIcon("FourMainTop"))
-                .AddMenuItem(
-                    "Main Bottom",
-                    new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainBottom)),
-                    this.ResolveIcon("FourMainBottom"))));
+        _ = builder.AddSubmenu("Layouts", layouts =>
+        {
+            _ = layouts.AddMenuItem("One Pane", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.OnePane)), this.ResolveIcon("OnePane"));
+            _ = layouts.AddMenuItem("Four Quadrants", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourQuad)), this.ResolveIcon("FourQuad"));
+            _ = layouts.AddSubmenu("Two Panes", two =>
+            {
+                _ = two.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainLeft)), this.ResolveIcon("TwoMainLeft"));
+                _ = two.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainRight)), this.ResolveIcon("TwoMainRight"));
+                _ = two.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainTop)), this.ResolveIcon("TwoMainTop"));
+                _ = two.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.TwoMainBottom)), this.ResolveIcon("TwoMainBottom"));
+            });
+            _ = layouts.AddSubmenu("Three Panes", three =>
+            {
+                _ = three.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainLeft)), this.ResolveIcon("ThreeMainLeft"));
+                _ = three.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainRight)), this.ResolveIcon("ThreeMainRight"));
+                _ = three.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainTop)), this.ResolveIcon("ThreeMainTop"));
+                _ = three.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.ThreeMainBottom)), this.ResolveIcon("ThreeMainBottom"));
+            });
+            _ = layouts.AddSubmenu("Four Panes", four =>
+            {
+                _ = four.AddMenuItem("Main Left", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainLeft)), this.ResolveIcon("FourMainLeft"));
+                _ = four.AddMenuItem("Main Right", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainRight)), this.ResolveIcon("FourMainRight"));
+                _ = four.AddMenuItem("Main Top", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainTop)), this.ResolveIcon("FourMainTop"));
+                _ = four.AddMenuItem("Main Bottom", new RelayCommand(() => this.OnLayoutRequested?.Invoke(SceneViewLayout.FourMainBottom)), this.ResolveIcon("FourMainBottom"));
+            });
+        });
 
         return builder.Build();
     }
 
-    private void ToggleShowFps(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
+    private MenuItemData CreateToggleMenuItem(string text, Func<bool> getter, Action<bool> setter, string? accelerator = null)
+        => new()
         {
-            return;
-        }
+            Text = text,
+            IsCheckable = true,
+            IsChecked = getter(),
+            AcceleratorText = accelerator,
+            Command = new RelayCommand<MenuItemData?>(item =>
+            {
+                if (item is null)
+                {
+                    return;
+                }
 
-        this.ShowFps = menuItem.IsChecked;
-    }
-
-    private void ToggleShowStats(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
-        {
-            return;
-        }
-
-        this.ShowStats = menuItem.IsChecked;
-    }
-
-    private void ToggleShowToolbar(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
-        {
-            return;
-        }
-
-        this.ShowToolbar = menuItem.IsChecked;
-    }
-
-    private void ToggleStat1(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
-        {
-            return;
-        }
-
-        this.Stat1 = menuItem.IsChecked;
-    }
-
-    private void ToggleStat2(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
-        {
-            return;
-        }
-
-        this.Stat2 = menuItem.IsChecked;
-    }
-
-    private void ToggleStat3(MenuItemData? menuItem)
-    {
-        if (menuItem is null)
-        {
-            return;
-        }
-
-        this.Stat3 = menuItem.IsChecked;
-    }
+                setter(item.IsChecked);
+            }),
+        };
 }
