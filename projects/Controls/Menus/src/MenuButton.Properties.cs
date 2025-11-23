@@ -67,9 +67,13 @@ public sealed partial class MenuButton
 
     private static void OnMenuSourceChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
-        if (d is MenuButton button && button.menuHost is not null)
+        if (d is MenuButton button)
         {
-            button.menuHost.MenuSource = e.NewValue as IMenuSource;
+            // Invalidate any cached snapshot of the button item so SubItems are rebuilt
+            // from the new MenuSource when next accessed.
+            button.buttonItemData = null;
+
+            _ = button.menuHost?.MenuSource = e.NewValue as IMenuSource;
         }
     }
 
