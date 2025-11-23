@@ -275,34 +275,18 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             var request = viewModel.CreateSurfaceRequest(requestTag);
             var lease = await viewModel.EngineService.AttachViewportAsync(request, this.SwapChainPanel, cancellationToken).ConfigureAwait(true);
 
-            if (!this.IsLoaded || this.isDisposed)
+            // Validate that we still want this lease. If any condition fails we dispose
+            // it and clean up. This reduces duplicated checks and paths above.
+            var shouldKeepLease = this.IsLoaded && !this.isDisposed && ReferenceEquals(requestedViewModel, this.ViewModel) && requestId == this.attachRequestId;
+            if (!shouldKeepLease)
             {
-                this.LogAttachOutcomeIgnored("ControlStateChanged");
+                this.LogAttachOutcomeIgnored(!this.IsLoaded || this.isDisposed ? "ControlStateChanged" : !ReferenceEquals(requestedViewModel, this.ViewModel) ? "ViewModelChanged" : "SupersededRequest");
                 await this.DisposeLeaseSilentlyAsync(lease).ConfigureAwait(true);
                 if (requestId == this.attachRequestId)
                 {
                     await this.CancelPendingAttachAsync().ConfigureAwait(true);
                 }
 
-                return;
-            }
-
-            if (!ReferenceEquals(requestedViewModel, this.ViewModel))
-            {
-                this.LogAttachOutcomeIgnored("ViewModelChanged");
-                await this.DisposeLeaseSilentlyAsync(lease).ConfigureAwait(true);
-                if (requestId == this.attachRequestId)
-                {
-                    await this.CancelPendingAttachAsync().ConfigureAwait(true);
-                }
-
-                return;
-            }
-
-            if (requestId != this.attachRequestId)
-            {
-                this.LogAttachOutcomeIgnored("SupersededRequest");
-                await this.DisposeLeaseSilentlyAsync(lease).ConfigureAwait(true);
                 return;
             }
 
