@@ -3,8 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura.Settings;
+using DroidNet.Config;
+using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.Controls;
 using Oxygen.Editor.WorldEditor.Engine;
@@ -18,6 +22,7 @@ public partial class SceneEditorViewModel : ObservableObject
 {
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IContainer container;
     private SceneViewLayout? previousLayout;
 
     /// <summary>
@@ -26,14 +31,26 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <param name="metadata">The scene document metadata.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public SceneEditorViewModel(SceneDocumentMetadata metadata, IEngineService engineService, ILoggerFactory? loggerFactory = null)
+    public SceneEditorViewModel(SceneDocumentMetadata metadata, IEngineService engineService, IContainer container, ILoggerFactory? loggerFactory = null)
     {
-        this.Metadata = metadata;
         this.engineService = engineService;
         this.loggerFactory = loggerFactory;
-        this.Viewports = [];
-        this.CurrentLayout = SceneViewLayout.OnePane;
-        this.UpdateLayout();
+        this.Viewports = new ObservableCollection<ViewportViewModel>();
+        this.Metadata = metadata;
+        this.container = container;
+
+        // Try to restore layout from metadata if present
+        if (this.Metadata?.Layout != null && System.Enum.TryParse<SceneViewLayout>(this.Metadata.Layout, out var parsed))
+        {
+            this.CurrentLayout = parsed;
+        }
+        else
+        {
+            this.CurrentLayout = SceneViewLayout.OnePane;
+        }
+
+        this.ChangeLayoutCommand = new RelayCommand<SceneViewLayout>(layout => this.CurrentLayout = layout);
+        this.UpdateLayout(this.CurrentLayout);
     }
 
     /// <summary>
@@ -53,25 +70,31 @@ public partial class SceneEditorViewModel : ObservableObject
     /// </summary>
     public ObservableCollection<ViewportViewModel> Viewports { get; }
 
-    partial void OnCurrentLayoutChanged(SceneViewLayout value)
+    /// <summary>
+    /// Gets the command that changes the current layout.
+    /// </summary>
+    public RelayCommand<SceneViewLayout> ChangeLayoutCommand { get; private set; } = null!;
+
+    partial void OnCurrentLayoutChanging(SceneViewLayout value)
     {
-        this.UpdateLayout();
+        this.UpdateLayout(value);
     }
 
-    private void UpdateLayout()
+    private void UpdateLayout(SceneViewLayout targetLayout)
     {
-        var (rows, cols) = SceneLayoutHelpers.GetGridDimensions(this.CurrentLayout);
+        var metadata = this.Metadata ?? throw new InvalidOperationException("Scene metadata is not initialized.");
+        metadata.Layout = targetLayout.ToString();
 
-        // TODO(oxygen-editor): Support multi-viewport layouts once the engine can
-        // safely host multiple instances. For now we intentionally cap the
-        // count to a single viewport to avoid spinning up multiple engines.
-        const int requiredCount = 1;
+        var placements = SceneLayoutHelpers.GetPlacements(targetLayout);
+        var requiredCount = placements.Count;
 
         // Adjust viewports count
         while (this.Viewports.Count < requiredCount)
         {
-            var viewport = new ViewportViewModel(this.Metadata.DocumentId, this.engineService, this.loggerFactory);
+            var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
+            var viewport = new ViewportViewModel(metadata.DocumentId, this.engineService, settings, this.loggerFactory);
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
+            viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
             this.Viewports.Add(viewport);
         }
 
@@ -80,12 +103,15 @@ public partial class SceneEditorViewModel : ObservableObject
             this.Viewports.RemoveAt(this.Viewports.Count - 1);
         }
 
-        // Update IsMaximized state for all viewports
+        // Update IsMaximized state and metadata for all viewports
         for (var i = 0; i < this.Viewports.Count; i++)
         {
             var viewport = this.Viewports[i];
-            viewport.IsMaximized = this.CurrentLayout == SceneViewLayout.OnePane && this.previousLayout != null;
+            viewport.IsMaximized = targetLayout == SceneViewLayout.OnePane && this.previousLayout != null;
+
+            // The first viewport is considered the main camera
             viewport.UpdateLayoutMetadata(i, i == 0);
+            viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
         }
     }
 

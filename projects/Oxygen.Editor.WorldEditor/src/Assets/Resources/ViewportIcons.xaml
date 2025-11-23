@@ -1,0 +1,131 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:media="using:Microsoft.UI.Xaml.Media.Imaging">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!--  Light theme  -->
+        <ResourceDictionary x:Key="Light">
+            <controls:BitmapIconSource
+                x:Key="Icon.OnePane"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/OnePane.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourQuad"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/FourQuad.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/TwoMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/TwoMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/TwoMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/TwoMainBottom.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/ThreeMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/ThreeMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/ThreeMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/ThreeMainBottom.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/FourMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/FourMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/FourMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Light/FourMainBottom.png" />
+        </ResourceDictionary>
+
+        <!--  Dark theme  -->
+        <ResourceDictionary x:Key="Dark">
+            <controls:BitmapIconSource
+                x:Key="Icon.OnePane"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/OnePane.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourQuad"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/FourQuad.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/TwoMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/TwoMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/TwoMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.TwoMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/TwoMainBottom.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/ThreeMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/ThreeMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/ThreeMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.ThreeMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/ThreeMainBottom.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainLeft"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/FourMainLeft.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainRight"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/FourMainRight.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainTop"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/FourMainTop.png" />
+            <controls:BitmapIconSource
+                x:Key="Icon.FourMainBottom"
+                ShowAsMonochrome="False"
+                UriSource="ms-appx:///Oxygen.Editor.WorldEditor/Assets/Icons/ViewPortLayout/Dark/FourMainBottom.png" />
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

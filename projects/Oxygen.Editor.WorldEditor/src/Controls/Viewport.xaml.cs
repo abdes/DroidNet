@@ -44,7 +44,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (this.DataContext is ViewportViewModel existingViewModel)
         {
             this.currentViewModel = existingViewModel;
-            this.OnViewModelChanged(null, existingViewModel);
+            this.OnViewModelChanged(previous: null, existingViewModel);
         }
     }
 
@@ -93,6 +93,11 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.RefreshLogger(current);
         this.LogViewModelChanged(GetViewportId(previous), GetViewportId(current));
+
+        // Dispose previous viewmodel subscriptions if present so it can detach
+        // from services (appearance settings, etc.). This prevents duplicate
+        // subscriptions when swapping viewmodels.
+        previous?.Dispose();
         _ = this.HandleViewModelChangeAsync(previous, current);
     }
 
@@ -178,7 +183,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.LogResizeSkipped("No active surface lease");
             return;
         }
-
 
         if (!this.TryGetSwapChainPixelSize(out var pixelWidth, out var pixelHeight))
         {
@@ -279,6 +283,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 {
                     await this.CancelPendingAttachAsync().ConfigureAwait(true);
                 }
+
                 return;
             }
 
@@ -290,6 +295,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 {
                     await this.CancelPendingAttachAsync().ConfigureAwait(true);
                 }
+
                 return;
             }
 
@@ -362,6 +368,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.DataContextChanged -= this.OnDataContextChanged;
 
         this.UnregisterSwapChainPanelSizeChanged();
+
+        // No theme listeners to remove; view does not interfere with theme settings.
         await this.DetachSurfaceAsync("Dispose").ConfigureAwait(true);
         await this.CancelPendingAttachAsync().ConfigureAwait(true);
 

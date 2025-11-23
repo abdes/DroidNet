@@ -26,6 +26,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IContainer container;
 
     private readonly WindowId windowId;
     private readonly IMessenger messenger;
@@ -50,8 +51,10 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         IViewLocator viewLocator,
         IMessenger messenger,
         IEngineService engineService,
+        IContainer container,
         ILoggerFactory? loggerFactory = null)
     {
+        this.container = container;
         this.DocumentService = documentService;
         this.windowId = windowId;
         this.viewLocator = viewLocator;
@@ -180,7 +183,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         object? editor = null;
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
-            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.loggerFactory);
+            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.container, this.loggerFactory);
         }
         else
         {

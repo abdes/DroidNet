@@ -234,7 +234,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         _ = this.messenger.Send(new OpenSceneRequestMessage(scene));
 
         this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
-        await this.InitializeRootAsync(this.Scene, false).ConfigureAwait(true);
+        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)

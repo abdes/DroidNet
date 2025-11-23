@@ -1,4 +1,4 @@
-﻿<UserControl
+<UserControl
     x:Class="Oxygen.Editor.WorldEditor.Controls.Viewport"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -18,10 +18,20 @@
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
-            <!--  Left: View and Shading Menus  -->
+            <!--  Left: Primary menu (toaster) , Camera and Shading Menus  -->
             <StackPanel Orientation="Horizontal" Spacing="4">
-                <menus:MenuButton Content="{x:Bind ViewModel.CameraType, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ViewMenu}" />
-                <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu}" />
+                <!--  Primary menu: toaster icon only  -->
+                <menus:MenuButton MenuSource="{x:Bind ViewModel.LayoutMenu, Mode=OneWay}">
+                    <menus:MenuButton.Content>
+                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE700;" />
+                    </menus:MenuButton.Content>
+                </menus:MenuButton>
+
+                <!--  Camera type menu: icon + text  -->
+                <menus:MenuButton Content="{x:Bind ViewModel.CameraType, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ViewMenu, Mode=OneWay}" />
+
+                <!--  Shading mode menu: icon + text  -->
+                <menus:MenuButton Content="{x:Bind ViewModel.ShadingMode, Mode=OneWay}" MenuSource="{x:Bind ViewModel.ShadingMenu, Mode=OneWay}" />
             </StackPanel>
 
             <!--  Right: Maximize/Restore  -->

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Generic;
 using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
@@ -16,6 +17,9 @@ namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 [ViewModel(typeof(SceneEditorViewModel))]
 public sealed partial class SceneEditorView : UserControl
 {
+    private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = new();
+    private SceneEditorViewModel? currentViewModel;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneEditorView"/> class.
     /// </summary>
@@ -24,69 +28,165 @@ public sealed partial class SceneEditorView : UserControl
         this.InitializeComponent();
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
+        this.DataContextChanged += this.OnDataContextChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
-        if (this.ViewModel != null)
-        {
-            this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
-            this.RebuildLayout();
-        }
+        _ = sender;
+        _ = e;
+
+        this.AttachToViewModel(this.ViewModel as SceneEditorViewModel ?? this.currentViewModel);
+        this.RebuildLayout();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
     {
-        if (this.ViewModel != null)
+        _ = sender;
+        _ = e;
+
+        this.DetachFromCurrentViewModel();
+        this.ClearViewportControls();
+    }
+
+    private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
+    {
+        _ = sender;
+
+        if (!this.IsLoaded)
         {
-            this.ViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;
+            this.AttachToViewModel(args.NewValue as SceneEditorViewModel);
+            return;
         }
+
+        this.AttachToViewModel(args.NewValue as SceneEditorViewModel);
+        this.RebuildLayout();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(SceneEditorViewModel.CurrentLayout), System.StringComparison.Ordinal))
-        {
-            this.RebuildLayout();
-        }
-    }
-
-    private void RebuildLayout()
-    {
-        if (this.ViewModel == null)
+        if (!string.Equals(e.PropertyName, nameof(SceneEditorViewModel.CurrentLayout), System.StringComparison.Ordinal))
         {
             return;
         }
 
-        this.LayoutGrid.Children.Clear();
-        this.LayoutGrid.RowDefinitions.Clear();
-        this.LayoutGrid.ColumnDefinitions.Clear();
+        this.RebuildLayout();
+    }
 
-        var (rows, cols) = SceneLayoutHelpers.GetGridDimensions(this.ViewModel.CurrentLayout);
+    private void AttachToViewModel(SceneEditorViewModel? viewModel)
+    {
+        if (ReferenceEquals(this.currentViewModel, viewModel))
+        {
+            return;
+        }
+
+        this.DetachFromCurrentViewModel();
+        this.ClearViewportControls();
+        this.currentViewModel = viewModel;
+
+        if (this.currentViewModel != null)
+        {
+            this.currentViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+        }
+    }
+
+    private void DetachFromCurrentViewModel()
+    {
+        if (this.currentViewModel == null)
+        {
+            return;
+        }
+
+        this.currentViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;
+        this.currentViewModel = null;
+    }
+
+    private void ClearViewportControls()
+    {
+        foreach (var control in this.viewportControls.Values)
+        {
+            this.ViewportGrid.Children.Remove(control);
+        }
+
+        this.viewportControls.Clear();
+    }
+
+    private void RebuildLayout()
+    {
+        var viewModel = this.currentViewModel ?? this.ViewModel as SceneEditorViewModel;
+        if (viewModel == null)
+        {
+            return;
+        }
+
+        this.ConfigureGrid(viewModel);
+        var placements = SceneLayoutHelpers.GetPlacements(viewModel.CurrentLayout);
+        this.SyncViewportControls(viewModel, placements);
+    }
+
+    private void ConfigureGrid(SceneEditorViewModel viewModel)
+    {
+        this.ViewportGrid.RowDefinitions.Clear();
+        this.ViewportGrid.ColumnDefinitions.Clear();
+
+        var (rows, cols) = SceneLayoutHelpers.GetGridDimensions(viewModel.CurrentLayout);
 
         for (var i = 0; i < rows; i++)
         {
-            this.LayoutGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            this.ViewportGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         }
 
         for (var i = 0; i < cols; i++)
         {
-            this.LayoutGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            this.ViewportGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         }
+    }
 
-        var viewports = this.ViewModel.Viewports;
-        for (var i = 0; i < viewports.Count; i++)
+    private void SyncViewportControls(SceneEditorViewModel viewModel, IReadOnlyList<(int row, int column, int rowspan, int colspan)> placements)
+    {
+        var viewports = viewModel.Viewports;
+        var used = new HashSet<ViewportViewModel>();
+        var count = Math.Min(placements.Count, viewports.Count);
+
+        for (var i = 0; i < count; i++)
         {
             var viewportVm = viewports[i];
-            var viewportControl = new Viewport { ViewModel = viewportVm };
+            used.Add(viewportVm);
 
-            var row = i / cols;
-            var col = i % cols;
+            if (!this.viewportControls.TryGetValue(viewportVm, out var viewportControl))
+            {
+                viewportControl = new Viewport { ViewModel = viewportVm };
+                this.viewportControls[viewportVm] = viewportControl;
+                this.ViewportGrid.Children.Add(viewportControl);
+            }
+            else if (!this.ViewportGrid.Children.Contains(viewportControl))
+            {
+                this.ViewportGrid.Children.Add(viewportControl);
+            }
 
+            var (row, column, rowspan, colspan) = placements[i];
             Grid.SetRow(viewportControl, row);
-            Grid.SetColumn(viewportControl, col);
+            Grid.SetColumn(viewportControl, column);
+            Grid.SetRowSpan(viewportControl, rowspan);
+            Grid.SetColumnSpan(viewportControl, colspan);
+        }
 
-            this.LayoutGrid.Children.Add(viewportControl);
+        var toRemove = new List<ViewportViewModel>();
+
+        foreach (var kvp in this.viewportControls)
+        {
+            if (used.Contains(kvp.Key))
+            {
+                continue;
+            }
+
+            this.ViewportGrid.Children.Remove(kvp.Value);
+            toRemove.Add(kvp.Key);
+        }
+
+        foreach (var key in toRemove)
+        {
+            this.viewportControls.Remove(key);
         }
     }
 }
