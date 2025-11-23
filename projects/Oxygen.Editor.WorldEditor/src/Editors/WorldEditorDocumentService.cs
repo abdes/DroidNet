@@ -70,7 +70,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
 
             if (existingSceneId.HasValue)
             {
-                var closed = await this.CloseDocumentAsync(windowId, existingSceneId.Value, false).ConfigureAwait(false);
+                var closed = await this.CloseDocumentAsync(windowId, existingSceneId.Value, force: false).ConfigureAwait(false);
                 if (!closed)
                 {
                     this.LogDocumentOpenAborted(windowId.Value, metadata.DocumentId);
@@ -178,7 +178,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
 
             if (existingSceneId.HasValue)
             {
-                var closed = await this.CloseDocumentAsync(targetWindowId, existingSceneId.Value, false).ConfigureAwait(false);
+                var closed = await this.CloseDocumentAsync(targetWindowId, existingSceneId.Value, force: false).ConfigureAwait(false);
                 if (!closed)
                 {
                     this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);

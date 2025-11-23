@@ -8,7 +8,11 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <Grid x:Name="LayoutGrid" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-        <!--  Viewports will be added here dynamically  -->
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <!--  Viewports will be added here dynamically inside the viewport grid  -->
+        <Grid
+            x:Name="ViewportGrid"
+            ColumnSpacing="5"
+            RowSpacing="5" />
     </Grid>
 </UserControl>

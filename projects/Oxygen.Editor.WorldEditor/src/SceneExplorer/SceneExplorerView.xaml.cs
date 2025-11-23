@@ -28,7 +28,7 @@ public sealed partial class SceneExplorerView
         _ = sender; // unused
         args.Handled = true;
 
-        this.ViewModel!.UndoCommand.Execute(null);
+        this.ViewModel!.UndoCommand.Execute(parameter: null);
     }
 
     private void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -36,7 +36,7 @@ public sealed partial class SceneExplorerView
         _ = sender; // unused
         args.Handled = true;
 
-        this.ViewModel!.RedoCommand.Execute(null);
+        this.ViewModel!.RedoCommand.Execute(parameter: null);
     }
 
     private void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
@@ -44,6 +44,6 @@ public sealed partial class SceneExplorerView
         _ = sender; // unused
         args.Handled = true;
 
-        this.ViewModel!.RemoveSelectedItemsCommand.Execute(null);
+        this.ViewModel!.RemoveSelectedItemsCommand.Execute(parameter: null);
     }
 }
