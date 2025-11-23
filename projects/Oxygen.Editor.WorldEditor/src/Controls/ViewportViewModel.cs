@@ -20,57 +20,11 @@ using Oxygen.Editor.WorldEditor.Engine;
 namespace Oxygen.Editor.WorldEditor.Controls;
 
 /// <summary>
-/// Defines the type of camera projection or orientation.
-/// </summary>
-public enum CameraType
-{
-    /// <summary>Perspective projection.</summary>
-    Perspective,
-
-    /// <summary>Top orthographic view.</summary>
-    Top,
-
-    /// <summary>Bottom orthographic view.</summary>
-    Bottom,
-
-    /// <summary>Left orthographic view.</summary>
-    Left,
-
-    /// <summary>Right orthographic view.</summary>
-    Right,
-
-    /// <summary>Front orthographic view.</summary>
-    Front,
-
-    /// <summary>Back orthographic view.</summary>
-    Back,
-}
-
-/// <summary>
-/// Defines the shading mode for the viewport.
-/// </summary>
-public enum ShadingMode
-{
-    /// <summary>Wireframe rendering.</summary>
-    Wireframe,
-
-    /// <summary>Shaded rendering.</summary>
-    Shaded,
-
-    /// <summary>Rendered mode.</summary>
-    Rendered,
-}
-
-/// <summary>
 /// ViewModel for the Viewport control, managing camera, shading, and menus.
 /// </summary>
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
-    private readonly IEngineService engineService;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
-    private readonly Guid viewportId = Guid.NewGuid();
-    private bool isPrimaryViewport;
-    private int viewportIndex;
 
     // Lazy-backed menu sources — build on first access.
     private IMenuSource? viewMenu;
@@ -99,7 +53,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public ViewportViewModel(Guid documentId, IEngineService engineService, ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
     {
         this.DocumentId = documentId;
-        this.engineService = engineService;
+        this.EngineService = engineService;
         this.LoggerFactory = loggerFactory;
         this.appearanceSettings = appearanceSettings;
 
@@ -130,31 +84,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public partial bool Stat3 { get; set; }
 
     /// <summary>
-    /// Gets the document identifier owning this viewport.
-    /// </summary>
-    public Guid DocumentId { get; }
-
-    /// <summary>
-    /// Gets the unique viewport identifier.
-    /// </summary>
-    public Guid ViewportId => this.viewportId;
-
-    /// <summary>
-    /// Gets the engine service reference, enabling views to request surfaces.
-    /// </summary>
-    public IEngineService EngineService => this.engineService;
-
-    /// <summary>
-    /// Gets the zero-based viewport index in the current layout.
-    /// </summary>
-    public int ViewportIndex => this.viewportIndex;
-
-    /// <summary>
-    /// Gets a value indicating whether this viewport should be considered primary.
-    /// </summary>
-    public bool IsPrimaryViewport => this.isPrimaryViewport;
-
-    /// <summary>
     /// Gets or sets the camera type.
     /// </summary>
     [ObservableProperty]
@@ -172,6 +101,31 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(MaximizeGlyph))]
     public partial bool IsMaximized { get; set; }
+
+    /// <summary>
+    /// Gets the document identifier owning this viewport.
+    /// </summary>
+    public Guid DocumentId { get; }
+
+    /// <summary>
+    /// Gets the unique viewport identifier.
+    /// </summary>
+    public Guid ViewportId { get; } = Guid.NewGuid();
+
+    /// <summary>
+    /// Gets the engine service reference, enabling views to request surfaces.
+    /// </summary>
+    public IEngineService EngineService { get; }
+
+    /// <summary>
+    /// Gets the zero-based viewport index in the current layout.
+    /// </summary>
+    public int ViewportIndex { get; private set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this viewport should be considered primary.
+    /// </summary>
+    public bool IsPrimaryViewport { get; private set; }
 
     /// <summary>
     /// Gets the menu source for the View menu. Built lazily on first access.
@@ -226,9 +180,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         => new()
         {
             DocumentId = this.DocumentId,
-            ViewportId = this.viewportId,
-            ViewportIndex = this.viewportIndex,
-            IsPrimary = this.isPrimaryViewport,
+            ViewportId = this.ViewportId,
+            ViewportIndex = this.ViewportIndex,
+            IsPrimary = this.IsPrimaryViewport,
             Tag = tag,
         };
 
@@ -239,8 +193,8 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// <param name="isPrimary">True if this viewport is the primary viewport; otherwise, false.</param>
     internal void UpdateLayoutMetadata(int index, bool isPrimary)
     {
-        this.viewportIndex = index;
-        this.isPrimaryViewport = isPrimary;
+        this.ViewportIndex = index;
+        this.IsPrimaryViewport = isPrimary;
     }
 
     /// <summary>
