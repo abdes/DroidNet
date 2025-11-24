@@ -118,11 +118,57 @@ auto Platform::OnFrameStart() -> void
 {
   if (HasComponent<WindowManager>()) {
     auto& window_manager = Windows();
-    // Process windows that were queued for closing in previous frames
-    window_manager.ProcessPendingCloses();
     // Scan for new windows that are pending close and queue them for next frame
+    // We do NOT destroy the native window yet; destruction happens at
+    // OnFrameEnd so the native window remains valid during the frame.
     window_manager.ScanForPendingCloses();
   }
+}
+
+auto Platform::OnFrameEnd() -> void
+{
+  if (HasComponent<WindowManager>()) {
+    auto& window_manager = Windows();
+    // Allow registered consumers (e.g., engine modules) to react to the
+    // pending window closures before we actually tear down native windows.
+    // This prevents races where those modules hold pointers into the native
+    // window object and would crash if the native window was destroyed first.
+    const auto& pending = window_manager.GetPendingCloses();
+    if (!pending.empty()) {
+      // Copy handlers to avoid mutation during invocation. Handlers may
+      // unregister themselves which would otherwise modify the map we are
+      // iterating.
+      const auto handlers = window_about_to_be_destroyed_handlers_;
+      for (const auto& kv : handlers) {
+        const auto& handler = kv.second;
+        for (const auto window_id : pending) {
+          try {
+            handler(window_id);
+          } catch (const std::exception& ex) {
+            LOG_F(ERROR, "Window destroy handler threw: {}", ex.what());
+          }
+        }
+      }
+    }
+
+    // Process windows queued for closing. Perform native window teardown at
+    // the end of the frame so modules using window resources during the
+    // frame are not disrupted.
+    window_manager.ProcessPendingCloses();
+  }
+}
+
+auto Platform::RegisterWindowAboutToBeDestroyedHandler(
+  WindowAboutToBeDestroyedHandler handler) -> size_t
+{
+  const auto id = window_about_to_be_destroyed_next_id_.fetch_add(1);
+  window_about_to_be_destroyed_handlers_.emplace(id, std::move(handler));
+  return id;
+}
+
+void Platform::UnregisterWindowAboutToBeDestroyedHandler(size_t token)
+{
+  window_about_to_be_destroyed_handlers_.erase(token);
 }
 
 auto Platform::Compose(const PlatformConfig& config) -> void

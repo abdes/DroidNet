@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include <asio/signal_set.hpp>
@@ -224,6 +225,15 @@ namespace platform {
     //! Process all windows queued for closing
     OXGN_PLAT_API auto ProcessPendingCloses() -> void;
 
+    //! Return a read-only view of windows queued for closing.
+    /*! Used by higher-level callers to perform pre-shutdown notifications
+        before the native window teardown occurs. */
+    [[nodiscard]] auto GetPendingCloses() const
+      -> const std::vector<WindowIdType>&
+    {
+      return pending_close_windows_;
+    }
+
     //! Scan for windows that are pending close and queue them
     OXGN_PLAT_API auto ScanForPendingCloses() -> void;
 
@@ -283,6 +293,20 @@ public:
   //! Called at the start of each frame to handle deferred operations
   OXGN_PLAT_API auto OnFrameStart() -> void;
 
+  //! Called at the end of each frame to perform deferred teardown (e.g. native
+  //! window destruction queued earlier in the frame).
+  OXGN_PLAT_API auto OnFrameEnd() -> void;
+
+  // Pre-destroy hook API: allow parties (e.g. engine modules) to register a
+  // callback invoked for each window about to be destroyed in OnFrameEnd().
+  using WindowAboutToBeDestroyedHandler
+    = std::function<void(platform::WindowIdType)>;
+
+  OXGN_PLAT_API auto RegisterWindowAboutToBeDestroyedHandler(
+    WindowAboutToBeDestroyedHandler handler) -> size_t;
+
+  OXGN_PLAT_API void UnregisterWindowAboutToBeDestroyedHandler(size_t token);
+
   auto Async() -> platform::AsyncOps&
   {
     return GetComponent<platform::AsyncOps>();
@@ -338,6 +362,9 @@ public:
   }
 
 private:
+  std::unordered_map<size_t, WindowAboutToBeDestroyedHandler>
+    window_about_to_be_destroyed_handlers_;
+  std::atomic<size_t> window_about_to_be_destroyed_next_id_ { 1 };
   auto Compose(const PlatformConfig& config) -> void;
 
   [[nodiscard]] auto FilterPlatformEvents() -> co::Co<>;
