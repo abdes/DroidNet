@@ -151,7 +151,8 @@ public partial class App
     {
         try
         {
-            this.engineService.EnsureInitializedAsync().GetAwaiter().GetResult();
+            // Use AsTask() to convert ValueTask to Task before blocking to avoid CA2012 warning.
+            this.engineService.EnsureInitializedAsync().AsTask().GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
