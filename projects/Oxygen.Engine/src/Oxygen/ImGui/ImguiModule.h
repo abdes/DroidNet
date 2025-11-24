@@ -60,7 +60,8 @@ public:
     -> engine::ModulePhaseMask override
   {
     using namespace oxygen::core;
-    return ::oxygen::engine::MakeModuleMask<PhaseId::kFrameStart>();
+    return ::oxygen::engine::MakeModuleMask<PhaseId::kFrameStart,
+      PhaseId::kFrameEnd>();
   }
 
   // Lifecycle
@@ -70,6 +71,13 @@ public:
   OXGN_IMGUI_API auto OnShutdown() noexcept -> void override;
 
   OXGN_IMGUI_API auto OnFrameStart(engine::FrameContext& /*context*/)
+    -> void override;
+
+  // Ensure ImGui gets a matching EndFrame when NewFrame was started but
+  // rendering did not happen for some reason (e.g. surface gone or pass
+  // skipped). This prevents ImGui's sanity checks from asserting on the
+  // next frame start.
+  OXGN_IMGUI_API auto OnFrameEnd(engine::FrameContext& /*context*/)
     -> void override;
 
   //! Access the owned render pass. Useful so other systems (for example the
@@ -84,6 +92,10 @@ public:
   //! This allows other modules to set the context when making ImGui calls
   OXGN_IMGUI_NDAPI auto GetImGuiContext() const noexcept -> ImGuiContext*;
 
+  //! Request that the graphics backend re-create any device-local ImGui
+  //! objects (called after swapchain/surface reconfiguration).
+  OXGN_IMGUI_API auto RecreateDeviceObjects() -> void;
+
 private:
   std::shared_ptr<Platform> platform_ {};
   std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_ {};
@@ -94,8 +106,15 @@ private:
   // Store window ID for lazy platform backend creation
   platform::WindowIdType window_id_ { platform::kInvalidWindowId };
 
+  // Token returned by Platform when we register for pre-destroy notifications
+  // for the currently tracked window. Zero means no registration.
+  size_t platform_window_destroy_handler_token_ { 0 };
+
   // Owned ImGuiPass instance created and configured by this module.
   std::unique_ptr<ImGuiPass> render_pass_ {};
+  // Track whether we successfully started an ImGui frame (ImGui::NewFrame)
+  // so we can EndFrame if a render path was skipped.
+  bool frame_started_ { false };
 };
 
 } // namespace oxygen::imgui

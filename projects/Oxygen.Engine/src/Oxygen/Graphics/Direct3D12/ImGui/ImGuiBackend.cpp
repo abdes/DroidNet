@@ -46,7 +46,7 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto gfx = gfx_weak.lock();
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  const auto* d3d_gfx = static_cast<Graphics*>(gfx.get());
+  auto* d3d_gfx = static_cast<Graphics*>(gfx.get());
   auto* device = d3d_gfx->GetCurrentDevice();
 
   // Get graphics queue for ImGui initialization
@@ -59,6 +59,20 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* d3d_queue = static_cast<const CommandQueue*>(graphics_queue.get());
   auto* command_queue = d3d_queue->GetCommandQueue();
+
+  // Cache a pointer to the per-frame DeferredReclaimer so we can use it to
+  // schedule deferred cleanup (GPU-safe) when shutting down. We query the
+  // Graphics instance for the reclaimer component and retain a non-owning
+  // observer_ptr here. Only cache if the Graphics instance owns a valid
+  // DeferredReclaimer.
+  try {
+    reclaimer_
+      = observer_ptr(&const_cast<Graphics*>(d3d_gfx)->GetDeferredReclaimer());
+  } catch (...) {
+    // If for some reason the call fails (shouldn't happen) leave reclaimer_ as
+    // nullptr and let Shutdown() fall back to immediate release.
+    reclaimer_ = nullptr;
+  }
 
   // Create dedicated descriptor heap for ImGui (CBV_SRV_UAV:imgui from config)
   constexpr UINT kImGuiDescriptorCount = 64;
@@ -111,9 +125,73 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
 auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
 {
   if (initialized_) {
-    ImGui::SetCurrentContext(imgui_context_);
-    ImGui_ImplDX12_Shutdown();
-    initialized_ = false;
+    // If a deferred reclaimer is available, register a deferred action that
+    // performs the full ImGui backend shutdown on the renderer thread when
+    // the frame bucket cycles. This avoids final-releasing pipeline/root
+    // signature objects while the GPU might still reference them.
+    if (reclaimer_) {
+      LOG_F(1,
+        "D3D12 ImGui backend deferring shutdown via DeferredReclaimer: "
+        "context={} device={} srv_heap={}",
+        static_cast<void*>(imgui_context_),
+        static_cast<void*>(init_info_ ? init_info_->Device : nullptr),
+        static_cast<void*>(imgui_srv_heap_.Get()));
+
+      // Keep a reference to the descriptor heap alive for the deferred
+      // action and capture the ImGui context pointer so the shutdown lambda
+      // can access and destroy the ImGui backend data safely later.
+      auto heap_keepalive = imgui_srv_heap_;
+      ImGuiContext* context_keepalive = imgui_context_;
+
+      // Register an action that runs on the renderer thread when the
+      // DeferredReclaimer processes the frame bucket ensuring the GPU is no
+      // longer using the resources.
+      reclaimer_->RegisterDeferredAction(
+        [heap_keepalive = std::move(heap_keepalive),
+          context_keepalive]() mutable {
+          try {
+            if (context_keepalive) {
+              ImGui::SetCurrentContext(context_keepalive);
+            }
+            LOG_F(1,
+              "D3D12 ImGui backend: deferred ImGui_ImplDX12_Shutdown()"
+              " running");
+            ImGui_ImplDX12_Shutdown();
+            LOG_F(1,
+              "D3D12 ImGui backend: deferred ImGui_ImplDX12_Shutdown()"
+              " completed");
+            if (context_keepalive) {
+              ImGui::DestroyContext(context_keepalive);
+            }
+          } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception in deferred ImGui shutdown: {}", e.what());
+          } catch (...) {
+            LOG_F(ERROR, "Unknown exception in deferred ImGui shutdown");
+          }
+        });
+
+      // Mark as no longer initialized and clear pointers on the backend
+      // side right away. The deferred action owns the heap and context
+      // until it runs.
+      initialized_ = false;
+      imgui_context_ = nullptr;
+      init_info_.reset();
+      imgui_srv_heap_.Reset();
+      next_descriptor_index_ = 0;
+    } else {
+      // No reclaimer available — fall back to immediate shutdown to avoid
+      // leaking resources.
+      ImGui::SetCurrentContext(imgui_context_);
+      LOG_F(1,
+        "D3D12 ImGui backend shutting down: context={} device={} "
+        "pPipelineState={} srv_heap={}",
+        static_cast<void*>(imgui_context_),
+        static_cast<void*>(init_info_->Device), static_cast<void*>(nullptr),
+        static_cast<void*>(init_info_->SrvDescriptorHeap));
+      ImGui_ImplDX12_Shutdown();
+      LOG_F(1, "D3D12 ImGui backend: ImGui_ImplDX12_Shutdown returned");
+      initialized_ = false;
+    }
   }
 
   if (imgui_context_) {
@@ -187,6 +265,38 @@ auto D3D12ImGuiGraphicsBackend::Render(graphics::CommandRecorder& recorder)
 
   // Delegate to the official ImGui D3D12 backend
   ImGui_ImplDX12_RenderDrawData(current_draw_data, command_list);
+}
+
+auto D3D12ImGuiGraphicsBackend::RecreateDeviceObjects() -> void
+{
+  DLOG_F(1,
+    "D3D12ImGuiGraphicsBackend::RecreateDeviceObjects called: initialized={} "
+    "next_descriptor_index={} srv_heap={}",
+    static_cast<int>(initialized_), next_descriptor_index_,
+    static_cast<void*>(imgui_srv_heap_.Get()));
+  if (!initialized_) {
+    return;
+  }
+
+  // Make sure we operate on the correct ImGui context
+  if (imgui_context_) {
+    ImGui::SetCurrentContext(imgui_context_);
+  }
+
+  // Invalidate device objects in ImGui D3D12 backend and try to recreate.
+  ImGui_ImplDX12_InvalidateDeviceObjects();
+  DLOG_F(1,
+    "D3D12ImGuiGraphicsBackend::RecreateDeviceObjects - invalidated device "
+    "objects; now recreating");
+  // Reset the linear descriptor allocator used by the imgui_impl_dx12
+  // callback allocator. We must reset this on recreate so repeated
+  // RecreateDeviceObjects calls (e.g. during refactoring or duplicate
+  // notifications) don't monotonically consume the finite heap and
+  // eventually exhaust it.
+  next_descriptor_index_ = 0;
+  if (!ImGui_ImplDX12_CreateDeviceObjects()) {
+    LOG_F(WARNING, "ImGui D3D12 backend failed to recreate device objects");
+  }
 }
 
 // --- Descriptor allocation callbacks ---
