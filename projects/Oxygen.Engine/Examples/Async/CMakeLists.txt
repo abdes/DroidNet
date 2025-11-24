@@ -31,10 +31,17 @@ find_package(sdl3 CONFIG REQUIRED)
 
 add_executable(
   ${META_MODULE_TARGET}
-  "AsyncEngineApp.h"
+  "../main.cpp"
+  "../Common/AsyncEngineApp.h"
+  "../Common/AppWindow.h"
+  "../Common/AppWindow.cpp"
+  "../Common/RenderGraph.h"
+  "../Common/RenderGraph.cpp"
+  "../Common/ExampleModuleBase.h"
+  "../Common/ExampleModuleBase.cpp"
   "main_impl.cpp"
   "MainModule.cpp"
-  "../main.cpp"
+  "MainModule.h"
 )
 
 set_target_properties(

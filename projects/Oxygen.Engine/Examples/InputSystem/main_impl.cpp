@@ -42,7 +42,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "AsyncEngineApp.h"
+#include "../Common/AsyncEngineApp.h"
 #include "MainModule.h"
 
 using namespace oxygen;
@@ -54,7 +54,7 @@ namespace {
 
 //! Event loop tick: drives the engine's asio context (if supplied) and
 //! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
-auto EventLoopRun(const oxygen::engine::examples::AsyncEngineApp& app) -> void
+auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
 
@@ -73,21 +73,21 @@ auto EventLoopRun(const oxygen::engine::examples::AsyncEngineApp& app) -> void
 } // namespace
 
 template <>
-struct co::EventLoopTraits<oxygen::engine::examples::AsyncEngineApp> {
-  static auto Run(oxygen::engine::examples::AsyncEngineApp& app) -> void
+struct co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
+  static auto Run(oxygen::examples::common::AsyncEngineApp& app) -> void
   {
     EventLoopRun(app);
   }
-  static auto Stop(oxygen::engine::examples::AsyncEngineApp& app) -> void
+  static auto Stop(oxygen::examples::common::AsyncEngineApp& app) -> void
   {
     app.running.store(false, std::memory_order_relaxed);
   }
-  static auto IsRunning(const oxygen::engine::examples::AsyncEngineApp& app)
+  static auto IsRunning(const oxygen::examples::common::AsyncEngineApp& app)
     -> bool
   {
     return app.running.load(std::memory_order_relaxed);
   }
-  static auto EventLoopId(oxygen::engine::examples::AsyncEngineApp& app)
+  static auto EventLoopId(oxygen::examples::common::AsyncEngineApp& app)
     -> EventLoopID
   {
     return EventLoopID(&app);
@@ -96,7 +96,7 @@ struct co::EventLoopTraits<oxygen::engine::examples::AsyncEngineApp> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::engine::examples::AsyncEngineApp& app)
+auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
   -> void
 {
   // Register engine modules
@@ -128,8 +128,7 @@ auto RegisterEngineModules(oxygen::engine::examples::AsyncEngineApp& app)
 
     // Graphics main module (replaces RenderController/RenderThread pattern)
     app.renderer = observer_ptr { renderer_unique.get() };
-    register_module(
-      std::make_unique<oxygen::engine::examples::MainModule>(app));
+    register_module(std::make_unique<oxygen::examples::input::MainModule>(app));
 
     // Register as module
     register_module(std::move(renderer_unique));
@@ -146,7 +145,7 @@ auto RegisterEngineModules(oxygen::engine::examples::AsyncEngineApp& app)
   }
 }
 
-auto AsyncMain(oxygen::engine::examples::AsyncEngineApp& app, uint32_t frames)
+auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
   -> co::Co<int>
 {
   // Structured concurrency scope.
@@ -170,6 +169,17 @@ auto AsyncMain(oxygen::engine::examples::AsyncEngineApp& app, uint32_t frames)
     // Everything is started, now register modules
     RegisterEngineModules(app);
 
+    // Application policy: when the last window closes, shut down the
+    // engine so the app exits gracefully (matches Async example behavior).
+    n.Start([&app, &n]() -> co::Co<> {
+      co_await app.platform->Windows().LastWindowClosed();
+      LOG_F(INFO,
+        "InputSystem example: last window closed -> shutting down engine");
+
+      app.engine->Stop();
+      co_return;
+    });
+
     co_await app.engine->Completed();
 
     co_return co::kCancel;
@@ -187,7 +197,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U; // desired frame pacing
   bool headless = false;
   bool enable_vsync = true;
-  oxygen::engine::examples::AsyncEngineApp app {};
+  oxygen::examples::common::AsyncEngineApp app {};
 
   try {
     CommandBuilder default_command(Command::DEFAULT);

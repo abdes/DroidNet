@@ -24,11 +24,11 @@ class InputSystem;
 class Renderer;
 } // namespace oxygen::engine
 
-namespace oxygen::engine::examples {
+namespace oxygen::examples::common {
 
 //! Aggregated application state used by the async example event loop.
 /*! Holds platform, graphics, engine, and module pointers shared across
- the async example. Modules can inspect immutable configuration (e.g.,
+ async examples. Modules can inspect immutable configuration (e.g.,
  fullscreen/headless) and observe engine subsystems via observer_ptr.
 */
 struct AsyncEngineApp {
@@ -44,11 +44,11 @@ struct AsyncEngineApp {
   std::shared_ptr<oxygen::AsyncEngine> engine;
 
   // Observed modules (non-owning)
-  observer_ptr<oxygen::engine::Renderer> renderer { nullptr };
-  observer_ptr<oxygen::engine::InputSystem> input_system { nullptr };
+  oxygen::observer_ptr<oxygen::engine::Renderer> renderer { nullptr };
+  oxygen::observer_ptr<oxygen::engine::InputSystem> input_system { nullptr };
 
   //! Flag toggled to request loop continue/stop
   std::atomic_bool running { false };
 };
 
-} // namespace oxygen::engine::examples
+} // namespace oxygen::examples::common
