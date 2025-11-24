@@ -1,0 +1,121 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+        "label": "MSBuild: Build Solution (Oxygen.Editor.sln)",
+        "type": "shell",
+        "command": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "${workspaceFolder}\\.vscode\\msbuild-build.ps1",
+            "-SolutionPath",
+            "${workspaceFolder}\\projects\\Oxygen.Editor\\Oxygen.Editor.sln",
+            "-Verbosity",
+            "${input:verbosity}",
+            "-Configuration",
+            "${input:configuration}"
+        ],
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "panel": "shared"
+        },
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "problemMatcher": [
+            "$msCompile"
+        ]
+    },
+    {
+        "label": "MSBuild: Build Solution (AllProjects.sln)",
+        "type": "shell",
+        "command": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "${workspaceFolder}\\.vscode\\msbuild-build.ps1",
+            "-SolutionPath",
+            "${workspaceFolder}\\AllProjects.sln",
+            "-Verbosity",
+            "${input:verbosity}",
+            "-Configuration",
+            "${input:configuration}"
+        ],
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "panel": "shared"
+        },
+        "group": {
+            "kind": "build",
+            "isDefault": true
+        },
+        "problemMatcher": [
+            "$msCompile"
+        ]
+    },
+    {
+        "label": "MSBuild: Build Projects.sln (projects/Projects.sln)",
+        "type": "shell",
+        "command": "pwsh",
+        "args": [
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "${workspaceFolder}\\.vscode\\msbuild-build.ps1",
+            "-SolutionPath",
+            "${workspaceFolder}\\projects\\Projects.sln",
+            "-Verbosity",
+            "${input:verbosity}",
+            "-Configuration",
+            "${input:configuration}"
+        ],
+        "presentation": {
+            "echo": true,
+            "reveal": "always",
+            "panel": "shared"
+        },
+        "group": {
+            "kind": "build",
+            "isDefault": false
+        },
+        "problemMatcher": [
+            "$msCompile"
+        ]
+    }
+],
+  "inputs": [
+    {
+      "id": "configuration",
+      "type": "pickString",
+      "description": "Choose MSBuild configuration",
+      "options": [
+        "Debug",
+        "Release"
+      ],
+      "default": "Debug"
+    }
+        ,
+        {
+            "id": "verbosity",
+            "type": "pickString",
+            "description": "MSBuild verbosity level (controls output noise)",
+            "options": [
+                "quiet",
+                "minimal",
+                "normal",
+                "detailed",
+                "diagnostic"
+            ],
+            "default": "minimal"
+        }
+  ]
+}
