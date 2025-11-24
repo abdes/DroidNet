@@ -251,7 +251,7 @@ auto Graphics::CreateSurfaceFromNative(void* native_handle,
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   const auto surface = std::make_shared<detail::CompositionSurface>(
-    queue->GetCommandQueue(), this);
+    queue->GetCommandQueue(), const_cast<Graphics*>(this));
   CHECK_NOTNULL_F(surface, "Failed to create composition surface");
   return std::static_pointer_cast<Surface>(surface);
 }
