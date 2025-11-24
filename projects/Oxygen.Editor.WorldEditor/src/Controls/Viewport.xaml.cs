@@ -10,6 +10,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Reactive.Subjects;
+using System.Reactive.Linq;
+using System.Reactive.Concurrency;
 using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
@@ -30,6 +33,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private ViewportViewModel? currentViewModel;
     private bool isDisposed;
     private long attachRequestId;
+
+    // Rx subject & subscription used to debounce SwapChainPanel size changes
+    // at the UI level. Using System.Reactive.Throttle ensures we do not hammer
+    // the engine with rapid resize requests originating from layout passes.
+    private Subject<Microsoft.UI.Xaml.SizeChangedEventArgs>? sizeChangedSubject;
+    private IDisposable? sizeChangedSubscription;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
@@ -152,6 +161,21 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (!this.swapChainSizeHooked)
         {
             this.SwapChainPanel.SizeChanged += this.OnSwapChainPanelSizeChanged;
+            this.sizeChangedSubject ??= new Subject<SizeChangedEventArgs>();
+
+            var dispatcherScheduler = new DispatcherQueueScheduler(
+                this.DispatcherQueue // WinUI 3 dispatcher
+            );
+
+            this.sizeChangedSubscription ??= this.sizeChangedSubject
+                .Throttle(TimeSpan.FromMilliseconds(150))
+                .ObserveOn(dispatcherScheduler)
+                .SelectMany(_ => Observable.FromAsync(this.NotifyViewportResizeAsync))
+                .Subscribe(
+                    _ => { },
+                    ex => this.LogResizeFailed(ex)
+                );
+
             this.swapChainSizeHooked = true;
             this.LogSwapChainHookRegistered();
         }
@@ -168,7 +192,16 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         _ = sender;
         this.LogSwapChainSizeChanged(e.NewSize.Width, e.NewSize.Height);
-        _ = this.NotifyViewportResizeAsync();
+        // Push event into the debounced pipeline; if Rx setup failed we still
+        // have OnSwapChainPanelSizeChanged called and want to behave like before.
+        if (this.sizeChangedSubject != null)
+        {
+            this.sizeChangedSubject.OnNext(e);
+        }
+        else
+        {
+            _ = this.NotifyViewportResizeAsync();
+        }
     }
 
     private async Task NotifyViewportResizeAsync(CancellationToken cancellationToken = default)
@@ -372,6 +405,23 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.SwapChainPanel.SizeChanged -= this.OnSwapChainPanelSizeChanged;
         }
+
+        // Stop and dispose the Rx subscription and subject when we detach so
+        // we stop dispatching debounced resize calls.
+        try
+        {
+            this.sizeChangedSubscription?.Dispose();
+        }
+        catch { }
+        this.sizeChangedSubscription = null;
+
+        try
+        {
+            this.sizeChangedSubject?.OnCompleted();
+            this.sizeChangedSubject?.Dispose();
+        }
+        catch { }
+        this.sizeChangedSubject = null;
 
         this.swapChainSizeHooked = false;
         this.LogSwapChainHookUnregistered();

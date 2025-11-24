@@ -40,7 +40,85 @@ namespace Oxygen::Editor::EngineInterface {
 
   auto SimpleEditorModule::OnFrameStart(engine::FrameContext& context) -> void
   {
-    (void)EnsureSurfacesRegistered(context);
+    if (!registry_) {
+      (void)EnsureSurfacesRegistered(context);
+      return;
+    }
+
+    // First, drain any pending destructions and hand them to the deferred
+    // reclaimer so final release occurs inside the engine frame/timeline.
+    auto pending = registry_->DrainPendingDestructions();
+    auto gfx = graphics_.lock();
+    for (auto &entry : pending) {
+      const auto& key = entry.first;
+      auto surface = entry.second.first;
+      auto cb = entry.second.second;
+
+      if (surface) {
+        if (gfx) {
+          try {
+            // Use the public Graphics API to register the surface for
+            // deferred release. This avoids including engine internal
+            // headers (DeferredReclaimer internals) in interop code.
+            gfx->RegisterDeferredRelease(std::move(surface));
+          }
+          catch (...) {
+            // In case deferred handoff fails, still treat the destruction
+            // as processed from the perspective of the editor - the engine
+            // module took ownership attempt was made.
+          }
+        }
+      }
+
+      if (cb) {
+        try {
+          cb(true);
+        }
+        catch (...) {
+          /* swallow */
+        }
+      }
+    }
+
+    // Next, process any pending resize callbacks. SnapshotSurfaces now
+    // returns pairs so we can resolve callbacks per surface key.
+    auto snapshot_pairs = registry_->SnapshotSurfaces();
+    std::vector<std::shared_ptr<graphics::Surface>> snapshot_only;
+    snapshot_only.reserve(snapshot_pairs.size());
+    for (const auto& pair : snapshot_pairs) {
+      const auto& key = pair.first;
+      const auto& surface = pair.second;
+
+      if (!surface) {
+        continue;
+      }
+
+      // If a resize was requested by the caller, apply it explicitly here
+      // on the engine thread (frame start) and only then invoke any resize
+      // callbacks with the outcome.
+      if (surface->ShouldResize()) {
+        surface->Resize();
+      }
+
+      // Drain and invoke callbacks after the explicit apply so they reflect
+      // the actual post-resize state.
+      auto resize_callbacks = registry_->DrainResizeCallbacks(key);
+      auto back = surface->GetCurrentBackBuffer();
+      bool ok = (back != nullptr);
+      for (auto &rcb : resize_callbacks) {
+        try {
+          rcb(ok);
+        }
+        catch (...) {
+          /* swallow */
+        }
+      }
+
+      snapshot_only.emplace_back(surface);
+    }
+
+    // Update surface registration state for this frame.
+    RefreshSurfaceIndices(context, snapshot_only);
   }
 
   auto SimpleEditorModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
@@ -80,6 +158,17 @@ namespace Oxygen::Editor::EngineInterface {
       }
 
       fb->PrepareForRender(*recorder);
+      // Diagnostic logging: record the framebuffer/backbuffer being cleared so
+      // we can confirm the clear happened and observe the target size.
+      try {
+        auto back_desc = back_buffer->GetDescriptor();
+        LOG_F(2, "SimpleEditorModule: clearing framebuffer (surface={} size={}x{})",
+          surface->GetName(), back_desc.width, back_desc.height);
+      }
+      catch (...) {
+        LOG_F(WARNING, "SimpleEditorModule: failed to query backbuffer descriptor for surface={}",
+          surface->GetName());
+      }
       recorder->BindFrameBuffer(*fb);
       recorder->ClearFramebuffer(*fb,
         std::vector<std::optional<graphics::Color>>{
@@ -100,7 +189,13 @@ namespace Oxygen::Editor::EngineInterface {
       return empty;
     }
 
-    auto snapshot = registry_->SnapshotSurfaces();
+    auto snapshot_pairs = registry_->SnapshotSurfaces();
+    std::vector<std::shared_ptr<graphics::Surface>> snapshot;
+    snapshot.reserve(snapshot_pairs.size());
+    for (const auto& p : snapshot_pairs) {
+      snapshot.push_back(p.second);
+    }
+
     RefreshSurfaceIndices(context, snapshot);
     return snapshot;
   }
