@@ -84,8 +84,11 @@
 #  include "imgui_impl_dx12.h"
 
 // DirectX
+#  include <cstdint>
 #  include <d3d12.h>
 #  include <d3dcompiler.h>
+
+#  include <Oxygen/Base/Logging.h>
 #  include <dxgi1_4.h>
 #  ifdef _MSC_VER
 #    pragma comment(                                                           \
@@ -227,6 +230,28 @@ template <typename T> static inline void SafeRelease(T*& res)
   if (res)
     res->Release();
   res = nullptr;
+}
+
+// Guard Release with SEH to avoid process termination in case the COM pointer
+// is already corrupted. This helps capture more information instead of
+// allowing an AV to immediately kill the process — only used for diagnostics
+// and to attempt a graceful shutdown.
+template <typename T>
+static inline void SafeReleaseGuarded(T*& res, const char* name)
+{
+#  if defined(_WIN32)
+  if (res) {
+    __try {
+      res->Release();
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+      LOG_F(ERROR, "Guarded Release failed for {} at {} (SEH caught)", name,
+        static_cast<void*>(res));
+    }
+  }
+  res = nullptr;
+#  else
+  SafeRelease(res);
+#  endif
 }
 
 // Render function
@@ -904,11 +929,39 @@ void ImGui_ImplDX12_InvalidateDeviceObjects()
   if (!bd || !bd->pd3dDevice)
     return;
 
-  if (bd->commandQueueOwned)
-    SafeRelease(bd->pCommandQueue);
+  if (bd->commandQueueOwned) {
+    LOG_F(2, "ImGui DX12: Invalidate device objects: pCommandQueue={} owned=1",
+      static_cast<void*>(bd->pCommandQueue));
+    SafeReleaseGuarded(bd->pCommandQueue, "pCommandQueue");
+  } else {
+    LOG_F(3, "ImGui DX12: Invalidate device objects: pCommandQueue={} owned=0",
+      static_cast<void*>(bd->pCommandQueue));
+  }
   bd->commandQueueOwned = false;
-  SafeRelease(bd->pRootSignature);
-  SafeRelease(bd->pPipelineState);
+  LOG_F(2,
+    "ImGui DX12: Invalidate device objects: pRootSignature={} "
+    "pPipelineState={} pd3dDevice={}",
+    static_cast<void*>(bd->pRootSignature),
+    static_cast<void*>(bd->pPipelineState), static_cast<void*>(bd->pd3dDevice));
+
+  // Check device health if debug layer present — GetDeviceRemovedReason is
+  // useful to determine if the device was removed earlier which could leave
+  // other D3D objects in an inconsistent state.
+  if (bd->pd3dDevice) {
+    HRESULT dr = bd->pd3dDevice->GetDeviceRemovedReason();
+    if (dr != S_OK) {
+      LOG_F(WARNING, "ImGui DX12: device removed reason = 0x{:08x}",
+        static_cast<unsigned int>(dr));
+    }
+  }
+
+  LOG_F(2,
+    "ImGui DX12: Guarding release of pRootSignature=%p pPipelineState=%p",
+    static_cast<void*>(bd->pRootSignature),
+    static_cast<void*>(bd->pPipelineState));
+  SafeReleaseGuarded(bd->pRootSignature, "pRootSignature");
+  SafeReleaseGuarded(bd->pPipelineState, "pPipelineState");
+  LOG_F(2, "ImGui DX12: Guarded release completed for root/pipeline");
 
   // Destroy all textures
   for (ImTextureData* tex : ImGui::GetPlatformIO().Textures)
@@ -917,8 +970,8 @@ void ImGui_ImplDX12_InvalidateDeviceObjects()
 
   for (UINT i = 0; i < bd->numFramesInFlight; i++) {
     ImGui_ImplDX12_RenderBuffers* fr = &bd->pFrameResources[i];
-    SafeRelease(fr->IndexBuffer);
-    SafeRelease(fr->VertexBuffer);
+    SafeReleaseGuarded(fr->IndexBuffer, "IndexBuffer");
+    SafeReleaseGuarded(fr->VertexBuffer, "VertexBuffer");
   }
 }
 
@@ -1052,13 +1105,19 @@ void ImGui_ImplDX12_Shutdown()
 
   // Clean up windows and device objects
   ImGui_ImplDX12_InvalidateDeviceObjects();
+  LOG_F(2,
+    "ImGui DX12: InvalidateDeviceObjects returned, deleting frame resources "
+    "(pFrameResources=%p)",
+    static_cast<void*>(bd->pFrameResources));
   delete[] bd->pFrameResources;
+  LOG_F(2, "ImGui DX12: pFrameResources deleted");
 
   io.BackendRendererName = nullptr;
   io.BackendRendererUserData = nullptr;
   io.BackendFlags &= ~(ImGuiBackendFlags_RendererHasVtxOffset
     | ImGuiBackendFlags_RendererHasTextures);
   IM_DELETE(bd);
+  LOG_F(2, "ImGui DX12: ImGui_ImplDX12_Shutdown completed and bd deleted");
 }
 
 void ImGui_ImplDX12_NewFrame()

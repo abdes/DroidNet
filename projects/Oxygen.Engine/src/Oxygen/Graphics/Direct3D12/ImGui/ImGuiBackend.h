@@ -12,6 +12,8 @@
 #include <d3d12.h>
 #include <wrl/client.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
@@ -56,6 +58,14 @@ public:
 
   auto GetImGuiContext() -> ImGuiContext* override { return imgui_context_; }
 
+  //! Recreate device objects after a swapchain resize or device reset.
+  /*!
+   * Calls into the underlying ImGui Direct3D12 backend to invalidate and
+   * re-create device-local objects. Safe to call from the engine thread when
+   * the swapchain has changed.
+   */
+  OXGN_D3D12_API auto RecreateDeviceObjects() -> void override;
+
 private:
   ImGuiContext* imgui_context_ { nullptr };
 
@@ -76,6 +86,16 @@ private:
   static auto SrvDescriptorFreeCallback(ImGui_ImplDX12_InitInfo* info,
     D3D12_CPU_DESCRIPTOR_HANDLE cpu_handle,
     D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) -> void;
+
+  // Per-frame DeferredReclaimer used to schedule GPU-safe cleanup.
+  // This is an observer_ptr to the engine's DeferredReclaimer component and
+  // may be null if not available. If present, Shutdown() will register a
+  // deferred action so the ImGui DX12 backend final release happens only
+  // after the in-flight frames referencing the pipeline/root signature
+  // are no longer used by the GPU.
+  observer_ptr<oxygen::graphics::detail::DeferredReclaimer> reclaimer_ {
+    nullptr
+  };
 };
 
 } // namespace oxygen::graphics::d3d12

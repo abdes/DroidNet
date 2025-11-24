@@ -62,6 +62,14 @@ public:
 
   // FIXME: Temporarily, the ImGui context is unique and owned by the backend
   virtual auto GetImGuiContext() -> ImGuiContext* = 0;
+
+  //! Notify the backend that device/swapchain related objects have changed and
+  //! device-local resources must be recreated. Default implementation is a
+  //! no-op; backends which allocate device objects may override this to
+  //! invalidate/re-create resources after a swapchain resize or device reset.
+  /*! @note Adding a default no-op keeps this change backward compatible for
+      any existing backend implementations. */
+  virtual auto RecreateDeviceObjects() -> void { /* no-op */ };
 };
 
 } // namespace oxygen::imgui
