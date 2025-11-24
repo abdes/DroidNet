@@ -128,8 +128,15 @@ public:
     const graphics::Buffer& src, std::span<const TextureUploadRegion> regions,
     Texture& dst) -> void override;
 
-  //! Binds the provided shader-visible descriptor heaps to the underlying
-  //! D3D12 command list.
+  //! Bind shader-visible descriptor heaps to the underlying D3D12 command
+  //! list. This sets up descriptor heaps only (no root-table binding).
+  auto SetupDescriptorHeaps(
+    std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void;
+
+  //! Binds root descriptor tables (SetGraphicsRootDescriptorTable /
+  //! SetComputeRootDescriptorTable) for the previously bound heaps. This
+  //! assumes that descriptor heaps and a compatible root signature have
+  //! already been bound to the command list.
   auto SetupDescriptorTables(
     std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void;
 
