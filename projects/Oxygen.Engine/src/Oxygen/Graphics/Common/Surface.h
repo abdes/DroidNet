@@ -48,7 +48,19 @@ public:
   auto ShouldResize(const bool flag) -> void { should_resize_ = flag; }
   auto ShouldResize() const -> bool { return should_resize_; }
 
+  // Mark the surface for destruction. Callers should set this to true to
+  // indicate the surface should be destroyed by the engine module at the
+  // next frame start. This mirrors ShouldResize behaviour and avoids
+  // performing final destruction on the caller/UI thread.
+  auto ShouldDestroy(const bool flag) -> void { should_destroy_ = flag; }
+  auto ShouldDestroy() const -> bool { return should_destroy_; }
+
   //! Handle a surface resize.
+  /*!
+   Resize application is explicit and handled by surface implementations
+   via their Resize() methods. The engine module should call Resize() on
+   the engine thread when it wants to apply pending resize requests.
+  */
   virtual auto Resize() -> void = 0;
 
   virtual auto GetCurrentBackBufferIndex() const -> uint32_t = 0;
@@ -80,6 +92,7 @@ protected:
 
 private:
   bool should_resize_ { false };
+  bool should_destroy_ { false };
 };
 
 namespace detail {
