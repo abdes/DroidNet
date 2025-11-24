@@ -9,6 +9,7 @@
 #include <expected>
 #include <functional>
 #include <span>
+#include <thread>
 #include <unordered_set>
 #include <utility>
 #include <variant>
@@ -321,6 +322,9 @@ auto UploadCoordinator::CreateRingBufferStaging(frame::SlotCount partitions,
 auto UploadCoordinator::Submit(const UploadRequest& req,
   StagingProvider& provider) -> std::expected<UploadTicket, UploadError>
 {
+  if (shutting_down_.load()) {
+    return std::unexpected(UploadError::kTrackerShutdown);
+  }
   switch (req.kind) {
   case UploadKind::kBuffer:
     return SubmitBuffer(
@@ -337,6 +341,9 @@ auto UploadCoordinator::SubmitMany(
   std::span<const UploadRequest> reqs, StagingProvider& provider)
   -> std::expected<std::vector<UploadTicket>, UploadError>
 {
+  if (shutting_down_.load()) {
+    return std::unexpected(UploadError::kTrackerShutdown);
+  }
   std::vector<UploadTicket> out;
   out.reserve(reqs.size());
 
@@ -368,6 +375,47 @@ auto UploadCoordinator::SubmitMany(
       std::make_move_iterator(exp_tickets->end()));
   }
   return out;
+}
+
+auto UploadCoordinator::Shutdown(std::chrono::milliseconds timeout)
+  -> std::expected<void, UploadError>
+{
+  shutting_down_.store(true);
+
+  using namespace std::chrono_literals;
+  const auto start = std::chrono::steady_clock::now();
+  std::chrono::milliseconds backoff { 1 };
+
+  // Capture the highest fence value registered so far. This ensures that we
+  // will wait for any recorded submissions even if individual ticket
+  // entries are later erased by frame-slot cleanup.
+  const auto target_fence = tracker_.LastRegisteredFence();
+
+  // Loop and politely poll the queue, using exponential backoff to avoid a
+  // hot spin. We primarily wait until either there are no tracked pending
+  // entries or the completed fence advances to the last observed fence.
+  while (tracker_.HasPending() || tracker_.CompletedFence() < target_fence) {
+    RetireCompleted();
+
+    if (!(tracker_.HasPending() || tracker_.CompletedFence() < target_fence)) {
+      break; // work finished after retire
+    }
+
+    if (std::chrono::steady_clock::now() - start > timeout) {
+      LOG_F(WARNING, "UploadCoordinator::Shutdown timed out after {}ms",
+        timeout.count());
+      return std::unexpected(UploadError::kSubmitFailed);
+    }
+
+    std::this_thread::sleep_for(backoff);
+    // Exponential backoff with a small ceiling to remain responsive.
+    backoff = (std::min)(backoff * 2, std::chrono::milliseconds { 50 });
+  }
+
+  // One final retire so providers can recycle any completed allocations.
+  RetireCompleted();
+
+  return {};
 }
 
 auto UploadCoordinator::RetireCompleted() -> void

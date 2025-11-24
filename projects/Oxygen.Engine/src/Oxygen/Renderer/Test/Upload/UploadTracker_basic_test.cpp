@@ -182,6 +182,43 @@ NOLINT_TEST(UploadTrackerTest, CompletedFenceMonotonic)
   EXPECT_EQ(tracker.CompletedFence().get(), 3u);
 }
 
+//! LastRegisteredFence reflects the last fence value registered by
+//! Track/Register
+NOLINT_TEST(UploadTrackerTest, LastRegisteredFence_TracksRegister)
+{
+  // Arrange
+  UploadTracker tracker;
+
+  // Initially zero
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 0u);
+
+  // Register two tickets and assert LastRegisteredFence reflects the most
+  // recently registered fence value.
+  const auto t1 = tracker.Register(FenceValue { 5 }, 10, "r1");
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 5u);
+
+  const auto t2 = tracker.Register(FenceValue { 12 }, 20, "r2");
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 12u);
+}
+
+//! RegisterFailedImmediate should update last-registered fence to the
+//! tracker's completed fence value.
+NOLINT_TEST(UploadTrackerTest, LastRegisteredFence_UpdatedOnFailedImmediate)
+{
+  UploadTracker tracker;
+
+  // Simulate some completion in the past and verify RegisterFailedImmediate
+  // stores the completed fence value.
+  tracker.MarkFenceCompleted(FenceValue { 77 });
+
+  const auto failed = tracker.RegisterFailedImmediate(
+    "failing", oxygen::engine::upload::UploadError::kCanceled);
+
+  EXPECT_EQ(tracker.LastRegisteredFence().get(), 77u);
+  // And ensure the returned ticket's fence matches the recorded completed fence
+  EXPECT_EQ(failed.fence.get(), 77u);
+}
+
 //! Verify OnFrameStart erases entries created in the same frame slot.
 NOLINT_TEST(UploadTrackerTest, OnFrameStart_CleansEntries)
 {

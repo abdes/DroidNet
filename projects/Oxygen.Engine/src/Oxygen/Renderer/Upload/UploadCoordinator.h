@@ -23,6 +23,7 @@
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
+using std::atomic_bool;
 class Graphics;
 } // namespace oxygen
 
@@ -62,6 +63,14 @@ public:
   OXGN_RNDR_API auto SubmitMany(
     std::span<const UploadRequest> reqs, StagingProvider& provider)
     -> std::expected<std::vector<UploadTicket>, UploadError>;
+
+  // Shutdown helpers -----------------------------------------------------//
+  // Prevents any new submissions and waits for outstanding upload work to
+  // complete. Call during Renderer/Engine shutdown to ensure the transfer
+  // queue has finished referencing upload resources before they are
+  // destroyed.
+  OXGN_RNDR_API auto Shutdown(std::chrono::milliseconds timeout
+    = std::chrono::milliseconds { 3000 }) -> std::expected<void, UploadError>;
 
   auto IsComplete(UploadTicket t) const -> std::expected<bool, UploadError>
   {
@@ -148,6 +157,8 @@ private:
   //! Plan → FillStaging → Optimize → Record → Tickets.
   auto SubmitRun(std::span<const UploadRequest> run, StagingProvider& provider)
     -> std::expected<std::vector<UploadTicket>, UploadError>;
+
+  std::atomic_bool shutting_down_ { false };
 };
 
 } // namespace oxygen::engine::upload

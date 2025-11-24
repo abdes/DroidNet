@@ -156,6 +156,11 @@ private:
   std::uint64_t upload_operations_count_ { 0 };
   std::uint32_t peak_draws_ { 0 };
   std::uint32_t peak_partitions_ { 0 };
+
+  // Runtime note: upload ticket tracking was intentionally kept out of the
+  // emitter itself. Shutdown coordination for the upload subsystem must be
+  // handled centrally by the UploadCoordinator/Tracker so we do not continue
+  // to accept uploads during shutdown or rely on destructors to block.
 };
 
 } // namespace oxygen::renderer::resources
