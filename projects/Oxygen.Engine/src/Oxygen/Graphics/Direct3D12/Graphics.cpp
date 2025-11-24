@@ -12,14 +12,15 @@
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Buffer.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/CompositionSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/WindowSurface.h>
-#include <Oxygen/Graphics/Direct3D12/Detail/CompositionSurface.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/EngineShaders.h>
@@ -98,6 +99,8 @@ protected:
     const std::function<Component&(oxygen::TypeId)>& get_component) noexcept
     -> void override
   {
+    using oxygen::graphics::DescriptorVisibility;
+    using oxygen::graphics::ResourceViewType;
     using oxygen::graphics::d3d12::D3D12HeapAllocationStrategy;
     using oxygen::graphics::d3d12::DescriptorAllocator;
     using oxygen::graphics::d3d12::DeviceManager;
@@ -108,6 +111,22 @@ protected:
     DCHECK_NOTNULL_F(device, "DeviceManager not properly initialized");
     allocator_ = std::make_unique<DescriptorAllocator>(
       std::make_shared<D3D12HeapAllocationStrategy>(device), device);
+
+    // Ensure shader-visible heaps (CBV_SRV_UAV and SAMPLER) exist up-front.
+    // Some pipelines expect directly-indexed sampler/srv heaps at pipeline
+    // signature time. Create initial segments so command recording can bind
+    // descriptor heaps even if no descriptors have been allocated yet.
+    try {
+      // Reserve will create initial segments when none exist according to
+      // BaseDescriptorAllocator::Reserve.
+      allocator_->Reserve(ResourceViewType::kStructuredBuffer_SRV,
+        DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
+      allocator_->Reserve(ResourceViewType::kSampler,
+        DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
+        ex.what());
+    }
   }
 
 private:
@@ -241,8 +260,9 @@ auto Graphics::CreateSurfaceFromNative(void* native_handle,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::shared_ptr<Surface>
 {
-  // native_handle is unused for CompositionSurface as we create the SwapChain internally
-  // and expose it via GetSwapChain() for the interop layer to connect.
+  // native_handle is unused for CompositionSurface as we create the SwapChain
+  // internally and expose it via GetSwapChain() for the interop layer to
+  // connect.
   DCHECK_NOTNULL_F(command_queue);
   DCHECK_EQ_F(command_queue->GetTypeId(),
     graphics::d3d12::CommandQueue::ClassTypeId(),
