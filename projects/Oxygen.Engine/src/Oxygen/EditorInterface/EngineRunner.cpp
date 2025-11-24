@@ -260,6 +260,8 @@ auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
     LOG_F(ERROR, "Unhandled exception of unknown type during shutdown");
   }
   LOG_F(INFO, "engine exit code: {}", rc);
+  loguru::flush();
+  loguru::shutdown();
 }
 
 auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
