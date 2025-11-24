@@ -10,6 +10,7 @@
 #include "SimpleEditorModule.h"
 #include "Base/LoguruWrapper.h"
 
+#include <fmt/format.h>
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
 
@@ -17,8 +18,15 @@
 #include <Oxygen/EditorInterface/Api.h>
 
 #include <dxgi1_2.h>
-#include <sstream>
 #include <string>
+#include <chrono>
+#include <ctime>
+#include <vcclr.h>
+#include <mutex>
+#include <unordered_map>
+#include <functional>
+
+// tokens_map and helpers declared below once System namespace is available.
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325")) ISwapChainPanelNative : public IUnknown {
@@ -81,6 +89,78 @@ static void NativeForward(void* user_data, const loguru::Message& msg) {
 }
 
 namespace Oxygen::Editor::EngineInterface {
+
+  // Token storage: native map keyed by the registry GuidKey, storing a pointer
+  // to a GCHandle (via IntPtr.ToPointer()). The GCHandle holds the
+  // TaskCompletionSource kept alive until the engine module processes the
+  // pending destruction/resize and we resolve the token.
+  using TokenKey = SurfaceRegistry::GuidKey;
+  // SurfaceRegistry::GuidHasher is a private helper; provide an internal
+  // TokenHasher for use in this compilation unit.
+  struct TokenHasher {
+    auto operator()(const TokenKey& key) const noexcept -> std::size_t {
+      std::size_t hash = 1469598103934665603ULL;
+      for (auto byte : key) {
+        hash ^= static_cast<std::size_t>(byte);
+        hash *= 1099511628211ULL;
+      }
+      return hash;
+    }
+  };
+  static std::unordered_map<TokenKey, void*, TokenHasher> tokens_map;
+  static std::mutex tokens_mutex;
+
+  static void ResolveToken(const TokenKey& nativeKey, bool ok)
+  {
+    // Helpful diagnostic message for interop troubleshooting: include a
+    // short hex representation of the token key and whether resolution
+    // succeeded.
+    auto tokenToHex = [](const TokenKey &k) -> std::string {
+      std::string out;
+      out.reserve(k.size() * 3);
+      for (size_t i = 0; i < k.size(); ++i) {
+        out += fmt::format("{:02x}", static_cast<unsigned int>(static_cast<unsigned char>(k[i])));
+        if (i + 1 < k.size() && (i % 4 == 3)) out.push_back('-');
+      }
+      return out;
+    };
+    try {
+      auto msg = fmt::format("ResolveToken: key={} ok={}", tokenToHex(nativeKey), ok ? "true" : "false");
+      oxygen::engine::interop::LogInfoMessage(msg.c_str());
+    }
+    catch (...) { /* keep resolving even if logging fails */ }
+    std::lock_guard<std::mutex> lg(tokens_mutex);
+    auto it = tokens_map.find(nativeKey);
+    if (it == tokens_map.end()) {
+      return;
+    }
+
+    void* hv = it->second;
+    if (hv != nullptr) {
+      try {
+        System::IntPtr ip(hv);
+        auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(ip);
+        auto tcs = safe_cast<System::Threading::Tasks::TaskCompletionSource<bool>^>(gh.Target);
+        if (tcs != nullptr) {
+          tcs->TrySetResult(ok);
+        }
+        gh.Free();
+      }
+      catch (...) {
+        /* swallow */
+      }
+    }
+
+    tokens_map.erase(it);
+  }
+
+  // Helper that returns a native callback which resolves the given token.
+  static std::function<void(bool)> MakeResolveCallback(const TokenKey& k) {
+    // copy the token into the heap-allocated closure so we don't create a
+    // local class inside a managed member function.
+    TokenKey copy = k;
+    return [copy](bool ok) { ResolveToken(copy, ok); };
+  }
 
   // Managed helper that encapsulates all logging-related state and behavior so
   // the EngineRunner header doesn't need to include or reference native logging
@@ -233,14 +313,19 @@ static void InvokeLogHandler(Object^ obj, const loguru::Message& msg) {
   }
 }
 
+// Token storage and resolution helpers are defined inside the
+// Oxygen::Editor::EngineInterface namespace below so they can refer to
+// SurfaceRegistry::GuidKey and related types without needing fully-qualified names.
+
 // EngineRunner implementation now delegates logging concerns to LogHandler.
 namespace Oxygen::Editor::EngineInterface {
 
   ref class SwapChainAttachState sealed {
   public:
-    SwapChainAttachState(IntPtr panel, IntPtr swapChain)
+    SwapChainAttachState(IntPtr panel, IntPtr swapChain, IntPtr surfaceHandle)
       : panel_(panel)
       , swap_chain_(swapChain)
+      , surface_handle_(surfaceHandle)
     {
     }
 
@@ -252,9 +337,14 @@ namespace Oxygen::Editor::EngineInterface {
       IntPtr get() { return swap_chain_; }
     }
 
+    property IntPtr SurfaceHandle {
+      IntPtr get() { return surface_handle_; }
+    }
+
   private:
     IntPtr panel_;
     IntPtr swap_chain_;
+    IntPtr surface_handle_;
   };
 
   EngineRunner::EngineRunner()
@@ -269,6 +359,9 @@ namespace Oxygen::Editor::EngineInterface {
     this->engine_completion_source_ = nullptr;
     this->active_context_ = nullptr;
     this->state_lock_ = gcnew Object();
+    // token map is implemented as a native map with managed gcroot values in
+    // the implementation file (to allow native callbacks to resolve tokens
+    // without capturing managed types in lambdas).
   }
 
   EngineRunner::~EngineRunner() {
@@ -482,10 +575,17 @@ namespace Oxygen::Editor::EngineInterface {
     const auto view = msclr::interop::marshal_as<std::string>(viewportString);
     const auto disp = msclr::interop::marshal_as<std::string>(displayLabel);
 
-    std::ostringstream registrationLog;
-    registrationLog << "RegisterSurface doc=" << doc << " viewport=" << view
-      << " name='" << disp << "'";
-    oxygen::engine::interop::LogInfoMessage(registrationLog.str().c_str());
+    // Timestamped entry trace for RegisterSurface
+    try {
+      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      char buf[64]{};
+      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
+      auto registrationLog = fmt::format("[{}] RegisterSurface doc={} viewport={} name='{}'", buf, doc, view, disp);
+      oxygen::engine::interop::LogInfoMessage(registrationLog.c_str());
+    }
+    catch (...) {
+      oxygen::engine::interop::LogInfoMessage("RegisterSurface: failed to format timestamped log");
+    }
 
     oxygen::engine::interop::LogInfoMessage("RegisterSurface: creating composition surface.");
     void* swap_chain_ptr = nullptr;
@@ -497,10 +597,33 @@ namespace Oxygen::Editor::EngineInterface {
       return false;
     }
 
+    // Set a helpful debug name that includes the document and viewport id so
+    // logs identify which viewport this composition surface belongs to.
+    try {
+      surface->SetName(disp);
+    }
+    catch (...) { /* best-effort naming; ignore failures */ }
+
     registry->RegisterSurface(key, surface);
 
+    // Log that registration succeeded (timestamp + diagnostic counts)
+    try {
+      std::time_t now2 = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      char buf2[64]{};
+      std::strftime(buf2, sizeof(buf2), "%F %T", std::localtime(&now2));
+      auto successLog = fmt::format("[{}] RegisterSurface completed: viewport={} swap_chain_ptr={} surface_ptr={} surface.use_count={}", buf2, view, fmt::ptr(swap_chain_ptr), fmt::ptr(surface.get()), surface.use_count());
+      oxygen::engine::interop::LogInfoMessage(successLog.c_str());
+    }
+    catch (...) {
+      oxygen::engine::interop::LogInfoMessage("RegisterSurface: failed to format success log");
+    }
+
     if (swap_chain_ptr != nullptr) {
-      AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr));
+      // Keep a temporary owning reference to the surface so the UI attach
+      // callback cannot observe a destroyed surface unexpectedly. The
+      // pointer is deleted by AttachSwapChainCallback once it runs.
+      auto surface_ptr = new std::shared_ptr<oxygen::graphics::Surface>(surface);
+      AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr), IntPtr(surface_ptr));
     }
 
     return true;
@@ -522,11 +645,12 @@ namespace Oxygen::Editor::EngineInterface {
     }
 
     const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
-    std::ostringstream resizeLog;
-    resizeLog << "ResizeSurface viewport=" << viewportString << " size="
-      << width << "x" << height;
-    oxygen::engine::interop::LogInfoMessage(resizeLog.str().c_str());
+    auto resizeLog = fmt::format("ResizeSurface viewport={} size={}x{}", viewportString, width, height);
+    oxygen::engine::interop::LogInfoMessage(resizeLog.c_str());
 
+    // Mark the composition surface for resize; the engine module will execute
+    // the actual Resize() during its next frame cycle and resolve any
+    // registered tokens.
     oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width,
       height);
   }
@@ -537,10 +661,172 @@ namespace Oxygen::Editor::EngineInterface {
     auto registry = GetSurfaceRegistry();
     auto key = ToGuidKey(viewportId);
     const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
-    std::ostringstream unregisterLog;
-    unregisterLog << "UnregisterSurface viewport=" << viewportString;
-    oxygen::engine::interop::LogInfoMessage(unregisterLog.str().c_str());
+    try {
+      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      char buf[64]{};
+      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
+      auto unregisterLog = fmt::format("[{}] UnregisterSurface viewport={}", buf, viewportString);
+      oxygen::engine::interop::LogInfoMessage(unregisterLog.c_str());
+    }
+    catch (...) {
+      oxygen::engine::interop::LogInfoMessage("UnregisterSurface: failed to format timestamped log");
+    }
+    // Stage removal into the registry; do not final-release on the UI thread.
     registry->RemoveSurface(key);
+  }
+
+  auto EngineRunner::UnregisterSurfaceAsync(System::Guid viewportId) -> Task<bool>^
+  {
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+
+    // Create the TaskCompletionSource and store it so we can resolve it when
+    // the engine module processes the pending destruction.
+    auto tcs = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
+
+    // Store the TaskCompletionSource in the native tokens_map keyed by the
+    // native GuidKey (array of bytes). Use tokens_mutex for thread safety.
+    TokenKey nativeKey;
+    for (size_t i = 0; i < nativeKey.size(); ++i) nativeKey[i] = key[i];
+
+    // Create a native callback that resolves the stored TaskCompletionSource
+    // when the engine module processes the pending destruction. Use the
+    // MakeResolveCallback helper (outside the managed member function) so
+    // no local class is defined inside this managed method.
+    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
+
+    try {
+      auto msg = fmt::format("UnregisterSurfaceAsync: stored token for viewport={}", msclr::interop::marshal_as<std::string>(viewportId.ToString()));
+      oxygen::engine::interop::LogInfoMessage(msg.c_str());
+    }
+    catch (...) { /* swallow logging errors */ }
+
+    // Pin the managed TaskCompletionSource using a GCHandle and store the
+    // IntPtr -> pointer value in the native map so callbacks can resolve it
+    // without holding managed references. Keep hold of the IntPtr so we can
+    // free it if staging into the registry fails.
+    System::IntPtr ip = IntPtr::Zero;
+    {
+      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      tokens_map[nativeKey] = ip.ToPointer();
+    }
+
+    try {
+      auto msg = fmt::format("UnregisterSurfaceAsync: stored token for viewport={}", msclr::interop::marshal_as<std::string>(viewportId.ToString()));
+      oxygen::engine::interop::LogInfoMessage(msg.c_str());
+    }
+    catch (...) { /* swallow logging errors */ }
+
+    // Stage the removal into the registry; callback will be invoked by the
+    // engine module when it drains pending destructions. If staging fails we
+    // must cleanup the pinned GCHandle and remove the entry from tokens_map
+    // to avoid leaking.
+    try {
+      registry->RemoveSurface(key, std::move(cb));
+      try {
+        auto msg2 = fmt::format("UnregisterSurfaceAsync: staged removal for viewport={}", msclr::interop::marshal_as<std::string>(viewportId.ToString()));
+        oxygen::engine::interop::LogInfoMessage(msg2.c_str());
+      }
+      catch (...) { /* ignore logging failures */ }
+    }
+    catch (...) {
+      // ensure the saved GCHandle is freed and token removed
+      try {
+        auto msg = fmt::format("UnregisterSurfaceAsync: staging removal failed for viewport={}, cleaning up token.", msclr::interop::marshal_as<std::string>(viewportId.ToString()));
+        oxygen::engine::interop::LogInfoMessage(msg.c_str());
+      }
+      catch (...) { /* swallow */ }
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      auto it = tokens_map.find(nativeKey);
+      if (it != tokens_map.end()) {
+        void* hv = it->second;
+        if (hv != nullptr) {
+          try {
+            System::IntPtr stored(hv);
+            auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+            if (gh.IsAllocated) gh.Free();
+          }
+          catch (...) { /* swallow */ }
+        }
+        tokens_map.erase(it);
+      }
+
+      // Fail the TaskCompletionSource so the caller does not hang
+      try { tcs->TrySetResult(false); } catch (...) { /* swallow */ }
+
+      return tcs->Task;
+    }
+
+    return tcs->Task;
+  }
+
+  auto EngineRunner::ResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
+    System::UInt32 height) -> Task<bool>^
+  {
+    if (width == 0 || height == 0) {
+      return Task::FromResult<bool>(false);
+    }
+
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+    auto surface = registry->FindSurface(key);
+    if (!surface) {
+      return Task::FromResult<bool>(false);
+    }
+
+
+    auto tcs = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
+    TokenKey nativeKey;
+    for (size_t i = 0; i < nativeKey.size(); ++i) nativeKey[i] = key[i];
+    System::IntPtr ip = IntPtr::Zero;
+    {
+      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      tokens_map[nativeKey] = ip.ToPointer();
+    }
+
+    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
+
+    try {
+      registry->RegisterResizeCallback(key, std::move(cb));
+      try {
+        auto msg = fmt::format("ResizeSurfaceAsync: staged resize for viewport={} size={}x{}",
+          msclr::interop::marshal_as<std::string>(viewportId.ToString()), width, height);
+        oxygen::engine::interop::LogInfoMessage(msg.c_str());
+      }
+      catch (...) { /* swallow */ }
+    }
+    catch (...) {
+      // cleanup pinned handle + native entry if registration fails
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      auto it = tokens_map.find(nativeKey);
+      if (it != tokens_map.end()) {
+        void* hv = it->second;
+        if (hv != nullptr) {
+          try {
+            System::IntPtr stored(hv);
+            auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+            if (gh.IsAllocated) gh.Free();
+          }
+          catch (...) { /* swallow */ }
+        }
+        tokens_map.erase(it);
+      }
+
+      try { tcs->TrySetResult(false); } catch (...) { /* swallow */ }
+      return tcs->Task;
+    }
+
+    // Request the resize (mark-only). Engine module will pick this up and
+    // perform the actual Resize() on next frame.
+    oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width, height);
+
+    return tcs->Task;
   }
 
   void EngineRunner::EngineLoopAdapter(System::Object^ state)
@@ -557,7 +843,19 @@ namespace Oxygen::Editor::EngineInterface {
     }
 
     try {
+      try {
+        auto startMsg = fmt::format("EngineLoopAdapter: starting engine loop for ctx_ptr={}", fmt::ptr(ctx->NativeShared().get()));
+        oxygen::engine::interop::LogInfoMessage(startMsg.c_str());
+      }
+      catch (...) { /* swallow logging failures */ }
+
       oxygen::engine::interop::RunEngine(ctx->NativeShared());
+
+      try {
+        auto endMsg = fmt::format("EngineLoopAdapter: engine loop finished for ctx_ptr={}", fmt::ptr(ctx->NativeShared().get()));
+        oxygen::engine::interop::LogInfoMessage(endMsg.c_str());
+      }
+      catch (...) { /* swallow logging failures */ }
       if (completion != nullptr) {
         completion->TrySetResult(true);
       }
@@ -590,6 +888,38 @@ namespace Oxygen::Editor::EngineInterface {
     oxygen::engine::interop::LogInfoMessage(
       "OnEngineLoopExited invoked; clearing surface registry.");
     ResetSurfaceRegistry();
+
+    // No managed pending_tokens_ map is defined in this class; we use the
+    // native tokens_map for outstanding tokens. Proceed to clear native
+    // outstanding entries instead (done below).
+
+    // Also fail any outstanding native tokens_map entries so awaiting callers
+    // using the async native APIs do not hang when the engine loop exits.
+    {
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      try {
+        auto msg = fmt::format("OnEngineLoopExited: failing outstanding tokens_map entries (count={})", tokens_map.size());
+        oxygen::engine::interop::LogInfoMessage(msg.c_str());
+      }
+      catch (...) { /* ignore logging failures */ }
+
+      for (auto &it : tokens_map) {
+        void* hv = it.second;
+        if (hv != nullptr) {
+          try {
+            System::IntPtr ip(hv);
+            auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(ip);
+            auto tcs = safe_cast<System::Threading::Tasks::TaskCompletionSource<bool>^>(gh.Target);
+            if (tcs != nullptr) {
+              tcs->TrySetResult(false);
+            }
+            gh.Free();
+          }
+          catch (...) { /* swallow */ }
+        }
+      }
+      tokens_map.clear();
+    }
 
     Monitor::Enter(state_lock_);
     try {
@@ -697,13 +1027,13 @@ namespace Oxygen::Editor::EngineInterface {
     return key;
   }
 
-  void EngineRunner::AttachSwapChain(IntPtr panelPtr, IntPtr swapChainPtr)
+  void EngineRunner::AttachSwapChain(IntPtr panelPtr, IntPtr swapChainPtr, IntPtr surfaceHandle)
   {
     if (panelPtr == IntPtr::Zero || swapChainPtr == IntPtr::Zero) {
       return;
     }
 
-    auto state = gcnew SwapChainAttachState(panelPtr, swapChainPtr);
+    auto state = gcnew SwapChainAttachState(panelPtr, swapChainPtr, surfaceHandle);
     if (ui_dispatcher_ == nullptr || !ui_dispatcher_->IsCaptured) {
       throw gcnew InvalidOperationException(gcnew String(
         L"SwapChain attachment requires a captured UI SynchronizationContext. "
@@ -723,6 +1053,21 @@ namespace Oxygen::Editor::EngineInterface {
 
     auto panelUnknown = reinterpret_cast<IUnknown*>(attachState->PanelPtr.ToPointer());
     auto swapChain = reinterpret_cast<IDXGISwapChain*>(attachState->SwapChainPtr.ToPointer());
+    auto surfaceHandlePtr = reinterpret_cast<std::shared_ptr<oxygen::graphics::Surface>*>(attachState->SurfaceHandle.ToPointer());
+    // Log the incoming attach with timestamp and surface reference info (if provided).
+    try {
+      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      char buf[64]{};
+      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
+      auto attachLog = fmt::format("[{}] AttachSwapChainCallback: panel={} swapchain={}", buf, fmt::ptr(panelUnknown), fmt::ptr(swapChain));
+      if (surfaceHandlePtr != nullptr) {
+        attachLog += fmt::format(" surface_handle_ptr={} use_count={}", fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
+      }
+      oxygen::engine::interop::LogInfoMessage(attachLog.c_str());
+    }
+    catch (...) {
+      oxygen::engine::interop::LogInfoMessage("AttachSwapChainCallback: failed to format attach diagnostics.");
+    }
     if (panelUnknown == nullptr || swapChain == nullptr) {
       return;
     }
@@ -738,10 +1083,35 @@ namespace Oxygen::Editor::EngineInterface {
     panelNative->Release();
     if (FAILED(hr)) {
       oxygen::engine::interop::LogInfoMessage("ISwapChainPanelNative::SetSwapChain failed.");
+      // cleanup surface handle if present
+      if (surfaceHandlePtr != nullptr) {
+        try {
+          auto errLog = fmt::format("AttachSwapChainCallback: SetSwapChain failed, cleaning surface_handle_ptr={} pre-delete use_count={}", fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
+          oxygen::engine::interop::LogInfoMessage(errLog.c_str());
+        }
+        catch (...) {
+          oxygen::engine::interop::LogInfoMessage("AttachSwapChainCallback: error logging before delete.");
+        }
+        delete surfaceHandlePtr;
+      }
       return;
     }
 
     oxygen::engine::interop::LogInfoMessage("SwapChain attached to panel.");
+
+    // if we received a temporary owning pointer, drop it now to return ownership
+    // to the registry/engine. We intentionally log the use_count for diagnostics
+    // before deleting the heap-held shared_ptr.
+    if (surfaceHandlePtr != nullptr) {
+      try {
+        auto cleanupLog = fmt::format("AttachSwapChainCallback cleaning surface_handle_ptr={} pre-delete use_count={}", fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
+        oxygen::engine::interop::LogInfoMessage(cleanupLog.c_str());
+      }
+      catch (...) {
+        oxygen::engine::interop::LogInfoMessage("AttachSwapChainCallback: error logging cleanup info.");
+      }
+      delete surfaceHandlePtr;
+    }
   }
 
   void EngineRunner::EnsureEngineLoopStopped()

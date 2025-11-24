@@ -81,7 +81,7 @@ public sealed partial class EngineService : IEngineService
                 {
                     var loggingConfig = new LoggingConfig
                     {
-                        Verbosity = 0,
+                        Verbosity = 1,
                         IsColored = false,
                     };
                     var engineLogger = factory.CreateLogger("Oxygen.Engine");
@@ -238,7 +238,7 @@ public sealed partial class EngineService : IEngineService
     /// <summary>
     /// Forwards a resize request to the native engine.
     /// </summary>
-    private void ResizeViewport(ViewportSurfaceKey key, uint pixelWidth, uint pixelHeight)
+    private async ValueTask ResizeViewportAsync(ViewportSurfaceKey key, uint pixelWidth, uint pixelHeight, bool waitForProcessed = false)
     {
         if (pixelWidth == 0 || pixelHeight == 0)
         {
@@ -247,7 +247,14 @@ public sealed partial class EngineService : IEngineService
 
         try
         {
-            this.engineRunner?.ResizeSurface(key.ViewportId, pixelWidth, pixelHeight);
+            if (waitForProcessed && this.engineRunner != null)
+            {
+                await this.engineRunner.ResizeSurfaceAsync(key.ViewportId, pixelWidth, pixelHeight).ConfigureAwait(true);
+            }
+            else
+            {
+                this.engineRunner?.ResizeSurface(key.ViewportId, pixelWidth, pixelHeight);
+            }
         }
         catch (ObjectDisposedException ex)
         {
@@ -264,8 +271,9 @@ public sealed partial class EngineService : IEngineService
     /// <summary>
     /// Releases the resources associated with the specified lease.
     /// </summary>
-    private async ValueTask ReleaseLeaseAsync(ViewportSurfaceLease lease)
+    private async ValueTask ReleaseLeaseAsync(ViewportSurfaceLease lease, bool waitForProcessed = false)
     {
+        this.logger?.LogDebug("[{Timestamp}] ReleaseLeaseAsync start for {LeaseKey}", DateTimeOffset.UtcNow, lease.Key.DisplayName);
         var idleCandidate = false;
         var documentCountAfter = 0;
         var totalCountAfter = 0;
@@ -306,8 +314,18 @@ public sealed partial class EngineService : IEngineService
         }
 
         lease.MarkDetached();
-        this.engineRunner?.UnregisterSurface(lease.Key.ViewportId);
+        this.logger?.LogDebug("[{Timestamp}] Calling UnregisterSurface for {LeaseKey}", DateTimeOffset.UtcNow, lease.Key.DisplayName);
+        if (waitForProcessed && this.engineRunner != null)
+        {
+            await this.engineRunner.UnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(true);
+        }
+        else
+        {
+            this.engineRunner?.UnregisterSurface(lease.Key.ViewportId);
+        }
+        this.logger?.LogDebug("[{Timestamp}] UnregisterSurface completed for {LeaseKey}", DateTimeOffset.UtcNow, lease.Key.DisplayName);
         this.LogLeaseReleased(lease.Key.DisplayName, lease.Key.DocumentId, totalCountAfter, documentCountAfter, idleCandidate);
+        this.logger?.LogDebug("[{Timestamp}] ReleaseLeaseAsync completed for {LeaseKey}", DateTimeOffset.UtcNow, lease.Key.DisplayName);
     }
 
     private async ValueTask<ViewportSurfaceLease> GetOrCreateLeaseAsync(ViewportSurfaceKey key, CancellationToken cancellationToken)
@@ -520,15 +538,15 @@ public sealed partial class EngineService : IEngineService
             await this.owner.AttachLeaseAsync(this, panel, cancellationToken).ConfigureAwait(true);
         }
 
-        public ValueTask ResizeAsync(uint pixelWidth, uint pixelHeight, CancellationToken cancellationToken = default)
+        public async ValueTask ResizeAsync(uint pixelWidth, uint pixelHeight, CancellationToken cancellationToken = default)
         {
             if (!this.IsAttached)
             {
-                return ValueTask.CompletedTask;
+                 return;
             }
 
-            this.owner.ResizeViewport(this.Key, pixelWidth, pixelHeight);
-            return ValueTask.CompletedTask;
+            await this.owner.ResizeViewportAsync(this.Key, pixelWidth, pixelHeight, false).ConfigureAwait(true);
+              return;
         }
 
         public async ValueTask DisposeAsync()

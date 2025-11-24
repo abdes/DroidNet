@@ -20,6 +20,8 @@
         <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Testably.Abstractions" />
         <PackageReference Include="CommunityToolkit.WinUI.Triggers" />
+        <!-- Reactive Extensions used for UI-level debounced resize handling -->
+        <PackageReference Include="System.Reactive" />
     </ItemGroup>
 
     <ItemGroup>

@@ -142,6 +142,13 @@ namespace Oxygen::Editor::EngineInterface {
       System::UInt32 height) -> void;
 
     auto UnregisterSurface(System::Guid viewportId) -> void;
+    // Async variants that return a processed acknowledgement once the engine
+    // module has executed the requested work (processed during the next
+    // engine frame). These are non-blocking on the UI thread and complete
+    // after the engine has applied the Resize or scheduled the Destroy.
+    auto UnregisterSurfaceAsync(System::Guid viewportId) -> System::Threading::Tasks::Task<bool>^;
+    auto ResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
+      System::UInt32 height) -> System::Threading::Tasks::Task<bool>^;
 
     void CaptureUiSynchronizationContext();
 
@@ -173,7 +180,7 @@ namespace Oxygen::Editor::EngineInterface {
     auto GetSurfaceRegistry() -> std::shared_ptr<SurfaceRegistry>;
     static auto ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey;
     void EnsureEngineLoopStopped();
-    void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr);
+    void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr, System::IntPtr surfaceHandle);
     void AttachSwapChainCallback(System::Object^ state);
   };
 
