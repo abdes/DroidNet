@@ -13,6 +13,22 @@ Action::Action(std::string name, const ActionValueType value_type)
   : name_(std::move(name))
   , value_type_(value_type)
 {
+  // Ensure internal ActionValue variant matches the declared value_type_
+  // to avoid std::bad_variant_access when callers read using GetAs<T>.
+  switch (value_type_) {
+  case ActionValueType::kBool:
+    value_.Set(false);
+    break;
+  case ActionValueType::kAxis1D:
+    value_.Set(Axis1D { 0.0f });
+    break;
+  case ActionValueType::kAxis2D:
+    value_.Set(Axis2D { 0.0f, 0.0f });
+    break;
+  default:
+    value_.Set(false);
+    break;
+  }
 }
 
 auto Action::State::ToActionState() const -> ActionState
