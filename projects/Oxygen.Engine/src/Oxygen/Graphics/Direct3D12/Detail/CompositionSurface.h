@@ -29,7 +29,7 @@ class CompositionSurface : public graphics::Surface {
 
 public:
   CompositionSurface(dx::ICommandQueue* command_queue,
-    const Graphics* graphics)
+    Graphics* graphics)
     : graphics::Surface("CompositionSurface")
   {
     AddComponent<CompositionSwapChain>(
@@ -51,6 +51,12 @@ public:
     pending_width_.store(width, std::memory_order_relaxed);
     pending_height_.store(height, std::memory_order_relaxed);
     resize_pending_.store(true, std::memory_order_release);
+    // Mirror the resize intent onto the public Surface flag so engine modules
+    // (which check Surface::ShouldResize()) will pick up and apply the
+    // explicit Resize() call during frame start. RequestResize is const to
+    // allow callers who only hold a const reference to the surface; we therefore
+    // cast away constness to update the mutable engine-visible flag.
+    const_cast<CompositionSurface*>(this)->ShouldResize(true);
   }
 
   auto GetCurrentBackBufferIndex() const -> uint32_t override
@@ -61,23 +67,40 @@ public:
   auto GetCurrentBackBuffer() const
     -> std::shared_ptr<graphics::Texture> override
   {
-    ApplyPendingResize();
+    // Do not apply pending resize implicitly here - applies must be
+      // explicitly triggered by the engine module at frame start by calling
+      // Resize().
     return GetComponent<CompositionSwapChain>().GetCurrentBackBuffer();
   }
   auto GetBackBuffer(uint32_t index) const
     -> std::shared_ptr<graphics::Texture> override
   {
-    ApplyPendingResize();
-    return GetComponent<CompositionSwapChain>().GetBackBuffer(index);
+    // No implicit resize here - engine must call Resize() explicitly.
+      return GetComponent<CompositionSwapChain>().GetBackBuffer(index);
   }
 
   void Present() const override
   {
-    ApplyPendingResize();
+    // Present should not apply pending resizes. Resize application is an
+    // explicit engine-module responsibility executed at frame start.
     GetComponent<CompositionSwapChain>().Present();
   }
 
-  void Resize() override { Resize(0, 0); }
+  void Resize() override
+  {
+    // Apply any pending resize request set by RequestResize(). If there is
+    // no pending request, no-op. This keeps resize application explicit and
+      // only performed when called by the engine module at frame start.
+    if (!resize_pending_.exchange(false, std::memory_order_acq_rel)) {
+      return;
+    }
+
+    const auto width = pending_width_.load(std::memory_order_acquire);
+    const auto height = pending_height_.load(std::memory_order_acquire);
+    const auto clamped_width = std::max<uint32_t>(1u, width);
+    const auto clamped_height = std::max<uint32_t>(1u, height);
+    Resize(clamped_width, clamped_height);
+  }
 
   void Resize(uint32_t width, uint32_t height)
   {
@@ -97,20 +120,6 @@ public:
   } // TODO: Implement size tracking
 
 private:
-  auto ApplyPendingResize() const -> void
-  {
-    if (!resize_pending_.exchange(false, std::memory_order_acq_rel)) {
-      return;
-    }
-
-    const auto width = pending_width_.load(std::memory_order_acquire);
-    const auto height = pending_height_.load(std::memory_order_acquire);
-    const auto clamped_width = std::max<uint32_t>(1u, width);
-    const auto clamped_height = std::max<uint32_t>(1u, height);
-    const_cast<CompositionSurface*>(this)->Resize(clamped_width,
-      clamped_height);
-  }
-
   mutable std::atomic<bool> resize_pending_ { false };
   mutable std::atomic<uint32_t> pending_width_ { 1 };
   mutable std::atomic<uint32_t> pending_height_ { 1 };

@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 
 #include <Oxygen/Graphics/Direct3D12/Detail/CompositionSwapChain.h>
 
@@ -24,7 +25,7 @@ using oxygen::windows::ThrowOnFailed;
 namespace oxygen::graphics::d3d12::detail {
 
 CompositionSwapChain::CompositionSwapChain(dx::ICommandQueue* command_queue,
-  const DXGI_FORMAT format, const Graphics* graphics)
+  const DXGI_FORMAT format, Graphics* graphics)
   : format_(format)
   , command_queue_(command_queue)
   , graphics_(graphics)
@@ -41,6 +42,7 @@ CompositionSwapChain::~CompositionSwapChain() noexcept
 auto CompositionSwapChain::Present() const -> void
 {
   if (swap_chain_) {
+    DLOG_F(3, "CompositionSwapChain::Present swap_chain={} current_index={}", fmt::ptr(swap_chain_), current_back_buffer_index_);
     ThrowOnFailed(swap_chain_->Present(1, 0));
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
   }
@@ -82,7 +84,12 @@ auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
     return;
   }
 
-  ReleaseRenderTargets();
+  DLOG_F(2, "CompositionSwapChain::Resize requested target={}x{} for swap_chain={}", width, height, fmt::ptr(swap_chain_));
+
+  // ResizeBuffers requires that all outstanding references to buffers are
+  // released. Force immediate release of our render target wrappers here so
+  // there are no outstanding back-buffer references when calling ResizeBuffers.
+  ReleaseRenderTargets(true);
 
   try {
     const auto target_width = std::max<uint32_t>(1u, width);
@@ -95,6 +102,7 @@ auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
     // cached index in sync so we target the correct render target on the next
     // frame and avoid executing command lists against stale buffers.
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
+    DLOG_F(2, "CompositionSwapChain::Resize completed new backbuffer_index={} for swap_chain={}", current_back_buffer_index_, fmt::ptr(swap_chain_));
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Failed to resize swap chain: {}", e.what());
   }
@@ -111,11 +119,17 @@ auto CompositionSwapChain::CreateRenderTargets() -> void
     ID3D12Resource* back_buffer { nullptr };
     ThrowOnFailed(swap_chain_->GetBuffer(i, IID_PPV_ARGS(&back_buffer)));
 
-    // Create Texture wrapper
+    // Create Texture wrapper - query actual resource dimensions from the
+    // native resource rather than using the placeholder 1x1 size.
+    D3D12_RESOURCE_DESC native_desc = back_buffer->GetDesc();
+
+    DLOG_F(2, "CompositionSwapChain::CreateRenderTargets created native backbuffer[{}] size={}x{} for swap_chain={}", i, static_cast<uint32_t>(std::min<uint64_t>(native_desc.Width, UINT32_MAX)), static_cast<uint32_t>(native_desc.Height), fmt::ptr(swap_chain_));
+
     TextureDesc desc;
     desc.debug_name = fmt::format("BackBuffer{}", i);
-    desc.width = 1; // TODO: Update on resize
-    desc.height = 1;
+    // Width in D3D12_RESOURCE_DESC is 64-bit; clamp to 32-bit here.
+    desc.width = static_cast<uint32_t>(std::min<uint64_t>(native_desc.Width, UINT32_MAX));
+    desc.height = static_cast<uint32_t>(native_desc.Height);
     // TODO: Use a proper conversion from DXGI_FORMAT to Format
     desc.format = Format::kRGBA8UNorm;
     desc.is_render_target = true;
@@ -125,19 +139,78 @@ auto CompositionSwapChain::CreateRenderTargets() -> void
       desc,
       NativeResource { back_buffer, ClassTypeId() },
       graphics_);
-
+    DLOG_F(3, "CompositionSwapChain::CreateRenderTargets created texture[{}] size={}x{}", i, desc.width, desc.height);
     render_targets_.emplace_back(std::move(texture));
   }
 }
 
-auto CompositionSwapChain::ReleaseRenderTargets() -> void
+auto CompositionSwapChain::ReleaseRenderTargets(bool immediate) -> void
 {
+  if (render_targets_.empty()) {
+    return;
+  }
+
+  if (immediate) {
+    // Immediate release: clear shared_ptrs so GetBuffer / ResizeBuffers will
+    // not be blocked by outstanding references.
+    DLOG_F(2, "CompositionSwapChain::ReleaseRenderTargets immediate clear (render_targets={})", render_targets_.size());
+    render_targets_.clear();
+    return;
+  }
+
+  // If we have a valid graphics instance, use the DeferredReclaimer so the
+  // D3D back-buffer resources are not final-released while the GPU may still
+  // have them referenced. This avoids OBJECT_DELETED_WHILE_STILL_IN_USE races
+  // that occur under rapid resize/unregister scenarios.
+  if (graphics_ != nullptr) {
+    try {
+      auto& reclaimer = static_cast<oxygen::Graphics*>(graphics_)->GetDeferredReclaimer();
+      for (auto& rt : render_targets_) {
+        // Transfer ownership to the deferred reclaimer; the texture shared_ptr
+        // will be reset here but its underlying resource will be released
+        // later when it's safe to do so (frame slot cycles).
+        oxygen::graphics::DeferredObjectRelease(rt, reclaimer);
+      }
+    }
+    catch (const std::exception& e) {
+      LOG_F(WARNING, "ReleaseRenderTargets: deferred release failed, falling back to immediate clear: {}", e.what());
+      render_targets_.clear();
+      return;
+    }
+  }
+  else {
+    // No graphics reclaimer available - fall back to immediate drop.
+    render_targets_.clear();
+    return;
+  }
+
+  // Container should be empty once ownership has been transferred.
   render_targets_.clear();
 }
 
 auto CompositionSwapChain::ReleaseSwapChain() -> void
 {
   ReleaseRenderTargets();
-  ObjectRelease(swap_chain_);
+
+  if (swap_chain_ == nullptr) {
+    return;
+  }
+
+  // Defer releasing the IDXGISwapChain object via the DeferredReclaimer when
+  // possible so the final COM Release() happens only after the frame/timeline
+  // indicates it is safe.
+  if (graphics_ != nullptr) {
+    try {
+      auto& reclaimer = static_cast<oxygen::Graphics*>(graphics_)->GetDeferredReclaimer();
+      oxygen::graphics::DeferredObjectRelease(swap_chain_, reclaimer);
+    }
+    catch (const std::exception& e) {
+      LOG_F(WARNING, "ReleaseSwapChain: deferred release failed, calling immediate Release(): {}", e.what());
+      ObjectRelease(swap_chain_);
+    }
+  }
+  else {
+    ObjectRelease(swap_chain_);
+  }
 }
 } // namespace oxygen::graphics::d3d12::detail

@@ -32,7 +32,7 @@ namespace detail {
     OXYGEN_COMPONENT(CompositionSwapChain)
   public:
     CompositionSwapChain(dx::ICommandQueue* command_queue, const DXGI_FORMAT format,
-      const Graphics* graphics);
+      Graphics* graphics);
 
     ~CompositionSwapChain() noexcept override;
 
@@ -74,12 +74,12 @@ namespace detail {
     friend class CompositionSurface;
     auto CreateSwapChain() -> void;
     auto CreateRenderTargets() -> void;
-    auto ReleaseRenderTargets() -> void;
+    auto ReleaseRenderTargets(bool immediate = false) -> void;
     auto ReleaseSwapChain() -> void;
 
     DXGI_FORMAT format_ { kDefaultBackBufferFormat };
     dx::ICommandQueue* command_queue_;
-    const Graphics* graphics_;
+    Graphics* graphics_;
 
     IDXGISwapChain4* swap_chain_ { nullptr };
 
