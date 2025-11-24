@@ -100,11 +100,67 @@ auto AsyncEngine::Shutdown() -> co::Co<>
 {
   // No need to flush the Graphics backend here, as it should have been done
   // already when the engine frame loop was terminating.
-  // Shutdown the platform event pump so out modules can finish up.
-  co_await platform_->Shutdown();
+  // Shutdown order: first stop modules (so they can safely access platform
+  // and graphics resources during their OnShutdown), then shutdown the
+  // platform to tear down native windows and event pumps.
 
-  // This will shut down all modules
+  // Drain outstanding GPU work and process any pending deferred releases
+  // registered during normal frame processing before we start shutting down
+  // modules. This ensures modules' destructors won't final-release resources
+  // while the GPU still has in-flight references.
+  if (!gfx_weak_.expired()) {
+    if (auto gfx = gfx_weak_.lock()) {
+      try {
+        LOG_F(INFO,
+          "AsyncEngine::Shutdown - pre-shutdown flush: draining GPU and "
+          "processing pending deferred releases");
+        gfx->Flush();
+      } catch (const std::exception& e) {
+        LOG_F(WARNING,
+          "AsyncEngine::Shutdown - pre-shutdown Graphics::Flush() threw: {}",
+          e.what());
+      } catch (...) {
+        LOG_F(WARNING,
+          "AsyncEngine::Shutdown - pre-shutdown Graphics::Flush() threw "
+          "unknown exception");
+      }
+    }
+  }
+
+  // This will shut down all modules synchronously (reverse order).
   module_manager_.reset();
+
+  // After modules have had an opportunity to perform shutdown work (which may
+  // include queue submissions or deferred-release registrations), ensure the
+  // Graphics backend is flushed so all GPU work is completed and the
+  // DeferredReclaimer has a chance to process its pending actions. Failing to
+  // flush here can lead to final-release of device objects that are still in
+  // use by the GPU which causes validation errors or crashes.
+  // After modules' OnShutdown() has run and destructors may have scheduled
+  // additional deferred releases, flush again to ensure the DeferredReclaimer
+  // processes those actions before we shutdown the platform.
+  if (!gfx_weak_.expired()) {
+    if (auto gfx = gfx_weak_.lock()) {
+      try {
+        LOG_F(INFO,
+          "AsyncEngine::Shutdown - post-shutdown flush: processing deferred "
+          "releases registered during module shutdown");
+        gfx->Flush();
+      } catch (const std::exception& e) {
+        LOG_F(WARNING,
+          "AsyncEngine::Shutdown - post-shutdown Graphics::Flush() threw: {}",
+          e.what());
+      } catch (...) {
+        LOG_F(WARNING,
+          "AsyncEngine::Shutdown - post-shutdown Graphics::Flush() threw "
+          "unknown exception");
+      }
+    }
+  }
+
+  // Now shutdown the platform event pump so modules are able to perform
+  // any required cleanup while platform objects are still alive.
+  co_await platform_->Shutdown();
 }
 
 auto AsyncEngine::Stop() -> void { shutdown_requested_ = true; }
@@ -158,8 +214,13 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
       break;
     }
     // Check for termination requests
-    if (platform_->Async().OnTerminate().Triggered()
-      || platform_->Windows().LastWindowClosed().Triggered()) {
+    // Engine termination should be driven explicitly by the platform's
+    // OnTerminate() signal (e.g. Ctrl-C or higher-level termination). Do
+    // NOT automatically stop the engine on LastWindowClosed: top-level
+    // application code (main_impl) is responsible for reacting to window
+    // lifecycle events and initiating an orderly shutdown via Stop(). This
+    // avoids duplicate/overlapping shutdown paths.
+    if (platform_->Async().OnTerminate().Triggered()) {
       LOG_F(INFO, "Termination requested, stopping frame loop...");
       break;
     }
@@ -669,6 +730,18 @@ auto AsyncEngine::PhaseFrameEnd(FrameContext& context) -> co::Co<>
   const auto total
     = duration_cast<microseconds>((frame_end.get() - frame_start_ts_.get()));
   LOG_F(2, "Frame {} end | total={}us", frame_number_, total.count());
+  // Let the platform finalize frame-level deferred operations (e.g. native
+  // window destruction). Doing this after EndFrame-present ensures the
+  // window and any per-frame resources are still valid during the frame and
+  // are torn down only at the frame boundary.
+  if (platform_) {
+    try {
+      LOG_F(2, "Calling Platform::OnFrameEnd at frame {}", frame_number_.get());
+      platform_->OnFrameEnd();
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "Platform::OnFrameEnd threw: {}", ex.what());
+    }
+  }
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
