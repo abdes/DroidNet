@@ -190,6 +190,11 @@ public:
   OXGN_GFX_NDAPI auto GetDeferredReclaimer()
     -> graphics::detail::DeferredReclaimer&;
 
+  //! Register a surface for deferred release so the final release occurs
+  //! inside the engine's render/frame timeline via DeferredReclaimer.
+  OXGN_GFX_NDAPI auto RegisterDeferredRelease(
+    std::shared_ptr<graphics::Surface> surface) -> void;
+
   //=== Rendering Resources factories ===-----------------------------------//
 
   OXGN_GFX_NDAPI auto CreateFramebuffer(const graphics::FramebufferDesc& desc)
