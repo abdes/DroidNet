@@ -217,28 +217,14 @@ constexpr UINT kRootIndex_Sampler_Table
   = static_cast<UINT>(oxygen::engine::binding::RootParam::kSamplerTable);
 } // namespace
 
-auto CommandRecorder::SetupDescriptorTables(
+auto CommandRecorder::SetupDescriptorHeaps(
   const std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void
 {
-  // Modern bindless approach: Bind the single unbounded SRV descriptor table.
-  // The heap(s) bound here must be the same as those used to allocate CBV/SRV
-  // handles in MainModule.cpp. This ensures the shader can access resources
-  // using ResourceDescriptorHeap with direct global indices.
   auto* d3d12_command_list = GetConcreteCommandList().GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  auto queue_role = GetCommandList().GetQueueRole();
-  DCHECK_F(
-    queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
-    "Invalid command list type for SetupDescriptorTables. Expected Graphics or "
-    "Compute, got: {}",
-    static_cast<int>(queue_role));
-
   std::vector<ID3D12DescriptorHeap*> heaps_to_set;
   // Collect all unique heaps first to call SetDescriptorHeaps once.
-  // This assumes that if CBV_SRV_UAV and Sampler heaps are different, they are
-  // distinct. If they could be the same heap object (not typical for D3D12
-  // types), logic would need adjustment.
   for (const auto& heap_info : heaps) {
     bool found = false;
     for (const ID3D12DescriptorHeap* existing_heap : heaps_to_set) {
@@ -258,6 +244,23 @@ auto CommandRecorder::SetupDescriptorTables(
     d3d12_command_list->SetDescriptorHeaps(
       static_cast<UINT>(heaps_to_set.size()), heaps_to_set.data());
   }
+}
+
+auto CommandRecorder::SetupDescriptorTables(
+  const std::span<const detail::ShaderVisibleHeapInfo> heaps) const -> void
+{
+  // Modern bindless approach: bind root descriptor tables for heaps that have
+  // been bound previously via SetupDescriptorHeaps(). The command list must
+  // already have a compatible root signature set.
+  auto* d3d12_command_list = GetConcreteCommandList().GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  auto queue_role = GetCommandList().GetQueueRole();
+  DCHECK_F(
+    queue_role == QueueRole::kGraphics || queue_role == QueueRole::kCompute,
+    "Invalid command list type for SetupDescriptorTables. Expected Graphics or "
+    "Compute, got: {}",
+    static_cast<int>(queue_role));
 
   auto set_table = [this, d3d12_command_list, queue_role](const UINT root_index,
                      const D3D12_GPU_DESCRIPTOR_HANDLE gpu_handle) {
@@ -385,11 +388,15 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
-  d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator = static_cast<DescriptorAllocator&>(
     const_cast<graphics::DescriptorAllocator&>(
       graphics->GetDescriptorAllocator()));
+  // Ensure descriptor heaps are bound before setting a root signature that may
+  // expect directly-indexed shader-visible heaps (D3D12 requirement). Bind
+  // heaps first, set the root signature, then bind root descriptor tables.
+  SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
+  d3d12_command_list->SetGraphicsRootSignature(root_signature);
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
 
   d3d12_command_list->SetPipelineState(pipeline_state);
@@ -411,12 +418,19 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
-  d3d12_command_list->SetGraphicsRootSignature(root_signature);
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator = static_cast<DescriptorAllocator&>(
     const_cast<graphics::DescriptorAllocator&>(
       graphics->GetDescriptorAllocator()));
+  // Ensure descriptor heaps are bound before setting a compute root signature
+  // which may depend on directly-indexed sampler/SRV heaps. Bind heaps, set
+  // root signature and then bind root descriptor tables.
+  SetupDescriptorHeaps(allocator.GetShaderVisibleHeaps());
+  d3d12_command_list->SetComputeRootSignature(root_signature);
   SetupDescriptorTables(allocator.GetShaderVisibleHeaps());
+  // Use the compute-specific root signature binder so we match command list
+  // expectations for compute workloads.
+  d3d12_command_list->SetComputeRootSignature(root_signature);
 
   // Name them for debugging
 
