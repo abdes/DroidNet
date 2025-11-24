@@ -133,24 +133,30 @@ enum class BarrierId : std::uint32_t {
 };
 using BarrierIndex = EnumAsIndex<BarrierId>;
 
-//! AllowMutation bitflags
+//! AllowMutation — bitflags for permitted mutation targets
 /*!
- AllowMutation indicates which state layers a phase is permitted to mutate.
- These are bitflags compatible with the project's `OXYGEN_FLAG` macro. Use the
- helper predicates on `PhaseDesc` or `meta::*` helpers to check permissions.
+ A compact set of bitflags that express which engine state layers a phase may
+ mutate. Values are intended for use in static phase descriptors and runtime
+ validation logic. Flags are created with the `OXYGEN_FLAG` macro and may be
+ combined with bitwise operators (see `OXYGEN_DEFINE_FLAGS_OPERATORS`).
 
- @note kFrameState represents transient per-frame outputs and is safe for
- mutation in integration phases. kGameState represents authoritative game state
- and requires stricter coordination.
+ Use the `PhaseDesc::allowed_mutations` member or the helpers in `meta::` (for
+ example `meta::PhaseCanMutateGameState`) to query permissions.
+
+ @note
+ - `kGameState` denotes authoritative, cross-frame game data that requires
+   strict coordination and is only safe to mutate from allowed phases.
+ - `kFrameState` denotes transient, per-frame artifacts (draw lists, per-job
+   outputs, command buffers, etc.) that may be produced during the frame and
+   integrated later.
+ - `kEngineState` denotes coordinator-visible engine registries and metadata
+   such as swapchain state, resource registries, and scheduling bookkeeping.
 */
 enum class AllowMutation : std::uint32_t {
   kNone = 0,
   kGameState = OXYGEN_FLAG(0),
-  // FrameState: transient, per-frame data produced during the frame (e.g.
-  // FrameGraph outputs, command buffers, per-frame uploads). These are not
-  // authoritative GameState and are safe to mutate during integration phases.
   kFrameState = OXYGEN_FLAG(1),
-  kEngineState = OXYGEN_FLAG(1),
+  kEngineState = OXYGEN_FLAG(2),
 };
 
 // Enable bitwise operators for AllowMutation
