@@ -42,7 +42,7 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
 
-#include "AsyncEngineApp.h"
+#include "../Common/AsyncEngineApp.h"
 #include "MainModule.h"
 
 using namespace oxygen;
@@ -54,7 +54,7 @@ namespace {
 
 //! Event loop tick: drives the engine's asio context (if supplied) and
 //! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
-auto EventLoopRun(const oxygen::examples::async::AsyncEngineApp& app) -> void
+auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
 {
   while (app.running.load(std::memory_order_relaxed)) {
 
@@ -73,21 +73,21 @@ auto EventLoopRun(const oxygen::examples::async::AsyncEngineApp& app) -> void
 } // namespace
 
 template <>
-struct co::EventLoopTraits<oxygen::examples::async::AsyncEngineApp> {
-  static auto Run(oxygen::examples::async::AsyncEngineApp& app) -> void
+struct co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
+  static auto Run(oxygen::examples::common::AsyncEngineApp& app) -> void
   {
     EventLoopRun(app);
   }
-  static auto Stop(oxygen::examples::async::AsyncEngineApp& app) -> void
+  static auto Stop(oxygen::examples::common::AsyncEngineApp& app) -> void
   {
     app.running.store(false, std::memory_order_relaxed);
   }
-  static auto IsRunning(const oxygen::examples::async::AsyncEngineApp& app)
+  static auto IsRunning(const oxygen::examples::common::AsyncEngineApp& app)
     -> bool
   {
     return app.running.load(std::memory_order_relaxed);
   }
-  static auto EventLoopId(oxygen::examples::async::AsyncEngineApp& app)
+  static auto EventLoopId(oxygen::examples::common::AsyncEngineApp& app)
     -> EventLoopID
   {
     return EventLoopID(&app);
@@ -96,7 +96,8 @@ struct co::EventLoopTraits<oxygen::examples::async::AsyncEngineApp> {
 
 namespace {
 
-auto RegisterEngineModules(oxygen::examples::async::AsyncEngineApp& app) -> void
+auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
+  -> void
 {
   // Register engine modules
   LOG_F(INFO, "Registering engine modules...");
@@ -144,7 +145,7 @@ auto RegisterEngineModules(oxygen::examples::async::AsyncEngineApp& app) -> void
   }
 }
 
-auto AsyncMain(oxygen::examples::async::AsyncEngineApp& app, uint32_t frames)
+auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
   -> co::Co<int>
 {
   // Structured concurrency scope.
@@ -168,6 +169,21 @@ auto AsyncMain(oxygen::examples::async::AsyncEngineApp& app, uint32_t frames)
     // Everything is started, now register modules
     RegisterEngineModules(app);
 
+    // Application policy: when the last window closes, the application
+    // should shut down. Previously the engine handled this automatically;
+    // after we moved that responsibility to the application layer, ensure
+    // the example stops the engine and platform when there are no windows
+    // remaining.
+    n.Start([&app, &n]() -> co::Co<> {
+      co_await app.platform->Windows().LastWindowClosed();
+      LOG_F(INFO,
+        "Async example: last window closed -> shutting down engine then "
+        "platform");
+
+      app.engine->Stop();
+      co_return;
+    });
+
     co_await app.engine->Completed();
 
     co_return co::kCancel;
@@ -185,7 +201,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
   uint32_t target_fps = 100U; // desired frame pacing
   bool headless = false;
   bool enable_vsync = true;
-  oxygen::examples::async::AsyncEngineApp app {};
+  oxygen::examples::common::AsyncEngineApp app {};
 
   try {
     CommandBuilder default_command(Command::DEFAULT);
@@ -296,7 +312,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
 
     const auto rc = co::Run(app, AsyncMain(app, frames));
 
-    app.engine->Stop();
     app.platform->Stop();
     app.engine.reset();
     if (!app.gfx_weak.expired()) {
@@ -310,9 +325,17 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     app.platform.reset();
 
     LOG_F(INFO, "exit code: {}", rc);
+    // Ensure any buffered log output is flushed before process exit so that
+    // external log collectors (or test harnesses) receive the final messages.
+    loguru::flush();
+    loguru::shutdown();
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
+    loguru::flush();
+    loguru::shutdown();
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Unhandled exception: {}", e.what());
+    loguru::flush();
+    loguru::shutdown();
   }
 }

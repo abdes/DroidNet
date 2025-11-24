@@ -27,12 +27,16 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Platform/input.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <imgui.h>
+
+#include "../Common/AsyncEngineApp.h"
+#include "../Common/ExampleModuleBase.h"
 
 #include <algorithm>
 #include <chrono>
@@ -165,22 +169,27 @@ static float ActionScalarValue(
   if (!a) {
     return 0.0f;
   }
-  // Try Axis2D first
-  try {
+
+  using oxygen::input::ActionValueType;
+  const auto vt = a->GetValueType();
+  switch (vt) {
+  case ActionValueType::kAxis2D: {
+    // Safe to access Axis2D
     const auto& axis = a->GetValue().GetAs<oxygen::Axis2D>();
     const float mag = std::sqrt(axis.x * axis.x + axis.y * axis.y);
     return (std::min)(mag, 1.0f);
-  } catch (const std::bad_variant_access&) {
-    // Not Axis2D; fallthrough
   }
-  // Try bool
-  try {
+  case ActionValueType::kAxis1D: {
+    const auto& ax = a->GetValue().GetAs<oxygen::Axis1D>();
+    return std::clamp(ax.x, -1.0f, 1.0f);
+  }
+  case ActionValueType::kBool: {
     const bool b = a->GetValue().GetAs<bool>();
     return b ? 1.0f : 0.0f;
-  } catch (const std::bad_variant_access&) {
-    // Not bool; default 0
   }
-  return 0.0f;
+  default:
+    return 0.0f;
+  }
 }
 
 // Helper: make a solid-color material asset snapshot (opaque by default)
@@ -226,13 +235,12 @@ auto CheckLimits(float& direction, float& new_distance) -> void
     direction = 1.0F;
   }
 }
-
 } // namespace
 
-namespace oxygen::engine::examples {
+namespace oxygen::examples::input {
 
-MainModule::MainModule(const AsyncEngineApp& app)
-  : app_(app)
+MainModule::MainModule(const common::AsyncEngineApp& app)
+  : Base(app)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
@@ -247,16 +255,13 @@ auto MainModule::OnAttached(
     return false;
   }
 
+  // Let the base class create the example window and lifecycle helpers
+  // (keeps examples DRY). Base::OnAttached will early-out for headless apps.
+  if (!Base::OnAttached(engine)) {
+    return false;
+  }
+
   if (!InitInputBindings()) {
-    return false;
-  }
-  if (!SetupMainWindow()) {
-    return false;
-  }
-  if (!SetupSurface()) {
-    return false;
-  }
-  if (!SetupFramebuffers()) {
     return false;
   }
 
@@ -267,27 +272,13 @@ void MainModule::OnShutdown() noexcept { }
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
-  // Set the scene.
-  if (!scene_) {
-    scene_ = std::make_shared<scene::Scene>("InputSystem-Scene");
-  }
-  context.SetScene(observer_ptr { scene_.get() });
-
-  // Register surface with the frame context
-  if (surface_) {
-    context.AddSurface(surface_);
-  }
-
-  // Configure ImGui to use our main window once after initialization
-  if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
-    auto& imgui_module = imgui_module_ref->get();
-    if (!window_weak_.expired()) {
-      imgui_module.SetWindowId(window_weak_.lock()->Id());
-    } else {
-      imgui_module.SetWindowId(platform::kInvalidWindowId);
-    }
-  }
+  // Delegate common per-example frame start handling to the base. The
+  // example-specific portion (scene creation & context.SetScene) is
+  // implemented in OnExampleFrameStart.
+  Base::OnFrameStart(context);
 }
+
+// (OnFrameStart logic moved to ExampleModuleBase::OnFrameStart)
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
@@ -340,16 +331,15 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
   // motion when the mapping clears values after micro-updates.
   if (pan_action_ && main_camera_.IsAlive()) {
     glm::vec2 pan_delta(0.0f);
-    for (const auto& tr : pan_action_->GetFrameTransitions()) {
-      // Attempt Axis2D; skip if not set
-      try {
+    // Guard by the action's declared value type to avoid throwing exceptions
+    if (pan_action_->GetValueType()
+      == oxygen::input::ActionValueType::kAxis2D) {
+      for (const auto& tr : pan_action_->GetFrameTransitions()) {
         const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
         if (std::abs(v.x) > 0.0f || std::abs(v.y) > 0.0f) {
           pan_delta.x += v.x;
           pan_delta.y += v.y;
         }
-      } catch (const std::bad_variant_access&) {
-        // Ignore non-Axis2D transitions
       }
     }
     if (std::abs(pan_delta.x) > 0.0f || std::abs(pan_delta.y) > 0.0f) {
@@ -411,8 +401,18 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnFrameGraph(engine::FrameContext& /*context*/) -> co::Co<>
 {
-  // Ensure render passes are created/configured
-  SetupRenderPasses();
+  // Ensure framebuffers are created after a resize (framebuffers are cleared
+  // on OnFrameStart when Surface::ShouldResize() was set). Recreate them here
+  // if necessary so the render graph has valid attachments.
+  DCHECK_NOTNULL_F(app_window_);
+  if (app_window_->GetFramebuffers().empty()) {
+    app_window_->EnsureFramebuffers();
+  }
+
+  // Ensure render passes are created/configured via the example RenderGraph
+  if (render_graph_) {
+    render_graph_->SetupRenderPasses();
+  }
 
   // Ensure ImGui context is set (safe to do here like in Async example)
   if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
@@ -424,9 +424,24 @@ auto MainModule::OnFrameGraph(engine::FrameContext& /*context*/) -> co::Co<>
   co_return;
 }
 
+auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
+{
+  LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
+
+  // Set or create the scene now that the base has handled window/lifecycle
+  // concerns for this frame.
+  if (!scene_) {
+    scene_ = std::make_shared<scene::Scene>("InputSystem-Scene");
+  }
+  context.SetScene(observer_ptr { scene_.get() });
+}
+
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
-  if (!surface_ || window_weak_.expired()) {
+  DCHECK_NOTNULL_F(app_window_);
+  const auto wnd_weak = app_window_->GetWindowWeak();
+  const auto surface = app_window_->GetSurface();
+  if (!surface || wnd_weak.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
     co_return;
   }
@@ -483,7 +498,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   // Ensure the main camera exists and has a valid viewport
   EnsureMainCamera(
-    static_cast<int>(surface_->Width()), static_cast<int>(surface_->Height()));
+    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
   // FIXME: view management is temporary
   context.AddView(std::make_shared<renderer::CameraView>(
@@ -495,14 +510,16 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     },
-    surface_));
+    surface));
 
   co_return;
 }
 
 auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 {
-  if (window_weak_.expired()) {
+  DCHECK_NOTNULL_F(app_window_);
+  const auto wnd_weak = app_window_->GetWindowWeak();
+  if (wnd_weak.expired()) {
     co_return;
   }
   // Set ImGui current context before making any ImGui calls
@@ -522,7 +539,10 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
 
-  if (!surface_ || window_weak_.expired()) {
+  DCHECK_NOTNULL_F(app_window_);
+  const auto wnd_weak = app_window_->GetWindowWeak();
+  const auto surface = app_window_->GetSurface();
+  if (!surface || wnd_weak.expired()) {
     LOG_F(3, "Window or Surface is no longer valid");
     co_return;
   }
@@ -546,48 +566,31 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   // backbuffer. The swapchain's backbuffer index may not match the engine's
   // frame slot due to resize or present timing; querying the surface avoids
   // D3D12 validation errors (WRONGSWAPCHAINBUFFERREFERENCE).
-  const auto backbuffer_index = surface_->GetCurrentBackBufferIndex();
-  if (framebuffers_.empty() || backbuffer_index >= framebuffers_.size()) {
+  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
+  DCHECK_NOTNULL_F(app_window_);
+  const auto& framebuffers = app_window_->GetFramebuffers();
+  if (framebuffers.empty() || backbuffer_index >= framebuffers.size()) {
     // Surface is not ready or has been torn down.
     co_return;
   }
-  const auto fb = framebuffers_.at(backbuffer_index);
+  const auto fb = framebuffers.at(backbuffer_index);
   if (!fb) {
     co_return;
   }
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 
-  // Create render context for renderer
-  render_context_.framebuffer = fb;
+  // Create render context for renderer (delegated to RenderGraph component)
+  DCHECK_NOTNULL_F(render_graph_);
+  render_graph_->PrepareForRenderFrame(fb);
 
   // Execute render graph using the configured passes
   co_await app_.renderer->ExecuteRenderGraph(
     [&](const engine::RenderContext& context) -> co::Co<> {
-      // Depth Pre-Pass execution
-      if (depth_pass_) {
-        co_await depth_pass_->PrepareResources(context, *recorder);
-        co_await depth_pass_->Execute(context, *recorder);
-      }
-      // Shader Pass execution
-      if (shader_pass_) {
-        co_await shader_pass_->PrepareResources(context, *recorder);
-        co_await shader_pass_->Execute(context, *recorder);
-      }
-      // Transparent Pass execution (reuses color/depth from framebuffer)
-      if (transparent_pass_) {
-        // Assign attachments each frame (framebuffer back buffer + depth)
-        if (fb) {
-          transparent_pass_config_->color_texture
-            = fb->GetDescriptor().color_attachments[0].texture;
-          if (fb->GetDescriptor().depth_attachment.IsValid()) {
-            transparent_pass_config_->depth_texture
-              = fb->GetDescriptor().depth_attachment.texture;
-          }
-        }
-        co_await transparent_pass_->PrepareResources(context, *recorder);
-        co_await transparent_pass_->Execute(context, *recorder);
-      }
+      // Run the example's configured render passes. This delegates the
+      // PrepareResources -> Execute sequence to the shared RenderGraph
+      // component so per-example modules don't need to duplicate the calls.
+      co_await render_graph_->RunPasses(context, *recorder);
       // --- ImGuiPass configuration ---
       auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
       if (imgui_module_ref) {
@@ -598,95 +601,20 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
         }
       }
     },
-    render_context_, context);
+    render_graph_->GetRenderContext(), context);
 }
 
-auto MainModule::SetupMainWindow() -> bool
-{
-  using WindowProps = oxygen::platform::window::Properties;
+// Window creation is managed by ExampleModuleBase/AppWindow — no local
+// SetupMainWindow is necessary for this module.
 
-  // Set up the main window
-  WindowProps props("Oxygen Graphics Demo - AsyncEngine");
-  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  props.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  window_weak_ = app_.platform->Windows().MakeWindow(props);
-  if (const auto window = window_weak_.lock()) {
-    LOG_F(INFO, "Main window {} is created", window->Id());
-    return true;
-  }
-  return false;
-}
-
-auto MainModule::SetupSurface() -> bool
-{
-  CHECK_F(!app_.gfx_weak.expired());
-  CHECK_F(!window_weak_.expired());
-
-  const auto gfx = app_.gfx_weak.lock();
-
-  auto queue = gfx->GetCommandQueue(graphics::QueueRole::kGraphics);
-  if (!queue) {
-    LOG_F(ERROR, "No graphics command queue available to create surface");
-    return false;
-  }
-  surface_ = gfx->CreateSurface(window_weak_, queue);
-  surface_->SetName("Main Window Surface (AsyncEngine)");
-  LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(),
-    window_weak_.lock()->Id());
-  return true;
-}
-
-auto MainModule::SetupRenderPasses() -> void
-{
-  LOG_SCOPE_F(3, "MainModule::SetupRenderPasses");
-
-  // --- DepthPrePass configuration ---
-  if (!depth_pass_config_) {
-    depth_pass_config_ = std::make_shared<engine::DepthPrePassConfig>();
-    depth_pass_config_->debug_name = "DepthPrePass";
-  }
-  if (!depth_pass_) {
-    depth_pass_ = std::make_shared<engine::DepthPrePass>(depth_pass_config_);
-  }
-
-  // --- ShaderPass configuration ---
-  if (!shader_pass_config_) {
-    shader_pass_config_ = std::make_shared<engine::ShaderPassConfig>();
-    shader_pass_config_->clear_color
-      = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F }; // Custom clear color
-    shader_pass_config_->debug_name = "ShaderPass";
-  }
-  if (!shader_pass_) {
-    shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
-  }
-
-  // --- TransparentPass configuration ---
-  if (!transparent_pass_config_) {
-    transparent_pass_config_
-      = std::make_shared<engine::TransparentPass::Config>();
-    transparent_pass_config_->debug_name = "TransparentPass";
-  }
-  // Color/depth textures are assigned each frame just before execution (in
-  // ExecuteRenderCommands)
-  if (!transparent_pass_) {
-    transparent_pass_
-      = std::make_shared<engine::TransparentPass>(transparent_pass_config_);
-  }
-}
+// SetupRenderPasses is now part of the shared Examples/Common RenderGraph
+// component. MainModule should call render_graph_->SetupRenderPasses when
+// needed instead of having a private copy.
 
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
   using scene::PerspectiveCamera;
   using scene::camera::ProjectionConvention;
-
   if (!scene_) {
     return;
   }
@@ -727,13 +655,13 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 
 auto MainModule::InitInputBindings() noexcept -> bool
 {
-  using input::Action;
-  using input::ActionTriggerDown;
-  using input::ActionTriggerPressed;
-  using input::ActionTriggerTap;
-  using input::ActionValueType;
-  using input::InputActionMapping;
-  using input::InputMappingContext;
+  using oxygen::input::Action;
+  using oxygen::input::ActionTriggerDown;
+  using oxygen::input::ActionTriggerPressed;
+  using oxygen::input::ActionTriggerTap;
+  using oxygen::input::ActionValueType;
+  using oxygen::input::InputActionMapping;
+  using oxygen::input::InputMappingContext;
 
   using platform::InputSlots;
 
@@ -902,41 +830,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
   app_.input_system->ActivateMappingContext(ground_movement_ctx_);
   app_.input_system->ActivateMappingContext(camera_controls_ctx_);
 
-  return true;
-}
-
-auto MainModule::SetupFramebuffers() -> bool
-{
-  CHECK_F(!app_.gfx_weak.expired());
-  CHECK_F(surface_ != nullptr, "Surface must be created before framebuffers");
-  auto gfx = app_.gfx_weak.lock();
-
-  // Get actual surface dimensions (important for full-screen mode)
-  const auto surface_width = surface_->Width();
-  const auto surface_height = surface_->Height();
-
-  framebuffers_.clear();
-  for (auto i = 0U; i < frame::kFramesInFlight.get(); ++i) {
-    graphics::TextureDesc depth_desc;
-    depth_desc.width = surface_width;
-    depth_desc.height = surface_height;
-    depth_desc.format = Format::kDepth32;
-    depth_desc.texture_type = TextureType::kTexture2D;
-    depth_desc.is_shader_resource = true;
-    depth_desc.is_render_target = true;
-    depth_desc.use_clear_value = true;
-    depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
-    depth_desc.initial_state = graphics::ResourceStates::kDepthWrite;
-    const auto depth_tex = gfx->CreateTexture(depth_desc);
-
-    auto desc = graphics::FramebufferDesc {}
-                  .AddColorAttachment(surface_->GetBackBuffer(i))
-                  .SetDepthAttachment(depth_tex);
-
-    framebuffers_.push_back(gfx->CreateFramebuffer(desc));
-    CHECK_NOTNULL_F(
-      framebuffers_[i], "Failed to create framebuffer for main window");
-  }
   return true;
 }
 
@@ -1155,4 +1048,4 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   ImGui::End();
 }
 
-} // namespace oxygen::engine::examples
+} // namespace oxygen::examples::input

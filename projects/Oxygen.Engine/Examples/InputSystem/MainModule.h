@@ -8,45 +8,23 @@
 
 #include <memory>
 
+#include "../Common/AsyncEngineApp.h"
+#include "../Common/ExampleModuleBase.h"
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
 #include <glm/glm.hpp>
 
-#include "AsyncEngineApp.h"
+namespace oxygen::examples::input {
 
-namespace oxygen::input {
-class Action;
-class InputMappingContext;
-} // namespace oxygen::input
-
-namespace oxygen::platform {
-class Window;
-} // namespace oxygen::platform
-
-namespace oxygen::graphics {
-class Surface;
-class Framebuffer;
-} // namespace oxygen::graphics
-
-namespace oxygen::engine {
-class FrameContext;
-} // namespace oxygen::engine
-
-namespace oxygen::engine::examples {
-
-class MainModule : public oxygen::engine::EngineModule {
+class MainModule : public common::ExampleModuleBase {
   OXYGEN_TYPED(MainModule)
 public:
-  using Base = oxygen::engine::EngineModule;
+  using Base = oxygen::examples::common::ExampleModuleBase;
 
-  explicit MainModule(const AsyncEngineApp& app);
+  explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
 
   // EngineModule metadata overrides
   // -------------------------------------------------
@@ -82,6 +60,9 @@ public:
 
   // EngineModule phase handlers we participate in
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
+  // Hook called by ExampleModuleBase::OnFrameStart for example-specific
+  // setup like scene creation and context.SetScene.
+  auto OnExampleFrameStart(engine::FrameContext& context) -> void override;
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
@@ -91,35 +72,20 @@ public:
 
 private:
   auto InitInputBindings() noexcept -> bool;
-  auto SetupMainWindow() -> bool;
-  auto SetupSurface() -> bool;
-  auto SetupFramebuffers() -> bool;
-  auto SetupRenderPasses() -> void;
-
   auto EnsureMainCamera(const int width, const int height) -> void;
-
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
 
-  const AsyncEngineApp& app_;
+  // The ExampleModuleBase provides `app_` and common window/render helpers.
 
   //! Scene and rendering.
-  engine::RenderContext render_context_;
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode sphere_node_; // Sphere for jump animation
 
-  //! Render passes (configured during frame graph, executed during command
-  //! record).
-  std::shared_ptr<engine::DepthPrePass> depth_pass_;
-  std::shared_ptr<engine::DepthPrePassConfig> depth_pass_config_;
-  std::shared_ptr<engine::ShaderPass> shader_pass_;
-  std::shared_ptr<engine::ShaderPassConfig> shader_pass_config_;
-  std::shared_ptr<engine::TransparentPass> transparent_pass_;
-  std::shared_ptr<engine::TransparentPass::Config> transparent_pass_config_;
+  //! RenderGraph component in the base provides the RenderContext and passes
+  //! used by this module.
 
-  std::weak_ptr<platform::Window> window_weak_;
-  std::shared_ptr<graphics::Surface> surface_;
-  std::vector<std::shared_ptr<graphics::Framebuffer>> framebuffers_;
+  // window + lifecycle + framebuffer storage live in base class
 
   // Stored actions for querying state later during frames
   std::shared_ptr<oxygen::input::Action> shift_action_;
@@ -157,4 +123,4 @@ private:
   bool pending_ground_reset_ { false };
 };
 
-} // namespace oxygen::engine::examples
+} // namespace oxygen::examples::input

@@ -55,7 +55,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
-#include "AsyncEngineApp.h"
+#include "../Common/AsyncEngineApp.h"
+#include "../Common/RenderGraph.h"
 #include "MainModule.h"
 
 using oxygen::examples::async::MainModule;
@@ -448,8 +449,11 @@ auto AnimateSphereOrbit(oxygen::scene::SceneNode& sphere_node, double angle,
 
 } // namespace
 
-MainModule::MainModule(const AsyncEngineApp& app)
-  : app_(app)
+namespace oxygen::examples::async {
+
+MainModule::MainModule(const common::AsyncEngineApp& app)
+  : Base(app)
+  , app_(app)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
@@ -460,20 +464,11 @@ MainModule::MainModule(const AsyncEngineApp& app)
 
 MainModule::~MainModule()
 {
-  // Cleanup graphics resources
-  if (!app_.gfx_weak.expired()) {
-    const auto gfx = app_.gfx_weak.lock();
-    const graphics::SingleQueueStrategy queues;
-    if (auto queue
-      = gfx->GetCommandQueue(queues.KeyFor(graphics::QueueRole::kGraphics))) {
-      // queue->Flush(); // Commented out until we fix the interface
-    }
-  }
-
-  framebuffers_.clear();
-  surface_.reset();
+  // Cleanup scene
   scene_.reset();
   // app_ is non-owning; do not reset here
+  // Window, surface, and framebuffers are managed by AppWindow component (via
+  // base)
 }
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
@@ -484,6 +479,52 @@ auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
     PhaseId::kCommandRecord, PhaseId::kFrameEnd>();
 }
 
+auto MainModule::BuildDefaultWindowProperties() const
+  -> oxygen::platform::window::Properties
+{
+  oxygen::platform::window::Properties props(
+    "Oxygen Graphics Demo - AsyncEngine");
+  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
+  props.flags = {
+    .hidden = false,
+    .always_on_top = false,
+    .full_screen = app_.fullscreen,
+    .maximized = false,
+    .minimized = false,
+    .resizable = true,
+    .borderless = false,
+  };
+  return props;
+}
+
+auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
+{
+  LOG_SCOPE_F(3, "MainModule::OnExampleFrameStart");
+
+  // Initialize on first frame: setup Async-specific features
+  if (!initialized_) {
+    SetupShaders();
+    SetupInput();
+    EnsureExampleScene();
+
+    // --- ImGuiPass configuration ---
+    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      auto& imgui_module = imgui_module_ref->get();
+      if (app_window_) {
+        imgui_module.SetWindowId(app_window_->GetWindowId());
+      }
+    }
+
+    initialized_ = true;
+  }
+
+  // Register scene with frame context (required for rendering)
+  if (scene_) {
+    context.SetScene(oxygen::observer_ptr { scene_.get() });
+  }
+}
+
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameStart");
@@ -492,52 +533,12 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
   StartFrameTracking();
   TrackFrameAction("Frame started");
 
-  // Initialize on first frame
-  if (!initialized_) {
-    SetupMainWindow();
-    SetupSurface();
-    SetupRenderer();
-    SetupShaders();
-    SetupInput();
+  // Call base to handle window lifecycle and surface setup
+  Base::OnFrameStart(context);
 
-    // --- ImGuiPass configuration ---
-    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-    if (imgui_module_ref) {
-      auto& imgui_module = imgui_module_ref->get();
-      imgui_module.SetWindowId(window_weak_.lock()->Id());
-    }
-
-    initialized_ = true;
-  }
-
-  // Check if window is closed
-  if (window_weak_.expired()) {
-    // Window expired, reset surface
-    LOG_F(WARNING, "Window expired, resetting surface");
-    surface_.reset();
-    context.RemoveSurfaceAt(0); // FIXME: find our surface index
-    // Disable ImGui rendering for the closed window
-    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-    if (imgui_module_ref) {
-      auto& imgui_module = imgui_module_ref->get();
-      imgui_module.SetWindowId(platform::kInvalidWindowId);
-    }
-
-    return;
-  }
-
-  // Add our surface to the FrameContext every frame (part of module contract)
-  // NOTE: FrameContext is recreated each frame, so we must populate it every
-  // time
-  DCHECK_NOTNULL_F(surface_);
-  context.AddSurface(surface_);
-  LOG_F(3, "Surface '{}' added to FrameContext for frame", surface_->GetName());
-
-  // Ensure scene and camera are set up
-  EnsureExampleScene();
-  context.SetScene(observer_ptr { scene_.get() });
-
-  TrackFrameAction("Scene and camera configured");
+  // AppWindow component handles framebuffer lifecycle, including clearing
+  // before resize. RenderGraph handles render pass configuration cleanup.
+  // Surface resize is also handled by AppWindow.
 }
 
 // Initialize a default looping flight path over the scene (few control points)
@@ -772,14 +773,21 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
-  if (!surface_ || window_weak_.expired()) {
+  if (!app_window_) {
     LOG_F(3, "Window or Surface is no longer valid");
     TrackPhaseEnd();
     co_return;
   }
 
+  const auto surface = app_window_->GetSurface();
+  if (!surface) {
+    LOG_F(3, "Surface is no longer valid");
+    TrackPhaseEnd();
+    co_return;
+  }
+
   EnsureMainCamera(
-    static_cast<int>(surface_->Width()), static_cast<int>(surface_->Height()));
+    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
   // FIXME: view management is temporary
   context.AddView(std::make_shared<renderer::CameraView>(
@@ -791,7 +799,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     },
-    surface_));
+    surface));
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -816,7 +824,7 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   current_frame_tracker_.transform_propagation_occurred = true;
   TrackFrameAction("Transform propagation phase started");
 
-  if (!surface_ || window_weak_.expired()) {
+  if (!app_window_) {
     LOG_F(3, "Window or Surface is no longer valid");
     TrackPhaseEnd();
     co_return;
@@ -886,10 +894,17 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.frame_graph_setup = true;
   TrackFrameAction("Frame graph setup started");
 
-  if (!surface_ || window_weak_.expired()) {
+  if (!app_window_) {
     LOG_F(3, "Window or Surface is no longer valid");
     TrackPhaseEnd();
     co_return;
+  }
+
+  // Ensure framebuffers are created after a resize (framebuffers are cleared
+  // on OnFrameStart when Surface::ShouldResize() was set). Recreate them here
+  // if necessary so the render graph has valid attachments.
+  if (app_window_->GetFramebuffers().empty()) {
+    app_window_->EnsureFramebuffers();
   }
 
   // Set ImGui context before making ImGui calls
@@ -901,15 +916,18 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // ImGui overlay moved to GUI phase; FrameGraph no longer builds ImGui UI
+  // Ensure render passes are created/configured via the example RenderGraph
+  if (render_graph_) {
+    render_graph_->SetupRenderPasses();
 
-  // Setup framebuffers if needed
-  if (framebuffers_.empty()) {
-    SetupFramebuffers();
+    // Configure pass-specific settings (clear color, debug names, etc.)
+    auto shader_pass_config = render_graph_->GetShaderPassConfig();
+    if (shader_pass_config) {
+      shader_pass_config->clear_color
+        = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
+      shader_pass_config->debug_name = "ShaderPass";
+    }
   }
-
-  // Setup render passes (frame graph configuration)
-  SetupRenderPasses();
 
   TrackFrameAction("Frame graph and render passes configured");
   TrackPhaseEnd();
@@ -921,8 +939,9 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
   TrackPhaseStart("GUI Update");
 
-  if (window_weak_.expired()) {
-    TrackFrameAction("GUI update skipped - window expired");
+  // Window must be available to render GUI
+  if (!app_window_) {
+    TrackFrameAction("GUI update skipped - app window not available");
     TrackPhaseEnd();
     co_return;
   }
@@ -951,7 +970,7 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.command_recording = true;
   TrackFrameAction("Command recording started");
 
-  if (!surface_ || window_weak_.expired()) {
+  if (!app_window_) {
     LOG_F(3, "Window or Surface is no longer valid");
     TrackFrameAction("Command recording skipped - no surface");
     TrackPhaseEnd();
@@ -977,50 +996,6 @@ auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 
   TrackFrameAction("Frame ended");
   EndFrameTracking();
-}
-
-auto MainModule::SetupMainWindow() -> void
-{
-  // Set up the main window
-  WindowProps props("Oxygen Graphics Demo - AsyncEngine");
-  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  props.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  window_weak_ = app_.platform->Windows().MakeWindow(props);
-  if (const auto window = window_weak_.lock()) {
-    LOG_F(INFO, "Main window {} is created", window->Id());
-  }
-}
-
-auto MainModule::SetupSurface() -> void
-{
-  CHECK_F(!app_.gfx_weak.expired());
-  CHECK_F(!window_weak_.expired());
-
-  const auto gfx = app_.gfx_weak.lock();
-
-  auto queue = gfx->GetCommandQueue(graphics::QueueRole::kGraphics);
-  if (!queue) {
-    LOG_F(ERROR, "No graphics command queue available to create surface");
-    throw std::runtime_error("No graphics command queue available");
-  }
-  surface_ = gfx->CreateSurface(window_weak_, queue);
-  surface_->SetName("Main Window Surface (AsyncEngine)");
-  LOG_F(INFO, "Surface ({}) created for main window ({})", surface_->GetName(),
-    window_weak_.lock()->Id());
-}
-
-auto MainModule::SetupRenderer() -> void
-{
-  CHECK_NOTNULL_F(app_.renderer, "Renderer was not provided to MainModule");
-  LOG_F(INFO, "Using provided Renderer for AsyncEngine");
 }
 
 auto MainModule::SetupInput() -> void
@@ -1088,40 +1063,6 @@ auto MainModule::SetupInput() -> void
   app_.input_system->ActivateMappingContext(input_ctx_);
   LOG_F(INFO,
     "Input bindings set: W(speed up, autorepeat), S(slow down, autorepeat)");
-}
-
-auto MainModule::SetupFramebuffers() -> void
-{
-  CHECK_F(!app_.gfx_weak.expired());
-  CHECK_F(surface_ != nullptr, "Surface must be created before framebuffers");
-  auto gfx = app_.gfx_weak.lock();
-
-  // Get actual surface dimensions (important for full-screen mode)
-  const auto surface_width = surface_->Width();
-  const auto surface_height = surface_->Height();
-
-  framebuffers_.clear();
-  for (auto i = 0U; i < frame::kFramesInFlight.get(); ++i) {
-    graphics::TextureDesc depth_desc;
-    depth_desc.width = surface_width;
-    depth_desc.height = surface_height;
-    depth_desc.format = Format::kDepth32;
-    depth_desc.texture_type = TextureType::kTexture2D;
-    depth_desc.is_shader_resource = true;
-    depth_desc.is_render_target = true;
-    depth_desc.use_clear_value = true;
-    depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
-    depth_desc.initial_state = graphics::ResourceStates::kDepthWrite;
-    const auto depth_tex = gfx->CreateTexture(depth_desc);
-
-    auto desc = graphics::FramebufferDesc {}
-                  .AddColorAttachment(surface_->GetBackBuffer(i))
-                  .SetDepthAttachment(depth_tex);
-
-    framebuffers_.push_back(gfx->CreateFramebuffer(desc));
-    CHECK_NOTNULL_F(
-      framebuffers_[i], "Failed to create framebuffer for main window");
-  }
 }
 
 auto MainModule::SetupShaders() -> void
@@ -1366,44 +1307,6 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
   }
 }
 
-auto MainModule::SetupRenderPasses() -> void
-{
-  LOG_SCOPE_F(3, "MainModule::SetupRenderPasses");
-
-  // --- DepthPrePass configuration ---
-  if (!depth_pass_config_) {
-    depth_pass_config_ = std::make_shared<engine::DepthPrePassConfig>();
-    depth_pass_config_->debug_name = "DepthPrePass";
-  }
-  if (!depth_pass_) {
-    depth_pass_ = std::make_shared<engine::DepthPrePass>(depth_pass_config_);
-  }
-
-  // --- ShaderPass configuration ---
-  if (!shader_pass_config_) {
-    shader_pass_config_ = std::make_shared<engine::ShaderPassConfig>();
-    shader_pass_config_->clear_color
-      = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F }; // Custom clear color
-    shader_pass_config_->debug_name = "ShaderPass";
-  }
-  if (!shader_pass_) {
-    shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
-  }
-
-  // --- TransparentPass configuration ---
-  if (!transparent_pass_config_) {
-    transparent_pass_config_
-      = std::make_shared<engine::TransparentPass::Config>();
-    transparent_pass_config_->debug_name = "TransparentPass";
-  }
-  // Color/depth textures are assigned each frame just before execution (in
-  // ExecuteRenderCommands)
-  if (!transparent_pass_) {
-    transparent_pass_
-      = std::make_shared<engine::TransparentPass>(transparent_pass_config_);
-  }
-}
-
 auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   -> co::Co<>
 {
@@ -1413,18 +1316,14 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   current_frame_tracker_.render_items_count
     = static_cast<std::uint32_t>(spheres_.size() + 1);
 
-  // Early-out if graphics, scene, window, or surface are not available. This
-  // can happen during shutdown or immediately after the window has been
-  // closed, while modules may still receive callbacks within the frame.
-  if (app_.gfx_weak.expired() || !scene_ || !surface_) {
+  // Early-out if graphics, scene, window, or surface are not available.
+  if (app_.gfx_weak.expired() || !scene_ || !app_window_) {
     co_return;
   }
-  if (window_weak_.expired()) {
-    auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-    if (imgui_module_ref) {
-      auto& imgui_module = imgui_module_ref->get();
-      imgui_module.SetWindowId(platform::kInvalidWindowId);
-    }
+
+  const auto surface = app_window_->GetSurface();
+  if (!surface) {
+    co_return;
   }
 
   auto gfx = app_.gfx_weak.lock();
@@ -1443,54 +1342,35 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
     co_return;
   }
 
-  // Always render to the framebuffer that wraps the swapchain's current
-  // backbuffer. The swapchain's backbuffer index may not match the engine's
-  // frame slot due to resize or present timing; querying the surface avoids
-  // D3D12 validation errors (WRONGSWAPCHAINBUFFERREFERENCE).
-  const auto backbuffer_index = surface_->GetCurrentBackBufferIndex();
-  if (framebuffers_.empty() || backbuffer_index >= framebuffers_.size()) {
+  // Get framebuffers from AppWindow component
+  const auto& framebuffers = app_window_->GetFramebuffers();
+  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
+  if (framebuffers.empty() || backbuffer_index >= framebuffers.size()) {
     // Surface is not ready or has been torn down.
     co_return;
   }
-  const auto fb = framebuffers_.at(backbuffer_index);
+  const auto fb = framebuffers.at(backbuffer_index);
   if (!fb) {
     co_return;
   }
   fb->PrepareForRender(*recorder);
   recorder->BindFrameBuffer(*fb);
 
-  // Create render context for renderer
-  render_context_.framebuffer = fb;
+  // Get render graph component from base class
+  if (!render_graph_) {
+    LOG_F(ERROR, "RenderGraph component not available");
+    co_return;
+  }
+
+  // Prepare render graph for this frame (wires up framebuffer attachments)
+  render_graph_->PrepareForRenderFrame(fb);
 
   // Execute render graph using the configured passes
   co_await app_.renderer->ExecuteRenderGraph(
-    [&](const engine::RenderContext& context) -> co::Co<> {
-      // Depth Pre-Pass execution
-      if (depth_pass_) {
-        co_await depth_pass_->PrepareResources(context, *recorder);
-        co_await depth_pass_->Execute(context, *recorder);
-      }
-      // Shader Pass execution
-      if (shader_pass_) {
-        co_await shader_pass_->PrepareResources(context, *recorder);
-        co_await shader_pass_->Execute(context, *recorder);
-      }
-      // Transparent Pass execution (reuses color/depth from framebuffer)
-      if (transparent_pass_) {
-        // Assign attachments each frame (framebuffer back buffer + depth)
-        if (fb && !framebuffers_.empty()) {
-          // Color: back buffer texture for current frame
-          transparent_pass_config_->color_texture
-            = fb->GetDescriptor().color_attachments[0].texture;
-          // Depth: same depth texture used by depth pass
-          if (fb->GetDescriptor().depth_attachment.IsValid()) {
-            transparent_pass_config_->depth_texture
-              = fb->GetDescriptor().depth_attachment.texture;
-          }
-        }
-        co_await transparent_pass_->PrepareResources(context, *recorder);
-        co_await transparent_pass_->Execute(context, *recorder);
-      }
+    [&](const engine::RenderContext& render_context) -> co::Co<> {
+      // Run all passes via RenderGraph (DepthPrePass, ShaderPass,
+      // TransparentPass)
+      co_await render_graph_->RunPasses(render_context, *recorder);
 
       // --- ImGuiPass configuration ---
       auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -1502,7 +1382,7 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
         }
       }
     },
-    render_context_, context);
+    render_graph_->GetRenderContext(), context);
 
   LOG_F(3, "Command recording completed for frame {}", current_frame);
 
@@ -1843,13 +1723,23 @@ auto MainModule::DrawRenderPassesPanel() -> void
   ImGui::Text("Configured Passes:");
   ImGui::Indent();
 
-  const char* pass_icon = depth_pass_ ? "[OK]" : "[--]";
+  // Get render passes from RenderGraph component in base class
+  bool depth_pass_ok = false;
+  bool shader_pass_ok = false;
+  bool transparent_pass_ok = false;
+  if (render_graph_) {
+    depth_pass_ok = render_graph_->GetDepthPass() != nullptr;
+    shader_pass_ok = render_graph_->GetShaderPass() != nullptr;
+    transparent_pass_ok = render_graph_->GetTransparentPass() != nullptr;
+  }
+
+  const char* pass_icon = depth_pass_ok ? "[OK]" : "[--]";
   ImGui::Text("%s Depth Pre-Pass", pass_icon);
 
-  pass_icon = shader_pass_ ? "[OK]" : "[--]";
+  pass_icon = shader_pass_ok ? "[OK]" : "[--]";
   ImGui::Text("%s Shader Pass", pass_icon);
 
-  pass_icon = transparent_pass_ ? "[OK]" : "[--]";
+  pass_icon = transparent_pass_ok ? "[OK]" : "[--]";
   ImGui::Text("%s Transparent Pass", pass_icon);
 
   ImGui::Unindent();
@@ -1858,16 +1748,27 @@ auto MainModule::DrawRenderPassesPanel() -> void
   ImGui::Spacing();
   ImGui::Text("Framebuffers:");
   ImGui::Indent();
-  ImGui::Text("Count: %zu", framebuffers_.size());
+  if (app_window_) {
+    const auto& framebuffers = app_window_->GetFramebuffers();
+    ImGui::Text("Count: %zu", framebuffers.size());
+  } else {
+    ImGui::Text("Count: 0 (no window)");
+  }
   ImGui::Unindent();
 
   // Surface info
-  if (surface_) {
-    ImGui::Spacing();
-    ImGui::Text("Surface: Active");
+  if (app_window_) {
+    const auto surface = app_window_->GetSurface();
+    if (surface) {
+      ImGui::Spacing();
+      ImGui::Text("Surface: Active");
+    } else {
+      ImGui::TextColored(
+        ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[WARN] Surface: Not Available");
+    }
   } else {
     ImGui::TextColored(
-      ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "[WARN] Surface: Not Available");
+      ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "[ERROR] AppWindow: Not Available");
   }
 }
 
@@ -1925,3 +1826,5 @@ auto MainModule::EndFrameTracking() -> void
     frame_history_.erase(frame_history_.begin());
   }
 }
+
+} // namespace oxygen::examples::async
