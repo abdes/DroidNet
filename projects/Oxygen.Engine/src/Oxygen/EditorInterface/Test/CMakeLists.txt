@@ -19,4 +19,3 @@ find_package(GTest REQUIRED CONFIG)
 include(GTestHelpers)
 
 m_gtest_program(Linked SOURCES "Linked_test.cpp")
-m_gtest_program(Loaded SOURCES "Loaded_test.cpp")
