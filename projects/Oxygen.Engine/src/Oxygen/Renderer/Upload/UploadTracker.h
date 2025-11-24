@@ -58,6 +58,14 @@ public:
   OXGN_RNDR_API auto AwaitAll(std::span<const UploadTicket> tickets)
     -> std::expected<std::vector<UploadResult>, UploadError>;
 
+  // Wait for all currently pending (non-completed) tickets tracked by the
+  // UploadTracker. This is a best-effort helper for shutdown: it collects
+  // the set of outstanding tickets and waits until they complete. If ticket
+  // entries are erased while waiting (frame lifecycle cleanup), the method
+  // will retry until no pending tickets remain.
+  OXGN_RNDR_API auto AwaitAllPending()
+    -> std::expected<std::vector<UploadResult>, UploadError>;
+
   // Coroutine helper accessors
   OXGN_RNDR_API auto CompletedFence() const noexcept -> FenceValue;
   OXGN_RNDR_API auto CompletedFenceValue() noexcept
@@ -65,6 +73,12 @@ public:
 
   // Best-effort cancellation: if found and not yet completed, mark canceled.
   OXGN_RNDR_API auto Cancel(TicketId id) -> std::expected<bool, UploadError>;
+  // Query whether there are any pending (not yet completed) entries.
+  OXGN_RNDR_API auto HasPending() const -> bool;
+  // Returns the highest fence value that has been registered. Use during
+  // shutdown to wait for any recorded submissions even when per-ticket
+  // entries are erased due to frame lifecycle cleanup.
+  OXGN_RNDR_API auto LastRegisteredFence() const -> FenceValue;
   // Frame lifecycle management: cleanup entries for cycling slot
   OXGN_RNDR_API auto OnFrameStart(UploaderTag, frame::Slot slot) -> void;
 
@@ -85,6 +99,11 @@ private:
 
   // Monotonic completed fence for coroutine waits.
   oxygen::co::Value<FenceValue> completed_fence_ { FenceValue { 0 } };
+
+  // Last fence value observed during registration. This allows shutdown to
+  // wait for any recorded submissions even if individual ticket entries are
+  // later removed due to frame-slot cleanup.
+  std::atomic<std::uint64_t> last_registered_fence_raw_ { 0 };
 
   TicketId next_ticket_ { 1 };
   std::unordered_map<TicketId, Entry> entries_;

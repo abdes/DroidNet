@@ -27,6 +27,8 @@ auto UploadTracker::Register(const FenceValue fence, const uint64_t bytes,
   e.completed = false;
   e.result = UploadResult {};
   e.creation_slot = current_slot_;
+  // Track the raw fence so shutdown can wait for any recorded submissions
+  last_registered_fence_raw_.store(fence.get());
   return UploadTicket { id, fence };
 }
 
@@ -45,6 +47,7 @@ auto UploadTracker::RegisterFailedImmediate(
   e.result.success = false;
   e.result.bytes_uploaded = 0;
   e.result.error = error;
+  last_registered_fence_raw_.store(e.fence.get());
   return UploadTicket { id, e.fence };
 }
 
@@ -158,6 +161,19 @@ auto UploadTracker::Cancel(const TicketId id)
   return true;
 }
 
+auto UploadTracker::HasPending() const -> bool
+{
+  std::lock_guard<std::mutex> lk(mu_);
+  return std::ranges::any_of(
+    entries_, [](const auto& p) { return !p.second.completed; });
+}
+
+auto UploadTracker::LastRegisteredFence() const -> FenceValue
+{
+  const auto raw = last_registered_fence_raw_.load();
+  return FenceValue { raw };
+}
+
 auto UploadTracker::MarkEntryCompleted(Entry& e) -> void
 {
   e.completed = true;
@@ -174,6 +190,42 @@ auto UploadTracker::OnFrameStart(UploaderTag, frame::Slot slot) -> void
   // Radical cleanup: erase all entries created in this slot
   std::erase_if(entries_,
     [slot](const auto& pair) { return pair.second.creation_slot == slot; });
+}
+
+auto UploadTracker::AwaitAllPending()
+  -> std::expected<std::vector<UploadResult>, UploadError>
+{
+  // Loop until there are no pending entries. If entries are erased
+  // underneath us (OnFrameStart cleanup), retry until none remain.
+  while (true) {
+    std::vector<UploadTicket> pending;
+    {
+      std::lock_guard<std::mutex> lk(mu_);
+      for (const auto& p : entries_) {
+        if (!p.second.completed) {
+          pending.emplace_back(p.first, p.second.fence);
+        }
+      }
+    }
+
+    if (pending.empty()) {
+      // No pending tickets
+      return std::vector<UploadResult> {};
+    }
+
+    // AwaitAll will block until the pending set completes. If entries are
+    // removed while waiting we may receive TicketNotFound; treat that as a
+    // reason to retry collection and wait again until nothing remains.
+    auto res = AwaitAll(pending);
+    if (res) {
+      return res;
+    }
+    if (res.error() == UploadError::kTicketNotFound) {
+      // Some tickets vanished; loop and build a fresh pending list.
+      continue;
+    }
+    return std::unexpected(res.error());
+  }
 }
 
 } // namespace oxygen::engine::upload
