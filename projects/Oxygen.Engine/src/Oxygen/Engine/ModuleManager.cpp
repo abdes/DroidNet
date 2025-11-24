@@ -69,11 +69,34 @@ ModuleManager::~ModuleManager()
     auto up = std::move(modules_.back());
     modules_.pop_back();
     if (up) {
-      LOG_F(INFO, "Shutting down module '{}'", up->GetName());
-      up->OnShutdown();
+      const auto name = up->GetName();
+      LOG_SCOPE_F(INFO, "Module Shutdown");
+      LOG_F(INFO, "module: '{}'", name);
+      // Protect against exceptions in OnShutdown() so we can continue
+      // shutting down remaining modules. We also protect the actual
+      // destruction (unique_ptr reset) in case a destructor throws.
+      try {
+        up->OnShutdown();
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "Module '{}' OnShutdown() threw exception: {}", name,
+          e.what());
+      } catch (...) {
+        LOG_F(ERROR, "Module '{}' OnShutdown() threw unknown exception", name);
+      }
+
+      try {
+        up.reset();
+      } catch (const std::exception& e) {
+        LOG_F(
+          ERROR, "Module '{}' destructor threw exception: {}", name, e.what());
+      } catch (...) {
+        LOG_F(ERROR, "Module '{}' destructor threw unknown exception", name);
+      }
     }
-    // 'up' is destroyed here
   }
+
+  LOG_F(
+    INFO, "ModuleManager::~ModuleManager finished shutting down all modules");
 }
 
 auto ModuleManager::RegisterModule(
@@ -117,7 +140,27 @@ auto ModuleManager::UnregisterModule(std::string_view name) noexcept -> void
 
   // Not allowed to fail
   if (victim) {
-    victim->OnShutdown();
+    const auto module_name = victim->GetName();
+    try {
+      victim->OnShutdown();
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Module '{}' OnShutdown threw exception: {}", module_name,
+        e.what());
+    } catch (...) {
+      LOG_F(
+        ERROR, "Module '{}' OnShutdown threw unknown exception", module_name);
+    }
+
+    try {
+      // Explicitly destroy while guarded to catch destructor exceptions.
+      victim.reset();
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Module '{}' destructor threw exception: {}", module_name,
+        e.what());
+    } catch (...) {
+      LOG_F(
+        ERROR, "Module '{}' destructor threw unknown exception", module_name);
+    }
   }
   RebuildPhaseCache();
 }
