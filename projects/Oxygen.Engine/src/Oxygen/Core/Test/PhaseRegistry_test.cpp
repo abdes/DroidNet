@@ -297,6 +297,7 @@ NOLINT_TEST(PhaseRegistryExtras, ThreadSafetyExpectations)
     case PhaseId::kCommandRecord:
     case PhaseId::kDetachedServices:
     case PhaseId::kAsyncPoll:
+    case PhaseId::kGuiUpdate:
       return true;
     default:
       return false;
