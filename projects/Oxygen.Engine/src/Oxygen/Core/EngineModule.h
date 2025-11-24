@@ -51,7 +51,7 @@ consteval auto MakeModuleMask() -> ModulePhaseMask
 // Module-facing interface. Module authors implement this interface and
 // override only the phase handlers they need. Default implementations are
 // no-ops. Lifecycle methods are present so modules can perform init/shutdown.
-class EngineModule : public Object {
+class EngineModule : public virtual Object {
 public:
   EngineModule() = default;
   ~EngineModule() override = default;
