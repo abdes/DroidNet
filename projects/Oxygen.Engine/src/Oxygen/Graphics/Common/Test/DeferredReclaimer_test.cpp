@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::graphics::detail;
@@ -99,6 +100,72 @@ NOLINT_TEST_F(DeferredReclaimerTest,
 
   // Assert
   EXPECT_TRUE(res->WasReleased());
+}
+
+//! Tests that DeferredObjectRelease(shared_ptr) resets the caller's pointer and
+//! invokes the resource Release() on frame cycle.
+NOLINT_TEST_F(DeferredReclaimerTest,
+  DeferredObjectRelease_SharedPtr_RegistersAndCallsReleaseOnFrameCycle)
+{
+  // Arrange
+  std::atomic<bool> released_flag { false };
+
+  struct ObservedResource : TestResource {
+    ObservedResource(std::atomic<bool>* flag)
+      : TestResource("observed")
+      , ext_flag(flag)
+    {}
+
+    auto Release() -> void {
+      TestResource::Release();
+      if (ext_flag) ext_flag->store(true);
+    }
+
+    std::atomic<bool>* ext_flag{nullptr};
+  };
+
+  auto res = std::make_shared<ObservedResource>(&released_flag);
+
+  // Act
+  oxygen::graphics::DeferredObjectRelease(res, *manager);
+
+  // Original pointer should have been reset immediately
+  EXPECT_EQ(res.get(), nullptr);
+
+  // On frame cycle the deferred action should call Release()
+  manager->OnBeginFrame(frame::Slot { 0 });
+  EXPECT_TRUE(released_flag.load());
+}
+
+//! Tests that DeferredObjectRelease(raw pointer) schedules Release() on frame
+//! cycle and sets the original pointer to nullptr.
+NOLINT_TEST_F(DeferredReclaimerTest,
+  DeferredObjectRelease_RawPointer_RegistersAndCallsReleaseOnFrameCycle)
+{
+  // Arrange
+  std::atomic<bool> released_flag { false };
+
+  struct ObservedRaw {
+    ObservedRaw(std::atomic<bool>* f) : flag(f) {}
+    auto Release() -> void { if (flag) flag->store(true); }
+    std::atomic<bool>* flag{nullptr};
+  };
+
+  auto* raw = new ObservedRaw(&released_flag);
+
+  // Act
+  oxygen::graphics::DeferredObjectRelease(raw, *manager);
+
+  // original pointer should be set to nullptr
+  EXPECT_EQ(raw, nullptr);
+
+  manager->OnBeginFrame(frame::Slot { 0 });
+  EXPECT_TRUE(released_flag.load());
+
+  // cleanup - release should have been invoked by reclaimer; raw may have been
+  // deleted already depending on implementation, but ProcessAllDeferredReleases
+  // will be invoked in teardown anyway. If not destroyed, attempt to delete.
+  if (raw != nullptr) delete raw;
 }
 
 //! Tests that shared_ptr resources without Release() method have destructor
