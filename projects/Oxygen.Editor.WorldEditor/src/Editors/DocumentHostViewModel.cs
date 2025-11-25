@@ -14,6 +14,7 @@ using Microsoft.UI;
 using Oxygen.Editor.WorldEditor.Editors.Scene;
 using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
 

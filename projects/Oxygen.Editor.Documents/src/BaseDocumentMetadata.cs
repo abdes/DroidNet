@@ -4,7 +4,7 @@
 
 using DroidNet.Aura.Documents;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.Documents;
 
 /// <summary>
 /// Base metadata for any WorldEditor tabbed document, implements IDocumentMetadata.

@@ -6,9 +6,8 @@ using DroidNet.Aura.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.WorldEditor.Editors.Scene;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.Documents;
 
 /// <summary>
 /// Document service for WorldEditor, integrates with Aura document tabs.

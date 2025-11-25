@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.Documents;
 
 /// <summary>
 ///     Metadata for a Scene document, used by Aura document tabs.
@@ -16,5 +16,5 @@ public class SceneDocumentMetadata : BaseDocumentMetadata
     /// <summary>
     ///     Gets or sets the viewport layout and configuration, only applicable for scene documents.
     /// </summary>
-    public string? Layout { get; set; }
+    public SceneViewLayout Layout { get; set; } = SceneViewLayout.OnePane;
 }

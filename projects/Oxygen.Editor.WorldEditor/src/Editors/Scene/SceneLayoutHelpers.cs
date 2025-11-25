@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Documents;
+
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
 /// <summary>

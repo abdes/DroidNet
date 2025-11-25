@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Editor.Documents</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
+    </ItemGroup>
+</Project>
