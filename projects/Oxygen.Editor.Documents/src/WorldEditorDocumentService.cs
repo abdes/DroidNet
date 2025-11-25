@@ -48,7 +48,8 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
     /// <inheritdoc/>
     public async Task<Guid> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
-        this.LogOpenDocumentCalled(windowId.Value, metadata.DocumentId);
+        var documentId = metadata.DocumentId;
+        this.LogOpenDocumentCalled(windowId.Value, documentId);
 
         var docs = this.GetOrCreateWindowDocuments(windowId);
 
@@ -72,7 +73,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
                 var closed = await this.CloseDocumentAsync(windowId, existingSceneId.Value, force: false).ConfigureAwait(false);
                 if (!closed)
                 {
-                    this.LogDocumentOpenAborted(windowId.Value, metadata.DocumentId);
+                    this.LogDocumentOpenAborted(windowId.Value, documentId);
                     return Guid.Empty;
                 }
 
@@ -82,15 +83,17 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
             }
         }
 
-        var assigned = metadata.DocumentId == Guid.Empty ? Guid.NewGuid() : metadata.DocumentId;
-        docs[assigned] = metadata;
+        docs[documentId] = metadata;
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
         if (shouldSelect)
         {
-            this.activeDocuments[windowId] = assigned;
+            this.activeDocuments[windowId] = documentId;
+
+            // Raise DocumentActivated for consistency with SelectDocumentAsync
+            this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
         }
 
-        return assigned;
+        return documentId;
     }
 
     /// <inheritdoc/>
@@ -124,6 +127,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         {
             _ = this.activeDocuments.Remove(windowId);
         }
+
         this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         this.LogDocumentClosed(windowId.Value, documentId);
         return true;
@@ -146,6 +150,7 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
             {
                 _ = this.activeDocuments.Remove(windowId);
             }
+
             this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
             this.LogDetached(windowId.Value, documentId);
             return Task.FromResult<IDocumentMetadata?>(metadata);
@@ -193,7 +198,11 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
         if (shouldSelect)
         {
             this.activeDocuments[targetWindowId] = metadata.DocumentId;
+
+            // Raise DocumentActivated for consistency with SelectDocumentAsync
+            this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(targetWindowId, metadata.DocumentId));
         }
+
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         this.LogAttached(targetWindowId.Value, metadata.DocumentId);
         return true;
@@ -235,14 +244,9 @@ public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = 
 
     /// <inheritdoc/>
     public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
-    {
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0)
-        {
-            return Array.Empty<IDocumentMetadata>();
-        }
-
-        return docs.Values.ToList();
-    }
+        => !this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0
+            ? Array.Empty<IDocumentMetadata>()
+            : docs.Values.ToList();
 
     /// <inheritdoc/>
     public Guid? GetActiveDocumentId(WindowId windowId)

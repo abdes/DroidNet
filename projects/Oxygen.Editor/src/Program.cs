@@ -27,6 +27,7 @@ using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.ProjectBrowser.ViewModels;
@@ -36,10 +37,8 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
 using Oxygen.Editor.WorldEditor.Engine;
-using Oxygen.Editor.WorldEditor.Editors;
 using Oxygen.Editor.WorldEditor.Workspace;
 using Serilog;
-using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor;
 

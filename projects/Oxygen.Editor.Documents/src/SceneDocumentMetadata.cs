@@ -8,7 +8,11 @@ namespace Oxygen.Editor.Documents;
 ///     Metadata for a Scene document, used by Aura document tabs.
 ///     Viewport layout and configuration are only applicable for scene documents.
 /// </summary>
-public class SceneDocumentMetadata : BaseDocumentMetadata
+/// <param name="documentId">
+///     The unique identifier for the document. If <see langword="null" /> a new <c>Guid</c> will
+///     be automatically assigned to <see cref="BaseDocumentMetadata.DocumentId"/>.
+/// </param>
+public class SceneDocumentMetadata(Guid? documentId = null) : BaseDocumentMetadata(documentId)
 {
     /// <inheritdoc/>
     public override string DocumentType => "Scene";

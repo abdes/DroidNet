@@ -147,20 +147,6 @@ public partial class App
         this.activationService.ActivateAsync(activationData).GetAwaiter().GetResult();
     }
 
-    private void EnsureEngineIsReady()
-    {
-        try
-        {
-            // Use AsTask() to convert ValueTask to Task before blocking to avoid CA2012 warning.
-            this.engineService.EnsureInitializedAsync().AsTask().GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Failed to initialize engine service: {ex}");
-            throw;
-        }
-    }
-
     private static void OnAppUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
         => OnUnhandledException(e.Exception);
 
@@ -188,5 +174,19 @@ public partial class App
 
         Process.GetCurrentProcess()
             .Kill();
+    }
+
+    private void EnsureEngineIsReady()
+    {
+        try
+        {
+            // Use AsTask() to convert ValueTask to Task before blocking to avoid CA2012 warning.
+            this.engineService.EnsureInitializedAsync().AsTask().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to initialize engine service: {ex}");
+            throw;
+        }
     }
 }

@@ -127,7 +127,6 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         // TODO: In a real scenario, we might prompt for a name or template
         var metadata = new SceneDocumentMetadata
         {
-            DocumentId = Guid.NewGuid(),
             Title = "New Scene",
             IsClosable = true,
         };
@@ -162,9 +161,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
 
         // Create metadata for the new scene document
-        var metadataNew = new SceneDocumentMetadata
+        var metadataNew = new SceneDocumentMetadata(message.Scene.Id)
         {
-            DocumentId = message.Scene.Id,
             Title = message.Scene.Name,
             IsClosable = false,
         };
