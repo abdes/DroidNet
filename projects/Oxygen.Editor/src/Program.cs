@@ -39,6 +39,7 @@ using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Editors;
 using Oxygen.Editor.WorldEditor.Workspace;
 using Serilog;
+using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor;
 

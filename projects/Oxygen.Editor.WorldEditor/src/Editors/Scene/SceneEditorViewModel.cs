@@ -12,6 +12,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.WorldEditor.Controls;
 using Oxygen.Editor.WorldEditor.Engine;
+using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
@@ -40,14 +41,7 @@ public partial class SceneEditorViewModel : ObservableObject
         this.container = container;
 
         // Try to restore layout from metadata if present
-        if (this.Metadata?.Layout != null && System.Enum.TryParse<SceneViewLayout>(this.Metadata.Layout, out var parsed))
-        {
-            this.CurrentLayout = parsed;
-        }
-        else
-        {
-            this.CurrentLayout = SceneViewLayout.OnePane;
-        }
+        this.CurrentLayout = SceneViewLayout.OnePane;
 
         this.ChangeLayoutCommand = new RelayCommand<SceneViewLayout>(layout => this.CurrentLayout = layout);
         this.UpdateLayout(this.CurrentLayout);
@@ -83,7 +77,7 @@ public partial class SceneEditorViewModel : ObservableObject
     private void UpdateLayout(SceneViewLayout targetLayout)
     {
         var metadata = this.Metadata ?? throw new InvalidOperationException("Scene metadata is not initialized.");
-        metadata.Layout = targetLayout.ToString();
+        metadata.Layout = targetLayout;
 
         var placements = SceneLayoutHelpers.GetPlacements(targetLayout);
         var requiredCount = placements.Count;
