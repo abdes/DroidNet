@@ -99,6 +99,17 @@ public:
   OXGN_NPUT_API void UpdateState(const ActionValue& action_value,
     oxygen::time::CanonicalDuration delta_time);
 
+  //! Reset the trigger to its initial idle state.
+  //! Called when a mapping is canceled or aborted to clear any accumulated
+  //! state (e.g., held duration, ongoing flags) so the trigger can cleanly
+  //! respond to subsequent input.
+  virtual void Reset() noexcept
+  {
+    state_ = State::kIdle;
+    previous_state_ = State::kIdle;
+    triggered_ = false;
+  }
+
 protected:
   enum class State : uint8_t {
     kIdle,
@@ -144,6 +155,12 @@ public:
   [[nodiscard]] auto GetType() const -> ActionTriggerType override
   {
     return ActionTriggerType::kPressed;
+  }
+
+  void Reset() noexcept override
+  {
+    ActionTrigger::Reset();
+    depleted_ = false;
   }
 
 protected:
@@ -202,6 +219,12 @@ public:
     return ActionTrigger::IsCanceled() && !triggered_once_;
   }
 
+  void Reset() noexcept override
+  {
+    ActionTrigger::Reset();
+    triggered_once_ = false;
+  }
+
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
     oxygen::time::CanonicalDuration delta_time) -> bool override;
@@ -223,6 +246,12 @@ public:
 
   OXYGEN_DEFAULT_COPYABLE(ActionTriggerTimed);
   OXYGEN_DEFAULT_MOVABLE(ActionTriggerTimed);
+
+  void Reset() noexcept override
+  {
+    ActionTrigger::Reset();
+    held_duration_ = {};
+  }
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
@@ -274,6 +303,12 @@ public:
   [[nodiscard]] auto IsCompleted() const -> bool override
   {
     return triggered_once_ && (IsIdle());
+  }
+
+  void Reset() noexcept override
+  {
+    ActionTriggerTimed::Reset();
+    triggered_once_ = false;
   }
 
 protected:
@@ -372,6 +407,15 @@ public:
   [[nodiscard]] auto IsCanceled() const -> bool override
   {
     return IsIdle() && (GetPreviousState() == State::kOngoing);
+  }
+
+  void Reset() noexcept override
+  {
+    ActionTriggerTimed::Reset();
+    trigger_count_ = 0;
+    leftover_ = {};
+    time_since_actuation_ = {};
+    accum_since_last_ = {};
   }
 
   //=== Optional stability controls ===---------------------------------------//
@@ -489,6 +533,15 @@ public:
   //! Require prerequisite to be Ongoing at the instant of local press.
   OXGN_NPUT_API void RequirePrerequisiteHeld(bool enable = true);
 
+  void Reset() noexcept override
+  {
+    ActionTrigger::Reset();
+    prev_actuated_ = false;
+    armed_ = false;
+    window_elapsed_ = {};
+    disarmed_until_idle_ = false;
+  }
+
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
     oxygen::time::CanonicalDuration delta_time) -> bool override;
@@ -550,6 +603,13 @@ public:
   OXGN_NPUT_API void RemoveComboBreaker(uint32_t index);
   OXGN_NPUT_API void ClearComboBreakers();
   [[nodiscard]] auto GetComboBreakers() const { return combo_breakers_; }
+
+  void Reset() noexcept override
+  {
+    ActionTrigger::Reset();
+    waited_time_ = {};
+    current_step_index_ = 0;
+  }
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,

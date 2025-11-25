@@ -54,6 +54,19 @@ void InputActionMapping::StartEvaluation()
 void InputActionMapping::NotifyActionCanceled()
 {
   DLOG_F(2, "action {} canceled", action_->GetName());
+  // When canceled, clear the action's value to its zero/default state
+  ActionValue zero_value;
+  switch (action_->GetValueType()) {
+  case ActionValueType::kBool:
+    zero_value.Update(false);
+    break;
+  case ActionValueType::kAxis1D:
+    zero_value.Update(Axis1D { 0.0F });
+    break;
+  case ActionValueType::kAxis2D:
+    zero_value.Update(Axis2D { .x = 0.0F, .y = 0.0F });
+    break;
+  }
   action_->UpdateState(
     Action::State {
       .triggered = false,
@@ -61,8 +74,8 @@ void InputActionMapping::NotifyActionCanceled()
       .completed = false,
       .canceled = true,
     },
-    action_value_);
-  evaluation_ongoing_ = false;
+    zero_value);
+    evaluation_ongoing_ = false;
 }
 
 void InputActionMapping::AddTrigger(std::shared_ptr<ActionTrigger> trigger)
@@ -136,6 +149,10 @@ void InputActionMapping::CancelInput()
 {
   event_processing_ = false;
   action_value_ = last_action_value_;
+  // Reset all triggers to clear any accumulated state (e.g., held duration)
+  for (const auto& trigger : triggers_) {
+    trigger->Reset();
+  }
   // Mark canceled for this evaluation
   NotifyActionCanceled();
 }
@@ -148,6 +165,10 @@ void InputActionMapping::AbortStaged() noexcept
   event_processing_ = false;
   evaluation_ongoing_ = false;
   clear_value_after_update_ = false;
+  // Reset all triggers to clear any accumulated state
+  for (const auto& trigger : triggers_) {
+    trigger->Reset();
+  }
 }
 
 auto InputActionMapping::Update(

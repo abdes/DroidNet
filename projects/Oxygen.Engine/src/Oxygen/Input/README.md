@@ -173,6 +173,38 @@ sequenceDiagram
     end
 ```
 
+### Mapping order within a single context
+
+Inside an `InputMappingContext`, mappings are evaluated in the order they were
+added. This ordering matters for conflict resolution and how `ConsumesInput`
+behaves within a single context:
+
+- If a consuming mapping is placed *after* other mappings using the same
+  `InputSlot`, those earlier mappings will have already been evaluated and may
+  trigger in the same update. When the consumer later triggers it will cancel
+  any remaining mappings that haven't run yet, and the context will return
+  `consumed = true`. In short: consumer placed later prevents mappings that
+  come after it from running, but does not retroactively undo work already
+  processed earlier in the sequence.
+
+- If the consuming mapping is placed *before* other mappings, it will run first
+  and when it triggers it will consume input and cancel the later mappings in
+  that same context (those later mappings will receive `CancelInput()` and be
+  turned into the canceled state for the current evaluation).
+
+Authoring tips:
+
+- To guarantee a mapping has exclusive handling inside a single context,
+  place the consumer mapping earlier in the context, or use separate contexts
+  and control priority via `AddMappingContext(..., priority)`.
+- Use context-level priority when you want whole sets of mappings to win over
+  others (e.g., UI vs gameplay). Use mapping ordering inside a context as a
+  cheap, predictable way to control local precedence.
+
+This model keeps semantics explicit and simple for authors: use ordering and
+priority intentionally instead of implicit retroactive cancellation which can
+lead to surprising per-frame state changes.
+
 ## Documentation map
 
 - Actions: `Docs/Actions.md`
