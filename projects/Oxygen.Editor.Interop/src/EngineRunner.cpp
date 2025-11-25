@@ -7,7 +7,7 @@
 #pragma managed
 
 #include "EngineRunner.h"
-#include "SimpleEditorModule.h"
+#include "Unmanaged/EditorModule.h"
 #include "Base/LoguruWrapper.h"
 
 #include <fmt/format.h>
@@ -436,7 +436,7 @@ namespace Oxygen::Editor::EngineInterface {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
 
-    ui_dispatcher_->CaptureCurrentOrThrow(
+    ui_dispatcher_->CaptureCurrent(
       gcnew String(L"CreateEngine must be invoked on the UI thread. "
         L"Call CaptureUiSynchronizationContext() before headless runs."));
 
@@ -465,8 +465,8 @@ namespace Oxygen::Editor::EngineInterface {
 
       if (shared->engine) {
         oxygen::engine::interop::LogInfoMessage(
-          "Registering SimpleEditorModule with surface registry.");
-        auto module = std::make_unique<SimpleEditorModule>(registry);
+          "Registering EditorModule with surface registry.");
+        auto module = std::make_unique<EditorModule>(registry);
         shared->engine->RegisterModule(std::move(module));
       }
 

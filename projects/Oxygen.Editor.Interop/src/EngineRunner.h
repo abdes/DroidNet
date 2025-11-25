@@ -12,7 +12,7 @@
 #include "Config.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
-#include "SurfaceRegistry.h"
+#include "Unmanaged/SurfaceRegistry.h"
 #include "UiThreadDispatcher.h"
 
 namespace oxygen::graphics {

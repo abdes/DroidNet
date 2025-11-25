@@ -7,12 +7,15 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
-    <ClCompile Include="SimpleEditorModule.cpp" />
+    <ClCompile Include="Unmanaged\EditorModule.cpp">
+      <Filter>Unmanaged</Filter>
+    </ClCompile>
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
   </ItemGroup>
@@ -24,10 +27,19 @@
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="Config.h" />
-    <ClInclude Include="SurfaceRegistry.h" />
-    <ClInclude Include="SimpleEditorModule.h" />
+    <ClInclude Include="Unmanaged\SurfaceRegistry.h">
+      <Filter>Unmanaged</Filter>
+    </ClInclude>
+    <ClInclude Include="Unmanaged\EditorModule.h">
+      <Filter>Unmanaged</Filter>
+    </ClInclude>
     <ClInclude Include="RenderThreadContext.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Unmanaged">
+      <UniqueIdentifier>{d9b7b4f4-9a1c-4d2c-96ae-123456789abc}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="World">
