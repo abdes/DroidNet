@@ -15,7 +15,7 @@
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
-    <ClCompile Include="SimpleEditorModule.cpp" />
+    <ClCompile Include="Unmanaged\EditorModule.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -35,8 +35,8 @@
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="OxygenWorld.h" />
     <ClInclude Include="RenderThreadContext.h" />
-    <ClInclude Include="SurfaceRegistry.h" />
-    <ClInclude Include="SimpleEditorModule.h" />
+    <ClInclude Include="Unmanaged\SurfaceRegistry.h" />
+    <ClInclude Include="Unmanaged\EditorModule.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
@@ -96,6 +96,9 @@
     <CopyLocalDebugSymbols>true</CopyLocalDebugSymbols>
     <OutDir>$(_InteropOutDir)</OutDir>
     <IntDir>$(_InteropIntDir)</IntDir>
+    <RunCodeAnalysis>false</RunCodeAnalysis>
+    <EnableClangTidyCodeAnalysis>false</EnableClangTidyCodeAnalysis>
+    <CodeAnalysisRuleSet>..\analyzers.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <TargetName>DroidNet.Oxygen.Editor.Interop</TargetName>
@@ -104,6 +107,9 @@
     <CopyLocalDebugSymbols>true</CopyLocalDebugSymbols>
     <OutDir>$(_InteropOutDir)</OutDir>
     <IntDir>$(_InteropIntDir)</IntDir>
+    <RunCodeAnalysis>false</RunCodeAnalysis>
+    <EnableClangTidyCodeAnalysis>false</EnableClangTidyCodeAnalysis>
+    <CodeAnalysisRuleSet>..\analyzers.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
@@ -115,6 +121,7 @@
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
@@ -131,6 +138,7 @@
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
       <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;%(AdditionalDependencies)</AdditionalDependencies>

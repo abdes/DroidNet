@@ -14,52 +14,53 @@ using namespace System::Threading;
 namespace Oxygen::Editor::EngineInterface {
 
   UiThreadDispatcher::UiThreadDispatcher()
-    : context_(nullptr)
-    , captured_thread_id_(-1)
-  {
+    : captured_context_(nullptr), captured_thread_id_(-1) {
   }
 
-  bool UiThreadDispatcher::IsCaptured::get()
-  {
-    return context_ != nullptr;
+  bool UiThreadDispatcher::IsCaptured::get() {
+    return captured_context_ != nullptr;
   }
 
-  void UiThreadDispatcher::CaptureCurrentOrThrow(String^ operationDescription)
-  {
+  void UiThreadDispatcher::CaptureCurrent(String^ operation) {
     auto current = SynchronizationContext::Current;
-    Capture(current, operationDescription);
+    Capture(current, operation);
   }
 
   void UiThreadDispatcher::Capture(SynchronizationContext^ context,
-    String^ operationDescription)
-  {
+    String^ operation) {
     if (context == nullptr) {
       throw gcnew InvalidOperationException(String::Format(
         "{0} requires a valid SynchronizationContext on the current thread. "
-        "Call CaptureUiSynchronizationContext() from the UI thread before headless runs.",
-        operationDescription));
+        "Call CaptureUiSynchronizationContext() from the UI thread before "
+        "headless runs.",
+        operation));
     }
 
-    context_ = context;
+    captured_context_ = context;
     auto thread = Thread::CurrentThread;
     captured_thread_id_ = thread != nullptr ? thread->ManagedThreadId : -1;
   }
 
-  void UiThreadDispatcher::VerifyAccess(String^ operationDescription)
-  {
-    EnsureCapturedOrThrow(operationDescription);
+  void UiThreadDispatcher::VerifyAccess(String^ operation) {
+    if (!IsCaptured) {
+      throw gcnew InvalidOperationException(String::Format(
+        "{0} requires a captured UI SynchronizationContext. Call "
+        "CreateEngine() "
+        "from the UI thread or CaptureUiSynchronizationContext() first.",
+        operation));
+    }
 
     auto current = Thread::CurrentThread;
     auto current_id = current != nullptr ? current->ManagedThreadId : -1;
     if (current_id != captured_thread_id_) {
-      throw gcnew InvalidOperationException(String::Format(
-        "{0} must be invoked from the thread that captured the SynchronizationContext.",
-        operationDescription));
+      throw gcnew InvalidOperationException(
+        String::Format("{0} must be invoked from the thread that captured the "
+          "SynchronizationContext.",
+          operation));
     }
   }
 
-  void UiThreadDispatcher::Post(SendOrPostCallback^ callback, Object^ state)
-  {
+  void UiThreadDispatcher::Post(SendOrPostCallback^ callback, Object^ state) {
     if (callback == nullptr) {
       return;
     }
@@ -69,11 +70,10 @@ namespace Oxygen::Editor::EngineInterface {
       return;
     }
 
-    context_->Post(callback, state);
+    captured_context_->Post(callback, state);
   }
 
-  void UiThreadDispatcher::Send(SendOrPostCallback^ callback, Object^ state)
-  {
+  void UiThreadDispatcher::Send(SendOrPostCallback^ callback, Object^ state) {
     if (callback == nullptr) {
       return;
     }
@@ -83,17 +83,7 @@ namespace Oxygen::Editor::EngineInterface {
       return;
     }
 
-    context_->Send(callback, state);
-  }
-
-  void UiThreadDispatcher::EnsureCapturedOrThrow(String^ operationDescription)
-  {
-    if (!IsCaptured) {
-      throw gcnew InvalidOperationException(String::Format(
-        "{0} requires a captured UI SynchronizationContext. Call CreateEngine() "
-        "from the UI thread or CaptureUiSynchronizationContext() first.",
-        operationDescription));
-    }
+    captured_context_->Send(callback, state);
   }
 
 } // namespace Oxygen::Editor::EngineInterface
