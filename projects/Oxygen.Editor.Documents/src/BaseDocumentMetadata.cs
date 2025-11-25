@@ -9,10 +9,16 @@ namespace Oxygen.Editor.Documents;
 /// <summary>
 /// Base metadata for any WorldEditor tabbed document, implements IDocumentMetadata.
 /// </summary>
-public abstract class BaseDocumentMetadata : IDocumentMetadata
+/// <param name="documentId">
+///     The unique identifier for the document. If <see langword="null" /> a new <c>Guid</c> will
+///     be automatically assigned to <see cref="DocumentId"/>.
+/// </param>
+public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentMetadata
 {
-    /// <inheritdoc/>
-    public Guid DocumentId { get; init; }
+    /// <summary>
+    /// Gets the document identifier.
+    /// </summary>
+    public Guid DocumentId { get; } = documentId ?? Guid.NewGuid();
 
     /// <inheritdoc/>
     public string Title { get; set; } = string.Empty;
