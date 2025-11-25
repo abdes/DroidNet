@@ -11,6 +11,7 @@
 *.user
 *.userosscache
 *.sln.docstates
+imgui.ini
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
@@ -33,6 +34,11 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+[Oo]ut/
+
+# Generated build files
+.clangd
+ConanPresets.json
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/
@@ -381,6 +387,7 @@ FodyWeavers.xsd
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/extensions.json
+!.vscode/default-profile.ps1
 *.code-workspace
 
 # Local History for Visual Studio Code
