@@ -731,7 +731,6 @@ auto MainModule::InitInputBindings() noexcept -> bool
 
       ground_movement_ctx_->AddMapping(mapping);
     }
-    // Zoom bindings moved to camera_controls_ctx_
     {
       const auto trigger = std::make_shared<ActionTriggerTap>();
       trigger->SetTapTimeThreshold(0.25F);
