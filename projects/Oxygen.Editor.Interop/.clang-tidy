@@ -1,0 +1,28 @@
+---
+UseColor: true
+
+Checks: >
+    bugprone-*,
+    cppcoreguidelines-*,
+    google-*,
+    modernize-*,
+    performance-*,
+    portability-*,
+    readability-*,
+    -readability-identifier-length,
+    -readability-convert-member-functions-to-static,
+    -readability-function-cognitive-complexity,
+    -readability-container-size-empty,
+    -cppcoreguidelines-pro-type-union-access
+
+CheckOptions:
+  - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
+    value: true
+
+HeaderFilterRegex: '^<Oxygen/.*>$'
+ExcludeHeaderFilterRegex: '^<Oxygen/.*signal\.hpp>$'
+
+ExtraArgs:
+  - -Wno-inconsistent-dllimport
+  - -Wno-format-extra-args
+...

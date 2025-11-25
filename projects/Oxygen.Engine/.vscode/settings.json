@@ -206,6 +206,7 @@
         "xtr1common": "cpp",
         "xtree": "cpp",
         "xstring": "cpp",
-        "xutility": "cpp"
+        "xutility": "cpp",
+        "filesystem": "cpp"
     }
 }
