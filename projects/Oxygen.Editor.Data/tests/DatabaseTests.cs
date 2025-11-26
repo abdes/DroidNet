@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using AwesomeAssertions;
 using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.Data.Sqlite;
@@ -55,7 +56,13 @@ public class DatabaseTests : TestSuiteWithAssertions
 
         using var scope = this.Container.OpenScope();
         var db = scope.Resolve<PersistentState>();
-        db.Database.Migrate();
+
+        // For tests using an in-memory SQLite connection, use EnsureCreated()
+        // to create the schema from the current model instead of applying
+        // migrations. This avoids the "pending model changes" error when
+        // the model and migrations are out of sync.
+        var success = db.Database.EnsureCreated();
+        _ = success.Should().BeTrue("Database schema should be created successfully for tests.");
     }
 
     protected IContainer Container { get; } = TestContainer.CreateChild();
