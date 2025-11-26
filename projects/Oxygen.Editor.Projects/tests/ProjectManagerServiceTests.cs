@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Projects.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("ProjectManagerService")]
-public class ProjectManagerServiceTests : TestSuiteWithAssertions
+public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
 {
     private readonly Mock<ILogger<ProjectManagerService>> mockLogger;
     private readonly Mock<IStorageProvider> mockStorage;
@@ -95,7 +95,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(projectFolderPath, CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadProjectInfoAsync(projectFolderPath).ConfigureAwait(false);
@@ -142,7 +142,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetDocumentFromPathAsync("normalized/path", CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.SaveProjectInfoAsync(projectInfo).ConfigureAwait(false);
@@ -174,8 +174,19 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(scenesFolderMock.Object);
         _ = scenesFolderMock.Setup(f => f.GetDocumentsAsync(It.IsAny<CancellationToken>()))
             .Returns(new List<IDocument> { sceneDocumentMock.Object }.ToAsyncEnumerable());
-        _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(true);
+        _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
         _ = sceneDocumentMock.Setup(d => d.Name).Returns("scene1.scene");
+
+        // Provide valid scene JSON so Scene.FromJson can deserialize and be added to the project
+        const string sceneJson = /*lang=json,strict*/
+            """
+            {
+              "Name": "scene1",
+              "Nodes": []
+            }
+            """;
+        _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
+        _ = sceneDocumentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadProjectAsync(projectInfo).ConfigureAwait(false);
@@ -183,7 +194,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         // Assert
         _ = result.Should().BeTrue();
         _ = this.projectManagerService.CurrentProject.Should().NotBeNull();
-        _ = this.projectManagerService.CurrentProject!.Scenes.Should().HaveCount(1);
+        _ = this.projectManagerService.CurrentProject!.Scenes.Should().ContainSingle();
         _ = this.projectManagerService.CurrentProject.Scenes[0].Name.Should().Be("scene1");
     }
 
@@ -191,9 +202,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadProjectAsync_ShouldReturnFalse_WhenProjectLocationIsNull()
     {
         // Arrange
-        var projectInfo = new ProjectInfo("name", Category.Games, null, "Media/Preview.png");
+        var projectInfo = new ProjectInfo("name", Category.Games, location: null, "Media/Preview.png");
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadProjectAsync(projectInfo).ConfigureAwait(false);
@@ -264,14 +275,14 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(documentMock.Object);
         _ = documentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(sceneJson);
-        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(true);
+        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeTrue();
-        _ = scene.Nodes.Should().HaveCount(1);
+        _ = scene.Nodes.Should().ContainSingle();
         _ = scene.Nodes.ElementAt(0).Name.Should().Be("node1");
     }
 
@@ -292,9 +303,9 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(scenesFolderMock.Object);
         _ = scenesFolderMock.Setup(f => f.GetDocumentAsync(It.IsAny<string>(), CancellationToken.None))
             .ReturnsAsync(documentMock.Object);
-        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(false);
+        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: false);
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
@@ -329,10 +340,10 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             .ReturnsAsync(scenesFolderMock.Object);
         _ = scenesFolderMock.Setup(f => f.GetDocumentAsync(It.IsAny<string>(), CancellationToken.None))
             .ReturnsAsync(documentMock.Object);
-        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(true);
+        _ = documentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
         _ = documentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(invalidJson);
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
@@ -353,11 +364,11 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public async Task LoadSceneAsync_ShouldReturnFalse_WhenProjectLocationIsNull()
     {
         // Arrange
-        var projectInfo = new ProjectInfo("name", Category.Games, null, "Media/Preview.png");
+        var projectInfo = new ProjectInfo("name", Category.Games, location: null, "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
@@ -390,7 +401,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(It.IsAny<string>(), CancellationToken.None))
             .ThrowsAsync(new DirectoryNotFoundException());
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
@@ -418,7 +429,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = this.mockStorage.Setup(s => s.GetFolderFromPathAsync(It.IsAny<string>(), CancellationToken.None))
             .ThrowsAsync(new InvalidOperationException(exceptionMessage));
 
-        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(true);
+        _ = this.mockLogger.Setup(x => x.IsEnabled(LogLevel.Error)).Returns(value: true);
 
         // Act
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
@@ -449,7 +460,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     public void Ctor_DefaultGeneratesNonEmptyId()
     {
         var pi = new ProjectInfo("name", Category.Games, "loc", "thumb");
-        pi.Id.Should().NotBe(Guid.Empty);
+        _ = pi.Id.Should().NotBe(Guid.Empty);
     }
 
     [TestMethod]
@@ -457,20 +468,20 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
     {
         var id = Guid.NewGuid();
         var pi = new ProjectInfo(id, "name", Category.Games);
-        pi.Id.Should().Be(id);
+        _ = pi.Id.Should().Be(id);
     }
 
     [TestMethod]
     public void Ctor_WithEmptyId_ThrowsArgumentException()
     {
         Action act = () => _ = new ProjectInfo(Guid.Empty, "name", Category.Games);
-        act.Should().Throw<ArgumentException>().WithMessage("*Project Id*");
+        _ = act.Should().Throw<ArgumentException>().WithMessage("*Project Id*");
     }
 
     [TestMethod]
     public void FromJson_ThrowsJsonException_WhenIdMissing()
     {
-        var json = /*lang=json,strict*/
+        const string json = /*lang=json,strict*/
             """
             {
               "Name": "name",
@@ -479,13 +490,13 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             """;
 
         Action act = () => _ = ProjectInfo.FromJson(json);
-        act.Should().Throw<JsonException>();
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
     public void FromJson_ThrowsJsonException_WhenIdEmpty()
     {
-        var json = /*lang=json,strict*/
+        const string json = /*lang=json,strict*/
             """
             {
               "Id": "",
@@ -495,7 +506,7 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
             """;
 
         Action act = () => _ = ProjectInfo.FromJson(json);
-        act.Should().Throw<JsonException>();
+        _ = act.Should().Throw<JsonException>();
     }
 
     [TestMethod]
@@ -504,6 +515,6 @@ public class ProjectManagerServiceTests : TestSuiteWithAssertions
         var pi = new ProjectInfo("name", Category.Games, "loc", "thumb");
         var json = ProjectInfo.ToJson(pi);
         var des = ProjectInfo.FromJson(json);
-        des.Id.Should().Be(pi.Id);
+        _ = des.Id.Should().Be(pi.Id);
     }
 }
