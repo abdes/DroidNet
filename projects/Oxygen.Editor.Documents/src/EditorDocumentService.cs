@@ -52,7 +52,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
         var documentId = metadata.DocumentId;
         this.LogOpenDocumentCalled(windowId.Value, documentId);
 
-        var docs = this.GetOrCreateWindowDocuments(windowId);
+        var docs = this.GetDocumentsForWindow(windowId);
 
         // Ensure only one Scene document is open per window. If the incoming metadata is a
         // SceneDocumentMetadata, attempt to close any existing scene document in this window before
@@ -80,7 +80,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
 
                 // Closing the last document removes the dictionary entry; reacquire it so the
                 // upcoming assignment is tracked in the global windowDocs map.
-                docs = this.GetOrCreateWindowDocuments(windowId);
+                docs = this.GetDocumentsForWindow(windowId);
             }
         }
 
@@ -166,7 +166,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     {
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
-        var docs = this.GetOrCreateWindowDocuments(targetWindowId);
+        var docs = this.GetDocumentsForWindow(targetWindowId);
 
         // If attaching a Scene document, replace any existing Scene document in the target window.
         if (metadata is SceneDocumentMetadata)
@@ -191,7 +191,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
                 }
 
                 // Closing may remove the window entry; reacquire to keep the attach tracked.
-                docs = this.GetOrCreateWindowDocuments(targetWindowId);
+                docs = this.GetDocumentsForWindow(targetWindowId);
             }
         }
 
@@ -255,7 +255,7 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
             ? documentId
             : null;
 
-    private Dictionary<Guid, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
+    private Dictionary<Guid, IDocumentMetadata> GetDocumentsForWindow(WindowId windowId)
     {
         if (!this.windowDocs.TryGetValue(windowId, out var docs))
         {
