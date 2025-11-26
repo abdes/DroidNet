@@ -6,12 +6,12 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
-using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Coordinates;
 using DroidNet.Docking.Controls;
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
@@ -45,23 +45,25 @@ namespace Oxygen.Editor;
 /// <summary>
 ///     The Main entry of the application.
 ///     <para>
-///         Overrides the usual WinUI XAML entry point in order to be able to control what exactly happens
-///         at the entry point of the application. Customized here to build an application <see cref="Host" />
-///         and populate it with the default services (such as Configuration, Logging, etc...) and a
-///         specialized <see cref="IHostedService" /> for running the User Interface thread.
+///         Overrides the usual WinUI XAML entry point in order to be able to control what exactly
+///         happens at the entry point of the application. Customized here to build an application
+///         <see cref="Host" /> and populate it with the default services (such as Configuration,
+///         Logging, etc...) and a specialized <see cref="IHostedService" /> for running the User
+///         Interface thread.
 ///     </para>
 /// </summary>
 /// <remarks>
 ///     <para>
-///         Convenience hosting extension methods are used to simplify the setup of services needed for the
-///         User Interface, logging, etc.
+///         Convenience hosting extension methods are used to simplify the setup of services needed
+///         for the User Interface, logging, etc.
 ///     </para>
 ///     <para>
-///         The WinUI service configuration supports customization, through a <see cref="HostingContext" />
-///         object placed in the <see cref="IHostApplicationBuilder.Properties" /> of the host builder.
-///         Currently, the IsLifetimeLinked property allows to specify if the User Interface thread lifetime
-///         is linked to the application lifetime or not. When the two lifetimes are linked, terminating
-///         either of them will result in terminating the other.
+///         The WinUI service configuration supports customization, through a <see
+///         cref="HostingContext" /> object placed in the <see
+///         cref="IHostApplicationBuilder.Properties" /> of the host builder. Currently, the
+///         IsLifetimeLinked property allows to specify if the User Interface thread lifetime is
+///         linked to the application lifetime or not. When the two lifetimes are linked,
+///         terminating either of them will result in terminating the other.
 ///     </para>
 /// </remarks>
 [ExcludeFromCodeCoverage]
@@ -278,9 +280,10 @@ public static partial class Program
         // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
         container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
 
-        // Register the universal template source with NO key, so it gets selected when injected an instance of ITemplateSource.
-        // Register specific template source implementations KEYED. They are injected only as a collection of implementation
-        // instances, only by the universal source.
+        // Register the universal template source with NO key, so it gets selected when injected an
+        // instance of ITemplateSource. Register specific template source implementations KEYED.
+        // They are injected only as a collection of implementation instances, only by the universal
+        // source.
         container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
@@ -296,9 +299,10 @@ public static partial class Program
     private static void ConfigureWindows(IContainer container)
     {
         /*
-         * Configure the Application's Windows. Each window represents a target in which to open the requested url.
-         * Now we create the instances via the registered IWindowFactory and annotate them with the window category
-         * that matches the target Name. This enables the Aura window manager to apply category-specific decoration.
+         * Configure the Application's Windows. Each window represents a target in which to open the
+         * requested url. Now we create the instances via the registered IWindowFactory and annotate
+         * them with the window category that matches the target Name. This enables the Aura window
+         * manager to apply category-specific decoration.
          */
 
         // In Oxygen Editor, we don't really have a "Main" window - all windows are created equally.

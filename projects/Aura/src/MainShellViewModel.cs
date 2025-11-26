@@ -13,6 +13,7 @@ using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Documents;
+using DroidNet.Documents;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 

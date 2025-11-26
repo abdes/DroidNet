@@ -4,31 +4,33 @@
 
 using Microsoft.UI;
 
-namespace DroidNet.Aura.Documents;
+namespace DroidNet.Documents;
 
 /// <summary>
-///     Application-facing document service contract. The app implements this interface
-///     and raises events using <see cref="IDocumentMetadata"/>. Aura (the UI layer) subscribes
-///     to the events to drive the TabStrip UI and maintain window document lists.
-///
-/// <para>
-///     Threading and event contract:
-/// </para>
-/// <list type="bullet">
-///     <item><description>Implementations may raise events from any thread. UI subscribers must
-///     marshal to the UI thread (for example using <c>DispatcherQueue.TryEnqueue</c>) before
-///     touching UI controls.</description></item>
-///     <item><description>The <see cref="DocumentClosing"/> event is a pre-close notification.
-///     Handlers may register async veto tasks via <see
-///     cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/>. The service implementation should
-///     await all veto tasks and cancel the close if any veto returns
-///     <see langword="false"/>.</description></item>
-///     <item><description>When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI
-///     should call <see cref="CloseDocumentAsync(WindowId,Guid,bool)"/>. Aura does not attempt
-///     to close windows - app is responsible for deciding and implementing the policy to close
-///     windows or detach documents as needed.</description></item>
-/// </list>
+///     Application-facing document service contract. The app implements this interface and raises
+///     events using <see cref="IDocumentMetadata"/>. Aura (the UI layer) subscribes to the events
+///     to drive the TabStrip UI and maintain window document lists.
 /// </summary>
+/// <remarks>
+///     <para><b>Threading and event contract:</b></para>
+///     <list type="bullet">
+///       <item>
+///         Implementations may raise events from any thread. UI subscribers must marshal to the UI
+///         thread (for example using <c>DispatcherQueue.TryEnqueue</c>) before touching UI
+///         controls.</item>
+///       <item>
+///         The <see cref="DocumentClosing"/> event is a pre-close notification. Handlers may
+///         register async veto tasks via <see
+///         cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/>. The service implementation
+///         should await all veto tasks and cancel the close if any veto returns <see
+///         langword="false"/>.</item>
+///       <item>
+///         When the UI raises a close for a tab (TabStrip.TabCloseRequested), the UI should call
+///         <see cref="CloseDocumentAsync(WindowId,Guid,bool)"/>. Aura does not attempt to close
+///         windows - app is responsible for deciding and implementing the policy to close windows
+///         or detach documents as needed.</item>
+///     </list>
+/// </remarks>
 public interface IDocumentService
 {
     /// <summary>
@@ -37,9 +39,10 @@ public interface IDocumentService
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
 
     /// <summary>
-    ///     Raised to allow application handlers to register async veto tasks before a document close.
-    ///     Subscribers should use <see cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/> if
-    ///     they need to perform asynchronous checks that could veto the close.
+    ///     Raised to allow application handlers to register async veto tasks before a document
+    ///     close. Subscribers should use <see
+    ///     cref="DocumentClosingEventArgs.AddVetoTask(Task{bool})"/> if they need to perform
+    ///     asynchronous checks that could veto the close.
     /// </summary>
     public event EventHandler<DocumentClosingEventArgs>? DocumentClosing;
 

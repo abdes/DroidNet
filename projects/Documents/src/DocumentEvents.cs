@@ -7,7 +7,7 @@ using Microsoft.UI;
 #pragma warning disable SA1649 // File name should match first type name
 #pragma warning disable SA1402 // File may only contain a single type
 
-namespace DroidNet.Aura.Documents;
+namespace DroidNet.Documents;
 
 /// <summary>
 ///     Event arguments for <see cref="IDocumentService.DocumentOpened"/>.
@@ -72,12 +72,14 @@ public sealed class DocumentClosingEventArgs(WindowId windowId, IDocumentMetadat
         => this.vetoTasks.Add(vetoTask);
 
     /// <summary>
-    ///     Awaits all registered veto tasks and returns <see langword="true"/> when all
-    ///     tasks complete and approve the close. If any task returns <see langword="false"/>
-    ///     or throws, the result is <see langword="false"/> indicating the close was vetoed.
+    ///     Awaits all registered veto tasks and returns <see langword="true"/> when all tasks
+    ///     complete and approve the close. If any task returns <see langword="false"/> or throws,
+    ///     the result is <see langword="false"/> indicating the close was vetoed.
     /// </summary>
-    /// <param name="cancellationToken">Optional cancellation token to cancel waiting for veto tasks.</param>
-    /// <returns><see langword="true"/> if all veto tasks approve the close; otherwise <see langword="false"/>.</returns>
+    /// <param name="cancellationToken">Optional cancellation token to cancel waiting for veto
+    /// tasks.</param>
+    /// <returns><see langword="true"/> if all veto tasks approve the close; otherwise <see
+    /// langword="false"/>.</returns>
     public async Task<bool> WaitForVetoResultAsync(CancellationToken cancellationToken = default)
     {
         List<Task<bool>> tasks;

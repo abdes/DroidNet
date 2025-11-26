@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
-///     Presents documents in a TabStrip by wiring <see cref="IDocumentService"/> events
-///     to the UI and forwarding user interactions (selection/close) to the service.
+///     Presents documents in a TabStrip by wiring <see cref="IDocumentService"/> events to the UI
+///     and forwarding user interactions (selection/close) to the service.
 /// </summary>
 public partial class DocumentTabPresenter
 {

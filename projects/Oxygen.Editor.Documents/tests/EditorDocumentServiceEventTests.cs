@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using DroidNet.Aura.Documents;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Moq;

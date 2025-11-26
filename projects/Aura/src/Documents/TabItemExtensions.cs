@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Documents;
+
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
@@ -11,12 +13,14 @@ namespace DroidNet.Aura.Documents;
 internal static class TabItemExtensions
 {
     /// <summary>
-    ///     Creates a <see cref="Controls.TabItem"/> that represents the
-    ///     supplied app metadata. The created TabItem is a UI snapshot and is safe to add
-    ///     to the TabStrip's Items collection. The caller is responsible for ensuring the
-    ///     <paramref name="contentId"/> equals the document id when the tab represents a document.
+    ///     Creates a <see cref="Controls.TabItem"/> that represents the supplied app metadata. The
+    ///     created TabItem is a UI snapshot and is safe to add to the TabStrip's Items collection.
+    ///     The caller is responsible for ensuring the <paramref name="contentId"/> equals the
+    ///     document id when the tab represents a document.
     /// </summary>
-    /// <param name="contentId">The UI content identifier for the tab (equal to DocumentId for document tabs).</param>
+    /// <param name="contentId">
+    ///     The UI content identifier for the tab (equal to DocumentId for document tabs).
+    /// </param>
     /// <param name="metadata">The optional app-provided metadata to populate the TabItem.</param>
     /// <returns>A new TabItem matching the supplied metadata.</returns>
     public static Controls.TabItem CreateTabItemFromMetadata(Guid contentId, IDocumentMetadata? metadata)
@@ -39,9 +43,9 @@ internal static class TabItemExtensions
     }
 
     /// <summary>
-    ///     Updates a <see cref="Controls.TabItem"/> with values from an
-    ///     <see cref="IDocumentMetadata"/>. This mirrors only UI-friendly values and does
-    ///     not modify UI-only state such as <see cref="Controls.TabItem.IsSelected"/>.
+    ///     Updates a <see cref="Controls.TabItem"/> with values from an <see
+    ///     cref="IDocumentMetadata"/>. This mirrors only UI-friendly values and does not modify
+    ///     UI-only state such as <see cref="Controls.TabItem.IsSelected"/>.
     /// </summary>
     /// <param name="tab">The TabItem to update.</param>
     /// <param name="metadata">The metadata whose values are applied to the TabItem.</param>

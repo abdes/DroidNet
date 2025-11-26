@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Documents;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
@@ -10,11 +10,11 @@ using Microsoft.UI;
 namespace Oxygen.Editor.Documents;
 
 /// <summary>
-/// Document service for WorldEditor, integrates with Aura document tabs.
+///     Document service for WorldEditor, integrates with Aura document tabs.
 /// </summary>
 /// <param name="loggerFactory">
-///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
-///     process. If <see langword="null" />, logging is disabled.
+///     Optional factory for creating loggers. If provided, enables detailed logging of the
+///     recognition process. If <see langword="null" />, logging is disabled.
 /// </param>
 public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     : IDocumentService, IDocumentServiceState
@@ -54,9 +54,9 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
 
         var docs = this.GetOrCreateWindowDocuments(windowId);
 
-        // Ensure only one Scene document is open per window. If the incoming metadata
-        // is a SceneDocumentMetadata, attempt to close any existing scene document
-        // in this window before opening the new one. If the close is vetoed, abort.
+        // Ensure only one Scene document is open per window. If the incoming metadata is a
+        // SceneDocumentMetadata, attempt to close any existing scene document in this window before
+        // opening the new one. If the close is vetoed, abort.
         if (metadata is SceneDocumentMetadata)
         {
             Guid? existingSceneId = null;
