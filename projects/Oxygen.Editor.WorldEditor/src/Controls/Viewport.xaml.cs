@@ -2,17 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Globalization;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using System.Runtime.InteropServices;
-using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using System.Reactive.Subjects;
-using System.Reactive.Linq;
-using System.Reactive.Concurrency;
 using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
@@ -164,8 +162,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.sizeChangedSubject ??= new Subject<SizeChangedEventArgs>();
 
             var dispatcherScheduler = new DispatcherQueueScheduler(
-                this.DispatcherQueue // WinUI 3 dispatcher
-            );
+                this.DispatcherQueue); // WinUI 3 dispatcher
 
             this.sizeChangedSubscription ??= this.sizeChangedSubject
                 .Throttle(TimeSpan.FromMilliseconds(150))
@@ -173,8 +170,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 .SelectMany(_ => Observable.FromAsync(this.NotifyViewportResizeAsync))
                 .Subscribe(
                     _ => { },
-                    ex => this.LogResizeFailed(ex)
-                );
+                    ex => this.LogResizeFailed(ex));
 
             this.swapChainSizeHooked = true;
             this.LogSwapChainHookRegistered();

@@ -10,7 +10,7 @@ namespace Oxygen.Editor.WorldEditor.Messages;
 /// Message indicating that the selection of scene nodes has changed.
 /// </summary>
 /// <param name="selectedEntities">The list of selected <see cref="SceneNode"/> entities.</param>
-internal class SceneNodeSelectionChangedMessage(IList<SceneNode> selectedEntities)
+internal sealed class SceneNodeSelectionChangedMessage(IList<SceneNode> selectedEntities)
 {
     /// <summary>
     /// Gets the list of selected <see cref="SceneNode"/> entities.

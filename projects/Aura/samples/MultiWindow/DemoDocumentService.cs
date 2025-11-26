@@ -2,22 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Linq;
-using DroidNet.Aura.Documents;
-using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using Microsoft.UI;
 
 namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
-/// Minimal in-sample document service for the MultiWindow demo. Implements enough of
-/// the IDocumentService contract to support opening, selecting, updating and closing
-/// documents; it's intentionally small and not intended for production.
+///     Minimal in-sample document service for the MultiWindow demo. Implements enough of the
+///     IDocumentService contract to support opening, selecting, updating and closing documents;
+///     it's intentionally small and not intended for production.
 /// </summary>
 [SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
 internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceState

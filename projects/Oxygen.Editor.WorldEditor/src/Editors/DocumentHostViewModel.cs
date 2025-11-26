@@ -5,16 +5,16 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Aura.Documents;
+using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.WorldEditor.Editors.Scene;
 using Oxygen.Editor.WorldEditor.Engine;
 using Oxygen.Editor.WorldEditor.Messages;
-using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
 
@@ -42,6 +42,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
+    /// <param name="container">The dependency injection container used to resolve services and manage editor lifetimes.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
     ///     process. If <see langword="null" />, logging is disabled.

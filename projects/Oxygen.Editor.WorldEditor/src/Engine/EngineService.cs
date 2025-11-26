@@ -542,11 +542,11 @@ public sealed partial class EngineService : IEngineService
         {
             if (!this.IsAttached)
             {
-                 return;
+                return;
             }
 
             await this.owner.ResizeViewportAsync(this.Key, pixelWidth, pixelHeight, false).ConfigureAwait(true);
-              return;
+            return;
         }
 
         public async ValueTask DisposeAsync()

@@ -3,16 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DryIoc;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.WorldEditor.Controls;
 using Oxygen.Editor.WorldEditor.Engine;
-using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 

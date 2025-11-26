@@ -7,11 +7,11 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.Documents;
 using DroidNet.Aura.Settings;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Coordinates;
+using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
@@ -22,16 +22,16 @@ using Serilog;
 namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
-/// The Main entry of the multi-window sample application.
+///     The Main entry of the multi-window sample application.
 /// </summary>
 /// <remarks>
-/// This sample demonstrates Aura's multi-window management capabilities including:
-/// <list type="bullet">
-/// <item>Creating and managing multiple windows</item>
-/// <item>Window lifecycle events and tracking</item>
-/// <item>Theme synchronization across windows</item>
-/// <item>Different window types (Main, Tool, Document)</item>
-/// </list>
+///     This sample demonstrates Aura's multi-window management capabilities including:
+///     <list type="bullet">
+///       <item>Creating and managing multiple windows</item>
+///       <item>Window lifecycle events and tracking</item>
+///       <item>Theme synchronization across windows</item>
+///       <item>Different window types (Main, Tool, Document)</item>
+///     </list>
 /// </remarks>
 [ExcludeFromCodeCoverage]
 [SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "program entrypoint class must be public")]
@@ -179,24 +179,20 @@ public static partial class Program
     }
 
     /// <summary>
-    /// Configures the Main window decoration to use the application's main menu.
+    ///     Configures the Main window decoration to use the application's main menu.
     /// </summary>
     /// <param name="container">The DI container.</param>
     /// <remarks>
-    /// <para>
-    /// This method provides a default configuration for the Main window that will be used
-    /// ONLY on the very first run when no configuration file exists yet. Once the user has
-    /// a configuration file, their settings are preserved.
-    /// </para>
-    /// <para>
-    /// The check for existing overrides happens AFTER the configuration file is loaded by
-    /// the IOptionsMonitor system, so persisted user customizations (like isCompact=true)
-    /// are properly respected.
-    /// </para>
-    /// <para>
-    /// Important: Do NOT call SetCategoryOverride if an override already exists, as this
-    /// will trigger the auto-save mechanism and overwrite the user's file.
-    /// </para>
+    ///     This method provides a default configuration for the Main window that will be used ONLY
+    ///     on the very first run when no configuration file exists yet. Once the user has a
+    ///     configuration file, their settings are preserved.
+    ///     <para>
+    ///     The check for existing overrides happens AFTER the configuration file is loaded by the
+    ///     IOptionsMonitor system, so persisted user customizations (like isCompact=true) are
+    ///     properly respected.</para>
+    ///     <para>
+    ///     Important: Do NOT call SetCategoryOverride if an override already exists, as this will
+    ///     trigger the auto-save mechanism and overwrite the user's file.</para>
     /// </remarks>
     private static void ConfigureMainWindowDecoration(IContainer container)
     {

@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Documents;
+
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
@@ -12,8 +14,8 @@ namespace DroidNet.Aura.Documents;
 internal sealed class DocumentDescriptor(Guid documentId)
 {
     /// <summary>
-    ///     Gets the document identifier. Aura ensures UI <c>TabItem.ContentId</c> equals
-    ///     this value when a tab corresponds to a document.
+    ///     Gets the document identifier. Aura ensures UI <c>TabItem.ContentId</c> equals this value
+    ///     when a tab corresponds to a document.
     /// </summary>
     public Guid DocumentId { get; } = documentId;
 }

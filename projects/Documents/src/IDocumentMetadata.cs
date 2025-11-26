@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Aura.Documents;
+namespace DroidNet.Documents;
 
 /// <summary>
 ///     Represents the minimal, app-provided metadata required by Aura to render a document in the
@@ -12,7 +12,8 @@ namespace DroidNet.Aura.Documents;
 public interface IDocumentMetadata
 {
     /// <summary>
-    ///     Gets the stable document identifier assigned by the application.
+    ///     Gets the stable document identifier assigned by the application. A valid document
+    ///     metadata must always have a valid (non empty) document identifier.
     /// </summary>
     public Guid DocumentId { get; }
 

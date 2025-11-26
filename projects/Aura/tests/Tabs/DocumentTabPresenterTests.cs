@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using DroidNet.Tests;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
@@ -611,7 +612,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
     private sealed class TestDocumentMetadata : IDocumentMetadata
     {
-        public Guid DocumentId { get; set; } = Guid.Empty;
+        public Guid DocumentId { get; set; } = Guid.NewGuid();
 
         public string Title { get; set; } = string.Empty;
 

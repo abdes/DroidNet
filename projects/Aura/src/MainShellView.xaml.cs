@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Linq;
 using DroidNet.Aura.Documents;
+using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;

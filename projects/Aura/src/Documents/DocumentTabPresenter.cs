@@ -2,18 +2,21 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Dispatching;
 
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
-///     Presents documents inside a <see cref="Controls.TabStrip"/> by translating <see cref="IDocumentService"/>
-///     lifecycle events into tab operations and mirroring user actions back to the service. It optionally hydrates
-///     existing documents when the service also implements <see cref="IDocumentServiceState"/>, otherwise it starts
-///     empty and waits for new events.
+///     Presents documents inside a <see cref="Controls.TabStrip"/> by translating <see
+///     cref="IDocumentService"/> lifecycle events into tab operations and mirroring user actions
+///     back to the service. It optionally hydrates existing documents when the service also
+///     implements <see cref="IDocumentServiceState"/>, otherwise it starts empty and waits for new
+///     events.
 /// </summary>
 public sealed partial class DocumentTabPresenter : IDisposable
 {
@@ -26,9 +29,10 @@ public sealed partial class DocumentTabPresenter : IDisposable
     private bool isUpdatingSelectionFromService;
 
     /// <summary>
-    ///     Initializes a new presenter and immediately attaches all event handlers. The constructor is responsible for the
-    ///     one-shot snapshot hydration, so callers should pass in an <see cref="IDocumentService"/> that already reflects
-    ///     the current state of the host window.
+    ///     Initializes a new instance of the <see cref="DocumentTabPresenter"/> class. Initializes
+    ///     a new presenter and immediately attaches all event handlers. The constructor is
+    ///     responsible for the one-shot snapshot hydration, so callers should pass in an <see
+    ///     cref="IDocumentService"/> that already reflects the current state of the host window.
     /// </summary>
     /// <param name="tabStrip">The TabStrip control to present document tabs.</param>
     /// <param name="documentService">The document service supplying lifecycle events.</param>
@@ -140,9 +144,9 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         _ = this.dispatcher.TryEnqueue(() =>
         {
-            var docId = this.ResolveDocumentId(e.Metadata);
+            var docId = e.Metadata.DocumentId;
             var insertAt = this.ClampInsertIndex(e.IndexHint);
-            this.AddOrUpdateTab(docId, e.Metadata, insertAt);
+            this.AddOrUpdateTab(e.Metadata, insertAt);
 
             // NOTE: The attach event currently does not include selection hint (ShouldSelect),
             // so we do not adjust selection here. If your service needs to select on attach,
@@ -159,9 +163,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         _ = this.dispatcher.TryEnqueue(() =>
         {
-            var docId = this.ResolveDocumentId(e.Metadata);
             var insertAt = this.ClampInsertIndex(e.IndexHint);
-            this.AddOrUpdateTab(docId, e.Metadata, insertAt);
+            this.AddOrUpdateTab(e.Metadata, insertAt);
 
             // DocumentAttachedEventArgs doesn't carry a selection hint; we avoid changing
             // selection on attach. The application may choose to explicitly activate the
@@ -262,8 +265,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             {
                 foreach (var metadata in documents)
                 {
-                    var docId = this.ResolveDocumentId(metadata);
-                    this.AddOrUpdateTab(docId, metadata, this.tabStrip.Items.Count);
+                    this.AddOrUpdateTab(metadata, this.tabStrip.Items.Count);
                 }
             }
 
@@ -280,34 +282,27 @@ public sealed partial class DocumentTabPresenter : IDisposable
         }
     }
 
-    private void AddOrUpdateTab(Guid docId, IDocumentMetadata? metadata, int insertAt)
+    private void AddOrUpdateTab(IDocumentMetadata metadata, int insertAt)
     {
-        var resolvedId = docId == Guid.Empty ? this.ResolveDocumentId(metadata) : docId;
-        if (this.tabMap.TryGetValue(resolvedId, out var existing))
+        Debug.Assert(metadata.DocumentId != Guid.Empty, "Metadata must contain a valid DocumentId.");
+        var docId = metadata.DocumentId;
+        if (this.tabMap.TryGetValue(docId, out var existing))
         {
             TabItemExtensions.ApplyMetadataToTab(existing, metadata);
             return;
         }
 
-        var tab = TabItemExtensions.CreateTabItemFromMetadata(resolvedId, metadata);
-        tab.Command = new AsyncRelayCommand(async () => await this.documentService.SelectDocumentAsync(this.hostWindow.Id, resolvedId).ConfigureAwait(true));
+        var tab = TabItemExtensions.CreateTabItemFromMetadata(docId, metadata);
+        tab.Command = new AsyncRelayCommand(async ()
+            => await this.documentService.SelectDocumentAsync(this.hostWindow.Id, docId)
+            .ConfigureAwait(true));
         var index = this.ClampInsertIndex(insertAt);
         this.tabStrip.Items.Insert(index, tab);
-        this.tabMap[resolvedId] = tab;
+        this.tabMap[docId] = tab;
     }
 
     private int ClampInsertIndex(int index)
         => index < 0 || index > this.tabStrip.Items.Count ? this.tabStrip.Items.Count : index;
-
-    private Guid ResolveDocumentId(IDocumentMetadata? metadata)
-    {
-        if (metadata is { DocumentId: { } docId } && docId != Guid.Empty)
-        {
-            return docId;
-        }
-
-        return Guid.NewGuid();
-    }
 
     private void ApplyActiveSelection(Guid? documentId)
     {

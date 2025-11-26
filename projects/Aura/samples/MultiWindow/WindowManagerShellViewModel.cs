@@ -10,8 +10,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
-using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -29,12 +29,12 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 #pragma warning disable CA1031 // Do not catch general exception types
 
 /// <summary>
-/// View model for the window manager demonstration shell.
+///     View model for the window manager demonstration shell.
 /// </summary>
 /// <remarks>
-/// This view model provides controls for creating and managing multiple windows,
-/// demonstrating Aura's multi-window capabilities including window lifecycle tracking,
-/// theme synchronization, and different window types.
+///     This view model provides controls for creating and managing multiple windows, demonstrating
+///     Aura's multi-window capabilities including window lifecycle tracking, theme synchronization,
+///     and different window types.
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "ViewModel classes must be public")]
 public sealed partial class WindowManagerShellViewModel : AbstractOutletContainer
@@ -43,14 +43,14 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
     private readonly IDocumentService? documentService;
-    private readonly Dictionary<Guid, IDocumentMetadata> documents = new();
-    private readonly Dictionary<WindowId, Guid> windowActiveDocument = new();
+    private readonly Dictionary<Guid, IDocumentMetadata> documents = [];
+    private readonly Dictionary<WindowId, Guid> windowActiveDocument = [];
     private readonly IDisposable windowEventsSubscription;
 
     private bool isDisposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="WindowManagerShellViewModel"/> class.
+    ///     Initializes a new instance of the <see cref="WindowManagerShellViewModel"/> class.
     /// </summary>
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher information.</param>
@@ -109,48 +109,46 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     public partial bool ConfirmBeforeClose { get; set; } = true;
 
     /// <summary>
-    /// Gets a simple indicator text when the active document is dirty.
+    ///     Gets a simple indicator text when the active document is dirty.
     /// </summary>
     public string ActiveDocumentDirtyIndicator => this.ActiveDocumentIsDirty ? " • Unsaved" : string.Empty;
 
-    // Event handlers for document events are implemented after the UpdateActiveWindowInfo method to keep property declarations before methods.
-
     /// <summary>
-    /// Gets the window associated with this view model.
+    ///     Gets the window associated with this view model.
     /// </summary>
     public Window? Window { get; private set; }
 
     /// <summary>
-    /// Gets the content view model for the primary outlet.
+    ///     Gets the content view model for the primary outlet.
     /// </summary>
     public object? ContentViewModel => this.Outlets[OutletName.Primary].viewModel;
 
     /// <summary>
-    /// Gets the collection of currently open windows for display.
+    ///     Gets the collection of currently open windows for display.
     /// </summary>
     [ObservableProperty]
     public partial ObservableCollection<WindowInfo> OpenWindows { get; set; } = [];
 
     /// <summary>
-    /// Gets the total count of open windows.
+    ///     Gets the total count of open windows.
     /// </summary>
     [ObservableProperty]
     public partial int WindowCount { get; set; }
 
     /// <summary>
-    /// Gets the currently active window information.
+    ///     Gets the currently active window information.
     /// </summary>
     [ObservableProperty]
     public partial string? ActiveWindowInfo { get; set; }
 
     /// <summary>
-    /// Gets or sets the selected backdrop for new windows.
+    ///     Gets or sets the selected backdrop for new windows.
     /// </summary>
     [ObservableProperty]
     public partial BackdropKind SelectedBackdrop { get; set; } = BackdropKind.Mica;
 
     /// <summary>
-    /// Gets the available backdrop options.
+    ///     Gets the available backdrop options.
     /// </summary>
     public IReadOnlyList<BackdropKind> AvailableBackdrops { get; } =
     [
@@ -186,7 +184,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to create a new tool window with the selected backdrop.
+    ///     Command to create a new tool window with the selected backdrop.
     /// </summary>
     [RelayCommand]
     private async Task CreateToolWindowAsync()
@@ -205,7 +203,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to create a new document window with the selected backdrop.
+    ///     Command to create a new document window with the selected backdrop.
     /// </summary>
     [RelayCommand]
     private async Task CreateDocumentWindowAsync()
@@ -246,7 +244,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to create a new frameless window with the DroidNet logo.
+    ///     Command to create a new frameless window with the DroidNet logo.
     /// </summary>
     [RelayCommand]
     private async Task CreateFramelessWindowAsync()
@@ -282,7 +280,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to close a specific window.
+    ///     Command to close a specific window.
     /// </summary>
     /// <param name="windowInfo">The window information to close.</param>
     [RelayCommand]
@@ -304,7 +302,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to activate a specific window.
+    ///     Command to activate a specific window.
     /// </summary>
     /// <param name="windowInfo">The window information to activate.</param>
     [RelayCommand]
@@ -326,7 +324,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Command to close all windows.
+    ///     Command to close all windows.
     /// </summary>
     [RelayCommand]
     private async Task CloseAllWindowsAsync()
@@ -342,7 +340,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Handles window lifecycle events to update the UI.
+    ///     Handles window lifecycle events to update the UI.
     /// </summary>
     /// <param name="evt">The window lifecycle event.</param>
     private void OnWindowLifecycleEvent(WindowLifecycleEvent evt)
@@ -354,7 +352,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Updates the list of open windows.
+    ///     Updates the list of open windows.
     /// </summary>
     private void UpdateWindowList()
     {
@@ -377,7 +375,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    /// Updates the active window information display.
+    ///     Updates the active window information display.
     /// </summary>
     private void UpdateActiveWindowInfo()
     {
@@ -499,7 +497,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         // Respect the demo toggle; if confirmation is disabled, allow the close immediately.
         if (!this.ConfirmBeforeClose)
         {
-            tcs.TrySetResult(true);
+            _ = tcs.TrySetResult(true);
             return;
         }
 
@@ -510,7 +508,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         if (targetWindow is null)
         {
             // If there's no UI available for the window, allow close by default.
-            tcs.TrySetResult(true);
+            _ = tcs.TrySetResult(true);
             return;
         }
 
@@ -529,22 +527,22 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                     CloseButtonText = "Cancel",
                 };
 
-                if (win.Content is not null && win.Content.XamlRoot is not null)
+                if (win.Content?.XamlRoot is not null)
                 {
                     dialog.XamlRoot = win.Content.XamlRoot;
                     var result = await dialog.ShowAsync().AsTask().ConfigureAwait(true);
-                    tcs.TrySetResult(result == ContentDialogResult.Primary);
+                    _ = tcs.TrySetResult(result == ContentDialogResult.Primary);
                 }
                 else
                 {
                     Debug.WriteLine("OnDocClosing: target window has no XamlRoot; allowing close.");
-                    tcs.TrySetResult(true);
+                    _ = tcs.TrySetResult(true);
                 }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"OnDocClosing dialog failed: {ex.Message}");
-                tcs.TrySetResult(false);
+                _ = tcs.TrySetResult(false);
             }
         }
     }
