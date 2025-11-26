@@ -101,6 +101,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
         {
             _ = this.activeDocuments.Remove(windowId);
         }
+
         Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
         this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         return true;
@@ -121,6 +122,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
             {
                 _ = this.activeDocuments.Remove(windowId);
             }
+
             this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
             return Task.FromResult<IDocumentMetadata?>(metadata);
         }
@@ -137,6 +139,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
         {
             this.activeDocuments[targetWindowId] = metadata.DocumentId;
         }
+
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
         return Task.FromResult(true);
     }
@@ -159,7 +162,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
     /// <inheritdoc/>
     public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId)
     {
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out _))
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.ContainsKey(documentId))
         {
             return Task.FromResult(false);
         }
@@ -171,14 +174,9 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
 
     /// <inheritdoc/>
     public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
-    {
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0)
-        {
-            return Array.Empty<IDocumentMetadata>();
-        }
-
-        return docs.Values.ToList();
-    }
+        => !this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0
+            ? Array.Empty<IDocumentMetadata>()
+            : docs.Values.ToList();
 
     /// <inheritdoc/>
     public Guid? GetActiveDocumentId(WindowId windowId)
