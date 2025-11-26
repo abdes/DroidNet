@@ -16,9 +16,10 @@ namespace Oxygen.Editor.Documents;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class WorldEditorDocumentService(ILoggerFactory? loggerFactory = null) : IDocumentService, IDocumentServiceState
+public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
+    : IDocumentService, IDocumentServiceState
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<WorldEditorDocumentService>() ?? NullLoggerFactory.Instance.CreateLogger<WorldEditorDocumentService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<EditorDocumentService>() ?? NullLoggerFactory.Instance.CreateLogger<EditorDocumentService>();
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];

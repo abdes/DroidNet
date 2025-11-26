@@ -12,14 +12,14 @@ using Moq;
 namespace Oxygen.Editor.Documents.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="WorldEditorDocumentService"/> event raising behavior.
+/// Unit tests for <see cref="EditorDocumentService"/> event raising behavior.
 /// </summary>
 [TestClass]
 [TestCategory("Unit")]
 [ExcludeFromCodeCoverage]
-public class WorldEditorDocumentServiceEventTests
+public class EditorDocumentServiceEventTests
 {
-    private WorldEditorDocumentService? service;
+    private EditorDocumentService? service;
     private WindowId testWindowId;
 
     /// <summary>
@@ -29,12 +29,12 @@ public class WorldEditorDocumentServiceEventTests
     public void Initialize()
     {
         var loggerFactoryMock = new Mock<ILoggerFactory>();
-        var mockLogger = new Mock<ILogger<WorldEditorDocumentService>>();
+        var mockLogger = new Mock<ILogger<EditorDocumentService>>();
         _ = loggerFactoryMock
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(mockLogger.Object);
 
-        this.service = new WorldEditorDocumentService(loggerFactoryMock.Object);
+        this.service = new EditorDocumentService(loggerFactoryMock.Object);
         this.testWindowId = new WindowId(1);
     }
 

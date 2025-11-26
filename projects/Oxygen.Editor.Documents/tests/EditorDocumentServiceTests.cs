@@ -11,14 +11,14 @@ using Moq;
 namespace Oxygen.Editor.Documents.Tests;
 
 /// <summary>
-/// Unit tests for <see cref="WorldEditorDocumentService"/> core functionality.
+/// Unit tests for <see cref="EditorDocumentService"/> core functionality.
 /// </summary>
 [TestClass]
 [TestCategory("Unit")]
 [ExcludeFromCodeCoverage]
-public class WorldEditorDocumentServiceTests
+public class EditorDocumentServiceTests
 {
-    private WorldEditorDocumentService? service;
+    private EditorDocumentService? service;
     private Mock<ILoggerFactory>? loggerFactoryMock;
     private WindowId testWindowId;
 
@@ -29,12 +29,12 @@ public class WorldEditorDocumentServiceTests
     public void Initialize()
     {
         this.loggerFactoryMock = new Mock<ILoggerFactory>();
-        var mockLogger = new Mock<ILogger<WorldEditorDocumentService>>();
+        var mockLogger = new Mock<ILogger<EditorDocumentService>>();
         _ = this.loggerFactoryMock
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(mockLogger.Object);
 
-        this.service = new WorldEditorDocumentService(this.loggerFactoryMock.Object);
+        this.service = new EditorDocumentService(this.loggerFactoryMock.Object);
         this.testWindowId = new WindowId(1);
     }
 
