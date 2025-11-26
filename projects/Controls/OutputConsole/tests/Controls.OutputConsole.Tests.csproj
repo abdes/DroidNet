@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+    <RootNamespace>Controls.OutputConsole.Tests</RootNamespace>
+    <AssemblyName>Controls.OutputConsole.Tests</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Moq" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
+  </ItemGroup>
+
+</Project>

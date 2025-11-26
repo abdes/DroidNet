@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -10,15 +11,17 @@ namespace DroidNet.Controls.OutputConsole.Model;
 
 /// <summary>
 ///     An observable, fixed-capacity ring buffer optimized for UI binding.
-///     Inherits from <see cref="ObservableCollection{T}" /> to provide standard incremental notifications.
 ///     When the buffer is paused via <see cref="IsPaused" />, change notifications are suppressed
 ///     except for a <see cref="NotifyCollectionChangedAction.Reset" /> which is raised when unpausing
 ///     to allow UI listeners to resynchronize.
 /// </summary>
-public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
+public partial class OutputLogBuffer : INotifyCollectionChanged, INotifyPropertyChanged, IEnumerable<OutputLogEntry>
 {
     private const string IndexerPropertyName = "Item[]";
     private readonly Lock syncLock = new();
+    private readonly List<OutputLogEntry> items;
+    private int updateDepth;
+    private bool isDirty;
     private bool paused;
 
     /// <summary>
@@ -34,7 +37,14 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity);
         this.Capacity = capacity;
+        this.items = new List<OutputLogEntry>(capacity);
     }
+
+    /// <inheritdoc />
+    public event NotifyCollectionChangedEventHandler? CollectionChanged;
+
+    /// <inheritdoc />
+    public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
     ///     Gets or sets a value indicating whether change notifications are paused.
@@ -45,16 +55,27 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     /// </summary>
     public bool IsPaused
     {
-        get => this.paused;
+        get
+        {
+            lock (this.syncLock)
+            {
+                return this.paused;
+            }
+        }
+
         set
         {
-            if (this.paused == value)
+            lock (this.syncLock)
             {
-                return;
+                if (this.paused == value)
+                {
+                    return;
+                }
+
+                this.paused = value;
             }
 
-            this.paused = value;
-            if (!this.paused)
+            if (!value)
             {
                 // After a pause, ensure listeners can resync
                 this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
@@ -68,91 +89,180 @@ public partial class OutputLogBuffer : ObservableCollection<OutputLogEntry>
     public int Capacity { get; }
 
     /// <summary>
-    ///     Appends an <see cref="OutputLogEntry" /> to the end of the buffer.
-    ///     If the buffer exceeds <see cref="Capacity" />, the oldest entries are removed.
+    ///     Gets the current number of elements in the buffer.
     /// </summary>
-    /// <param name="entry">The log entry to append.</param>
-    public void Append(OutputLogEntry entry) => this.Add(entry);
-
-    /// <summary>
-    ///     Clears all entries from the buffer.
-    /// </summary>
-    public new void Clear()
+    public int Count
     {
-        lock (this.syncLock)
+        get
         {
-            this.ClearItems();
-        }
-    }
-
-    /// <summary>
-    ///     Inserts an item into the buffer. The buffer always appends items to the end
-    ///     regardless of the provided <paramref name="index" />, to provide ring semantics.
-    ///     After insertion the buffer is trimmed to the configured <see cref="Capacity" />.
-    /// </summary>
-    /// <inheritdoc />
-    protected override void InsertItem(int index, OutputLogEntry item)
-    {
-        lock (this.syncLock)
-        {
-            // Always append to the end; ignore index for ring semantics
-            base.InsertItem(this.Count, item);
-            this.TrimIfNeeded();
-        }
-    }
-
-    /// <inheritdoc />
-    protected override void RemoveItem(int index)
-    {
-        lock (this.syncLock)
-        {
-            base.RemoveItem(index);
-        }
-    }
-
-    /// <summary>
-    ///     Raises collection change notifications. When the buffer is paused notifications
-    ///     are suppressed except for a Reset action which is always forwarded to allow
-    ///     listeners to resynchronize.
-    /// </summary>
-    /// <inheritdoc />
-    protected override void OnCollectionChanged(NotifyCollectionChangedEventArgs e)
-    {
-        // Always notify Reset (e.g., Clear) even when paused so UIs can resync immediately.
-        if (!this.paused || e.Action == NotifyCollectionChangedAction.Reset)
-        {
-            // Block reentrancy to prevent nested collection changes during event handling
-            using (this.BlockReentrancy())
+            lock (this.syncLock)
             {
-                base.OnCollectionChanged(e);
+                return this.items.Count;
             }
         }
     }
 
     /// <summary>
-    ///     Raises property change notifications. When paused, only notifications for <see cref="Collection{T}.Count" />
-    ///     and the indexer ("Item[]") are forwarded.
+    ///     Gets the element at the specified index.
     /// </summary>
-    /// <inheritdoc />
-    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    /// <param name="index">The zero-based index of the element to get.</param>
+    /// <returns>The element at the specified index.</returns>
+    public OutputLogEntry this[int index]
     {
-        if (!this.paused ||
-            string.Equals(e.PropertyName, nameof(this.Count), StringComparison.Ordinal) ||
-            string.Equals(e.PropertyName, IndexerPropertyName, StringComparison.Ordinal))
+        get
         {
-            base.OnPropertyChanged(e);
+            lock (this.syncLock)
+            {
+                return this.items[index];
+            }
         }
     }
 
     /// <summary>
-    ///     Removes oldest entries if the current count exceeds the configured <see cref="Capacity" />.
+    ///     Appends an <see cref="OutputLogEntry" /> to the end of the buffer.
+    ///     If the buffer exceeds <see cref="Capacity" />, the oldest entries are removed.
     /// </summary>
-    private void TrimIfNeeded()
+    /// <param name="entry">The log entry to append.</param>
+    public void Append(OutputLogEntry entry)
     {
-        while (this.Count > this.Capacity)
+        bool wasPaused;
+        bool isInBatch;
+        var wasRotation = false;
+        int newIndex;
+
+        lock (this.syncLock)
         {
-            // Remove at head to maintain ring behavior
-            this.RemoveItem(0);
+            if (this.items.Count == this.Capacity)
+            {
+                this.items.RemoveAt(0);
+                wasRotation = true;
+            }
+
+            this.items.Add(entry);
+
+            // capture index while still holding the lock so callers reading by index
+            // from a CollectionChanged handler get a stable, correct reference
+            newIndex = this.items.Count - 1;
+            wasPaused = this.paused;
+            isInBatch = this.updateDepth > 0;
+
+            if (isInBatch)
+            {
+                this.isDirty = true;
+            }
+        }
+
+        if (wasPaused || isInBatch)
+        {
+            return;
+        }
+
+        // During rotation, use Reset to avoid per-item Remove events
+        if (wasRotation)
+        {
+            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.OnPropertyChanged(nameof(this.Count));
+            this.OnPropertyChanged(IndexerPropertyName);
+        }
+        else
+        {
+            // use the index captured under the lock to avoid races where other
+            // threads mutated the list between the append and event creation
+            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, entry, newIndex));
+            this.OnPropertyChanged(nameof(this.Count));
+            this.OnPropertyChanged(IndexerPropertyName);
         }
     }
+
+    /// <summary>
+    ///     Clears all entries from the buffer.
+    /// </summary>
+    public void Clear()
+    {
+        lock (this.syncLock)
+        {
+            this.items.Clear();
+        }
+
+        this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        this.OnPropertyChanged(nameof(this.Count));
+        this.OnPropertyChanged(IndexerPropertyName);
+    }
+
+    /// <summary>
+    ///     Begins a batch update operation. While in batch mode, collection change notifications
+    ///     are suppressed. Call <see cref="EndUpdate" /> to complete the batch and raise a single
+    ///     <see cref="NotifyCollectionChangedAction.Reset" /> notification.
+    /// </summary>
+    /// <remarks>
+    ///     This method supports nested calls. Notifications are only raised when the outermost
+    ///     batch is completed (when update depth returns to zero).
+    /// </remarks>
+    public void BeginUpdate()
+    {
+        lock (this.syncLock)
+        {
+            this.updateDepth++;
+        }
+    }
+
+    /// <summary>
+    ///     Ends a batch update operation. If this completes the outermost batch (update depth
+    ///     reaches zero) and changes were made, a <see cref="NotifyCollectionChangedAction.Reset" />
+    ///     notification is raised.
+    /// </summary>
+    public void EndUpdate()
+    {
+        var shouldNotify = false;
+
+        lock (this.syncLock)
+        {
+            if (this.updateDepth > 0)
+            {
+                this.updateDepth--;
+            }
+
+            if (this.updateDepth == 0 && this.isDirty)
+            {
+                shouldNotify = true;
+                this.isDirty = false;
+            }
+        }
+
+        if (shouldNotify)
+        {
+            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.OnPropertyChanged(nameof(this.Count));
+            this.OnPropertyChanged(IndexerPropertyName);
+        }
+    }
+
+    /// <inheritdoc />
+    public IEnumerator<OutputLogEntry> GetEnumerator()
+    {
+        List<OutputLogEntry> snapshot;
+        lock (this.syncLock)
+        {
+            snapshot = [.. this.items];
+        }
+
+        return snapshot.GetEnumerator();
+    }
+
+    /// <inheritdoc />
+    IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
+
+    /// <summary>
+    ///     Raises the <see cref="CollectionChanged" /> event.
+    /// </summary>
+    /// <param name="e">The event data.</param>
+    protected virtual void OnCollectionChanged(NotifyCollectionChangedEventArgs e)
+        => this.CollectionChanged?.Invoke(this, e);
+
+    /// <summary>
+    ///     Raises the <see cref="PropertyChanged" /> event.
+    /// </summary>
+    /// <param name="propertyName">The name of the property that changed.</param>
+    protected virtual void OnPropertyChanged(string propertyName)
+        => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

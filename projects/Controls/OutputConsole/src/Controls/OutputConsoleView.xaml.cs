@@ -7,6 +7,9 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Reactive;
+using System.Reactive.Linq;
+using System.Reactive.Subjects;
 using DroidNet.Controls.OutputConsole.Model;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -22,6 +25,7 @@ namespace DroidNet.Controls.OutputConsole;
 ///     A UI control that displays log entries in a live, filterable, and searchable console view.
 ///     This partial type contains core behavior for view wiring, event handlers and UI helpers.
 /// </summary>
+[SuppressMessage("Usage", "CA1001:Types that own disposable fields should be disposable", Justification = "This control disposes subscriptions on Unloaded; control lifecycle owns cleanup.")]
 public sealed partial class OutputConsoleView
 {
     private const double BottomThreshold = 32.0;
@@ -30,14 +34,19 @@ public sealed partial class OutputConsoleView
     private const StringComparison FilterComparison = StringComparison.CurrentCultureIgnoreCase;
 
     private readonly ObservableCollection<OutputLogEntry> viewItems = [];
+    private readonly Subject<NotifyCollectionChangedEventArgs> collectionChanges = new();
+    private readonly Subject<Unit> resetRequests = new();
+    private readonly IDisposable collectionChangesSubscription;
+    private readonly IDisposable resetSubscription;
     private Brush? accentBrush;
-    private bool autoFollowSuspended; // true when user scrolled away from bottom while FollowTail is on
     private TypedEventHandler<ListViewBase, ContainerContentChangingEventArgs>? contentChangingHandler;
     private Brush? errorBrush;
     private bool isLoaded;
+    private bool isRebuildingView;
     private ScrollViewer? scrollViewer;
     private Brush? tertiaryBrush;
     private Brush? warningBrush;
+    private bool disposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="OutputConsoleView" /> class.
@@ -53,6 +62,28 @@ public sealed partial class OutputConsoleView
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
         this.ActualThemeChanged += this.OnActualThemeChanged;
+
+        // Collect all collection changes in a short window and process them
+        // together instead of only processing the latest event. Sampling (previous
+        // behavior) dropped intermediate Add events that arrived within the sample
+        // window, causing the UI to only ever see the last line in a high-throughput
+        // batch. Buffering preserves all events while still batching UI work.
+        this.collectionChangesSubscription = this.collectionChanges
+            .Buffer(TimeSpan.FromMilliseconds(16))
+            .Where(batch => batch.Count > 0)
+                .Subscribe(batch => _ = this.DispatcherQueue.TryEnqueue(() =>
+                {
+                    foreach (var e in batch)
+                    {
+                        this.ProcessCollectionChange(e);
+                    }
+                }));
+
+        // Throttle Reset requests to prevent flooding during high-volume rotation
+        // Use Sample instead of Throttle to ensure regular updates even under continuous load
+        this.resetSubscription = this.resetRequests
+            .Sample(TimeSpan.FromMilliseconds(100)) // Less frequent than Add events
+            .Subscribe(_ => this.DispatcherQueue.TryEnqueue(this.RebuildView));
     }
 
     private static T? FindDescendant<T>(DependencyObject root, Func<FrameworkElement, bool>? predicate = null)
@@ -177,15 +208,18 @@ public sealed partial class OutputConsoleView
 
         this.FollowTailToggle.Checked += (_, _) =>
         {
-            // If we're not near the bottom, don't yank the user; suspend auto-follow until near bottom
-            this.autoFollowSuspended = !this.IsNearBottom();
+            // When the user explicitly enables Follow, always resume auto-follow
+            // and jump to the bottom immediately.
+            // auto-follow resumed by enabling Follow - no suspension tracked
             this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: true));
+
+            if (this.isLoaded)
+            {
+                // Force a scroll to bottom so the view reflects the user's intent.
+                this.ScrollToBottom();
+            }
         };
-        this.FollowTailToggle.Unchecked += (_, _) =>
-        {
-            this.autoFollowSuspended = false;
-            this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
-        };
+        this.FollowTailToggle.Unchecked += (_, _) => this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
 
         this.PauseToggle.Checked += (_, _) =>
         {
@@ -263,10 +297,6 @@ public sealed partial class OutputConsoleView
         this.UpdateLevelsSummary();
     }
 
-    [SuppressMessage(
-        "Maintainability",
-        "MA0051:Method is too long",
-        Justification = "already the smallest possible without artificial splitting")]
     private void OnCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (!this.isLoaded)
@@ -274,61 +304,74 @@ public sealed partial class OutputConsoleView
             return;
         }
 
-        // Marshal changes to UI thread and mirror them into the proxy collection
-        _ = this.DispatcherQueue.TryEnqueue(() =>
+        // For Reset (e.g., buffer rotation), throttle to prevent flooding
+        if (e.Action == NotifyCollectionChangedAction.Reset)
         {
-            if (!this.isLoaded)
-            {
-                return;
-            }
+            this.resetRequests.OnNext(Unit.Default);
+            return;
+        }
 
-            switch (e.Action)
-            {
-                case NotifyCollectionChangedAction.Add:
-                    foreach (var item in e.NewItems!.OfType<OutputLogEntry>())
+        // Push other changes to the throttled stream
+        this.collectionChanges.OnNext(e);
+    }
+
+    [SuppressMessage(
+        "Maintainability",
+        "MA0051:Method is too long",
+        Justification = "Switch statement for collection change actions")]
+    private void ProcessCollectionChange(NotifyCollectionChangedEventArgs e)
+    {
+        if (!this.isLoaded)
+        {
+            return;
+        }
+
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add:
+                foreach (var item in e.NewItems!.OfType<OutputLogEntry>())
+                {
+                    if (this.PassesFilter(item))
                     {
-                        if (this.PassesFilter(item))
+                        this.viewItems.Add(item);
+                    }
+                }
+
+                if (this.FollowTail && this.ShouldAutoScroll())
+                {
+                    this.ScrollToBottom();
+                }
+
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                foreach (var item in e.OldItems!.OfType<OutputLogEntry>())
+                {
+                    // Remove the first matching instance from the view proxy
+                    var idx = this.viewItems.IndexOf(item);
+                    if (idx >= 0)
+                    {
+                        this.viewItems.RemoveAt(idx);
+                    }
+                    else
+                    {
+                        // Fallback: if reference differs, remove from head to mirror ring trim
+                        if (this.viewItems.Count > 0)
                         {
-                            this.viewItems.Add(item);
+                            this.viewItems.RemoveAt(0);
                         }
                     }
+                }
 
-                    if (this.FollowTail && this.ShouldAutoScroll())
-                    {
-                        this.ScrollToBottom();
-                    }
-
-                    break;
-                case NotifyCollectionChangedAction.Remove:
-                    foreach (var item in e.OldItems!.OfType<OutputLogEntry>())
-                    {
-                        // Remove the first matching instance from the view proxy
-                        var idx = this.viewItems.IndexOf(item);
-                        if (idx >= 0)
-                        {
-                            this.viewItems.RemoveAt(idx);
-                        }
-                        else
-                        {
-                            // Fallback: if reference differs, remove from head to mirror ring trim
-                            if (this.viewItems.Count > 0)
-                            {
-                                this.viewItems.RemoveAt(0);
-                            }
-                        }
-                    }
-
-                    break;
-                case NotifyCollectionChangedAction.Reset:
-                    this.RebuildView();
-                    break;
-                case NotifyCollectionChangedAction.Replace:
-                case NotifyCollectionChangedAction.Move:
-                    // For simplicity, rebuild on complex changes
-                    this.RebuildView();
-                    break;
-            }
-        });
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                this.RebuildView();
+                break;
+            case NotifyCollectionChangedAction.Replace:
+            case NotifyCollectionChangedAction.Move:
+                // For simplicity, rebuild on complex changes
+                this.RebuildView();
+                break;
+        }
     }
 
     private void AttachCollectionChanged(IEnumerable? items)
@@ -379,29 +422,98 @@ public sealed partial class OutputConsoleView
         }
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Best-effort UI cleanup; exceptions are diagnostics only.")]
     private void RebuildView()
     {
-        if (!this.isLoaded)
+        if (!this.isLoaded || this.isRebuildingView)
         {
             return;
         }
 
-        this.viewItems.Clear();
-        if (this.ItemsSource is IEnumerable<OutputLogEntry> src)
+        try
         {
-            foreach (var item in src)
+            this.isRebuildingView = true;
+
+            // Capture scroll position before rebuilding when we're not following
+            // so we can restore the view instead of jumping to the start.
+            double? savedOffset = null;
+            this.scrollViewer ??= FindDescendant<ScrollViewer>(this.List);
+            if (!this.FollowTail && this.scrollViewer is not null)
             {
-                if (this.PassesFilter(item))
+                try
                 {
-                    this.viewItems.Add(item);
+                    savedOffset = this.scrollViewer.VerticalOffset;
+                }
+                catch
+                {
+                    savedOffset = null;
+                }
+            }
+
+            this.viewItems.Clear();
+            if (this.ItemsSource is IEnumerable<OutputLogEntry> src)
+            {
+                foreach (var item in src)
+                {
+                    if (this.PassesFilter(item))
+                    {
+                        this.viewItems.Add(item);
+                    }
+                }
+            }
+
+            if (this.ShouldAutoScroll())
+            {
+                this.ScrollToBottom();
+            }
+            else if (savedOffset.HasValue && this.scrollViewer is not null)
+            {
+                // Try to restore the previous scroll offset so pausing/unpausing
+                // doesn't yank the user back to the top.
+                try
+                {
+                    _ = this.scrollViewer.ChangeView(horizontalOffset: null, savedOffset.Value, zoomFactor: null, disableAnimation: true);
+                }
+                catch
+                {
+                    // ignore failures restoring offset; best-effort only
                 }
             }
         }
-
-        if (this.ShouldAutoScroll())
+        finally
         {
-            this.ScrollToBottom();
+            this.isRebuildingView = false;
         }
+    }
+
+    private void Cleanup()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+
+        if (this.contentChangingHandler is not null)
+        {
+            this.List.ContainerContentChanging -= this.contentChangingHandler;
+            this.contentChangingHandler = null;
+        }
+
+        if (this.scrollViewer is not null)
+        {
+            this.scrollViewer.ViewChanged -= this.OnScrollViewerViewChanged;
+            this.scrollViewer = null;
+        }
+
+        this.DetachCollectionChanged(this.ItemsSource);
+        this.ActualThemeChanged -= this.OnActualThemeChanged;
+
+        this.collectionChangesSubscription?.Dispose();
+        this.resetSubscription?.Dispose();
+        this.collectionChanges.Dispose();
+        this.resetRequests.Dispose();
     }
 
     private bool PassesFilter(OutputLogEntry item)
@@ -467,11 +579,12 @@ public sealed partial class OutputConsoleView
             return false;
         }
 
-        // Auto scroll only when user is near the bottom, or when not suspended
-        // If suspended due to user scroll, wait until they come near bottom again
-        return !this.autoFollowSuspended && this.IsNearBottom();
+        // Auto scroll only when Follow is enabled and the user is near the bottom
+        return this.IsNearBottom();
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "UI operations may throw platform exceptions; swallow to avoid crashes while keeping diagnostics.")]
+    [SuppressMessage("Maintainability", "MA0051:Method is too long", Justification = "Method contains small UI plumbing; splitting reduces readability.")]
     private void ScrollToBottom()
     {
         var last = this.viewItems.LastOrDefault();
@@ -563,14 +676,24 @@ public sealed partial class OutputConsoleView
             return;
         }
 
-        // If FollowTail is enabled and user scrolled away from bottom, suspend auto-follow
+        // If FollowTail is enabled and user scrolled away from bottom, disable follow
+        // (the user took explicit action to scroll) — this mirrors typical console
+        // behavior where manual scrolling turns off auto-follow.
         if (!this.FollowTail)
         {
             return;
         }
 
-        // Resume auto-follow when near bottom
-        this.autoFollowSuspended = !this.IsNearBottom();
+        if (!this.IsNearBottom())
+        {
+            // User scrolled away: turn follow off
+            this.FollowTail = false;
+            this.FollowTailChanged?.Invoke(this, new ToggleEventArgs(isOn: false));
+        }
+        else
+        {
+            // Still near the bottom — nothing to do
+        }
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs e)
@@ -589,6 +712,9 @@ public sealed partial class OutputConsoleView
 
         this.DetachCollectionChanged(this.ItemsSource);
         this.ActualThemeChanged -= this.OnActualThemeChanged; // safety
+
+        // Perform full cleanup of subscriptions and handlers tied to control lifetime
+        this.Cleanup();
     }
 
     [SuppressMessage(
