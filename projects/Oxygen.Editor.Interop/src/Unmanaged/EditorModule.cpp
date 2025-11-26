@@ -179,21 +179,8 @@ namespace Oxygen::Editor::EngineInterface {
     }
     auto gfx = graphics_.lock();
 
-    auto snapshot_pairs = registry_->SnapshotSurfaces();
-    if (snapshot_pairs.empty()) {
-      // No surfaces -> no work to be done.
-      co_return;
-    }
-
-    std::vector<std::shared_ptr<graphics::Surface>> surfaces;
-    surfaces.reserve(snapshot_pairs.size());
-    for (const auto& p : snapshot_pairs) {
-      DCHECK_NOTNULL_F(p.second);
-      surfaces.push_back(p.second);
-    }
-
-    SyncSurfacesWithFrameContext(context, surfaces);
-
+    // We will onlky work on the surfaces registered in the frame context.
+    auto surfaces = context.GetSurfaces();
     for (const auto& surface : surfaces) {
       // One command list (via command recorder acquisition) per surface.
       auto key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
