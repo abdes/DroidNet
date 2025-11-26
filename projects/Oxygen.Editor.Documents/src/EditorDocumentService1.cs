@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 namespace Oxygen.Editor.Documents;
 
 /// <summary>
-///     Logging methods for <see cref="WorldEditorDocumentService" />.
+///     Logging methods for <see cref="EditorDocumentService" />.
 /// </summary>
-public partial class WorldEditorDocumentService
+public partial class EditorDocumentService
 {
     [LoggerMessage(EventId = 1, Level = LogLevel.Debug, Message = "OpenDocumentAsync called for WindowId: {WindowId}, DocumentId: {DocumentId}")]
     private static partial void LogOpenDocumentCalled(ILogger logger, object windowId, Guid documentId);
