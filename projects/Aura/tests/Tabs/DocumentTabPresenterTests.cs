@@ -608,6 +608,14 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
             return Task.FromResult(true);
         }
+
+        // Return all stored documents for test purposes
+        public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
+            => [.. this.store.Values];
+
+        // Return the first document's ID if any exist, otherwise null
+        public Guid? GetActiveDocumentId(WindowId windowId)
+            => this.store.Keys.FirstOrDefault();
     }
 
     private sealed class TestDocumentMetadata : IDocumentMetadata

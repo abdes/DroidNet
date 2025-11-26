@@ -128,4 +128,18 @@ public interface IDocumentService
     /// <param name="documentId">The id of the document to select.</param>
     /// <returns>True when the selection was successful.</returns>
     public Task<bool> SelectDocumentAsync(WindowId windowId, Guid documentId);
+
+    /// <summary>
+    ///     Gets a list of all open documents for the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to get documents for.</param>
+    /// <returns>A read-only list of document metadata.</returns>
+    public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId);
+
+    /// <summary>
+    ///     Gets the ID of the currently active document for the specified window.
+    /// </summary>
+    /// <param name="windowId">The ID of the window to get the active document for.</param>
+    /// <returns>The ID of the active document, or null if no document is active.</returns>
+    public Guid? GetActiveDocumentId(WindowId windowId);
 }
