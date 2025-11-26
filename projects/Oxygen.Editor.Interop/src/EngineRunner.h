@@ -134,23 +134,17 @@ namespace Oxygen::Editor::EngineInterface {
 
     auto StopEngine(EngineContext^ ctx) -> void;
 
-    auto RegisterSurface(EngineContext^ ctx, System::Guid documentId,
-      System::Guid viewportId, System::String^ displayName,
-      System::IntPtr swapChainPanel) -> bool;
-
-    auto ResizeSurface(System::Guid viewportId, System::UInt32 width,
-      System::UInt32 height) -> void;
-
-    auto UnregisterSurface(System::Guid viewportId) -> void;
     // Async variants that return a processed acknowledgement once the engine
     // module has executed the requested work (processed during the next
     // engine frame). These are non-blocking on the UI thread and complete
     // after the engine has applied the Resize or scheduled the Destroy.
+
+    auto RegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
+      System::Guid viewportId, System::String^ displayName,
+      System::IntPtr swapChainPanel) -> System::Threading::Tasks::Task<bool>^;
     auto UnregisterSurfaceAsync(System::Guid viewportId) -> System::Threading::Tasks::Task<bool>^;
     auto ResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
       System::UInt32 height) -> System::Threading::Tasks::Task<bool>^;
-
-    void CaptureUiSynchronizationContext();
 
   private:
     // Encapsulated logging handler (forward-declared above). This hides any

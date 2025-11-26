@@ -72,6 +72,7 @@ namespace Oxygen::Editor::EngineInterface {
       -> oxygen::co::Co<> override;
 
   private:
+    void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
     auto ProcessResizeRequests()
       -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;

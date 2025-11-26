@@ -84,10 +84,19 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
     {
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
-        // DocumentHostViewModel must be a singleton to ensure it is always listening for messages
-        // even if the router hasn't navigated to it yet (e.g. if the layout is loading).
+        // DocumentHostViewModel must be registered and resolved first to ensure it subscribes to
+        // IDocumentService events before DocumentManager starts handling open requests.
         childContainer.Register<DocumentHostViewModel>(Reuse.Singleton);
         childContainer.Register<DocumentHostView>(Reuse.Singleton);
+
+        // Resolve DocumentHostViewModel immediately to ensure it subscribes to document events
+        _ = childContainer.Resolve<DocumentHostViewModel>();
+
+        // DocumentManager must be a singleton and resolved immediately to ensure it is always listening for messages
+        // even if the router hasn't navigated to any editor yet.
+        childContainer.Register<DocumentManager>(Reuse.Singleton);
+        _ = childContainer.Resolve<DocumentManager>();
+
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);

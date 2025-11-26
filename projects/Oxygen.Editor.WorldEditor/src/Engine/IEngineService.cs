@@ -26,7 +26,7 @@ public interface IEngineService : IAsyncDisposable
     /// </summary>
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>A task that completes once the engine is ready for surface allocation.</returns>
-    public ValueTask EnsureInitializedAsync(CancellationToken cancellationToken = default);
+    public ValueTask InitializeAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Attaches the engine to a WinUI panel and returns a handle that can be used for subsequent resize and disposal operations.

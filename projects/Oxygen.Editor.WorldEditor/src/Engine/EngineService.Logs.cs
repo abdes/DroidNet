@@ -33,19 +33,19 @@ public sealed partial class EngineService
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Failed to resize composition surface to {Width}x{Height}.")]
-    private static partial void LogResizeFailed(ILogger logger, Exception exception, uint width, uint height);
+    private static partial void LogResizeFailed(ILogger logger, uint width, uint height, Exception? exception);
 
-    private void LogResizeFailed(Exception exception, uint width, uint height)
-        => LogResizeFailed(this.logger, exception, width, height);
+    private void LogResizeFailed(uint width, uint height, Exception? exception = null)
+        => LogResizeFailed(this.logger, width, height, exception);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Starting engine loop for panel {PanelHash}.")]
-    private static partial void LogStartingEngineLoop(ILogger logger, int panelHash);
+        Message = "Starting engine loop.")]
+    private static partial void LogStartingEngineLoop(ILogger logger);
 
-    private void LogStartingEngineLoop(int panelHash)
-        => LogStartingEngineLoop(this.logger, panelHash);
+    private void LogStartingEngineLoop()
+        => LogStartingEngineLoop(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -107,17 +107,32 @@ public sealed partial class EngineService
         Message = "Lease {LeaseKey} released for document {DocumentId}. Active={TotalActive} DocumentActive={DocumentSurfaceCount} IdleCandidate={IdleCandidate}.")]
     private static partial void LogLeaseReleased(ILogger logger, string leaseKey, Guid documentId, int totalActive, int documentSurfaceCount, bool idleCandidate);
 
-    private void LogLeaseReleased(string leaseKey, Guid documentId, int totalActive, int documentSurfaceCount, bool idleCandidate)
-        => LogLeaseReleased(this.logger, leaseKey, documentId, totalActive, documentSurfaceCount, idleCandidate);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Failed to release lease {LeaseKey} for document {DocumentId}. Active={TotalActive} DocumentActive={DocumentSurfaceCount}.")]
+    private static partial void LogLeaseReleaseFailed(ILogger logger, string leaseKey, Guid documentId, int totalActive, int documentSurfaceCount);
+
+    private void LogLeaseReleased(string leaseKey, Guid documentId, bool result)
+    {
+        if (result)
+        {
+            LogLeaseReleased(this.logger, leaseKey, documentId, this.activeLeases.Count, this.documentSurfaceCounts.Count, this.activeLeases.Count == 0);
+        }
+        else
+        {
+            LogLeaseReleaseFailed(this.logger, leaseKey, documentId, this.activeLeases.Count, this.documentSurfaceCounts.Count);
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "StopEngineAsync requested (keepContextAlive={KeepContextAlive}) hasActiveContext={HasActiveContext} while state {State}.")]
-    private static partial void LogStopEngineRequested(ILogger logger, bool keepContextAlive, bool hasActiveContext, EngineServiceState state);
+        Message = "StopEngineAsync requested in state {State}, (keepContextAlive={KeepContextAlive}).")]
+    private static partial void LogStopEngineRequested(ILogger logger, EngineServiceState state, bool keepContextAlive);
 
-    private void LogStopEngineRequested(bool keepContextAlive, bool hasActiveContext, EngineServiceState state)
-        => LogStopEngineRequested(this.logger, keepContextAlive, hasActiveContext, state);
+    private void LogStopEngineRequested(bool keepContextAlive)
+        => LogStopEngineRequested(this.logger, this.state, keepContextAlive);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

@@ -13,14 +13,15 @@ using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
-using DroidNet.Routing.Events;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.WorldEditor.Messages;
 
@@ -37,7 +38,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
     private readonly IMessenger messenger;
     private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
-    private IDisposable? activationStartedSubscription;
+    private readonly IDocumentService documentService;
 
     private bool isDisposed;
 
@@ -57,6 +58,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         IProjectManagerService projectManager,
         IMessenger messenger,
         IRouter router,
+        IDocumentService documentService,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
@@ -65,10 +67,10 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         this.projectManager = projectManager;
         this.messenger = messenger;
         this.router = router;
+        this.documentService = documentService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
-        this.currentProject.PropertyChanged += this.OnCurrentProjectPropertyChanged;
 
         this.UndoStack = UndoRedo.Default[this].UndoStack;
         this.RedoStack = UndoRedo.Default[this].RedoStack;
@@ -80,7 +82,9 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         this.ItemAdded += this.OnItemAdded;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
-        this.activationStartedSubscription = this.router.Events.OfType<ActivationStarted>().Subscribe(this.OnActivationStarted);
+
+        // Subscribe to document events to load scene when a scene document is opened
+        documentService.DocumentOpened += this.OnDocumentOpened;
     }
 
     /// <summary>
@@ -113,10 +117,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
             return;
         }
 
-        this.currentProject.PropertyChanged -= this.OnCurrentProjectPropertyChanged;
-
+        this.documentService.DocumentOpened -= this.OnDocumentOpened;
         this.messenger.UnregisterAll(this);
-        this.activationStartedSubscription?.Dispose();
 
         this.isDisposed = true;
     }
@@ -163,9 +165,6 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         UndoRedo.Default[this].EndChangeSet();
     }
 
-    private void OnActivationStarted(ActivationStarted e)
-        => _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync);
-
     [RelayCommand]
     private void Undo() => UndoRedo.Default[this].Undo();
 
@@ -207,31 +206,34 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         await this.InsertItemAsync(relativeIndex, parent, newEntity).ConfigureAwait(false);
     }
 
-    private void OnCurrentProjectPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    private void OnDocumentOpened(object? sender, DroidNet.Documents.DocumentOpenedEventArgs e)
     {
-        if (args.PropertyName is not nameof(IProject.ActiveScene))
+        // Only react to scene documents
+        if (e.Metadata is not SceneDocumentMetadata sceneMetadata)
         {
             return;
         }
 
-        _ = this.dispatcher.EnqueueAsync(this.LoadActiveSceneAsync).ConfigureAwait(true);
-    }
-
-    private async Task LoadActiveSceneAsync()
-    {
-        var scene = this.currentProject.ActiveScene;
+        // Find the scene in the current project
+        var scene = this.currentProject.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
         if (scene is null)
         {
             return;
         }
 
+        // Update the active scene on the project
+        this.currentProject.ActiveScene = scene;
+
+        // Load the scene data and display it
+        _ = this.dispatcher.EnqueueAsync(() => this.LoadSceneAsync(scene)).ConfigureAwait(true);
+    }
+
+    private async Task LoadSceneAsync(Scene scene)
+    {
         if (!await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true))
         {
             return;
         }
-
-        // Request the document host to open the scene editor
-        _ = this.messenger.Send(new OpenSceneRequestMessage(scene));
 
         this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
