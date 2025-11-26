@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reflection;
-using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
 using Moq;

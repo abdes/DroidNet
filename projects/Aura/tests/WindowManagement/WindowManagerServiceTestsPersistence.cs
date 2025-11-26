@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Aura.Windowing;
-using Microsoft.UI.Windowing;
 
 namespace DroidNet.Aura.Tests;
 

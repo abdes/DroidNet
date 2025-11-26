@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;

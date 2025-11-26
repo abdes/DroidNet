@@ -4,11 +4,9 @@
 
 using System.Reflection;
 using AwesomeAssertions;
-using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Moq;
 using Windows.Foundation;
 
@@ -83,30 +81,27 @@ public partial class TabDragCoordinatorTests
     public Task HitTest_SkipsStaleTabStrips_Async() => EnqueueAsync(async () =>
     {
         // Arrange
+        // Simulate failure for stale element
         var coordinator = this.CreateCoordinator(
             mapperFactory: (window, element) =>
-            {
-                // Simulate failure for stale element
-                if (element is Border b && b.Tag as string == "stale")
-                {
-                    throw new InvalidOperationException("Stale element");
-                }
-                return new SpatialMapper(window, element);
-            });
+                element is Border b && string.Equals(b.Tag as string, "stale", StringComparison.Ordinal)
+                    ? throw new InvalidOperationException("Stale element")
+                    : (ISpatialMapper)new SpatialMapper(window, element));
 
         // 1. Create a "stale" strip
         var staleStripMock = new Mock<ITabStrip>();
         var staleContainer = new Border { Tag = "stale" };
-        staleStripMock.Setup(s => s.GetContainerElement()).Returns(staleContainer);
-        staleStripMock.SetupGet(s => s.WindowId).Returns(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+        _ = staleStripMock.Setup(s => s.GetContainerElement()).Returns(staleContainer);
+        _ = staleStripMock.SetupGet(s => s.WindowId).Returns(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
 
         // 2. Create a "valid" strip
         var validStripMock = new Mock<ITabStrip>();
         var validContainer = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
-        validStripMock.Setup(s => s.GetContainerElement()).Returns(validContainer);
-        validStripMock.SetupGet(s => s.WindowId).Returns(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+        _ = validStripMock.Setup(s => s.GetContainerElement()).Returns(validContainer);
+        _ = validStripMock.SetupGet(s => s.WindowId).Returns(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+
         // Setup HitTest to return success so we know it was checked
-        validStripMock.Setup(s => s.HitTestWithThreshold(It.IsAny<SpatialPoint<ElementSpace>>(), It.IsAny<double>())).Returns(1);
+        _ = validStripMock.Setup(s => s.HitTestWithThreshold(It.IsAny<SpatialPoint<ElementSpace>>(), It.IsAny<double>())).Returns(1);
 
         // Register both
         coordinator.RegisterTabStrip(staleStripMock.Object);
