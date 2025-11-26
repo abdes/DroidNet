@@ -55,6 +55,10 @@ struct TimingConfig {
 };
 
 struct EngineConfig {
+  // Maximum allowed target FPS for runtime configuration.
+  // Use 0 for uncapped frame rate. Values above this will be clamped by
+  // AsyncEngine::SetTargetFps.
+  static constexpr uint32_t kMaxTargetFps = 240u;
   struct {
     std::string name;
     uint32_t version;

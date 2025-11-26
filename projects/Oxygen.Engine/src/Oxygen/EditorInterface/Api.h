@@ -37,6 +37,16 @@ OXGN_EI_API auto CreateEngine(const EngineConfig& config)
 OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
 OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
 
+// Runtime configuration helpers
+// Set the engine target frames per second for the given engine context.
+// Value is handled by AsyncEngine::SetTargetFps which clamps to allowed range.
+OXGN_EI_API auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void;
+
+// Returns a copy of the current engine configuration for inspection by
+// managed code or tests. If ctx or ctx->engine is null, returns a default
+// EngineConfig value-initialized to defaults.
+OXGN_EI_API auto GetEngineConfig(std::shared_ptr<EngineContext> ctx) -> EngineConfig;
+
 OXGN_EI_API auto CreateScene(const char* name) -> bool;
 OXGN_EI_API auto RemoveScene(const char* name) -> bool;
 

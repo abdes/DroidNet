@@ -63,6 +63,29 @@ public sealed class EngineTests
     }
 
     [TestMethod]
+    public void SetTargetFps_InteropAppliesAndClamps()
+    {
+        var cfg = new EngineConfig();
+        var ctx = this.CreateEngineUnderTest(cfg);
+
+        // Apply reasonable fps
+        this.runner.SetTargetFps(ctx, 120u);
+        var readCfg = this.runner.GetEngineConfig(ctx);
+        _ = readCfg.Should().NotBeNull();
+        _ = readCfg.TargetFps.Should().Be(120u);
+
+        // Values above allowed maximum are clamped to 240
+        this.runner.SetTargetFps(ctx, 10000u);
+        readCfg = this.runner.GetEngineConfig(ctx);
+        _ = readCfg.TargetFps.Should().Be(240u);
+
+        // 0 means uncapped
+        this.runner.SetTargetFps(ctx, 0u);
+        readCfg = this.runner.GetEngineConfig(ctx);
+        _ = readCfg.TargetFps.Should().Be(0u);
+    }
+
+    [TestMethod]
     public void CreateEngine_AfterDispose_ThrowsObjectDisposed()
     {
         this.runner.Dispose();

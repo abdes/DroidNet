@@ -114,6 +114,11 @@ public:
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
 
+  //! Set the engine target frames-per-second at runtime. 0 = uncapped.
+  //! Value will be clamped to range [0, 240]. Thread-safety is caller's
+  //! responsibility.
+  OXGN_NGIN_API auto SetTargetFps(uint32_t fps) noexcept -> void;
+
   // Clock accessors
   OXGN_NGIN_NDAPI auto GetPhysicalClock() const noexcept
     -> const time::PhysicalClock&;

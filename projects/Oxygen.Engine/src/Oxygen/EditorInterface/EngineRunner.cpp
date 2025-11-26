@@ -269,4 +269,27 @@ auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
   ctx->engine->Stop();
 }
 
+ auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void
+ {
+   if (!ctx || !ctx->engine) {
+     return; // nothing to do
+   }
+
+   try {
+     ctx->engine->SetTargetFps(fps);
+   }
+   catch (...) {
+     // keep interop boundary robust — swallow internal errors
+   }
+ }
+
+ auto GetEngineConfig(std::shared_ptr<EngineContext> ctx) -> EngineConfig
+ {
+   if (!ctx || !ctx->engine) {
+     return EngineConfig{};
+   }
+   // GetEngineConfig returns a const reference; copy it for safe return
+   return ctx->engine->GetEngineConfig();
+ }
+
 } // namespace oxygen::engine::interop

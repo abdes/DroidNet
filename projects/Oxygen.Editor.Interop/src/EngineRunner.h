@@ -126,6 +126,18 @@ namespace Oxygen::Editor::EngineInterface {
     auto RunEngine(EngineContext^ ctx) -> void;
 
     /// <summary>
+    /// Set runtime target FPS via interop. 0 = uncapped. Caller must ensure
+    /// appropriate synchronization (UI thread) when invoking.
+    /// </summary>
+    auto SetTargetFps(EngineContext^ ctx, System::UInt32 fps) -> void;
+
+    /// <summary>
+    /// Reads the current native EngineConfig for inspection. Returns a managed
+    /// `EngineConfig` object converted from the native config.
+    /// </summary>
+    auto GetEngineConfig(EngineContext^ ctx) -> EngineConfig^;
+
+    /// <summary>
     /// Starts the engine loop on a dedicated background thread and returns a task that
     /// completes when the engine stops.
     /// </summary>
