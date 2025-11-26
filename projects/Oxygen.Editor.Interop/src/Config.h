@@ -281,6 +281,16 @@ namespace Oxygen::Editor::EngineInterface {
       }
       return n;
     }
+
+    /// <summary>
+    /// Maximum allowed target FPS as defined by the native engine config.
+    /// This exposes the native EngineConfig::kMaxTargetFps to managed callers.
+    /// </summary>
+    static property System::UInt32 MaxTargetFps {
+      System::UInt32 get() {
+        return native::EngineConfig::kMaxTargetFps;
+      }
+    }
   };
 
   // Convenience aggregating helper (optional future extension point)

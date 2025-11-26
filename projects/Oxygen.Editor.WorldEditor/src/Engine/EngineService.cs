@@ -9,7 +9,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.EngineInterface;
-using Oxygen.Editor.WorldEditor.Editors;
 
 namespace Oxygen.Editor.WorldEditor.Engine;
 
@@ -42,6 +41,13 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     /// Gets the number of active viewport leases currently tracked by the service.
     /// </summary>
     public int ActiveSurfaceCount => this.activeLeases.Count;
+
+    /// <summary>
+    /// Gets the maximum allowed target frames-per-second defined by the native
+    /// engine configuration (exposed to consumers so they don't need interop
+    /// types).
+    /// </summary>
+    public uint MaxTargetFps => EngineConfig.MaxTargetFps;
 
     /// <inheritdoc />
     public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
@@ -80,9 +86,6 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             var config = ConfigFactory.CreateDefaultEngineConfig();
             config.Graphics ??= new GraphicsConfigManaged();
             config.Graphics.Headless = true;
-
-            // TODO: temporarirly set FPS at 1 to reduce log throughput
-            config.TargetFps = 60;
 
             this.engineContext = this.engineRunner.CreateEngine(config);
             if (this.engineContext?.IsValid != true)
@@ -145,6 +148,32 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         }
     }
 
+    /// <summary>
+    /// Gets the current engine target frames-per-second setting. 0 = uncapped.
+    /// </summary>
+    /// <returns>The configured target FPS.</returns>
+    public uint GetEngineTargetFps()
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+        var cfg = this.engineRunner.GetEngineConfig(this.engineContext);
+        return cfg.TargetFps;
+    }
+
+    /// <summary>
+    /// Sets the engine target frames-per-second at runtime. 0 = uncapped.
+    /// </summary>
+    /// <param name="fps">Target frames per second.</param>
+    public void SetEngineTargetFps(uint fps)
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+        this.engineRunner.SetTargetFps(this.engineContext, fps);
+        this.LogTargetFpsSet(fps);
+    }
+
     /// <inheritdoc />
     public async ValueTask DisposeAsync()
     {
@@ -180,6 +209,17 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         this.initializationGate.Dispose();
         this.leaseGate.Dispose();
         this.state = EngineServiceState.Created;
+    }
+
+    private void EnsureEngineCreated()
+    {
+        if (this.engineRunner is not null && this.engineContext?.IsValid == true)
+        {
+            // We assume that we are ok, if we have a valid context
+            return;
+        }
+
+        throw new InvalidOperationException("Expecting engine to have been created.");
     }
 
     private void EnsureEngineReady()

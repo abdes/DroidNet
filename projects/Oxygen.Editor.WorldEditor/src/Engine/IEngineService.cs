@@ -48,4 +48,28 @@ public interface IEngineService : IAsyncDisposable
     /// <param name="cancellationToken">A cancellation token.</param>
     /// <returns>A task that completes when the releases have finished.</returns>
     public ValueTask ReleaseDocumentSurfacesAsync(Guid documentId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns the current engine target frames-per-second setting.
+    /// </summary>
+    /// <remarks>
+    /// This API is only valid while the <see cref="EngineService"/> is in <see cref="EngineServiceState.Created"/>. When
+    /// called in that state the implementation will call into the managed engine wrapper to read the current runtime value.
+    /// </remarks>
+    public uint GetEngineTargetFps();
+
+    /// <summary>
+    /// Updates the engine target frames-per-second runtime setting.
+    /// </summary>
+    /// <param name="fps">Target frames per second. 0 = uncapped.</param>
+    /// <remarks>
+    /// This API is only valid while the <see cref="EngineService"/> is in <see cref="EngineServiceState.Created"/> and will
+    /// forward the request to the managed native wrapper.
+    /// </remarks>
+    public void SetEngineTargetFps(uint fps);
+
+    /// <summary>
+    /// Maximum allowed target frames per second as defined by the native engine.
+    /// </summary>
+    public uint MaxTargetFps { get; }
 }

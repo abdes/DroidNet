@@ -185,6 +185,15 @@ auto AsyncEngine::GetEngineConfig() const noexcept -> const EngineConfig&
   return config_;
 }
 
+auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
+{
+  if (fps > EngineConfig::kMaxTargetFps) {
+    fps = EngineConfig::kMaxTargetFps;
+  }
+  config_.target_fps = fps;
+  LOG_F(INFO, "AsyncEngine target_fps set to {}", config_.target_fps);
+}
+
 auto AsyncEngine::NextFrame() -> bool
 {
   ++frame_number_;

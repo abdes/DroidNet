@@ -525,6 +525,24 @@ namespace Oxygen::Editor::EngineInterface {
     oxygen::engine::interop::StopEngine(ctx->NativeShared());
   }
 
+  auto EngineRunner::SetTargetFps(EngineContext^ ctx, System::UInt32 fps) -> void
+  {
+    if (ctx == nullptr) {
+      return;
+    }
+
+    oxygen::engine::interop::SetTargetFps(ctx->NativeShared(), static_cast<uint32_t>(fps));
+  }
+
+  auto EngineRunner::GetEngineConfig(EngineContext^ ctx) -> EngineConfig^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    auto native_cfg = oxygen::engine::interop::GetEngineConfig(ctx->NativeShared());
+    return EngineConfig::FromNative(native_cfg);
+  }
+
   auto EngineRunner::UnregisterSurfaceAsync(System::Guid viewportId) -> Task<bool>^
   {
     EnsureSurfaceRegistry();

@@ -169,4 +169,40 @@ public sealed partial class EngineService
 
     private void LogContextReused()
         => LogContextReused(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Engine target FPS retrieved: {Fps}.")]
+    private static partial void LogTargetFpsRetrieved(ILogger logger, uint fps);
+
+    private void LogTargetFpsRetrieved(uint fps)
+        => LogTargetFpsRetrieved(this.logger, fps);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Engine target FPS set to {Fps}.")]
+    private static partial void LogTargetFpsSet(ILogger logger, uint fps);
+
+    private void LogTargetFpsSet(uint fps)
+        => LogTargetFpsSet(this.logger, fps);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to set engine target FPS to {Fps}.")]
+    private static partial void LogSetTargetFpsFailed(ILogger logger, uint fps, Exception exception);
+
+    private void LogSetTargetFpsFailed(uint fps, Exception exception)
+        => LogSetTargetFpsFailed(this.logger, fps, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to retrieve engine target FPS.")]
+    private static partial void LogGetTargetFpsFailed(ILogger logger, Exception exception);
+
+    private void LogGetTargetFpsFailed(Exception exception)
+        => LogGetTargetFpsFailed(this.logger, exception);
 }
