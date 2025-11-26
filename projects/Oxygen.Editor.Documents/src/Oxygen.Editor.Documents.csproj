@@ -4,6 +4,12 @@
 
         <RootNamespace>Oxygen.Editor.Documents</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen editor document management system.</Title>
+		<Description>Oxygen.Editor.Documents is the concrete implementation of document management for the Oxygen editor.</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageTags>winui;documents;document-management;editor</PackageTags>
+		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
