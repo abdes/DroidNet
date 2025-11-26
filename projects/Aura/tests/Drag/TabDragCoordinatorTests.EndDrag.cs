@@ -2,15 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reflection;
 using AwesomeAssertions;
-using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
 using Moq;
 using Windows.Foundation;
-using System.Reflection;
 
 namespace DroidNet.Aura.Drag.Tests;
 

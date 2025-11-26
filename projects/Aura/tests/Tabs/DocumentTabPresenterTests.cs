@@ -2,12 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
-using System.Threading.Tasks;
 using AwesomeAssertions;
-using DroidNet.Aura.Controls;
 using DroidNet.Aura.Documents;
 using DroidNet.Aura.Windowing;
 using DroidNet.Tests;
@@ -76,7 +72,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         using var presenter = new DocumentTabPresenter(
             tabStrip,
-            CreateStatefulServiceMock(ctx.Id, new[] { metadata }, docId).Object,
+            CreateStatefulServiceMock(ctx.Id, [metadata], docId).Object,
             ctx,
             DispatcherQueue.GetForCurrentThread(),
             this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
@@ -105,7 +101,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         using var presenter = new DocumentTabPresenter(
             tabStrip,
-            CreateStatefulServiceMock(ctx.Id, new[] { first, second }, second.DocumentId).Object,
+            CreateStatefulServiceMock(ctx.Id, [first, second], second.DocumentId).Object,
             ctx,
             DispatcherQueue.GetForCurrentThread(),
             this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
@@ -421,6 +417,39 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         }
     }
 
+    private static Mock<IDocumentService> CreateStatefulServiceMock(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, Guid? activeDocumentId)
+    {
+        var mock = new Mock<IDocumentService>(MockBehavior.Loose);
+        var stateMock = mock.As<IDocumentServiceState>();
+        _ = stateMock
+            .Setup(s => s.GetOpenDocuments(windowId))
+            .Returns(documents);
+        _ = stateMock
+            .Setup(s => s.GetActiveDocumentId(windowId))
+            .Returns(activeDocumentId);
+
+        _ = mock
+            .Setup(s => s.SelectDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
+            .ReturnsAsync(value: true);
+        _ = mock
+            .Setup(s => s.CloseDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<bool>()))
+            .ReturnsAsync(value: true);
+        _ = mock
+            .Setup(s => s.DetachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
+            .ReturnsAsync((IDocumentMetadata?)null);
+        _ = mock
+            .Setup(s => s.OpenDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(Guid.NewGuid());
+        _ = mock
+            .Setup(s => s.AttachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
+            .ReturnsAsync(value: true);
+        _ = mock
+            .Setup(s => s.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
+            .ReturnsAsync(value: true);
+
+        return mock;
+    }
+
     /// <summary>
     /// Helper to create a ManagedWindow for tests (avoids using the ManagedWindowFactory dependency).
     /// This mirrors the minimal parts of the window context used by DocumentTabPresenter.
@@ -435,39 +464,6 @@ public class DocumentTabPresenterTests : TabStripTestsBase
             Category = new WindowCategory("Test"),
             CreatedAt = DateTimeOffset.UtcNow,
         };
-    }
-
-    private static Mock<IDocumentService> CreateStatefulServiceMock(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, Guid? activeDocumentId)
-    {
-        var mock = new Mock<IDocumentService>(MockBehavior.Loose);
-        var stateMock = mock.As<IDocumentServiceState>();
-        stateMock
-            .Setup(s => s.GetOpenDocuments(windowId))
-            .Returns(documents);
-        stateMock
-            .Setup(s => s.GetActiveDocumentId(windowId))
-            .Returns(activeDocumentId);
-
-        _ = mock
-            .Setup(s => s.SelectDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
-            .ReturnsAsync(true);
-        _ = mock
-            .Setup(s => s.CloseDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<bool>()))
-            .ReturnsAsync(true);
-        _ = mock
-            .Setup(s => s.DetachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<Guid>()))
-            .ReturnsAsync((IDocumentMetadata?)null);
-        _ = mock
-            .Setup(s => s.OpenDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
-            .ReturnsAsync(Guid.NewGuid());
-        _ = mock
-            .Setup(s => s.AttachDocumentAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<int>(), It.IsAny<bool>()))
-            .ReturnsAsync(true);
-        _ = mock
-            .Setup(s => s.UpdateMetadataAsync(It.IsAny<WindowId>(), It.IsAny<Guid>(), It.IsAny<IDocumentMetadata>()))
-            .ReturnsAsync(true);
-
-        return mock;
     }
 
     private sealed class TestDocumentService : IDocumentService
