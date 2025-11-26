@@ -16,7 +16,7 @@ namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 [ViewModel(typeof(SceneEditorViewModel))]
 public sealed partial class SceneEditorView : UserControl
 {
-    private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = new();
+    private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = [];
     private SceneEditorViewModel? currentViewModel;
 
     /// <summary>
@@ -27,7 +27,6 @@ public sealed partial class SceneEditorView : UserControl
         this.InitializeComponent();
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
-        this.DataContextChanged += this.OnDataContextChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -46,20 +45,6 @@ public sealed partial class SceneEditorView : UserControl
 
         this.DetachFromCurrentViewModel();
         this.ClearViewportControls();
-    }
-
-    private void OnDataContextChanged(FrameworkElement sender, DataContextChangedEventArgs args)
-    {
-        _ = sender;
-
-        if (!this.IsLoaded)
-        {
-            this.AttachToViewModel(args.NewValue as SceneEditorViewModel);
-            return;
-        }
-
-        this.AttachToViewModel(args.NewValue as SceneEditorViewModel);
-        this.RebuildLayout();
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -104,7 +89,7 @@ public sealed partial class SceneEditorView : UserControl
     {
         foreach (var control in this.viewportControls.Values)
         {
-            this.ViewportGrid.Children.Remove(control);
+            _ = this.ViewportGrid.Children.Remove(control);
         }
 
         this.viewportControls.Clear();
@@ -150,7 +135,7 @@ public sealed partial class SceneEditorView : UserControl
         for (var i = 0; i < count; i++)
         {
             var viewportVm = viewports[i];
-            used.Add(viewportVm);
+            _ = used.Add(viewportVm);
 
             if (!this.viewportControls.TryGetValue(viewportVm, out var viewportControl))
             {
@@ -179,13 +164,13 @@ public sealed partial class SceneEditorView : UserControl
                 continue;
             }
 
-            this.ViewportGrid.Children.Remove(kvp.Value);
+            _ = this.ViewportGrid.Children.Remove(kvp.Value);
             toRemove.Add(kvp.Key);
         }
 
         foreach (var key in toRemove)
         {
-            this.viewportControls.Remove(key);
+            _ = this.viewportControls.Remove(key);
         }
     }
 }

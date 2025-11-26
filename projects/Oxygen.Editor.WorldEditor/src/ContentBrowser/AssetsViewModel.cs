@@ -6,10 +6,12 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
@@ -26,7 +28,8 @@ public partial class AssetsViewModel(
     AssetsIndexingService assetsIndexingService,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
-    IProjectManagerService projectManagerService) : AbstractOutletContainer, IRoutingAware
+    IProjectManagerService projectManagerService,
+    IMessenger messenger) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
     private bool isInitialized;
@@ -58,6 +61,16 @@ public partial class AssetsViewModel(
             await assetsIndexingService.IndexAssetsAsync().ConfigureAwait(true);
 
             this.isInitialized = true;
+
+            // If the project has an active scene, navigate to Scenes folder and request it to be opened
+            if (currentProject.ActiveScene is not null)
+            {
+                // Navigate to the Scenes folder to show scene assets
+                contentBrowserState.SetSelectedFolders(["Scenes"]);
+
+                // Request the scene document to be opened
+                _ = messenger.Send(new OpenSceneRequestMessage(currentProject.ActiveScene));
+            }
         }
 
         // Actions that should happen on every navigation
@@ -121,6 +134,9 @@ public partial class AssetsViewModel(
             if (scene is not null)
             {
                 currentProject.ActiveScene = scene;
+
+                // Request to open the scene document
+                _ = messenger.Send(new OpenSceneRequestMessage(scene));
             }
         }
         else if (args.InvokedItem.AssetType == AssetType.Folder)

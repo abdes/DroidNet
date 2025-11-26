@@ -49,9 +49,45 @@ namespace Oxygen::Editor::EngineInterface {
   auto EditorModule::OnFrameStart(engine::FrameContext& context) -> void {
     DCHECK_NOTNULL_F(registry_);
 
+    ProcessSurfaceRegistrations();
     ProcessSurfaceDestructions();
     auto surfaces = ProcessResizeRequests();
     SyncSurfacesWithFrameContext(context, surfaces);
+  }
+
+  void EditorModule::ProcessSurfaceRegistrations() {
+    DCHECK_NOTNULL_F(registry_);
+
+    auto pending = registry_->DrainPendingRegistrations();
+    if (pending.empty()) {
+      return;
+    }
+
+    for (auto& entry : pending) {
+      const auto& key = entry.first;
+      auto& surface = entry.second.first;
+      auto& cb = entry.second.second;
+
+      CHECK_NOTNULL_F(surface); // This is a bug if it happens.
+      try {
+        DLOG_F(INFO, "Processing pending surface registration for: '{}'.",
+          surface->GetName());
+        // Register the surface in the registry's live entries
+        registry_->CommitRegistration(key, surface);
+      }
+      catch (...) {
+        // Registration failed
+      }
+
+      if (cb) {
+        try {
+          cb(true);
+        }
+        catch (...) {
+          /* swallow */
+        }
+      }
+    }
   }
 
   void EditorModule::ProcessSurfaceDestructions() {

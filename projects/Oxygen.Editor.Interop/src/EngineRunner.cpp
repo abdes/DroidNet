@@ -115,7 +115,7 @@ namespace Oxygen::Editor::EngineInterface {
     // Helpful diagnostic message for interop troubleshooting: include a
     // short hex representation of the token key and whether resolution
     // succeeded.
-    auto tokenToHex = [](const TokenKey &k) -> std::string {
+    auto tokenToHex = [](const TokenKey& k) -> std::string {
       std::string out;
       out.reserve(k.size() * 3);
       for (size_t i = 0; i < k.size(); ++i) {
@@ -123,7 +123,7 @@ namespace Oxygen::Editor::EngineInterface {
         if (i + 1 < k.size() && (i % 4 == 3)) out.push_back('-');
       }
       return out;
-    };
+      };
     try {
       auto msg = fmt::format("ResolveToken: key={} ok={}", tokenToHex(nativeKey), ok ? "true" : "false");
       oxygen::engine::interop::LogInfoMessage(msg.c_str());
@@ -413,19 +413,6 @@ namespace Oxygen::Editor::EngineInterface {
     return ConfigureLogging(config);
   }
 
-  void EngineRunner::CaptureUiSynchronizationContext()
-  {
-    if (disposed_) {
-      throw gcnew ObjectDisposedException("EngineRunner");
-    }
-
-    auto current = SynchronizationContext::Current;
-    ui_dispatcher_->Capture(current,
-      gcnew String(L"CaptureUiSynchronizationContext() must be invoked on the UI thread."));
-  }
-
-
-
   auto EngineRunner::CreateEngine(EngineConfig^ engine_cfg) -> EngineContext^ {
     return CreateEngine(engine_cfg, IntPtr::Zero);
   }
@@ -436,9 +423,7 @@ namespace Oxygen::Editor::EngineInterface {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
 
-    ui_dispatcher_->CaptureCurrent(
-      gcnew String(L"CreateEngine must be invoked on the UI thread. "
-        L"Call CaptureUiSynchronizationContext() before headless runs."));
+    ui_dispatcher_->CaptureCurrent(gcnew String(L"CreateEngine"));
 
     try {
       // Translate managed EngineConfig into native config.
@@ -540,141 +525,6 @@ namespace Oxygen::Editor::EngineInterface {
     oxygen::engine::interop::StopEngine(ctx->NativeShared());
   }
 
-  auto EngineRunner::RegisterSurface(EngineContext^ ctx, System::Guid documentId,
-    System::Guid viewportId, System::String^ displayName,
-    IntPtr swapChainPanel) -> bool
-  {
-    if (ctx == nullptr) {
-      throw gcnew ArgumentNullException("ctx");
-    }
-    if (swapChainPanel == IntPtr::Zero) {
-      throw gcnew ArgumentException(
-        "SwapChainPanel pointer must not be zero.", "swapChainPanel");
-    }
-    if (disposed_) {
-      throw gcnew ObjectDisposedException("EngineRunner");
-    }
-
-    ui_dispatcher_->VerifyAccess(
-      gcnew String(L"RegisterSurface requires the UI thread. "
-        L"Call CreateEngine() on the UI thread first."));
-
-    auto& shared = ctx->NativeShared();
-    if (!shared) {
-      return false;
-    }
-
-    EnsureSurfaceRegistry();
-    auto registry = GetSurfaceRegistry();
-    auto key = ToGuidKey(viewportId);
-
-    auto docString = documentId.ToString();
-    auto viewportString = viewportId.ToString();
-    auto displayLabel = displayName != nullptr ? displayName : gcnew String(L"(unnamed viewport)");
-    const auto doc = msclr::interop::marshal_as<std::string>(docString);
-    const auto view = msclr::interop::marshal_as<std::string>(viewportString);
-    const auto disp = msclr::interop::marshal_as<std::string>(displayLabel);
-
-    // Timestamped entry trace for RegisterSurface
-    try {
-      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-      char buf[64]{};
-      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
-      auto registrationLog = fmt::format("[{}] RegisterSurface doc={} viewport={} name='{}'", buf, doc, view, disp);
-      oxygen::engine::interop::LogInfoMessage(registrationLog.c_str());
-    }
-    catch (...) {
-      oxygen::engine::interop::LogInfoMessage("RegisterSurface: failed to format timestamped log");
-    }
-
-    oxygen::engine::interop::LogInfoMessage("RegisterSurface: creating composition surface.");
-    void* swap_chain_ptr = nullptr;
-    auto surface = oxygen::engine::interop::CreateCompositionSurface(shared,
-      &swap_chain_ptr);
-    if (!surface) {
-      oxygen::engine::interop::LogInfoMessage(
-        "RegisterSurface failed: CreateCompositionSurface returned null.");
-      return false;
-    }
-
-    // Set a helpful debug name that includes the document and viewport id so
-    // logs identify which viewport this composition surface belongs to.
-    try {
-      surface->SetName(disp);
-    }
-    catch (...) { /* best-effort naming; ignore failures */ }
-
-    registry->RegisterSurface(key, surface);
-
-    // Log that registration succeeded (timestamp + diagnostic counts)
-    try {
-      std::time_t now2 = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-      char buf2[64]{};
-      std::strftime(buf2, sizeof(buf2), "%F %T", std::localtime(&now2));
-      auto successLog = fmt::format("[{}] RegisterSurface completed: viewport={} swap_chain_ptr={} surface_ptr={} surface.use_count={}", buf2, view, fmt::ptr(swap_chain_ptr), fmt::ptr(surface.get()), surface.use_count());
-      oxygen::engine::interop::LogInfoMessage(successLog.c_str());
-    }
-    catch (...) {
-      oxygen::engine::interop::LogInfoMessage("RegisterSurface: failed to format success log");
-    }
-
-    if (swap_chain_ptr != nullptr) {
-      // Keep a temporary owning reference to the surface so the UI attach
-      // callback cannot observe a destroyed surface unexpectedly. The
-      // pointer is deleted by AttachSwapChainCallback once it runs.
-      auto surface_ptr = new std::shared_ptr<oxygen::graphics::Surface>(surface);
-      AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr), IntPtr(surface_ptr));
-    }
-
-    return true;
-  }
-
-  auto EngineRunner::ResizeSurface(System::Guid viewportId, System::UInt32 width,
-    System::UInt32 height) -> void
-  {
-    if (width == 0 || height == 0) {
-      return;
-    }
-
-    EnsureSurfaceRegistry();
-    auto registry = GetSurfaceRegistry();
-    auto key = ToGuidKey(viewportId);
-    auto surface = registry->FindSurface(key);
-    if (!surface) {
-      return;
-    }
-
-    const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
-    auto resizeLog = fmt::format("ResizeSurface viewport={} size={}x{}", viewportString, width, height);
-    oxygen::engine::interop::LogInfoMessage(resizeLog.c_str());
-
-    // Mark the composition surface for resize; the engine module will execute
-    // the actual Resize() during its next frame cycle and resolve any
-    // registered tokens.
-    oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width,
-      height);
-  }
-
-  auto EngineRunner::UnregisterSurface(System::Guid viewportId) -> void
-  {
-    EnsureSurfaceRegistry();
-    auto registry = GetSurfaceRegistry();
-    auto key = ToGuidKey(viewportId);
-    const auto viewportString = msclr::interop::marshal_as<std::string>(viewportId.ToString());
-    try {
-      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-      char buf[64]{};
-      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
-      auto unregisterLog = fmt::format("[{}] UnregisterSurface viewport={}", buf, viewportString);
-      oxygen::engine::interop::LogInfoMessage(unregisterLog.c_str());
-    }
-    catch (...) {
-      oxygen::engine::interop::LogInfoMessage("UnregisterSurface: failed to format timestamped log");
-    }
-    // Stage removal into the registry; do not final-release on the UI thread.
-    registry->RemoveSurface(key);
-  }
-
   auto EngineRunner::UnregisterSurfaceAsync(System::Guid viewportId) -> Task<bool>^
   {
     EnsureSurfaceRegistry();
@@ -755,7 +605,8 @@ namespace Oxygen::Editor::EngineInterface {
       }
 
       // Fail the TaskCompletionSource so the caller does not hang
-      try { tcs->TrySetResult(false); } catch (...) { /* swallow */ }
+      try { tcs->TrySetResult(false); }
+      catch (...) { /* swallow */ }
 
       return tcs->Task;
     }
@@ -818,13 +669,130 @@ namespace Oxygen::Editor::EngineInterface {
         tokens_map.erase(it);
       }
 
-      try { tcs->TrySetResult(false); } catch (...) { /* swallow */ }
+      try { tcs->TrySetResult(false); }
+      catch (...) { /* swallow */ }
       return tcs->Task;
     }
 
     // Request the resize (mark-only). Engine module will pick this up and
     // perform the actual Resize() on next frame.
     oxygen::engine::interop::RequestCompositionSurfaceResize(surface, width, height);
+
+    return tcs->Task;
+  }
+
+  auto EngineRunner::RegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
+    System::Guid viewportId, System::String^ displayName,
+    System::IntPtr swapChainPanel) -> Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (swapChainPanel == IntPtr::Zero) {
+      throw gcnew ArgumentException(
+        "SwapChainPanel pointer must not be zero.", "swapChainPanel");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"RegisterSurfaceAsync requires the UI thread. "
+        L"Call CreateEngine() on the UI thread first."));
+
+    auto& shared = ctx->NativeShared();
+    if (!shared) {
+      return Task::FromResult<bool>(false);
+    }
+
+    EnsureSurfaceRegistry();
+    auto registry = GetSurfaceRegistry();
+    auto key = ToGuidKey(viewportId);
+
+    auto docString = documentId.ToString();
+    auto viewportString = viewportId.ToString();
+    auto displayLabel = displayName != nullptr ? displayName : gcnew String(L"(unnamed viewport)");
+    const auto doc = msclr::interop::marshal_as<std::string>(docString);
+    const auto view = msclr::interop::marshal_as<std::string>(viewportString);
+    const auto disp = msclr::interop::marshal_as<std::string>(displayLabel);
+
+    try {
+      std::time_t now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+      char buf[64]{};
+      std::strftime(buf, sizeof(buf), "%F %T", std::localtime(&now));
+      auto registrationLog = fmt::format("[{}] RegisterSurfaceAsync doc={} viewport={} name='{}'", buf, doc, view, disp);
+      oxygen::engine::interop::LogInfoMessage(registrationLog.c_str());
+    }
+    catch (...) {
+      oxygen::engine::interop::LogInfoMessage("RegisterSurfaceAsync: failed to format timestamped log");
+    }
+
+    oxygen::engine::interop::LogInfoMessage("RegisterSurfaceAsync: creating composition surface.");
+    void* swap_chain_ptr = nullptr;
+    auto surface = oxygen::engine::interop::CreateCompositionSurface(shared,
+      &swap_chain_ptr);
+    if (!surface) {
+      oxygen::engine::interop::LogInfoMessage(
+        "RegisterSurfaceAsync failed: CreateCompositionSurface returned null.");
+      return Task::FromResult<bool>(false);
+    }
+
+    try {
+      surface->SetName(disp);
+    }
+    catch (...) { /* best-effort naming; ignore failures */ }
+
+    // Prepare the completion token and store in native token map so the
+    // engine module can resolve it when the queued registration is processed.
+    auto tcs = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
+
+    TokenKey nativeKey;
+    for (size_t i = 0; i < nativeKey.size(); ++i) nativeKey[i] = key[i];
+
+    System::IntPtr ip = IntPtr::Zero;
+    {
+      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(tcs, System::Runtime::InteropServices::GCHandleType::Normal);
+      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      tokens_map[nativeKey] = ip.ToPointer();
+    }
+
+    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
+
+    try {
+      registry->RegisterSurface(key, surface, std::move(cb));
+      try {
+        auto msg = fmt::format("RegisterSurfaceAsync: staged registration for viewport={}", msclr::interop::marshal_as<std::string>(viewportId.ToString()));
+        oxygen::engine::interop::LogInfoMessage(msg.c_str());
+      }
+      catch (...) { /* swallow logging failures */ }
+    }
+    catch (...) {
+      // cleanup pinned handle + native entry if staging fails
+      std::lock_guard<std::mutex> lg(tokens_mutex);
+      auto it = tokens_map.find(nativeKey);
+      if (it != tokens_map.end()) {
+        void* hv = it->second;
+        if (hv != nullptr) {
+          try {
+            System::IntPtr stored(hv);
+            auto gh = System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
+            if (gh.IsAllocated) gh.Free();
+          }
+          catch (...) { /* swallow */ }
+        }
+        tokens_map.erase(it);
+      }
+
+      try { tcs->TrySetResult(false); }
+      catch (...) { /* swallow */ }
+      return tcs->Task;
+    }
+
+    if (swap_chain_ptr != nullptr) {
+      auto surface_ptr = new std::shared_ptr<oxygen::graphics::Surface>(surface);
+      AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr), IntPtr(surface_ptr));
+    }
 
     return tcs->Task;
   }
@@ -903,7 +871,7 @@ namespace Oxygen::Editor::EngineInterface {
       }
       catch (...) { /* ignore logging failures */ }
 
-      for (auto &it : tokens_map) {
+      for (auto& it : tokens_map) {
         void* hv = it.second;
         if (hv != nullptr) {
           try {

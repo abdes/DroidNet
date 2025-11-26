@@ -178,10 +178,11 @@ public partial class App
 
     private void EnsureEngineIsReady()
     {
+        // FIXME(abdes): this engine initialization should be done better with UI feedback and cancellation support.
         try
         {
             // Use AsTask() to convert ValueTask to Task before blocking to avoid CA2012 warning.
-            this.engineService.EnsureInitializedAsync().AsTask().GetAwaiter().GetResult();
+            this.engineService.InitializeAsync().AsTask().GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {

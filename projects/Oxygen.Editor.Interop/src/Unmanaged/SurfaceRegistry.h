@@ -68,13 +68,49 @@ namespace Oxygen::Editor::EngineInterface {
     SurfaceRegistry(SurfaceRegistry&&) noexcept = delete;
     SurfaceRegistry& operator=(SurfaceRegistry&&) noexcept = delete;
 
+
+    //! Queue a surface for registration during the next frame.
+    /*!
+     The surface is added to a pending-registrations list which the engine
+     module will drain on the next frame-start. An optional callback may be
+     provided which will be invoked (on the engine thread) when the
+     registration has been processed.
+    */
+    //! Register (stage) a surface for commitment on the next engine frame.
+    /*!
+      This is the public-facing method used by caller threads (UI or others)
+      to stage a surface registration. It behaves symmetrically to
+      RemoveSurface(): the entry becomes visible only after the engine
+      commits the pending registration during the frame processing phase.
+      An optional callback is invoked on the engine thread once processed.
+    */
     auto RegisterSurface(GuidKey key,
-      std::shared_ptr<oxygen::graphics::Surface> surface)
-      -> void {
+      std::shared_ptr<oxygen::graphics::Surface> surface,
+      std::function<void(bool)> onProcessed = {}) -> void {
       if (!surface) {
+        if (onProcessed) {
+          onProcessed(false);
+        }
         return;
       }
 
+      std::scoped_lock lock(mutex_);
+      PendingRegistration entry;
+      entry.key = key;
+      entry.surface = std::move(surface);
+      entry.callback = std::move(onProcessed);
+      pending_registrations_.emplace_back(std::move(entry));
+    }
+
+    //! Commit the given surface into the live entries map (engine-thread only)
+    /*
+      This method inserts or replaces the entry for the supplied key.
+      It is intended to be called only from the engine thread while
+      processing pending registrations; external callers should use
+      the public RegisterSurface(...) overload to stage a registration.
+    */
+    auto CommitRegistration(GuidKey key, std::shared_ptr<oxygen::graphics::Surface> surface) -> void {
+      if (!surface) return;
       std::scoped_lock lock(mutex_);
       entries_[key] = std::move(surface);
     }
@@ -164,6 +200,25 @@ namespace Oxygen::Editor::EngineInterface {
       return result;
     }
 
+    //! Drain any pending registrations. Called by the engine module on the
+    //! engine thread to retrieve surfaces queued for registration.
+    auto DrainPendingRegistrations() -> std::vector<
+      std::pair<GuidKey, std::pair<std::shared_ptr<oxygen::graphics::Surface>,
+      std::function<void(bool)>>>> {
+      std::scoped_lock lock(mutex_);
+      std::vector<
+        std::pair<GuidKey, std::pair<std::shared_ptr<oxygen::graphics::Surface>,
+        std::function<void(bool)>>>>
+        result;
+      result.reserve(pending_registrations_.size());
+      for (auto& pr : pending_registrations_) {
+        result.emplace_back(pr.key, std::make_pair(pr.surface, pr.callback));
+      }
+      pending_registrations_.clear();
+      return result;
+    }
+
+
     //! Register a callback to be invoked when the requested surface has been
     //! processed for resize on the engine thread. Multiple callbacks are
     //! allowed; they will be invoked and cleared when the resize happens.
@@ -211,7 +266,14 @@ namespace Oxygen::Editor::EngineInterface {
       std::function<void(bool)> callback;
     };
 
+    struct PendingRegistration {
+      GuidKey key;
+      std::shared_ptr<oxygen::graphics::Surface> surface;
+      std::function<void(bool)> callback;
+    };
+
     std::vector<PendingDestruction> pending_destructions_;
+    std::vector<PendingRegistration> pending_registrations_;
     std::unordered_map<GuidKey, std::vector<std::function<void(bool)>>,
       GuidHasher>
       resize_callbacks_;

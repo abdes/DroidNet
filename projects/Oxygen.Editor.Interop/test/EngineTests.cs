@@ -185,22 +185,6 @@ public sealed class EngineTests
     }
 
     [TestMethod]
-    public void CaptureUiSynchronizationContext_WithoutSynchronizationContext_ThrowsInvalidOperation()
-    {
-        SynchronizationContext.SetSynchronizationContext(syncContext: null);
-
-        try
-        {
-            var act4 = this.runner.CaptureUiSynchronizationContext;
-            _ = act4.Should().Throw<InvalidOperationException>();
-        }
-        finally
-        {
-            this.RestoreUiContext();
-        }
-    }
-
-    [TestMethod]
     public void RunEngine_WithNullContext_ThrowsArgumentNullException()
     {
         var act5 = () => this.runner.RunEngine(null!);
@@ -226,68 +210,68 @@ public sealed class EngineTests
     }
 
     [TestMethod]
-    public void RegisterSurface_WithNullContext_ThrowsArgumentNullException()
+    public async Task RegisterSurfaceAsync_WithNullContext_ThrowsArgumentNullException()
     {
-        var act8 = () => this.runner.RegisterSurface(
+        var act8 = async () => await this.runner.RegisterSurfaceAsync(
             null!,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new IntPtr(1));
+            new nint(1)).ConfigureAwait(false);
 
-        _ = act8.Should().Throw<ArgumentNullException>();
+        _ = await act8.Should().ThrowAsync<ArgumentNullException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    public void RegisterSurface_WithZeroSwapChainPanel_ThrowsArgumentException()
+    public async Task RegisterSurfaceAsync_WithZeroSwapChainPanel_ThrowsArgumentException()
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
-        var act9 = () => this.runner.RegisterSurface(
+        var act9 = async () => await this.runner.RegisterSurfaceAsync(
             ctx,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            IntPtr.Zero);
+            nint.Zero).ConfigureAwait(false);
 
-        _ = act9.Should().Throw<ArgumentException>();
+        _ = await act9.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    public void RegisterSurface_AfterDispose_ThrowsObjectDisposedException()
+    public async Task RegisterSurfaceAsync_AfterDispose_ThrowsObjectDisposedException()
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         this.runner.Dispose();
 
-        var act10 = () => this.runner.RegisterSurface(
+        var act10 = async () => await this.runner.RegisterSurfaceAsync(
             ctx,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new IntPtr(1));
+            new nint(1)).ConfigureAwait(false);
 
-        _ = act10.Should().Throw<ObjectDisposedException>();
+        _ = await act10.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(false);
     }
 
     [TestMethod]
-    public async Task RegisterSurface_FromNonUiThread_ThrowsInvalidOperationException()
+    public async Task RegisterSurfaceAsync_FromNonUiThread_ThrowsInvalidOperationException()
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         var documentId = Guid.NewGuid();
         var viewportId = Guid.NewGuid();
 
-        var exception = await Task.Run(() =>
+        var exception = await Task.Run(async () =>
         {
             try
             {
-                _ = this.runner.RegisterSurface(
+                _ = await this.runner.RegisterSurfaceAsync(
                     ctx,
                     documentId,
                     viewportId,
                     "Viewport",
-                    new IntPtr(1));
+                    new nint(1)).ConfigureAwait(false);
                 return null as InvalidOperationException;
             }
             catch (InvalidOperationException ex)
@@ -296,7 +280,33 @@ public sealed class EngineTests
             }
         }).ConfigureAwait(false);
 
-        _ = exception.Should().NotBeNull("RegisterSurface should enforce UI-thread invocation.");
+        _ = exception.Should().NotBeNull("RegisterSurfaceAsync should enforce UI-thread invocation.");
+    }
+
+    [TestMethod]
+    public async Task RegisterSurfaceAsync_StagedAndResolved_ReturnsTrue()
+    {
+        var cfg = new EngineConfig { TargetFps = 30 };
+        var ctx = this.CreateEngineUnderTest(cfg);
+
+        // Start the engine loop so the engine module will process pending
+        // registrations on a frame.
+        var runTask = this.runner.RunEngineAsync(ctx);
+
+        var documentId = Guid.NewGuid();
+        var viewportId = Guid.NewGuid();
+
+        var regTask = this.runner.RegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1));
+
+        var completed = await Task.WhenAny(regTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
+
+        _ = regTask.Should().BeSameAs(completed, "RegisterSurfaceAsync did not complete within the expected timeout.");
+        _ = (await regTask.ConfigureAwait(false)).Should().BeTrue("RegisterSurfaceAsync should resolve to true when staged and processed by the engine.");
+
+        // Stop the engine loop and wait for complete cleanup.
+        this.runner.StopEngine(ctx);
+        var stopped = await Task.WhenAny(runTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
+        _ = runTask.Should().BeSameAs(stopped, "Engine loop didn't stop within timeout.");
     }
 
     private void EnsureUiContext()

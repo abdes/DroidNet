@@ -23,12 +23,12 @@ namespace Oxygen.Editor.WorldEditor.Controls;
 /// </summary>
 public partial class ViewportViewModel : ObservableObject, IDisposable
 {
+    private readonly ILogger logger;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettings;
     private IMenuSource? viewMenu;
     private IMenuSource? shadingMenu;
     private IMenuSource? layoutMenu;
     private ElementTheme? effectiveThemeOverride;
-    private readonly ILogger logger;
     private bool isDisposed;
 
     /// <summary>
@@ -46,14 +46,14 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </param>
     public ViewportViewModel(Guid documentId, IEngineService engineService, ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
     {
-        this.DocumentId = documentId;
-        this.EngineService = engineService;
         this.LoggerFactory = loggerFactory;
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.WorldEditor.Controls.ViewportViewModel");
+
+        this.DocumentId = documentId;
+        this.EngineService = engineService;
         this.appearanceSettings = appearanceSettings;
 
         // Seed effective theme from settings and subscribe for changes.
-        ArgumentNullException.ThrowIfNull(this.appearanceSettings);
         this.SetEffectiveTheme(this.appearanceSettings.Settings.AppThemeMode);
         this.appearanceSettings.PropertyChanged += this.AppearanceSettings_PropertyChanged;
         this.ToggleMaximizeCommand = new RelayCommand(() => this.IsMaximized = !this.IsMaximized);
@@ -149,7 +149,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; }
 
-
     /// <summary>
     /// Dispose of transient subscriptions.
     /// </summary>
@@ -157,12 +156,6 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     {
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
-    }
-
-    partial void OnIsMaximizedChanged(bool oldValue, bool newValue)
-    {
-        // keep MaximizeGlyph synched with IsMaximized
-        this.OnPropertyChanged(nameof(this.MaximizeGlyph));
     }
 
     /// <summary>
@@ -213,6 +206,30 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
             this.isDisposed = true;
         }
+    }
+
+    private static MenuItemData CreateToggleMenuItem(string text, Func<bool> getter, Action<bool> setter, string? accelerator = null)
+        => new()
+        {
+            Text = text,
+            IsCheckable = true,
+            IsChecked = getter(),
+            AcceleratorText = accelerator,
+            Command = new RelayCommand<MenuItemData?>(item =>
+            {
+                if (item is null)
+                {
+                    return;
+                }
+
+                setter(item.IsChecked);
+            }),
+        };
+
+    partial void OnIsMaximizedChanged(bool oldValue, bool newValue)
+    {
+        // keep MaximizeGlyph synched with IsMaximized
+        this.OnPropertyChanged(nameof(this.MaximizeGlyph));
     }
 
     private void SetEffectiveTheme(ElementTheme theme)
@@ -332,13 +349,13 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     private IMenuSource BuildLayoutMenu()
     {
         var builder = new MenuBuilder(this.LoggerFactory);
-        _ = builder.AddMenuItem(this.CreateToggleMenuItem("Show FPS", () => this.ShowFps, v => this.ShowFps = v, "Ctrl+Shift+H"))
-            .AddMenuItem(this.CreateToggleMenuItem("Show Stats", () => this.ShowStats, v => this.ShowStats = v, "Shift+L"))
+        _ = builder.AddMenuItem(CreateToggleMenuItem("Show FPS", () => this.ShowFps, v => this.ShowFps = v, "Ctrl+Shift+H"))
+            .AddMenuItem(CreateToggleMenuItem("Show Stats", () => this.ShowStats, v => this.ShowStats = v, "Shift+L"))
             .AddSubmenu("Stats", submenu => submenu
-                .AddMenuItem(this.CreateToggleMenuItem("Stat1", () => this.Stat1, v => this.Stat1 = v))
-                .AddMenuItem(this.CreateToggleMenuItem("Stat2", () => this.Stat2, v => this.Stat2 = v))
-                .AddMenuItem(this.CreateToggleMenuItem("Stat3", () => this.Stat3, v => this.Stat3 = v)))
-            .AddMenuItem(this.CreateToggleMenuItem("Show Toolbar", () => this.ShowToolbar, v => this.ShowToolbar = v, "Ctrl+Shift+T"))
+                .AddMenuItem(CreateToggleMenuItem("Stat1", () => this.Stat1, v => this.Stat1 = v))
+                .AddMenuItem(CreateToggleMenuItem("Stat2", () => this.Stat2, v => this.Stat2 = v))
+                .AddMenuItem(CreateToggleMenuItem("Stat3", () => this.Stat3, v => this.Stat3 = v)))
+            .AddMenuItem(CreateToggleMenuItem("Show Toolbar", () => this.ShowToolbar, v => this.ShowToolbar = v, "Ctrl+Shift+T"))
             .AddSeparator();
 
         // Layouts submenu with grouped panes and themed icons
@@ -371,22 +388,4 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
         return builder.Build();
     }
-
-    private MenuItemData CreateToggleMenuItem(string text, Func<bool> getter, Action<bool> setter, string? accelerator = null)
-        => new()
-        {
-            Text = text,
-            IsCheckable = true,
-            IsChecked = getter(),
-            AcceleratorText = accelerator,
-            Command = new RelayCommand<MenuItemData?>(item =>
-            {
-                if (item is null)
-                {
-                    return;
-                }
-
-                setter(item.IsChecked);
-            }),
-        };
 }
