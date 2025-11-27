@@ -10,6 +10,9 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls;
 
+/// <summary>
+/// Represents a toggle button control for use in a toolbar, supporting icon, label, and compact visual states.
+/// </summary>
 [TemplatePart(Name = LayoutGridPartName, Type = typeof(Grid))]
 [TemplatePart(Name = LayoutGridPartName, Type = typeof(Grid))]
 [TemplatePart(Name = IconPresenterPartName, Type = typeof(IconSourceElement))]
@@ -26,22 +29,19 @@ public partial class ToolBarToggleButton : ToggleButton
 
     private ILogger? logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ToolBarToggleButton"/> class.
+    /// </summary>
     public ToolBarToggleButton()
     {
         this.DefaultStyleKey = typeof(ToolBarToggleButton);
         this.Loaded += (s, e) => this.UpdateLabelPosition();
     }
 
-    protected override void OnApplyTemplate()
-    {
-        base.OnApplyTemplate();
-        this.layoutGrid = this.GetTemplateChild(LayoutGridPartName) as Grid;
-        this.iconPresenter = this.GetTemplateChild(IconPresenterPartName) as IconSourceElement;
-        this.labelText = this.GetTemplateChild(LabelTextPartName) as TextBlock;
-        this.UpdateLabelPosition();
-        this.UpdateVisualState();
-    }
-
+    /// <summary>
+    /// Updates the label position and layout based on the <see cref="ToolBarLabelPosition"/> property.
+    /// </summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "keep the logic together")]
     internal void UpdateLabelPosition()
     {
         if (this.layoutGrid == null || this.labelText == null || this.iconPresenter == null)
@@ -108,7 +108,23 @@ public partial class ToolBarToggleButton : ToggleButton
         }
     }
 
-    internal void UpdateVisualState()
+    /// <summary>
+    /// Applies the control template and initializes template parts.
+    /// </summary>
+    protected override void OnApplyTemplate()
+    {
+        base.OnApplyTemplate();
+        this.layoutGrid = this.GetTemplateChild(LayoutGridPartName) as Grid;
+        this.iconPresenter = this.GetTemplateChild(IconPresenterPartName) as IconSourceElement;
+        this.labelText = this.GetTemplateChild(LabelTextPartName) as TextBlock;
+        this.UpdateLabelPosition();
+        this.UpdateVisualState();
+    }
+
+    /// <summary>
+    /// Updates the visual state of the button based on the <see cref="IsCompact"/> property.
+    /// </summary>
+    private void UpdateVisualState()
     {
         var state = this.IsCompact ? "Compact" : "Standard";
         this.LogVisualStateUpdated(state);

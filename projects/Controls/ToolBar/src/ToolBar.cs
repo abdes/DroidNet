@@ -13,6 +13,9 @@ using Windows.Foundation;
 
 namespace DroidNet.Controls;
 
+/// <summary>
+/// Represents a toolbar control that arranges primary and secondary items, manages overflow, and supports customizable layout and logging.
+/// </summary>
 [ContentProperty(Name = "PrimaryItems")]
 [TemplatePart(Name = PrimaryItemsControlPartName, Type = typeof(ItemsControl))]
 [TemplatePart(Name = OverflowButtonPartName, Type = typeof(Button))]
@@ -20,10 +23,29 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = RootGridPartName, Type = typeof(Grid))]
 public partial class ToolBar : Control
 {
+    /// <summary>
+    /// The template part name for the primary items control.
+    /// </summary>
     public const string PrimaryItemsControlPartName = "PrimaryItemsControl";
+
+    /// <summary>
+    /// The template part name for the secondary items control.
+    /// </summary>
     public const string SecondaryItemsControlPartName = "SecondaryItemsControl";
+
+    /// <summary>
+    /// The template part name for the overflow button.
+    /// </summary>
     public const string OverflowButtonPartName = "OverflowButton";
+
+    /// <summary>
+    /// The template part name for the overflow menu flyout.
+    /// </summary>
     public const string OverflowMenuFlyoutPartName = "OverflowMenuFlyout";
+
+    /// <summary>
+    /// The template part name for the root grid.
+    /// </summary>
     public const string RootGridPartName = "RootGrid";
 
     private ILogger? logger;
@@ -35,6 +57,9 @@ public partial class ToolBar : Control
 
     private double cachedSecondaryItemsWidth;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ToolBar"/> class.
+    /// </summary>
     public ToolBar()
     {
         this.DefaultStyleKey = typeof(ToolBar);
@@ -46,6 +71,9 @@ public partial class ToolBar : Control
         this.SizeChanged += this.OnSizeChanged;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the toolbar has secondary items.
+    /// </summary>
     public bool HasSecondaryItems => this.SecondaryItems.Count > 0;
 
     /// <inheritdoc/>
@@ -67,6 +95,9 @@ public partial class ToolBar : Control
         this.UpdateOverflow();
     }
 
+    /// <summary>
+    /// Updates the overflow state and menu for the toolbar based on available space and item measurements.
+    /// </summary>
     protected void UpdateOverflow()
     {
         if (this.primaryItemsControl == null
