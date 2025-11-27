@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml;
 
 namespace Oxygen.Editor.WorldEditor.Editors;
 

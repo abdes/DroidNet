@@ -7,6 +7,7 @@
 #pragma once
 #pragma managed
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/EngineConfig.h>
@@ -110,6 +111,15 @@ namespace Oxygen::Editor::EngineInterface {
     property int Verbosity;
     property bool IsColored;
     property System::String^ ModuleOverrides;
+
+    // Minimum and maximum allowed verbosity values (loguru constants).
+    static property int MinVerbosity {
+      int get() { return static_cast<int>(::loguru::Verbosity_OFF); }
+    }
+
+    static property int MaxVerbosity {
+      int get() { return static_cast<int>(::loguru::Verbosity_MAX); }
+    }
   };
 
   // GraphicsConfig ---------------------------------------------------------

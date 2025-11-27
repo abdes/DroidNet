@@ -72,4 +72,29 @@ public interface IEngineService : IAsyncDisposable
     /// Maximum allowed target frames per second as defined by the native engine.
     /// </summary>
     public uint MaxTargetFps { get; }
+
+    /// <summary>
+    /// Gets the minimum allowed logging verbosity for the native engine runtime
+    /// (e.g. loguru::Verbosity_OFF = -9).
+    /// </summary>
+    public int MinLoggingVerbosity { get; }
+
+    /// <summary>
+    /// Gets the maximum allowed logging verbosity for the native engine runtime
+    /// (e.g. loguru::Verbosity_MAX = +9).
+    /// </summary>
+    public int MaxLoggingVerbosity { get; }
+
+    /// <summary>
+    /// Gets the current engine native logging verbosity.
+    /// </summary>
+    /// <returns>Raw verbosity level (may be negative).</returns>
+    public int GetEngineLoggingVerbosity();
+
+    /// <summary>
+    /// Sets the engine native logging verbosity via the engine's logguru bridge.
+    /// This updates the native engine log level and does not change the .NET bridge logger.
+    /// </summary>
+    /// <param name="verbosity">Logging verbosity, typically between MinLoggingVerbosity and MaxLoggingVerbosity.</param>
+    public void SetEngineLoggingVerbosity(int verbosity);
 }

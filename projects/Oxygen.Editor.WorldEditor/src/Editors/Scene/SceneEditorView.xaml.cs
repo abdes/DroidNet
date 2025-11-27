@@ -6,6 +6,8 @@ using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives; // FlyoutBase
+using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.WorldEditor.Controls;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;

@@ -49,6 +49,15 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     /// </summary>
     public uint MaxTargetFps => EngineConfig.MaxTargetFps;
 
+    /// <summary>
+    /// Gets the minimum logging verbosity allowed by the native engine runtime.
+    /// </summary>
+    public int MinLoggingVerbosity => LoggingConfig.MinVerbosity;
+
+    /// <summary>
+    /// Gets the maximum logging verbosity allowed by the native engine runtime.
+    /// </summary>
+    public int MaxLoggingVerbosity => LoggingConfig.MaxVerbosity;
     /// <inheritdoc />
     public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
     {
@@ -162,6 +171,19 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     }
 
     /// <summary>
+    /// Gets the current native engine logging verbosity.
+    /// </summary>
+    public int GetEngineLoggingVerbosity()
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+        var cfg = this.engineRunner.GetLoggingConfig(this.engineContext);
+        this.LogLoggingVerbosityRetrieved(cfg.Verbosity);
+        return cfg.Verbosity;
+    }
+
+    /// <summary>
     /// Sets the engine target frames-per-second at runtime. 0 = uncapped.
     /// </summary>
     /// <param name="fps">Target frames per second.</param>
@@ -172,6 +194,42 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
         this.engineRunner.SetTargetFps(this.engineContext, fps);
         this.LogTargetFpsSet(fps);
+    }
+
+    /// <summary>
+    /// Sets the native engine logging verbosity via the engine interop bridge (loguru).
+    /// </summary>
+    /// <param name="verbosity">Desired verbosity.</param>
+    public void SetEngineLoggingVerbosity(int verbosity)
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+
+        try
+        {
+            // Read the current logging config from the native engine and update
+            // only the verbosity field so other logging settings are preserved.
+            var current = this.engineRunner.GetLoggingConfig(this.engineContext);
+            if (current == null)
+            {
+                throw new InvalidOperationException("Failed to read existing engine logging configuration.");
+            }
+
+            current.Verbosity = verbosity;
+            var ok = this.engineRunner.ConfigureLogging(current);
+            if (!ok)
+            {
+                throw new InvalidOperationException("Failed to configure native engine logging.");
+            }
+
+            this.LogLoggingVerbositySet(verbosity);
+        }
+        catch (Exception ex)
+        {
+            this.LogSetLoggingVerbosityFailed(verbosity, ex);
+            throw;
+        }
     }
 
     /// <inheritdoc />
