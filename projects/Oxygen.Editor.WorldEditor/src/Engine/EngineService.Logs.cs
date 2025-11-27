@@ -205,4 +205,40 @@ public sealed partial class EngineService
 
     private void LogGetTargetFpsFailed(Exception exception)
         => LogGetTargetFpsFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Engine logging verbosity retrieved: {Verbosity}.")]
+    private static partial void LogLoggingVerbosityRetrieved(ILogger logger, int verbosity);
+
+    private void LogLoggingVerbosityRetrieved(int verbosity)
+        => LogLoggingVerbosityRetrieved(this.logger, verbosity);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Engine logging verbosity set to {Verbosity}.")]
+    private static partial void LogLoggingVerbositySet(ILogger logger, int verbosity);
+
+    private void LogLoggingVerbositySet(int verbosity)
+        => LogLoggingVerbositySet(this.logger, verbosity);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to set engine logging verbosity to {Verbosity}.")]
+    private static partial void LogSetLoggingVerbosityFailed(ILogger logger, int verbosity, Exception exception);
+
+    private void LogSetLoggingVerbosityFailed(int verbosity, Exception exception)
+        => LogSetLoggingVerbosityFailed(this.logger, verbosity, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to retrieve engine logging verbosity.")]
+    private static partial void LogGetLoggingVerbosityFailed(ILogger logger, Exception exception);
+
+    private void LogGetLoggingVerbosityFailed(Exception exception)
+        => LogGetLoggingVerbosityFailed(this.logger, exception);
 }

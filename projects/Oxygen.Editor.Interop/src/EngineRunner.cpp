@@ -219,8 +219,21 @@ namespace Oxygen::Editor::EngineInterface {
         InteropLogging::Loguru::WriteAndFlush(
           InteropLogging::Loguru::Verbosity::Verbosity_INFO,
           gcnew String(L"Oxygen Editor logging configured."));
+        // Keep a copy of the currently applied config for later inspection.
+        this->current_config_ = gcnew LoggingConfig();
+        this->current_config_->Verbosity = config->Verbosity;
+        this->current_config_->IsColored = config->IsColored;
+        this->current_config_->ModuleOverrides = config->ModuleOverrides;
       }
       return ok;
+    }
+
+    LoggingConfig^ GetCurrentConfig() {
+      if (this->current_config_ == nullptr) {
+        return gcnew LoggingConfig();
+      }
+
+      return this->current_config_;
     }
 
     // Invoked from native forwarder through the GCHandle.
@@ -291,7 +304,8 @@ namespace Oxygen::Editor::EngineInterface {
     }
 
     // Instance state
-    ILogger^ logger_;
+    ILogger^ logger_;                 // Managed logger to forward native messages
+    LoggingConfig^ current_config_;   // Store the last applied LoggingConfig
     bool callback_registered_;
     IntPtr self_handle_; // GCHandle to this (for callback user_data)
   };
@@ -402,6 +416,14 @@ namespace Oxygen::Editor::EngineInterface {
       log_handler_ = gcnew LogHandler();
     }
     return log_handler_->ConfigureLogging(config);
+  }
+
+  auto EngineRunner::GetLoggingConfig(EngineContext^ ctx) -> LoggingConfig^ {
+    if (log_handler_ == nullptr) {
+      log_handler_ = gcnew LogHandler();
+    }
+
+    return log_handler_->GetCurrentConfig();
   }
 
   auto EngineRunner::ConfigureLogging(LoggingConfig^ config, Object^ logger)

@@ -70,6 +70,7 @@ namespace Oxygen::Editor::EngineInterface {
     /// reflection or delegate bindings.
     /// </remarks>
     auto ConfigureLogging(LoggingConfig^ config) -> bool;
+    auto GetLoggingConfig(EngineContext^ ctx) -> LoggingConfig^;
 
     /// <summary>
     /// Configures the native engine logging subsystem and wires a managed
