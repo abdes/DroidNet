@@ -4,7 +4,7 @@
 
 using System.Runtime.InteropServices;
 
-namespace Oxygen.Editor.WorldEditor.Engine;
+namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
 /// Identifies a leased composition surface by document and viewport identifiers.

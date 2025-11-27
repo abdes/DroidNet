@@ -12,21 +12,20 @@
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
         <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 
-        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-
         <RootNamespace>Oxygen.Editor.Projects</RootNamespace>
-        <AssemblyName>Oxygen.Editor.Projects</AssemblyName>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-        <PackageReference Include="Microsoft.Extensions.Options" />
         <PackageReference Include="System.Linq.Async" />
     </ItemGroup>
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Storage\src\Oxygen.Editor.Storage.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
     </ItemGroup>
+
     <ItemGroup>
         <!-- Reference the runtime resources project so the generator sees the ResourceExtensions
         symbol -->

@@ -14,6 +14,7 @@ using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 

@@ -7,8 +7,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.Projects.Tests;
+namespace Oxygen.Editor.Runtime.Engine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

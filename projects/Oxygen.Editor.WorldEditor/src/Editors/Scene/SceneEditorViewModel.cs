@@ -12,8 +12,8 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Controls;
-using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
@@ -140,14 +140,14 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         get
         {
-                var raw = this.engineService.GetEngineLoggingVerbosity();
-                return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
+            var raw = this.engineService.GetEngineLoggingVerbosity();
+            return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
         }
         set
         {
-                var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
-                this.engineService.SetEngineLoggingVerbosity(clamped);
-                this.OnPropertyChanged(nameof(this.LoggingVerbosity));
+            var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
+            this.engineService.SetEngineLoggingVerbosity(clamped);
+            this.OnPropertyChanged(nameof(this.LoggingVerbosity));
         }
     }
 

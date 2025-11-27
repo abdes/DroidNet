@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 
-namespace Oxygen.Editor.Projects.Utils;
+namespace Oxygen.Editor.World.Utils;
 
 /// <summary>
 /// Provides helper methods for throwing JSON-related exceptions during serialization and deserialization.

@@ -6,8 +6,11 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
+using Moq;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.Projects.Tests;
+namespace Oxygen.Editor.Runtime.Engine.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -15,6 +18,7 @@ namespace Oxygen.Editor.Projects.Tests;
 public class SceneTests
 {
     private readonly JsonSerializerOptions jsonOptions = new();
+    private readonly Mock<IProject> projectMock = new();
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneTests" /> class.
@@ -25,7 +29,7 @@ public class SceneTests
         this.jsonOptions.Converters.Add(new SceneJsonConverter(this.ExampleProject));
     }
 
-    private Project ExampleProject { get; } = new(null!) { Name = "Example Project" };
+    private IProject ExampleProject => this.projectMock.Object;
 
     [TestMethod]
     public void Should_Serialize_Scene_ToJson()

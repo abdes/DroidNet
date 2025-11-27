@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Windows.Storage;
 
 namespace Oxygen.Editor.ProjectBrowser.Controls;

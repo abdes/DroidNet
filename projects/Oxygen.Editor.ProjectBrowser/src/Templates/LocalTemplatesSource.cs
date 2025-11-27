@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO.Abstractions;
 using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 

@@ -5,8 +5,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents a scene in a game project.
@@ -51,7 +52,7 @@ public partial class Scene(IProject project) : GameObject
         "Performance",
         "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
         Justification = "we need to set the scene for the converter")]
-    internal static Scene? FromJson(string json, IProject project)
+    public static Scene? FromJson(string json, IProject project)
     {
         var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneJsonConverter(project) } };
         return JsonSerializer.Deserialize<Scene>(json, options);
@@ -65,5 +66,5 @@ public partial class Scene(IProject project) : GameObject
     /// <remarks>
     ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
     /// </remarks>
-    internal static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
+    public static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
 }

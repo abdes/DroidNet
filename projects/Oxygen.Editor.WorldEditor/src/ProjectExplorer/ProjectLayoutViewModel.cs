@@ -13,6 +13,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
+using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.ContentBrowser;
 
 namespace Oxygen.Editor.WorldEditor.ProjectExplorer;

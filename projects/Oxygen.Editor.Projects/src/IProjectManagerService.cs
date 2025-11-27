@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Storage;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects;
 

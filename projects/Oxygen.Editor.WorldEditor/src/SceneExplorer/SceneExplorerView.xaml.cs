@@ -4,13 +4,12 @@
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Input;
-using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 
 /// <summary>
-///     A View that shows a hierarchical layout of a <see cref="Scene">scene</see>, which
-///     in turn can hold multiple <see cref="SceneNode">entities</see>.
+///     A View that shows a hierarchical layout of a <see cref="World.Scene">scene</see>, which
+///     in turn can hold multiple <see cref="World.SceneNode">entities</see>.
 /// </summary>
 [ViewModel(typeof(SceneExplorerViewModel))]
 public sealed partial class SceneExplorerView
