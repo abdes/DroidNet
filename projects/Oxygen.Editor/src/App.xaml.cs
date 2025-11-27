@@ -16,8 +16,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
-using Oxygen.Editor.WorldEditor.Engine;
 
 namespace Oxygen.Editor;
 

@@ -5,9 +5,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.Projects.Utils;
+using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents a scene node with a name and an associated scene.

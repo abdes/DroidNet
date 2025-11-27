@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 /// The base class for any game object. Exposes a <see cref="Name" /> property and provides the required boilerplate for

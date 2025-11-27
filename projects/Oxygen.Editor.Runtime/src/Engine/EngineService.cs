@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.EngineInterface;
 
-namespace Oxygen.Editor.WorldEditor.Engine;
+namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
 /// Application-wide coordinator that keeps the native engine alive and arbitrates access to composition surfaces.

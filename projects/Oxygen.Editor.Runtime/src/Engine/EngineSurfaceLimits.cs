@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Engine;
+namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
 /// Defines the hard limits enforced by the engine when allocating Composition surfaces.

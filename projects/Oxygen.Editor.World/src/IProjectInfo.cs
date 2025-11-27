@@ -4,7 +4,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents the metadata information about a project within the Oxygen Editor.
@@ -14,7 +14,7 @@ namespace Oxygen.Editor.Projects;
 ///     project's
 ///     name, category, location, thumbnail, last used date, and a stable identifier.
 /// </remarks>
-public interface IProjectInfo : IEquatable<ProjectInfo?>
+public interface IProjectInfo
 {
     /// <summary>
     ///     Gets the stable GUID identifier for the project. Used for persistent identity and hashing.
@@ -33,7 +33,7 @@ public interface IProjectInfo : IEquatable<ProjectInfo?>
     ///     Gets or sets the category of the project.
     /// </summary>
     /// <value>
-    ///     A <see cref="Projects.Category" /> representing the category of the project.
+    ///     A <see cref="Category" /> representing the category of the project.
     /// </value>
     public Category Category { get; set; }
 

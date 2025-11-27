@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.Engine;
+namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
 /// Logger message definitions for <see cref="EngineService"/>.

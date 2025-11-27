@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <Title>Oxygen Editor World Model</Title>
+        <Description>Shared module, providing the abstractions and utilities for manipulating Oxygen world model objects.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>oxygen;gameengine;editor;world;model</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+        <RootNamespace>Oxygen.Editor.World</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Reference the runtime resources project so the generator sees the ResourceExtensions symbol -->
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
+        <!-- Add generator as an analyzer (development time only) -->
+        <ProjectReference Include="$(ProjectsRoot)\Resources.Generator\src\Resources.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+</Project>

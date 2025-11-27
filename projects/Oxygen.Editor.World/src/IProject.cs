@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 /// Represents a project within the Oxygen Editor.

@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Resources.Generator.Localized_e0db1f46;
+using DroidNet.Resources.Generator.Localized_8f7683a5;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 /// Represents a category for a project within the Oxygen Editor.

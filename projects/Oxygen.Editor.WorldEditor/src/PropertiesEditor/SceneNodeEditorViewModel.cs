@@ -7,7 +7,7 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using Microsoft.UI.Xaml.Data;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;

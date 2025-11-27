@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using DroidNet.Resources.Generator.Localized_a870a544;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Templates;
 

@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 

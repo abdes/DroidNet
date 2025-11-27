@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.WorldEditor.Engine;
+namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
 /// Coordinates the lifetime of the native engine and arbitrates access to composition surfaces across all viewports.

@@ -5,6 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World;
+using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.Projects;
 
@@ -18,7 +20,7 @@ namespace Oxygen.Editor.Projects;
 ///     thumbnail, last used date
 ///     and a stable <see cref="Id" /> GUID used to identify the project instance.
 /// </remarks>
-public class ProjectInfo : IProjectInfo
+public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

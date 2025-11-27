@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 

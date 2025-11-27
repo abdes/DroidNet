@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.ProjectBrowser.Templates;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 

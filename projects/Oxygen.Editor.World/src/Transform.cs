@@ -4,7 +4,7 @@
 
 using System.Numerics;
 
-namespace Oxygen.Editor.Projects;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents a transform component of a scene node, specifying its position, rotation, and scale in the scene.
