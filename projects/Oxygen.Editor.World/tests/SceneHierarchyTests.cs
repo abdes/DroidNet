@@ -25,8 +25,8 @@ public class SceneHierarchyTests
 
         parent.AddChild(child);
 
-        child.Parent.Should().BeSameAs(parent);
-        parent.Children.Should().Contain(child);
+        _ = child.Parent.Should().BeSameAs(parent);
+        _ = parent.Children.Should().Contain(child);
     }
 
     [TestMethod]
@@ -39,8 +39,8 @@ public class SceneHierarchyTests
         parent.AddChild(child);
         parent.RemoveChild(child);
 
-        child.Parent.Should().BeNull();
-        parent.Children.Should().NotContain(child);
+        _ = child.Parent.Should().BeNull();
+        _ = parent.Children.Should().NotContain(child);
     }
 
     [TestMethod]
@@ -54,9 +54,9 @@ public class SceneHierarchyTests
         parent1.AddChild(child);
         parent2.AddChild(child); // Should move from parent1 to parent2
 
-        child.Parent.Should().BeSameAs(parent2);
-        parent1.Children.Should().NotContain(child);
-        parent2.Children.Should().Contain(child);
+        _ = child.Parent.Should().BeSameAs(parent2);
+        _ = parent1.Children.Should().NotContain(child);
+        _ = parent2.Children.Should().Contain(child);
     }
 
     [TestMethod]
@@ -67,7 +67,7 @@ public class SceneHierarchyTests
 
         var act = () => node.AddChild(node);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
+        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
     }
 
     [TestMethod]
@@ -83,7 +83,7 @@ public class SceneHierarchyTests
 
         var act = () => grandChild.AddChild(parent);
 
-        act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
+        _ = act.Should().Throw<InvalidOperationException>().WithMessage("*circular reference*");
     }
 
     [TestMethod]
@@ -101,10 +101,10 @@ public class SceneHierarchyTests
 
         var descendants = root.Descendants().ToList();
 
-        descendants.Should().HaveCount(3);
-        descendants.Should().Contain(child1);
-        descendants.Should().Contain(child2);
-        descendants.Should().Contain(grandChild);
+        _ = descendants.Should().HaveCount(3);
+        _ = descendants.Should().Contain(child1);
+        _ = descendants.Should().Contain(child2);
+        _ = descendants.Should().Contain(grandChild);
     }
 
     [TestMethod]
@@ -120,9 +120,9 @@ public class SceneHierarchyTests
 
         var ancestors = grandChild.Ancestors().ToList();
 
-        ancestors.Should().HaveCount(2);
-        ancestors.ElementAt(0).Should().BeSameAs(child);
-        ancestors.ElementAt(1).Should().BeSameAs(root);
+        _ = ancestors.Should().HaveCount(2);
+        _ = ancestors[0].Should().BeSameAs(child);
+        _ = ancestors[1].Should().BeSameAs(root);
     }
 
     [TestMethod]
@@ -138,16 +138,16 @@ public class SceneHierarchyTests
         var json = Scene.ToJson(scene);
 
         // Verify structure roughly
-        json.Should().Contain("RootNodes");
-        json.Should().Contain("Children");
-        json.Should().Contain("Root");
-        json.Should().Contain("Child");
+        _ = json.Should().Contain("RootNodes");
+        _ = json.Should().Contain("Children");
+        _ = json.Should().Contain("Root");
+        _ = json.Should().Contain("Child");
     }
 
     [TestMethod]
     public void Should_Deserialize_Nested_Hierarchy()
     {
-        var json = """
+        const string json = """
         {
             "Name": "Scene",
             "RootNodes": [
@@ -165,16 +165,16 @@ public class SceneHierarchyTests
 
         var scene = Scene.FromJson(json, this.ExampleProject);
 
-        scene.Should().NotBeNull();
-        scene!.RootNodes.Should().HaveCount(1);
+        _ = scene.Should().NotBeNull();
+        _ = scene!.RootNodes.Should().ContainSingle();
 
-        var root = scene.RootNodes.First();
-        root.Name.Should().Be("Root");
-        root.Children.Should().HaveCount(1);
+        var root = scene.RootNodes[0];
+        _ = root.Name.Should().Be("Root");
+        _ = root.Children.Should().ContainSingle();
 
-        var child = root.Children.First();
-        child.Name.Should().Be("Child");
-        child.Parent.Should().BeSameAs(root);
-        child.Scene.Should().BeSameAs(scene);
+        var child = root.Children[0];
+        _ = child.Name.Should().Be("Child");
+        _ = child.Parent.Should().BeSameAs(root);
+        _ = child.Scene.Should().BeSameAs(scene);
     }
 }

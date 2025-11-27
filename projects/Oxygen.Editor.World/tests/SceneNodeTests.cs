@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -23,7 +23,7 @@ public class SceneNodeTests
     public SceneNodeTests()
     {
         this.jsonOptions.WriteIndented = false;
-        this.jsonOptions.Converters.Add(new SceneNode.SceneNodeConverter(this.ExampleScene));
+        this.jsonOptions.Converters.Add(new SceneNodeJsonConverter(this.ExampleScene));
     }
 
     private Scene ExampleScene { get; } = new(null!) { Name = "Example Scene" };
@@ -118,7 +118,6 @@ public class SceneNodeTests
 
         // Assert
         _ = sceneNode.Should().NotBeNull();
-        Debug.Assert(sceneNode != null, nameof(sceneNode) + " != null");
         _ = sceneNode.Name.Should().Be("Node Name");
         _ = sceneNode.Scene.Should().BeSameAs(this.ExampleScene);
         _ = sceneNode.Components.Should().HaveCount(2);
@@ -153,7 +152,6 @@ public class SceneNodeTests
 
         // Assert
         _ = node.Should().NotBeNull();
-        Debug.Assert(node != null, nameof(node) + " != null");
         _ = node.Name.Should().Be("Node Name");
         _ = node.Scene.Should().BeSameAs(this.ExampleScene);
 
@@ -181,7 +179,6 @@ public class SceneNodeTests
 
         // Assert
         _ = deserialized.Should().NotBeNull();
-        Debug.Assert(deserialized != null, "deserialized != null");
         _ = deserialized.Name.Should().Be(node.Name);
         _ = deserialized.Scene.Should().BeSameAs(this.ExampleScene);
         _ = deserialized.Components.Should().HaveCount(3); // original 2 + always-present transform (may be duplicate if ToJson included transform explicitly)
@@ -214,7 +211,6 @@ public class SceneNodeTests
 
         // Assert
         _ = node.Should().NotBeNull();
-        Debug.Assert(node != null, "node != null");
         _ = node.Components.Should().HaveCount(2); // one provided + injected Transform
         _ = node.Components.ElementAt(1).Should().BeOfType<Transform>();
         _ = node.Components.ElementAt(1).As<Transform>().Position.Should().BeEquivalentTo(new Vector3(0, 0, 0));
@@ -240,7 +236,6 @@ public class SceneNodeTests
 
         // Assert
         _ = node.Should().NotBeNull();
-        Debug.Assert(node != null, "node != null");
 
         // Exactly one transform (provided in JSON) plus the named component => count == 2
         _ = node.Components.Should().HaveCount(2);
@@ -267,7 +262,6 @@ public class SceneNodeTests
 
         // Assert
         _ = node.Should().NotBeNull();
-        Debug.Assert(node != null, "node != null");
         foreach (var c in node.Components)
         {
             _ = c.Node.Should().BeSameAs(node);
@@ -291,8 +285,7 @@ public class SceneNodeTests
 
         // Assert
         _ = node.Should().NotBeNull();
-        Debug.Assert(node != null, "node != null");
-        _ = node.Components.Should().HaveCount(1);
+        _ = node.Components.Should().ContainSingle();
         _ = node.Components.ElementAt(0).Should().BeOfType<Transform>();
     }
 }
