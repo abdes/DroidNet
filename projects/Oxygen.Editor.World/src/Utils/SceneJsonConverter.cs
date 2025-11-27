@@ -38,19 +38,19 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
 
         var scene = new Scene(project) { Name = name, Id = id };
 
-        if (!sceneElement.TryGetProperty(nameof(Scene.Nodes), out var entitiesElement) ||
+        if (!sceneElement.TryGetProperty(nameof(Scene.RootNodes), out var entitiesElement) ||
             entitiesElement.ValueKind != JsonValueKind.Array)
         {
             return scene;
         }
 
-        scene.Nodes.Clear();
+        scene.RootNodes.Clear();
         foreach (var nodeElement in entitiesElement.EnumerateArray())
         {
             var sceneNode = SceneNode.FromJson(nodeElement.GetRawText(), scene);
             if (sceneNode != null)
             {
-                scene.Nodes.Add(sceneNode);
+                scene.RootNodes.Add(sceneNode);
             }
         }
 
@@ -65,8 +65,8 @@ internal class SceneJsonConverter(IProject project) : JsonConverter<Scene>
         writer.WriteString(nameof(GameObject.Name), value.Name);
         writer.WriteString(nameof(GameObject.Id), value.Id);
 
-        writer.WritePropertyName(nameof(Scene.Nodes));
-        JsonSerializer.Serialize(writer, value.Nodes, options);
+        writer.WritePropertyName(nameof(Scene.RootNodes));
+        JsonSerializer.Serialize(writer, value.RootNodes, options);
 
         writer.WriteEndObject();
     }

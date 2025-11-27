@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -35,9 +36,15 @@ public partial class Scene(IProject project) : GameObject
     public IProject Project { get; init; } = project;
 
     /// <summary>
-    ///     Gets the list of entities within the scene.
+    ///     Gets the list of root entities within the scene.
     /// </summary>
-    public ICollection<SceneNode> Nodes { get; init; } = [];
+    public ObservableCollection<SceneNode> RootNodes { get; init; } = [];
+
+    /// <summary>
+    ///     Gets all nodes in the scene (flattened).
+    /// </summary>
+    [JsonIgnore]
+    public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
     ///     Deserializes a JSON string into a <see cref="Scene" /> object.

@@ -127,10 +127,10 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return false;
         }
 
-        scene.Nodes.Clear();
-        foreach (var sceneNode in loadedScene.Nodes)
+        scene.RootNodes.Clear();
+        foreach (var sceneNode in loadedScene.RootNodes)
         {
-            scene.Nodes.Add(sceneNode);
+            scene.RootNodes.Add(sceneNode);
         }
 
         return true;
@@ -240,7 +240,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
                 if (scene != null)
                 {
                     // Clear nodes to maintain lazy loading behavior (nodes are loaded in LoadSceneAsync)
-                    scene.Nodes.Clear();
+                    scene.RootNodes.Clear();
                     project.Scenes.Add(scene);
                 }
             }

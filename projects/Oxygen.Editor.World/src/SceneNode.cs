@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -43,6 +44,7 @@ public partial class SceneNode : GameObject, IDisposable
         // Initialize the components collection with the always-present Transform.
         // Use a concrete mutable collection that preserves insertion order.
         this.Components = [new Transform(this) { Name = nameof(Transform) }];
+        this.Children = [];
     }
 
     /// <summary>
@@ -72,6 +74,97 @@ public partial class SceneNode : GameObject, IDisposable
     ///     Gets the list of components associated with the scene node.
     /// </summary>
     public ICollection<GameComponent> Components { get; private init; }
+
+    /// <summary>
+    ///     Gets the parent of the scene node.
+    /// </summary>
+    [JsonIgnore]
+    public SceneNode? Parent { get; private set; }
+
+    /// <summary>
+    ///     Gets the collection of child nodes.
+    /// </summary>
+    public ObservableCollection<SceneNode> Children { get; }
+
+    /// <summary>
+    ///     Adds a child node to this node.
+    /// </summary>
+    /// <param name="child">The child node to add.</param>
+    public void AddChild(SceneNode child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        child.SetParent(this);
+    }
+
+    /// <summary>
+    ///     Removes a child node from this node.
+    /// </summary>
+    /// <param name="child">The child node to remove.</param>
+    public void RemoveChild(SceneNode child)
+    {
+        ArgumentNullException.ThrowIfNull(child);
+        if (child.Parent == this)
+        {
+            child.SetParent(null);
+        }
+    }
+
+    /// <summary>
+    ///     Sets the parent of this node.
+    /// </summary>
+    /// <param name="newParent">The new parent node, or null to detach.</param>
+    public void SetParent(SceneNode? newParent)
+    {
+        if (this.Parent == newParent)
+        {
+            return;
+        }
+
+        if (newParent != null && (newParent == this || newParent.Ancestors().Contains(this)))
+        {
+            throw new InvalidOperationException("Cannot set parent: would create circular reference.");
+        }
+
+        var oldParent = this.Parent;
+        this.Parent = newParent;
+
+        oldParent?.Children.Remove(this);
+
+        if (newParent != null && !newParent.Children.Contains(this))
+        {
+            newParent.Children.Add(this);
+        }
+    }
+
+    /// <summary>
+    ///     Gets all descendant nodes.
+    /// </summary>
+    /// <returns>An enumerable of descendant nodes.</returns>
+    public IEnumerable<SceneNode> Descendants()
+    {
+        foreach (var child in this.Children)
+        {
+            yield return child;
+            foreach (var descendant in child.Descendants())
+            {
+                yield return descendant;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Gets all ancestor nodes.
+    /// </summary>
+    /// <returns>An enumerable of ancestor nodes.</returns>
+    public IEnumerable<SceneNode> Ancestors()
+    {
+        var current = this.Parent;
+        while (current != null)
+        {
+            yield return current;
+            current = current.Parent;
+        }
+    }
 
     /// <inheritdoc />
     public void Dispose()
@@ -192,6 +285,20 @@ public partial class SceneNode : GameObject, IDisposable
                 sceneNode.Components.Add(new Transform(sceneNode) { Name = nameof(Transform) });
             }
 
+            // Deserialize children
+            if (nodeElement.TryGetProperty(nameof(SceneNode.Children), out var elChildren) &&
+                elChildren.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var elChild in elChildren.EnumerateArray())
+                {
+                    var childNode = JsonSerializer.Deserialize<SceneNode>(elChild.GetRawText(), options);
+                    if (childNode != null)
+                    {
+                        sceneNode.AddChild(childNode);
+                    }
+                }
+            }
+
             // Finally set the scene node's active state
             sceneNode.IsActive = isActive;
 
@@ -206,6 +313,9 @@ public partial class SceneNode : GameObject, IDisposable
             writer.WriteString(nameof(SceneNode.Name), value.Name);
             writer.WriteString(nameof(GameObject.Id), value.Id);
             writer.WriteBoolean(nameof(SceneNode.IsActive), value.IsActive);
+
+            writer.WritePropertyName(nameof(SceneNode.Children));
+            JsonSerializer.Serialize(writer, value.Children, options);
 
             writer.WritePropertyName(nameof(SceneNode.Components));
             var componentSerializerOptions = new JsonSerializerOptions(options);

@@ -7,10 +7,9 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.Runtime.Engine.Tests;
+namespace Oxygen.Editor.World.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -38,15 +37,15 @@ public class SceneTests
         var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
         using var node1 = new SceneNode(scene) { Name = "Node 1" };
         using var node2 = new SceneNode(scene) { Name = "Node 2" };
-        scene.Nodes.Add(node1);
-        scene.Nodes.Add(node2);
+        scene.RootNodes.Add(node1);
+        scene.RootNodes.Add(node2);
 
         // Act
         var json = JsonSerializer.Serialize(scene, this.jsonOptions);
 
         // Assert
         _ = json.Should().Contain("\"Name\":\"Scene Name\"");
-        _ = json.Should().Contain("\"Nodes\"");
+        _ = json.Should().Contain("\"RootNodes\"");
         _ = json.Should().Contain("\"Name\":\"Node 1\"");
         _ = json.Should().Contain("\"Name\":\"Node 2\"");
         _ = json.Should().NotContain("\"Project\"");
@@ -61,7 +60,7 @@ public class SceneTests
             """
             {
                "Name":"Scene Name",
-               "Nodes":[
+               "RootNodes":[
                    {
                        "Name":"Node 1"
                    },
@@ -80,9 +79,9 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Nodes.Should().HaveCount(2);
-        _ = scene.Nodes.ElementAt(0).Name.Should().Be("Node 1");
-        _ = scene.Nodes.ElementAt(1).Name.Should().Be("Node 2");
+        _ = scene.RootNodes.Should().HaveCount(2);
+        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("Node 1");
+        _ = scene.RootNodes.ElementAt(1).Name.Should().Be("Node 2");
     }
 
     [TestMethod]
@@ -94,7 +93,7 @@ public class SceneTests
             """
             {
                 "Name":"Scene Name",
-                "Nodes":[]
+                "RootNodes":[]
             }
             """;
 
@@ -106,7 +105,7 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Nodes.Should().BeEmpty();
+        _ = scene.RootNodes.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -117,7 +116,7 @@ public class SceneTests
             /*lang=json,strict*/
             """
             {
-                "Nodes":[
+                "RootNodes":[
                     {
                         "Name":"Node 1"
                     },
@@ -142,15 +141,15 @@ public class SceneTests
         var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
         using var node1 = new SceneNode(scene) { Name = "Node 1" };
         using var node2 = new SceneNode(scene) { Name = "Node 2" };
-        scene.Nodes.Add(node1);
-        scene.Nodes.Add(node2);
+        scene.RootNodes.Add(node1);
+        scene.RootNodes.Add(node2);
 
         // Act
         var json = Scene.ToJson(scene);
 
         // Assert
         _ = json.Should().Contain("\"Name\": \"Scene Name\"");
-        _ = json.Should().Contain("\"Nodes\"");
+        _ = json.Should().Contain("\"RootNodes\"");
         _ = json.Should().Contain("\"Name\": \"Node 1\"");
         _ = json.Should().Contain("\"Name\": \"Node 2\"");
         _ = json.Should().NotContain("\"Project\"");
@@ -165,7 +164,7 @@ public class SceneTests
             """
             {
                "Name":"Scene Name",
-               "Nodes":[
+               "RootNodes":[
                    {
                        "Name":"Node 1"
                    },
@@ -184,9 +183,9 @@ public class SceneTests
         Debug.Assert(scene is not null, "scene != null");
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
-        _ = scene.Nodes.Should().HaveCount(2);
-        _ = scene.Nodes.ElementAt(0).Name.Should().Be("Node 1");
-        _ = scene.Nodes.ElementAt(1).Name.Should().Be("Node 2");
+        _ = scene.RootNodes.Should().HaveCount(2);
+        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("Node 1");
+        _ = scene.RootNodes.ElementAt(1).Name.Should().Be("Node 2");
     }
 
     [TestMethod]
@@ -197,8 +196,8 @@ public class SceneTests
         using var node1 = new SceneNode(scene) { Name = "Node A" };
         using var node2 = new SceneNode(scene) { Name = "Node B" };
         node1.Components.Add(new GameComponent(node1) { Name = "GC1" });
-        scene.Nodes.Add(node1);
-        scene.Nodes.Add(node2);
+        scene.RootNodes.Add(node1);
+        scene.RootNodes.Add(node2);
 
         // Act
         var json = Scene.ToJson(scene);
@@ -209,12 +208,12 @@ public class SceneTests
         Debug.Assert(deserialized is not null, "deserialized != null");
         _ = deserialized!.Name.Should().Be(scene.Name);
         _ = deserialized.Project.Should().BeSameAs(this.ExampleProject);
-        _ = deserialized.Nodes.Should().HaveCount(2);
-        _ = deserialized.Nodes.ElementAt(0).Name.Should().Be("Node A");
-        _ = deserialized.Nodes.ElementAt(1).Name.Should().Be("Node B");
+        _ = deserialized.RootNodes.Should().HaveCount(2);
+        _ = deserialized.RootNodes.ElementAt(0).Name.Should().Be("Node A");
+        _ = deserialized.RootNodes.ElementAt(1).Name.Should().Be("Node B");
 
         // Nodes should reference their parent scene
-        foreach (var n in deserialized.Nodes)
+        foreach (var n in deserialized.RootNodes)
         {
             _ = n.Scene.Should().BeSameAs(deserialized);
         }
@@ -229,7 +228,7 @@ public class SceneTests
             """
             {
                "Name":"Scene Name",
-               "Nodes":[
+               "RootNodes":[
                    { "Name":"Node 1" },
                    { "Name":"Node 2" }
                ]
@@ -242,7 +241,7 @@ public class SceneTests
         // Assert
         _ = scene.Should().NotBeNull();
         Debug.Assert(scene is not null, "scene != null");
-        foreach (var node in scene!.Nodes)
+        foreach (var node in scene!.RootNodes)
         {
             _ = node.Scene.Should().BeSameAs(scene);
         }
