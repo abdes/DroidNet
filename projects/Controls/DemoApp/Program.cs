@@ -16,6 +16,7 @@ using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.Demo.TabStrip;
+using DroidNet.Controls.Demo.ToolBar;
 using DroidNet.Coordinates;
 using DroidNet.Hosting;
 using DroidNet.Hosting.WinUI;
@@ -183,6 +184,8 @@ public static partial class Program
         container.Register<MenuItemDemoViewModel>(Reuse.Transient);
         container.Register<TabStripDemoView>(Reuse.Transient);
         container.Register<TabStripDemoViewModel>(Reuse.Transient);
+        container.Register<ToolBarDemoView>(Reuse.Transient);
+        container.Register<ToolBarDemoViewModel>(Reuse.Transient);
     }
 
     [SuppressMessage("Design", "MA0051:Method is too long", Justification = "methoid gains in clarity iof all routes are together")]
@@ -254,6 +257,11 @@ public static partial class Program
                         {
                             Path = "tabstrip",
                             ViewModelType = typeof(TabStripDemoViewModel),
+                        },
+                        new Route()
+                        {
+                            Path = "toolbar",
+                            ViewModelType = typeof(ToolBarDemoViewModel),
                         },
                     ]),
                 },

@@ -1,0 +1,432 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="DroidNet.Controls.Demo.ToolBar.ToolBarDemoView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ctk="using:CommunityToolkit.WinUI.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:DroidNet.Controls.Demo.ToolBar"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!--  Reusable panel style for demo borders  -->
+        <Style x:Key="DemoPanelBorderStyle" TargetType="Border">
+            <Setter Property="Padding" Value="16" />
+            <Setter Property="Background" Value="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}" />
+            <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="4" />
+        </Style>
+    </Page.Resources>
+
+    <Grid>
+        <ScrollViewer>
+            <StackPanel
+                Margin="20"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Spacing="20">
+
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="ToolBar Demo" />
+
+                <!--  Configurable ToolBar  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Configurable ToolBar" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <StackPanel Spacing="16">
+                        <!--  Configuration Controls  -->
+                        <StackPanel Spacing="12">
+                            <TextBlock FontWeight="SemiBold" Text="Configuration:" />
+
+                            <!--  IsCompact Toggle  -->
+                            <ToggleSwitch
+                                Header="Compact Mode"
+                                IsOn="{x:Bind ViewModel.IsCompact, Mode=TwoWay}"
+                                OffContent="Standard"
+                                OnContent="Compact" />
+
+                            <!--  Default Label Position  -->
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Default Label Position:" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <RadioButton
+                                        Checked="LabelPosition_Changed"
+                                        Content="Collapsed"
+                                        GroupName="LabelPos"
+                                        Tag="Collapsed" />
+                                    <RadioButton
+                                        Checked="LabelPosition_Changed"
+                                        Content="Right"
+                                        GroupName="LabelPos"
+                                        IsChecked="True"
+                                        Tag="Right" />
+                                    <RadioButton
+                                        Checked="LabelPosition_Changed"
+                                        Content="Bottom"
+                                        GroupName="LabelPos"
+                                        Tag="Bottom" />
+                                    <RadioButton
+                                        Checked="LabelPosition_Changed"
+                                        Content="Left"
+                                        GroupName="LabelPos"
+                                        Tag="Left" />
+                                    <RadioButton
+                                        Checked="LabelPosition_Changed"
+                                        Content="Top"
+                                        GroupName="LabelPos"
+                                        Tag="Top" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!--  Configurable ToolBar  -->
+                        <dnc:ToolBar
+                            x:Name="ConfigurableToolBar"
+                            DefaultLabelPosition="{x:Bind ViewModel.DefaultLabelPosition, Mode=OneWay}"
+                            IsCompact="{x:Bind ViewModel.IsCompact, Mode=OneWay}"
+                            LoggerFactory="{x:Bind ViewModel.LoggerFactory}">
+
+                            <dnc:ToolBarButton
+                                Command="{x:Bind ViewModel.ExecuteNewCommand}"
+                                KeyTip="N"
+                                Label="New">
+                                <dnc:ToolBarButton.Icon>
+                                    <FontIconSource Glyph="&#xE8A5;" />
+                                </dnc:ToolBarButton.Icon>
+                            </dnc:ToolBarButton>
+
+                            <dnc:ToolBarButton
+                                Command="{x:Bind ViewModel.ExecuteOpenCommand}"
+                                KeyTip="O"
+                                Label="Open">
+                                <dnc:ToolBarButton.Icon>
+                                    <FontIconSource Glyph="&#xE8E5;" />
+                                </dnc:ToolBarButton.Icon>
+                            </dnc:ToolBarButton>
+
+                            <dnc:ToolBarButton
+                                Command="{x:Bind ViewModel.ExecuteSaveCommand}"
+                                KeyTip="S"
+                                Label="Save">
+                                <dnc:ToolBarButton.Icon>
+                                    <FontIconSource Glyph="&#xE74E;" />
+                                </dnc:ToolBarButton.Icon>
+                            </dnc:ToolBarButton>
+
+                            <dnc:ToolBarSeparator />
+
+                            <dnc:ToolBarToggleButton
+                                IsChecked="{x:Bind ViewModel.IsToggleChecked, Mode=TwoWay}"
+                                KeyTip="B"
+                                Label="Bold">
+                                <dnc:ToolBarToggleButton.Icon>
+                                    <FontIconSource Glyph="&#xE8DD;" />
+                                </dnc:ToolBarToggleButton.Icon>
+                            </dnc:ToolBarToggleButton>
+
+                            <dnc:ToolBarButton
+                                Command="{x:Bind ViewModel.ExecuteUndoCommand}"
+                                KeyTip="Z"
+                                Label="Undo">
+                                <dnc:ToolBarButton.Icon>
+                                    <FontIconSource Glyph="&#xE7A7;" />
+                                </dnc:ToolBarButton.Icon>
+                            </dnc:ToolBarButton>
+
+                            <dnc:ToolBarButton
+                                Command="{x:Bind ViewModel.ExecuteRedoCommand}"
+                                KeyTip="Y"
+                                Label="Redo">
+                                <dnc:ToolBarButton.Icon>
+                                    <FontIconSource Glyph="&#xE7A6;" />
+                                </dnc:ToolBarButton.Icon>
+                            </dnc:ToolBarButton>
+                        </dnc:ToolBar>
+
+                        <!--  Status Display  -->
+                        <Border
+                            Padding="12,8"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="4">
+                            <StackPanel Spacing="4">
+                                <TextBlock FontWeight="SemiBold" Text="Status:" />
+                                <TextBlock Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!--  Overflow Demo (Sizer)  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Overflow Demo (Resizable Panel)" />
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <!--  Resizable ToolBar Panel  -->
+                        <Border
+                            x:Name="OverflowToolBar1"
+                            Width="200"
+                            Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}">
+                            <dnc:ToolBar LoggerFactory="{x:Bind ViewModel.LoggerFactory}">
+                                <dnc:ToolBarButton Label="Item 1">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE8A5;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 2">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE8E5;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 3">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE74E;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 4">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE8C6;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 5">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE8C8;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 6">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE77F;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 7">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE7A7;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                                <dnc:ToolBarButton Label="Item 8">
+                                    <dnc:ToolBarButton.Icon>
+                                        <FontIconSource Glyph="&#xE7A6;" />
+                                    </dnc:ToolBarButton.Icon>
+                                </dnc:ToolBarButton>
+                            </dnc:ToolBar>
+                        </Border>
+                        <ctk:ContentSizer Grid.Column="1" TargetControl="{x:Bind OverflowToolBar1}" />
+                        <!--  Empty space for layout  -->
+                        <Grid Grid.Column="2" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition />
+                        </Grid.ColumnDefinitions>
+                        <!--  Resizable ToolBar Panel  -->
+                        <Border
+                            x:Name="OverflowToolBar2"
+                            Width="400"
+                            Background="{ThemeResource LayerOnMicaBaseAltFillColorDefaultBrush}">
+                            <!--  Primary and Secondary Commands Demo  -->
+                            <dnc:ToolBar LoggerFactory="{x:Bind ViewModel.LoggerFactory}">
+                                <!--  Primary Commands - shown in main toolbar  -->
+                                <dnc:ToolBar.PrimaryItems>
+                                    <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteNewCommand}" Label="New">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE8A5;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteOpenCommand}" Label="Open">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE8E5;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteSaveCommand}" Label="Save">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE74E;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarSeparator />
+
+                                    <dnc:ToolBarToggleButton IsChecked="{x:Bind ViewModel.IsToggleChecked, Mode=TwoWay}" Label="Bold">
+                                        <dnc:ToolBarToggleButton.Icon>
+                                            <FontIconSource Glyph="&#xE8DD;" />
+                                        </dnc:ToolBarToggleButton.Icon>
+                                    </dnc:ToolBarToggleButton>
+                                </dnc:ToolBar.PrimaryItems>
+
+                                <!--  Secondary Commands - always in overflow menu  -->
+                                <dnc:ToolBar.SecondaryItems>
+                                    <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteUndoCommand}" Label="Undo">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE7A7;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteRedoCommand}" Label="Redo">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE7A6;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarSeparator />
+
+                                    <dnc:ToolBarButton Label="Settings">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE713;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+
+                                    <dnc:ToolBarButton Label="Help">
+                                        <dnc:ToolBarButton.Icon>
+                                            <FontIconSource Glyph="&#xE897;" />
+                                        </dnc:ToolBarButton.Icon>
+                                    </dnc:ToolBarButton>
+                                </dnc:ToolBar.SecondaryItems>
+                            </dnc:ToolBar>
+                        </Border>
+                        <ctk:ContentSizer Grid.Column="1" TargetControl="{x:Bind OverflowToolBar2}" />
+                        <!--  Empty space for layout  -->
+                        <Grid Grid.Column="2" />
+                    </Grid>
+                </Border>
+
+                <!--  Mixed Label Positions Demo  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Mixed Label Positions" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
+                    Demonstrates individual buttons with overridden label positions, independent of the ToolBar's DefaultLabelPosition.
+                </TextBlock>
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <dnc:ToolBar DefaultLabelPosition="Right" LoggerFactory="{x:Bind ViewModel.LoggerFactory}">
+                        <dnc:ToolBarButton
+                            Command="{x:Bind ViewModel.ExecuteNewCommand}"
+                            Label="Right"
+                            ToolBarLabelPosition="Right">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE8A5;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarButton
+                            Command="{x:Bind ViewModel.ExecuteOpenCommand}"
+                            Label="Bottom"
+                            ToolBarLabelPosition="Bottom">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE8E5;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarButton
+                            Command="{x:Bind ViewModel.ExecuteSaveCommand}"
+                            Label="Left"
+                            ToolBarLabelPosition="Left">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE74E;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarSeparator />
+
+                        <dnc:ToolBarButton
+                            Command="{x:Bind ViewModel.ExecuteCutCommand}"
+                            Label="Top"
+                            ToolBarLabelPosition="Top">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE8C6;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarButton
+                            Command="{x:Bind ViewModel.ExecuteCopyCommand}"
+                            Label="Icon Only"
+                            ToolBarLabelPosition="Collapsed">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE8C8;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecutePasteCommand}" Label="Auto (uses ToolBar default)">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE77F;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+                    </dnc:ToolBar>
+                </Border>
+
+                <!--  Custom Control Hosting Demo  -->
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Custom Control Hosting" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
+                    ToolBar can host arbitrary controls, not just ToolBarButton and ToolBarToggleButton.
+                </TextBlock>
+                <Border Style="{StaticResource DemoPanelBorderStyle}">
+                    <dnc:ToolBar LoggerFactory="{x:Bind ViewModel.LoggerFactory}">
+                        <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteNewCommand}" Label="New">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE8A5;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+
+                        <dnc:ToolBarSeparator />
+
+                        <!--  Custom TextBox hosted in ToolBar  -->
+                        <TextBox
+                            Width="200"
+                            Margin="4,0"
+                            VerticalAlignment="Center"
+                            PlaceholderText="Search..." />
+
+                        <dnc:ToolBarSeparator />
+
+                        <!--  Custom ComboBox hosted in ToolBar  -->
+                        <ComboBox
+                            Width="120"
+                            Margin="4,0"
+                            VerticalAlignment="Center"
+                            PlaceholderText="Font"
+                            SelectedIndex="0">
+                            <ComboBoxItem Content="Arial" />
+                            <ComboBoxItem Content="Calibri" />
+                            <ComboBoxItem Content="Times New Roman" />
+                        </ComboBox>
+
+                        <dnc:ToolBarSeparator />
+
+                        <!--  Custom Slider hosted in ToolBar  -->
+                        <StackPanel
+                            Margin="8,0"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <TextBlock VerticalAlignment="Center" Text="Zoom:" />
+                            <Slider
+                                Width="100"
+                                VerticalAlignment="Center"
+                                Maximum="200"
+                                Minimum="50"
+                                Value="100" />
+                        </StackPanel>
+
+                        <dnc:ToolBarSeparator />
+
+                        <dnc:ToolBarButton Command="{x:Bind ViewModel.ExecuteSaveCommand}" Label="Save">
+                            <dnc:ToolBarButton.Icon>
+                                <FontIconSource Glyph="&#xE74E;" />
+                            </dnc:ToolBarButton.Icon>
+                        </dnc:ToolBarButton>
+                    </dnc:ToolBar>
+                </Border>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>
