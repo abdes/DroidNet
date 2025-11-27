@@ -80,8 +80,8 @@ public class SceneTests
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
         _ = scene.RootNodes.Should().HaveCount(2);
-        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("Node 1");
-        _ = scene.RootNodes.ElementAt(1).Name.Should().Be("Node 2");
+        _ = scene.RootNodes[0].Name.Should().Be("Node 1");
+        _ = scene.RootNodes[1].Name.Should().Be("Node 2");
     }
 
     [TestMethod]
@@ -184,8 +184,8 @@ public class SceneTests
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
         _ = scene.RootNodes.Should().HaveCount(2);
-        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("Node 1");
-        _ = scene.RootNodes.ElementAt(1).Name.Should().Be("Node 2");
+        _ = scene.RootNodes[0].Name.Should().Be("Node 1");
+        _ = scene.RootNodes[1].Name.Should().Be("Node 2");
     }
 
     [TestMethod]
@@ -209,8 +209,8 @@ public class SceneTests
         _ = deserialized!.Name.Should().Be(scene.Name);
         _ = deserialized.Project.Should().BeSameAs(this.ExampleProject);
         _ = deserialized.RootNodes.Should().HaveCount(2);
-        _ = deserialized.RootNodes.ElementAt(0).Name.Should().Be("Node A");
-        _ = deserialized.RootNodes.ElementAt(1).Name.Should().Be("Node B");
+        _ = deserialized.RootNodes[0].Name.Should().Be("Node A");
+        _ = deserialized.RootNodes[1].Name.Should().Be("Node B");
 
         // Nodes should reference their parent scene
         foreach (var n in deserialized.RootNodes)

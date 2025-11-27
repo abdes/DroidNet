@@ -51,7 +51,7 @@ Status: ✅ Implemented — Scene nodes now expose `Parent` and `Children`, and 
 
 ---
 
-### 2. **Scene Node Flags System** ❌ MISSING
+### 2. **Scene Node Flags System** ✅ Completed
 
 **Engine Has:**
 
@@ -68,6 +68,8 @@ Status: ✅ Implemented — Scene nodes now expose `Parent` and `Children`, and 
 - JSON serialization of flag states
 
 **Impact:** Cannot represent visibility, shadow casting, static/dynamic hints, or raycasting selectability
+
+Status: ✅ Implemented — Editor exposes `SceneNodeFlags` enum (`src/SceneNodeFlags.cs`), helper conversions (`src/SceneNodeFlagsExtensions.cs`), and editor-local boolean flag properties plus a composed `Flags` property on `SceneNode` (`src/SceneNode.cs`).
 
 ---
 
@@ -245,7 +247,7 @@ public IEnumerable<SceneNode> AllNodes => RootNodes.SelectMany(r => r.Descendant
 
 ---
 
-### Phase 2: Scene Flags System
+### Phase 2: Scene Flags System ✅ Completed
 
 #### 2.1 Create `SceneNodeFlags` Enum
 
@@ -263,7 +265,6 @@ public enum SceneNodeFlags : uint
     RayCastingSelectable = 1 << 3,
     IgnoreParentTransform = 1 << 4,
     Static = 1 << 5,
-    Dynamic = 1 << 6,
 }
 ```
 
@@ -280,7 +281,7 @@ public enum SceneNodeFlags : uint
 public bool IsVisible { get; set; } = true;
 public bool CastsShadows { get; set; }
 public bool ReceivesShadows { get; set; }
-public bool IsSelectable { get; set; } = true;
+public bool IsRayCastingSelectable { get; set; } = true;
 public bool IgnoreParentTransform { get; set; }
 public bool IsStatic { get; set; }
 ```
@@ -498,7 +499,7 @@ public static class SceneNodeExtensions
 | Feature | Status | Priority | Complexity |
 |---------|--------|----------|------------|
 | Hierarchy Navigation | ✅ Completed | **High** | Medium |
-| Scene Flags System | ❌ Missing | **High** | Low |
+| Scene Flags System | ✅ Completed | **High** | Low |
 | Renderable Component | ❌ Missing | **High** | Medium |
 | Camera Components | ❌ Missing | Medium | Low |
 | Transform Enhancements | ⚠️ Partial | Low | Low |

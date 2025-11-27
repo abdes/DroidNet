@@ -29,6 +29,12 @@ public partial class SceneNode : GameObject, IDisposable
     };
 
     private bool isActive;
+    private bool isVisible = true;
+    private bool castsShadows;
+    private bool receivesShadows;
+    private bool isRayCastingSelectable = true;
+    private bool ignoreParentTransform;
+    private bool isStatic;
     private bool isDisposed;
 
     // private bool isDisposed;
@@ -65,6 +71,115 @@ public partial class SceneNode : GameObject, IDisposable
     }
 
     /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether the node is visible (editor local value).
+    /// </summary>
+    public bool IsVisible
+    {
+        get => this.isVisible;
+        set => _ = this.SetField(ref this.isVisible, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether this node casts shadows.
+    /// </summary>
+    public bool CastsShadows
+    {
+        get => this.castsShadows;
+        set => _ = this.SetField(ref this.castsShadows, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether this node receives shadows.
+    /// </summary>
+    public bool ReceivesShadows
+    {
+        get => this.receivesShadows;
+        set => _ = this.SetField(ref this.receivesShadows, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether this node is selectable by ray casting.
+    /// </summary>
+    public bool IsRayCastingSelectable
+    {
+        get => this.isRayCastingSelectable;
+        set => _ = this.SetField(ref this.isRayCastingSelectable, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether this node ignores parent transforms.
+    /// </summary>
+    public bool IgnoreParentTransform
+    {
+        get => this.ignoreParentTransform;
+        set => _ = this.SetField(ref this.ignoreParentTransform, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether gets or sets whether this node is considered static (editor hint).
+    /// </summary>
+    public bool IsStatic
+    {
+        get => this.isStatic;
+        set => _ = this.SetField(ref this.isStatic, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a compact enum representing the current flags on this node.
+    ///     The getter composes the enum from the individual observable properties and the
+    ///     setter updates those properties (so change notifications fire).
+    /// </summary>
+    public SceneNodeFlags Flags
+    {
+        get
+        {
+            var f = SceneNodeFlags.None;
+            if (this.IsVisible)
+            {
+                f |= SceneNodeFlags.Visible;
+            }
+
+            if (this.CastsShadows)
+            {
+                f |= SceneNodeFlags.CastsShadows;
+            }
+
+            if (this.ReceivesShadows)
+            {
+                f |= SceneNodeFlags.ReceivesShadows;
+            }
+
+            if (this.IsRayCastingSelectable)
+            {
+                f |= SceneNodeFlags.RayCastingSelectable;
+            }
+
+            if (this.IgnoreParentTransform)
+            {
+                f |= SceneNodeFlags.IgnoreParentTransform;
+            }
+
+            if (this.IsStatic)
+            {
+                f |= SceneNodeFlags.Static;
+            }
+
+            return f;
+        }
+
+        set
+        {
+            // Use property setters so change notifications fire.
+            this.IsVisible = value.HasFlag(SceneNodeFlags.Visible);
+            this.CastsShadows = value.HasFlag(SceneNodeFlags.CastsShadows);
+            this.ReceivesShadows = value.HasFlag(SceneNodeFlags.ReceivesShadows);
+            this.IsRayCastingSelectable = value.HasFlag(SceneNodeFlags.RayCastingSelectable);
+            this.IgnoreParentTransform = value.HasFlag(SceneNodeFlags.IgnoreParentTransform);
+            this.IsStatic = value.HasFlag(SceneNodeFlags.Static);
+        }
+    }
+
+    /// <summary>
     ///     Gets the scene associated with the scene node.
     /// </summary>
     [JsonIgnore]
@@ -87,6 +202,23 @@ public partial class SceneNode : GameObject, IDisposable
     public ObservableCollection<SceneNode> Children { get; }
 
     /// <summary>
+    /// Toggle a single flag on this node.
+    /// </summary>
+    /// <param name="flag">The flag to toggle.</param>
+    public void ToggleFlag(SceneNodeFlags flag)
+    {
+        var f = this.Flags;
+        this.Flags = f ^ flag;
+    }
+
+    /// <summary>
+    /// Returns true if the node has the specified flag set.
+    /// </summary>
+    /// <param name="flag">The flag to check.</param>
+    /// <returns>True if the flag is set on this node; otherwise false.</returns>
+    public bool HasFlag(SceneNodeFlags flag) => this.Flags.HasFlag(flag);
+
+    /// <summary>
     ///     Adds a child node to this node.
     /// </summary>
     /// <param name="child">The child node to add.</param>
@@ -105,7 +237,7 @@ public partial class SceneNode : GameObject, IDisposable
         ArgumentNullException.ThrowIfNull(child);
         if (child.Parent == this)
         {
-            child.SetParent(null);
+            child.SetParent(newParent: null);
         }
     }
 
@@ -128,9 +260,9 @@ public partial class SceneNode : GameObject, IDisposable
         var oldParent = this.Parent;
         this.Parent = newParent;
 
-        oldParent?.Children.Remove(this);
+        _ = oldParent?.Children.Remove(this);
 
-        if (newParent != null && !newParent.Children.Contains(this))
+        if (newParent?.Children.Contains(this) == false)
         {
             newParent.Children.Add(this);
         }
@@ -189,7 +321,7 @@ public partial class SceneNode : GameObject, IDisposable
         Justification = "we need to set the scene for the converter")]
     internal static SceneNode? FromJson(string json, Scene scene)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeConverter(scene) } };
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeJsonConverter(scene) } };
         return JsonSerializer.Deserialize<SceneNode>(json, options);
     }
 
@@ -207,7 +339,7 @@ public partial class SceneNode : GameObject, IDisposable
         Justification = "we need to use the custom converter")]
     internal static string ToJson(SceneNode sceneNode)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeConverter(null!) } };
+        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeJsonConverter(null!) } };
         return JsonSerializer.Serialize(sceneNode, options);
     }
 
@@ -234,115 +366,5 @@ public partial class SceneNode : GameObject, IDisposable
         // TODO: free unmanaged resources (unmanaged objects) and override finalizer
         // TODO: set large fields to null
         this.isDisposed = true;
-    }
-
-    /// <summary>
-    ///     A custom JSON converter for <see cref="SceneNode" /> because we want to enforce that a
-    ///     <c>SceneNode</c> can only be created with the <see cref="Scene" /> to which it belongs.
-    /// </summary>
-    internal sealed class SceneNodeConverter(Scene scene) : JsonConverter<SceneNode>
-    {
-        /// <inheritdoc />
-        public override SceneNode Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        {
-            var nodeElement = JsonSerializer.Deserialize<JsonElement>(ref reader, options);
-
-            if (!nodeElement.TryGetProperty(nameof(SceneNode.Name), out var nameElement))
-            {
-                Fail.MissingRequiredProperty(nameof(SceneNode.Name));
-            }
-
-            var name = nameElement.ToString();
-
-            var id = nodeElement.TryGetProperty(nameof(GameObject.Id), out var idElement) && idElement.TryGetGuid(out var parsedId)
-                ? parsedId
-                : Guid.NewGuid();
-
-            var isActive = nodeElement.TryGetProperty(nameof(SceneNode.IsActive), out var isActiveElement) &&
-                           isActiveElement.GetBoolean();
-            var sceneNode = new SceneNode(scene) { Name = name, Id = id };
-
-            if (nodeElement.TryGetProperty(nameof(SceneNode.Components), out var elComponents) &&
-                elComponents.ValueKind == JsonValueKind.Array)
-            {
-                // Clear any constructor-injected components before populating from JSON
-                sceneNode.Components.Clear();
-                foreach (var elComponent in elComponents.EnumerateArray())
-                {
-                    var component = GameComponent.FromJson(elComponent.GetRawText());
-                    if (component != null)
-                    {
-                        // Ensure the component's Node points to the deserialized node
-                        component.Node = sceneNode;
-                        sceneNode.Components.Add(component);
-                    }
-                }
-            }
-
-            // Ensure the Components list contains a Transform element
-            if (!sceneNode.Components.OfType<Transform>().Any())
-            {
-                sceneNode.Components.Add(new Transform(sceneNode) { Name = nameof(Transform) });
-            }
-
-            // Deserialize children
-            if (nodeElement.TryGetProperty(nameof(SceneNode.Children), out var elChildren) &&
-                elChildren.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var elChild in elChildren.EnumerateArray())
-                {
-                    var childNode = JsonSerializer.Deserialize<SceneNode>(elChild.GetRawText(), options);
-                    if (childNode != null)
-                    {
-                        sceneNode.AddChild(childNode);
-                    }
-                }
-            }
-
-            // Finally set the scene node's active state
-            sceneNode.IsActive = isActive;
-
-            return sceneNode;
-        }
-
-        /// <inheritdoc />
-        public override void Write(Utf8JsonWriter writer, SceneNode value, JsonSerializerOptions options)
-        {
-            writer.WriteStartObject();
-
-            writer.WriteString(nameof(SceneNode.Name), value.Name);
-            writer.WriteString(nameof(GameObject.Id), value.Id);
-            writer.WriteBoolean(nameof(SceneNode.IsActive), value.IsActive);
-
-            writer.WritePropertyName(nameof(SceneNode.Children));
-            JsonSerializer.Serialize(writer, value.Children, options);
-
-            writer.WritePropertyName(nameof(SceneNode.Components));
-            var componentSerializerOptions = new JsonSerializerOptions(options);
-            foreach (var converter in GameComponent.JsonOptions.Converters)
-            {
-                componentSerializerOptions.Converters.Add(converter);
-            }
-
-            // When serializing, place user-provided components before the injected
-            // default Transform (which is present in the collection by constructor).
-            // This ensures the JSON lists the meaningful components first so that
-            // deserialization produces a collection where those components appear
-            // in the expected order.
-            var ordered = value.Components
-                .OrderBy(c =>
-                    c is Transform && string.Equals(c.Name, nameof(Transform), StringComparison.Ordinal) ? 1 : 0)
-                .ToList();
-
-            JsonSerializer.Serialize(writer, ordered, componentSerializerOptions);
-
-            writer.WriteEndObject();
-        }
-
-        private abstract class Fail : JsonThrowHelper<SceneNode>
-        {
-            public static new void MissingRequiredProperty(string propertyName)
-                => JsonThrowHelper<SceneNode>.MissingRequiredProperty(propertyName);
-        }
     }
 }
