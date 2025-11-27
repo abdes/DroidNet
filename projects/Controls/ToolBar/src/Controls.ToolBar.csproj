@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>$(RootNamespace).Controls</RootNamespace>
+        <AssemblyName>DroidNet.Controls.ToolBar</AssemblyName>
+
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <UseWinUI>true</UseWinUI>
+
+        <Title>ToolBar controls</Title>
+        <Description>Custom controls for ToolBar.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>winui;controls;toolbar</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.WinUI.Converters" />
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    </ItemGroup>
+
+</Project>
