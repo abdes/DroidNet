@@ -54,7 +54,7 @@ public class SceneTests
                     Name = "Node 1",
                     Components =
                     [
-                        new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                     ],
                 },
                 new()
@@ -63,7 +63,7 @@ public class SceneTests
                     Name = "Node 2",
                     Components =
                     [
-                        new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                     ],
                 },
             ],
@@ -162,7 +162,7 @@ public class SceneTests
                     Name = "Node 1",
                     Components =
                     [
-                        new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                     ],
                 },
                 new()
@@ -171,7 +171,7 @@ public class SceneTests
                     Name = "Node 2",
                     Components =
                     [
-                        new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                     ],
                 },
             ],
@@ -329,7 +329,7 @@ public class SceneTests
                     Name = "Root",
                     Components =
                     [
-                        new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                        new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                     ],
                     Children =
                     [
@@ -339,7 +339,7 @@ public class SceneTests
                             Name = "Child",
                             Components =
                             [
-                                new Serialization.TransformComponentData { Name = "Transform", Transform = new() },
+                                new Serialization.TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
                             ],
                         },
                     ],

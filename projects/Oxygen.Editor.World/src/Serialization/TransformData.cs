@@ -9,7 +9,7 @@ namespace Oxygen.Editor.World.Serialization;
 /// <summary>
 /// Data transfer object for transform component data.
 /// </summary>
-public record TransformData
+public record TransformData : ComponentData
 {
     /// <summary>
     /// Gets or initializes the local position.

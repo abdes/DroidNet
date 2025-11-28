@@ -345,10 +345,13 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             // 3. Component & node-level override slots
             // Node-level override slots are persisted separately from components.
             this.OverrideSlots.Clear();
-            foreach (var slotData in data.OverrideSlots)
+            if (data.OverrideSlots is not null)
             {
-                var slot = Slots.OverrideSlot.CreateAndHydrate(slotData);
-                this.OverrideSlots.Add(slot);
+                foreach (var slotData in data.OverrideSlots)
+                {
+                    var slot = Slots.OverrideSlot.CreateAndHydrate(slotData);
+                    this.OverrideSlots.Add(slot);
+                }
             }
 
             // 4. Flags

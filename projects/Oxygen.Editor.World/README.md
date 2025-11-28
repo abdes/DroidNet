@@ -243,35 +243,48 @@ Scenes serialize to JSON with custom converters:
         {
           "$type": "Transform",
           "Name": "Transform",
-          "LocalPosition": { "x": 0.0, "y": 1.0, "z": 0.0 },
-          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
-          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          "LocalPosition": {
+            "x": 0.0,
+            "y": 1.0,
+            "z": 0.0
+          },
+          "LocalRotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "LocalScale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
         },
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
-          "GeometryUri": "assets/models/player.glb",
+          "GeometryUri": "asset://Generated/BasicShapes/Cube",
           "OverrideSlots": [
             {
               "$type": "RenderingSlot",
-              "IsVisible": true
+              "IsVisible": { "Value": true }
             }
           ],
           "TargetedOverrides": [
             {
               "LodIndex": 0,
-              "SubmeshIndex": 2,
+              "SubmeshIndex": 0,
               "OverrideSlots": [
                 {
                   "$type": "MaterialsSlot",
-                  "Material": { "Uri": "assets/materials/metal.mat" }
+                  "Material": { "Uri": "asset://Generated/Materials/Default" }
                 }
               ]
             }
           ]
         },
         {
-          "$type": "CameraComponent",
+          "$type": "PerspectiveCamera",
           "Name": "PlayerCamera",
           "NearPlane": 0.1,
           "FarPlane": 1000.0
@@ -286,14 +299,27 @@ Scenes serialize to JSON with custom converters:
             {
               "$type": "Transform",
               "Name": "Transform",
-              "LocalPosition": { "x": 0.5, "y": 0.0, "z": 0.0 },
-              "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
-              "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+              "LocalPosition": {
+                "x": 0.5,
+                "y": 0.0,
+                "z": 0.0
+              },
+              "LocalRotation": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": 0.0,
+                "w": 1.0
+              },
+              "LocalScale": {
+                "x": 1.0,
+                "y": 1.0,
+                "z": 1.0
+              }
             },
             {
               "$type": "GeometryComponent",
               "Name": "WeaponMesh",
-              "GeometryUri": "assets/models/weapon.glb"
+              "GeometryUri": "asset://Generated/BasicShapes/Plane"
             }
           ]
         }
@@ -307,14 +333,27 @@ Scenes serialize to JSON with custom converters:
         {
           "$type": "Transform",
           "Name": "Transform",
-          "LocalPosition": { "x": 10.0, "y": 0.0, "z": 0.0 },
-          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
-          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          "LocalPosition": {
+            "x": 10.0,
+            "y": 0.0,
+            "z": 0.0
+          },
+          "LocalRotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "LocalScale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
         },
         {
           "$type": "GeometryComponent",
           "Name": "EnemyMesh",
-          "GeometryUri": "assets/models/enemy.glb"
+          "GeometryUri": "asset://Generated/BasicShapes/Sphere"
         }
       ]
     },
@@ -326,9 +365,22 @@ Scenes serialize to JSON with custom converters:
         {
           "$type": "Transform",
           "Name": "Transform",
-          "LocalPosition": { "x": 0.0, "y": 5.0, "z": -10.0 },
-          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
-          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          "LocalPosition": {
+            "x": 0.0,
+            "y": 5.0,
+            "z": -10.0
+          },
+          "LocalRotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "LocalScale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
         },
         {
           "$type": "OrthographicCamera",
