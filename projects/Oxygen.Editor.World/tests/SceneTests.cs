@@ -7,7 +7,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World.Tests;
 
@@ -396,5 +395,55 @@ public class SceneTests
         _ = child.Name.Should().Be("Child");
         _ = child.Parent.Should().BeSameAs(root);
         _ = child.Scene.Should().BeSameAs(scene);
+    }
+
+    [TestMethod]
+    public void Should_RoundTrip_GeometryComponent_With_TargetedOverrides()
+    {
+        // Arrange
+        var scene = new Scene(this.ExampleProject) { Name = "Geometry Scene" };
+        var node = new SceneNode(scene) { Name = "MeshNode" };
+        scene.RootNodes.Add(node);
+
+        var geo = new GeometryComponent { Name = "HeroGeometry", Node = node };
+        geo.Geometry.Uri = "asset://Generated/BasicShapes/Cube";
+
+        // component-level override
+        var compMat = new Slots.MaterialsSlot();
+        compMat.Material.Uri = "asset://Generated/Materials/Default";
+        geo.OverrideSlots.Add(compMat);
+
+        // targeted override for LOD 0, submesh 1
+        var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
+        var mat = new Slots.MaterialsSlot();
+        mat.Material.Uri = "asset://Generated/Materials/Gold";
+        target.OverrideSlots.Add(mat);
+        geo.TargetedOverrides.Add(target);
+
+        node.Components.Add(geo);
+
+        // Act: serialize and round-trip via DTO
+        var json = JsonSerializer.Serialize(scene.Dehydrate(), Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+        var data = JsonSerializer.Deserialize(json, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+
+        _ = data.Should().NotBeNull();
+        Debug.Assert(data is not null, "data != null");
+
+        var restored = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
+        restored.Hydrate(data);
+
+        // Assert
+        _ = restored.RootNodes.Should().HaveCount(1);
+        var rnode = restored.RootNodes[0];
+        var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
+
+        _ = rgeo.Geometry.Uri.Should().Be("asset://Generated/BasicShapes/Cube");
+        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
+        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset://Generated/Materials/Default");
+
+        _ = rgeo.TargetedOverrides.Should().ContainSingle();
+        var rt = rgeo.TargetedOverrides[0];
+        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
+        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset://Generated/Materials/Gold");
     }
 }
