@@ -82,24 +82,33 @@ public partial class GeometryComponent : GameComponent
 
             // component-level override slots
             this.OverrideSlots.Clear();
-            foreach (var slotDto in gd.OverrideSlots)
+            if (gd.OverrideSlots is not null)
             {
-                var slot = OverrideSlot.CreateAndHydrate(slotDto);
-                this.OverrideSlots.Add(slot);
+                foreach (var slotDto in gd.OverrideSlots)
+                {
+                    var slot = OverrideSlot.CreateAndHydrate(slotDto);
+                    this.OverrideSlots.Add(slot);
+                }
             }
 
             // targeted overrides
             this.TargetedOverrides.Clear();
-            foreach (var targ in gd.TargetedOverrides)
+            if (gd.TargetedOverrides is not null)
             {
-                var t = new GeometryOverrideTarget { LodIndex = targ.LodIndex, SubmeshIndex = targ.SubmeshIndex };
-                foreach (var s in targ.OverrideSlots)
+                foreach (var targ in gd.TargetedOverrides)
                 {
-                    var slot = OverrideSlot.CreateAndHydrate(s);
-                    t.OverrideSlots.Add(slot);
-                }
+                    if (targ.OverrideSlots is not null)
+                    {
+                        var t = new GeometryOverrideTarget { LodIndex = targ.LodIndex, SubmeshIndex = targ.SubmeshIndex };
+                        foreach (var s in targ.OverrideSlots)
+                        {
+                            var slot = OverrideSlot.CreateAndHydrate(s);
+                            t.OverrideSlots.Add(slot);
+                        }
 
-                this.TargetedOverrides.Add(t);
+                        this.TargetedOverrides.Add(t);
+                    }
+                }
             }
         }
     }

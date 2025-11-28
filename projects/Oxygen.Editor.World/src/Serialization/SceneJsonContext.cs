@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World.Serialization;
@@ -13,8 +14,15 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(SceneData))]
 [JsonSerializable(typeof(SceneNodeData))]
 [JsonSerializable(typeof(ComponentData))]
+[JsonSerializable(typeof(PerspectiveCameraData))]
+[JsonSerializable(typeof(OrthographicCameraData))]
 [JsonSerializable(typeof(CameraComponentData))]
 [JsonSerializable(typeof(TransformData))]
+[JsonSerializable(typeof(OverrideSlotData))]
+[JsonSerializable(typeof(RenderingSlotData))]
+[JsonSerializable(typeof(MaterialsSlotData))]
+[JsonSerializable(typeof(LightingSlotData))]
+[JsonSerializable(typeof(LevelOfDetailSlotData))]
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

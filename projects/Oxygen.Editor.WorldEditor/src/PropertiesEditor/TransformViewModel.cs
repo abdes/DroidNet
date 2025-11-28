@@ -156,9 +156,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                     continue;
                 }
 
-                var p = transform.Position;
+                var p = transform.LocalPosition;
                 p.X = value;
-                transform.Position = p;
+                transform.LocalPosition = p;
             }
         }
         catch (Exception ex)
@@ -188,9 +188,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var p = transform.Position;
+                var p = transform.LocalPosition;
                 p.Y = value;
-                transform.Position = p;
+                transform.LocalPosition = p;
             }
         }
         catch (Exception ex)
@@ -220,9 +220,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var p = transform.Position;
+                var p = transform.LocalPosition;
                 p.Z = value;
-                transform.Position = p;
+                transform.LocalPosition = p;
             }
         }
         catch (Exception ex)
@@ -250,9 +250,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.Rotation;
+                var r = transform.LocalRotation;
                 r.X = value;
-                transform.Rotation = r;
+                transform.LocalRotation = r;
             }
         }
         catch (Exception ex)
@@ -277,9 +277,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.Rotation;
+                var r = transform.LocalRotation;
                 r.Y = value;
-                transform.Rotation = r;
+                transform.LocalRotation = r;
             }
         }
         catch (Exception ex)
@@ -304,9 +304,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.Rotation;
+                var r = transform.LocalRotation;
                 r.Z = value;
-                transform.Rotation = r;
+                transform.LocalRotation = r;
             }
         }
         catch (Exception ex)
@@ -331,9 +331,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var s = transform.Scale;
+                var s = transform.LocalScale;
                 s.X = value;
-                transform.Scale = s;
+                transform.LocalScale = s;
             }
         }
         catch (Exception ex)
@@ -358,9 +358,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var s = transform.Scale;
+                var s = transform.LocalScale;
                 s.Y = value;
-                transform.Scale = s;
+                transform.LocalScale = s;
             }
         }
         catch (Exception ex)
@@ -385,9 +385,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var s = transform.Scale;
+                var s = transform.LocalScale;
                 s.Z = value;
-                transform.Scale = s;
+                transform.LocalScale = s;
             }
         }
         catch (Exception ex)
@@ -403,7 +403,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         var mixedPosX = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Position.X ?? 0;
+            return transform?.LocalPosition.X ?? 0;
         });
 
         if (mixedPosX.HasValue)
@@ -415,14 +415,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.PositionXIsIndeterminate = true;
             this.PositionX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Position.X ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.X ?? 0
                 : 0;
         }
 
         var mixedPosY = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Position.Y ?? 0;
+            return transform?.LocalPosition.Y ?? 0;
         });
 
         if (mixedPosY.HasValue)
@@ -434,14 +434,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.PositionYIsIndeterminate = true;
             this.PositionY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Position.Y ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.Y ?? 0
                 : 0;
         }
 
         var mixedPosZ = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Position.Z ?? 0;
+            return transform?.LocalPosition.Z ?? 0;
         });
 
         if (mixedPosZ.HasValue)
@@ -453,7 +453,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.PositionZIsIndeterminate = true;
             this.PositionZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Position.Z ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.Z ?? 0
                 : 0;
         }
     }
@@ -463,7 +463,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         var mixedRotX = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Rotation.X ?? 0;
+            return transform?.LocalRotation.X ?? 0;
         });
 
         if (mixedRotX.HasValue)
@@ -475,14 +475,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.RotationXIsIndeterminate = true;
             this.RotationX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Rotation.X ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.X ?? 0
                 : 0;
         }
 
         var mixedRotY = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Rotation.Y ?? 0;
+            return transform?.LocalRotation.Y ?? 0;
         });
 
         if (mixedRotY.HasValue)
@@ -494,14 +494,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.RotationYIsIndeterminate = true;
             this.RotationY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Rotation.Y ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.Y ?? 0
                 : 0;
         }
 
         var mixedRotZ = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Rotation.Z ?? 0;
+            return transform?.LocalRotation.Z ?? 0;
         });
 
         if (mixedRotZ.HasValue)
@@ -513,7 +513,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.RotationZIsIndeterminate = true;
             this.RotationZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Rotation.Z ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.Z ?? 0
                 : 0;
         }
     }
@@ -523,7 +523,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         var mixedScaleX = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Scale.X ?? 0;
+            return transform?.LocalScale.X ?? 0;
         });
 
         if (mixedScaleX.HasValue)
@@ -535,14 +535,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.ScaleXIsIndeterminate = true;
             this.ScaleX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Scale.X ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.X ?? 0
                 : 0;
         }
 
         var mixedScaleY = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Scale.Y ?? 0;
+            return transform?.LocalScale.Y ?? 0;
         });
 
         if (mixedScaleY.HasValue)
@@ -554,14 +554,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.ScaleYIsIndeterminate = true;
             this.ScaleY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Scale.Y ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.Y ?? 0
                 : 0;
         }
 
         var mixedScaleZ = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.Scale.Z ?? 0;
+            return transform?.LocalScale.Z ?? 0;
         });
 
         if (mixedScaleZ.HasValue)
@@ -573,7 +573,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.ScaleZIsIndeterminate = true;
             this.ScaleZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.Scale.Z ?? 0
+                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.Z ?? 0
                 : 0;
         }
     }

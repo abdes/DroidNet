@@ -23,9 +23,9 @@ public partial class Transform : GameComponent
 
     static Transform()
     {
-        Register<TransformComponentData>(d =>
+        Register<TransformData>(d =>
         {
-            var t = new Transform { Name = d.Name };
+            var t = new Transform { Name = "Transform" };
             t.Hydrate(d);
             return t;
         });
@@ -72,29 +72,26 @@ public partial class Transform : GameComponent
     {
         base.Hydrate(data);
 
-        if (data is not TransformComponentData transformData)
+        if (data is not TransformData d)
         {
             return;
         }
 
         using (this.SuppressNotifications())
         {
-            this.LocalPosition = transformData.Transform.Position;
-            this.LocalRotation = transformData.Transform.Rotation;
-            this.LocalScale = transformData.Transform.Scale;
+            this.LocalPosition = d.Position;
+            this.LocalRotation = d.Rotation;
+            this.LocalScale = d.Scale;
         }
     }
 
     /// <inheritdoc/>
     public override ComponentData Dehydrate()
-        => new TransformComponentData
+        => new TransformData
         {
             Name = this.Name,
-            Transform = new TransformData
-            {
-                Position = this.LocalPosition,
-                Rotation = this.LocalRotation,
-                Scale = this.LocalScale,
-            },
+            Position = this.LocalPosition,
+            Rotation = this.LocalRotation,
+            Scale = this.LocalScale,
         };
 }

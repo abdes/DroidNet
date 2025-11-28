@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -12,6 +14,27 @@ namespace Oxygen.Editor.World.Serialization;
 /// <param name="project">The project that owns the scenes being serialized/deserialized.</param>
 public class SceneSerializer(IProject project)
 {
+    private static readonly Lazy<bool> FactoriesInitialized = new(() =>
+    {
+        // Scene game objects
+        RuntimeHelpers.RunClassConstructor(typeof(GameObject).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(SceneNode).TypeHandle);
+
+        // Components
+        RuntimeHelpers.RunClassConstructor(typeof(GeometryComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(PerspectiveCamera).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(OrthographicCamera).TypeHandle);
+
+        // Slots
+        RuntimeHelpers.RunClassConstructor(typeof(RenderingSlot).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(LightingSlot).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(MaterialsSlot).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(LevelOfDetailSlot).TypeHandle);
+
+        // Add other types as needed
+        return true;
+    });
+
     /// <summary>
     /// Deserializes a scene from a stream.
     /// </summary>
@@ -20,6 +43,8 @@ public class SceneSerializer(IProject project)
     /// <exception cref="JsonException">Thrown if deserialization fails.</exception>
     public async Task<Scene> DeserializeAsync(Stream stream)
     {
+        _ = FactoriesInitialized.Value; // Ensure factories are registered
+
         var data = await JsonSerializer.DeserializeAsync(stream, SceneJsonContext.Default.SceneData)
             .ConfigureAwait(false) ?? throw new JsonException("Failed to deserialize scene data.");
 
