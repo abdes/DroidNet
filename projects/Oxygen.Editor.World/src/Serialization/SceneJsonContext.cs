@@ -13,6 +13,7 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(SceneData))]
 [JsonSerializable(typeof(SceneNodeData))]
 [JsonSerializable(typeof(ComponentData))]
+[JsonSerializable(typeof(CameraComponentData))]
 [JsonSerializable(typeof(TransformData))]
 [JsonSourceGenerationOptions(
     WriteIndented = true,

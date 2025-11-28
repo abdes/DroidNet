@@ -56,7 +56,7 @@ public partial class MaterialsSlot : OverrideSlot
         {
             if (!string.IsNullOrEmpty(md.MaterialUri))
             {
-                this.Material.Uri = md.MaterialUri;
+                this.Material.Uri = new(md.MaterialUri);
             }
             else
             {
@@ -68,5 +68,5 @@ public partial class MaterialsSlot : OverrideSlot
 
     /// <inheritdoc/>
     public override OverrideSlotData Dehydrate()
-        => new MaterialsSlotData { MaterialUri = this.Material.Uri };
+        => new MaterialsSlotData { MaterialUri = this.Material.Uri?.ToString() };
 }

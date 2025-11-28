@@ -7,11 +7,19 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// Base data transfer object for game components (no ID, only name).
+/// DTO for camera component base values.
 /// </summary>
-[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
-[JsonDerivedType(typeof(TransformComponentData), "Transform")]
-[JsonDerivedType(typeof(GeometryComponentData), "GeometryComponent")]
 [JsonDerivedType(typeof(PerspectiveCameraData), "PerspectiveCamera")]
 [JsonDerivedType(typeof(OrthographicCameraData), "OrthographicCamera")]
-public abstract record ComponentData : NamedData;
+public abstract record CameraComponentData : ComponentData
+{
+    /// <summary>
+    /// Gets the distance to the near clipping plane.
+    /// </summary>
+    public float NearPlane { get; init; }
+
+    /// <summary>
+    /// Gets the distance to the far clipping plane.
+    /// </summary>
+    public float FarPlane { get; init; }
+}

@@ -78,7 +78,7 @@ public partial class GeometryComponent : GameComponent
         using (this.SuppressNotifications())
         {
             // geometry URI
-            this.Geometry.Uri = gd.GeometryUri;
+            this.Geometry.Uri = gd.GeometryUri is not null ? new(gd.GeometryUri) : null;
 
             // component-level override slots
             this.OverrideSlots.Clear();
@@ -110,7 +110,7 @@ public partial class GeometryComponent : GameComponent
         => new GeometryComponentData
         {
             Name = this.Name,
-            GeometryUri = this.Geometry.Uri,
+            GeometryUri = this.Geometry.Uri?.ToString(),
             OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             TargetedOverrides = this.TargetedOverrides.Select(t => new TargetedOverrideData
             {
