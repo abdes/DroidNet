@@ -387,7 +387,7 @@ Status: ✅ Implemented — The persistence layer has been fully refactored. We 
 
 ---
 
-### Phase 4: Asset System Foundation (Lightweight)
+### Phase 4: Asset System Foundation (Lightweight) ✅ Completed
 
 **Objective:** Establish the minimal infrastructure to reference assets (meshes, materials) in the editor, focusing on **built-in primitives** (Cube, Sphere, Plane) to unblock scene construction.
 
@@ -569,6 +569,50 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 - **Future Proof:** The URI scheme scales to packages, remote assets, and generated content.
 - **Consistent:** Uniform way to reference everything.
 - **Extensible:** `IAssetService` can add handlers for new authorities (e.g., `http`) later.
+
+#### 4.5 Project Structure & Implementation
+
+**New Module:** `Oxygen.Editor.Assets`
+
+**Dependencies:**
+- `Oxygen.Editor.Core` (for `ScopedObservableObject`)
+- `System.Text.Json` (for serialization)
+
+**File Organization:**
+
+```
+Oxygen.Editor.Assets/
+├─ src/
+│  ├─ Asset.cs                       # Abstract base class
+│  ├─ GeometryAsset.cs               # Geometry + LODs + SubMeshes
+│  ├─ MaterialAsset.cs               # Material metadata
+│  ├─ AssetReference.cs              # AssetReference<T>
+│  ├─ IAssetService.cs               # Service interface
+│  ├─ IAssetResolver.cs              # Resolver strategy interface
+│  └─ Resolvers/
+│     ├─ GeneratedAssetResolver.cs   # In-memory resolver
+│     ├─ FileSystemAssetResolver.cs  # Content folder resolver (stub for Phase 4)
+│     └─ PakAssetResolver.cs         # PAK file resolver (stub for Phase 4)
+└─ Oxygen.Editor.Assets.csproj
+```
+
+**Phase 4 Implementation Checklist:**
+
+- [x] Create `Oxygen.Editor.Assets` project
+- [x] Add reference to `Oxygen.Editor.Core`
+- [x] Implement `Asset`, `GeometryAsset`, `MaterialAsset` (domain models)
+- [x] Implement `AssetReference<T>` (using `ScopedObservableObject`)
+- [x] Define `IAssetResolver` interface
+- [x] Define `IAssetService` interface
+- [x] Implement `GeneratedAssetResolver` with hardcoded built-ins:
+  - `BasicShapes/Cube`, `BasicShapes/Sphere`, `BasicShapes/Plane`, `BasicShapes/Cylinder`
+  - `Materials/Default`
+- [x] Implement stub resolvers (`FileSystemAssetResolver`, `PakAssetResolver`)
+- [x] Update `Oxygen.Editor.World` to reference `Oxygen.Editor.Assets`
+- [x] Write unit tests for `AssetReference<T>` synchronization logic
+- [x] Write unit tests for `GeneratedAssetResolver`
+
+**Status:** ✅ **Completed** — The asset system foundation is fully implemented. The new `Oxygen.Editor.Assets` module provides URI-based asset references, a pluggable resolver architecture, and 5 built-in generated assets (4 primitive geometries + 1 default material). All 21 unit tests pass. `FileSystemAssetResolver` and `PakAssetResolver` are stubbed for future phases.
 
 ---
 
@@ -984,7 +1028,7 @@ public static class SceneNodeExtensions
 | Hierarchy Navigation | ✅ Completed | **High** | Medium |
 | Scene Flags System | ✅ Completed | **High** | Low |
 | Persistence & Performance | ✅ Completed | **High** | High |
-| Asset System | ❌ Missing | **High** | Medium |
+| Asset System | ✅ Completed | **High** | Medium |
 | Override Slots & Geometry | ❌ Missing | **High** | High |
 | Camera Components | ❌ Missing | Medium | Low |
 | Transform Enhancements | ⚠️ Partial | Low | Low |
@@ -995,7 +1039,7 @@ public static class SceneNodeExtensions
 1. Hierarchy Foundation (Phase 1) — ✅ Completed
 2. Scene Flags (Phase 2) — ✅ Completed
 3. Persistence & Performance (Phase 3) — ✅ Completed
-4. Asset System Foundation (Phase 4)
+4. Asset System Foundation (Phase 4) — ✅ Completed
 5. Override Slots & Geometry (Phase 5)
 6. Camera Components (Phase 6)
 7. Transform Enhancements (Phase 7)
