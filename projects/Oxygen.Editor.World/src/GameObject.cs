@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
 using Oxygen.Editor.Core;
+using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.World;
 
@@ -15,7 +17,7 @@ namespace Oxygen.Editor.World;
 /// The <see cref="GameObject"/> class serves as a base class for all game objects, providing common functionality such as
 /// property change notification and value validation. It includes a <see cref="Name"/> property that must be set and validated.
 /// </remarks>
-public abstract partial class GameObject : ScopedObservableObject, INamed
+public abstract class GameObject : ScopedObservableObject, INamed
 {
     private string name = string.Empty;
 
@@ -42,6 +44,15 @@ public abstract partial class GameObject : ScopedObservableObject, INamed
     }
 
     /// <summary>
+    /// Gets the collection of override slots for this game object.
+    /// </summary>
+    /// <remarks>
+    /// Override slots at the GameObject level apply globally to all components.
+    /// For component-specific or targeted overrides, use the slots on individual components.
+    /// </remarks>
+    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
+
+    /// <summary>
     /// Validates the name of the game object.
     /// </summary>
     /// <param name="name">The name to validate.</param>
@@ -56,7 +67,24 @@ public abstract partial class GameObject : ScopedObservableObject, INamed
         }
     }
 
-    // Persistence is handled by concrete types. GameObject only exposes Name and Id.
+    /// <summary>
+    /// Gets an existing override slot of the specified type, or creates and adds a new one if not found.
+    /// </summary>
+    /// <typeparam name="T">The type of override slot to get or create.</typeparam>
+    /// <returns>The existing or newly created override slot.</returns>
+    public T GetOrCreateSlot<T>()
+        where T : OverrideSlot, new()
+    {
+        var existing = this.OverrideSlots.OfType<T>().FirstOrDefault();
+        if (existing != null)
+        {
+            return existing;
+        }
+
+        var newSlot = new T();
+        this.OverrideSlots.Add(newSlot);
+        return newSlot;
+    }
 
     /// <summary>
     /// Validates and sets the field, and raises the <see cref="ScopedObservableObject.PropertyChanged"/> event if the value has changed.

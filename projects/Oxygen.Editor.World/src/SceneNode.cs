@@ -37,8 +37,8 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
 
         // Initialize the components collection with the always-present Transform.
         // Use a concrete mutable collection that preserves insertion order.
-        this.Components = new List<GameComponent> { new Transform { Name = nameof(Transform), Node = this } };
-        this.Children = new ObservableCollection<SceneNode>();
+        this.Components = [new Transform { Name = nameof(Transform), Node = this }];
+        this.Children = [];
     }
 
     /// <summary>
@@ -334,7 +334,16 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
                 throw new System.Text.Json.JsonException("Multiple Transform components found in SceneNode data.");
             }
 
-            // 3. Flags
+            // 3. Component & node-level override slots
+            // Node-level override slots are persisted separately from components.
+            this.OverrideSlots.Clear();
+            foreach (var slotData in data.OverrideSlots)
+            {
+                var slot = Slots.OverrideSlot.CreateAndHydrate(slotData);
+                this.OverrideSlots.Add(slot);
+            }
+
+            // 4. Flags
             this.IsActive = data.IsActive;
             this.IsVisible = data.IsVisible;
             this.CastsShadows = data.CastsShadows;
@@ -343,7 +352,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             this.IgnoreParentTransform = data.IgnoreParentTransform;
             this.IsStatic = data.IsStatic;
 
-            // 4. Children
+            // 5. Children
             foreach (var childData in data.Children)
             {
                 var child = CreateAndHydrate(this.Scene, childData);
@@ -356,6 +365,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     ///     Dehydrates this scene node to a data transfer object.
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene node.</returns>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "With LINQ, /ToList() is more natural")]
     public Serialization.SceneNodeData Dehydrate()
     {
         var transform = this.Components.OfType<Transform>().FirstOrDefault();
@@ -364,6 +374,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             Name = this.Name,
             Id = this.Id,
             Components = this.Components.Select(c => c.Dehydrate()).ToList(),
+            OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             Children = this.Children.Select(c => c.Dehydrate()).ToList(),
             IsActive = this.IsActive,
             IsVisible = this.IsVisible,

@@ -21,6 +21,11 @@ public record SceneNodeData : GameObjectData
     public IList<SceneNodeData> Children { get; init; } = [];
 
     /// <summary>
+    /// Gets or initializes the list of override slots for this node.
+    /// </summary>
+    public IList<OverrideSlotData> OverrideSlots { get; init; } = [];
+
+    /// <summary>
     /// Gets a value indicating whether gets or initializes a value indicating whether the node is active.
     /// </summary>
     public bool IsActive { get; init; }

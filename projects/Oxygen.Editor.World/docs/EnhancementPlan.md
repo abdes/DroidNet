@@ -205,6 +205,7 @@ Status: ✅ Implemented — Editor exposes `SceneNodeFlags` enum (`src/SceneNode
 **Objective:** Separate the world model and project management concerns into distinct projects to improve modularity and maintainability.
 
 **Changes:**
+
 - Created `Oxygen.Editor.Projects` for project management logic (`ProjectManagerService`, `IProject`, etc.).
 - Refactored `Oxygen.Editor.World` to focus solely on the world domain model (`Scene`, `SceneNode`, `Components`).
 - Extracted document management to `Oxygen.Editor.Documents`.
@@ -435,20 +436,20 @@ public interface IAssetService
 
 **3. Concrete Resolvers:**
 
-*   **`GeneratedAssetResolver`**: Handles `Generated` authority.
-    *   *Mechanism:* Looks up assets in a thread-safe in-memory dictionary.
-    *   *Usage:* Used for built-in primitives and procedural content.
-*   **`FileSystemAssetResolver`**: Handles `Content` authority.
-    *   *Mechanism:* Maps URI path to `<ProjectRoot>/Content` and deserializes files (JSON/Binary).
-*   **`PakAssetResolver`**: Handles `Engine` and Package authorities.
-    *   *Mechanism:* Uses `Oxygen.Content.PakFile` (via Interop) to read from `.pak` archives.
+- **`GeneratedAssetResolver`**: Handles `Generated` authority.
+  - *Mechanism:* Looks up assets in a thread-safe in-memory dictionary.
+  - *Usage:* Used for built-in primitives and procedural content.
+- **`FileSystemAssetResolver`**: Handles `Content` authority.
+  - *Mechanism:* Maps URI path to `<ProjectRoot>/Content` and deserializes files (JSON/Binary).
+- **`PakAssetResolver`**: Handles `Engine` and Package authorities.
+  - *Mechanism:* Uses `Oxygen.Content.PakFile` (via Interop) to read from `.pak` archives.
 
 **4. Resolution Flow (External):**
 
-1.  **Consumer** (e.g., a Property Grid or Scene Loader) encounters an `AssetReference<T>`.
-2.  Consumer calls `IAssetService.LoadAssetAsync<T>(ref.Uri)`.
-3.  `AssetService` delegates to the appropriate `IAssetResolver`.
-4.  Consumer updates `ref.Asset` with the loaded result (optional caching).
+1. **Consumer** (e.g., a Property Grid or Scene Loader) encounters an `AssetReference<T>`.
+2. Consumer calls `IAssetService.LoadAssetAsync<T>(ref.Uri)`.
+3. `AssetService` delegates to the appropriate `IAssetResolver`.
+4. Consumer updates `ref.Asset` with the loaded result (optional caching).
 
 #### 4.2 Define Asset Domain Models
 
@@ -566,6 +567,7 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 - `asset://Generated/Materials/Default` -> MaterialAsset
 
 **Rationale:**
+
 - **Future Proof:** The URI scheme scales to packages, remote assets, and generated content.
 - **Consistent:** Uniform way to reference everything.
 - **Extensible:** `IAssetService` can add handlers for new authorities (e.g., `http`) later.
@@ -575,12 +577,13 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 **New Module:** `Oxygen.Editor.Assets`
 
 **Dependencies:**
+
 - `Oxygen.Editor.Core` (for `ScopedObservableObject`)
 - `System.Text.Json` (for serialization)
 
 **File Organization:**
 
-```
+```text
 Oxygen.Editor.Assets/
 ├─ src/
 │  ├─ Asset.cs                       # Abstract base class
@@ -616,11 +619,7 @@ Oxygen.Editor.Assets/
 
 ---
 
-
-
-
-
-### Phase 5: Override Slots & Geometry System
+### Phase 5: Override Slots & Geometry System ✅ Completed
 
 #### 5.1 Implement `OverridableProperty<T>`
 
@@ -630,12 +629,24 @@ Oxygen.Editor.Assets/
 // Properties/OverridableProperty.cs
 public readonly record struct OverridableProperty<T>(T DefaultValue, T OverrideValue, bool IsOverridden)
 {
-    public T EffectiveValue => IsOverridden ? OverrideValue : DefaultValue;
+  public T EffectiveValue => IsOverridden ? OverrideValue : DefaultValue;
 
-    // Immutable helpers
-    public static OverridableProperty<T> FromDefault(T defaultValue) => new(defaultValue, default, false);
-    public OverridableProperty<T> WithOverride(T value) => new(DefaultValue, value, true);
-    public OverridableProperty<T> ClearOverride() => new(DefaultValue, default, false);
+  // Instance helpers (factories moved to non-generic helper):
+  public OverridableProperty<T> WithOverride(T value) => new(DefaultValue, value, true);
+  public OverridableProperty<T> ClearOverride() => new(DefaultValue, default, false);
+
+  // Convert to DTO when overridden
+  public OverridablePropertyData<T>? ToDto() => IsOverridden ? new OverridablePropertyData<T> { OverrideValue = OverrideValue, IsOverridden = true } : null;
+}
+
+// Factory helpers now live in a non-generic helper:
+```csharp
+// Properties/OverridableProperty.Helper.cs
+public static class OverridableProperty
+{
+  public static OverridableProperty<T> FromDefault<T>(T defaultValue) => new(defaultValue, default, false);
+  public static OverridableProperty<T> FromDto<T>(T defaultValue, OverridablePropertyData<T>? dto)
+    => dto is { IsOverridden: true } ? new(defaultValue, dto.OverrideValue, true) : FromDefault(defaultValue);
 }
 ```
 
@@ -670,7 +681,7 @@ public abstract class OverrideSlot : ObservableObject
 // Slots/RenderingSlot.cs
 public class RenderingSlot : OverrideSlot
 {
-    private OverridableProperty<bool> _isVisible = OverridableProperty<bool>.FromDefault(true);
+    private OverridableProperty<bool> _isVisible = OverridableProperty.FromDefault(defaultValue: true);
     public OverridableProperty<bool> IsVisible
     {
         get => _isVisible;
@@ -681,14 +692,14 @@ public class RenderingSlot : OverrideSlot
 // Slots/LightingSlot.cs
 public class LightingSlot : OverrideSlot
 {
-    private OverridableProperty<bool> _castShadows = OverridableProperty<bool>.FromDefault(true);
+    private OverridableProperty<bool> _castShadows = OverridableProperty.FromDefault(defaultValue: true);
     public OverridableProperty<bool> CastShadows
     {
         get => _castShadows;
         set => SetProperty(ref _castShadows, value);
     }
 
-    private OverridableProperty<bool> _receiveShadows = OverridableProperty<bool>.FromDefault(true);
+    private OverridableProperty<bool> _receiveShadows = OverridableProperty.FromDefault(defaultValue: true);
     public OverridableProperty<bool> ReceiveShadows
     {
         get => _receiveShadows;
@@ -699,7 +710,7 @@ public class LightingSlot : OverrideSlot
 // Slots/LevelOfDetailSlot.cs
 public class LevelOfDetailSlot : OverrideSlot
 {
-    private OverridableProperty<LodPolicy> _lodPolicy = OverridableProperty<LodPolicy>.FromDefault(new FixedLodPolicy());
+    private OverridableProperty<LodPolicy> _lod_policy = OverridableProperty.FromDefault<LodPolicy>(new FixedLodPolicy());
     public OverridableProperty<LodPolicy> LodPolicy
     {
         get => _lodPolicy;
@@ -790,62 +801,87 @@ public class MaterialsSlot : OverrideSlot
 
 ```json
 {
-  "$type": "SceneNode",
-  "Name": "HeroNode",
-
-  "Components": [
+  "$type": "Scene",
+  "Name": "TestScene",
+  "Id": "12345678-1234-1234-1234-123456789abc",
+  "RootNodes": [
     {
-      "$type": "GeometryComponent",
-      "Geometry": "Assets/Models/Hero.geo",
-
-      // 1. Global Overrides (Apply to whole model)
+      "$type": "SceneNode",
+      "Name": "HeroNode",
+      "Id": "abcdef12-1234-1234-1234-123456789abc",
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "Position": { "X": 0, "Y": 0, "Z": 0 },
+          "Rotation": { "X": 0, "Y": 0, "Z": 0 },
+          "Scale": { "X": 1, "Y": 1, "Z": 1 }
+        },
+        {
+          "$type": "GeometryComponent",
+          "Name": "HeroGeometry",
+          "GeometryUri": "asset://Content/Models/Hero.geo",
+          "OverrideSlots": [
+            {
+              "$type": "LightingSlot",
+              "CastShadows": {
+                "OverrideValue": true,
+                "IsOverridden": true
+              }
+            }
+          ],
+          "TargetedOverrides": [
+            {
+              "LodIndex": 0,
+              "SubmeshIndex": 1,
+              "OverrideSlots": [
+                {
+                  "$type": "MaterialsSlot",
+                  "MaterialUri": "asset://Content/Materials/Gold.mat"
+                },
+                {
+                  "$type": "RenderingSlot",
+                  "IsVisible": {
+                    "OverrideValue": false,
+                    "IsOverridden": true
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ],
       "OverrideSlots": [
         {
           "$type": "LightingSlot",
-          "CastShadows": { "OverrideValue": true, "IsOverridden": true }
+          "CastShadows": {
+            "OverrideValue": false,
+            "IsOverridden": true
+          }
         }
       ],
-
-      // 2. Targeted Overrides
-      "TargetedOverrides": [
-        {
-          "LodIndex": 0,
-          "SubmeshIndex": 1, // Target specific submesh (e.g. Head)
-          "OverrideSlots": [
-            {
-              "$type": "MaterialsSlot",
-              "Material": { "OverrideValue": "Assets/Materials/Gold.mat", "IsOverridden": true }
-            },
-            {
-              "$type": "RenderingSlot",
-      ],
-
       "Children": [
         {
           "$type": "SceneNode",
-          "Name": "Tree_01",
-          "Components": [
-            { "$type": "Transform", "Position": "2, 0, 2" },
-            {
-              "$type": "GeometryComponent",
-              "Geometry": "Assets/Models/Nature/PineTree.geo"
-              // Inherits CastShadows=false from parent
-            }
-          ]
-        },
-        {
-          "$type": "SceneNode",
           "Name": "Campfire",
+          "Id": "fedcba98-4321-4321-4321-cba987654321",
           "Components": [
-            { "$type": "Transform", "Position": "0, 0, 0" },
+            {
+              "$type": "Transform",
+              "Name": "Transform",
+              "Position": { "X": 0, "Y": 0, "Z": 0 }
+            },
             {
               "$type": "GeometryComponent",
-              "Geometry": "Assets/Models/Props/Campfire.geo",
-              // Explicitly re-enable shadows for this specific child
+              "Name": "CampfireGeometry",
+              "GeometryUri": "asset://Content/Models/Props/Campfire.geo",
               "OverrideSlots": [
                 {
                   "$type": "LightingSlot",
-                  "CastShadows": { "OverrideValue": true, "IsOverridden": true }
+                  "CastShadows": {
+                    "OverrideValue": true,
+                    "IsOverridden": true
+                  }
                 }
               ]
             }
@@ -861,41 +897,99 @@ public class MaterialsSlot : OverrideSlot
 
 ### Phase 6: Camera Components
 
-#### 6.1 Create Camera Component Hierarchy
+#### 6.1 Create Camera Component Hierarchy (DTO-driven + Hydration)
 
-**New Classes:**
+In keeping with Phase 3 (Persistence & Hydration), camera components are serialized via DTOs (POCO records in the `Oxygen.Editor.World.Serialization` namespace) and hydrated into domain objects. Domain types implement `IPersistent<TData>` / `Hydrate(…)/Dehydrate()` so the scene serializer can perform fast, deterministic mapping.
+
+##### Domain classes (editor model)
 
 ```csharp
-// CameraComponent.cs
-public abstract partial class CameraComponent : GameComponent
+// CameraComponent.cs (domain) - implements IPersistent<TData> for hydration
+public abstract partial class CameraComponent : GameComponent, IPersistent<CameraComponentData>
 {
-    public float NearPlane { get; set; } = 0.1f;
-    public float FarPlane { get; set; } = 1000f;
+  public float NearPlane { get; set; } = 0.1f;
+  public float FarPlane { get; set; } = 1000f;
+
+  public virtual void Hydrate(CameraComponentData data)
+  {
+    this.NearPlane = data.NearPlane;
+    this.FarPlane = data.FarPlane;
+  }
+
+  public virtual CameraComponentData Dehydrate()
+    => new CameraComponentData { NearPlane = this.NearPlane, FarPlane = this.FarPlane };
 }
 
-// PerspectiveCamera.cs
-public partial class PerspectiveCamera : CameraComponent
+public partial class PerspectiveCamera : CameraComponent, IPersistent<PerspectiveCameraData>
 {
-    public float FieldOfView { get; set; } = 60f;
-    public float AspectRatio { get; set; } = 16f / 9f;
+  public float FieldOfView { get; set; } = 60f;
+  public float AspectRatio { get; set; } = 16f / 9f;
+
+  public override void Hydrate(CameraComponentData data)
+  {
+    base.Hydrate(data);
+    if (data is PerspectiveCameraData pd)
+    {
+      this.FieldOfView = pd.FieldOfView;
+      this.AspectRatio = pd.AspectRatio;
+    }
+  }
+
+  public override PerspectiveCameraData Dehydrate()
+    => new PerspectiveCameraData { NearPlane = this.NearPlane, FarPlane = this.FarPlane, FieldOfView = this.FieldOfView, AspectRatio = this.AspectRatio };
 }
 
-// OrthographicCamera.cs
-public partial class OrthographicCamera : CameraComponent
+public partial class OrthographicCamera : CameraComponent, IPersistent<OrthographicCameraData>
 {
-    public float OrthographicSize { get; set; } = 10f;
+  public float OrthographicSize { get; set; } = 10f;
+
+  public override void Hydrate(CameraComponentData data)
+  {
+    base.Hydrate(data);
+    if (data is OrthographicCameraData od)
+      this.OrthographicSize = od.OrthographicSize;
+  }
+
+  public override OrthographicCameraData Dehydrate()
+    => new OrthographicCameraData { NearPlane = this.NearPlane, FarPlane = this.FarPlane, OrthographicSize = this.OrthographicSize };
 }
 ```
 
-**JSON Discriminators:**
+##### Serialization (DTO) types
+
+The DTOs are simple POCO records suited for source-gen and fast JSON (de)serialization:
 
 ```csharp
-[JsonDerivedType(typeof(PerspectiveCamera), "PerspectiveCamera")]
-[JsonDerivedType(typeof(OrthographicCamera), "OrthographicCamera")]
-public abstract partial class CameraComponent : GameComponent { }
+// Oxygen.Editor.World.Serialization
+public record CameraComponentData : ComponentData
+{
+  public float NearPlane { get; init; }
+  public float FarPlane { get; init; }
+}
+
+public record PerspectiveCameraData : CameraComponentData
+{
+  public float FieldOfView { get; init; }
+  public float AspectRatio { get; init; }
+}
+
+public record OrthographicCameraData : CameraComponentData
+{
+  public float OrthographicSize { get; init; }
+}
 ```
 
-**Rationale:** Match engine camera architecture, enable camera editing in scenes
+##### JSON discriminators (DTOs)
+
+Register the DTO variants with JsonDerivedType on the component-data base so source-gen produces polymorphic serializers for the DTO layer. The Scene/Serializer will read DTOs and hydrate domain objects.
+
+```csharp
+[JsonDerivedType(typeof(PerspectiveCameraData), "PerspectiveCamera")]
+[JsonDerivedType(typeof(OrthographicCameraData), "OrthographicCamera")]
+public abstract record CameraComponentData : ComponentData { }
+```
+
+**Rationale:** Keeps to Phase 3's model — DTOs are the serialized representation (POCO), domain objects are hydrated and implement IPersistent. This keeps serialization fast and avoids coupling JSON shape to runtime/instrumented domain objects.
 
 ---
 
@@ -1029,7 +1123,7 @@ public static class SceneNodeExtensions
 | Scene Flags System | ✅ Completed | **High** | Low |
 | Persistence & Performance | ✅ Completed | **High** | High |
 | Asset System | ✅ Completed | **High** | Medium |
-| Override Slots & Geometry | ❌ Missing | **High** | High |
+| Override Slots & Geometry | ✅ Completed | **High** | High |
 | Camera Components | ❌ Missing | Medium | Low |
 | Transform Enhancements | ⚠️ Partial | Low | Low |
 | LINQ Extensions | ❌ Missing | Low | Low |

@@ -11,4 +11,5 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
 [JsonDerivedType(typeof(TransformComponentData), "Transform")]
+[JsonDerivedType(typeof(GeometryComponentData), "GeometryComponent")]
 public abstract record ComponentData : NamedData;
