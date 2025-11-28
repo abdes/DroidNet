@@ -31,7 +31,11 @@ public partial class Project(IProjectInfo info) : GameObject, IProject
                 throw new ArgumentException($"scene with name {value} is not part of this project.", nameof(value));
             }
 
-            _ = this.SetField(ref this.activeScene, value);
+            _ = this.SetProperty(ref this.activeScene, value);
         }
     }
+
+    /// <inheritdoc/>
+    // Persistence for projects should be implemented on a concrete DTO-specific API.
+    // Leave hydration/dehydration to the concrete classes; GameObject has no persistence helpers.
 }

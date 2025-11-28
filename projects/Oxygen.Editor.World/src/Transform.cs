@@ -3,57 +3,98 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents a transform component of a scene node, specifying its position, rotation, and scale in the scene.
 /// </summary>
-/// <param name="node">The owner <see cref="SceneNode" />.</param>
 /// <remarks>
 ///     The <see cref="Transform" /> class represents a transform component of a scene node. It includes properties for
 ///     the position, rotation, and scale of the scene node within the scene. The class provides methods for getting and
 ///     setting these properties.
 /// </remarks>
-public partial class Transform(SceneNode node) : GameComponent(node)
+public partial class Transform : GameComponent
 {
-    private Vector3 position;
-    private Vector3 rotation;
-    private Vector3 scale;
+    private Vector3 localPosition;
+    private Quaternion localRotation = Quaternion.Identity;
+    private Vector3 localScale = Vector3.One;
 
-    /// <summary>
-    ///     Gets or sets the position of the scene node in the scene.
-    /// </summary>
-    /// <value>
-    ///     A <see cref="Vector3" /> representing the position of the scene node.
-    /// </value>
-    public Vector3 Position
+    static Transform()
     {
-        get => this.position;
-        set => _ = this.SetField(ref this.position, value);
+        Register<TransformComponentData>(d =>
+        {
+            var t = new Transform { Name = d.Name };
+            t.Hydrate(d);
+            return t;
+        });
     }
 
     /// <summary>
-    ///     Gets or sets the rotation of the scene node in the scene.
+    ///     Gets or sets the local position of the scene node.
     /// </summary>
     /// <value>
-    ///     A <see cref="Vector3" /> representing the rotation of the scene node.
+    ///     A <see cref="Vector3" /> representing the local position of the scene node.
     /// </value>
-    public Vector3 Rotation
+    public Vector3 LocalPosition
     {
-        get => this.rotation;
-        set => _ = this.SetField(ref this.rotation, value);
+        get => this.localPosition;
+        set => _ = this.SetProperty(ref this.localPosition, value);
     }
 
     /// <summary>
-    ///     Gets or sets the scale of the scene node in the scene.
+    ///     Gets or sets the local rotation of the scene node (as a quaternion).
     /// </summary>
     /// <value>
-    ///     A <see cref="Vector3" /> representing the scale of the scene node.
+    ///     A <see cref="Quaternion" /> representing the local rotation of the scene node.
     /// </value>
-    public Vector3 Scale
+    public Quaternion LocalRotation
     {
-        get => this.scale;
-        set => _ = this.SetField(ref this.scale, value);
+        get => this.localRotation;
+        set => _ = this.SetProperty(ref this.localRotation, value);
     }
+
+    /// <summary>
+    ///     Gets or sets the local scale of the scene node.
+    /// </summary>
+    /// <value>
+    ///     A <see cref="Vector3" /> representing the local scale of the scene node.
+    /// </value>
+    public Vector3 LocalScale
+    {
+        get => this.localScale;
+        set => _ = this.SetProperty(ref this.localScale, value);
+    }
+
+    /// <inheritdoc/>
+    public override void Hydrate(ComponentData data)
+    {
+        base.Hydrate(data);
+
+        if (data is not TransformComponentData transformData)
+        {
+            return;
+        }
+
+        using (this.SuppressNotifications())
+        {
+            this.LocalPosition = transformData.Transform.Position;
+            this.LocalRotation = transformData.Transform.Rotation;
+            this.LocalScale = transformData.Transform.Scale;
+        }
+    }
+
+    /// <inheritdoc/>
+    public override ComponentData Dehydrate()
+        => new TransformComponentData
+        {
+            Name = this.Name,
+            Transform = new TransformData
+            {
+                Position = this.LocalPosition,
+                Rotation = this.LocalRotation,
+                Scale = this.LocalScale,
+            },
+        };
 }

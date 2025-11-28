@@ -204,8 +204,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             var sceneFileName = scene.Name + Constants.SceneFileExtension;
             var sceneFile = await scenesFolder.GetDocumentAsync(sceneFileName).ConfigureAwait(true);
 
-            // Serialize and save the scene
-            var sceneJson = Scene.ToJson(scene);
+            // Serialize and save the scene using SceneSerializer
+            var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(scene.Project);
+            using var stream = new System.IO.MemoryStream();
+            await serializer.SerializeAsync(stream, scene).ConfigureAwait(true);
+            var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
             await sceneFile.WriteAllTextAsync(sceneJson).ConfigureAwait(true);
 
             return true;
@@ -228,6 +231,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return;
         }
 
+        var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
         var scenes = scenesFolder.GetDocumentsAsync()
             .Where(d => d.Name.EndsWith(Constants.SceneFileExtension, StringComparison.OrdinalIgnoreCase));
         project.Scenes.Clear();
@@ -236,13 +240,12 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             try
             {
                 var json = await item.ReadAllTextAsync().ConfigureAwait(true);
-                var scene = Scene.FromJson(json, project);
-                if (scene != null)
-                {
-                    // Clear nodes to maintain lazy loading behavior (nodes are loaded in LoadSceneAsync)
-                    scene.RootNodes.Clear();
-                    project.Scenes.Add(scene);
-                }
+                using var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+                var scene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
+
+                // Clear nodes to maintain lazy loading behavior (nodes are loaded in LoadSceneAsync)
+                scene.RootNodes.Clear();
+                project.Scenes.Add(scene);
             }
             catch (Exception ex)
             {
@@ -272,13 +275,11 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
                 return null;
             }
 
-            // TODO: parsing json from UTF-8 ReadOnlySpan<Byte> is more efficient
+            // Use SceneSerializer for high-performance deserialization
+            var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
             var json = await sceneFile.ReadAllTextAsync().ConfigureAwait(true);
-            var loadedScene = Scene.FromJson(json, project);
-            if (loadedScene is null)
-            {
-                this.CouldNotLoadScene(sceneFile.Location, "JSON deserialization failed");
-            }
+            using var stream = new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(json));
+            var loadedScene = await serializer.DeserializeAsync(stream).ConfigureAwait(true);
 
             return loadedScene;
         }

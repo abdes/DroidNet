@@ -3,10 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World;
 
@@ -19,15 +16,8 @@ namespace Oxygen.Editor.World;
 ///     It provides methods for JSON serialization and deserialization, allowing scene nodes to be easily saved and
 ///     loaded.
 /// </remarks>
-public partial class SceneNode : GameObject, IDisposable
+public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNodeData>
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        AllowTrailingCommas = true,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     private bool isActive;
     private bool isVisible = true;
     private bool castsShadows;
@@ -35,9 +25,6 @@ public partial class SceneNode : GameObject, IDisposable
     private bool isRayCastingSelectable = true;
     private bool ignoreParentTransform;
     private bool isStatic;
-    private bool isDisposed;
-
-    // private bool isDisposed;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneNode" /> class.
@@ -46,11 +33,12 @@ public partial class SceneNode : GameObject, IDisposable
     public SceneNode(Scene scene)
     {
         this.Scene = scene;
+        this.Name = "New Node"; // Initialize required property
 
         // Initialize the components collection with the always-present Transform.
         // Use a concrete mutable collection that preserves insertion order.
-        this.Components = [new Transform(this) { Name = nameof(Transform) }];
-        this.Children = [];
+        this.Components = new List<GameComponent> { new Transform { Name = nameof(Transform), Node = this } };
+        this.Children = new ObservableCollection<SceneNode>();
     }
 
     /// <summary>
@@ -66,7 +54,7 @@ public partial class SceneNode : GameObject, IDisposable
                 return;
             }
 
-            _ = this.SetField(ref this.isActive, value);
+            _ = this.SetProperty(ref this.isActive, value);
         }
     }
 
@@ -76,7 +64,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool IsVisible
     {
         get => this.isVisible;
-        set => _ = this.SetField(ref this.isVisible, value);
+        set => _ = this.SetProperty(ref this.isVisible, value);
     }
 
     /// <summary>
@@ -85,7 +73,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool CastsShadows
     {
         get => this.castsShadows;
-        set => _ = this.SetField(ref this.castsShadows, value);
+        set => _ = this.SetProperty(ref this.castsShadows, value);
     }
 
     /// <summary>
@@ -94,7 +82,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool ReceivesShadows
     {
         get => this.receivesShadows;
-        set => _ = this.SetField(ref this.receivesShadows, value);
+        set => _ = this.SetProperty(ref this.receivesShadows, value);
     }
 
     /// <summary>
@@ -103,7 +91,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool IsRayCastingSelectable
     {
         get => this.isRayCastingSelectable;
-        set => _ = this.SetField(ref this.isRayCastingSelectable, value);
+        set => _ = this.SetProperty(ref this.isRayCastingSelectable, value);
     }
 
     /// <summary>
@@ -112,7 +100,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool IgnoreParentTransform
     {
         get => this.ignoreParentTransform;
-        set => _ = this.SetField(ref this.ignoreParentTransform, value);
+        set => _ = this.SetProperty(ref this.ignoreParentTransform, value);
     }
 
     /// <summary>
@@ -121,7 +109,7 @@ public partial class SceneNode : GameObject, IDisposable
     public bool IsStatic
     {
         get => this.isStatic;
-        set => _ = this.SetField(ref this.isStatic, value);
+        set => _ = this.SetProperty(ref this.isStatic, value);
     }
 
     /// <summary>
@@ -200,6 +188,21 @@ public partial class SceneNode : GameObject, IDisposable
     ///     Gets the collection of child nodes.
     /// </summary>
     public ObservableCollection<SceneNode> Children { get; }
+
+    /// <summary>
+    /// Create and hydrate a <see cref="SceneNode"/> instance from DTO.
+    /// Factory sets required properties (Name/Id) via object initializer and
+    /// then calls the instance <see cref="Hydrate(Serialization.SceneNodeData)"/>.
+    /// </summary>
+    /// <param name="scene">The scene to associate with the new node.</param>
+    /// <param name="data">The data transfer object to hydrate from.</param>
+    /// <returns>A hydrated <see cref="SceneNode"/> instance.</returns>
+    public static SceneNode CreateAndHydrate(Scene scene, Serialization.SceneNodeData data)
+    {
+        var node = new SceneNode(scene) { Name = data.Name, Id = data.Id };
+        node.Hydrate(data);
+        return node;
+    }
 
     /// <summary>
     /// Toggle a single flag on this node.
@@ -298,73 +301,77 @@ public partial class SceneNode : GameObject, IDisposable
         }
     }
 
-    /// <inheritdoc />
-    public void Dispose()
-    {
-        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <summary>
-    ///     Deserializes a JSON string into a <see cref="SceneNode" /> object.
+    ///     Hydrates this scene node instance from the specified DTO. The factory
+    ///     `CreateAndHydrate` is responsible for setting required properties (Name/Id).
     /// </summary>
-    /// <param name="json">The JSON string to deserialize.</param>
-    /// <param name="scene">The scene to set in the deserialized <see cref="SceneNode" /> object.</param>
-    /// <returns>The deserialized <see cref="SceneNode" /> object.</returns>
-    /// <remarks>
-    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
-    /// </remarks>
-    [SuppressMessage(
-        "Performance",
-        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
-        Justification = "we need to set the scene for the converter")]
-    internal static SceneNode? FromJson(string json, Scene scene)
+    /// <param name="data">The node DTO to hydrate from.</param>
+    public void Hydrate(Serialization.SceneNodeData data)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeJsonConverter(scene) } };
-        return JsonSerializer.Deserialize<SceneNode>(json, options);
-    }
-
-    /// <summary>
-    ///     Serializes a <see cref="SceneNode" /> object into a JSON string.
-    /// </summary>
-    /// <param name="sceneNode">The <see cref="SceneNode" /> object to serialize.</param>
-    /// <returns>The JSON string representation of the <see cref="SceneNode" /> object.</returns>
-    /// <remarks>
-    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
-    /// </remarks>
-    [SuppressMessage(
-        "Performance",
-        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
-        Justification = "we need to use the custom converter")]
-    internal static string ToJson(SceneNode sceneNode)
-    {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneNodeJsonConverter(null!) } };
-        return JsonSerializer.Serialize(sceneNode, options);
-    }
-
-    /// <summary>
-    ///     Disposes of the scene node.
-    /// </summary>
-    /// <param name="disposing">A value indicating whether the scene node is being disposed of deterministically.</param>
-    /// <remarks>
-    ///     The disposing parameter should be false when called from a finalizer, and true when called
-    ///     from the IDisposable.Dispose method. In other words, it is true when deterministically
-    ///     called and false when non-deterministically called.
-    /// </remarks>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (this.isDisposed)
+        using (this.SuppressNotifications())
         {
-            return;
-        }
+            // 1. Recreate components from DTO using the canonical factory API.
+            // Clear existing components and recreate all components so component
+            // creation/hydration follows the same path for every component type.
+            this.Components.Clear();
 
-        if (disposing)
+            foreach (var compData in data.Components)
+            {
+                var component = GameComponent.CreateAndHydrate(compData);
+                component.Node = this;
+                this.Components.Add(component);
+            }
+
+            // 2. Ensure exactly one Transform component exists after hydration.
+            var transforms = this.Components.OfType<Transform>().ToList();
+            if (transforms.Count == 0)
+            {
+                throw new System.Text.Json.JsonException("Missing required Transform component in SceneNode data.");
+            }
+
+            if (transforms.Count > 1)
+            {
+                throw new System.Text.Json.JsonException("Multiple Transform components found in SceneNode data.");
+            }
+
+            // 3. Flags
+            this.IsActive = data.IsActive;
+            this.IsVisible = data.IsVisible;
+            this.CastsShadows = data.CastsShadows;
+            this.ReceivesShadows = data.ReceivesShadows;
+            this.IsRayCastingSelectable = data.IsRayCastingSelectable;
+            this.IgnoreParentTransform = data.IgnoreParentTransform;
+            this.IsStatic = data.IsStatic;
+
+            // 4. Children
+            foreach (var childData in data.Children)
+            {
+                var child = CreateAndHydrate(this.Scene, childData);
+                this.AddChild(child);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Dehydrates this scene node to a data transfer object.
+    /// </summary>
+    /// <returns>A data transfer object containing the current state of this scene node.</returns>
+    public Serialization.SceneNodeData Dehydrate()
+    {
+        var transform = this.Components.OfType<Transform>().FirstOrDefault();
+        return new Serialization.SceneNodeData
         {
-        }
-
-        // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-        // TODO: set large fields to null
-        this.isDisposed = true;
+            Name = this.Name,
+            Id = this.Id,
+            Components = this.Components.Select(c => c.Dehydrate()).ToList(),
+            Children = this.Children.Select(c => c.Dehydrate()).ToList(),
+            IsActive = this.IsActive,
+            IsVisible = this.IsVisible,
+            CastsShadows = this.CastsShadows,
+            ReceivesShadows = this.ReceivesShadows,
+            IsRayCastingSelectable = this.IsRayCastingSelectable,
+            IgnoreParentTransform = this.IgnoreParentTransform,
+            IsStatic = this.IsStatic,
+        };
     }
 }

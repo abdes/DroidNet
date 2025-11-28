@@ -200,6 +200,19 @@ Status: ✅ Implemented — Editor exposes `SceneNodeFlags` enum (`src/SceneNode
 
 ## Proposed Enhancements
 
+### Phase 0: Module Architecture Refactoring ✅ Completed
+
+**Objective:** Separate the world model and project management concerns into distinct projects to improve modularity and maintainability.
+
+**Changes:**
+- Created `Oxygen.Editor.Projects` for project management logic (`ProjectManagerService`, `IProject`, etc.).
+- Refactored `Oxygen.Editor.World` to focus solely on the world domain model (`Scene`, `SceneNode`, `Components`).
+- Extracted document management to `Oxygen.Editor.Documents`.
+
+Status: ✅ Implemented — The solution now has clear separation of concerns with `Oxygen.Editor.World`, `Oxygen.Editor.Projects`, and `Oxygen.Editor.Documents`.
+
+---
+
 ### Phase 1: Hierarchy Foundation ✅ Completed
 
 #### 1.1 Add Hierarchy to `SceneNode`
@@ -292,51 +305,519 @@ public bool IsStatic { get; set; }
 - Serializes as individual JSON booleans (not bitfield)
 - **Inheritance logic deferred to engine** (editor just stores local values)
 
-**Rationale:** Editor-friendly boolean properties, engine handles inheritance at runtime
+### Phase 3: Persistence & Performance Optimization ✅ Completed
 
----
+**Objective:** Ensure sub-second loading times for scenes with 1,000+ nodes by eliminating reflection overhead and event chatter during deserialization.
 
-### Phase 3: Renderable Component
+**Location:** All serialization classes reside in `src/Serialization` with namespace `Oxygen.Editor.World.Serialization`.
 
-#### 3.1 Create `RenderableComponent`
+#### 3.1 Define Data Transfer Objects (Data)
 
-**New Class:**
+**Why DTOs?**
+
+1. **Source Generators:** `System.Text.Json` source generators produce highly optimized serialization code at compile time, but they require simple, acyclic types (POCOs). They struggle with complex classes like `SceneNode` (which has circular `Parent`/`Child` refs and `ObservableObject` logic).
+2. **"Cold" Instantiation:** When mapping `Data -> Domain`, the new Domain objects have **no subscribers**. Triggering `PropertyChanged` on an object with no listeners is effectively a free operation (a simple null check).
+3. **Maintainability:** DTOs decouple the serialized format from the internal domain logic.
+
+**Concept:**
+
+- **POCOs Only:** No `ObservableObject`, no events, no logic.
+- **Flat Arrays:** Use `T[]` or `List<T>` instead of `ObservableCollection`.
+- **Source Generation:** Use `[JsonSerializable]` for maximum performance.
 
 ```csharp
-// RenderableComponent.cs
-public partial class RenderableComponent : GameComponent
+namespace Oxygen.Editor.World.Serialization;
+
+// Serialization/NamedData.cs
+public record NamedData
 {
-    public string? GeometryAssetPath { get; set; }
-    public LodPolicy? LodPolicy { get; set; }
-    // Submesh configuration (future)
+    public string Name { get; init; }
 }
 
-public enum LodPolicyType { Fixed, Distance, ScreenSpaceError }
+// Serialization/GameObjectData.cs
+public record GameObjectData : NamedData
+{
+    public Guid Id { get; init; }
+}
 
-public record LodPolicy(LodPolicyType Type, int? FixedLodIndex = null, float[]? DistanceThresholds = null);
+// Serialization/SceneData.cs
+public record SceneData : GameObjectData
+{
+    public List<SceneNodeData> Nodes { get; init; } = [];
+}
+
+// Serialization/SceneNodeData.cs
+public record SceneNodeData : GameObjectData
+{
+    // Components includes the node's Transform represented as a
+    // TransformComponentData entry. All components (including Transform)
+    // are carried in this list so component creation and hydration follow
+    // a single, canonical code path.
+    public List<ComponentData> Components { get; init; } = [];
+    public List<OverrideSlotData> OverrideSlots { get; init; } = [];
+    public List<SceneNodeData> Children { get; init; } = [];
+}
+
+// Serialization/ComponentData.cs
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(GeometryComponentData), "GeometryComponent")]
+public abstract record ComponentData : NamedData; // No ID for components
+
+// Serialization/GeometryComponentData.cs
+public record GeometryComponentData : ComponentData
+{
+    public string Geometry { get; init; }
+    public List<OverrideSlotData> OverrideSlots { get; init; } = [];
+    public List<TargetedOverrideData> TargetedOverrides { get; init; } = [];
+}
 ```
 
-**Serialization:**
+#### 3.2 Update Domain Classes for Hydration
 
-- Geometry path as string
-- LOD policy as nested JSON object with discriminator
+**Refined Class Hierarchy:**
 
-**Rationale:** Enable mesh assignment and LOD configuration in editor
+1. **`INamed`**: Contract for having a `Name`.
+2. **`IPersistent<TData>`**: Contract for `Hydrate(TData)` and `Dehydrate()`.
+3. **`ScopedObservableObject`**: Base class implementing `INotifyPropertyChanged` with **RAII notification suppression**.
+4. **`GameObject : ScopedObservableObject, INamed, IPersistent<GameObjectData>`** - **Has ID.**
+5. **`GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>`** - **No ID.**
+6. **`SceneNode : GameObject`** - Inherits ID from GameObject.
 
----
-
-#### 3.2 Material Override Support (Future)
-
-**Deferred:**
-
-- Material override system requires asset management infrastructure
-- Can add `MaterialOverrides : Dictionary<int, string>` later
+Status: ✅ Implemented — The persistence layer has been fully refactored. We now use `ScopedObservableObject`, `INamed`, and `IPersistent<T>` interfaces. DTOs (`SceneData`, `SceneNodeData`, `ComponentData`, etc.) are defined in `Oxygen.Editor.World.Serialization`. The `SceneSerializer` handles the hydration/dehydration process, and `SceneNode` properly implements `Hydrate`/`Dehydrate`.
 
 ---
 
-### Phase 4: Camera Components
+### Phase 4: Asset System Foundation (Lightweight)
 
-#### 4.1 Create Camera Component Hierarchy
+**Objective:** Establish the minimal infrastructure to reference assets (meshes, materials) in the editor, focusing on **built-in primitives** (Cube, Sphere, Plane) to unblock scene construction.
+
+#### 4.1 Asset Naming & URI Scheme
+
+We will use a **URI-based** naming convention where the **Authority** corresponds directly to a **Mount Point** in the Content Browser.
+
+**Format:** `asset://<MountPoint>/<Path/To/Asset>`
+
+| Mount Point | Description | Physical Source | Read-Only | Example |
+| :--- | :--- | :--- | :--- | :--- |
+| **`Content`** | User project assets. | `<ProjectRoot>/Content/` | ❌ No | `asset://Content/Models/Hero.geo` |
+| **`Engine`** | Built-in engine resources. | `oxygen.pak` | ✅ Yes | `asset://Engine/Mesh/Cube` |
+| **`Generated`** | Runtime procedural assets. | In-Memory | ✅ Yes | `asset://Generated/Preview/Sphere` |
+| **`<PakName>`** | External package content. | `<PakName>.pak` | ✅ Yes | `asset://Oxygen.StandardAssets/Skybox` |
+
+#### 4.2 Asset Resolution Architecture
+
+To handle different asset sources (Files, PAKs, Memory) uniformly, we will use a **Strategy Pattern** for resolution.
+
+**1. The Resolver Interface:**
+
+```csharp
+public interface IAssetResolver
+{
+    // Returns true if this resolver handles the given mount point (Authority)
+    bool CanResolve(string authority);
+
+    // Resolves the URI to an Asset object
+    Task<Asset?> ResolveAsync(string uri);
+}
+```
+
+**2. The Asset Service (Orchestrator):**
+
+The `IAssetService` maintains a registry of resolvers and delegates requests based on the URI's authority.
+
+```csharp
+public interface IAssetService
+{
+    void RegisterResolver(IAssetResolver resolver);
+    Task<T?> LoadAssetAsync<T>(string uri) where T : Asset;
+}
+```
+
+**3. Concrete Resolvers:**
+
+*   **`GeneratedAssetResolver`**: Handles `Generated` authority.
+    *   *Mechanism:* Looks up assets in a thread-safe in-memory dictionary.
+    *   *Usage:* Used for built-in primitives and procedural content.
+*   **`FileSystemAssetResolver`**: Handles `Content` authority.
+    *   *Mechanism:* Maps URI path to `<ProjectRoot>/Content` and deserializes files (JSON/Binary).
+*   **`PakAssetResolver`**: Handles `Engine` and Package authorities.
+    *   *Mechanism:* Uses `Oxygen.Content.PakFile` (via Interop) to read from `.pak` archives.
+
+**4. Resolution Flow (External):**
+
+1.  **Consumer** (e.g., a Property Grid or Scene Loader) encounters an `AssetReference<T>`.
+2.  Consumer calls `IAssetService.LoadAssetAsync<T>(ref.Uri)`.
+3.  `AssetService` delegates to the appropriate `IAssetResolver`.
+4.  Consumer updates `ref.Asset` with the loaded result (optional caching).
+
+#### 4.2 Define Asset Domain Models
+
+**Classes:**
+
+```csharp
+// Assets/Asset.cs
+public abstract class Asset
+{
+    // The canonical URI for this asset
+    public string Uri { get; set; } // e.g., "asset://builtin/Mesh/Cube"
+
+    public string Name => System.IO.Path.GetFileNameWithoutExtension(Uri);
+}
+
+// Assets/GeometryAsset.cs
+public class GeometryAsset : Asset
+{
+    // Matches Engine: GeometryAsset -> LODs (Meshes) -> SubMeshes
+    public List<MeshLOD> Lods { get; set; } = [];
+}
+
+public class MeshLOD
+{
+    public int LodIndex { get; set; }
+    public List<SubMesh> SubMeshes { get; set; } = [];
+}
+
+public class SubMesh
+{
+    public string Name { get; set; } // e.g., "Head", "Body"
+    public int MaterialIndex { get; set; } // Default material index
+}
+
+// Assets/MaterialAsset.cs
+public class MaterialAsset : Asset
+{
+    // Minimal material data
+}
+```
+
+#### 4.3 Implement `AssetReference<T>`
+
+**Class:**
+
+```csharp
+// Assets/AssetReference.cs
+public class AssetReference<T> : ScopedObservableObject where T : Asset
+{
+    private string? uri;
+    private T? asset;
+
+    // The serialized reference to the asset
+    public string? Uri
+    {
+        get => this.uri;
+        set
+        {
+            // SetField already checks equality and returns true only if changed
+            if (SetField(ref this.uri, value))
+            {
+                // Invalidate the asset when URI changes (unless it matches the current asset's URI)
+                if (this.asset != null && this.asset.Uri != value)
+                {
+                    Asset = null;
+                }
+            }
+        }
+    }
+
+    // Resolved metadata (runtime only, not serialized)
+    [JsonIgnore]
+    public T? Asset
+    {
+        get => this.asset;
+        set
+        {
+            // SetField already checks equality and returns true only if changed
+            if (SetField(ref this.asset, value))
+            {
+                // Sync URI when Asset is set
+                if (value != null && Uri != value.Uri)
+                {
+                    Uri = value.Uri;
+                }
+            }
+        }
+    }
+}
+```
+
+#### 4.4 Minimal `IAssetService`
+
+**Interface:**
+
+```csharp
+public interface IAssetService
+{
+    // Registers a physical location for a given authority
+    void Mount(string authority, string physicalPath);
+
+    // Resolves URIs to Asset objects.
+    Task<T?> LoadAssetAsync<T>(string uri) where T : Asset;
+}
+```
+
+**Built-in Support (Phase 4 - Generated Only):**
+
+For Phase 4, we will strictly use the **Generated** resolver for built-ins.
+
+- `asset://Generated/BasicShapes/Cube` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset://Generated/BasicShapes/Sphere` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset://Generated/BasicShapes/Plane` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset://Generated/BasicShapes/Cylinder` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset://Generated/Materials/Default` -> MaterialAsset
+
+**Rationale:**
+- **Future Proof:** The URI scheme scales to packages, remote assets, and generated content.
+- **Consistent:** Uniform way to reference everything.
+- **Extensible:** `IAssetService` can add handlers for new authorities (e.g., `http`) later.
+
+---
+
+
+
+
+
+### Phase 5: Override Slots & Geometry System
+
+#### 5.1 Implement `OverridableProperty<T>`
+
+**New Helper Type:**
+
+```csharp
+// Properties/OverridableProperty.cs
+public readonly record struct OverridableProperty<T>(T DefaultValue, T OverrideValue, bool IsOverridden)
+{
+    public T EffectiveValue => IsOverridden ? OverrideValue : DefaultValue;
+
+    // Immutable helpers
+    public static OverridableProperty<T> FromDefault(T defaultValue) => new(defaultValue, default, false);
+    public OverridableProperty<T> WithOverride(T value) => new(DefaultValue, value, true);
+    public OverridableProperty<T> ClearOverride() => new(DefaultValue, default, false);
+}
+```
+
+**Rationale:**
+
+- **Value Semantics:** Behaves like a standard property (equatable, hashable).
+- **Not Observable:** Changes are notified by the parent Slot raising `PropertyChanged` when the property is replaced.
+- **Clean State:** Encapsulates the "Default vs Override" logic in a simple primitive.
+
+#### 5.2 Define Override Slots
+
+**Concept:**
+
+- **OverrideSlots** are observable containers for `OverridableProperty<T>` values.
+- **Universal:** They are attached to `SceneNode` and `GameComponent` via a standard `OverrideSlots` collection.
+- **Polymorphic:** Serialized with type discriminators.
+
+**New Classes:**
+
+```csharp
+// Slots/OverrideSlot.cs
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(RenderingSlot), "RenderingSlot")]
+[JsonDerivedType(typeof(LightingSlot), "LightingSlot")]
+[JsonDerivedType(typeof(MaterialsSlot), "MaterialsSlot")]
+[JsonDerivedType(typeof(LevelOfDetailSlot), "LevelOfDetailSlot")]
+public abstract class OverrideSlot : ObservableObject
+{
+    // Base functionality
+}
+
+// Slots/RenderingSlot.cs
+public class RenderingSlot : OverrideSlot
+{
+    private OverridableProperty<bool> _isVisible = OverridableProperty<bool>.FromDefault(true);
+    public OverridableProperty<bool> IsVisible
+    {
+        get => _isVisible;
+        set => SetProperty(ref _isVisible, value);
+    }
+}
+
+// Slots/LightingSlot.cs
+public class LightingSlot : OverrideSlot
+{
+    private OverridableProperty<bool> _castShadows = OverridableProperty<bool>.FromDefault(true);
+    public OverridableProperty<bool> CastShadows
+    {
+        get => _castShadows;
+        set => SetProperty(ref _castShadows, value);
+    }
+
+    private OverridableProperty<bool> _receiveShadows = OverridableProperty<bool>.FromDefault(true);
+    public OverridableProperty<bool> ReceiveShadows
+    {
+        get => _receiveShadows;
+        set => SetProperty(ref _receiveShadows, value);
+    }
+}
+
+// Slots/LevelOfDetailSlot.cs
+public class LevelOfDetailSlot : OverrideSlot
+{
+    private OverridableProperty<LodPolicy> _lodPolicy = OverridableProperty<LodPolicy>.FromDefault(new FixedLodPolicy());
+    public OverridableProperty<LodPolicy> LodPolicy
+    {
+        get => _lodPolicy;
+        set => SetProperty(ref _lodPolicy, value);
+    }
+}
+
+// Slots/MaterialsSlot.cs
+public class MaterialsSlot : OverrideSlot
+{
+    // Manages material assignments per submesh
+    private Dictionary<string, AssetReference<MaterialAsset>> _overrides = new();
+
+    public void SetMaterial(int lod, int submesh, AssetReference<MaterialAsset> material);
+    public AssetReference<MaterialAsset>? GetOverride(int lod, int submesh);
+    public void ClearOverride(int lod, int submesh);
+}
+```
+
+#### 5.3 Update `SceneNode` and `GameComponent`
+
+**Base Integration:**
+
+```csharp
+// GameObject.cs (or IHasOverrideSlots interface)
+public partial class GameObject
+{
+    // Standard container for all overrides (Global scope for this object)
+    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
+
+    // Helper to get/create a specific slot
+    public T GetSlot<T>() where T : OverrideSlot, new() { ... }
+}
+```
+
+#### 5.4 Update `GeometryComponent`
+
+**Concept:**
+
+- Supports overrides at three levels:
+  1. **Component Level:** Applies to the entire geometry (via `OverrideSlots`).
+  2. **Mesh Level:** Applies to a specific LOD.
+  3. **Submesh Level:** Applies to a specific submesh within an LOD.
+
+**New Classes:**
+
+```csharp
+// GeometryComponent.cs
+public partial class GeometryComponent : GameComponent
+{
+    public AssetReference<GeometryAsset> Geometry { get; } = new();
+
+    // Collection of targeted overrides (LOD/Submesh specific)
+    public ObservableCollection<GeometryOverrideTarget> TargetedOverrides { get; } = [];
+}
+
+// GeometryOverrideTarget.cs
+public class GeometryOverrideTarget : ObservableObject
+{
+    public int LodIndex { get; set; } = -1; // -1 = All LODs
+    public int SubmeshIndex { get; set; } = -1; // -1 = All Submeshes
+
+    // Slots applied specifically to this target
+    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
+}
+```
+
+**Refined Slots:**
+
+- **`MaterialsSlot`** is simplified. It no longer manages a dictionary. It just holds a single `Material` property.
+- When attached to a `GeometryOverrideTarget`, it overrides the material for that specific target.
+
+```csharp
+public class MaterialsSlot : OverrideSlot
+{
+    // The material to apply to the target(s)
+    private OverridableProperty<AssetReference<MaterialAsset>> _material = ...;
+    public OverridableProperty<AssetReference<MaterialAsset>> Material { ... }
+}
+```
+
+#### 5.5 Persistence Format (Solid Spec)
+
+**Structure:**
+
+- `Components` list contains the entity definitions.
+- `OverrideSlots` (Global) vs `TargetedOverrides` (Specific).
+
+```json
+{
+  "$type": "SceneNode",
+  "Name": "HeroNode",
+
+  "Components": [
+    {
+      "$type": "GeometryComponent",
+      "Geometry": "Assets/Models/Hero.geo",
+
+      // 1. Global Overrides (Apply to whole model)
+      "OverrideSlots": [
+        {
+          "$type": "LightingSlot",
+          "CastShadows": { "OverrideValue": true, "IsOverridden": true }
+        }
+      ],
+
+      // 2. Targeted Overrides
+      "TargetedOverrides": [
+        {
+          "LodIndex": 0,
+          "SubmeshIndex": 1, // Target specific submesh (e.g. Head)
+          "OverrideSlots": [
+            {
+              "$type": "MaterialsSlot",
+              "Material": { "OverrideValue": "Assets/Materials/Gold.mat", "IsOverridden": true }
+            },
+            {
+              "$type": "RenderingSlot",
+      ],
+
+      "Children": [
+        {
+          "$type": "SceneNode",
+          "Name": "Tree_01",
+          "Components": [
+            { "$type": "Transform", "Position": "2, 0, 2" },
+            {
+              "$type": "GeometryComponent",
+              "Geometry": "Assets/Models/Nature/PineTree.geo"
+              // Inherits CastShadows=false from parent
+            }
+          ]
+        },
+        {
+          "$type": "SceneNode",
+          "Name": "Campfire",
+          "Components": [
+            { "$type": "Transform", "Position": "0, 0, 0" },
+            {
+              "$type": "GeometryComponent",
+              "Geometry": "Assets/Models/Props/Campfire.geo",
+              // Explicitly re-enable shadows for this specific child
+              "OverrideSlots": [
+                {
+                  "$type": "LightingSlot",
+                  "CastShadows": { "OverrideValue": true, "IsOverridden": true }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### Phase 6: Camera Components
+
+#### 6.1 Create Camera Component Hierarchy
 
 **New Classes:**
 
@@ -374,9 +855,11 @@ public abstract partial class CameraComponent : GameComponent { }
 
 ---
 
-### Phase 5: Transform Enhancements
+---
 
-#### 5.1 Add World Transform Caching (Optional)
+### Phase 7: Transform Enhancements
+
+#### 7.1 Add World Transform Caching (Optional)
 
 **New Properties:**
 
@@ -395,9 +878,9 @@ public bool IsWorldTransformDirty { get; internal set; } = true; // synced from 
 
 ---
 
-### Phase 6: LINQ Extension Methods (Optional)
+### Phase 8: LINQ Extension Methods (Optional)
 
-#### 6.1 Scene Graph Query Extensions
+#### 8.1 Scene Graph Query Extensions
 
 **New Class:**
 
@@ -453,23 +936,23 @@ public static class SceneNodeExtensions
 ### Unit Tests
 
 1. **Hierarchy Tests**
-   - Verify parent/child relationships
-   - Test `AddChild`, `RemoveChild`, circular reference prevention
-   - Check `Descendants()`, `Ancestors()` enumeration
+    - Verify parent/child relationships
+    - Test `AddChild`, `RemoveChild`, circular reference prevention
+    - Check `Descendants()`, `Ancestors()` enumeration
 
 2. **Serialization Tests**
-   - Round-trip Scene with nested hierarchy
-   - Verify flags, components, cameras serialize correctly
-   - Test scene with multiple roots
+    - Round-trip Scene with nested hierarchy
+    - Verify flags, components, cameras serialize correctly
+    - Test scene with multiple roots
 
 3. **Flag Tests**
-   - Verify flag property setters raise PropertyChanged
-   - Test flag serialization/deserialization
+    - Verify flag property setters raise PropertyChanged
+    - Test flag serialization/deserialization
 
 4. **Component Tests**
-   - Test renderable component creation
-   - Verify camera component polymorphism
-   - Check component collection JsonDerivedType resolution
+    - Test renderable component creation
+    - Verify camera component polymorphism
+    - Check component collection JsonDerivedType resolution
 
 ### Integration with Engine
 
@@ -500,7 +983,9 @@ public static class SceneNodeExtensions
 |---------|--------|----------|------------|
 | Hierarchy Navigation | ✅ Completed | **High** | Medium |
 | Scene Flags System | ✅ Completed | **High** | Low |
-| Renderable Component | ❌ Missing | **High** | Medium |
+| Persistence & Performance | ✅ Completed | **High** | High |
+| Asset System | ❌ Missing | **High** | Medium |
+| Override Slots & Geometry | ❌ Missing | **High** | High |
 | Camera Components | ❌ Missing | Medium | Low |
 | Transform Enhancements | ⚠️ Partial | Low | Low |
 | LINQ Extensions | ❌ Missing | Low | Low |
@@ -508,8 +993,10 @@ public static class SceneNodeExtensions
 **Recommended Implementation Order:**
 
 1. Hierarchy Foundation (Phase 1) — ✅ Completed
-2. Scene Flags (Phase 2)
-3. Camera Components (Phase 4) - simpler than renderables
-4. Renderable Component (Phase 3)
-5. Transform Enhancements (Phase 5)
-6. LINQ Extensions (Phase 6)
+2. Scene Flags (Phase 2) — ✅ Completed
+3. Persistence & Performance (Phase 3) — ✅ Completed
+4. Asset System Foundation (Phase 4)
+5. Override Slots & Geometry (Phase 5)
+6. Camera Components (Phase 6)
+7. Transform Enhancements (Phase 7)
+8. LINQ Extensions (Phase 8)
