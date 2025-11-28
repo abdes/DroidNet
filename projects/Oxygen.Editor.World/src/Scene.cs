@@ -3,37 +3,35 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World;
 
 /// <summary>
 ///     Represents a scene in a game project.
 /// </summary>
-/// <param name="project">The owner <see cref="Project" />.</param>
 /// <remarks>
 ///     The <see cref="Scene" /> class represents a scene within a game project. It includes properties for the project
 ///     that owns the scene and the entities within the scene. The class also provides methods for JSON serialization and
 ///     deserialization.
 /// </remarks>
-public partial class Scene(IProject project) : GameObject
+public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
 {
-    /// <summary>Default template for the JsonSerializer options.</summary>
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="Scene"/> class.
+    /// </summary>
+    /// <param name="project">The owner <see cref="IProject"/>.</param>
+    public Scene(IProject project)
     {
-        AllowTrailingCommas = true,
-        WriteIndented = true,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
+        this.Project = project;
+        this.Name = "Untitled Scene"; // Initialize required property
+    }
 
     /// <summary>
     ///     Gets the project that owns the scene.
     /// </summary>
     [JsonIgnore]
-    public IProject Project { get; init; } = project;
+    public IProject Project { get; init; }
 
     /// <summary>
     ///     Gets the list of root entities within the scene.
@@ -47,31 +45,48 @@ public partial class Scene(IProject project) : GameObject
     public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
-    ///     Deserializes a JSON string into a <see cref="Scene" /> object.
+    ///     Creates and hydrates a <see cref="Scene"/> instance from the specified DTO.
     /// </summary>
-    /// <param name="json">The JSON string to deserialize.</param>
-    /// <param name="project">The project to set in the deserialized <see cref="Scene" /> object.</param>
-    /// <returns>The deserialized <see cref="Scene" /> object.</returns>
-    /// <remarks>
-    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
-    /// </remarks>
-    [SuppressMessage(
-        "Performance",
-        "CA1869:Cache and reuse 'JsonSerializerOptions' instances",
-        Justification = "we need to set the scene for the converter")]
-    public static Scene? FromJson(string json, IProject project)
+    /// <param name="project">Owner project for the new scene.</param>
+    /// <param name="data">DTO containing scene data.</param>
+    /// <returns>A hydrated <see cref="Scene"/> instance.</returns>
+    public static Scene CreateAndHydrate(IProject project, Serialization.SceneData data)
     {
-        var options = new JsonSerializerOptions(JsonOptions) { Converters = { new SceneJsonConverter(project) } };
-        return JsonSerializer.Deserialize<Scene>(json, options);
+        var scene = new Scene(project) { Name = data.Name, Id = data.Id };
+        scene.Hydrate(data);
+        return scene;
     }
 
     /// <summary>
-    ///     Serializes a <see cref="Scene" /> object into a JSON string.
+    ///     Hydrates this scene instance from the specified data transfer object.
+    ///     This instance method assumes the instance's required properties (Name/Id)
+    ///     were set by the factory. It only restores the scene contents.
     /// </summary>
-    /// <param name="scene">The <see cref="Scene" /> object to serialize.</param>
-    /// <returns>The JSON string representation of the <see cref="Scene" /> object.</returns>
-    /// <remarks>
-    ///     This method uses the default <see cref="JsonSerializerOptions" /> defined in <see cref="JsonOptions" />.
-    /// </remarks>
-    public static string ToJson(Scene scene) => JsonSerializer.Serialize(scene, JsonOptions);
+    /// <param name="data">DTO containing scene data.</param>
+    public void Hydrate(Serialization.SceneData data)
+    {
+        using (this.SuppressNotifications())
+        {
+            this.RootNodes.Clear();
+            foreach (var nodeData in data.RootNodes)
+            {
+                var node = SceneNode.CreateAndHydrate(this, nodeData);
+                this.RootNodes.Add(node);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Dehydrates this scene to a data transfer object.
+    /// </summary>
+    /// <returns>A data transfer object containing the current state of this scene.</returns>
+    public Serialization.SceneData Dehydrate()
+    {
+        return new Serialization.SceneData
+        {
+            Name = this.Name,
+            Id = this.Id,
+            RootNodes = this.RootNodes.Select(n => n.Dehydrate()).ToList(),
+        };
+    }
 }

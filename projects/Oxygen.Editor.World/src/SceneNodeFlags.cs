@@ -7,7 +7,7 @@ namespace Oxygen.Editor.World;
 /// <summary>
 /// Flags available on a <see cref="SceneNode"/> matching engine-side semantics.
 /// </summary>
-[System.Flags]
+[Flags]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "these are really flags and match the engine vocabulary")]
 public enum SceneNodeFlags
 {

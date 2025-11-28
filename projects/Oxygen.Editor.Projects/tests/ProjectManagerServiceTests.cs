@@ -283,8 +283,8 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
 
         // Assert
         _ = result.Should().BeTrue();
-        _ = scene.Nodes.Should().ContainSingle();
-        _ = scene.Nodes.ElementAt(0).Name.Should().Be("node1");
+        _ = scene.RootNodes.Should().ContainSingle();
+        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("node1");
     }
 
     [TestMethod]

@@ -21,6 +21,10 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- Reference the runtime resources project so the generator sees the ResourceExtensions symbol -->
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <!-- Add generator as an analyzer (development time only) -->
