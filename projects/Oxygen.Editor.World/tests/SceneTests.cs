@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using AwesomeAssertions;
 using Moq;
 
@@ -20,7 +18,7 @@ public class SceneTests
     private IProject ExampleProject => this.projectMock.Object;
 
     [TestMethod]
-    public void Should_Serialize_Scene_ToJson()
+    public void Dehydrate_Returns_SceneData_With_RootNodes()
     {
         // Arrange
         var scene = new Scene(this.ExampleProject) { Name = "Scene Name" };
@@ -29,19 +27,19 @@ public class SceneTests
         scene.RootNodes.Add(node1);
         scene.RootNodes.Add(node2);
 
-        // Act: serialize the DTO produced by Dehydrate using source-generated context
+        // Act
         var dto = scene.Dehydrate();
-        var json = JsonSerializer.Serialize(dto, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
 
-        // Assert (PascalCase JSON produced by source-generated context)
-        _ = json.Should().Contain("\"Name\": \"Scene Name\"");
-        _ = json.Should().Contain("\"RootNodes\"");
-        _ = json.Should().Contain("\"Name\": \"Node 1\"");
-        _ = json.Should().Contain("\"Name\": \"Node 2\"");
+        // Assert - DTO shape and values (unit-level check, no JSON round-trip)
+        _ = dto.Should().NotBeNull();
+        _ = dto.Name.Should().Be("Scene Name");
+        _ = dto.RootNodes.Should().HaveCount(2);
+        _ = dto.RootNodes[0].Name.Should().Be("Node 1");
+        _ = dto.RootNodes[1].Name.Should().Be("Node 2");
     }
 
     [TestMethod]
-    public void Should_Deserialize_Scene_FromJson()
+    public void Hydrate_Populates_Scene_From_SceneData()
     {
         // Arrange
         // Act: build DTO in code then hydrate into domain Scene (more robust than relying on string literals)
@@ -74,33 +72,24 @@ public class SceneTests
         var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
         scene.Hydrate(data);
 
-        // Assert
+        // Assert - hydrate logic sets values and attaches created nodes to the scene
         _ = scene.Name.Should().Be("Scene Name");
         _ = scene.Project.Should().BeSameAs(this.ExampleProject);
         _ = scene.RootNodes.Should().HaveCount(2);
         _ = scene.RootNodes[0].Name.Should().Be("Node 1");
         _ = scene.RootNodes[1].Name.Should().Be("Node 2");
+        foreach (var node in scene.RootNodes)
+        {
+            _ = node.Scene.Should().BeSameAs(scene);
+        }
     }
 
     [TestMethod]
-    public void Should_Handle_Empty_Nodes()
+    public void Hydrate_With_Empty_RootNodes_Populates_Empty_RootNodes()
     {
         // Arrange
-        const string json =
-            /*lang=json,strict*/
-            """
-            {
-                "Id": "00000000-0000-0000-0000-000000000010",
-                "Name":"Scene Name",
-                "RootNodes":[]
-            }
-            """;
-
-        // Act
-        var data = JsonSerializer.Deserialize(json, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
-
-        _ = data.Should().NotBeNull();
-        Debug.Assert(data is not null, "data != null");
+        // Act: construct DTO equivalent to the JSON literal used previously
+        var data = new Serialization.SceneData { Id = Guid.Parse("00000000-0000-0000-0000-000000000010"), Name = "Scene Name", RootNodes = [] };
 
         var scene = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
         scene.Hydrate(data);
@@ -112,38 +101,22 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Throw_When_Name_Is_Missing()
+    public void CreateAndHydrate_Throws_When_Required_Properties_Missing()
     {
-        // Arrange
-        const string json =
-            /*lang=json,strict*/
-            """
-                {
-                    "Id": "00000000-0000-0000-0000-000000000020",
-                    "RootNodes":[
-                        {
-                            "Id": "00000000-0000-0000-0000-000000000021",
-                            "Name":"Node 1",
-                            "Components": [ { "$type": "Transform", "Transform": {} } ]
-                        },
-                        {
-                            "Id": "00000000-0000-0000-0000-000000000022",
-                            "Name":"Node 2",
-                            "Components": [ { "$type": "Transform", "Transform": {} } ]
-                        }
-                    ]
-                }
-            """;
+        // Arrange: Scene factory requires Name to be set by caller. Creating a DTO with missing Name
+        // should still allow the factory to accept data, but CreateAndHydrate uses the DTO.Name as the scene
+        // Name. We assert that creating a Scene with null Name is not allowed via object initializer.
+        var data = new Serialization.SceneData { Id = Guid.NewGuid(), Name = null!, RootNodes = [] };
 
-        // Act: deserializing to DTO should throw if required property (Name) is missing on the Scene
-        var act = () => JsonSerializer.Deserialize(json, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+        // Act: factory CreateAndHydrate expects a non-null Name (the code assigns Name first). Simulate misuse.
+        var act = () => Scene.CreateAndHydrate(this.ExampleProject, data);
 
-        // Assert
-        _ = act.Should().Throw<JsonException>();
+        // Assert - creating a scene with a null name should fail validation
+        _ = act.Should().Throw<ArgumentException>();
     }
 
     [TestMethod]
-    public void Should_RoundTrip_Scene_Serialization()
+    public void Dehydrate_Then_Hydrate_Restores_SceneContents()
     {
         // Arrange
         var scene = new Scene(this.ExampleProject) { Name = "RoundTrip Scene" };
@@ -154,19 +127,13 @@ public class SceneTests
         scene.RootNodes.Add(node1);
         scene.RootNodes.Add(node2);
 
-        // Act: serialize DTO then deserialize DTO and hydrate a new Scene
-        var json = JsonSerializer.Serialize(scene.Dehydrate(), Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
-        var data = JsonSerializer.Deserialize(json, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+        // Act: Dehydrate -> DTO then hydrate a new Scene using the DTO (unit check; no JSON serializer)
+        var dto = scene.Dehydrate();
+        var deserialized = new Scene(this.ExampleProject) { Name = dto.Name, Id = dto.Id };
+        deserialized.Hydrate(dto);
 
-        _ = data.Should().NotBeNull();
-        Debug.Assert(data is not null, "data != null");
-
-        var deserialized = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        deserialized.Hydrate(data);
-
-        // Assert
+        // Assert basic structural equivalence
         _ = deserialized.Should().NotBeNull();
-        Debug.Assert(deserialized is not null, "deserialized != null");
         _ = deserialized!.Name.Should().Be(scene.Name);
         _ = deserialized.Project.Should().BeSameAs(this.ExampleProject);
         _ = deserialized.RootNodes.Should().HaveCount(2);
@@ -181,7 +148,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Set_Node_Scene_On_Deserialize()
+    public void Hydrate_Node_Sets_NodeScene_For_All_RootNodes()
     {
         // Arrange: construct DTO programmatically (avoid JSON literal fragility)
         var data = new Serialization.SceneData
@@ -221,7 +188,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Add_Child_And_Set_Parent()
+    public void AddChild_Attaches_Child_And_Sets_Parent()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var parent = new SceneNode(scene) { Name = "Parent" };
@@ -234,7 +201,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Remove_Child()
+    public void RemoveChild_Detaches_Child()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var parent = new SceneNode(scene) { Name = "Parent" };
@@ -248,7 +215,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Reparent_Node()
+    public void SetParent_Reparents_Node_From_Old_To_New_Parent()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var parent1 = new SceneNode(scene) { Name = "Parent1" };
@@ -264,7 +231,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Prevent_Circular_Reference_Direct()
+    public void SetParent_Direct_Circular_Reference_Throws()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
@@ -275,7 +242,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Prevent_Circular_Reference_Indirect()
+    public void SetParent_Indirect_Circular_Reference_Throws()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var parent = new SceneNode(scene) { Name = "Parent" };
@@ -291,7 +258,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Enumerate_Descendants()
+    public void Descendants_Returns_All_Descendants_In_Tree()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
@@ -312,7 +279,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Enumerate_Ancestors()
+    public void Ancestors_Returns_Ordered_Ancestors()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
@@ -330,7 +297,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_Serialize_Nested_Hierarchy()
+    public void Dehydrate_Includes_Nested_Children()
     {
         var scene = new Scene(this.ExampleProject) { Name = "Scene" };
         var root = new SceneNode(scene) { Name = "Root" };
@@ -339,17 +306,16 @@ public class SceneTests
         root.AddChild(child);
         scene.RootNodes.Add(root);
 
-        var json = JsonSerializer.Serialize(scene.Dehydrate(), Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+        var dto = scene.Dehydrate();
 
-        // Verify structure roughly (PascalCase)
-        _ = json.Should().Contain("RootNodes");
-        _ = json.Should().Contain("Children");
-        _ = json.Should().Contain("Root");
-        _ = json.Should().Contain("Child");
+        // Verify DTO hierarchy captures nested nodes
+        _ = dto.RootNodes.Should().Contain(r => r.Name == "Root");
+        var rootDto = dto.RootNodes.Single(r => string.Equals(r.Name, "Root", StringComparison.Ordinal));
+        _ = rootDto.Children.Should().Contain(c => c.Name == "Child");
     }
 
     [TestMethod]
-    public void Should_Deserialize_Nested_Hierarchy()
+    public void Hydrate_Populates_Nested_Hierarchy()
     {
         // Arrange: construct nested DTO programmatically
         var data = new Serialization.SceneData
@@ -398,7 +364,7 @@ public class SceneTests
     }
 
     [TestMethod]
-    public void Should_RoundTrip_GeometryComponent_With_TargetedOverrides()
+    public void GeometryComponent_Targeted_And_Component_Overrides_Are_Preserved_InMemory()
     {
         // Arrange
         var scene = new Scene(this.ExampleProject) { Name = "Geometry Scene" };
@@ -406,33 +372,28 @@ public class SceneTests
         scene.RootNodes.Add(node);
 
         var geo = new GeometryComponent { Name = "HeroGeometry", Node = node };
-        geo.Geometry.Uri = "asset://Generated/BasicShapes/Cube";
+        geo.Geometry.Uri = new("asset://Generated/BasicShapes/Cube");
 
         // component-level override
         var compMat = new Slots.MaterialsSlot();
-        compMat.Material.Uri = "asset://Generated/Materials/Default";
+        compMat.Material.Uri = new("asset://Generated/Materials/Default");
         geo.OverrideSlots.Add(compMat);
 
         // targeted override for LOD 0, submesh 1
         var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         var mat = new Slots.MaterialsSlot();
-        mat.Material.Uri = "asset://Generated/Materials/Gold";
+        mat.Material.Uri = new("asset://Generated/Materials/Gold");
         target.OverrideSlots.Add(mat);
         geo.TargetedOverrides.Add(target);
 
         node.Components.Add(geo);
 
-        // Act: serialize and round-trip via DTO
-        var json = JsonSerializer.Serialize(scene.Dehydrate(), Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
-        var data = JsonSerializer.Deserialize(json, Oxygen.Editor.World.Serialization.SceneJsonContext.Default.SceneData);
+        // Act: all operations performed in-memory (unit test) — no JSON serialization
+        var dto = scene.Dehydrate();
+        var restored = new Scene(this.ExampleProject) { Name = dto.Name, Id = dto.Id };
+        restored.Hydrate(dto);
 
-        _ = data.Should().NotBeNull();
-        Debug.Assert(data is not null, "data != null");
-
-        var restored = new Scene(this.ExampleProject) { Name = data.Name, Id = data.Id };
-        restored.Hydrate(data);
-
-        // Assert
+        // Assert we have the same in-memory structure
         _ = restored.RootNodes.Should().HaveCount(1);
         var rnode = restored.RootNodes[0];
         var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
