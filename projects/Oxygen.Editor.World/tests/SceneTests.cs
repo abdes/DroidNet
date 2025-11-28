@@ -394,7 +394,7 @@ public class SceneTests
         restored.Hydrate(dto);
 
         // Assert we have the same in-memory structure
-        _ = restored.RootNodes.Should().HaveCount(1);
+        _ = restored.RootNodes.Should().ContainSingle();
         var rnode = restored.RootNodes[0];
         var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
 

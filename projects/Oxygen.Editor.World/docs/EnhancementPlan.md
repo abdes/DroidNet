@@ -96,7 +96,7 @@ Status: ✅ Implemented — Editor exposes `SceneNodeFlags` enum (`src/SceneNode
 
 ---
 
-### 4. **Camera Support** ❌ MISSING
+### 4. **Camera Support** ✅ Completed
 
 **Engine Has:**
 
@@ -895,7 +895,7 @@ public class MaterialsSlot : OverrideSlot
 
 ---
 
-### Phase 6: Camera Components
+### Phase 6: Camera Components ✅ Completed
 
 #### 6.1 Create Camera Component Hierarchy (DTO-driven + Hydration)
 
@@ -993,32 +993,9 @@ public abstract record CameraComponentData : ComponentData { }
 
 ---
 
----
+### Phase 7: LINQ Extension Methods (Optional) ✅ Completed
 
-### Phase 7: Transform Enhancements
-
-#### 7.1 Add World Transform Caching (Optional)
-
-**New Properties:**
-
-```csharp
-// Transform.cs
-[JsonIgnore]
-public Vector3? WorldPosition { get; internal set; } // synced from engine
-
-[JsonIgnore]
-public bool IsWorldTransformDirty { get; internal set; } = true; // synced from engine
-```
-
-**Rationale:** Display world positions in inspector, optimize dirty tracking sync
-
-**Note:** Engine computes these, editor just caches for display
-
----
-
-### Phase 8: LINQ Extension Methods (Optional)
-
-#### 8.1 Scene Graph Query Extensions
+#### 7.1 Scene Graph Query Extensions
 
 **New Class:**
 
@@ -1124,9 +1101,8 @@ public static class SceneNodeExtensions
 | Persistence & Performance | ✅ Completed | **High** | High |
 | Asset System | ✅ Completed | **High** | Medium |
 | Override Slots & Geometry | ✅ Completed | **High** | High |
-| Camera Components | ❌ Missing | Medium | Low |
-| Transform Enhancements | ⚠️ Partial | Low | Low |
-| LINQ Extensions | ❌ Missing | Low | Low |
+| Camera Components | ✅ Completed | Medium | Low |
+| LINQ Extensions | ✅ Completed | Low | Low |
 
 **Recommended Implementation Order:**
 
@@ -1135,6 +1111,5 @@ public static class SceneNodeExtensions
 3. Persistence & Performance (Phase 3) — ✅ Completed
 4. Asset System Foundation (Phase 4) — ✅ Completed
 5. Override Slots & Geometry (Phase 5)
-6. Camera Components (Phase 6)
-7. Transform Enhancements (Phase 7)
-8. LINQ Extensions (Phase 8)
+6. Camera Components (Phase 6) — ✅ Completed
+7. LINQ Extensions (Phase 7) — ✅ Completed
