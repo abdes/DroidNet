@@ -10,7 +10,7 @@ namespace Oxygen.Editor.Assets;
 /// <remarks>
 /// Assets represent metadata about resources (meshes, materials, textures, etc.) that can be referenced
 /// and loaded by the editor. Each asset has a unique URI that follows the format:
-/// <c>asset://{MountPoint}/{Path}</c>
+/// <c>asset://{MountPoint}/{Path}</c>.
 /// </remarks>
 public abstract class Asset
 {
@@ -21,7 +21,7 @@ public abstract class Asset
     /// The asset URI in the format <c>asset://{MountPoint}/{Path}</c>.
     /// For example: <c>asset://Generated/BasicShapes/Cube</c> or <c>asset://Content/Models/Hero.geo</c>.
     /// </value>
-    public required string Uri { get; set; }
+    public required Uri Uri { get; set; }
 
     /// <summary>
     /// Gets the name of the asset extracted from the URI.
@@ -29,5 +29,5 @@ public abstract class Asset
     /// <value>
     /// The filename without extension, extracted from the last segment of the URI path.
     /// </value>
-    public string Name => Path.GetFileNameWithoutExtension(this.Uri);
+    public string Name => Path.GetFileNameWithoutExtension(this.Uri.AbsolutePath);
 }

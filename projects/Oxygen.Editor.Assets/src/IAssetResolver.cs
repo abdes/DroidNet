@@ -24,7 +24,7 @@ public interface IAssetResolver
     /// </summary>
     /// <param name="authority">The mount point authority from the asset URI (e.g., "Content", "Engine", "Generated").</param>
     /// <returns><see langword="true"/> if this resolver can handle the authority; otherwise, <see langword="false"/>.</returns>
-    bool CanResolve(string authority);
+    public bool CanResolve(string authority);
 
     /// <summary>
     /// Asynchronously resolves an asset URI to an asset instance.
@@ -34,5 +34,5 @@ public interface IAssetResolver
     /// A task that represents the asynchronous operation. The task result contains the resolved <see cref="Asset"/>,
     /// or <see langword="null"/> if the asset could not be found or loaded.
     /// </returns>
-    Task<Asset?> ResolveAsync(string uri);
+    public Task<Asset?> ResolveAsync(Uri uri);
 }

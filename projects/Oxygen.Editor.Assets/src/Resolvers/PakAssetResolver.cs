@@ -27,11 +27,11 @@ public sealed class PakAssetResolver : IAssetResolver
     /// <inheritdoc/>
     public bool CanResolve(string authority)
         => string.Equals(authority, "Engine", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(authority, "Content", StringComparison.OrdinalIgnoreCase)
-               && !string.Equals(authority, "Generated", StringComparison.OrdinalIgnoreCase);
+            || (!string.Equals(authority, "Content", StringComparison.OrdinalIgnoreCase)
+               && !string.Equals(authority, "Generated", StringComparison.OrdinalIgnoreCase));
 
     /// <inheritdoc/>
-    public Task<Asset?> ResolveAsync(string uri)
+    public Task<Asset?> ResolveAsync(Uri uri)
     {
         // Stub implementation for Phase 4
         // TODO: Implement PAK file asset loading in future phases

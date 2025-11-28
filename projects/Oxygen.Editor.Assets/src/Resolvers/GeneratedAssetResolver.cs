@@ -29,7 +29,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     private const string Authority = "Generated";
     private const string BaseUri = "asset://Generated/";
 
-    private readonly FrozenDictionary<string, Asset> assets;
+    private readonly FrozenDictionary<Uri, Asset> assets;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GeneratedAssetResolver"/> class
@@ -37,7 +37,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     /// </summary>
     public GeneratedAssetResolver()
     {
-        this.assets = this.CreateBuiltInAssets().ToFrozenDictionary(a => a.Uri, StringComparer.OrdinalIgnoreCase);
+        this.assets = CreateBuiltInAssets().ToFrozenDictionary(a => a.Uri);
     }
 
     /// <inheritdoc/>
@@ -45,18 +45,18 @@ public sealed class GeneratedAssetResolver : IAssetResolver
         => string.Equals(authority, Authority, StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
-    public Task<Asset?> ResolveAsync(string uri)
+    public Task<Asset?> ResolveAsync(Uri uri)
     {
         var result = this.assets.GetValueOrDefault(uri);
         return Task.FromResult(result);
     }
 
-    private IEnumerable<Asset> CreateBuiltInAssets()
+    private static IEnumerable<Asset> CreateBuiltInAssets()
     {
         // Basic shape geometries (1 LOD, 1 SubMesh "Main")
         yield return new GeometryAsset
         {
-            Uri = $"{BaseUri}BasicShapes/Cube",
+            Uri = new($"{BaseUri}BasicShapes/Cube"),
             Lods =
             [
                 new MeshLod
@@ -69,7 +69,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
 
         yield return new GeometryAsset
         {
-            Uri = $"{BaseUri}BasicShapes/Sphere",
+            Uri = new($"{BaseUri}BasicShapes/Sphere"),
             Lods =
             [
                 new MeshLod
@@ -82,7 +82,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
 
         yield return new GeometryAsset
         {
-            Uri = $"{BaseUri}BasicShapes/Plane",
+            Uri = new($"{BaseUri}BasicShapes/Plane"),
             Lods =
             [
                 new MeshLod
@@ -95,7 +95,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
 
         yield return new GeometryAsset
         {
-            Uri = $"{BaseUri}BasicShapes/Cylinder",
+            Uri = new($"{BaseUri}BasicShapes/Cylinder"),
             Lods =
             [
                 new MeshLod
@@ -109,7 +109,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
         // Default material
         yield return new MaterialAsset
         {
-            Uri = $"{BaseUri}Materials/Default",
+            Uri = new($"{BaseUri}Materials/Default"),
         };
     }
 }

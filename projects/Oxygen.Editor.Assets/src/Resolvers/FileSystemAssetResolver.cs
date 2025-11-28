@@ -28,7 +28,7 @@ public sealed class FileSystemAssetResolver : IAssetResolver
         => string.Equals(authority, "Content", StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
-    public Task<Asset?> ResolveAsync(string uri)
+    public Task<Asset?> ResolveAsync(Uri uri)
     {
         // Stub implementation for Phase 4
         // TODO: Implement file system asset loading in future phases

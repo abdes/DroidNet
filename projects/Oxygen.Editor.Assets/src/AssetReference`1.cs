@@ -25,7 +25,7 @@ namespace Oxygen.Editor.Assets;
 public sealed class AssetReference<T> : ScopedObservableObject
     where T : Asset
 {
-    private string? uri;
+    private Uri? uri;
     private T? asset;
 
     /// <summary>
@@ -36,7 +36,7 @@ public sealed class AssetReference<T> : ScopedObservableObject
     /// Setting this property will invalidate <see cref="Asset"/> if the new URI does not match
     /// the current asset's URI.
     /// </value>
-    public string? Uri
+    public Uri? Uri
     {
         get => this.uri;
         set
@@ -45,7 +45,7 @@ public sealed class AssetReference<T> : ScopedObservableObject
             if (this.SetProperty(ref this.uri, value))
             {
                 // Invalidate the asset when URI changes (unless it matches the current asset's URI)
-                if (this.asset is not null && this.asset.Uri != value)
+                if (this.asset?.Uri.Equals(value) == false)
                 {
                     this.Asset = null;
                 }
@@ -70,7 +70,7 @@ public sealed class AssetReference<T> : ScopedObservableObject
             if (this.SetProperty(ref this.asset, value))
             {
                 // Sync URI when Asset is set
-                if (value is not null && this.Uri != value.Uri)
+                if (value?.Uri.Equals(this.Uri) == false)
                 {
                     this.Uri = value.Uri;
                 }
