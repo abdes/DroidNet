@@ -18,7 +18,8 @@ public record SceneNodeData : GameObjectData
     /// <summary>
     /// Gets or initializes the list of child nodes.
     /// </summary>
-    public IList<SceneNodeData> Children { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public IList<SceneNodeData>? Children { get; init; } = null;
 
     /// <summary>
     /// Gets or initializes the list of override slots for this node.

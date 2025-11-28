@@ -22,5 +22,6 @@ public record TargetedOverrideData
     /// <summary>
     /// Gets or initializes the override slots for this target.
     /// </summary>
-    public IList<OverrideSlotData> OverrideSlots { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public IList<OverrideSlotData>? OverrideSlots { get; init; } = null;
 }
