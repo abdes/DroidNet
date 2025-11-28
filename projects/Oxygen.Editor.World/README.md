@@ -2,156 +2,239 @@
 
 ## Overview
 
-The **Oxygen.Editor.World** module provides the core domain model for game world entities in the Oxygen Editor. It defines the fundamental building blocks for scenes, hierarchical nodes, and component-based entities that make up game worlds.
+**Oxygen.Editor.World** is the domain model for game world entities in Oxygen Editor. It defines scenes, hierarchical nodes, and extensible component-based entities, supporting property change notification and robust JSON serialization.
 
-This module is a **pure domain model** with no UI dependencies, no engine coupling, and no I/O logic. It focuses solely on in-memory representation of game world structures with support for property change notification and JSON serialization.
+**Key attributes:**
+
+- Pure domain model: no UI, engine, or I/O dependencies
+- In-memory only: supports property change notification and JSON round-tripping
 
 ## Purpose
 
-The World module exists to:
+This module provides:
 
-1. **Define World Entities** - Scene, SceneNode, Transform, and component hierarchy
-2. **Enable Hierarchical Composition** - Trees of scene nodes with parent-child relationships
-3. **Support Component Pattern** - Extensible component system (Transform, future: Physics, Rendering, etc.)
-4. **Provide Observability** - `INotifyPropertyChanged` for UI binding and synchronization
-5. **Enable Serialization** - JSON-based persistence with polymorphic component support
+- **World Entities:** Scene, SceneNode, Transform, and extensible component hierarchy
+- **Hierarchical Composition:** Parent-child trees of nodes, with circular reference protection
+- **Component Pattern:** Extensible, polymorphic components (Transform, Geometry, Camera, etc.)
+- **Property Overrides via Slots:** Flexible override system using slots, supporting global, component-level, and targeted overrides (e.g., per LOD/submesh)
+- **Observability:** `INotifyPropertyChanged` for UI/data binding and runtime sync
+- **Serialization:** JSON-based, with type discriminators and round-trip support
 
 ## Technology Stack
 
-| Technology | Version | Purpose |
-|-----------|---------|---------|
-| **.NET** | 9.0 (Windows 10.0.26100.0) | Target framework |
-| **C#** | 13 (preview) | Language with nullable reference types |
-| **Microsoft.Extensions.Logging** | Latest | Logging abstractions |
+| Technology                        | Version                        | Purpose                  |
+|------------------------------------|--------------------------------|--------------------------|
+| .NET                              | 9.0 (Windows 10.0.26100.0)     | Target framework         |
+| C#                                | 13 (preview, nullable enabled) | Language                 |
+| Microsoft.Extensions.Logging      | Latest                         | Logging abstractions     |
+| System.Numerics                   | Built-in                       | Vector3 for Transform    |
 
 ## Architecture
 
 ### Domain Model Structure
 
 ```mermaid
-graph TB
-    subgraph World["Oxygen.Editor.World"]
-        GO[GameObject<br/>Base class]
-        SCENE[Scene<br/>Root container]
-        NODE[SceneNode<br/>Hierarchy node]
-        COMP[GameComponent<br/>Component base]
-        TRANS[Transform<br/>Spatial data]
+---
+config:
+  class:
+    hideEmptyMembersBox: true
+---
+classDiagram
+    class GameObject {
+        <<abstract>>
+    }
 
-        GO -.base class.-> SCENE
-        GO -.base class.-> NODE
-        GO -.base class.-> COMP
-        COMP -.base class.-> TRANS
+    class Scene {
+        <<root container>>
+    }
 
-        SCENE -->|contains| NODE
-        NODE -->|has| COMP
-        NODE -->|children| NODE
-    end
+    class SceneNode {
+        <<hierarchy node>>
+    }
 
-    style World fill:#1b5e20,stroke:#81c784
+    class GameComponent {
+        <<component base>>
+    }
+
+    class Transform {
+        <<spatial data>>
+    }
+
+    class GeometryComponent
+    class CameraComponent
+    class OrthographicCamera
+    class PerspectiveCamera
+
+    GameObject <|-- Scene
+    GameObject <|-- SceneNode
+    GameComponent <|-- Transform
+    GameComponent <|-- GeometryComponent
+    GameComponent <|-- CameraComponent
+    CameraComponent <|-- OrthographicCamera
+    CameraComponent <|-- PerspectiveCamera
+
+    Scene "1" --> "many" SceneNode : contains
+    SceneNode "1" --> "many" GameComponent : has
+    SceneNode --> SceneNode : children
 ```
 
 ### Key Classes
 
-| Class | Purpose | Key Features |
-|-------|---------|--------------|
-| **`GameObject`** | Base class for all game entities | `INotifyPropertyChanged`, `Id`, `Name`, validation |
-| **`Scene`** | Root container for a scene | Node collection, project reference, JSON serialization |
-| **`SceneNode`** | Hierarchical scene entity | Components, `IsActive` flag, parent/child, disposable |
-| **`GameComponent`** | Base for all components | Node reference, polymorphic serialization |
-| **`Transform`** | Spatial component | Position, rotation, scale (Vector3) |
-| **`Category`** | Node categorization | Enum-style categories (Actor, Prop, UI, etc |
-|.) |
+| Class                | Purpose                        | Features                                      |
+|----------------------|-------------------------------|-----------------------------------------------|
+| `GameObject`         | Base for all entities         | `INotifyPropertyChanged`, `Id`, `Name`, validation, override slots |
+| `Scene`              | Root container                | RootNodes, AllNodes, project reference, JSON  |
+| `SceneNode`          | Hierarchical entity           | Components, flags, parent/child, override slots, circular protection |
+| `GameComponent`      | Base for components           | `INotifyPropertyChanged`, Node reference, polymorphic serialization, override slots |
+| `Transform`          | Spatial component             | LocalPosition, LocalRotation, LocalScale      |
+| `GeometryComponent`  | Geometry asset reference      | AssetReference, targeted overrides            |
+| `CameraComponent`    | Camera base                   | Near/Far plane, concrete types                |
+| `OrthographicCamera` | Orthographic camera           | OrthographicSize, Near/Far plane              |
+| `PerspectiveCamera`  | Perspective camera            | FieldOfView, AspectRatio, Near/Far plane      |
+| `Category`           | Project categorization        | Enum-style, not for nodes/entities            |
 
 ## Core Concepts
 
 ### GameObject Base Class
 
-All world entities inherit from `GameObject`:
+All entities inherit from `GameObject`:
 
-**Provides:**
-- **Unique Identity**: `Guid Id` property
-- **Observable Properties**: `INotifyPropertyChanged` + `INotifyPropertyChanging`
-- **Name Validation**: Required, non-empty string name
-- **Helpers**: `SetField<T>()` and `ValidateAndSetField<T>`() for property setters
+- Unique `Guid Id` (init-only)
+- Observable properties: `INotifyPropertyChanged` + `INotifyPropertyChanging`
+- Name validation: required, non-empty string
+- Override slots: for property overrides (global/component/targeted)
 
 ### Scene Hierarchy
 
-```
+```text
 Scene
 ├── SceneNode ("Player")
 │   ├── Transform
-│   ├── [Future: Renderer]
-│   └── [Future: Physics]
+│   ├── GeometryComponent
+│   └── CameraComponent
 ├── SceneNode ("Enemy")
 │   ├── Transform
-│   └── SceneNode ("Weapon")  ← Nested hierarchy
+│   └── SceneNode ("Weapon")
 │       └── Transform
 └── SceneNode ("Camera")
-    └── Transform
+    └── OrthographicCamera
 ```
 
-**Key Properties:**
-- `Scene.Nodes`: Collection of root-level scene nodes
-- `SceneNode.Components`: Collection of components (Transform is always present)
-- `SceneNode.IsActive`: Whether node participates in runtime (synced to engine)
+- `Scene.RootNodes`: Collection of root-level nodes
+- `Scene.AllNodes`: Flattened node tree
+- `SceneNode.Components`: Always includes Transform; supports others
+- `SceneNode.Flags`: Compact enum for visibility, shadow, selection, static, etc.
+- Parent/child relationships, circular reference protection
 
 ### Component System
 
-Components follow the **Entity-Component pattern**:
+- Entity-Component pattern: each `SceneNode` has a collection of `GameComponent`
+- **Transform** is mandatory
+- Components are polymorphic (`[JsonDerivedType]`), registered for serialization
+- Components reference their owning node
+- Override slots: component-level and targeted (e.g., for geometry LODs/submeshes)
 
-- Each `SceneNode` has a collection of `GameComponent` instances
-- **Transform** is mandatory - automatically added on construction
-- Components are **polymorphic** - serialized with type discriminators
-- Components have a reference back to their owning `SceneNode`
+#### Extensibility
 
-**Extensibility:**
+Add new components by subclassing `GameComponent` and registering with serializer:
+
 ```csharp
-// Current
-[JsonDerivedType(typeof(Transform), "Transform")]
-[JsonDerivedType(typeof(GameComponent), "Base")]
-public partial class GameComponent(SceneNode node) : GameObject
+public partial class MeshRenderer : GameComponent
+{
+    public string MeshPath { get; set; } = string.Empty;
+    // Register in static constructor
+}
+```
 
-// Future: Add new components
+Register:
+
+```csharp
 [JsonDerivedType(typeof(MeshRenderer), "MeshRenderer")]
-[JsonDerivedType(typeof(RigidbodyComponent), "Rigidbody")]
+public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
+```
+
+Add to node:
+
+```csharp
+node.Components.Add(new MeshRenderer { MeshPath = "models/character.glb" });
 ```
 
 ### Property Change Notifications
 
-All domain objects implement `INotifyPropertyChanged`:
+- All domain objects implement `INotifyPropertyChanged`
+- Used for UI binding, runtime sync, dirty tracking
 
-**Purpose:**
-- **UI Binding**: WPF/WinUI data binding
-- **Runtime Sync**: `Oxygen.Editor.Runtime` observes changes to sync with engine
-- **Dirty Tracking**: Editors can detect unsaved changes
-
-**Pattern:**
 ```csharp
-private Vector3 position;
-
-public Vector3 Position
+private Vector3 localPosition;
+public Vector3 LocalPosition
 {
-    get => this.position;
-    set => _ = this.SetField(ref this.position, value);  // Raises PropertyChanged
+    get => this.localPosition;
+    set => _ = this.SetProperty(ref this.localPosition, value);
 }
 ```
+
+### Slots System
+
+The Slots system provides a flexible, extensible mechanism for property overrides at multiple levels of the world model. Slots are observable containers for overridable properties, enabling fine-grained control over rendering, materials, LOD, and lighting.
+
+| Concept                | Description |
+|------------------------|-------------|
+| **`OverrideSlot`**       | Abstract base for all slot types. Supports property change notification and serialization. Can be attached to `GameObject` (global), `GameComponent` (component-level), or `GeometryOverrideTarget` (targeted overrides). |
+| **`OverridableProperty<T>`** | Value type representing a property with a default and optional override value. Used within slots to encapsulate override semantics. |
+| **Slot Types**         | See table below for built-in slot types. |
+| **Targeted Overrides** | `GeometryOverrideTarget` allows slots to be scoped to specific LODs/submeshes for per-part customization. |
+| **Usage Patterns**     | Slots are hydrated/dehydrated for persistence. Factories and registration patterns ensure extensibility. Query or create slots using `GetOrCreateSlot<T>()`. |
+
+#### Built-in Slot Types
+
+| Slot Type            | Purpose/Overrides                | Typical Scope                |
+|----------------------|----------------------------------|------------------------------|
+| `LevelOfDetailSlot`  | LOD selection policy (distance, fixed, screen space error) | GeometryComponent |
+| `LightingSlot`       | Shadow casting/receiving         | GeometryComponent, GameObject |
+| `RenderingSlot`      | Visibility, rendering flags      | GeometryComponent, GameObject |
+| `MaterialsSlot`      | Material assignment              | GeometryOverrideTarget        |
+
+#### Example Usage
+
+```csharp
+// Attach a material override to a specific submesh
+var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 2 };
+var matSlot = new MaterialsSlot();
+matSlot.Material.Uri = new Uri("assets/materials/metal.mat");
+target.OverrideSlots.Add(matSlot);
+```
+
+Slots enable designers and tools to override properties at any level of the scene graph, supporting advanced workflows like per-object rendering tweaks, dynamic LOD, and context-sensitive material assignment.
+
+### SceneNode LINQ Extensions
+
+The module provides LINQ-style extension methods for traversing and querying scene node hierarchies:
+
+- `DescendantsAndSelf()`: Enumerates the node and all its descendants (depth-first).
+- `Descendants()`: Enumerates all descendant nodes.
+- `AncestorsAndSelf()`: Enumerates the node and all its ancestors (closest parent first).
+- `Ancestors()`: Enumerates all ancestor nodes.
+- `FindByPath(scene, path)`: Finds a node by a path expression (supports exact names, `*`, and `**` wildcards).
+
+These extensions simplify tree navigation, path-based queries, and hierarchical operations on scenes and nodes.
 
 ## JSON Serialization
 
 ### Scene Format
 
-Scenes serialize to JSON with **custom converters** that handle:
+Scenes serialize to JSON with custom converters:
+
 - Circular references via `IProject` injection
 - Polymorphic components via `[JsonDerivedType]`
-- Required fields (Scene requires `IProject`, Node requires `Scene`)
+- Required fields: Scene requires `IProject`, Node requires `Scene`
 
-**Example Scene JSON:**
+#### Example Scene JSON
+
 ```json
 {
   "Name": "MainScene",
   "Id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
-  "IsActive": false,
-  "Nodes": [
+  "RootNodes": [
     {
       "Name": "Player",
       "Id": "550e8400-e29b-41d4-a716-446655440000",
@@ -160,10 +243,99 @@ Scenes serialize to JSON with **custom converters** that handle:
         {
           "$type": "Transform",
           "Name": "Transform",
-          "Id": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-          "Position": { "x": 0.0, "y": 1.0, "z": 0.0 },
-          "Rotation": { "x": 0.0, "y": 0.0, "z": 0.0 },
-          "Scale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+          "LocalPosition": { "x": 0.0, "y": 1.0, "z": 0.0 },
+          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        {
+          "$type": "GeometryComponent",
+          "Name": "PlayerMesh",
+          "GeometryUri": "assets/models/player.glb",
+          "OverrideSlots": [
+            {
+              "$type": "RenderingSlot",
+              "IsVisible": true
+            }
+          ],
+          "TargetedOverrides": [
+            {
+              "LodIndex": 0,
+              "SubmeshIndex": 2,
+              "OverrideSlots": [
+                {
+                  "$type": "MaterialsSlot",
+                  "Material": { "Uri": "assets/materials/metal.mat" }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "$type": "CameraComponent",
+          "Name": "PlayerCamera",
+          "NearPlane": 0.1,
+          "FarPlane": 1000.0
+        }
+      ],
+      "Children": [
+        {
+          "Name": "Weapon",
+          "Id": "c0a80101-0000-0000-0000-000000000001",
+          "IsActive": true,
+          "Components": [
+            {
+              "$type": "Transform",
+              "Name": "Transform",
+              "LocalPosition": { "x": 0.5, "y": 0.0, "z": 0.0 },
+              "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+              "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+            },
+            {
+              "$type": "GeometryComponent",
+              "Name": "WeaponMesh",
+              "GeometryUri": "assets/models/weapon.glb"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Enemy",
+      "Id": "550e8400-e29b-41d4-a716-446655440001",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": 10.0, "y": 0.0, "z": 0.0 },
+          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        {
+          "$type": "GeometryComponent",
+          "Name": "EnemyMesh",
+          "GeometryUri": "assets/models/enemy.glb"
+        }
+      ]
+    },
+    {
+      "Name": "Camera",
+      "Id": "550e8400-e29b-41d4-a716-446655440002",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": 0.0, "y": 5.0, "z": -10.0 },
+          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        {
+          "$type": "OrthographicCamera",
+          "Name": "MainCamera",
+          "NearPlane": 0.1,
+          "FarPlane": 1000.0,
+          "OrthographicSize": 10.0
         }
       ]
     }
@@ -171,110 +343,115 @@ Scenes serialize to JSON with **custom converters** that handle:
 }
 ```
 
+#### Scene Graph
+
+```mermaid
+graph TD
+  MainScene[MainScene]
+  Player[Player]
+  Enemy[Enemy]
+  Camera[Camera]
+  Weapon[Weapon]
+
+  MainScene --> Player
+  MainScene --> Enemy
+  MainScene --> Camera
+  Player --> Weapon
+
+  PlayerMesh["GeometryComponent: PlayerMesh<br>OverrideSlots: RenderingSlot(IsVisible=true)<br>TargetedOverrides: MaterialsSlot(Lod=0,Submesh=2)"]
+  Player --> PlayerMesh
+  PlayerCamera[CameraComponent: PlayerCamera]
+  Player --> PlayerCamera
+  PlayerTransform[Transform]
+  Player --> PlayerTransform
+
+  WeaponMesh[GeometryComponent: WeaponMesh]
+  Weapon --> WeaponMesh
+  WeaponTransform[Transform]
+  Weapon --> WeaponTransform
+
+  EnemyMesh[GeometryComponent: EnemyMesh]
+  Enemy --> EnemyMesh
+  EnemyTransform[Transform]
+  Enemy --> EnemyTransform
+
+  MainCamera[OrthographicCamera: MainCamera]
+  Camera --> MainCamera
+  CameraTransform[Transform]
+  Camera --> CameraTransform
+
+  %% Styling
+  classDef gameobject stroke:#1976d2,stroke-width:3px;
+  classDef gamecomponent stroke:#388e3c,stroke-width:3px;
+  class MainScene,Player,Enemy,Camera,Weapon gameobject;
+  class PlayerMesh,PlayerCamera,PlayerTransform,WeaponMesh,WeaponTransform,EnemyMesh,EnemyTransform,MainCamera,CameraTransform gamecomponent;
+```
+
 ### Custom JSON Converters
 
-**`Scene.SceneJsonConverter`**:
-- Requires `IProject` to construct deserialized scenes
-- Handles per-scene context
-
-**`SceneNode.SceneNodeConverter`**:
-- Requires `Scene` to construct deserialized nodes
-- Ensures Transform component always present
-- Sets `IsActive` state post-construction
-
-**`GameComponent.Vector3JsonConverter`**:
-- Serializes `System.Numerics.Vector3` as `{x, y, z}`
+- `Scene.SceneJsonConverter`: Requires `IProject` for deserialization
+- `SceneNode.SceneNodeConverter`: Requires `Scene`, ensures Transform is present
+- `GameComponent.Vector3JsonConverter`: Serializes `System.Numerics.Vector3` as `{x, y, z}`
 
 ## Design Patterns
 
-### Observable Pattern
-All entities implement `INotifyPropertyChanged` for reactive programming
-
-### Composite Pattern
-`SceneNode` can contain child nodes forming trees
-
-### Component Pattern
-Behavior added to nodes via composition, not inheritance
-
-### Immutable Identity
-`GameObject.Id` is `init`-only - stable across lifecycle
+- **Observable:** All entities are reactive (`INotifyPropertyChanged`)
+- **Composite:** SceneNode trees (parent/child, descendants/ancestors)
+- **Component:** Behavior via composition, not inheritance
+- **Immutable Identity:** `Id` is `init`-only, stable across lifecycle
 
 ## Dependencies
 
-### Project References
-- **None** - Pure domain model
-
-### Nuget Packages
-- `Microsoft.Extensions.Logging.Abstractions` - Logging interfaces
-
-### Framework Dependencies
-- `System.Numerics` - Vector3 for Transform
+- **No project references** (pure domain model)
+- NuGet: `Microsoft.Extensions.Logging.Abstractions`
+- Framework: `System.Numerics` (Vector3, Quaternion)
 
 ## Thread Safety
 
-⚠️ **Not thread-safe** - Domain models are designed for single-threaded access.
-
-**Synchronization Responsibility:**
-- **UI Thread**: ViewModels modify domain objects
-- **Engine Thread**: `Oxygen.Editor.Runtime.Sync` observes changes and queues to engine via `EditorModule`
-
-Property change events fire on the **calling thread** - synchronizers must handle cross-thread marshaling.
+⚠️ **Not thread-safe** — domain models are single-threaded.
+Property change events fire on the calling thread; synchronizers must handle cross-thread marshaling.
 
 ## Extensibility
 
 ### Adding New Components
 
 1. **Define Component Class**:
-   ```csharp
-   public partial class MeshRenderer(SceneNode node) : GameComponent(node)
-   {
-       private string meshPath = string.Empty;
 
-       public string MeshPath
-       {
-           get => this.meshPath;
-           set => _ = this.SetField(ref this.meshPath, value);
-       }
+   ```csharp
+   public partial class MeshRenderer : GameComponent
+   {
+       public string MeshPath { get; set; } = string.Empty;
    }
    ```
 
 2. **Register with JSON Serializer**:
+
    ```csharp
    [JsonDerivedType(typeof(MeshRenderer), "MeshRenderer")]
-   public partial class GameComponent(SceneNode node) : GameObject
+   public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
    ```
 
-3. **Add to Scene Nodes**:
+3. **Add to SceneNode**:
+
    ```csharp
-   node.Components.Add(new MeshRenderer(node) { MeshPath = "models/character.glb" });
+   node.Components.Add(new MeshRenderer { MeshPath = "models/character.glb" });
    ```
-
-### Adding New Node Types
-
-Currently `SceneNode` is monomorphic. To add specialized nodes:
-- Inherit from `SceneNode`
-- Register with `Scene` converter
-- Handle serialization type discriminators
 
 ## Testing
 
 Unit tests should cover:
-- **Property change notifications** - Verify events fire
-- **JSON round-tripping** - Serialize and deserialize
-- **Component lifecycle** - Add/remove components
-- **Transform math** - Validate Vector3 operations
-- **Validation** - Name requirements, required properties
+
+- Property change notifications (events fire)
+- JSON round-tripping (serialize/deserialize)
+- Component lifecycle (add/remove, hydrate/dehydrate)
+- Transform math (Vector3/Quaternion operations)
+- Validation (name requirements, required properties)
 
 ## Related Documentation
 
-- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Synchronizes world models with engine
-- [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/) - Manages workspace and project files
+- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md): Synchronizes world models with engine
+- [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/): Manages workspace and project files
 
 ## License
 
-Distributed under the MIT License. See accompanying `LICENSE` file or visit
-[https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
-
----
-
-**SPDX-License-Identifier**: MIT
+Distributed under the MIT License. See [LICENSE](../../LICENSE) or [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
