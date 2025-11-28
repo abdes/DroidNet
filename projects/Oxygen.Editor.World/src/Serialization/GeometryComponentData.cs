@@ -18,10 +18,12 @@ public record GeometryComponentData : ComponentData
     /// <summary>
     /// Gets or initializes the component-level override slots.
     /// </summary>
-    public IList<OverrideSlotData> OverrideSlots { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public IList<OverrideSlotData>? OverrideSlots { get; init; } = null;
 
     /// <summary>
     /// Gets or initializes the targeted overrides for specific LODs/submeshes.
     /// </summary>
-    public IList<TargetedOverrideData> TargetedOverrides { get; init; } = [];
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public IList<TargetedOverrideData>? TargetedOverrides { get; init; } = null;
 }

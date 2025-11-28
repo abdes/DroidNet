@@ -187,6 +187,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     /// <summary>
     ///     Gets the collection of child nodes.
     /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public ObservableCollection<SceneNode> Children { get; }
 
     /// <summary>
@@ -201,6 +202,13 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     {
         var node = new SceneNode(scene) { Name = data.Name, Id = data.Id };
         node.Hydrate(data);
+
+        // If Children is null (missing from JSON), treat as empty
+        if (data.Children is null)
+        {
+            node.Children.Clear();
+        }
+
         return node;
     }
 
@@ -353,10 +361,13 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
             this.IsStatic = data.IsStatic;
 
             // 5. Children
-            foreach (var childData in data.Children)
+            if (data.Children != null)
             {
-                var child = CreateAndHydrate(this.Scene, childData);
-                this.AddChild(child);
+                foreach (var childData in data.Children)
+                {
+                    var child = CreateAndHydrate(this.Scene, childData);
+                    this.AddChild(child);
+                }
             }
         }
     }
