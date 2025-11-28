@@ -22,14 +22,14 @@ public sealed class AssetReferenceTests
         var propertyChangedFired = false;
         reference.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(AssetReference<GeometryAsset>.Uri))
+            if (string.Equals(args.PropertyName, nameof(AssetReference<>.Uri), StringComparison.Ordinal))
             {
                 propertyChangedFired = true;
             }
         };
 
         // Act
-        reference.Uri = "asset://Generated/BasicShapes/Cube";
+        reference.Uri = new("asset://Generated/BasicShapes/Cube");
 
         // Assert
         propertyChangedFired.Should().BeTrue();
@@ -39,12 +39,12 @@ public sealed class AssetReferenceTests
     public void Uri_WhenSetToSameValue_ShouldNotNotify()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset> { Uri = "asset://Test" };
+        var reference = new AssetReference<GeometryAsset> { Uri = new("asset://Test") };
         var propertyChangedFireCount = 0;
         reference.PropertyChanged += (_, _) => propertyChangedFireCount++;
 
         // Act
-        reference.Uri = "asset://Test";
+        reference.Uri = new("asset://Test");
 
         // Assert
         propertyChangedFireCount.Should().Be(0);
@@ -56,7 +56,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = "asset://Generated/BasicShapes/Cube",
+            Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>
@@ -66,7 +66,7 @@ public sealed class AssetReferenceTests
         };
 
         // Act
-        reference.Uri = "asset://Generated/BasicShapes/Sphere";
+        reference.Uri = new("asset://Generated/BasicShapes/Sphere");
 
         // Assert
         reference.Asset.Should().BeNull("changing URI should invalidate the cached asset");
@@ -78,12 +78,12 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = "asset://Generated/BasicShapes/Cube",
+            Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>
         {
-            Uri = "asset://Generated/BasicShapes/Sphere",
+            Uri = new("asset://Generated/BasicShapes/Sphere"),
             Asset = asset,
         };
 
@@ -100,11 +100,11 @@ public sealed class AssetReferenceTests
         // Arrange
         var reference = new AssetReference<GeometryAsset>
         {
-            Uri = "asset://OldUri",
+            Uri = new("asset://OldUri"),
         };
         var asset = new GeometryAsset
         {
-            Uri = "asset://Generated/BasicShapes/Cube",
+            Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
 
@@ -121,7 +121,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = "asset://Generated/BasicShapes/Cube",
+            Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>
@@ -143,7 +143,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = "asset://Generated/BasicShapes/Cube",
+            Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>
@@ -153,7 +153,7 @@ public sealed class AssetReferenceTests
         var uriChangedCount = 0;
         reference.PropertyChanged += (_, args) =>
         {
-            if (args.PropertyName == nameof(AssetReference<GeometryAsset>.Uri))
+            if (string.Equals(args.PropertyName, nameof(AssetReference<>.Uri), StringComparison.Ordinal))
             {
                 uriChangedCount++;
             }

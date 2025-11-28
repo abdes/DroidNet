@@ -30,7 +30,7 @@ public interface IAssetService
     /// </summary>
     /// <param name="resolver">The resolver to register.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="resolver"/> is <see langword="null"/>.</exception>
-    void RegisterResolver(IAssetResolver resolver);
+    public void RegisterResolver(IAssetResolver resolver);
 
     /// <summary>
     /// Asynchronously loads an asset of type <typeparamref name="T"/> from the specified URI.
@@ -42,6 +42,6 @@ public interface IAssetService
     /// of type <typeparamref name="T"/>, or <see langword="null"/> if the asset could not be found,
     /// loaded, or is not of the expected type.
     /// </returns>
-    Task<T?> LoadAssetAsync<T>(string uri)
+    public Task<T?> LoadAssetAsync<T>(Uri uri)
         where T : Asset;
 }

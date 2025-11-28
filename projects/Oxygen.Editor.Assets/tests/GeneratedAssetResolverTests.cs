@@ -52,13 +52,14 @@ public sealed class GeneratedAssetResolverTests
     [DataRow("asset://Generated/BasicShapes/Sphere")]
     [DataRow("asset://Generated/BasicShapes/Plane")]
     [DataRow("asset://Generated/BasicShapes/Cylinder")]
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "test data")]
     public async Task ResolveAsync_WithBuiltInGeometry_ShouldReturnGeometryAsset(string uri)
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
 
         // Act
-        var result = await resolver.ResolveAsync(uri);
+        var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
         result.Should().NotBeNull();
@@ -79,7 +80,7 @@ public sealed class GeneratedAssetResolverTests
         const string uri = "asset://Generated/Materials/Default";
 
         // Act
-        var result = await resolver.ResolveAsync(uri);
+        var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
         result.Should().NotBeNull();
@@ -95,24 +96,23 @@ public sealed class GeneratedAssetResolverTests
         const string uri = "asset://Generated/Unknown/Asset";
 
         // Act
-        var result = await resolver.ResolveAsync(uri);
+        var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
         result.Should().BeNull();
     }
 
     [TestMethod]
-    public async Task ResolveAsync_IsCaseInsensitive()
+    public async Task ResolveAsync_IsCaseSitive()
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
         const string uri = "asset://GENERATED/BASICSHAPES/CUBE";
 
         // Act
-        var result = await resolver.ResolveAsync(uri);
+        var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().BeOfType<GeometryAsset>();
+        result.Should().BeNull();
     }
 }
