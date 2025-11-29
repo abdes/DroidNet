@@ -80,8 +80,6 @@ public partial class Transform : GameComponent
         using (this.SuppressNotifications())
         {
             this.LocalPosition = d.Position;
-            this.LocalRotation = d.Rotation;
-            this.LocalScale = d.Scale;
         }
     }
 
