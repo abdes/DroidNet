@@ -6,8 +6,11 @@
 
 #pragma once
 
-#include <Oxygen/Base/logging.h>
 #include <vcclr.h>
+
+#pragma warning(disable: 4793) // function compiled as native
+#include <Oxygen/Base/logging.h>
+#pragma warning(default: 4793)
 
 using System::IntPtr;
 using System::String;

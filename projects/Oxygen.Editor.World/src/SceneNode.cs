@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.Core;
 
 namespace Oxygen.Editor.World;
 

@@ -8,7 +8,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.EngineInterface;
+using Oxygen.Interop;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;

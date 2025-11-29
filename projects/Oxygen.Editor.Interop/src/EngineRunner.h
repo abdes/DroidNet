@@ -10,9 +10,9 @@
 #include <memory>
 
 #include "Config.h"
+#include "EditorModule/SurfaceRegistry.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
-#include "Unmanaged/SurfaceRegistry.h"
 #include "UiThreadDispatcher.h"
 
 namespace oxygen::graphics {
@@ -22,23 +22,22 @@ namespace oxygen::graphics {
     ref class Object;
     ref class String;
     value struct Guid;
-  }
+  } // namespace System
 
   namespace System::Threading {
     ref class SynchronizationContext;
     ref class Thread;
     ref class SendOrPostCallback;
-  }
+  } // namespace System::Threading
 
   namespace System::Threading::Tasks {
     ref class Task;
-    generic<typename TResult>
-    ref class TaskCompletionSource;
-  }
+    generic<typename TResult> ref class TaskCompletionSource;
+  } // namespace System::Threading::Tasks
   class Surface;
-}
+} // namespace oxygen::graphics
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   // Forward declare the managed LogHandler so EngineRunner header does not expose
   // any logging implementation or native logging headers.
@@ -52,55 +51,59 @@ namespace Oxygen::Editor::EngineInterface {
     !EngineRunner(); // finalizer (safety)
 
     /// <summary>
-    /// Configures the native engine logging subsystem without binding a managed <c>ILogger</c>.
-    /// Use this overload if you only need native logging (e.g., to <c>stderr</c> or files)
-    /// and do not want managed log forwarding.
+    /// Configures the native engine logging subsystem without binding a managed
+    /// <c>ILogger</c>. Use this overload if you only need native logging (e.g.,
+    /// to <c>stderr</c> or files) and do not want managed log forwarding.
     /// </summary>
     /// <param name="config">
-    /// The logging configuration, including verbosity, color settings, and per-module overrides.
+    /// The logging configuration, including verbosity, color settings, and
+    /// per-module overrides.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> if the native logging backend was initialized successfully;
-    /// otherwise, <see langword="false"/>.
+    /// <see langword="true"/> if the native logging backend was initialized
+    /// successfully; otherwise, <see langword="false"/>.
     /// </returns>
     /// <remarks>
-    /// This method must be invoked before any native engine component emits log output
-    /// you want captured. It is safe to call multiple times; subsequent calls will
-    /// reconfigure verbosity and overrides. This overload does not create any managed
-    /// reflection or delegate bindings.
+    /// This method must be invoked before any native engine component emits log
+    /// output you want captured. It is safe to call multiple times; subsequent
+    /// calls will reconfigure verbosity and overrides. This overload does not
+    /// create any managed reflection or delegate bindings.
     /// </remarks>
     auto ConfigureLogging(LoggingConfig^ config) -> bool;
     auto GetLoggingConfig(EngineContext^ ctx) -> LoggingConfig^;
 
     /// <summary>
     /// Configures the native engine logging subsystem and wires a managed
-    /// <c>Microsoft.Extensions.Logging.ILogger</c> instance so native log messages
-    /// are forwarded into the managed logging pipeline.
+    /// <c>Microsoft.Extensions.Logging.ILogger</c> instance so native log
+    /// messages are forwarded into the managed logging pipeline.
     /// </summary>
     /// <param name="config">
-    /// The logging configuration, including verbosity, color settings, and per-module overrides.
+    /// The logging configuration, including verbosity, color settings, and
+    /// per-module overrides.
     /// </param>
     /// <param name="logger">
-    /// A managed <c>ILogger</c> instance (boxed as <c>System::Object^</c>) to receive
-    /// forwarded native log events.
+    /// A managed <c>ILogger</c> instance (boxed as <c>System::Object^</c>) to
+    /// receive forwarded native log events.
     /// </param>
     /// <returns>
-    /// <see langword="true"/> if the native logging backend was initialized successfully;
-    /// otherwise, <see langword="false"/>.
+    /// <see langword="true"/> if the native logging backend was initialized
+    /// successfully; otherwise, <see langword="false"/>.
     /// </returns>
     /// <remarks>
     /// <para>
-    /// On success, a native callback is registered that captures each native log message,
-    /// maps its verbosity to <c>LogLevel</c>, and invokes <c>ILogger.Log(...)</c>
-    /// via cached reflection metadata. Reflection discovery of the <c>Log</c> method
-    /// and construction of a formatter delegate occur only on the first successful call.
+    /// On success, a native callback is registered that captures each native log
+    /// message, maps its verbosity to <c>LogLevel</c>, and invokes
+    /// <c>ILogger.Log(...)</c> via cached reflection metadata. Reflection
+    /// discovery of the <c>Log</c> method and construction of a formatter
+    /// delegate occur only on the first successful call.
     /// </para>
     /// <para>
-    /// If <paramref name="logger"/> is <see langword="nullptr"/>, this overload behaves
-    /// the same as the simpler overload.
+    /// If <paramref name="logger"/> is <see langword="nullptr"/>, this overload
+    /// behaves the same as the simpler overload.
     /// </para>
     /// <para>
-    /// Safe to call multiple times; the logger reference and cached method info are replaced.
+    /// Safe to call multiple times; the logger reference and cached method info
+    /// are replaced.
     /// </para>
     /// </remarks>
     auto ConfigureLogging(LoggingConfig^ config, Object^ logger) -> bool;
@@ -112,15 +115,21 @@ namespace Oxygen::Editor::EngineInterface {
     /// The engine configuration to use during initialization.
     /// </param>
     /// <param name="swapChainPanel">
-    /// The native IUnknown pointer to the WinUI 3 SwapChainPanel to render into. If IntPtr::Zero, the engine will run in headless mode or create its own window (depending on config).
+    /// The native IUnknown pointer to the WinUI 3 SwapChainPanel to render into.
+    /// If IntPtr::Zero, the engine will run in headless mode or create its own
+    /// window (depending on config).
     /// </param>
     /// <returns>
     /// A new EngineContext if creation succeeded; otherwise, nullptr.
     /// </returns>
-    auto CreateEngine(EngineConfig^ config, System::IntPtr swapChainPanel) -> EngineContext^;
+    auto CreateEngine(EngineConfig^ config, System::IntPtr swapChainPanel)
+      -> EngineContext
+      ^
+      ;
 
     /// <summary>
-    /// Creates and initializes the engine using the supplied configuration (headless or default window).
+    /// Creates and initializes the engine using the supplied configuration
+    /// (headless or default window).
     /// </summary>
     auto CreateEngine(EngineConfig^ config) -> EngineContext^;
 
@@ -139,11 +148,10 @@ namespace Oxygen::Editor::EngineInterface {
     auto GetEngineConfig(EngineContext^ ctx) -> EngineConfig^;
 
     /// <summary>
-    /// Starts the engine loop on a dedicated background thread and returns a task that
-    /// completes when the engine stops.
+    /// Starts the engine loop on a dedicated background thread and returns a task
+    /// that completes when the engine stops.
     /// </summary>
-    auto RunEngineAsync(EngineContext^ ctx)
-      -> System::Threading::Tasks::Task^;
+    auto RunEngineAsync(EngineContext^ ctx) -> System::Threading::Tasks::Task^;
 
     auto StopEngine(EngineContext^ ctx) -> void;
 
@@ -153,16 +161,25 @@ namespace Oxygen::Editor::EngineInterface {
     // after the engine has applied the Resize or scheduled the Destroy.
 
     auto RegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
-      System::Guid viewportId, System::String^ displayName,
-      System::IntPtr swapChainPanel) -> System::Threading::Tasks::Task<bool>^;
-    auto UnregisterSurfaceAsync(System::Guid viewportId) -> System::Threading::Tasks::Task<bool>^;
+      System::Guid viewportId,
+      System::String^ displayName,
+      System::IntPtr swapChainPanel)
+      -> System::Threading::Tasks::Task<bool>^
+      ;
+    auto UnregisterSurfaceAsync(System::Guid viewportId)
+      -> System::Threading::Tasks::Task<bool>^
+      ;
     auto ResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
-      System::UInt32 height) -> System::Threading::Tasks::Task<bool>^;
+      System::UInt32 height)
+      -> System::Threading::Tasks::Task<bool>^
+      ;
 
   private:
     // Encapsulated logging handler (forward-declared above). This hides any
     // references to native logging libraries from this header.
     LogHandler^ log_handler_;
+
+    using SurfaceRegistry = oxygen::interop::module::SurfaceRegistry;
 
     bool disposed_;
     std::shared_ptr<SurfaceRegistry>* surface_registry_;
@@ -170,7 +187,8 @@ namespace Oxygen::Editor::EngineInterface {
     UiThreadDispatcher^ ui_dispatcher_;
     RenderThreadContext^ render_thread_context_;
     System::Threading::Tasks::Task^ engine_task_;
-    System::Threading::Tasks::TaskCompletionSource<bool>^ engine_completion_source_;
+    System::Threading::Tasks::TaskCompletionSource<bool>^
+      engine_completion_source_;
     EngineContext^ active_context_;
     System::Object^ state_lock_;
 
@@ -187,8 +205,9 @@ namespace Oxygen::Editor::EngineInterface {
     auto GetSurfaceRegistry() -> std::shared_ptr<SurfaceRegistry>;
     static auto ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey;
     void EnsureEngineLoopStopped();
-    void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr, System::IntPtr surfaceHandle);
+    void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr,
+      System::IntPtr surfaceHandle);
     void AttachSwapChainCallback(System::Object^ state);
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

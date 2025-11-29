@@ -8,18 +8,18 @@
 #pragma managed
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Config/PlatformConfig.h>
-#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Config/RendererConfig.h>
 
 // Std / interop
 #ifdef _WIN32
-#  include <WinSock2.h> // include before any header that might include <windows.h>
+#include <WinSock2.h> // include before any header that might include <windows.h>
 #endif
 #include <msclr/marshal_cppstd.h>
-#include <string>
 #include <optional>
+#include <string>
 
 // The purpose of this header is to expose managed (C++/CLI) mirror types for
 // the native Oxygen engine configuration structures so they can be consumed
@@ -44,7 +44,7 @@
 // Naming: We append the suffix 'Managed' to avoid collisions with the native
 // names and to make intent clear at the call-site.
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   // Forward declarations of native types (already included but for clarity)
   namespace native = ::oxygen;
@@ -78,7 +78,8 @@ namespace Oxygen::Editor::EngineInterface {
   } // namespace detail
 
   // RendererConfig ---------------------------------------------------------
-  public ref class RendererConfigManaged sealed {
+  public
+  ref class RendererConfigManaged sealed {
   public:
     System::String^ UploadQueueKey; // required
 
@@ -123,11 +124,12 @@ namespace Oxygen::Editor::EngineInterface {
   };
 
   // GraphicsConfig ---------------------------------------------------------
-  public ref class GraphicsConfigManaged sealed {
+  public
+  ref class GraphicsConfigManaged sealed {
   public:
     bool EnableDebug;
     bool EnableValidation;
-    System::String^ PreferredCardName; // null => not specified
+    System::String^ PreferredCardName;                // null => not specified
     System::Nullable<long long> PreferredCardDeviceId; // null => not specified
     bool Headless;
     bool EnableImGui;
@@ -135,14 +137,9 @@ namespace Oxygen::Editor::EngineInterface {
     System::String^ Extra; // JSON string
 
     GraphicsConfigManaged()
-      : EnableDebug(false)
-      , EnableValidation(false)
-      , PreferredCardName(nullptr)
-      , PreferredCardDeviceId()
-      , Headless(false)
-      , EnableImGui(false)
-      , EnableVSync(true)
-      , Extra(gcnew System::String("{}")) {
+      : EnableDebug(false), EnableValidation(false), PreferredCardName(nullptr),
+      PreferredCardDeviceId(), Headless(false), EnableImGui(false),
+      EnableVSync(true), Extra(gcnew System::String("{}")) {
     }
 
     static GraphicsConfigManaged^ FromNative(native::GraphicsConfig const& n) {
@@ -153,7 +150,8 @@ namespace Oxygen::Editor::EngineInterface {
         m->PreferredCardName = detail::ToManagedString(*n.preferred_card_name);
       }
       if (n.preferred_card_device_id.has_value()) {
-        m->PreferredCardDeviceId = System::Nullable<long long>(*n.preferred_card_device_id);
+        m->PreferredCardDeviceId =
+          System::Nullable<long long>(*n.preferred_card_device_id);
       }
       m->Headless = n.headless;
       m->EnableImGui = n.enable_imgui;
@@ -170,7 +168,8 @@ namespace Oxygen::Editor::EngineInterface {
         n.preferred_card_name = detail::ToStdString(PreferredCardName);
       }
       if (PreferredCardDeviceId.HasValue) {
-        n.preferred_card_device_id = static_cast<native::DeviceId>(PreferredCardDeviceId.Value);
+        n.preferred_card_device_id =
+          static_cast<native::DeviceId>(PreferredCardDeviceId.Value);
       }
       n.headless = Headless;
       n.enable_imgui = EnableImGui;
@@ -181,7 +180,8 @@ namespace Oxygen::Editor::EngineInterface {
   };
 
   // PlatformConfig ---------------------------------------------------------
-  public ref class PlatformConfigManaged sealed {
+  public
+  ref class PlatformConfigManaged sealed {
   public:
     bool Headless;
     System::UInt32 ThreadPoolSize; // 0 = none
@@ -204,17 +204,17 @@ namespace Oxygen::Editor::EngineInterface {
   };
 
   // TimingConfig -----------------------------------------------------------
-  public ref class TimingConfigManaged sealed {
+  public
+  ref class TimingConfigManaged sealed {
   public:
-    System::TimeSpan FixedDelta;            // canonical (nanoseconds)
-    System::TimeSpan MaxAccumulator;        // canonical (nanoseconds)
-    System::UInt32  MaxSubsteps;            // max iterations / frame
-    System::TimeSpan PacingSafetyMargin;    // microseconds
+    System::TimeSpan FixedDelta;         // canonical (nanoseconds)
+    System::TimeSpan MaxAccumulator;     // canonical (nanoseconds)
+    System::UInt32 MaxSubsteps;          // max iterations / frame
+    System::TimeSpan PacingSafetyMargin; // microseconds
 
-    TimingConfigManaged() :
-      FixedDelta(System::TimeSpan::FromTicks(0)),
-      MaxAccumulator(System::TimeSpan::FromTicks(0)),
-      MaxSubsteps(0),
+    TimingConfigManaged()
+      : FixedDelta(System::TimeSpan::FromTicks(0)),
+      MaxAccumulator(System::TimeSpan::FromTicks(0)), MaxSubsteps(0),
       PacingSafetyMargin(System::TimeSpan::FromTicks(0)) {
     }
 
@@ -224,14 +224,17 @@ namespace Oxygen::Editor::EngineInterface {
       m->FixedDelta = detail::NsToTimeSpan(n.fixed_delta.get());
       m->MaxAccumulator = detail::NsToTimeSpan(n.max_accumulator.get());
       m->MaxSubsteps = n.max_substeps;
-      m->PacingSafetyMargin = detail::MicrosecondsToTimeSpan(n.pacing_safety_margin);
+      m->PacingSafetyMargin =
+        detail::MicrosecondsToTimeSpan(n.pacing_safety_margin);
       return m;
     }
 
     native::TimingConfig ToNative() {
       native::TimingConfig n;
-      n.fixed_delta = native::time::CanonicalDuration{ detail::TimeSpanToNs(FixedDelta) };
-      n.max_accumulator = native::time::CanonicalDuration{ detail::TimeSpanToNs(MaxAccumulator) };
+      n.fixed_delta =
+        native::time::CanonicalDuration{ detail::TimeSpanToNs(FixedDelta) };
+      n.max_accumulator =
+        native::time::CanonicalDuration{ detail::TimeSpanToNs(MaxAccumulator) };
       n.max_substeps = MaxSubsteps;
       n.pacing_safety_margin = detail::TimeSpanToMicroseconds(PacingSafetyMargin);
       return n;
@@ -239,25 +242,22 @@ namespace Oxygen::Editor::EngineInterface {
   };
 
   // EngineConfig -----------------------------------------------------------
-  public ref class EngineConfig sealed {
+  public
+  ref class EngineConfig sealed {
   public:
     // Application sub-structure
     System::String^ ApplicationName;
-    System::UInt32  ApplicationVersion;
+    System::UInt32 ApplicationVersion;
 
-    System::UInt32 TargetFps; // 0 = uncapped
+    System::UInt32 TargetFps;  // 0 = uncapped
     System::UInt32 FrameCount; // 0 = unlimited / run until exit
 
     GraphicsConfigManaged^ Graphics; // required logically; allow null -> default
-    TimingConfigManaged^ Timing;   // required logically; allow null -> default
+    TimingConfigManaged^ Timing;     // required logically; allow null -> default
 
     EngineConfig()
-      : ApplicationName(gcnew System::String("")),
-      ApplicationVersion(0),
-      TargetFps(0),
-      FrameCount(0),
-      Graphics(nullptr),
-      Timing(nullptr) {
+      : ApplicationName(gcnew System::String("")), ApplicationVersion(0),
+      TargetFps(0), FrameCount(0), Graphics(nullptr), Timing(nullptr) {
     }
 
     static EngineConfig^ FromNative(native::EngineConfig const& n) {
@@ -297,19 +297,20 @@ namespace Oxygen::Editor::EngineInterface {
     /// This exposes the native EngineConfig::kMaxTargetFps to managed callers.
     /// </summary>
     static property System::UInt32 MaxTargetFps {
-      System::UInt32 get() {
-        return native::EngineConfig::kMaxTargetFps;
-      }
+      System::UInt32 get() { return native::EngineConfig::kMaxTargetFps; }
     }
   };
 
   // Convenience aggregating helper (optional future extension point)
-  public ref class ConfigFactory abstract sealed {
-  public:
-    static EngineConfig^ CreateDefaultEngineConfig() {
-      native::EngineConfig native_default; // default constructed
-      return EngineConfig::FromNative(native_default);
-    }
-  };
+  public
+  ref class ConfigFactory abstract
+    sealed {
+  public: static EngineConfig^
+    CreateDefaultEngineConfig() {
+    native::EngineConfig native_default; // default constructed
+    return EngineConfig::FromNative(native_default);
+  } // namespace Oxygen::Interop
+  }
+  ;
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

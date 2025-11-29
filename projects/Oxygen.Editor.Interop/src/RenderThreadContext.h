@@ -10,25 +10,24 @@
 namespace System {
   ref class Object;
   ref class String;
-}
+} // namespace System
 
 namespace System::Threading {
   ref class ParameterizedThreadStart;
   ref class Thread;
-}
+} // namespace System::Threading
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   /// <summary>
   /// Manages the lifecycle of the dedicated engine render thread.
   /// </summary>
-  public ref class RenderThreadContext sealed {
+  public
+  ref class RenderThreadContext sealed {
   public:
     RenderThreadContext();
 
-    property bool IsRunning {
-      bool get();
-    }
+    property bool IsRunning { bool get(); }
 
     property System::Threading::Thread^ ThreadHandle {
       System::Threading::Thread^ get();
@@ -48,4 +47,4 @@ namespace Oxygen::Editor::EngineInterface {
     System::Object^ gate_;
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

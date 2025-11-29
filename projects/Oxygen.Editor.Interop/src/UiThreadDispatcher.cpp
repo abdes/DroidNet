@@ -11,7 +11,7 @@
 using namespace System;
 using namespace System::Threading;
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   UiThreadDispatcher::UiThreadDispatcher()
     : captured_context_(nullptr), captured_thread_id_(-1) {
@@ -86,4 +86,4 @@ namespace Oxygen::Editor::EngineInterface {
     captured_context_->Send(callback, state);
   }
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

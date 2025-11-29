@@ -12,12 +12,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="EditorModule\EditorModule.cpp" />
+    <ClCompile Include="EditorModule\NodeRegistry.cpp" />
+    <ClCompile Include="EditorModule\RenderGraph.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
-    <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
-    <ClCompile Include="Unmanaged\EditorModule.cpp" />
-    <ClCompile Include="Unmanaged\RenderGraph.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
+    <ClCompile Include="World\OxygenWorld.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(OxygenEditorInterfaceProject)">
@@ -25,21 +26,36 @@
       <Private>true</Private>
       <CopyLocalSatelliteAssemblies>false</CopyLocalSatelliteAssemblies>
     </ProjectReference>
+    <ProjectReference Include="..\..\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj">
+      <Private>true</Private>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Commands\SceneCommands.h" />
+    <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
+    <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
+    <ClInclude Include="Commands\RenameSceneNodeCommand.h" />
+    <ClInclude Include="Commands\SetLocalTransformCommand.h" />
+    <ClInclude Include="Commands\CreateBasicMeshCommand.h" />
+    <ClInclude Include="Commands\SetVisibilityCommand.h" />
+    <ClInclude Include="Commands\ReparentSceneNodeCommand.h" />
+    <ClInclude Include="Commands\UpdateTransformsForNodesCommand.h" />
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />
+    <ClInclude Include="EditorModule\EditorCommand.h" />
+    <ClInclude Include="EditorModule\EditorModule.h" />
+    <ClInclude Include="EditorModule\NodeRegistry.h" />
+    <ClInclude Include="EditorModule\RenderGraph.h" />
+    <ClInclude Include="EditorModule\SurfaceRegistry.h" />
+    <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
-    <ClInclude Include="OxygenWorld.h" />
     <ClInclude Include="RenderThreadContext.h" />
-    <ClInclude Include="Unmanaged\SurfaceRegistry.h" />
-    <ClInclude Include="Unmanaged\EditorModule.h" />
-    <ClInclude Include="Unmanaged\RenderGraph.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
+    <ClInclude Include="World\OxygenWorld.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

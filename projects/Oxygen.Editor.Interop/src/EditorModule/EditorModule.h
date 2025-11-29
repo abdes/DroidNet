@@ -12,22 +12,25 @@
 #include <vector>
 
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include "Unmanaged/SurfaceRegistry.h"
+#include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Scene/Scene.h>
 
-namespace Oxygen::Editor::EngineInterface {
+#include "EditorModule/EditorCommand.h"
+#include "EditorModule/SurfaceRegistry.h"
+#include "EditorModule/ThreadSafeQueue.h"
 
-class RenderGraph; // forward-declare the helper at namespace scope
+namespace oxygen::interop::module {
+
+  class RenderGraph; // forward-declare the helper at namespace scope
 
   //! An engine module, that connects the editor to the Oxygen engine.
   /*!
@@ -70,8 +73,7 @@ class RenderGraph; // forward-declare the helper at namespace scope
 
     [[nodiscard]] auto GetSupportedPhases() const noexcept
       -> oxygen::engine::ModulePhaseMask override {
-      return oxygen::engine::MakeModuleMask<
-        oxygen::core::PhaseId::kFrameStart,
+      return oxygen::engine::MakeModuleMask<oxygen::core::PhaseId::kFrameStart,
         oxygen::core::PhaseId::kCommandRecord,
         oxygen::core::PhaseId::kSceneMutation,
         oxygen::core::PhaseId::kFrameGraph>();
@@ -88,26 +90,17 @@ class RenderGraph; // forward-declare the helper at namespace scope
       -> oxygen::co::Co<> override;
 
     // Ensure framebuffers for all registered surfaces (creates depth textures
-    // and one framebuffer per backbuffer slot). Mirrors AppWindow::EnsureFramebuffers
-    // from the examples so editor behavior matches the sample exactly.
+    // and one framebuffer per backbuffer slot). Mirrors
+    // AppWindow::EnsureFramebuffers from the examples so editor behavior matches
+    // the sample exactly.
     auto EnsureFramebuffers() -> bool;
 
-
-      // Scene management API
+    // Scene management API
     auto CreateScene(std::string_view name) -> void;
 
-    // Node management API
-    auto CreateSceneNode(std::string_view name, std::string_view parent_name = "") -> void;
-    auto RemoveSceneNode(std::string_view name) -> void;
+    //! Enqueues a command to be executed during the SceneMutation phase.
+    void Enqueue(std::unique_ptr<EditorCommand> cmd);
 
-    // Transform management API
-    auto SetLocalTransform(std::string_view node_name,
-        const glm::vec3& position,
-        const glm::quat& rotation,
-        const glm::vec3& scale) -> void;
-
-    // Geometry management API
-    auto CreateBasicMesh(std::string_view node_name, std::string_view mesh_type) -> void;
   private:
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
@@ -140,13 +133,17 @@ class RenderGraph; // forward-declare the helper at namespace scope
     // Per-surface framebuffer cache: keep one framebuffer per swapchain
     // back-buffer slot so we avoid recreating and re-registering resources
     // every frame. Keyed by the raw surface pointer (non-owning).
-    std::unordered_map<const oxygen::graphics::Surface*,
+    std::unordered_map<
+      const oxygen::graphics::Surface*,
       std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>>>
       surface_framebuffers_{};
 
     std::chrono::steady_clock::time_point last_frame_time_{};
+
+    // Command queue for scene mutations
+    ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)
