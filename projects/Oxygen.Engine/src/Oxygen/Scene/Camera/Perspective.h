@@ -1,4 +1,5 @@
 //===----------------------------------------------------------------------===//
+//===----------------------------------------------------------------------===//
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
@@ -15,6 +16,10 @@
 #include <Oxygen/Scene/api_export.h>
 
 namespace oxygen::scene {
+
+  namespace detail {
+    class TransformComponent;
+  } // namespace detail
 
 //! Perspective camera component for 3D scene nodes
 /*!
@@ -203,13 +208,9 @@ public:
   }
 
 protected:
-  auto UpdateDependencies(
+  OXGN_SCN_API auto UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept
-    -> void override
-  {
-    transform_ = &static_cast<detail::TransformComponent&>(
-      get_component(detail::TransformComponent::ClassTypeId()));
-  }
+    -> void override;
 
 private:
   float fov_y_ = 1.0f;

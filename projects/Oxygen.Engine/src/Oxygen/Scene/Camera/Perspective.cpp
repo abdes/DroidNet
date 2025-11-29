@@ -37,6 +37,13 @@ auto PerspectiveCamera::ProjectionMatrix() const -> glm::mat4
   return proj;
 }
 
+inline auto PerspectiveCamera::UpdateDependencies(
+  const std::function<Component&(TypeId)>& get_component) noexcept -> void
+{
+  transform_ = &static_cast<detail::TransformComponent&>(
+    get_component(detail::TransformComponent::ClassTypeId()));
+}
+
 /*!
  Maps a screen-space point (in pixels) to a world-space position at the near
  plane using the camera's projection and transform.
