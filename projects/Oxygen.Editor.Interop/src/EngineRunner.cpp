@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 #include <dxgi1_2.h>
 #include <string>
@@ -441,6 +442,9 @@ namespace Oxygen::Editor::EngineInterface {
 
   auto EngineRunner::CreateEngine(EngineConfig^ engine_cfg, IntPtr swapChainPanel) -> EngineContext^
   {
+    using namespace oxygen::graphics;
+    using namespace oxygen::engine;
+
     if (disposed_) {
       throw gcnew ObjectDisposedException("EngineRunner");
     }
@@ -458,21 +462,33 @@ namespace Oxygen::Editor::EngineInterface {
       }
 
       // Create the native engine context (unique ownership from factory).
-      auto native_unique = oxygen::engine::interop::CreateEngine(native_cfg);
+      auto native_unique = interop::CreateEngine(native_cfg);
       if (!native_unique) {
         return nullptr; // creation failed
       }
 
       // Promote unique_ptr to shared_ptr for the managed wrapper lifetime model.
-      std::shared_ptr<oxygen::engine::interop::EngineContext> shared(native_unique.release());
+      std::shared_ptr<interop::EngineContext> shared(native_unique.release());
 
       EnsureSurfaceRegistry();
       auto registry = GetSurfaceRegistry();
       registry->Clear();
 
       if (shared->engine) {
-        oxygen::engine::interop::LogInfoMessage(
-          "Registering EditorModule with surface registry.");
+        interop::LogInfoMessage(
+          "Registering renderer and EditorModule with surface registry.");
+
+        // Create the renderer module and register it with the engine.
+        // Required by the EditorModule.
+        oxygen::RendererConfig renderer_config{
+          .upload_queue_key = shared->queue_strategy.KeyFor(QueueRole::kTransfer).get(),
+        };
+        auto renderer_unique = std::make_unique<Renderer>(shared->gfx_weak, renderer_config);
+        // Store observer ptr in the EngineContext so managed code can access it
+        shared->renderer = oxygen::observer_ptr<Renderer>(renderer_unique.get());
+        shared->engine->RegisterModule(std::move(renderer_unique));
+
+        // Register the Editor module (requires surface registry)
         auto module = std::make_unique<EditorModule>(registry);
         shared->engine->RegisterModule(std::move(module));
       }
@@ -480,14 +496,14 @@ namespace Oxygen::Editor::EngineInterface {
       return gcnew EngineContext(shared);
     }
     catch (const std::exception& ex) {
-#if defined(_DEBUG) || !defined(NDEBUG)
-      System::Diagnostics::Debug::WriteLine(gcnew System::String(ex.what()));
+#if defined(_DEBUG) || !defined(NDEBUG) // FIXME: use proper logging with LoguruWrapper
+      ::System::Diagnostics::Debug::WriteLine(gcnew ::System::String(ex.what()));
 #endif
       return nullptr;
     }
     catch (...) {
-#if defined(_DEBUG) || !defined(NDEBUG)
-      System::Diagnostics::Debug::WriteLine("Unknown exception in EngineRunner::CreateEngine");
+#if defined(_DEBUG) || !defined(NDEBUG) // FIXME: use proper logging with LoguruWrapper
+      ::System::Diagnostics::Debug::WriteLine("Unknown exception in EngineRunner::CreateEngine");
 #endif
       return nullptr;
     }

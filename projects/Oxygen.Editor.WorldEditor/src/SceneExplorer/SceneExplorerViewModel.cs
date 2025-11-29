@@ -6,6 +6,8 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
+using System.Numerics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -23,6 +25,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Messages;
 
@@ -40,8 +43,10 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
     private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
     private readonly IDocumentService documentService;
+    private readonly IEngineService engineService;
 
     private bool isDisposed;
+
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneExplorerViewModel" /> class.
@@ -50,6 +55,8 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
     /// <param name="projectManager">The project manager service.</param>
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="router">The router service used for navigation events.</param>
+    /// <param name="documentService">The document service for handling document operations.</param>
+    /// <param name="engineService">The engine service for interop with the rendering engine.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -60,6 +67,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         IMessenger messenger,
         IRouter router,
         IDocumentService documentService,
+        IEngineService engineService,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
@@ -69,6 +77,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         this.messenger = messenger;
         this.router = router;
         this.documentService = documentService;
+        this.engineService = engineService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -238,6 +247,172 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
 
         this.Scene = new SceneAdapter(scene) { IsExpanded = true, IsLocked = true, IsRoot = true };
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+
+        // Sync scene with the engine
+        this.SyncSceneWithEngine(scene);
+    }
+
+    private void SyncSceneWithEngine(Scene scene)
+    {
+        var world = this.engineService.World;
+        if (world is null)
+        {
+            this.logger.LogWarning("OxygenWorld is not available; skipping scene sync");
+            return;
+        }
+        // Diagnostic: log transforms from the managed Scene model to verify
+        // that hydratation produced the expected values before we call into
+        // the native engine. This helps detect mismatches between the on-disk
+        // JSON and the in-memory model used for sync.
+        try
+        {
+            foreach (var root in scene.RootNodes)
+            {
+                this.LogNodeTransformRecursive(root, parentName: null);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(ex, "Failed to dump scene transforms for debug");
+        }
+        try
+        {
+            // Create (or recreate) the scene in the engine
+            world.CreateScene(scene.Name);
+            this.logger.LogInformation("Created scene '{SceneName}' in engine", scene.Name);
+
+            // Recursively create all root nodes and attach geometry/materials
+            foreach (var node in scene.RootNodes)
+            {
+                this.CreateEngineNode(world, node, parentName: null);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to sync scene '{SceneName}' with engine", scene.Name);
+        }
+    }
+
+    private void CreateEngineNode(Oxygen.Interop.World.OxygenWorld world, SceneNode node, string? parentName)
+    {
+        try
+        {
+            // Create the node in the engine
+            world.CreateSceneNode(node.Name, parentName);
+            this.logger.LogDebug("Created scene node '{NodeName}' in engine (parent: {ParentName})",
+                node.Name, parentName ?? "root");
+
+            // Set transform if available (respect scene-provided values). Do nothing
+            // when no Transform component exists so engine placement remains unchanged
+            // or can be handled elsewhere.
+            var transform = node.Components.OfType<Transform>().FirstOrDefault();
+            if (transform is not null)
+            {
+                try
+                {
+                    this.logger.LogInformation("SyncEngine: node='{NodeName}' pos=({X:0.00},{Y:0.00},{Z:0.00}) scale=({SX:0.00},{SY:0.00},{SZ:0.00}) rot=({RX:0.00},{RY:0.00},{RZ:0.00},{RW:0.00})",
+                        node.Name,
+                        transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z,
+                        transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z,
+                        transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
+
+                    world.SetLocalTransform(
+                        node.Name,
+                        new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z),
+                        new Quaternion(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W),
+                        new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z));
+
+                    this.logger.LogDebug("Set transform for scene node '{NodeName}'", node.Name);
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogError(ex, "Failed to set transform for node '{NodeName}'", node.Name);
+                }
+            }
+
+            // Attach geometry if the node has a GeometryComponent with a resolved or unresolved URI.
+            var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
+            if (geometryComp is not null)
+            {
+                try
+                {
+                    var uri = geometryComp.Geometry.Uri?.ToString();
+                    if (!string.IsNullOrEmpty(uri))
+                    {
+                        // Expect URIs like: asset://Generated/BasicShapes/Sphere
+                        // Extract last segment as mesh type (e.g. Sphere, Cube, Plane)
+                        var meshType = uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+                        if (!string.IsNullOrEmpty(meshType))
+                        {
+                            this.logger.LogDebug("Attaching generated mesh '{MeshType}' to node '{NodeName}' (uri='{Uri}')", meshType, node.Name, uri);
+                            world.CreateBasicMesh(node.Name, meshType);
+                            this.logger.LogInformation("Attached mesh '{MeshType}' to node '{NodeName}'", meshType, node.Name);
+                        }
+                        else
+                        {
+                            this.logger.LogDebug("Geometry URI for node '{NodeName}' did not contain a mesh type: '{Uri}'", node.Name, uri);
+                        }
+                    }
+                    else
+                    {
+                        this.logger.LogDebug("GeometryComponent on node '{NodeName}' has no Uri; skipping mesh attach", node.Name);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogError(ex, "Failed to attach geometry for node '{NodeName}'", node.Name);
+                }
+            }
+
+            // Material attachments: currently the interop exposes only CreateBasicMesh
+            // which creates a default material for generated meshes. If a material
+            // component exists we log it for future handling by the interop.
+            var materialComp = node.Components.FirstOrDefault(c => string.Equals(c.GetType().Name, "MaterialComponent", StringComparison.Ordinal));
+            if (materialComp is not null)
+            {
+                this.logger.LogDebug("Node '{NodeName}' contains a MaterialComponent; material attachment is not implemented via interop yet", node.Name);
+            }
+
+            // Recursively create children
+            foreach (var child in node.Children)
+            {
+                this.CreateEngineNode(world, child, node.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to create engine node '{NodeName}'", node.Name);
+        }
+    }
+
+    private void LogNodeTransformRecursive(SceneNode node, string? parentName)
+    {
+        try
+        {
+            var t = node.Components.OfType<Transform>().FirstOrDefault();
+            if (t is not null)
+            {
+                this.logger.LogInformation("SceneTransform: node='{NodeName}' parent='{ParentName}' pos=({X:0.00},{Y:0.00},{Z:0.00}) scale=({SX:0.00},{SY:0.00},{SZ:0.00}) rot=({RX:0.00},{RY:0.00},{RZ:0.00},{RW:0.00})",
+                    node.Name,
+                    parentName ?? "root",
+                    t.LocalPosition.X, t.LocalPosition.Y, t.LocalPosition.Z,
+                    t.LocalScale.X, t.LocalScale.Y, t.LocalScale.Z,
+                    t.LocalRotation.X, t.LocalRotation.Y, t.LocalRotation.Z, t.LocalRotation.W);
+            }
+            else
+            {
+                this.logger.LogInformation("SceneTransform: node='{NodeName}' parent='{ParentName}' has NO Transform component", node.Name, parentName ?? "root");
+            }
+
+            foreach (var child in node.Children)
+            {
+                this.LogNodeTransformRecursive(child, node.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(ex, "Failed to log transform for node '{NodeName}'", node.Name);
+        }
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -346,6 +521,33 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
         var scene = parentAdapter.AttachedObject;
         scene.RootNodes.Add(entity);
+
+        // Sync with engine
+        var world = this.engineService.World;
+        if (world is not null)
+        {
+            try
+            {
+                world.CreateSceneNode(entity.Name, parentName: null);
+
+                // Set initial transform if available
+                var transform = entity.Components.OfType<Transform>().FirstOrDefault();
+                if (transform is not null)
+                {
+                    world.SetLocalTransform(
+                        entity.Name,
+                        new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z),
+                        new Quaternion(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W),
+                        new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z));
+                }
+
+                this.logger.LogDebug("Synced new node '{NodeName}' with engine", entity.Name);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to sync new node '{NodeName}' with engine", entity.Name);
+            }
+        }
     }
 
     private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
@@ -362,6 +564,21 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
         var scene = parentAdapter.AttachedObject;
         _ = scene.RootNodes.Remove(entity);
+
+        // Sync with engine
+        var world = this.engineService.World;
+        if (world is not null)
+        {
+            try
+            {
+                world.RemoveSceneNode(entity.Name);
+                this.logger.LogDebug("Removed node '{NodeName}' from engine", entity.Name);
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogError(ex, "Failed to remove node '{NodeName}' from engine", entity.Name);
+            }
+        }
     }
 
     [LoggerMessage(

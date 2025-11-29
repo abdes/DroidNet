@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -20,6 +21,11 @@ public interface IEngineService : IAsyncDisposable
     /// Gets the number of active composition surfaces managed by the service.
     /// </summary>
     public int ActiveSurfaceCount { get; }
+
+    /// <summary>
+    /// Gets the world instance associated with this engine service.
+    /// </summary>
+    public OxygenWorld? World { get; }
 
     /// <summary>
     /// Ensures the underlying engine is initialized in its dormant headless state.
