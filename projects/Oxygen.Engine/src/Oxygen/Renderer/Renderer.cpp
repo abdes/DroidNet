@@ -38,6 +38,7 @@
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Scene/Scene.h>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag

@@ -23,7 +23,6 @@
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -43,6 +42,11 @@ class Mesh;
 } // namespace oxygen::data
 
 namespace oxygen::engine {
+
+namespace upload {
+  class UploadCoordinator;
+  class StagingProvider;
+} // namespace upload
 
 namespace sceneprep {
   class ScenePrepState;
