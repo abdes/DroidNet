@@ -15,10 +15,19 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/Passes/DepthPrePass.h>
+#include <Oxygen/Renderer/Passes/ShaderPass.h>
+#include <Oxygen/Renderer/Passes/TransparentPass.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include "Unmanaged/SurfaceRegistry.h"
 
 namespace Oxygen::Editor::EngineInterface {
+
+class RenderGraph; // forward-declare the helper at namespace scope
 
   //! An engine module, that connects the editor to the Oxygen engine.
   /*!
@@ -61,8 +70,11 @@ namespace Oxygen::Editor::EngineInterface {
 
     [[nodiscard]] auto GetSupportedPhases() const noexcept
       -> oxygen::engine::ModulePhaseMask override {
-      return oxygen::engine::MakeModuleMask<oxygen::core::PhaseId::kFrameStart,
-        oxygen::core::PhaseId::kCommandRecord>();
+      return oxygen::engine::MakeModuleMask<
+        oxygen::core::PhaseId::kFrameStart,
+        oxygen::core::PhaseId::kCommandRecord,
+        oxygen::core::PhaseId::kSceneMutation,
+        oxygen::core::PhaseId::kFrameGraph>();
     }
 
     auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
@@ -70,7 +82,32 @@ namespace Oxygen::Editor::EngineInterface {
     auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
     auto OnCommandRecord(oxygen::engine::FrameContext& context)
       -> oxygen::co::Co<> override;
+    auto OnSceneMutation(oxygen::engine::FrameContext& context)
+      -> oxygen::co::Co<> override;
+    auto OnFrameGraph(oxygen::engine::FrameContext& context)
+      -> oxygen::co::Co<> override;
 
+    // Ensure framebuffers for all registered surfaces (creates depth textures
+    // and one framebuffer per backbuffer slot). Mirrors AppWindow::EnsureFramebuffers
+    // from the examples so editor behavior matches the sample exactly.
+    auto EnsureFramebuffers() -> bool;
+
+
+      // Scene management API
+    auto CreateScene(std::string_view name) -> void;
+
+    // Node management API
+    auto CreateSceneNode(std::string_view name, std::string_view parent_name = "") -> void;
+    auto RemoveSceneNode(std::string_view name) -> void;
+
+    // Transform management API
+    auto SetLocalTransform(std::string_view node_name,
+        const glm::vec3& position,
+        const glm::quat& rotation,
+        const glm::vec3& scale) -> void;
+
+    // Geometry management API
+    auto CreateBasicMesh(std::string_view node_name, std::string_view mesh_type) -> void;
   private:
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
@@ -80,14 +117,34 @@ namespace Oxygen::Editor::EngineInterface {
       oxygen::engine::FrameContext& context,
       const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& surfaces)
       -> void;
+    // Helper to find a node by name
+    auto FindNodeByName(std::string_view name) -> oxygen::scene::SceneNode;
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
+    oxygen::observer_ptr<oxygen::AsyncEngine> engine_{};
 
     // Keep track of indices at which we added our render surfaces to the frame
     // context, so that we can differentially update them each frame.
     std::unordered_map<const oxygen::graphics::Surface*, size_t>
       surface_indices_;
+
+    std::shared_ptr<oxygen::scene::Scene> scene_;
+
+    // Shared per-frame RenderGraph helper used by the module (prepares
+    // a RenderContext for the renderer). Implemented in Unmanaged/RenderGraph
+    // and forward-declared at namespace scope above to avoid creating a
+    // nested incomplete type that conflicts with the implementation.
+    std::unique_ptr<RenderGraph> render_graph_{};
+
+    // Per-surface framebuffer cache: keep one framebuffer per swapchain
+    // back-buffer slot so we avoid recreating and re-registering resources
+    // every frame. Keyed by the raw surface pointer (non-owning).
+    std::unordered_map<const oxygen::graphics::Surface*,
+      std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>>>
+      surface_framebuffers_{};
+
+    std::chrono::steady_clock::time_point last_frame_time_{};
   };
 
 } // namespace Oxygen::Editor::EngineInterface

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.EngineInterface;
+using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -41,6 +42,9 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     /// Gets the number of active viewport leases currently tracked by the service.
     /// </summary>
     public int ActiveSurfaceCount => this.activeLeases.Count;
+
+    /// <inheritdoc />
+    public OxygenWorld? World { get; private set; }
 
     /// <summary>
     /// Gets the maximum allowed target frames-per-second defined by the native
@@ -93,6 +97,7 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
 
             // Configure the engine for headless operation
             var config = ConfigFactory.CreateDefaultEngineConfig();
+            config.TargetFps = 1; // TODO: remove after editor is stable
             config.Graphics ??= new GraphicsConfigManaged();
             config.Graphics.Headless = true;
 
@@ -101,6 +106,8 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             {
                 throw new InvalidOperationException("Failed to create engine context.");
             }
+
+            this.World = new OxygenWorld(this.engineContext);
 
             this.LogContextReady();
             this.state = EngineServiceState.Ready;
@@ -574,6 +581,7 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         finally
         {
             this.engineContext = null;
+            this.World = null;
             this.LogContextDestroyed();
         }
     }

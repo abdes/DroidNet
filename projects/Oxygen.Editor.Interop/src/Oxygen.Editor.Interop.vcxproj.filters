@@ -8,12 +8,16 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="Unmanaged\EditorModule.cpp">
+      <Filter>Unmanaged</Filter>
+    </ClCompile>
+    <ClCompile Include="Unmanaged\RenderGraph.cpp">
       <Filter>Unmanaged</Filter>
     </ClCompile>
     <ClCompile Include="RenderThreadContext.cpp" />
@@ -31,6 +35,9 @@
       <Filter>Unmanaged</Filter>
     </ClInclude>
     <ClInclude Include="Unmanaged\EditorModule.h">
+      <Filter>Unmanaged</Filter>
+    </ClInclude>
+    <ClInclude Include="Unmanaged\RenderGraph.h">
       <Filter>Unmanaged</Filter>
     </ClInclude>
     <ClInclude Include="RenderThreadContext.h" />

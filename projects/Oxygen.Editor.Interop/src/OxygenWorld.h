@@ -8,16 +8,38 @@
 
 #include <Oxygen/Scene/Scene.h>
 
+#include "EngineContext.h"
+
 using namespace System;
 using namespace System::Numerics;
+
+// TODO: properly design this API and implement all needed features.
 
 namespace Oxygen::Interop::World {
 
   public
   ref class OxygenWorld {
   public:
-    static auto CreateScene(String^ name) -> bool;
-    static auto RemoveSceneNode(String^ name) -> bool;
+    OxygenWorld(Oxygen::Editor::EngineInterface::EngineContext^ context);
+
+    // Scene management
+    void CreateScene(String^ name);
+
+    // Node management
+    void CreateSceneNode(String^ name, String^ parentName);
+    void RemoveSceneNode(String^ name);
+
+    // Transform management
+    void SetLocalTransform(String^ nodeName,
+        System::Numerics::Vector3 position,
+        System::Numerics::Quaternion rotation,
+        System::Numerics::Vector3 scale);
+
+    // Geometry management
+    void CreateBasicMesh(String^ nodeName, String^ meshType);
+
+  private:
+    Oxygen::Editor::EngineInterface::EngineContext^ context_;
   };
 
 } // namespace Oxygen::Interop::World
