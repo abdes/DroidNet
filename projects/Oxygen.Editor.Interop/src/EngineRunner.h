@@ -10,10 +10,10 @@
 #include <memory>
 
 #include "Config.h"
-#include "EditorModule/SurfaceRegistry.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
 #include "UiThreadDispatcher.h"
+#include "EditorModule/SurfaceRegistry.h"
 
 namespace oxygen::graphics {
 
