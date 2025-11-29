@@ -6,6 +6,8 @@
 
 #define WIN32_LEAN_AND_MEAN
 
+#include <memory>
+
 #include <msclr/marshal_cppstd.h>
 #include <msclr/auto_gcroot.h>
 
@@ -14,6 +16,7 @@
 
 #include "Base/LoguruWrapper.h"
 #include "World/OxygenWorld.h"
+#include "World/CommandFactory.h"
 #include "EditorModule/EditorModule.h"
 #include "EditorModule/NodeRegistry.h"
 #include "Commands/SceneCommands.h"
@@ -43,8 +46,18 @@ private:
     System::Action<System::Guid>^ onCreated_;
 };
 
-OxygenWorld::OxygenWorld(EngineContext^ context) : context_(context) {
+OxygenWorld::OxygenWorld(EngineContext^ context) : OxygenWorld(context, nullptr) {
+}
+
+OxygenWorld::OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory) : context_(context) {
     if (context == nullptr) throw gcnew System::ArgumentNullException("context");
+
+    if (commandFactory == nullptr) {
+        commandFactory_ = gcnew CommandFactory();
+    }
+    else {
+        commandFactory_ = commandFactory;
+    }
 }
 
 void OxygenWorld::CreateScene(String^ name) {
@@ -94,7 +107,7 @@ void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<Sy
     auto managedCallback = gcnew System::Action<Oxygen::Editor::Core::NodeHandle>(invoker, &CallbackInvoker::OnCreated);
 
     // Enqueue command that will create native node, register native handle under reg_key, then invoke managed callback
-    auto cmd = std::make_unique<CreateSceneNodeCommand>(native_name, native_parent, managedCallback, reg_key, initializeWorldAsRoot);
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSceneNode(native_name, native_parent, managedCallback, reg_key, initializeWorldAsRoot));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -112,8 +125,8 @@ void OxygenWorld::RemoveSceneNode(System::Guid nodeId) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    auto handle = opt.value();
-    auto cmd = std::make_unique<RemoveSceneNodeCommand>(handle);
+    const auto& handle = opt.value();
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateRemoveSceneNode(handle));
     editor_module->get().Enqueue(std::move(cmd));
 
     // Best-effort unregister
@@ -134,9 +147,9 @@ void OxygenWorld::RenameSceneNode(System::Guid nodeId, String^ newName) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    auto handle = opt.value();
+    const auto &handle = opt.value();
     auto native_name = msclr::interop::marshal_as<std::string>(newName);
-    auto cmd = std::make_unique<RenameSceneNodeCommand>(handle, native_name);
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateRenameSceneNode(handle, native_name));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -158,13 +171,13 @@ void OxygenWorld::SetLocalTransform(System::Guid nodeId,
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    auto nodeHandle = opt.value();
+    const auto &nodeHandle = opt.value();
 
     glm::vec3 glm_pos(position.X, position.Y, position.Z);
     glm::quat glm_rot(rotation.W, rotation.X, rotation.Y, rotation.Z);
     glm::vec3 glm_scale(scale.X, scale.Y, scale.Z);
 
-    auto cmd = std::make_unique<SetLocalTransformCommand>(nodeHandle, glm_pos, glm_rot, glm_scale);
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSetLocalTransform(nodeHandle, glm_pos, glm_rot, glm_scale));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -182,9 +195,9 @@ void OxygenWorld::CreateBasicMesh(System::Guid nodeId, String^ meshType) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    auto handle = opt.value();
+    const auto &handle = opt.value();
     auto native_mesh_type = msclr::interop::marshal_as<std::string>(meshType);
-    auto cmd = std::make_unique<CreateBasicMeshCommand>(handle, native_mesh_type);
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateBasicMesh(handle, native_mesh_type));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -202,8 +215,8 @@ void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    auto handle = opt.value();
-    auto cmd = std::make_unique<SetVisibilityCommand>(handle, visible);
+    const auto &handle = opt.value();
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSetVisibility(handle, visible));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -219,7 +232,7 @@ void OxygenWorld::ReparentSceneNode(System::Guid child, Nullable<System::Guid> p
     for (int i = 0; i < 16; ++i) childKey[i] = cb[i];
     auto childOpt = NodeRegistry::Lookup(childKey);
     if (!childOpt.has_value()) return;
-    auto childHandle = childOpt.value();
+    const auto &childHandle = childOpt.value();
 
     oxygen::scene::NodeHandle parentHandle;
     if (parent.HasValue) {
@@ -231,7 +244,7 @@ void OxygenWorld::ReparentSceneNode(System::Guid child, Nullable<System::Guid> p
         parentHandle = popt.value();
     }
 
-    auto cmd = std::make_unique<ReparentSceneNodeCommand>(childHandle, parentHandle, preserveWorldTransform);
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateReparentSceneNode(childHandle, parentHandle, preserveWorldTransform));
     editor_module->get().Enqueue(std::move(cmd));
 }
 
@@ -255,7 +268,7 @@ void OxygenWorld::UpdateTransformsForNodes(array<System::Guid>^ nodes) {
     }
 
     if (native_nodes.empty()) return;
-    auto cmd = std::make_unique<UpdateTransformsForNodesCommand>(std::move(native_nodes));
+    auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateUpdateTransformsForNodes(std::move(native_nodes)));
     editor_module->get().Enqueue(std::move(cmd));
 }
 

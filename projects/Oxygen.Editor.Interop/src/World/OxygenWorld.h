@@ -9,6 +9,7 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "EngineContext.h"
+#include "World/ICommandFactory.h"
 
 using namespace System;
 using namespace System::Numerics;
@@ -22,6 +23,7 @@ namespace Oxygen::Interop::World {
     public ref class OxygenWorld {
     public:
         OxygenWorld(EngineContext^ context);
+        OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory);
 
         // Scene management
         // Scenes are identified by name on the native engine side; keep CreateScene(String) as before.
@@ -56,6 +58,7 @@ namespace Oxygen::Interop::World {
 
     private:
         EngineContext^ context_;
+        ICommandFactory^ commandFactory_;
     };
 
 } // namespace Oxygen::Interop::World

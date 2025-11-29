@@ -387,7 +387,7 @@ namespace oxygen::interop::module {
       {
         auto surfaces = context.GetSurfaces();
         if (!surfaces.empty() && surfaces.front()) {
-          auto surface = surfaces.front();
+          auto &surface = surfaces.front();
           // Use the dedicated editor camera for the CameraView so the
           // editor rendering is independent of any scene cameras.
           context.AddView(std::make_shared<oxygen::renderer::CameraView>(
@@ -629,7 +629,7 @@ namespace oxygen::interop::module {
 
     const auto surface_iter = snapshot.begin();
     for (const auto& p : snapshot) {
-      auto surface = p.second;
+      const auto &surface = p.second;
       if (!surface) {
         continue;
       }

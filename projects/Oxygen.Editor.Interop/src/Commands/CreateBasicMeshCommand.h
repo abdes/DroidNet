@@ -14,6 +14,10 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/MaterialAsset.h>
+
 #include "EditorModule/EditorCommand.h"
 
 namespace oxygen::interop::module::commands {
@@ -83,9 +87,9 @@ public:
 
     // Build mesh
     auto &[vertices, indices] = mesh_data.value();
-    auto mesh_builder =
-        oxygen::data::MeshBuilder(0, type).WithVertices(vertices).WithIndices(
-            indices);
+    auto &mesh_builder = oxygen::data::MeshBuilder(0, type)
+      .WithVertices(vertices)
+      .WithIndices(indices);
 
     oxygen::data::pak::MeshViewDesc view_desc{};
     view_desc.first_vertex = 0;
@@ -93,10 +97,11 @@ public:
     view_desc.first_index = 0;
     view_desc.index_count = static_cast<uint32_t>(indices.size());
 
-    auto mesh = mesh_builder.BeginSubMesh("default", material)
-                    .WithMeshView(view_desc)
-                    .EndSubMesh()
-                    .Build();
+    auto mesh = mesh_builder
+      .BeginSubMesh("default", material)
+      .WithMeshView(view_desc)
+      .EndSubMesh()
+      .Build();
 
     // Create GeometryAsset
     oxygen::data::pak::GeometryAssetDesc geo_desc{};
