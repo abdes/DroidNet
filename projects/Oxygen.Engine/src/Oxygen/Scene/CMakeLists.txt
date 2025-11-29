@@ -10,7 +10,15 @@
 
 asap_module_declare(
   MODULE_NAME "Oxygen.Scene"
-  DESCRIPTION "Oxygen scene management subsystem"
+  DESCRIPTION
+    [=[
+The Oxygen Scene module implements a scene-graph (core Scene and SceneNode
+types) with transform and renderable components, node factories, reparenting
+and flag handling; it provides traversal and query systems (sync/async, batch),
+camera projections (orthographic/perspective), light/renderable utilities,
+pretty-printing/string converters, and comprehensive tests and docs to support
+rendering and editor workflows.
+]=]
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -47,66 +55,80 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
+set(
+  OXYGEN_SCENE_HEADERS
+  "Camera/Orthographic.cpp"
+  "Camera/Perspective.cpp"
+  "Detail/GraphData.h"
+  "Detail/NodeData.h"
+  "Detail/PathMatcher.h"
+  "Detail/PathParser.cpp"
+  "Detail/PathParser.h"
+  "Detail/RenderableComponent.cpp"
+  "Detail/RenderableComponent.h"
+  "Detail/RenderablePolicies.cpp"
+  "Detail/Scene_safecall_impl.cpp"
+  "Detail/Scene_safecall_impl.h"
+  "Detail/StringConverters.cpp"
+  "Detail/TransformComponent.cpp"
+  "Scene_node_factory.cpp"
+  "Scene_reparent.cpp"
+  "Scene.cpp"
+  "SceneFlags.cpp"
+  "SceneNode_Transform.cpp"
+  "SceneNode_Renderable.cpp"
+  "SceneNode.cpp"
+  "SceneNodeImpl.cpp"
+  "ScenePrettyPrinter.cpp"
+  "SceneQuery.cpp"
+  "SceneQueryBatch.cpp"
+)
+set(
+  OXYGEN_SCENE_PRIVATE_SOURCES
+  "Camera/Orthographic.cpp"
+  "Camera/Perspective.cpp"
+  "Detail/GraphData.h"
+  "Detail/NodeData.h"
+  "Detail/PathMatcher.h"
+  "Detail/PathParser.cpp"
+  "Detail/PathParser.h"
+  "Detail/RenderableComponent.cpp"
+  "Detail/RenderableComponent.h"
+  "Detail/RenderablePolicies.cpp"
+  "Detail/Scene_safecall_impl.cpp"
+  "Detail/Scene_safecall_impl.h"
+  "Detail/StringConverters.cpp"
+  "Detail/TransformComponent.cpp"
+  "Scene_node_factory.cpp"
+  "Scene_reparent.cpp"
+  "Scene.cpp"
+  "SceneFlags.cpp"
+  "SceneNode_Transform.cpp"
+  "SceneNode_Renderable.cpp"
+  "SceneNode.cpp"
+  "SceneNodeImpl.cpp"
+  "ScenePrettyPrinter.cpp"
+  "SceneQuery.cpp"
+  "SceneQueryBatch.cpp"
+)
+
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
-    "Camera/Orthographic.cpp"
-    "Camera/Perspective.cpp"
-    "Detail/GraphData.h"
-    "Detail/NodeData.h"
-    "Detail/PathMatcher.h"
-    "Detail/PathParser.cpp"
-    "Detail/PathParser.h"
-    "Detail/RenderableComponent.cpp"
-    "Detail/RenderableComponent.h"
-    "Detail/RenderablePolicies.cpp"
-    "Detail/Scene_safecall_impl.cpp"
-    "Detail/Scene_safecall_impl.h"
-    "Detail/StringConverters.cpp"
-    "Detail/TransformComponent.cpp"
-    "Detail/TransformComponent.h"
-    "Scene_node_factory.cpp"
-    "Scene_reparent.cpp"
-    "Scene.cpp"
-    "SceneFlags.cpp"
-    "SceneNode_Transform.cpp"
-    "SceneNode_Renderable.cpp"
-    "SceneNode.cpp"
-    "SceneNodeImpl.cpp"
-    "ScenePrettyPrinter.cpp"
-    "SceneQuery.cpp"
-    "SceneQueryBatch.cpp"
+    ${OXYGEN_SCENE_PRIVATE_SOURCES}
+    ${OXYGEN_SCENE_HEADERS}
   PUBLIC
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES
-      "api_export.h"
-      "Camera/Orthographic.h"
-      "Camera/Perspective.h"
-      "Camera/ProjectionConvention.h"
-      "Scene.h"
-      "SceneFlags.h"
-      "SceneNode.h"
-      "SceneNodeImpl.h"
-      "ScenePrettyPrinter.h"
-      "SceneQuery.h"
-      "SceneTraversal.h"
-      "SceneTraversalAsync.h"
-      "SceneTraversalBase.h"
-      "Types/ActiveMesh.h"
-      "Types/Flags.h"
-      "Types/NodeHandle.h"
-      "Types/RenderablePolicies.h"
-      "Types/SceneFlagEnum.h"
-      "Types/Strong.h"
-      "Types/Traversal.h"
+    FILES ${OXYGEN_SCENE_HEADERS}
 )
+
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 target_compile_options(${META_MODULE_TARGET} PUBLIC ${OXYGEN_COMMON_CXX_FLAGS})
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PRIVATE
-    GLM_ENABLE_EXPERIMENTAL
     $<$<PLATFORM_ID:Windows>:WIN32_LEAN_AND_MEAN>
     $<$<PLATFORM_ID:Windows>:NOMINMAX>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_SCN_STATIC>
