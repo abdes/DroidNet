@@ -6,7 +6,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.EngineInterface;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.Interop.Tests;
 

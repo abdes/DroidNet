@@ -16,16 +16,18 @@
 // and we can't isolate that particular function:
 // 'asio::detail::winsock_init_base::throw_on_error'
 #pragma warning(push)
-#pragma warning(disable:4793)
+#pragma warning(disable : 4793)
 #include <Oxygen/Platform/Platform.h>
 #pragma warning(pop)
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
-  public ref class EngineContext {
+  public
+  ref class EngineContext {
   private:
     using NativeEngineContext = oxygen::engine::interop::EngineContext;
     std::shared_ptr<NativeEngineContext>* native_ctx_;
+
   public:
     EngineContext(std::shared_ptr<NativeEngineContext> ctx)
       : native_ctx_(nullptr) {
@@ -36,18 +38,15 @@ namespace Oxygen::Editor::EngineInterface {
 
   public:
     // Copy-like constructor (managed semantic “copy” = share underlying native)
-    EngineContext(const EngineContext% other)
-      : native_ctx_(nullptr)
-    {
+    EngineContext(const EngineContext% other) : native_ctx_(nullptr) {
       if (other.native_ctx_ != nullptr) {
-        native_ctx_ = new std::shared_ptr<NativeEngineContext>(*other.native_ctx_);
+        native_ctx_ =
+          new std::shared_ptr<NativeEngineContext>(*other.native_ctx_);
       }
     }
 
     // Destructor (deterministic)
-    ~EngineContext() {
-      this->!EngineContext();
-    }
+    ~EngineContext() { this->!EngineContext(); }
 
     // Finalizer (fallback)
     !EngineContext() {
@@ -75,7 +74,6 @@ namespace Oxygen::Editor::EngineInterface {
     NativeEngineContext* NativePtr() {
       return (native_ctx_ && native_ctx_->get()) ? native_ctx_->get() : nullptr;
     }
-
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

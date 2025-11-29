@@ -23,6 +23,7 @@ using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.Core;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -249,10 +250,10 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
 
         // Sync scene with the engine
-        this.SyncSceneWithEngine(scene);
+        await this.SyncSceneWithEngineAsync(scene).ConfigureAwait(true);
     }
 
-    private void SyncSceneWithEngine(Scene scene)
+    private async Task SyncSceneWithEngineAsync(Scene scene)
     {
         var world = this.engineService.World;
         if (world is null)
@@ -260,6 +261,7 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
             this.logger.LogWarning("OxygenWorld is not available; skipping scene sync");
             return;
         }
+
         // Diagnostic: log transforms from the managed Scene model to verify
         // that hydratation produced the expected values before we call into
         // the native engine. This helps detect mismatches between the on-disk
@@ -275,113 +277,178 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         {
             this.logger.LogWarning(ex, "Failed to dump scene transforms for debug");
         }
+
         try
         {
             // Create (or recreate) the scene in the engine
             world.CreateScene(scene.Name);
             this.logger.LogInformation("Created scene '{SceneName}' in engine", scene.Name);
 
-            // Recursively create all root nodes and attach geometry/materials
-            foreach (var node in scene.RootNodes)
+            // Phase 1: create all nodes without parenting and collect handles
+            var createTasks = new List<Task<bool>>();
+
+            void EnqueueCreateRecursive(SceneNode node)
             {
-                this.CreateEngineNode(world, node, parentName: null);
+                var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                createTasks.Add(tcs.Task);
+
+                // Enqueue creation with no parent so we obtain a stable handle
+                // and initialize the node's world matrix as root to ensure the
+                // engine's cached world matrix is valid if anything reads it
+                // before the transform propagation step.
+                world.CreateSceneNode(
+                    node.Name,
+                    node.Id,
+                    parentGuid: null,
+                    handle =>
+                    {
+                        try
+                        {
+                            node.IsActive = true;
+                            tcs.SetResult(true);
+                        }
+                        catch (Exception ex)
+                        {
+                            tcs.SetException(ex);
+                        }
+                    },
+                    initializeWorldAsRoot: true);
+
+                foreach (var child in node.Children)
+                {
+                    EnqueueCreateRecursive(child);
+                }
+            }
+
+            foreach (var root in scene.RootNodes)
+            {
+                EnqueueCreateRecursive(root);
+            }
+
+            // Await completion of all create operations without blocking the UI thread
+            await Task.WhenAll(createTasks).ConfigureAwait(true);
+
+            // Phase 2: resolve parent-child links deterministically and apply
+            // transforms/geometry now that all handles are available.
+            void ResolveAndApply(SceneNode node, Guid? parentGuid)
+            {
+                try
+                {
+                    if (!node.IsActive)
+                    {
+                        this.logger.LogError("Node '{NodeName}' creation was not successful", node.Name);
+                        scene.RootNodes.Remove(node);
+                    }
+                    else
+                    {
+                        // Reparent to the desired parent (or make root when parent is null)
+                        try
+                        {
+                            // Do not attempt to preserve world transform here —
+                            // nodes were created detached and their world-space
+                            // transform state may be stale. We'll apply the desired
+                            // local transform after reparenting.
+                            world.ReparentSceneNode(node.Id, parentGuid, preserveWorldTransform: false);
+                        }
+                        catch (Exception ex)
+                        {
+                            this.logger.LogError(ex, "Failed to reparent node '{NodeName}'", node.Name);
+                        }
+
+                        // Apply transform if present
+                        var transform = node.Components.OfType<Transform>().FirstOrDefault();
+                        if (transform is not null)
+                        {
+                            try
+                            {
+                                world.SetLocalTransform(
+                                    node.Id,
+                                    new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z),
+                                    new Quaternion(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W),
+                                    new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z));
+                            }
+                            catch (Exception ex)
+                            {
+                                this.logger.LogError(ex, "Failed to set transform for node '{NodeName}'", node.Name);
+                            }
+                        }
+
+                        // Attach geometry if present
+                        var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
+                        if (geometryComp is not null)
+                        {
+                            try
+                            {
+                                var uri = geometryComp.Geometry.Uri?.ToString();
+                                if (!string.IsNullOrEmpty(uri))
+                                {
+                                    var meshType = uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+                                    if (!string.IsNullOrEmpty(meshType))
+                                    {
+                                        world.CreateBasicMesh(node.Id, meshType);
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                this.logger.LogError(ex, "Failed to attach geometry for node '{NodeName}'", node.Name);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    this.logger.LogError(ex, "Error while resolving node '{NodeName}'", node.Name);
+                }
+
+                foreach (var child in node.Children)
+                {
+                    ResolveAndApply(child, node.Id);
+                }
+            }
+
+            foreach (var root in scene.RootNodes)
+            {
+                ResolveAndApply(root, parentGuid: null);
+            }
+
+            // After applying parenting/transforms, request a targeted transform
+            // propagation for all created root nodes so the engine's cached
+            // world matrices are up-to-date before any renderer-side reads.
+            try
+            {
+                var handles = new List<Guid>();
+                void CollectChildren(SceneNode n)
+                {
+                    if (n.IsActive)
+                    {
+                        handles.Add(n.Id);
+                    }
+
+                    foreach (var c in n.Children)
+                    {
+                        CollectChildren(c);
+                    }
+                }
+
+                foreach (var root in scene.RootNodes)
+                {
+                    CollectChildren(root);
+                }
+
+                if (handles.Count > 0)
+                {
+                    world.UpdateTransformsForNodes(handles.ToArray());
+                }
+            }
+            catch (Exception ex)
+            {
+                this.logger.LogWarning(ex, "Failed to request targeted transform propagation");
             }
         }
         catch (Exception ex)
         {
             this.logger.LogError(ex, "Failed to sync scene '{SceneName}' with engine", scene.Name);
-        }
-    }
-
-    private void CreateEngineNode(Oxygen.Interop.World.OxygenWorld world, SceneNode node, string? parentName)
-    {
-        try
-        {
-            // Create the node in the engine
-            world.CreateSceneNode(node.Name, parentName);
-            this.logger.LogDebug("Created scene node '{NodeName}' in engine (parent: {ParentName})",
-                node.Name, parentName ?? "root");
-
-            // Set transform if available (respect scene-provided values). Do nothing
-            // when no Transform component exists so engine placement remains unchanged
-            // or can be handled elsewhere.
-            var transform = node.Components.OfType<Transform>().FirstOrDefault();
-            if (transform is not null)
-            {
-                try
-                {
-                    this.logger.LogInformation("SyncEngine: node='{NodeName}' pos=({X:0.00},{Y:0.00},{Z:0.00}) scale=({SX:0.00},{SY:0.00},{SZ:0.00}) rot=({RX:0.00},{RY:0.00},{RZ:0.00},{RW:0.00})",
-                        node.Name,
-                        transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z,
-                        transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z,
-                        transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W);
-
-                    world.SetLocalTransform(
-                        node.Name,
-                        new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z),
-                        new Quaternion(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W),
-                        new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z));
-
-                    this.logger.LogDebug("Set transform for scene node '{NodeName}'", node.Name);
-                }
-                catch (Exception ex)
-                {
-                    this.logger.LogError(ex, "Failed to set transform for node '{NodeName}'", node.Name);
-                }
-            }
-
-            // Attach geometry if the node has a GeometryComponent with a resolved or unresolved URI.
-            var geometryComp = node.Components.OfType<GeometryComponent>().FirstOrDefault();
-            if (geometryComp is not null)
-            {
-                try
-                {
-                    var uri = geometryComp.Geometry.Uri?.ToString();
-                    if (!string.IsNullOrEmpty(uri))
-                    {
-                        // Expect URIs like: asset://Generated/BasicShapes/Sphere
-                        // Extract last segment as mesh type (e.g. Sphere, Cube, Plane)
-                        var meshType = uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-                        if (!string.IsNullOrEmpty(meshType))
-                        {
-                            this.logger.LogDebug("Attaching generated mesh '{MeshType}' to node '{NodeName}' (uri='{Uri}')", meshType, node.Name, uri);
-                            world.CreateBasicMesh(node.Name, meshType);
-                            this.logger.LogInformation("Attached mesh '{MeshType}' to node '{NodeName}'", meshType, node.Name);
-                        }
-                        else
-                        {
-                            this.logger.LogDebug("Geometry URI for node '{NodeName}' did not contain a mesh type: '{Uri}'", node.Name, uri);
-                        }
-                    }
-                    else
-                    {
-                        this.logger.LogDebug("GeometryComponent on node '{NodeName}' has no Uri; skipping mesh attach", node.Name);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    this.logger.LogError(ex, "Failed to attach geometry for node '{NodeName}'", node.Name);
-                }
-            }
-
-            // Material attachments: currently the interop exposes only CreateBasicMesh
-            // which creates a default material for generated meshes. If a material
-            // component exists we log it for future handling by the interop.
-            var materialComp = node.Components.FirstOrDefault(c => string.Equals(c.GetType().Name, "MaterialComponent", StringComparison.Ordinal));
-            if (materialComp is not null)
-            {
-                this.logger.LogDebug("Node '{NodeName}' contains a MaterialComponent; material attachment is not implemented via interop yet", node.Name);
-            }
-
-            // Recursively create children
-            foreach (var child in node.Children)
-            {
-                this.CreateEngineNode(world, child, node.Name);
-            }
-        }
-        catch (Exception ex)
-        {
-            this.logger.LogError(ex, "Failed to create engine node '{NodeName}'", node.Name);
         }
     }
 
@@ -528,14 +595,28 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         {
             try
             {
-                world.CreateSceneNode(entity.Name, parentName: null);
+                // Create the node with callback to receive handle
+                var tcs = new TaskCompletionSource<bool>();
+                world.CreateSceneNode(
+                    entity.Name,
+                    entity.Id,
+                    parentGuid: null,
+                    handle =>
+                    {
+                        entity.IsActive = true;
+                        tcs.SetResult(true);
+                    },
+                    initializeWorldAsRoot: true);
+
+                // Wait for handle
+                var nodeHandle = tcs.Task.Result;
 
                 // Set initial transform if available
                 var transform = entity.Components.OfType<Transform>().FirstOrDefault();
                 if (transform is not null)
                 {
                     world.SetLocalTransform(
-                        entity.Name,
+                        entity.Id,
                         new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z),
                         new Quaternion(transform.LocalRotation.X, transform.LocalRotation.Y, transform.LocalRotation.Z, transform.LocalRotation.W),
                         new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z));
@@ -571,8 +652,15 @@ public sealed partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisp
         {
             try
             {
-                world.RemoveSceneNode(entity.Name);
-                this.logger.LogDebug("Removed node '{NodeName}' from engine", entity.Name);
+                if (entity.IsActive)
+                {
+                    world.RemoveSceneNode(entity.Id);
+                    this.logger.LogDebug("Removed node '{NodeName}' from engine", entity.Name);
+                }
+                else
+                {
+                    this.logger.LogWarning("Cannot remove node '{NodeName}' from engine: no handle available", entity.Name);
+                }
             }
             catch (Exception ex)
             {

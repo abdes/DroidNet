@@ -9,42 +9,86 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="OxygenWorld.cpp" />
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
-    <ClCompile Include="Unmanaged\EditorModule.cpp">
-      <Filter>Unmanaged</Filter>
-    </ClCompile>
-    <ClCompile Include="Unmanaged\RenderGraph.cpp">
-      <Filter>Unmanaged</Filter>
-    </ClCompile>
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
+    <ClCompile Include="EditorModule\EditorModule.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\NodeRegistry.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\RenderGraph.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="World\OxygenWorld.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="OxygenWorld.h" />
     <ClInclude Include="Base\LoguruWrapper.h">
       <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SceneCommands.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\CreateSceneNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\RemoveSceneNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\RenameSceneNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetLocalTransformCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\CreateBasicMeshCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetVisibilityCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ReparentSceneNodeCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\UpdateTransformsForNodesCommand.h">
+      <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="Config.h" />
-    <ClInclude Include="Unmanaged\SurfaceRegistry.h">
-      <Filter>Unmanaged</Filter>
-    </ClInclude>
-    <ClInclude Include="Unmanaged\EditorModule.h">
-      <Filter>Unmanaged</Filter>
-    </ClInclude>
-    <ClInclude Include="Unmanaged\RenderGraph.h">
-      <Filter>Unmanaged</Filter>
-    </ClInclude>
     <ClInclude Include="RenderThreadContext.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
+    <ClInclude Include="EditorModule\EditorModule.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorCommand.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\NodeRegistry.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\RenderGraph.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="World\OxygenWorld.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\SurfaceRegistry.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ThreadSafeQueue.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Filter Include="Unmanaged">
+    <Filter Include="EditorModule">
       <UniqueIdentifier>{d9b7b4f4-9a1c-4d2c-96ae-123456789abc}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
@@ -54,6 +98,9 @@
     </Filter>
     <Filter Include="Base">
       <UniqueIdentifier>{3187e374-ea51-469d-8e36-92d80e02fc13}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Commands">
+      <UniqueIdentifier>{8a9b2c3d-4e5f-6071-8293-a4b5c6d7e8f9}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
 </Project>

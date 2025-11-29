@@ -6,7 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.EngineInterface;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.Interop.Tests;
 

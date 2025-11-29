@@ -19,7 +19,7 @@ namespace System::Threading {
   ref class SendOrPostCallback;
 } // namespace System::Threading
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   /// <summary>
   ///   Captures and enforces access to the UI thread <see
@@ -125,4 +125,4 @@ namespace Oxygen::Editor::EngineInterface {
     int captured_thread_id_;
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop

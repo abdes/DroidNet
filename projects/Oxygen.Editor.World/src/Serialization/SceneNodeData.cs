@@ -11,7 +11,7 @@ public record SceneNodeData : GameObjectData
 {
     /// <summary>
     /// Gets or initializes the list of components (including Transform).
-    /// Transform is represented by a <see cref="TransformComponentData"/> entry.
+    /// Transform is represented by a <see cref="TransformData"/> entry.
     /// </summary>
     public IList<ComponentData> Components { get; init; } = [];
 

@@ -19,7 +19,7 @@
 
 #include <Oxygen/Graphics/Common/Surface.h>
 
-namespace Oxygen::Editor::EngineInterface {
+namespace oxygen::interop::module {
 
   //! Thread-safe registry that stores and manages shared ownership of
   //! `oxygen::graphics::Surface` instances keyed by a 16-byte `GuidKey`. The
@@ -68,7 +68,6 @@ namespace Oxygen::Editor::EngineInterface {
     SurfaceRegistry(SurfaceRegistry&&) noexcept = delete;
     SurfaceRegistry& operator=(SurfaceRegistry&&) noexcept = delete;
 
-
     //! Queue a surface for registration during the next frame.
     /*!
      The surface is added to a pending-registrations list which the engine
@@ -109,8 +108,11 @@ namespace Oxygen::Editor::EngineInterface {
       processing pending registrations; external callers should use
       the public RegisterSurface(...) overload to stage a registration.
     */
-    auto CommitRegistration(GuidKey key, std::shared_ptr<oxygen::graphics::Surface> surface) -> void {
-      if (!surface) return;
+    auto CommitRegistration(GuidKey key,
+      std::shared_ptr<oxygen::graphics::Surface> surface)
+      -> void {
+      if (!surface)
+        return;
       std::scoped_lock lock(mutex_);
       entries_[key] = std::move(surface);
     }
@@ -218,7 +220,6 @@ namespace Oxygen::Editor::EngineInterface {
       return result;
     }
 
-
     //! Register a callback to be invoked when the requested surface has been
     //! processed for resize on the engine thread. Multiple callbacks are
     //! allowed; they will be invoked and cleared when the resize happens.
@@ -279,6 +280,6 @@ namespace Oxygen::Editor::EngineInterface {
       resize_callbacks_;
   };
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)

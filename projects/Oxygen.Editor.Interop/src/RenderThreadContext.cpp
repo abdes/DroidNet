@@ -11,16 +11,13 @@
 using namespace System;
 using namespace System::Threading;
 
-namespace Oxygen::Editor::EngineInterface {
+namespace Oxygen::Interop {
 
   RenderThreadContext::RenderThreadContext()
-    : thread_(nullptr)
-    , gate_(gcnew Object())
-  {
+    : thread_(nullptr), gate_(gcnew Object()) {
   }
 
-  bool RenderThreadContext::IsRunning::get()
-  {
+  bool RenderThreadContext::IsRunning::get() {
     Monitor::Enter(gate_);
     try {
       return thread_ != nullptr && thread_->IsAlive;
@@ -30,8 +27,7 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
-  Thread^ RenderThreadContext::ThreadHandle::get()
-  {
+  Thread^ RenderThreadContext::ThreadHandle::get() {
     Monitor::Enter(gate_);
     try {
       return thread_;
@@ -42,8 +38,7 @@ namespace Oxygen::Editor::EngineInterface {
   }
 
   void RenderThreadContext::Start(ParameterizedThreadStart^ entryPoint,
-    Object^ state, String^ threadName)
-  {
+    Object^ state, String^ threadName) {
     if (entryPoint == nullptr) {
       throw gcnew ArgumentNullException("entryPoint");
     }
@@ -51,7 +46,8 @@ namespace Oxygen::Editor::EngineInterface {
     Monitor::Enter(gate_);
     try {
       if (thread_ != nullptr && thread_->IsAlive) {
-        throw gcnew InvalidOperationException("The engine render thread is already running.");
+        throw gcnew InvalidOperationException(
+          "The engine render thread is already running.");
       }
 
       thread_ = gcnew Thread(entryPoint);
@@ -66,8 +62,7 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
-  void RenderThreadContext::Clear()
-  {
+  void RenderThreadContext::Clear() {
     Monitor::Enter(gate_);
     try {
       thread_ = nullptr;
@@ -77,8 +72,7 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
-  bool RenderThreadContext::IsRenderThread()
-  {
+  bool RenderThreadContext::IsRenderThread() {
     Monitor::Enter(gate_);
     try {
       return thread_ != nullptr && Thread::CurrentThread == thread_;
@@ -88,8 +82,7 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
-  void RenderThreadContext::Join()
-  {
+  void RenderThreadContext::Join() {
     Thread^ thread = nullptr;
 
     Monitor::Enter(gate_);
@@ -110,4 +103,4 @@ namespace Oxygen::Editor::EngineInterface {
     }
   }
 
-} // namespace Oxygen::Editor::EngineInterface
+} // namespace Oxygen::Interop
