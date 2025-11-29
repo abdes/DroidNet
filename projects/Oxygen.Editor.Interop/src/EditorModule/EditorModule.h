@@ -110,8 +110,6 @@ namespace oxygen::interop::module {
       oxygen::engine::FrameContext& context,
       const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& surfaces)
       -> void;
-    // Helper to find a node by name
-    auto FindNodeByName(std::string_view name) -> oxygen::scene::SceneNode;
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;

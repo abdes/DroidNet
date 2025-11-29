@@ -87,17 +87,15 @@ public:
 
     // Build mesh
     auto &[vertices, indices] = mesh_data.value();
-    auto &mesh_builder = oxygen::data::MeshBuilder(0, type)
-      .WithVertices(vertices)
-      .WithIndices(indices);
-
     oxygen::data::pak::MeshViewDesc view_desc{};
     view_desc.first_vertex = 0;
     view_desc.vertex_count = static_cast<uint32_t>(vertices.size());
     view_desc.first_index = 0;
     view_desc.index_count = static_cast<uint32_t>(indices.size());
 
-    auto mesh = mesh_builder
+    auto mesh = oxygen::data::MeshBuilder(0, type)
+      .WithVertices(vertices)
+      .WithIndices(indices)
       .BeginSubMesh("default", material)
       .WithMeshView(view_desc)
       .EndSubMesh()

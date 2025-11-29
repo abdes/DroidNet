@@ -282,35 +282,19 @@ namespace oxygen::interop::module {
       // This will allow us to show mulitple editor views (e.g. for multiple
       // viewports) if needed.
 
-      // Create and use a dedicated editor camera node (never modify scene
-      // cameras) Editor camera is created once and used for CameraView so scene
-      // cameras remain under author control.
-      auto scene_camera_node = this->FindNodeByName("MainCamera");
-      if (scene_camera_node.IsAlive()) {
-        auto sc_tf = scene_camera_node.GetTransform();
-        const auto sc_pos = sc_tf.GetLocalPosition().value_or(glm::vec3(0.0F));
-        DLOG_F(INFO,
-          "Scene camera 'MainCamera' present at ({:.2f},{:.2f},{:.2f})",
-          sc_pos.x, sc_pos.y, sc_pos.z);
-      }
 
-      auto editor_camera_node = this->FindNodeByName("EditorCamera");
-      bool editor_camera_created = false;
-      if (!editor_camera_node.IsAlive()) {
-        editor_camera_node = scene_->CreateNode(std::string("EditorCamera"));
+      auto editor_camera_node = scene_->CreateNode(std::string("EditorCamera"));
+      // Configure camera parameters and viewport for the editor camera
+      {
         LOG_F(INFO, "Created editor camera node 'EditorCamera' in scene");
         auto editor_cam = std::make_unique<oxygen::scene::PerspectiveCamera>(
           oxygen::scene::camera::ProjectionConvention::kD3D12);
         editor_camera_node.AttachCamera(std::move(editor_cam));
-        editor_camera_created = true;
         editor_camera_node.GetTransform().SetLocalPosition(
           glm::vec3(1.5F, 2.0F, 14.0F));
         editor_camera_node.GetTransform().SetLocalRotation(
           glm::quat(glm::vec3(glm::radians(-20.0F), 0.0F, 0.0F)));
-      }
 
-      // Configure camera parameters and viewport for the editor camera
-      {
         // FIXME: viewport settings and camera parameters should be per-surface
         // Use the first surface for viewport sizing if available
         float width = 1280.0f;
@@ -387,7 +371,7 @@ namespace oxygen::interop::module {
       {
         auto surfaces = context.GetSurfaces();
         if (!surfaces.empty() && surfaces.front()) {
-          auto &surface = surfaces.front();
+          auto& surface = surfaces.front();
           // Use the dedicated editor camera for the CameraView so the
           // editor rendering is independent of any scene cameras.
           context.AddView(std::make_shared<oxygen::renderer::CameraView>(
@@ -629,7 +613,7 @@ namespace oxygen::interop::module {
 
     const auto surface_iter = snapshot.begin();
     for (const auto& p : snapshot) {
-      const auto &surface = p.second;
+      const auto& surface = p.second;
       if (!surface) {
         continue;
       }
@@ -717,49 +701,6 @@ namespace oxygen::interop::module {
     }
 
     return any_created;
-  }
-
-  auto EditorModule::FindNodeByName(std::string_view name)
-    -> oxygen::scene::SceneNode {
-    if (!scene_) {
-      return oxygen::scene::SceneNode();
-    }
-
-    // Search through all root nodes and their children
-    auto root_nodes = scene_->GetRootNodes();
-    for (auto& root : root_nodes) {
-      if (root.GetName() == name) {
-        return root;
-      }
-
-      // Recursively search children
-      std::function<oxygen::scene::SceneNode(oxygen::scene::SceneNode&)>
-        search_children;
-      search_children =
-        [&](oxygen::scene::SceneNode& parent) -> oxygen::scene::SceneNode {
-        auto child_opt = parent.GetFirstChild();
-        while (child_opt.has_value() && child_opt->IsAlive()) {
-          if (child_opt->GetName() == name) {
-            return *child_opt;
-          }
-
-          auto result = search_children(*child_opt);
-          if (result.IsAlive()) {
-            return result;
-          }
-
-          child_opt = child_opt->GetNextSibling();
-        }
-        return oxygen::scene::SceneNode();
-        };
-
-      auto result = search_children(root);
-      if (result.IsAlive()) {
-        return result;
-      }
-    }
-
-    return oxygen::scene::SceneNode();
   }
 
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
