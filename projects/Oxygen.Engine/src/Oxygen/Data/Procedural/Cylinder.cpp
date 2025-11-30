@@ -55,15 +55,14 @@ auto oxygen::data::MakeCylinderMeshAsset(
   float half_height = height * 0.5f;
   // Side vertices
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
     glm::vec3 normal = { x, 0.0f, z };
     glm::vec3 tangent = { -z, 0.0f, x };
     glm::vec3 bitangent = { 0.0f, 1.0f, 0.0f };
     float u = static_cast<float>(i) / static_cast<float>(segments);
-    // Bottom
+    // Bottom (side)
     vertices.push_back(Vertex {
       .position = { x * radius, -half_height, z * radius },
       .normal = normal,
@@ -72,7 +71,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
     });
-    // Top
+    // Top (side)
     vertices.push_back(Vertex {
       .position = { x * radius, half_height, z * radius },
       .normal = normal,
@@ -81,6 +80,39 @@ auto oxygen::data::MakeCylinderMeshAsset(
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
     });
+  }
+
+  // --- Fix: Duplicate rim vertices for caps with correct normals ---
+  // This ensures cap triangles use only vertices with up/down normals,
+  // so shading is correct and not interpolated with side normals.
+  std::vector<uint32_t> bottom_cap_rim_indices;
+  std::vector<uint32_t> top_cap_rim_indices;
+  for (unsigned int i = 0; i < segments; ++i) {
+    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float x = std::cos(theta);
+    float z = std::sin(theta);
+    float u = (x + 1.0f) * 0.5f;
+    float v = (z + 1.0f) * 0.5f;
+    // Bottom cap rim vertex
+    vertices.push_back(Vertex {
+      .position = { x * radius, -half_height, z * radius },
+      .normal = { 0, -1, 0 }, // Downward normal for bottom cap
+      .texcoord = { u, v },
+      .tangent = { 1, 0, 0 },
+      .bitangent = { 0, 0, 1 },
+      .color = { 1, 1, 1, 1 },
+    });
+    bottom_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
+    // Top cap rim vertex
+    vertices.push_back(Vertex {
+      .position = { x * radius, half_height, z * radius },
+      .normal = { 0, 1, 0 }, // Upward normal for top cap
+      .texcoord = { u, v },
+      .tangent = { 1, 0, 0 },
+      .bitangent = { 0, 0, 1 },
+      .color = { 1, 1, 1, 1 },
+    });
+    top_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
   }
   // Side indices
   for (unsigned int i = 0; i < segments; ++i) {
@@ -96,7 +128,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
     indices.push_back(i3);
   }
   // Center vertices for caps
-  uint32_t base_index = static_cast<uint32_t>(vertices.size());
+  uint32_t bottom_center_index = static_cast<uint32_t>(vertices.size());
   vertices.push_back(Vertex {
     .position = { 0, -half_height, 0 },
     .normal = { 0, -1, 0 },
@@ -105,6 +137,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
     .bitangent = { 0, 0, 1 },
     .color = { 1, 1, 1, 1 },
   }); // bottom center
+  uint32_t top_center_index = static_cast<uint32_t>(vertices.size());
   vertices.push_back(Vertex {
     .position = { 0, half_height, 0 },
     .normal = { 0, 1, 0 },
@@ -113,18 +146,20 @@ auto oxygen::data::MakeCylinderMeshAsset(
     .bitangent = { 0, 0, 1 },
     .color = { 1, 1, 1, 1 },
   }); // top center
-  // Bottom and top caps
+
+  // --- Fix: Use duplicated rim vertices for caps ---
+  // This ensures all cap triangles use only vertices with correct up/down normals.
   for (unsigned int i = 0; i < segments; ++i) {
     // Bottom cap
-    uint32_t v0 = i * 2;
-    uint32_t v1 = ((i + 1) % segments) * 2;
-    indices.push_back(base_index + 0);
+    uint32_t v0 = bottom_cap_rim_indices[i];
+    uint32_t v1 = bottom_cap_rim_indices[(i + 1) % segments];
+    indices.push_back(bottom_center_index);
     indices.push_back(v1);
     indices.push_back(v0);
     // Top cap
-    uint32_t v2 = i * 2 + 1;
-    uint32_t v3 = ((i + 1) % segments) * 2 + 1;
-    indices.push_back(base_index + 1);
+    uint32_t v2 = top_cap_rim_indices[i];
+    uint32_t v3 = top_cap_rim_indices[(i + 1) % segments];
+    indices.push_back(top_center_index);
     indices.push_back(v2);
     indices.push_back(v3);
   }

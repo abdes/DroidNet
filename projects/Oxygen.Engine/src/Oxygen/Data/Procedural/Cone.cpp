@@ -55,8 +55,7 @@ auto oxygen::data::MakeConeMeshAsset(
   glm::vec3 apex = { 0.0f, half_height, 0.0f };
   // Side vertices (base ring)
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float z = std::sin(theta);
     float u = static_cast<float>(i) / static_cast<float>(segments);
@@ -72,6 +71,27 @@ auto oxygen::data::MakeConeMeshAsset(
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
     });
+  }
+
+  // --- Fix: Duplicate rim vertices for base cap with correct normals ---
+  // This ensures base cap triangles use only vertices with downward normals,
+  // so shading is correct and not interpolated with side normals.
+  std::vector<uint32_t> base_cap_rim_indices;
+  for (unsigned int i = 0; i < segments; ++i) {
+    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float x = std::cos(theta);
+    float z = std::sin(theta);
+    float u = (x + 1.0f) * 0.5f;
+    float v = (z + 1.0f) * 0.5f;
+    vertices.push_back(Vertex {
+      .position = { x * radius, -half_height, z * radius },
+      .normal = { 0, -1, 0 }, // Downward normal for base cap
+      .texcoord = { u, v },
+      .tangent = { 1, 0, 0 },
+      .bitangent = { 0, 0, 1 },
+      .color = { 1, 1, 1, 1 },
+    });
+    base_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
   }
   // Apex vertex
   vertices.push_back(Vertex {
@@ -99,10 +119,14 @@ auto oxygen::data::MakeConeMeshAsset(
     .color = { 1, 1, 1, 1 },
   });
   uint32_t base_center = static_cast<uint32_t>(vertices.size() - 1);
-  // Base cap indices (CCW: i, i+1, center)
+
+  // --- Fix: Use duplicated rim vertices for base cap ---
+  // This ensures all base cap triangles use only vertices with correct downward normals.
   for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(i);
-    indices.push_back(i + 1);
+    uint32_t v0 = base_cap_rim_indices[i];
+    uint32_t v1 = base_cap_rim_indices[(i + 1) % segments];
+    indices.push_back(v0);
+    indices.push_back(v1);
     indices.push_back(base_center);
   }
 
