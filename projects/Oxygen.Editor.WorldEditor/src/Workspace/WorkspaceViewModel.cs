@@ -13,6 +13,7 @@ using Oxygen.Editor.WorldEditor.Output;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.SceneExplorer;
+using Oxygen.Editor.WorldEditor.Services;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
 
@@ -96,6 +97,9 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         // even if the router hasn't navigated to any editor yet.
         childContainer.Register<DocumentManager>(Reuse.Singleton);
         _ = childContainer.Resolve<DocumentManager>();
+
+        // Register scene-engine synchronization service
+        childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
