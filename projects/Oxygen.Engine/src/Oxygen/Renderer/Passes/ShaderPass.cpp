@@ -299,7 +299,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Set up rasterizer and blend state for standard color rendering
   constexpr RasterizerStateDesc raster_desc {
     .fill_mode = FillMode::kSolid,
-    .cull_mode = CullMode::kNone,
+    .cull_mode = CullMode::kBack,
     .front_counter_clockwise = true,
     .multisample_enable = false,
   };
