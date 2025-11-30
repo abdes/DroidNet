@@ -151,6 +151,8 @@ namespace oxygen::interop::module {
       }
       // Remove any cached framebuffers for the surface so we don't hold
       // references to backbuffers after the surface is destroyed.
+      // Also cleanup the camera associated with this surface.
+      CleanupSurfaceCamera(surface.get());
       surface_framebuffers_.erase(surface.get());
     }
   }
@@ -272,8 +274,8 @@ namespace oxygen::interop::module {
             "ProcessResizeRequests: surface reports {}x{}, backbuffer is {}x{}",
             surface_width, surface_height, bb_width, bb_height);
 
-          // Use backbuffer dimensions for camera aspect ratio (actual pixel dimensions)
-          EnsureEditorCamera(bb_width, bb_height);
+          // Use surface pointer to identify which camera to update
+          EnsureEditorCamera(surface.get(), bb_width, bb_height);
         }
       }
 
@@ -294,30 +296,55 @@ namespace oxygen::interop::module {
       });
 
     if (scene_) {
-      // TODO: Must have a different camera per surface being rendered to
-      // This will allow us to show mulitple editor views (e.g. for multiple
-      // viewports) if needed.
-
-      // Ensure editor camera exists with current surface dimensions
-      float width = 1280.0f;
-      float height = 720.0f;
+      // Iterate over ALL surfaces and create camera views for each with
+      // correct aspect ratios. This fixes the multi-panel layout issue where
+      // surfaces with different aspect ratios were all using the main panel's
+      // aspect ratio.
       auto surfaces = context.GetSurfaces();
-      if (!surfaces.empty() && surfaces.front()) {
-        auto& surface = surfaces.front();
+
+      for (const auto& surface : surfaces) {
+        if (!surface) {
+          continue;
+        }
+
+        // Get surface dimensions
+        float width = 1280.0f;
+        float height = 720.0f;
         auto back = surface->GetCurrentBackBuffer();
         if (back) {
           const auto& desc = back->GetDescriptor();
           width = static_cast<float>(desc.width);
           height = static_cast<float>(desc.height);
-          DLOG_F(INFO, "OnSceneMutation: using backbuffer dimensions {}x{}", width, height);
+          DLOG_F(INFO, "OnSceneMutation: surface ptr={} dimensions {}x{}",
+                 fmt::ptr(surface.get()), width, height);
         } else {
-          // Fallback to surface dimensions if no backbuffer yet
           width = static_cast<float>(surface->Width());
           height = static_cast<float>(surface->Height());
-          DLOG_F(INFO, "OnSceneMutation: using surface dimensions {}x{}", width, height);
+          DLOG_F(INFO, "OnSceneMutation: surface ptr={} using surface dimensions {}x{}",
+                 fmt::ptr(surface.get()), width, height);
+        }
+
+        // Ensure camera exists for this surface with correct aspect ratio
+        EnsureEditorCamera(surface.get(), width, height);
+
+        // Create camera view for this surface
+        auto it = surface_cameras_.find(surface.get());
+        if (it != surface_cameras_.end() && it->second.IsAlive()) {
+          context.AddView(std::make_shared<oxygen::renderer::CameraView>(
+            oxygen::renderer::CameraView::Params{
+              .camera_node = it->second,
+              .viewport = std::nullopt,
+              .scissor = std::nullopt,
+              .pixel_jitter = glm::vec2(0.0F, 0.0F),
+              .reverse_z = false,
+              .mirrored = false,
+            },
+            surface));
+          LOG_F(INFO,
+            "Editor Camera view created for surface (ptr={}) with dedicated camera.",
+            fmt::ptr(surface.get()));
         }
       }
-      EnsureEditorCamera(width, height);
 
       // TODO: delete debug diags once editor module is stable
       // Minimal diagnostic: avoid dereferencing scene internals in logs to
@@ -327,14 +354,18 @@ namespace oxygen::interop::module {
 
         // Diagnostic logging: camera and root-node transforms to check for
         // potential frustum clipping / placement issues.
-        if (editor_camera_node_.has_value() && editor_camera_node_->IsAlive()) {
-          auto cam_tf = editor_camera_node_->GetTransform();
-          const auto cam_pos =
-            cam_tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 0.0F));
-          DLOG_F(INFO,
-            "OnSceneMutation: editor camera node '{}' "
-            "local_pos=({:.2f},{:.2f},{:.2f})",
-            editor_camera_node_->GetName(), cam_pos.x, cam_pos.y, cam_pos.z);
+        // Log all surface cameras
+        for (const auto& cam_entry : surface_cameras_) {
+          if (cam_entry.second.IsAlive()) {
+            auto cam_tf = cam_entry.second.GetTransform();
+            const auto cam_pos =
+              cam_tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 0.0F));
+            DLOG_F(INFO,
+              "OnSceneMutation: editor camera node '{}' for surface ptr={} "
+              "local_pos=({:.2f},{:.2f},{:.2f})",
+              cam_entry.second.GetName(), fmt::ptr(cam_entry.first),
+              cam_pos.x, cam_pos.y, cam_pos.z);
+          }
         }
 
         try {
@@ -354,36 +385,6 @@ namespace oxygen::interop::module {
         catch (...) {
           DLOG_F(WARNING, "OnSceneMutation: failed to query root node transforms "
             "for diagnostics");
-        }
-      }
-
-      // FIXME: per-surface camera views should be created if multiple surfaces
-      // FIXME: for now engine clears views every frame. We rely on that behavior,
-      // but this may change in the future
-
-      // Add camera view to the frame context. Match example behavior by
-      // always creating a CameraView when a valid surface exists (the
-      // camera and viewport were configured above).
-      if (editor_camera_node_.has_value() && editor_camera_node_->IsAlive()) {
-        auto surfaces = context.GetSurfaces();
-        if (!surfaces.empty() && surfaces.front()) {
-          auto& surface = surfaces.front();
-          // Use the dedicated editor camera for the CameraView so the
-          // editor rendering is independent of any scene cameras.
-          context.AddView(std::make_shared<oxygen::renderer::CameraView>(
-            oxygen::renderer::CameraView::Params{
-                .camera_node = *editor_camera_node_,
-                .viewport = std::nullopt, // FIXME: per-surface viewport?
-                .scissor = std::nullopt,  // FIXME: per-surface scissor?
-                .pixel_jitter = glm::vec2(0.0F, 0.0F),
-                .reverse_z = false,
-                .mirrored = false,
-            },
-            surface));
-          LOG_F(INFO,
-            "Editor Camera view created and set in frame context for a "
-            "surface (ptr={}).",
-            fmt::ptr(surface.get()));
         }
       }
     }
@@ -699,46 +700,93 @@ namespace oxygen::interop::module {
     return any_created;
   }
 
-  void EditorModule::EnsureEditorCamera(float width, float height) {
-    if (!scene_) {
+
+  void EditorModule::EnsureEditorCamera(const oxygen::graphics::Surface* surface,
+                                       float width,
+                                       float height) {
+    if (!scene_ || !surface) {
       return;
     }
 
-    // Create editor camera if it doesn't exist or is no longer alive
-      if (!editor_camera_node_.has_value() || !editor_camera_node_->IsAlive()) {
-        editor_camera_node_ = scene_->CreateNode(std::string("EditorCamera"));
-        auto editor_cam = std::make_unique<oxygen::scene::PerspectiveCamera>(
-          oxygen::scene::camera::ProjectionConvention::kD3D12);
-        editor_camera_node_->AttachCamera(std::move(editor_cam));
-        float distance = 15.0F;
-        glm::vec3 position(0.0F, 0.0F, distance);
-        glm::vec3 target(0.0F, 0.0F, 0.0F);
-        glm::vec3 up(0.0F, 1.0F, 0.0F);
-        editor_camera_node_->GetTransform().SetLocalPosition(position);
-        glm::vec3 direction = glm::normalize(target - position);
-        glm::quat orientation = glm::quatLookAt(direction, up);
-        editor_camera_node_->GetTransform().SetLocalRotation(orientation);
-        LOG_F(INFO, "Created editor camera node 'EditorCamera' in scene");
+    // Check if camera exists for this surface
+    auto it = surface_cameras_.find(surface);
+    bool camera_exists = (it != surface_cameras_.end() && it->second.IsAlive());
+
+    // Create camera if it doesn't exist
+    if (!camera_exists) {
+      std::string camera_name = fmt::format("EditorCamera_{}",
+                                           fmt::ptr(surface));
+      auto camera_node = scene_->CreateNode(camera_name);
+      auto editor_cam = std::make_unique<oxygen::scene::PerspectiveCamera>(
+        oxygen::scene::camera::ProjectionConvention::kD3D12);
+      camera_node.AttachCamera(std::move(editor_cam));
+
+      // DIAGNOSTIC: Vary camera distance per surface to confirm each surface
+      // gets its own camera. Each camera will be at a different distance:
+      // 15, 20, 25, 30, etc. based on how many cameras already exist.
+      const float base_distance = 15.0F;
+      const float distance_offset = static_cast<float>(surface_cameras_.size()) * 5.0F;
+      const float distance = base_distance + distance_offset;
+
+      // Set initial camera position
+      glm::vec3 position(0.0F, 0.0F, distance);
+      glm::vec3 target(0.0F, 0.0F, 0.0F);
+      glm::vec3 up(0.0F, 1.0F, 0.0F);
+      camera_node.GetTransform().SetLocalPosition(position);
+      glm::vec3 direction = glm::normalize(target - position);
+      glm::quat orientation = glm::quatLookAt(direction, up);
+      camera_node.GetTransform().SetLocalRotation(orientation);
+
+      // Store the camera
+      surface_cameras_[surface] = std::move(camera_node);
+      LOG_F(INFO, "Created editor camera '{}' for surface ptr={} at distance={:.1f}",
+            camera_name, fmt::ptr(surface), distance);
+
+      it = surface_cameras_.find(surface);
     }
 
-    // Update camera aspect ratio and viewport based on surface dimensions
-    auto cam_ref =
-      editor_camera_node_->GetCameraAs<oxygen::scene::PerspectiveCamera>();
-    if (cam_ref) {
-      const float aspect = (width > 0.0f && height > 0.0f) ? (width / height) : 1.0f;
-      auto& cam = cam_ref->get();
-      cam.SetFieldOfView(glm::radians(60.0F));
-      cam.SetAspectRatio(aspect);
-      cam.SetNearPlane(0.1F);
-      cam.SetFarPlane(10000.0F);
-      cam.SetViewport(oxygen::ViewPort{ .top_left_x = 0.0f,
-                                       .top_left_y = 0.0f,
-                                       .width = width,
-                                       .height = height,
-                                       .min_depth = 0.0f,
-                                       .max_depth = 1.0f });
-      LOG_F(INFO, "Editor camera configured: width={:.1f} height={:.1f} aspect={:.3f}",
-        width, height, aspect);
+    // ALWAYS update camera aspect ratio and viewport, even if camera already exists.
+    // This is critical because surfaces are recycled by SurfaceRegistry - the same
+    // surface pointer can be reused for different viewports with different dimensions.
+    // Recalculating aspect ratio is cheap and ensures correctness.
+    if (it != surface_cameras_.end() && it->second.IsAlive()) {
+      auto cam_ref = it->second.GetCameraAs<oxygen::scene::PerspectiveCamera>();
+      if (cam_ref) {
+        const float aspect = (width > 0.0f && height > 0.0f) ? (width / height) : 1.0f;
+        auto& cam = cam_ref->get();
+        cam.SetFieldOfView(glm::radians(60.0F));
+        cam.SetAspectRatio(aspect);
+        cam.SetNearPlane(0.1F);
+        cam.SetFarPlane(10000.0F);
+        cam.SetViewport(oxygen::ViewPort{
+          .top_left_x = 0.0f,
+          .top_left_y = 0.0f,
+          .width = width,
+          .height = height,
+          .min_depth = 0.0f,
+          .max_depth = 1.0f
+        });
+        DLOG_F(2,
+          "Camera for surface ptr={} configured: {}x{} aspect={:.3f}",
+          fmt::ptr(surface), width, height, aspect);
+      }
+    }
+  }
+
+  void EditorModule::CleanupSurfaceCamera(const oxygen::graphics::Surface* surface) {
+    if (!surface) {
+      return;
+    }
+
+    auto it = surface_cameras_.find(surface);
+    if (it != surface_cameras_.end()) {
+      if (it->second.IsAlive()) {
+        // Detach camera component before destroying node
+        it->second.DetachCamera();
+        // Node will be cleaned up by scene when map entry is removed
+        LOG_F(INFO, "Cleaned up camera for surface ptr={}", fmt::ptr(surface));
+      }
+      surface_cameras_.erase(it);
     }
   }
 
