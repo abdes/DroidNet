@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.World.Serialization;
