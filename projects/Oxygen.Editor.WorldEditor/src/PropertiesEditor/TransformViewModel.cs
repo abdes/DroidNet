@@ -409,6 +409,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+                // Apply the user-entered value directly — the control validates inputs.
                 s.X = value;
                 transform.LocalScale = s;
             }
@@ -417,6 +418,8 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 .ToList();
 
             this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleX"));
+            // Reflect the raw user value back to the ViewModel — do not normalize here.
+            this.ScaleX = value;
         }
         catch (Exception ex)
         {
@@ -445,6 +448,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+                // Apply the user-entered value directly — the control validates inputs.
                 s.Y = value;
                 transform.LocalScale = s;
             }
@@ -453,6 +457,8 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 .ToList();
 
             this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleY"));
+            // Reflect the raw user value back to the ViewModel — do not normalize here.
+            this.ScaleY = value;
         }
         catch (Exception ex)
         {
@@ -481,6 +487,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+                // Apply the user-entered value directly — the control validates inputs.
                 s.Z = value;
                 transform.LocalScale = s;
             }
@@ -489,6 +496,8 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 .ToList();
 
             this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleZ"));
+            // Reflect the raw user value back to the ViewModel — do not normalize here.
+            this.ScaleZ = value;
         }
         catch (Exception ex)
         {
@@ -631,9 +640,24 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleXIsIndeterminate = true;
-            this.ScaleX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.X ?? 0
-                : 0;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            if (firstTransform is null)
+            {
+                this.ScaleX = 0;
+            }
+            else
+            {
+
+                var s = firstTransform.LocalScale;
+                var norm = TransformConverter.NormalizeScaleValue(s.X);
+                if (norm != s.X)
+                {
+                    s.X = norm;
+                    firstTransform.LocalScale = s; // update model to canonical non-zero value
+                }
+
+                this.ScaleX = s.X;
+            }
         }
 
         var mixedScaleY = MixedValues.GetMixedValue(items, e =>
@@ -650,9 +674,23 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleYIsIndeterminate = true;
-            this.ScaleY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.Y ?? 0
-                : 0;
+            var firstTransformY = items.FirstOrDefault() is { } firstY ? (firstY.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            if (firstTransformY is null)
+            {
+                this.ScaleY = 0;
+            }
+            else
+            {
+                var s = firstTransformY.LocalScale;
+                var norm = TransformConverter.NormalizeScaleValue(s.Y);
+                if (norm != s.Y)
+                {
+                    s.Y = norm;
+                    firstTransformY.LocalScale = s;
+                }
+
+                this.ScaleY = s.Y;
+            }
         }
 
         var mixedScaleZ = MixedValues.GetMixedValue(items, e =>
@@ -669,9 +707,23 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleZIsIndeterminate = true;
-            this.ScaleZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalScale.Z ?? 0
-                : 0;
+            var firstTransformZ = items.FirstOrDefault() is { } firstZ ? (firstZ.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            if (firstTransformZ is null)
+            {
+                this.ScaleZ = 0;
+            }
+            else
+            {
+                var s = firstTransformZ.LocalScale;
+                var norm = TransformConverter.NormalizeScaleValue(s.Z);
+                if (norm != s.Z)
+                {
+                    s.Z = norm;
+                    firstTransformZ.LocalScale = s;
+                }
+
+                this.ScaleZ = s.Z;
+            }
         }
     }
 
