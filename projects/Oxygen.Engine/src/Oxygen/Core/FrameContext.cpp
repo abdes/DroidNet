@@ -60,6 +60,14 @@ auto FrameContext::PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&
   const uint32_t next = (visible_snapshot_index_ + 1u) & 1u;
   auto& unified = snapshot_buffers_[static_cast<size_t>(next)];
 
+  // CreateUnifiedSnapshot expects the caller to hold the relevant mutexes
+  // to snapshot coordinator-owned state (staged module data, surfaces, and
+  // views). Acquire them here to guarantee consistent copies.
+  // Lock order must match the declaration order to avoid potential deadlocks.
+  std::unique_lock stage_lock(staged_module_mutex_);
+  std::unique_lock surfaces_lock(surfaces_mutex_);
+  std::unique_lock views_lock(views_mutex_);
+
   CreateUnifiedSnapshot(unified, version);
 
   // Publish: update visible index and version (engine-only writers)
@@ -400,10 +408,12 @@ auto FrameContext::PopulateGameStateSnapshot(
 {
   // Caller must hold views_mutex_ and surfaces_mutex_ when invoking this
   // function to guarantee consistent copies of coordinator-owned state.
+  // Copy shared_ptrs into the snapshot without creating duplicate default
+  // entries or moving the original pointers.
   out.views.clear();
-  out.views.resize(views_.size());
-  for (auto view_ptr : views_) {
-    out.views.emplace_back(std::move(view_ptr));
+  out.views.reserve(views_.size());
+  for (const auto& view_ptr : views_) {
+    out.views.emplace_back(view_ptr);
   }
 
   out.surfaces = surfaces_;
