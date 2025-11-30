@@ -110,6 +110,7 @@ namespace oxygen::interop::module {
       oxygen::engine::FrameContext& context,
       const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& surfaces)
       -> void;
+    void EnsureEditorCamera(float width, float height);
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
@@ -140,6 +141,9 @@ namespace oxygen::interop::module {
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;
+
+    // Editor camera node (created once per scene, updated on resize)
+    std::optional<oxygen::scene::SceneNode> editor_camera_node_{};
   };
 
 } // namespace oxygen::interop::module
