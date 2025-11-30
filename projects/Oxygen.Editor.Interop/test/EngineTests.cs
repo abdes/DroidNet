@@ -240,7 +240,7 @@ public sealed class EngineTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new nint(1)).ConfigureAwait(false);
+            new nint(1), 0u, 0u).ConfigureAwait(false);
 
         _ = await act8.Should().ThrowAsync<ArgumentNullException>().ConfigureAwait(false);
     }
@@ -255,7 +255,7 @@ public sealed class EngineTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            nint.Zero).ConfigureAwait(false);
+            nint.Zero, 0u, 0u).ConfigureAwait(false);
 
         _ = await act9.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
     }
@@ -272,7 +272,7 @@ public sealed class EngineTests
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new nint(1)).ConfigureAwait(false);
+            new nint(1), 0u, 0u).ConfigureAwait(false);
 
         _ = await act10.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(false);
     }
@@ -294,7 +294,7 @@ public sealed class EngineTests
                     documentId,
                     viewportId,
                     "Viewport",
-                    new nint(1)).ConfigureAwait(false);
+                    new nint(1), 0u, 0u).ConfigureAwait(false);
                 return null as InvalidOperationException;
             }
             catch (InvalidOperationException ex)
@@ -319,7 +319,7 @@ public sealed class EngineTests
         var documentId = Guid.NewGuid();
         var viewportId = Guid.NewGuid();
 
-        var regTask = this.runner.RegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1));
+        var regTask = this.runner.RegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1), 0u, 0u);
 
         var completed = await Task.WhenAny(regTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
 
