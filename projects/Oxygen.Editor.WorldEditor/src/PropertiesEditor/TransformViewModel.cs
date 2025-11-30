@@ -5,7 +5,9 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Numerics;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Utils;
 
 namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 
@@ -16,13 +18,19 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : ComponentPropertyEditor
+using CommunityToolkit.Mvvm.Messaging;
+using System.Numerics;
+using Oxygen.Editor.WorldEditor.Messages;
+
+public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IMessenger? messenger = null) : ComponentPropertyEditor
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
 
     // Keep track of the current selection so property-change handlers can apply edits back
     // to the selected SceneNode instances.
     private ICollection<SceneNode>? selectedItems;
+
+    private readonly IMessenger? messengerSvc = messenger;
 
     // Guard against re-entrant updates when applying changes from the view back to the model.
     private bool isApplyingEditorChanges;
@@ -148,7 +156,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         {
             this.isApplyingEditorChanges = true;
 
-            foreach (var item in this.selectedItems)
+            // capture old snapshots for undo/redo
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null)
@@ -160,6 +174,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 p.X = value;
                 transform.LocalPosition = p;
             }
+            // notify message with new snapshots
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionX"));
         }
         catch (Exception ex)
         {
@@ -184,7 +204,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
@@ -192,6 +217,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 p.Y = value;
                 transform.LocalPosition = p;
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionY"));
         }
         catch (Exception ex)
         {
@@ -216,7 +246,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
@@ -224,6 +259,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 p.Z = value;
                 transform.LocalPosition = p;
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionZ"));
         }
         catch (Exception ex)
         {
@@ -246,14 +286,25 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.LocalRotation;
-                r.X = value;
-                transform.LocalRotation = r;
+                var q = transform.LocalRotation;
+                var euler = TransformConverter.QuaternionToEulerDegrees(q);
+                euler.X = value;
+                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationX"));
         }
         catch (Exception ex)
         {
@@ -273,14 +324,25 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.LocalRotation;
-                r.Y = value;
-                transform.LocalRotation = r;
+                var q = transform.LocalRotation;
+                var euler = TransformConverter.QuaternionToEulerDegrees(q);
+                euler.Y = value;
+                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationY"));
         }
         catch (Exception ex)
         {
@@ -300,14 +362,25 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
-                var r = transform.LocalRotation;
-                r.Z = value;
-                transform.LocalRotation = r;
+                var q = transform.LocalRotation;
+                var euler = TransformConverter.QuaternionToEulerDegrees(q);
+                euler.Z = value;
+                transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationZ"));
         }
         catch (Exception ex)
         {
@@ -327,7 +400,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
@@ -335,6 +412,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 s.X = value;
                 transform.LocalScale = s;
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleX"));
         }
         catch (Exception ex)
         {
@@ -354,7 +436,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
@@ -362,6 +448,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 s.Y = value;
                 transform.LocalScale = s;
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleY"));
         }
         catch (Exception ex)
         {
@@ -381,7 +472,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         try
         {
             this.isApplyingEditorChanges = true;
-            foreach (var item in this.selectedItems)
+            var nodes = this.selectedItems.ToList();
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
+                .ToList();
+            foreach (var item in nodes)
             {
                 var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
                 if (transform is null) continue;
@@ -389,6 +484,11 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 s.Z = value;
                 transform.LocalScale = s;
             }
+            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+                .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
+                .ToList();
+
+            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleZ"));
         }
         catch (Exception ex)
         {
@@ -460,10 +560,10 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
 
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
-        var mixedRotX = MixedValues.GetMixedValue(items, e =>
+            var mixedRotX = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.LocalRotation.X ?? 0;
+            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).X;
         });
 
         if (mixedRotX.HasValue)
@@ -474,15 +574,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         else
         {
             this.RotationXIsIndeterminate = true;
-            this.RotationX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.X ?? 0
-                : 0;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            this.RotationX = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).X;
         }
 
-        var mixedRotY = MixedValues.GetMixedValue(items, e =>
+            var mixedRotY = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.LocalRotation.Y ?? 0;
+            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Y;
         });
 
         if (mixedRotY.HasValue)
@@ -493,15 +592,14 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         else
         {
             this.RotationYIsIndeterminate = true;
-            this.RotationY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.Y ?? 0
-                : 0;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            this.RotationY = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Y;
         }
 
-        var mixedRotZ = MixedValues.GetMixedValue(items, e =>
+            var mixedRotZ = MixedValues.GetMixedValue(items, e =>
         {
             var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
-            return transform?.LocalRotation.Z ?? 0;
+            return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Z;
         });
 
         if (mixedRotZ.HasValue)
@@ -512,9 +610,8 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
         else
         {
             this.RotationZIsIndeterminate = true;
-            this.RotationZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalRotation.Z ?? 0
-                : 0;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            this.RotationZ = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Z;
         }
     }
 
@@ -577,4 +674,6 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null) : 
                 : 0;
         }
     }
+
+
 }

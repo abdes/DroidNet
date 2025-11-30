@@ -66,4 +66,48 @@ public static class TransformConverter
         ArgumentNullException.ThrowIfNull(transform);
         return new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);
     }
+
+    /// <summary>
+    /// Convert a quaternion to Euler angles (degrees) using the yaw-pitch-roll convention
+    /// compatible with <see cref="Quaternion.CreateFromYawPitchRoll"/>.
+    /// Euler ordering: X = pitch, Y = yaw, Z = roll.
+    /// </summary>
+    public static Vector3 QuaternionToEulerDegrees(Quaternion q)
+    {
+        // Normalize first
+        if (q.LengthSquared() <= 0f) q = Quaternion.Identity;
+        q = Quaternion.Normalize(q);
+
+        var sinp = 2f * (q.W * q.X - q.Y * q.Z);
+        float pitch;
+        if (MathF.Abs(sinp) >= 1f)
+        {
+            pitch = MathF.CopySign(MathF.PI / 2f, sinp);
+        }
+        else
+        {
+            pitch = MathF.Asin(sinp);
+        }
+
+        var yaw = MathF.Atan2(2f * (q.W * q.Y + q.Z * q.X), 1f - 2f * (q.X * q.X + q.Y * q.Y));
+
+        var roll = MathF.Atan2(2f * (q.W * q.Z + q.X * q.Y), 1f - 2f * (q.Y * q.Y + q.Z * q.Z));
+
+        const float RadToDeg = 180f / MathF.PI;
+        return new Vector3(pitch * RadToDeg, yaw * RadToDeg, roll * RadToDeg);
+    }
+
+    /// <summary>
+    /// Convert Euler angles (degrees) to a quaternion using the yaw-pitch-roll convention.
+    /// Euler ordering: X = pitch, Y = yaw, Z = roll.
+    /// </summary>
+    public static Quaternion EulerDegreesToQuaternion(Vector3 eulerDegrees)
+    {
+        const float DegToRad = MathF.PI / 180f;
+        var pitch = eulerDegrees.X * DegToRad;
+        var yaw = eulerDegrees.Y * DegToRad;
+        var roll = eulerDegrees.Z * DegToRad;
+
+        return Quaternion.CreateFromYawPitchRoll(yaw, pitch, roll);
+    }
 }
