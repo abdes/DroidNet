@@ -259,6 +259,22 @@ namespace oxygen::interop::module {
             /* swallow */
           }
         }
+
+        // Update editor camera aspect ratio after resize
+        if (ok && back) {
+          const auto& bb_desc = back->GetDescriptor();
+          const float surface_width = static_cast<float>(surface->Width());
+          const float surface_height = static_cast<float>(surface->Height());
+          const float bb_width = static_cast<float>(bb_desc.width);
+          const float bb_height = static_cast<float>(bb_desc.height);
+
+          LOG_F(INFO,
+            "ProcessResizeRequests: surface reports {}x{}, backbuffer is {}x{}",
+            surface_width, surface_height, bb_width, bb_height);
+
+          // Use backbuffer dimensions for camera aspect ratio (actual pixel dimensions)
+          EnsureEditorCamera(bb_width, bb_height);
+        }
       }
 
       surfaces.emplace_back(surface);
@@ -282,48 +298,28 @@ namespace oxygen::interop::module {
       // This will allow us to show mulitple editor views (e.g. for multiple
       // viewports) if needed.
 
-
-      auto editor_camera_node = scene_->CreateNode(std::string("EditorCamera"));
-      // Configure camera parameters and viewport for the editor camera
-      {
-        LOG_F(INFO, "Created editor camera node 'EditorCamera' in scene");
-        auto editor_cam = std::make_unique<oxygen::scene::PerspectiveCamera>(
-          oxygen::scene::camera::ProjectionConvention::kD3D12);
-        editor_camera_node.AttachCamera(std::move(editor_cam));
-        editor_camera_node.GetTransform().SetLocalPosition(
-          glm::vec3(1.5F, 2.0F, 14.0F));
-        editor_camera_node.GetTransform().SetLocalRotation(
-          glm::quat(glm::vec3(glm::radians(-20.0F), 0.0F, 0.0F)));
-
-        // FIXME: viewport settings and camera parameters should be per-surface
-        // Use the first surface for viewport sizing if available
-        float width = 1280.0f;
-        float height = 720.0f;
-        auto surfaces = context.GetSurfaces();
-        if (!surfaces.empty() && surfaces.front()) {
-          width = static_cast<float>(surfaces.front()->Width());
-          height = static_cast<float>(surfaces.front()->Height());
-        }
-
-        auto cam_ref =
-          editor_camera_node.GetCameraAs<oxygen::scene::PerspectiveCamera>();
-        if (cam_ref) {
-          const float aspect = height > 0.0f ? (width / height) : 1.0f;
-          auto& cam = cam_ref->get();
-          cam.SetFieldOfView(glm::radians(75.0F));
-          cam.SetAspectRatio(aspect);
-          cam.SetNearPlane(0.1F);
-          cam.SetFarPlane(10000.0F);
-          cam.SetViewport(oxygen::ViewPort{ .top_left_x = 0.0f,
-                                           .top_left_y = 0.0f,
-                                           .width = width,
-                                           .height = height,
-                                           .min_depth = 0.0f,
-                                           .max_depth = 1.0f });
+      // Ensure editor camera exists with current surface dimensions
+      float width = 1280.0f;
+      float height = 720.0f;
+      auto surfaces = context.GetSurfaces();
+      if (!surfaces.empty() && surfaces.front()) {
+        auto& surface = surfaces.front();
+        auto back = surface->GetCurrentBackBuffer();
+        if (back) {
+          const auto& desc = back->GetDescriptor();
+          width = static_cast<float>(desc.width);
+          height = static_cast<float>(desc.height);
+          DLOG_F(INFO, "OnSceneMutation: using backbuffer dimensions {}x{}", width, height);
+        } else {
+          // Fallback to surface dimensions if no backbuffer yet
+          width = static_cast<float>(surface->Width());
+          height = static_cast<float>(surface->Height());
+          DLOG_F(INFO, "OnSceneMutation: using surface dimensions {}x{}", width, height);
         }
       }
+      EnsureEditorCamera(width, height);
 
-      // TODO: delete debug diags one editor module is stable
+      // TODO: delete debug diags once editor module is stable
       // Minimal diagnostic: avoid dereferencing scene internals in logs to
       // prevent UB. Just report that we have a scene reference.
       {
@@ -331,14 +327,14 @@ namespace oxygen::interop::module {
 
         // Diagnostic logging: camera and root-node transforms to check for
         // potential frustum clipping / placement issues.
-        if (editor_camera_node.IsAlive()) {
-          auto cam_tf = editor_camera_node.GetTransform();
+        if (editor_camera_node_.has_value() && editor_camera_node_->IsAlive()) {
+          auto cam_tf = editor_camera_node_->GetTransform();
           const auto cam_pos =
             cam_tf.GetLocalPosition().value_or(glm::vec3(0.0F, 0.0F, 0.0F));
           DLOG_F(INFO,
             "OnSceneMutation: editor camera node '{}' "
             "local_pos=({:.2f},{:.2f},{:.2f})",
-            editor_camera_node.GetName(), cam_pos.x, cam_pos.y, cam_pos.z);
+            editor_camera_node_->GetName(), cam_pos.x, cam_pos.y, cam_pos.z);
         }
 
         try {
@@ -368,7 +364,7 @@ namespace oxygen::interop::module {
       // Add camera view to the frame context. Match example behavior by
       // always creating a CameraView when a valid surface exists (the
       // camera and viewport were configured above).
-      {
+      if (editor_camera_node_.has_value() && editor_camera_node_->IsAlive()) {
         auto surfaces = context.GetSurfaces();
         if (!surfaces.empty() && surfaces.front()) {
           auto& surface = surfaces.front();
@@ -376,7 +372,7 @@ namespace oxygen::interop::module {
           // editor rendering is independent of any scene cameras.
           context.AddView(std::make_shared<oxygen::renderer::CameraView>(
             oxygen::renderer::CameraView::Params{
-                .camera_node = editor_camera_node,
+                .camera_node = *editor_camera_node_,
                 .viewport = std::nullopt, // FIXME: per-surface viewport?
                 .scissor = std::nullopt,  // FIXME: per-surface scissor?
                 .pixel_jitter = glm::vec2(0.0F, 0.0F),
@@ -701,6 +697,49 @@ namespace oxygen::interop::module {
     }
 
     return any_created;
+  }
+
+  void EditorModule::EnsureEditorCamera(float width, float height) {
+    if (!scene_) {
+      return;
+    }
+
+    // Create editor camera if it doesn't exist or is no longer alive
+      if (!editor_camera_node_.has_value() || !editor_camera_node_->IsAlive()) {
+        editor_camera_node_ = scene_->CreateNode(std::string("EditorCamera"));
+        auto editor_cam = std::make_unique<oxygen::scene::PerspectiveCamera>(
+          oxygen::scene::camera::ProjectionConvention::kD3D12);
+        editor_camera_node_->AttachCamera(std::move(editor_cam));
+        float distance = 15.0F;
+        glm::vec3 position(0.0F, 0.0F, distance);
+        glm::vec3 target(0.0F, 0.0F, 0.0F);
+        glm::vec3 up(0.0F, 1.0F, 0.0F);
+        editor_camera_node_->GetTransform().SetLocalPosition(position);
+        glm::vec3 direction = glm::normalize(target - position);
+        glm::quat orientation = glm::quatLookAt(direction, up);
+        editor_camera_node_->GetTransform().SetLocalRotation(orientation);
+        LOG_F(INFO, "Created editor camera node 'EditorCamera' in scene");
+    }
+
+    // Update camera aspect ratio and viewport based on surface dimensions
+    auto cam_ref =
+      editor_camera_node_->GetCameraAs<oxygen::scene::PerspectiveCamera>();
+    if (cam_ref) {
+      const float aspect = (width > 0.0f && height > 0.0f) ? (width / height) : 1.0f;
+      auto& cam = cam_ref->get();
+      cam.SetFieldOfView(glm::radians(60.0F));
+      cam.SetAspectRatio(aspect);
+      cam.SetNearPlane(0.1F);
+      cam.SetFarPlane(10000.0F);
+      cam.SetViewport(oxygen::ViewPort{ .top_left_x = 0.0f,
+                                       .top_left_y = 0.0f,
+                                       .width = width,
+                                       .height = height,
+                                       .min_depth = 0.0f,
+                                       .max_depth = 1.0f });
+      LOG_F(INFO, "Editor camera configured: width={:.1f} height={:.1f} aspect={:.3f}",
+        width, height, aspect);
+    }
   }
 
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
