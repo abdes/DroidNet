@@ -25,6 +25,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private IViewportSurfaceLease? surfaceLease;
     private bool swapChainSizeHooked;
+    // NOTE: composition-scale handling was intentionally removed in favor of
+    // an explicit, static RenderTransform set in XAML. This keeps the control
+    // markup predictable and avoids dynamic flicker caused by composition-scale
+    // oscillation.
     private int activeLoadCount;
     private CancellationTokenSource? attachCancellationSource;
     private ILogger logger = NullLoggerFactory.Instance.CreateLogger(LoggerCategoryName);
@@ -159,6 +163,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (!this.swapChainSizeHooked)
         {
             this.SwapChainPanel.SizeChanged += this.OnSwapChainPanelSizeChanged;
+            // Also observe composition-scale changes (compositor-driven transform)
+            // as recommended by the SwapChainPanel docs. This lets us detect when
+            // the compositor applies additional scaling (e.g. transforms or dpi)
+            // and re-request an appropriate resize so the native backbuffers and
+            // engine configuration stay in sync with presented pixels.
+            // CompositionScaleChanged handling removed - use static XAML RenderTransform instead
             this.sizeChangedSubject ??= new Subject<SizeChangedEventArgs>();
 
             var dispatcherScheduler = new DispatcherQueueScheduler(
@@ -185,7 +195,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             return;
         }
-
         _ = sender;
         this.LogSwapChainSizeChanged(e.NewSize.Width, e.NewSize.Height);
         // Push event into the debounced pipeline; if Rx setup failed we still
@@ -300,6 +309,33 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         try
         {
+            // If the SwapChainPanel hasn't been measured yet we can end up
+            // registering a 1x1 backbuffer which the engine will use to
+            // configure the camera incorrectly. Wait briefly for the panel to
+            // be measured so we can pass a realistic initial size to the
+            // engine. This is conservative and short-lived; if measurement does
+            // not complete we fall back to proceeding immediately.
+            const int maxAttempts = 10;
+            const int delayMs = 50;
+            var attempted = 0;
+            while (attempted < maxAttempts && !cancellationToken.IsCancellationRequested)
+            {
+                if (this.TryGetSwapChainPixelSize(out var w, out var h) && w >= MinimumPixelExtent && h >= MinimumPixelExtent)
+                {
+                    break; // measured to a usable size
+                }
+
+                attempted++;
+                try
+                {
+                    await Task.Delay(delayMs, cancellationToken).ConfigureAwait(true);
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+            }
+
             var requestTag = this.Name ?? "viewport";
             var request = viewModel.CreateSurfaceRequest(requestTag);
             var lease = await viewModel.EngineService.AttachViewportAsync(request, this.SwapChainPanel, cancellationToken).ConfigureAwait(true);
@@ -396,7 +432,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             return;
         }
-
         if (this.SwapChainPanel != null)
         {
             this.SwapChainPanel.SizeChanged -= this.OnSwapChainPanelSizeChanged;

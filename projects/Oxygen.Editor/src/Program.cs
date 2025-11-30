@@ -85,6 +85,10 @@ public static partial class Program
         // fails. Otherwise, it quietly does nothing.
         XamlCheckProcessRequirements();
 
+#if DEBUG
+        PixLoader.LoadPixDll();
+#endif // DEBUG
+
         var bootstrap = new Bootstrapper(args);
         try
         {

@@ -163,7 +163,10 @@ namespace Oxygen::Interop {
     auto RegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
       System::Guid viewportId,
       System::String^ displayName,
-      System::IntPtr swapChainPanel)
+      System::IntPtr swapChainPanel,
+      System::UInt32 initialWidth,
+      System::UInt32 initialHeight,
+      float compositionScale)
       -> System::Threading::Tasks::Task<bool>^
       ;
     auto UnregisterSurfaceAsync(System::Guid viewportId)
@@ -206,7 +209,7 @@ namespace Oxygen::Interop {
     static auto ToGuidKey(System::Guid guid) -> SurfaceRegistry::GuidKey;
     void EnsureEngineLoopStopped();
     void AttachSwapChain(System::IntPtr panelPtr, System::IntPtr swapChainPtr,
-      System::IntPtr surfaceHandle);
+      System::IntPtr surfaceHandle, float compositionScale);
     void AttachSwapChainCallback(System::Object^ state);
   };
 

@@ -8,7 +8,7 @@
     "Oxygen Editor (Unpackaged)": {
       "commandName": "Project",
       "commandLineArgs": "--mode dev",
-      "nativeDebugging": true
+      "nativeDebugging": false
     }
   }
 }

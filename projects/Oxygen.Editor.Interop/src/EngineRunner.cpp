@@ -15,6 +15,7 @@
 
 #define WIN32_LEAN_AND_MEAN
 #include <dxgi1_2.h>
+#include <dxgi1_3.h>
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
 #include <vcclr.h>
@@ -338,8 +339,8 @@ namespace Oxygen::Interop {
 
   ref class SwapChainAttachState sealed {
   public:
-    SwapChainAttachState(IntPtr panel, IntPtr swapChain, IntPtr surfaceHandle)
-      : panel_(panel), swap_chain_(swapChain), surface_handle_(surfaceHandle) {
+    SwapChainAttachState(IntPtr panel, IntPtr swapChain, IntPtr surfaceHandle, float compositionScale)
+      : panel_(panel), swap_chain_(swapChain), surface_handle_(surfaceHandle), composition_scale_(compositionScale) {
     }
 
     property IntPtr PanelPtr {
@@ -354,10 +355,15 @@ namespace Oxygen::Interop {
       IntPtr get() { return surface_handle_; }
     }
 
+    property float CompositionScale {
+      float get() { return composition_scale_; }
+    }
+
   private:
     IntPtr panel_;
     IntPtr swap_chain_;
     IntPtr surface_handle_;
+    float composition_scale_;
   };
 
   EngineRunner::EngineRunner()
@@ -776,7 +782,10 @@ namespace Oxygen::Interop {
     System::Guid documentId,
     System::Guid viewportId,
     System::String^ displayName,
-    System::IntPtr swapChainPanel)
+    System::IntPtr swapChainPanel,
+    System::UInt32 initialWidth,
+    System::UInt32 initialHeight,
+    float compositionScale)
     -> Task<bool>^
   {
     if (ctx == nullptr) {
@@ -826,8 +835,8 @@ namespace Oxygen::Interop {
     oxygen::engine::interop::LogInfoMessage(
       "RegisterSurfaceAsync: creating composition surface.");
     void* swap_chain_ptr = nullptr;
-    auto surface = oxygen::engine::interop::CreateCompositionSurface(
-      shared, &swap_chain_ptr);
+      auto surface = oxygen::engine::interop::CreateCompositionSurface(
+        shared, &swap_chain_ptr);
     if (!surface) {
       oxygen::engine::interop::LogInfoMessage(
         "RegisterSurfaceAsync failed: CreateCompositionSurface returned null.");
@@ -902,7 +911,30 @@ namespace Oxygen::Interop {
     if (swap_chain_ptr != nullptr) {
       auto surface_ptr = new std::shared_ptr<oxygen::graphics::Surface>(surface);
       AttachSwapChain(swapChainPanel, IntPtr(swap_chain_ptr),
-        IntPtr(surface_ptr));
+        IntPtr(surface_ptr), compositionScale);
+    }
+
+    // If the caller supplied an initial desired size, request a staged resize
+    // here so the composition surface will be resized (and native backbuffers
+    // created) prior to the engine processing the registration on the next
+    // frame. This avoids the initial 1x1 default remaining as the backbuffer
+    // when the panel already reports a measurable size.
+    if (initialWidth > 0 && initialHeight > 0) {
+      try {
+        oxygen::engine::interop::RequestCompositionSurfaceResize(surface,
+          static_cast<uint32_t>(initialWidth), static_cast<uint32_t>(initialHeight));
+        try {
+          auto msg = fmt::format(
+            "RegisterSurfaceAsync: requested initial resize for viewport={} size={}x{}",
+            msclr::interop::marshal_as<std::string>(viewportId.ToString()), initialWidth,
+            initialHeight);
+          oxygen::engine::interop::LogInfoMessage(msg.c_str());
+        }
+        catch (...) { /* swallow logging failures */ }
+      }
+      catch (...) {
+        /* best-effort: ignore resize request errors here */
+      }
     }
 
     return tcs->Task;
@@ -1109,13 +1141,13 @@ namespace Oxygen::Interop {
   }
 
   void EngineRunner::AttachSwapChain(IntPtr panelPtr, IntPtr swapChainPtr,
-    IntPtr surfaceHandle) {
+    IntPtr surfaceHandle, float compositionScale) {
     if (panelPtr == IntPtr::Zero || swapChainPtr == IntPtr::Zero) {
       return;
     }
 
     auto state =
-      gcnew SwapChainAttachState(panelPtr, swapChainPtr, surfaceHandle);
+      gcnew SwapChainAttachState(panelPtr, swapChainPtr, surfaceHandle, compositionScale);
     if (ui_dispatcher_ == nullptr || !ui_dispatcher_->IsCaptured) {
       throw gcnew InvalidOperationException(gcnew String(
         L"SwapChain attachment requires a captured UI SynchronizationContext. "
@@ -1194,6 +1226,33 @@ namespace Oxygen::Interop {
     }
 
     oxygen::engine::interop::LogInfoMessage("SwapChain attached to panel.");
+
+    // Apply inverse scale transform to counteract SwapChainPanel's automatic DPI scaling.
+    //
+    // CRITICAL FIX FOR HIGH DPI SCREENS (Issue #8219):
+    // WinUI's SwapChainPanel automatically applies a scale transform based on the CompositionScale
+    // (DPI scale) to the content. When rendering at full physical resolution (1:1 pixel mapping),
+    // this automatic scaling causes the content to be "zoomed in" and truncated/cropped at the
+    // bottom-right.
+    //
+    // To fix this, we must apply an INVERSE scale transform to the SwapChain itself. This cancels
+    // out the compositor's scaling, ensuring that our 1:1 rendered pixels map exactly to the
+    // physical screen pixels without being stretched or cropped.
+    if (attachState->CompositionScale > 0.0f) {
+      IDXGISwapChain2* swapChain2 = nullptr;
+      HRESULT hr2 = swapChain->QueryInterface(__uuidof(IDXGISwapChain2), reinterpret_cast<void**>(&swapChain2));
+      if (SUCCEEDED(hr2) && swapChain2 != nullptr) {
+        DXGI_MATRIX_3X2_F inverseScale = {};
+        inverseScale._11 = 1.0f / attachState->CompositionScale;
+        inverseScale._22 = 1.0f / attachState->CompositionScale;
+        swapChain2->SetMatrixTransform(&inverseScale);
+        swapChain2->Release();
+        oxygen::engine::interop::LogInfoMessage("Applied inverse scale transform to SwapChain.");
+      }
+      else {
+        oxygen::engine::interop::LogInfoMessage("Failed to query IDXGISwapChain2 for inverse scale transform.");
+      }
+    }
 
     // if we received a temporary owning pointer, drop it now to return ownership
     // to the registry/engine. We intentionally log the use_count for diagnostics

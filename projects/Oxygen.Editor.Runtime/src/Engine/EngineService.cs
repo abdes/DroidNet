@@ -327,15 +327,50 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         Debug.Assert(this.engineRunner is not null, "Engine runner should be initialized when engine is running.");
 
         var panelPtr = IntPtr.Zero;
+        // Initial pixel sizes captured prior to attachment - declared here
+        // so they remain visible after the try/finally block.
+        uint initialPixelWidth = 0u;
+        uint initialPixelHeight = 0u;
+        float raster = 1.0f;
         try
         {
             panelPtr = Marshal.GetIUnknownForObject(panel);
+            // Compute a robust initial pixel size using the XamlRoot rasterization
+            // scale only. The compositor's composition scale is handled at
+            // presentation time - including it here would over-scale the
+            // requested buffers and lead to mismatch/clipping during present.
+            // assign into the variables declared above
+            try
+            {
+                raster = (float)(panel.XamlRoot?.RasterizationScale ?? 1.0);
+                // Compute the initial requested pixels using rasterization scale
+                // only (DIPs -> physical pixels).
+                //
+                // IMPORTANT: We pass the 'raster' (CompositionScale) to the engine so it can
+                // apply an inverse scale transform to the SwapChain. This prevents WinUI from
+                // double-scaling the content on high DPI screens, which causes truncation.
+                // See EngineRunner.cpp for the implementation of the inverse transform.
+                initialPixelWidth = (uint)Math.Max(1, Math.Round(panel.ActualWidth * raster));
+                initialPixelHeight = (uint)Math.Max(1, Math.Round(panel.ActualHeight * raster));
+                this.logger.LogWarning("AttachLeaseAsync: requesting initial pixels {0}x{1} (Actual={2}x{3} dips raster={4})",
+                    initialPixelWidth, initialPixelHeight, panel.ActualWidth, panel.ActualHeight, raster);
+            }
+            catch
+            {
+                // Fall back to zero - native side will decide how to proceed.
+                initialPixelWidth = 0u;
+                initialPixelHeight = 0u;
+            }
+
             var registered = await this.engineRunner.RegisterSurfaceAsync(
                 this.engineContext,
                 lease.Key.DocumentId,
                 lease.Key.ViewportId,
                 lease.Key.DisplayName,
-                panelPtr).ConfigureAwait(true);
+                panelPtr,
+                initialPixelWidth,
+                initialPixelHeight,
+                raster).ConfigureAwait(true);
 
             if (!registered)
             {
@@ -350,6 +385,12 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
                 _ = Marshal.Release(panelPtr);
             }
         }
+
+        // Registration requested an initial resize (if the UI reported a
+        // measurable size). The engine registration path will mark the surface
+        // for resize so the native side will create backbuffers of the
+        // requested dimensions prior to the next engine frame. No additional
+        // staged resize is required here.
 
         lease.MarkAttached(panel);
         this.LogLeaseAttached(lease.Key.DisplayName, panel.GetHashCode(), this.state);
