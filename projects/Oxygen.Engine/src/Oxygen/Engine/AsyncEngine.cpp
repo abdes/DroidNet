@@ -286,6 +286,9 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
       // ordered submission)
       co_await PhaseCommandRecord(context);
 
+      // Compositing phase (post-rendering effects and composition)
+      co_await PhaseCompositing(context);
+
       // ClearRenderGraphBuilder(context);
     }
 
@@ -667,6 +670,18 @@ auto AsyncEngine::PhaseCommandRecord(FrameContext& context) -> co::Co<>
 
   LOG_F(2, "[F{}][A] PhaseCommandRecord complete - modules recorded commands",
     frame_number_);
+}
+
+// ReSharper disable once CppMemberFunctionMayBeConst
+auto AsyncEngine::PhaseCompositing(FrameContext& context) -> co::Co<>
+{
+  const auto tag = internal::EngineTagFactory::Get();
+  context.SetCurrentPhase(PhaseId::kCompositing, tag);
+
+  LOG_F(2, "[F{}][A] PhaseCompositing", frame_number_);
+
+  // Execute module compositing work
+  co_await module_manager_->ExecutePhase(PhaseId::kCompositing, context);
 }
 
 // ReSharper disable once CppMemberFunctionMayBeConst

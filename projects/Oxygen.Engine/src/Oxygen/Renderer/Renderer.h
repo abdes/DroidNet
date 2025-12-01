@@ -110,12 +110,6 @@ public:
     RenderContext& render_context, const FrameContext& frame_context)
     -> co::Co<>
   {
-    // If the renderer encounters fatal errors while preparing the scene or the
-    // frame, then this is a garbage frame that should not be rendered.
-    if (skip_frame_render_) {
-      co_return;
-    }
-
     PreExecute(render_context, frame_context);
     co_await std::forward<RenderGraphCoroutine>(graph_coroutine)(
       render_context);
@@ -186,9 +180,6 @@ private:
   // CPU-owning storage populated during finalization each frame. Spans inside
   // PreparedSceneFrame alias these vectors (no ownership transfer).
   PreparedSceneFrame prepared_frame_ {}; // view object
-  // if true, skip rendering this frame, either because it's garbage due to
-  // errors, or because it has no draws.
-  bool skip_frame_render_ { false };
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each BuildFrame while retaining

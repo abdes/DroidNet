@@ -140,6 +140,11 @@ public:
     co_return;
   }
 
+  virtual auto OnCompositing(FrameContext& /*context*/) -> co::Co<>
+  {
+    co_return;
+  }
+
   // Parallel phase (snapshot-based)
   // Parallel phase (snapshot-based): modules receive a read-only
   // `FrameSnapshot` (a view over the authoritative GameState). Handlers

@@ -81,13 +81,14 @@ enum class PhaseId : std::uint32_t {
   kGuiUpdate = 11,
   kFrameGraph = 12,
   kCommandRecord = 13,
-  kPresent = 14,
-  kAsyncPoll = 15,
-  kBudgetAdapt = 16,
-  kFrameEnd = 17,
-  kDetachedServices = 18,
+  kCompositing = 14,
+  kPresent = 15,
+  kAsyncPoll = 16,
+  kBudgetAdapt = 17,
+  kFrameEnd = 18,
+  kDetachedServices = 19,
 
-  kCount = 19, // Must be last
+  kCount = 20, // Must be last
 };
 using PhaseIndex = EnumAsIndex<PhaseId>;
 
@@ -350,6 +351,14 @@ and records submission metadata into EngineState (fence/epoch markers). It
 must not mutate authoritative GameState.)",
       },
       DocStrings {
+        .name = R"(Compositing)",
+        .description
+        = R"(Perform post-rendering composition and full-screen effects.
+Modules can access rendered outputs from previous phases and combine them
+or apply effects before presentation. This phase produces final presentable
+surfaces.)",
+      },
+      DocStrings {
         .name = R"(Present)",
         .description
         = R"(Perform swapchain present and finalize platform submission
@@ -590,6 +599,12 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations
     = AllowMutation::kFrameState | AllowMutation::kEngineState,
+    .thread_safe = true,
+  },
+  PhaseDesc {
+    .id = PhaseId::kCompositing,
+    .category = ExecutionModel::kBarrieredConcurrency,
+    .allowed_mutations = AllowMutation::kFrameState,
     .thread_safe = true,
   },
   PhaseDesc {

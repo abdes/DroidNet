@@ -3,6 +3,7 @@
 Purpose: Track migration of ScenePrep from ad-hoc invocation inside `Renderer::BuildFrame` to a dedicated `EngineModule` that publishes a fully finalized, deterministic SoA representation consumed by render graph / passes without legacy `RenderItemsList`.
 
 Status Legend:
+
 - [ ] Not started  | [~] In progress | [x] Complete | [!] Pending decision
 
 ## 1. Phase Integration Overview
@@ -21,28 +22,33 @@ Status Legend:
 ## 2. Data Structures
 
 ### 2.1 Staging (ParallelTasks)
+
 `ScenePrepState` (already exists) gathers raw `RenderItemData` + intermediate lists.
 
 ### 2.2 Finalized Publish Object
+
 ```cpp
 struct PreparedSceneFrame {
-	uint64_t frame_seq;                       // Monotonic frame sequence
-	std::vector<CollectedItem> items;         // One per visible submesh (immutable snapshot of collection outputs)
-	std::vector<MaterialHandle> materials;    // Logical handles aligned with items ordering
-	std::vector<GeometryHandle> geometries;   // Logical geometry buffer pair indices (no bindless yet)
-	std::vector<PassMask> pass_masks;         // Per-item pass participation bitset
-	std::vector<sceneprep::DrawMetadata> cpu_draw_desc; // Lightweight per-draw (first_index, index_count,...)
-	PartitionMap partitions;                  // pass_id -> [begin,end)
-	ScenePrepMetrics metrics;                 // (future instrumentation)
-	bool finalized = false;                   // Guard for consumers
+ uint64_t frame_seq;                       // Monotonic frame sequence
+ std::vector<CollectedItem> items;         // One per visible submesh (immutable snapshot of collection outputs)
+ std::vector<MaterialHandle> materials;    // Logical handles aligned with items ordering
+ std::vector<GeometryHandle> geometries;   // Logical geometry buffer pair indices (no bindless yet)
+ std::vector<PassMask> pass_masks;         // Per-item pass participation bitset
+ std::vector<sceneprep::DrawMetadata> cpu_draw_desc; // Lightweight per-draw (first_index, index_count,...)
+ PartitionMap partitions;                  // pass_id -> [begin,end)
+ ScenePrepMetrics metrics;                 // (future instrumentation)
+ bool finalized = false;                   // Guard for consumers
 };
 ```
 
 ### 2.3 GPU Translation (FrameGraph)
+
 Transient vectors (not owned by module):
+
 ```cpp
 std::vector<engine::DrawMetadata> gpu_draw_metadata; // Packed 14 x uint32 per draw (explicit vertex_count added) = 56 bytes
 ```
+
 Bindless upload via existing `BindlessStructuredBuffer<DrawMetadata>` and `BindlessStructuredBuffer<glm::mat4>`.
 
 ## 3. Two DrawMetadata Variants
@@ -57,6 +63,7 @@ Translation occurs in FrameGraph phase (late binding). Avoids GPU coupling insid
 ## 4. Deterministic Ordering Rules
 
 Default stable sort (applied in PostParallel finalization) key order:
+
 1. `material_handle`
 2. `geometry_handle`
 3. `submesh_id`
@@ -69,29 +76,32 @@ Document + test: identical snapshot → identical serialized `PreparedSceneFrame
 
 Double-buffer: two `PreparedSceneFrame` instances.
 Steps:
+
 1. ParallelTasks writes to working buffer (not visible).
 2. PostParallel finalizes + sets `finalized=true`.
 3. Atomic pointer swap (publish pointer + frame_seq).
 4. Old buffer retained until reused next frame (no GPU lifetime entanglement because GPU uses separate uploaded buffers each frame).
 
 Accessor:
+
 ```cpp
 const PreparedSceneFrame* ScenePrepModule::TryGetPreparedFrame(uint64_t expected_seq) const;
 ```
+
 Returns nullptr if not published or seq mismatch.
 
 ## 6. Phase Handlers (Draft Signatures)
 
 ```cpp
 class ScenePrepModule : public EngineModule {
-	// Metadata
-	std::string_view GetName() const noexcept override;
-	ModulePriority GetPriority() const noexcept override; // choose mid-tier
-	ModulePhaseMask GetSupportedPhases() const noexcept override; // ParallelTasks | PostParallel | FrameGraph
+ // Metadata
+ std::string_view GetName() const noexcept override;
+ ModulePriority GetPriority() const noexcept override; // choose mid-tier
+ ModulePhaseMask GetSupportedPhases() const noexcept override; // ParallelTasks | PostParallel | FrameGraph
 
-	co::Co<> OnParallelTasks(const FrameSnapshot& snapshot) override; // collection
-	co::Co<> OnPostParallel(FrameContext& ctx) override;              // finalize + publish
-	co::Co<> OnFrameGraph(FrameContext& ctx) override;                // GPU binding translation
+ co::Co<> OnParallelTasks(const FrameSnapshot& snapshot) override; // collection
+ co::Co<> OnPostParallel(FrameContext& ctx) override;              // finalize + publish
+ co::Co<> OnFrameGraph(FrameContext& ctx) override;                // GPU binding translation
 };
 ```
 

@@ -13,7 +13,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Scene/Scene.h>
 #include <glm/glm.hpp>
 
@@ -81,6 +83,11 @@ private:
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode sphere_node_; // Sphere for jump animation
+
+  // Camera view for the main viewport
+  std::shared_ptr<renderer::CameraView> camera_view_;
+  // ViewId for the main viewport
+  ViewId view_id_ { 0 };
 
   //! RenderGraph component in the base provides the RenderContext and passes
   //! used by this module.

@@ -12,6 +12,8 @@
 #include <vector>
 
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -149,6 +151,10 @@ namespace oxygen::interop::module {
     std::unordered_map<const oxygen::graphics::Surface*,
                        oxygen::scene::SceneNode>
       surface_cameras_{};
+
+    // Map surfaces to their ViewIds for the current frame
+    std::unordered_map<const oxygen::graphics::Surface*, oxygen::ViewId>
+      surface_view_ids_{};
   };
 
 } // namespace oxygen::interop::module
