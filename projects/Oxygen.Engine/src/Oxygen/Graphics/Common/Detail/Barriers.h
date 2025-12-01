@@ -137,19 +137,21 @@ public:
       descriptor_);
   }
 
-  //! Append the provided state to the barrier's 'after' state.
+  //! Update the barrier's 'after' state to the latest requested value.
   /*!
-   This method is used to accumulate multiple states for a resource in a
-   single barrier, reducing the number of barriers needed in a command list.
+   When multiple transitions are merged for the same resource before the
+   barriers are flushed, we keep only the most recent target state. This avoids
+   generating invalid state combinations and ensures the recorded barrier
+   matches the last requested transition.
   */
-  auto AppendState(ResourceStates state) -> void
+  auto UpdateStateAfter(ResourceStates state) -> void
   {
     std::visit(Overloads {
-                 [state](BufferBarrierDesc& desc) { desc.after |= state; },
-                 [state](TextureBarrierDesc& desc) { desc.after |= state; },
+                 [state](BufferBarrierDesc& desc) { desc.after = state; },
+                 [state](TextureBarrierDesc& desc) { desc.after = state; },
                  [](const MemoryBarrierDesc&) {
                    ABORT_F(
-                     "Invalid use of AppendState() for MemoryBarrierDesc");
+                     "Invalid use of UpdateStateAfter() for MemoryBarrierDesc");
                  },
                },
       descriptor_);
