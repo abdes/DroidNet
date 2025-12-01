@@ -67,7 +67,9 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Core/api_export.h>
 
 namespace oxygen::scene {
@@ -185,9 +187,26 @@ struct FrameError {
 // Unique identifier for a view within a frame
 using ViewId = oxygen::ViewId;
 
-// Metadata associated with a view for module discovery
+// Unique identifier for a surface
+using SurfaceIdTag = struct SurfaceIdTag;
+using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
+  oxygen::Hashable, oxygen::Printable>;
+
+// Presentation policy for a view
+enum class PresentPolicy : uint8_t {
+  DirectToSurface, // Present directly to the surface (default)
+  Hidden, // Don't present (e.g., for offscreen rendering)
+  Composite // Compose with other views before presenting
+};
+
+// Metadata associated with a view for module discovery and presentation control
 struct ViewMetadata {
   std::string tag; // e.g. "MainScene", "Minimap", "EditorViewport"
+  PresentPolicy present_policy { PresentPolicy::DirectToSurface };
+  std::vector<SurfaceId> target_surfaces; // Surfaces to present to
+  std::optional<ViewPort> viewport; // Override viewport
+  std::optional<Scissors> scissor; // Override scissor
+  uint32_t flags { 0 }; // HDR, MSAA, etc.
 };
 
 // Complete context for a view, including its output
@@ -197,7 +216,8 @@ struct ViewContext {
   std::variant<std::reference_wrapper<graphics::Surface>, std::string> surface;
 
   ViewMetadata metadata;
-  std::shared_ptr<graphics::Framebuffer> output; // Render target (set by Renderer/Compositor)
+  std::shared_ptr<graphics::Framebuffer>
+    output; // Render target (set by Renderer/Compositor)
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -674,12 +694,11 @@ public:
   }
 
   // Add individual view with phase validation
-  OXGN_CORE_API auto AddView(ViewContext view) noexcept
-    -> ViewId;
+  OXGN_CORE_API auto AddView(ViewContext view) noexcept -> ViewId;
 
   // Set the output framebuffer for a view (Renderer/Compositor only)
-  OXGN_CORE_API auto SetViewOutput(ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept
-    -> void;
+  OXGN_CORE_API auto SetViewOutput(
+    ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept -> void;
 
   // Get the full context for a view
   OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;
