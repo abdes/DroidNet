@@ -500,8 +500,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   EnsureMainCamera(
     static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
-  // FIXME: view management is temporary
-  context.AddView(std::make_shared<renderer::CameraView>(
+  // Create CameraView with the appropriate parameters
+  camera_view_ = std::make_shared<renderer::CameraView>(
     renderer::CameraView::Params {
       .camera_node = main_camera_,
       .viewport = std::nullopt,
@@ -510,7 +510,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     },
-    surface));
+    surface);
+
+  // Add view to FrameContext with metadata
+  view_id_ = context.AddView(engine::ViewContext {
+    .name = "InputSystemView",
+    .surface = *surface,
+    .metadata = { .tag = "InputSystem_MainView" }
+  });
 
   co_return;
 }
@@ -584,13 +591,23 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   DCHECK_NOTNULL_F(render_graph_);
   render_graph_->PrepareForRenderFrame(fb);
 
+  // Resolve the camera view to get the View snapshot
+  if (!camera_view_) {
+    LOG_F(ERROR, "CameraView not available");
+    co_return;
+  }
+  const auto view_snapshot = camera_view_->Resolve();
+
+  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
+  app_.renderer->BuildFrame(view_snapshot, context);
+
   // Execute render graph using the configured passes
   co_await app_.renderer->ExecuteRenderGraph(
-    [&](const engine::RenderContext& context) -> co::Co<> {
+    [&](const engine::RenderContext& render_context) -> co::Co<> {
       // Run the example's configured render passes. This delegates the
       // PrepareResources -> Execute sequence to the shared RenderGraph
       // component so per-example modules don't need to duplicate the calls.
-      co_await render_graph_->RunPasses(context, *recorder);
+      co_await render_graph_->RunPasses(render_context, *recorder);
       // --- ImGuiPass configuration ---
       auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
       if (imgui_module_ref) {
@@ -602,6 +619,20 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
       }
     },
     render_graph_->GetRenderContext(), context);
+
+  // Update FrameContext with the output framebuffer
+  context.SetViewOutput(view_id_, fb);
+
+  // Mark the surface as presentable
+  const auto surfaces = context.GetSurfaces();
+  for (size_t i = 0; i < surfaces.size(); ++i) {
+    if (surfaces[i] == surface) {
+      context.SetSurfacePresentable(i, true);
+      LOG_F(3, "Marked surface at index {} as presentable", i);
+      break;
+    }
+  }
+  co_return;
 }
 
 // Window creation is managed by ExampleModuleBase/AppWindow — no local

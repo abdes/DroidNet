@@ -173,8 +173,11 @@ private:
     -> co::Co<>; // async (simulated work)
 
   auto PhaseCommandRecord(engine::FrameContext& context)
-
     -> co::Co<>; // async (simulated work)
+
+  auto PhaseCompositing(engine::FrameContext& context)
+    -> co::Co<>; // async (simulated work)
+
   auto PhasePresent(engine::FrameContext& context)
     -> void; // synchronous presentation
 

@@ -85,29 +85,59 @@ auto FrameContext::SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
   atomic_input_snapshot_.store(std::move(inp), std::memory_order_release);
 }
 
-auto FrameContext::AddView(std::shared_ptr<RenderableView> view) noexcept
-  -> void
+auto FrameContext::AddView(ViewContext view) noexcept -> ViewId
 {
   // Views may only be added before the Snapshot phase (exclusive).
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
 #if !defined(NDEBUG)
   // In debug builds, verify that the view surface is one of the surfaces set in
   // the FrameContext.
-  auto surf_res = view->GetSurface();
-  if (surf_res.index() == 0) {
-    const auto& surface = std::get<0>(surf_res).get();
+  if (view.surface.index() == 0) {
+    const auto& surface = std::get<0>(view.surface).get();
     const bool found = std::ranges::any_of(
       surfaces_, [&](const auto& s) { return s.get() == &surface; });
     if (!found) {
       DLOG_F(WARNING,
         "View '{}' being added with a surface not in the Frame Context",
-        view->GetName());
+        view.name);
     }
   }
 #endif // !defined(NDEBUG)
 
   std::unique_lock lock(views_mutex_);
-  views_.emplace_back(std::move(view));
+  // Generate a unique ID for this view
+  // Simple incrementing ID for now, scoped to the frame context instance
+  static std::atomic<uint64_t> next_view_id { 1 };
+  const ViewId id { next_view_id.fetch_add(1, std::memory_order_relaxed) };
+
+  views_.emplace(id, std::move(view));
+  return id;
+}
+
+auto FrameContext::SetViewOutput(
+  ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept -> void
+{
+  // Output setting is allowed during rendering phases (FrameGraph, CommandRecord)
+  // and Compositing.
+  // CHECK_F(engine_state_.current_phase >= PhaseId::kFrameGraph &&
+  //         engine_state_.current_phase <= PhaseId::kCompositing);
+
+  std::unique_lock lock(views_mutex_);
+  if (auto it = views_.find(id); it != views_.end()) {
+    it->second.output = std::move(output);
+  } else {
+    LOG_F(WARNING, "SetViewOutput: ViewId {} not found", id.get());
+  }
+}
+
+auto FrameContext::GetViewContext(ViewId id) const -> const ViewContext&
+{
+  std::shared_lock lock(views_mutex_);
+  auto it = views_.find(id);
+  if (it == views_.end()) {
+    throw std::out_of_range("ViewId not found");
+  }
+  return it->second;
 }
 
 auto FrameContext::ClearViews(EngineTag) noexcept -> void
@@ -226,23 +256,18 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   {
     std::unique_lock view_lock(views_mutex_);
     // Erase-remove idiom: keep views whose surface != removed_surface_ptr
-    auto new_end = std::ranges::remove_if(views_, [&](const auto& view_ptr) {
-      DCHECK_NOTNULL_F(view_ptr);
-      auto surf_res = view_ptr->GetSurface();
-      if (surf_res.index() == 0) {
-        const auto& surf = std::get<0>(surf_res).get();
+    std::erase_if(views_, [&](const auto& pair) {
+      const auto& view_ctx = pair.second;
+      if (view_ctx.surface.index() == 0) {
+        const auto& surf = std::get<0>(view_ctx.surface).get();
         if (&surf == removed_surface_ptr) {
           LOG_F(INFO, "Removing view '{}' due to surface removal",
-            view_ptr->GetName());
+            view_ctx.name);
           return true; // remove this view
         }
       }
       return false;
-    }).begin();
-
-    if (new_end != views_.end()) {
-      views_.erase(new_end, views_.end());
-    }
+    });
   }
   // Keep presentable flags in sync
   if (index < presentable_flags_.size()) {
@@ -412,8 +437,8 @@ auto FrameContext::PopulateGameStateSnapshot(
   // entries or moving the original pointers.
   out.views.clear();
   out.views.reserve(views_.size());
-  for (const auto& view_ptr : views_) {
-    out.views.emplace_back(view_ptr);
+  for (const auto& [id, context] : views_) {
+    out.views.emplace_back(context);
   }
 
   out.surfaces = surfaces_;

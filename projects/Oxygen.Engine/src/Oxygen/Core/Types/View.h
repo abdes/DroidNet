@@ -12,8 +12,13 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Core/api_export.h>
+#include <Oxygen/Base/NamedType.h>
 
 namespace oxygen {
+
+// Unique identifier for a view within a frame
+using ViewIdTag = struct ViewIdTag;
+using ViewId = NamedType<uint64_t, ViewIdTag, Comparable, Hashable, Printable>;
 
 //! Immutable per-frame view snapshot used for rendering and culling.
 /*!

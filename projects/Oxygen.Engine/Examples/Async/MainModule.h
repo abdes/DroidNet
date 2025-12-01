@@ -183,6 +183,11 @@ private:
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
 
+  // Camera view for the main viewport
+  std::shared_ptr<renderer::CameraView> camera_view_;
+  // ViewId for the main viewport
+  ViewId view_id_ { 0 };
+
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };
   int last_ovr_toggle_ { -1 };

@@ -27,7 +27,7 @@ namespace oxygen::renderer {
 /*! Resolves a per-frame immutable View snapshot from a scene camera node.
     The scene's transforms must be up-to-date for the current frame before
     calling Resolve(). */
-class CameraView : public engine::RenderableView {
+class CameraView {
 public:
   struct Params {
     // Camera node handle (non-owning). Must have a camera component.
@@ -46,14 +46,14 @@ public:
   OXYGEN_DEFAULT_COPYABLE(CameraView)
   OXYGEN_DEFAULT_MOVABLE(CameraView)
 
-  ~CameraView() override = default;
+  ~CameraView() = default;
 
-  [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+  [[nodiscard]] auto GetName() const noexcept -> std::string_view
   {
     return name_;
   }
 
-  auto SetName(std::string_view name) noexcept -> void override
+  auto SetName(std::string_view name) noexcept -> void
   {
     name_ = std::move(name);
   }
@@ -69,7 +69,7 @@ public:
 
   // Builds a View snapshot from the camera's world transform and projection.
   // Contract: Scene transforms must have been updated prior to this call.
-  OXGN_RNDR_NDAPI auto Resolve() const noexcept -> View override;
+  OXGN_RNDR_NDAPI auto Resolve() const noexcept -> View;
 
   [[nodiscard]] auto GetParams() const noexcept -> const Params&
   {

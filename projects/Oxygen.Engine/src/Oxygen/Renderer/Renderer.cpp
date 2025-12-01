@@ -198,26 +198,9 @@ auto Renderer::PostExecute(RenderContext& render_context) -> void
 
 auto Renderer::OnFrameGraph(FrameContext& context) -> co::Co<>
 {
-  if (skip_frame_render_) {
-    co_return;
-  }
-
-  // FIXME: temporary: single view rendering only
-  // Pick the first available view from FrameContext's view-transform view
-  bool found = false;
-  for (const auto& viewRef : context.GetViews()) {
-    const auto& view = viewRef.get();
-    const auto resolved_view = view.Resolve();
-    BuildFrame(resolved_view, context);
-    found = true;
-    break; // temporary single-view support
-  }
-  if (!found) {
-    LOG_F(WARNING, "Renderer::OnFrameGraph: no views in FrameContext");
-    skip_frame_render_ = true;
-    co_return;
-  }
-
+  // Renderer is now passive; modules drive rendering via
+  // BuildFrame/ExecuteRenderGraph. This method remains as a phase hook if
+  // needed for global setup.
   co_return;
 }
 
@@ -229,28 +212,9 @@ auto Renderer::OnCommandRecord(FrameContext& context) -> co::Co<>
   // Once done, mark surfaces for rendered views presentable.
 
   // Mark our surface as presentable after rendering is complete
-  // This is part of the module contract - surfaces must be marked presentable
-  // before the Present phase. Since FrameContext is recreated each frame,
-  // we need to find and mark our surface every frame.
-  for (const auto& viewRef : context.GetViews()) {
-    const auto& view = viewRef.get();
-    const auto surface_result = view.GetSurface();
-    if (surface_result.index() != 0) {
-      LOG_F(WARNING, "Could not mark surface presentable for view {}: {}",
-        view.GetName(), std::get<1>(surface_result));
-      continue;
-    }
-    const auto& surface = std::get<0>(surface_result).get();
-    auto surfaces = context.GetSurfaces();
-    for (size_t i = 0; i < surfaces.size(); ++i) {
-      if (surfaces[i].get() == &surface) {
-        context.SetSurfacePresentable(i, true);
-        LOG_F(2, "Surface '{}' marked as presentable at index {}",
-          surface.GetName(), i);
-        break;
-      }
-    }
-  }
+  // Surface presentation is now handled by the module driving the rendering
+  // (e.g. EditorModule). The renderer is passive and only executes the render
+  // graph.
 
   co_return;
 }
@@ -397,9 +361,6 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context.GetFrameSlot();
 
-  // Initially mark the frame as renderable
-  skip_frame_render_ = false;
-
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.
   uploader_->OnFrameStart(tag, frame_slot);
@@ -475,10 +436,6 @@ auto Renderer::OnTransformPropagation(FrameContext& context) -> co::Co<>
 
   // Perform hierarchy propagation & world matrix updates.
   scene_ptr->Update();
-
-  for (const auto& viewRef : context.GetViews()) {
-    viewRef.get().Resolve();
-  }
 
   co_return;
 }

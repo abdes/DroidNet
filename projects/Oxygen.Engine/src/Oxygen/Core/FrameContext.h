@@ -78,6 +78,7 @@ namespace oxygen {
 class Graphics;
 namespace graphics {
   class Surface;
+  class Framebuffer;
 } // namespace graphics
 } // namespace oxygen
 
@@ -181,24 +182,22 @@ struct FrameError {
   std::optional<std::string> source_key;
 };
 
-// Note: There is no 1:1 mapping between surfaces and views. A surface may have
-// zero or many associated views. Each view references exactly one surface (or
-// null). Surfaces and views are expected to be finalized by the coordinator
-// during FrameStart and remain frozen afterward.
-class RenderableView : public Named {
-public:
-  RenderableView() = default;
+// Unique identifier for a view within a frame
+using ViewId = oxygen::ViewId;
 
-  OXYGEN_DEFAULT_COPYABLE(RenderableView)
-  OXYGEN_DEFAULT_MOVABLE(RenderableView)
+// Metadata associated with a view for module discovery
+struct ViewMetadata {
+  std::string tag; // e.g. "MainScene", "Minimap", "EditorViewport"
+};
 
-  ~RenderableView() override = default;
+// Complete context for a view, including its output
+struct ViewContext {
+  std::string name;
+  // Surface reference (for presentation/sizing)
+  std::variant<std::reference_wrapper<graphics::Surface>, std::string> surface;
 
-  // NOTE: Not using std:;expected as this header is visible to C++/CLI which is stuck at c++20
-  virtual [[nodiscard]] auto GetSurface() const noexcept
-    -> std::variant<std::reference_wrapper<graphics::Surface>, std::string>
-    = 0;
-  virtual [[nodiscard]] auto Resolve() const noexcept -> View = 0;
+  ViewMetadata metadata;
+  std::shared_ptr<graphics::Framebuffer> output; // Render target (set by Renderer/Compositor)
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -464,7 +463,7 @@ using InputBlobPtr = std::shared_ptr<const void>;
  @see FrameSnapshot, FrameContext::GetGameStateSnapshot
 */
 struct GameStateSnapshot {
-  std::vector<std::shared_ptr<const RenderableView>> views;
+  std::vector<ViewContext> views;
   InputBlobPtr input; // input snapshot at capture time (type-erased)
 
   // Cross-module game data using immutable policy
@@ -671,12 +670,19 @@ public:
   auto GetViews() const noexcept
   {
     return std::ranges::views::transform(
-      views_, [](const auto& v) { return std::cref(*v); });
+      views_, [](const auto& pair) { return std::cref(pair.second); });
   }
 
   // Add individual view with phase validation
-  OXGN_CORE_API auto AddView(std::shared_ptr<RenderableView> view) noexcept
+  OXGN_CORE_API auto AddView(ViewContext view) noexcept
+    -> ViewId;
+
+  // Set the output framebuffer for a view (Renderer/Compositor only)
+  OXGN_CORE_API auto SetViewOutput(ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept
     -> void;
+
+  // Get the full context for a view
+  OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;
 
   // Clear views with phase validation
   OXGN_CORE_API auto ClearViews(EngineTag) noexcept -> void;
@@ -963,7 +969,7 @@ private:
   // Active rendering views, in multi-view rendering. There is no 1:1 mapping
   // between views and surfaces. Can be mutated until the PhaseId::kSnapshot
   // phase (not included)
-  std::vector<std::shared_ptr<RenderableView>> views_;
+  std::unordered_map<ViewId, ViewContext> views_;
 
   // Active scene (non-owning, may be null). Not part of GameData because the
   // high level scene is manipulated early in the frame render cycle, uses its

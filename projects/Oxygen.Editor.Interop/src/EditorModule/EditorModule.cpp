@@ -65,6 +65,9 @@ namespace oxygen::interop::module {
     auto surfaces = ProcessResizeRequests();
     SyncSurfacesWithFrameContext(context, surfaces);
 
+    // Clear per-frame view IDs
+    surface_view_ids_.clear();
+
     // After scene creation/loading:
     if (scene_) {
       context.SetScene(observer_ptr{ scene_.get() });
@@ -330,7 +333,7 @@ namespace oxygen::interop::module {
         // Create camera view for this surface
         auto it = surface_cameras_.find(surface.get());
         if (it != surface_cameras_.end() && it->second.IsAlive()) {
-          context.AddView(std::make_shared<oxygen::renderer::CameraView>(
+          auto camera_view = std::make_shared<oxygen::renderer::CameraView>(
             oxygen::renderer::CameraView::Params{
               .camera_node = it->second,
               .viewport = std::nullopt,
@@ -339,10 +342,21 @@ namespace oxygen::interop::module {
               .reverse_z = false,
               .mirrored = false,
             },
-            surface));
+            surface);
+
+          // Register the view with the FrameContext (metadata only, no resolve)
+          const auto view_id = context.AddView(engine::ViewContext {
+            .name = std::string(camera_view->GetName()),
+            .surface = *surface,
+            .metadata = { .tag = fmt::format("Surface_{}", fmt::ptr(surface.get())) }
+          });
+
+          // Store the ViewId for later use in OnCommandRecord
+          surface_view_ids_[surface.get()] = view_id;
+
           LOG_F(INFO,
-            "Editor Camera view created for surface (ptr={}) with dedicated camera.",
-            fmt::ptr(surface.get()));
+            "Editor Camera view created for surface (ptr={}) with dedicated camera. ViewId={}",
+            fmt::ptr(surface.get()), view_id.get());
         }
       }
 
@@ -518,6 +532,30 @@ namespace oxygen::interop::module {
         }
       }
 
+      // Re-create the CameraView for this surface to resolve the latest transforms
+      auto cam_it = surface_cameras_.find(surface.get());
+      if (cam_it == surface_cameras_.end() || !cam_it->second.IsAlive()) {
+          continue;
+      }
+
+      oxygen::renderer::CameraView camera_view(
+        oxygen::renderer::CameraView::Params{
+          .camera_node = cam_it->second,
+          .viewport = std::nullopt,
+          .scissor = std::nullopt,
+          .pixel_jitter = glm::vec2(0.0F, 0.0F),
+          .reverse_z = false,
+          .mirrored = false,
+        },
+        surface);
+
+      // Resolve the view now that transforms are up to date (PhaseCommandRecord > PhaseTransformPropagation)
+      const auto view_snapshot = camera_view.Resolve();
+
+      // Drive the renderer: BuildFrame -> ExecuteRenderGraph
+      // This replaces the passive iteration in Renderer::OnFrameGraph
+      renderer.BuildFrame(view_snapshot, context);
+
       fb->PrepareForRender(*recorder);
       recorder->BindFrameBuffer(*fb);
 
@@ -549,29 +587,7 @@ namespace oxygen::interop::module {
             static_cast<bool>(ctx.scene_constants));
           DLOG_F(INFO, "RenderGraph run: framebuffer={}",
             static_cast<bool>(ctx.framebuffer));
-          try {
-            // Avoid dereferencing or calling methods on potentially stale
-            // RenderableView/Surface objects while logging (this can cause
-            // UB if the underlying objects were destroyed). Log presence and
-            // counts only.
-            // Safely count views without dereferencing view objects to avoid
-            // touching possibly-stale references that can cause crashes.
-            size_t view_count = 0;
-            // Avoid calling begin()/end() on different temporary
-            // transform_views (which yields incompatible iterators);
-            // materialize the view range into a local variable and iterate
-            // that.
-            {
-              auto views = context.GetViews();
-              for (auto&& ignored_view : views) {
-                ++view_count; // do NOT dereference or call methods on the view
-              }
-            }
-            DLOG_F(INFO, "RenderGraph run: FrameContext views={}", view_count);
-          }
-          catch (...) {
-            DLOG_F(INFO, "RenderGraph run: failed to query FrameContext views");
-          }
+
           // Delegate pass execution to the shared RenderGraph component
           // which performs PrepareResources -> Execute for configured passes.
           if (!render_graph_) {
@@ -582,7 +598,21 @@ namespace oxygen::interop::module {
           co_return;
         },
         render_graph_->GetRenderContext(), context);
-    }
+
+      // Update FrameContext with the output for compositing
+      auto vid_it = surface_view_ids_.find(surface.get());
+      if (vid_it != surface_view_ids_.end()) {
+          context.SetViewOutput(vid_it->second, fb);
+      }
+
+      // Mark the surface as presentable now that we've rendered to it
+      auto idx_it = surface_indices_.find(surface.get());
+      if (idx_it != surface_indices_.end()) {
+        context.SetSurfacePresentable(idx_it->second, true);
+        DLOG_F(INFO, "Marked surface ptr={} at index {} as presentable",
+          fmt::ptr(surface.get()), idx_it->second);
+      }
+    } // End of for loop over surfaces
 
     co_return;
   }

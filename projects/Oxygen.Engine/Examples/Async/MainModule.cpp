@@ -789,8 +789,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   EnsureMainCamera(
     static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
-  // FIXME: view management is temporary
-  context.AddView(std::make_shared<renderer::CameraView>(
+  // Create CameraView with the appropriate parameters
+  camera_view_ = std::make_shared<renderer::CameraView>(
     renderer::CameraView::Params {
       .camera_node = main_camera_,
       .viewport = std::nullopt,
@@ -799,7 +799,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       .reverse_z = false,
       .mirrored = false,
     },
-    surface));
+    surface);
+
+  // Add view to FrameContext with metadata
+  view_id_ = context.AddView(engine::ViewContext {
+    .name = "MainView",
+    .surface = *surface,
+    .metadata = { .tag = "AsyncDemo_MainView" }
+  });
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -1365,6 +1372,16 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // Prepare render graph for this frame (wires up framebuffer attachments)
   render_graph_->PrepareForRenderFrame(fb);
 
+  // Resolve the camera view to get the View snapshot
+  if (!camera_view_) {
+    LOG_F(ERROR, "CameraView not available");
+    co_return;
+  }
+  const auto view_snapshot = camera_view_->Resolve();
+
+  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
+  app_.renderer->BuildFrame(view_snapshot, context);
+
   // Execute render graph using the configured passes
   co_await app_.renderer->ExecuteRenderGraph(
     [&](const engine::RenderContext& render_context) -> co::Co<> {
@@ -1383,6 +1400,19 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
       }
     },
     render_graph_->GetRenderContext(), context);
+
+  // Update FrameContext with the output framebuffer
+  context.SetViewOutput(view_id_, fb);
+
+  // Mark the surface as presentable
+  const auto surfaces = context.GetSurfaces();
+  for (size_t i = 0; i < surfaces.size(); ++i) {
+    if (surfaces[i] == surface) {
+      context.SetSurfacePresentable(i, true);
+      DLOG_F(3, "Marked surface at index {} as presentable", i);
+      break;
+    }
+  }
 
   LOG_F(3, "Command recording completed for frame {}", current_frame);
 

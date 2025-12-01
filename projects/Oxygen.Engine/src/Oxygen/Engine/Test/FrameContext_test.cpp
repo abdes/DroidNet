@@ -78,34 +78,16 @@ struct DummySurface final : oxygen::graphics::Surface {
   auto Height() const -> uint32_t override { return 0u; }
 };
 
-// Minimal concrete RenderableView implementation for tests
-struct DummyRenderableView final : oxygen::engine::RenderableView {
-  DummyRenderableView() = default;
-
-  // Return a static dummy surface reference for tests wrapped in expected
-  auto GetSurface() const noexcept
-    -> std::variant<std::reference_wrapper<oxygen::graphics::Surface>,
-      std::string> override
-  {
-    static DummySurface s;
-    return std::ref(s);
-  }
-
-  // Return a simple View for resolution; tests don't inspect it deeply
-  auto Resolve() const noexcept -> oxygen::View override
-  {
-    oxygen::View::Params p;
-    return oxygen::View(p);
-  }
-
-  // Implement Named interface
-  auto GetName() const noexcept -> std::string_view override
-  {
-    return "DummyRenderableView";
-  }
-
-  void SetName(std::string_view) noexcept override { /* no-op for tests */ }
-};
+// Helper to create a minimal ViewContext for testing
+auto MakeDummyViewContext() -> oxygen::engine::ViewContext {
+  static DummySurface s;
+  return oxygen::engine::ViewContext {
+    .name = "TestView",
+    .surface = std::ref(s),
+    .metadata = { .tag = "TestTag" },
+    .output = nullptr
+  };
+}
 
 //! Stage and read back module data using new facade API
 NOLINT_TEST(FrameContext_basic_test, StageModuleData)
@@ -255,8 +237,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Add a view (should succeed in GameState mutation phase)
-  auto view = std::make_shared<DummyRenderableView>();
-  ctx.AddView(view);
+  ctx.AddView(MakeDummyViewContext());
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 
   // Move to snapshot phase (allows FrameState but not GameState mutations)
@@ -265,8 +246,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
 
   // Now try to mutate Views - should trigger CHECK_F (death) due to phase
   // restrictions. Use ASSERT_DEATH to verify behavior in tests.
-  auto view2 = std::make_shared<DummyRenderableView>();
-  NOLINT_ASSERT_DEATH(ctx.AddView(view2), ".*");
+  NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
   // The visible views should remain unchanged after the failed mutation.
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 }
@@ -282,9 +262,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsMutatorsDieInSnapshot)
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   (void)ctx.PublishSnapshots(tag);
 
-  auto bad_view = std::make_shared<DummyRenderableView>();
-
-  NOLINT_ASSERT_DEATH(ctx.AddView(bad_view), ".*");
+  NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
   NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
 }
 
@@ -339,7 +317,6 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsDieAtOrAfterPresent)
 NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 {
   auto tag = EngineTagFactory::Get();
-  auto view = std::make_shared<DummyRenderableView>();
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
@@ -348,13 +325,13 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Allowed: adding/clearing views before Snapshot
-      ctx.AddView(view);
+      ctx.AddView(MakeDummyViewContext());
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
       ctx.ClearViews(tag);
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0u);
     } else {
       // Disallowed: should be fatal
-      NOLINT_ASSERT_DEATH(ctx.AddView(view), ".*");
+      NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
       NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
     }
   }
