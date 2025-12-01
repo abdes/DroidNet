@@ -10,6 +10,7 @@ add_subdirectory("Platform")
 add_subdirectory("Devices")
 add_subdirectory("Async")
 add_subdirectory("InputSystem")
+add_subdirectory("MultiView")
 
 # add_subdirectory("Graphics")
 

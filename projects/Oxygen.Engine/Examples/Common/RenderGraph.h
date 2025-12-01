@@ -69,6 +69,12 @@ public:
     return shader_pass_config_;
   }
 
+  auto GetWireframeShaderPassConfig()
+    -> std::shared_ptr<oxygen::engine::ShaderPassConfig>&
+  {
+    return wireframe_shader_pass_config_;
+  }
+
   auto GetTransparentPass() -> std::shared_ptr<oxygen::engine::TransparentPass>&
   {
     return transparent_pass_;
@@ -88,12 +94,18 @@ public:
   auto PrepareForRenderFrame(
     const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void;
 
+  auto PrepareForWireframeRenderFrame(
+    const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void;
+
   // Execute the configured pass list (DepthPrePass, ShaderPass,
   // TransparentPass) using the supplied recorder. This reuses the
   // RenderGraph's internal RenderContext and performs the PrepareResources
   // -> Execute sequence for each pass. Implemented as a coroutine to match
   // the renderer's usage pattern.
   auto RunPasses(const oxygen::engine::RenderContext& ctx,
+    oxygen::graphics::CommandRecorder& recorder) -> co::Co<>;
+
+  auto RunWireframePasses(const oxygen::engine::RenderContext& ctx,
     oxygen::graphics::CommandRecorder& recorder) -> co::Co<>;
 
 private:
@@ -103,6 +115,14 @@ private:
 
   std::shared_ptr<oxygen::engine::ShaderPass> shader_pass_ {};
   std::shared_ptr<oxygen::engine::ShaderPassConfig> shader_pass_config_ {};
+
+  std::shared_ptr<oxygen::engine::DepthPrePass> wireframe_depth_pass_ {};
+  std::shared_ptr<oxygen::engine::DepthPrePassConfig>
+    wireframe_depth_pass_config_ {};
+
+  std::shared_ptr<oxygen::engine::ShaderPass> wireframe_shader_pass_ {};
+  std::shared_ptr<oxygen::engine::ShaderPassConfig>
+    wireframe_shader_pass_config_ {};
 
   std::shared_ptr<oxygen::engine::TransparentPass> transparent_pass_ {};
   std::shared_ptr<oxygen::engine::TransparentPass::Config>
