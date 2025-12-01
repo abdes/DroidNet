@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <iterator>
 #include <ranges>
 
 #include <Oxygen/Base/AlwaysFalse.h>
@@ -70,15 +71,27 @@ auto ResourceStateTracker::TryMergeWithExistingTransition(
   const NativeResource& native_object, ResourceStates& current_state,
   const ResourceStates required_state) -> bool
 {
-  for (auto& pending_barrier : std::ranges::reverse_view(pending_barriers_)) {
+  for (auto it = pending_barriers_.rbegin(); it != pending_barriers_.rend();
+    ++it) {
+    auto& pending_barrier = *it;
     if (pending_barrier.GetResource() == native_object) {
       if (std::holds_alternative<BarrierDescType>(
             pending_barrier.GetDescriptor())) {
-        pending_barrier.AppendState(required_state);
-        current_state = pending_barrier.GetStateAfter();
-        DLOG_F(2, "Merged with existing transition: {} -> {}",
-          nostd::to_string(pending_barrier.GetStateBefore()),
-          nostd::to_string(pending_barrier.GetStateAfter()));
+        const auto before_state = pending_barrier.GetStateBefore();
+        pending_barrier.UpdateStateAfter(required_state);
+        const auto after_state = pending_barrier.GetStateAfter();
+        current_state = after_state;
+
+        if (before_state == after_state) {
+          auto forward_it = it.base();
+          --forward_it;
+          pending_barriers_.erase(forward_it);
+          DLOG_F(2, "Removed redundant transition: resource={} ending state={}",
+            nostd::to_string(native_object), nostd::to_string(after_state));
+        } else {
+          DLOG_F(2, "Merged with existing transition: {} -> {}",
+            nostd::to_string(before_state), nostd::to_string(after_state));
+        }
         return true; // Successfully merged
       }
       if (pending_barrier.IsMemoryBarrier()) {
