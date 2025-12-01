@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 namespace oxygen {
@@ -15,6 +16,10 @@ struct RendererConfig {
   // this into the UploadPolicy passed to the UploadCoordinator. This field
   // is required; do not default-initialize.
   std::string upload_queue_key;
+
+  // Maximum number of simultaneously prepared views the renderer keeps alive
+  // before evicting the least-recently-used entry. Default keeps legacy 8.
+  std::size_t max_active_views { 8 };
 };
 
 } // namespace oxygen
