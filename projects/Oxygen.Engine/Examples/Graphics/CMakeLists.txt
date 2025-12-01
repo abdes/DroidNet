@@ -4,5 +4,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # ===-----------------------------------------------------------------------===#
 
-add_subdirectory("Simple")
+# add_subdirectory("Simple")
 # add_subdirectory("RenderPass")
