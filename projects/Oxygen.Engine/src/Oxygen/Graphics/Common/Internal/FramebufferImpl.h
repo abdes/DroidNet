@@ -36,10 +36,6 @@ public:
   [[nodiscard]] auto GetFramebufferInfo() const
     -> const FramebufferInfo& override;
 
-  // TODO: maybe this should go to the render pass?
-  OXGN_GFX_API auto PrepareForRender(CommandRecorder& crecorder)
-    -> void override;
-
   [[nodiscard]] auto GetRenderTargetViews() const
     -> std::span<const NativeView> override
   {

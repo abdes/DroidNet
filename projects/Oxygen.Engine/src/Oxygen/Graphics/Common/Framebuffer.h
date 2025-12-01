@@ -253,10 +253,6 @@ public:
   [[nodiscard]] virtual auto GetFramebufferInfo() const
     -> const FramebufferInfo& = 0;
 
-  // TODO: maybe this should go to the render pass?
-  OXGN_GFX_API virtual auto PrepareForRender(CommandRecorder& crecorder) -> void
-    = 0;
-
   OXGN_GFX_NDAPI virtual auto GetRenderTargetViews() const
     -> std::span<const NativeView>
     = 0;

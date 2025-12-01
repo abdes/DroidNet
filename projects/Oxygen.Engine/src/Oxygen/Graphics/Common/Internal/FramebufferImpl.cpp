@@ -149,27 +149,3 @@ auto FramebufferImpl::GetFramebufferInfo() const -> const FramebufferInfo&
   static FramebufferInfo info(desc_);
   return info;
 }
-
-auto FramebufferImpl::PrepareForRender(CommandRecorder& recorder) -> void
-{
-  const auto& desc = GetDescriptor();
-  for (const auto& attachment : desc.color_attachments) {
-    if (attachment.texture) {
-      recorder.BeginTrackingResourceState(
-        *attachment.texture, ResourceStates::kPresent, true);
-      recorder.RequireResourceState(
-        *attachment.texture, ResourceStates::kRenderTarget);
-    }
-  }
-
-  if (desc.depth_attachment.IsValid()) {
-    // Depth attachment starts in the DepthWrite state
-    recorder.BeginTrackingResourceState(
-      *desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
-  }
-
-  // Flush barriers to ensure all resource state transitions are applied and
-  // that subsequent state transitions triggered by the frame rendering task
-  // (application) are executed in a separate batch.
-  recorder.FlushBarriers();
-}

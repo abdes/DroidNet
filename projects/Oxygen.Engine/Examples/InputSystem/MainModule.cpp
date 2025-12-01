@@ -513,11 +513,9 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     surface);
 
   // Add view to FrameContext with metadata
-  view_id_ = context.AddView(engine::ViewContext {
-    .name = "InputSystemView",
+  view_id_ = context.AddView(engine::ViewContext { .name = "InputSystemView",
     .surface = *surface,
-    .metadata = { .tag = "InputSystem_MainView" }
-  });
+    .metadata = { .tag = "InputSystem_MainView" } });
 
   co_return;
 }
@@ -544,6 +542,8 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
 {
+  using namespace oxygen::graphics;
+
   LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
 
   DCHECK_NOTNULL_F(app_window_);
@@ -584,7 +584,25 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   if (!fb) {
     co_return;
   }
-  fb->PrepareForRender(*recorder);
+  // Manual resource tracking replacing PrepareForRender
+  const auto& fb_desc = fb->GetDescriptor();
+  for (const auto& attachment : fb_desc.color_attachments) {
+    if (attachment.texture) {
+      recorder->BeginTrackingResourceState(
+        *attachment.texture, ResourceStates::kPresent, true);
+      recorder->RequireResourceState(
+        *attachment.texture, ResourceStates::kRenderTarget);
+    }
+  }
+  if (fb_desc.depth_attachment.texture) {
+    recorder->BeginTrackingResourceState(
+      *fb_desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
+
+    // Flush barriers to ensure all resource state transitions are applied and
+    // that subsequent state transitions triggered by the frame rendering task
+    // (application) are executed in a separate batch.
+    recorder->FlushBarriers();
+  }
   recorder->BindFrameBuffer(*fb);
 
   // Create render context for renderer (delegated to RenderGraph component)
@@ -598,11 +616,12 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   }
   const auto view_snapshot = camera_view_->Resolve();
 
-  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
-  app_.renderer->BuildFrame(view_snapshot, context);
+  // Phase 2: Use PrepareView/RenderView for multi-view support
+  app_.renderer->PrepareView(view_id_, view_snapshot, context);
 
-  // Execute render graph using the configured passes
-  co_await app_.renderer->ExecuteRenderGraph(
+  // Execute render graph for this specific view
+  co_await app_.renderer->RenderView(
+    view_id_,
     [&](const engine::RenderContext& render_context) -> co::Co<> {
       // Run the example's configured render passes. This delegates the
       // PrepareResources -> Execute sequence to the shared RenderGraph

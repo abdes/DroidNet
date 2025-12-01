@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
 
 using namespace oxygen;
@@ -44,6 +45,32 @@ auto RenderGraph::SetupRenderPasses() -> void
   }
   if (!shader_pass_) {
     shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
+  }
+
+  // Wireframe-only pass stack for PiP rendering
+  if (!wireframe_depth_pass_config_) {
+    wireframe_depth_pass_config_
+      = std::make_shared<engine::DepthPrePassConfig>();
+    wireframe_depth_pass_config_->debug_name = "WireframeDepthPrePass";
+  }
+  if (!wireframe_depth_pass_) {
+    wireframe_depth_pass_
+      = std::make_shared<engine::DepthPrePass>(wireframe_depth_pass_config_);
+  }
+
+  if (!wireframe_shader_pass_config_) {
+    wireframe_shader_pass_config_
+      = std::make_shared<engine::ShaderPassConfig>();
+    wireframe_shader_pass_config_->should_clear = true;
+    wireframe_shader_pass_config_->clear_color
+      = graphics::Color { 0.05F, 0.05F, 0.05F, 1.0F };
+    wireframe_shader_pass_config_->rasterizer_override
+      = graphics::RasterizerStateDesc::WireframeBackFaceCulling();
+    wireframe_shader_pass_config_->debug_name = "WireframeShaderPass";
+  }
+  if (!wireframe_shader_pass_) {
+    wireframe_shader_pass_
+      = std::make_shared<engine::ShaderPass>(wireframe_shader_pass_config_);
   }
 
   // Transparent pass
@@ -115,6 +142,28 @@ auto RenderGraph::PrepareForRenderFrame(
   }
 }
 
+auto RenderGraph::PrepareForWireframeRenderFrame(
+  const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void
+{
+  LOG_SCOPE_F(4, "RenderGraph::PrepareForWireframeRenderFrame");
+
+  if (!fb) {
+    return;
+  }
+
+  render_context_.framebuffer = fb;
+
+  const auto& desc = fb->GetDescriptor();
+  if (wireframe_shader_pass_config_) {
+    if (!desc.color_attachments.empty()) {
+      wireframe_shader_pass_config_->color_texture
+        = desc.color_attachments[0].texture;
+    } else {
+      wireframe_shader_pass_config_->color_texture.reset();
+    }
+  }
+}
+
 auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   oxygen::graphics::CommandRecorder& recorder) -> co::Co<>
 {
@@ -134,6 +183,22 @@ auto RenderGraph::RunPasses(const oxygen::engine::RenderContext& ctx,
   if (transparent_pass_) {
     co_await transparent_pass_->PrepareResources(ctx, recorder);
     co_await transparent_pass_->Execute(ctx, recorder);
+  }
+
+  co_return;
+}
+
+auto RenderGraph::RunWireframePasses(const oxygen::engine::RenderContext& ctx,
+  oxygen::graphics::CommandRecorder& recorder) -> co::Co<>
+{
+  if (wireframe_depth_pass_) {
+    co_await wireframe_depth_pass_->PrepareResources(ctx, recorder);
+    co_await wireframe_depth_pass_->Execute(ctx, recorder);
+  }
+
+  if (wireframe_shader_pass_) {
+    co_await wireframe_shader_pass_->PrepareResources(ctx, recorder);
+    co_await wireframe_shader_pass_->Execute(ctx, recorder);
   }
 
   co_return;
