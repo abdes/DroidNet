@@ -249,7 +249,18 @@ auto MainModule::RenderScene() -> co::Co<>
 
   // 5. Prepare framebuffer, set viewport/scissors, pipeline, bindless, clear,
   // draw
-  fb->PrepareForRender(*recorder);
+  // Manual resource tracking replacing PrepareForRender
+  const auto& fb_desc = fb->GetDescriptor();
+  for (const auto& att : fb_desc.color_attachments) {
+    if (att.texture) {
+      recorder->RequireResourceState(
+        *att.texture, oxygen::graphics::ResourceStates::kRenderTarget);
+    }
+  }
+  if (fb_desc.depth_attachment.texture) {
+    recorder->RequireResourceState(*fb_desc.depth_attachment.texture,
+      oxygen::graphics::ResourceStates::kDepthWrite);
+  }
 
   // Update the shared config for this frame
   const auto& fb_desc = fb->GetDescriptor();

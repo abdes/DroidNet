@@ -8,13 +8,11 @@
 # Meta information about the this module
 # ------------------------------------------------------------------------------
 
-set(
-  description
-  "Sample program using oxygen::graphics for some rendering activities."
-)
 asap_module_declare(
-  MODULE_NAME "Oxygen.Graphics.Simple.Example"
-  DESCRIPTION description
+  MODULE_NAME "Oxygen.Examples.MultiView"
+  DESCRIPTION [=[
+An example demonstrating the Oxygen engine multi-view rendering capabilities.
+]=]
   WITHOUT_VERSION_H
 )
 asap_push_module("${META_MODULE_NAME}")
@@ -31,10 +29,17 @@ asap_push_module("${META_MODULE_NAME}")
 
 add_executable(
   ${META_MODULE_TARGET}
-  "MainModule.cpp"
-  "MainModule.h"
+  "../main.cpp"
+  "../Common/AsyncEngineApp.h"
+  "../Common/AppWindow.h"
+  "../Common/AppWindow.cpp"
+  "../Common/RenderGraph.h"
+  "../Common/RenderGraph.cpp"
+  "../Common/ExampleModuleBase.h"
+  "../Common/ExampleModuleBase.cpp"
   "main_impl.cpp"
-  "../../main.cpp"
+  "MainModule.h"
+  "MainModule.cpp"
 )
 set_target_properties(
   ${META_MODULE_TARGET}
@@ -45,22 +50,17 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_include_directories(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
-    oxygen::base
-    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
-    oxygen::oxco
     oxygen::platform
-    oxygen::loader
-    oxygen::data
-    oxygen::renderer
+    oxygen::input
+    oxygen::core
+    oxygen::clap
+    oxygen::engine
     oxygen::graphics-direct3d12
+    oxygen::renderer
+    oxygen::loader
 )
 
 # ==============================================================================
