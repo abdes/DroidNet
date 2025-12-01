@@ -616,17 +616,16 @@ auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
   }
   const auto view_snapshot = camera_view_->Resolve();
 
-  // Phase 2: Use PrepareView/RenderView for multi-view support
-  app_.renderer->PrepareView(view_id_, view_snapshot, context);
+  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
+  app_.renderer->BuildFrame(view_snapshot, context);
 
-  // Execute render graph for this specific view
-  co_await app_.renderer->RenderView(
-    view_id_,
+  // Execute render graph using the configured passes
+  co_await app_.renderer->ExecuteRenderGraph(
     [&](const engine::RenderContext& render_context) -> co::Co<> {
-      // Run the example's configured render passes. This delegates the
-      // PrepareResources -> Execute sequence to the shared RenderGraph
-      // component so per-example modules don't need to duplicate the calls.
+      // Run all passes via RenderGraph (DepthPrePass, ShaderPass,
+      // TransparentPass)
       co_await render_graph_->RunPasses(render_context, *recorder);
+
       // --- ImGuiPass configuration ---
       auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
       if (imgui_module_ref) {

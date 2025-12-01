@@ -1397,12 +1397,11 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   }
   const auto view_snapshot = camera_view_->Resolve();
 
-  // Phase 2: Use PrepareView/RenderView for multi-view support
-  app_.renderer->PrepareView(view_id_, view_snapshot, context);
+  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
+  app_.renderer->BuildFrame(view_snapshot, context);
 
-  // Execute render graph for this specific view
-  co_await app_.renderer->RenderView(
-    view_id_,
+  // Execute render graph using the configured passes
+  co_await app_.renderer->ExecuteRenderGraph(
     [&](const engine::RenderContext& render_context) -> co::Co<> {
       // Run all passes via RenderGraph (DepthPrePass, ShaderPass,
       // TransparentPass)

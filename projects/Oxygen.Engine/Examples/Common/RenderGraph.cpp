@@ -61,11 +61,8 @@ auto RenderGraph::SetupRenderPasses() -> void
   if (!wireframe_shader_pass_config_) {
     wireframe_shader_pass_config_
       = std::make_shared<engine::ShaderPassConfig>();
-    wireframe_shader_pass_config_->should_clear = true;
     wireframe_shader_pass_config_->clear_color
       = graphics::Color { 0.05F, 0.05F, 0.05F, 1.0F };
-    wireframe_shader_pass_config_->rasterizer_override
-      = graphics::RasterizerStateDesc::WireframeBackFaceCulling();
     wireframe_shader_pass_config_->debug_name = "WireframeShaderPass";
   }
   if (!wireframe_shader_pass_) {
