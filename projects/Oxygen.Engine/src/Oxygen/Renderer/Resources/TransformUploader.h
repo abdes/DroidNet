@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <memory>
-#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -21,9 +19,8 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::renderer::resources {
@@ -32,7 +29,6 @@ namespace oxygen::renderer::resources {
 class TransformUploader {
 public:
   OXGN_RNDR_API TransformUploader(observer_ptr<Graphics> gfx,
-    observer_ptr<engine::upload::UploadCoordinator> uploader,
     observer_ptr<engine::upload::StagingProvider> provider);
 
   OXYGEN_MAKE_NON_COPYABLE(TransformUploader)
@@ -83,15 +79,15 @@ private:
 
   // Core state
   observer_ptr<Graphics> gfx_;
-  observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
 
-  // Phase 1+: Future migration target – resident atlases (not yet wired)
-  std::unique_ptr<engine::upload::AtlasBuffer> worlds_atlas_;
-  std::unique_ptr<engine::upload::AtlasBuffer> normals_atlas_;
-  // Atlas element refs stored per transform when atlas path is enabled
-  std::vector<engine::upload::AtlasBuffer::ElementRef> world_refs_;
-  std::vector<engine::upload::AtlasBuffer::ElementRef> normal_refs_;
+  // Transient per-frame GPU buffers for transforms (direct-write strategy)
+  engine::upload::TransientStructuredBuffer worlds_buffer_;
+  engine::upload::TransientStructuredBuffer normals_buffer_;
+
+  // Cached SRV indices for fast access
+  ShaderVisibleIndex worlds_srv_index_ { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex normals_srv_index_ { kInvalidShaderVisibleIndex };
 
   // Transform storage and deduplication
   std::vector<glm::mat4> transforms_;
@@ -107,16 +103,11 @@ private:
 
   std::unordered_map<std::uint64_t, TransformCacheEntry> key_to_handle_;
 
-  // Simple dirty tracking
-  std::vector<std::uint32_t> dirty_epoch_;
   std::uint32_t current_epoch_ { 1U };
   bool uploaded_this_frame_ { false };
   // Per-frame write cursor to reuse existing slots in call order and avoid
   // unbounded growth when transforms are dynamic. Reset at OnFrameStart.
   std::uint32_t frame_write_count_ { 0U };
-
-  // Current frame slot for atlas element retirement
-  oxygen::frame::Slot current_frame_slot_ { oxygen::frame::kInvalidSlot };
 
   // Statistics
   //! Total number of new logical transforms allocated (grows monotonically)
@@ -126,11 +117,6 @@ private:
   std::uint64_t cache_hits_ { 0U };
   //! Total number of GetOrAllocate() calls made (usage metric)
   std::uint64_t total_calls_ { 0U };
-  //! Total number of logical transform allocations (each requires world+normal
-  //! pair)
-  std::uint64_t atlas_allocations_ { 0U };
-  //! Total number of upload operations submitted to staging provider
-  std::uint64_t upload_operations_ { 0U };
 };
 
 } // namespace oxygen::renderer::resources
