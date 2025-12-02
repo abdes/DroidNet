@@ -6,18 +6,23 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <expected>
 #include <optional>
+#include <string>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
+
+class InlineTransfersCoordinator;
 
 //! Wrapper around StagingProvider for per-frame transient structured buffers.
 /*!
@@ -50,6 +55,12 @@ namespace oxygen::engine::upload {
  - **Memory Management**: No manual deallocation is needed. The memory is
    "released" by simply advancing the ring head.
 
+ Warning:
+   The `stride` of the structured buffer must be a multiple of the `staging`
+   provider's alignment. D3D12 requires the SRV FirstElement offset to be
+   `ByteOffset / Stride`. If the allocator returns an offset that is not a
+   multiple of `stride`, the SRV will point to the wrong location.
+
  Usage:
  1. Call Allocate(count) at start of frame/view.
  2. Write data to GetMappedPtr().
@@ -63,13 +74,18 @@ public:
     std::uint32_t stride { 0 };
   };
 
-  OXGN_RNDR_API TransientStructuredBuffer(
-    observer_ptr<Graphics> gfx, StagingProvider& staging, std::uint32_t stride);
+  OXGN_RNDR_API TransientStructuredBuffer(observer_ptr<Graphics> gfx,
+    StagingProvider& staging, std::uint32_t stride,
+    observer_ptr<InlineTransfersCoordinator> inline_transfers = nullptr,
+    std::string debug_label = {});
 
   OXYGEN_MAKE_NON_COPYABLE(TransientStructuredBuffer)
   OXYGEN_DEFAULT_MOVABLE(TransientStructuredBuffer)
 
   OXGN_RNDR_API ~TransientStructuredBuffer();
+
+  //! Set the active frame slot for upcoming allocations.
+  OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
 
   //! Allocate memory and create a transient SRV.
   OXGN_RNDR_API auto Allocate(std::uint32_t element_count)
@@ -78,13 +94,19 @@ public:
   //! Get the current binding (SRV + Stride).
   OXGN_RNDR_NDAPI auto GetBinding() const noexcept -> Binding
   {
-    return { srv_index_, stride_ };
+    if (const auto* slot = ActiveSlot(); slot != nullptr) {
+      return { slot->srv_index, stride_ };
+    }
+    return { kInvalidShaderVisibleIndex, stride_ };
   }
 
   //! Get pointer to mapped memory for writing.
   OXGN_RNDR_NDAPI auto GetMappedPtr() const noexcept -> void*
   {
-    return allocation_.has_value() ? allocation_->Ptr() : nullptr;
+    if (const auto* slot = ActiveSlot(); slot != nullptr) {
+      return slot->allocation.has_value() ? slot->allocation->Ptr() : nullptr;
+    }
+    return nullptr;
   }
 
   //! Release the SRV descriptor. Memory is recycled by StagingProvider
@@ -92,13 +114,24 @@ public:
   OXGN_RNDR_API auto Reset() -> void;
 
 private:
+  struct SlotData {
+    std::optional<StagingProvider::Allocation> allocation;
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    oxygen::graphics::NativeView native_view {};
+  };
+
   observer_ptr<Graphics> gfx_;
   StagingProvider* staging_; // stored as pointer for assignability
   std::uint32_t stride_;
+  observer_ptr<InlineTransfersCoordinator> inline_transfers_;
+  std::string debug_label_;
+  frame::Slot current_slot_ { frame::kInvalidSlot };
+  std::array<SlotData, frame::kFramesInFlight.get()> slots_ {};
 
-  std::optional<StagingProvider::Allocation> allocation_;
-  ShaderVisibleIndex srv_index_ { kInvalidShaderVisibleIndex };
-  oxygen::graphics::NativeView native_view_ {};
+  auto ResetSlot(std::uint32_t slot_index) -> void;
+  auto ReleaseSlotView(SlotData& slot) -> void;
+  [[nodiscard]] auto ActiveSlot() const noexcept -> SlotData const*;
+  [[nodiscard]] auto ActiveSlot() noexcept -> SlotData*;
 };
 
 } // namespace oxygen::engine::upload

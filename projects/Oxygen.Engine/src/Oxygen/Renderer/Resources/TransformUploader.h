@@ -23,13 +23,18 @@
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
 
+namespace oxygen::engine::upload {
+class InlineTransfersCoordinator;
+}
+
 namespace oxygen::renderer::resources {
 
 //! Manages transform matrix uploads to GPU with per-frame deduplication.
 class TransformUploader {
 public:
   OXGN_RNDR_API TransformUploader(observer_ptr<Graphics> gfx,
-    observer_ptr<engine::upload::StagingProvider> provider);
+    observer_ptr<engine::upload::StagingProvider> provider,
+    observer_ptr<engine::upload::InlineTransfersCoordinator> inline_transfers);
 
   OXYGEN_MAKE_NON_COPYABLE(TransformUploader)
   OXYGEN_MAKE_NON_MOVABLE(TransformUploader)
@@ -80,6 +85,7 @@ private:
   // Core state
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<engine::upload::InlineTransfersCoordinator> inline_transfers_;
 
   // Transient per-frame GPU buffers for transforms (direct-write strategy)
   engine::upload::TransientStructuredBuffer worlds_buffer_;

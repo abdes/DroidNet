@@ -100,6 +100,8 @@ set(
   "Upload/AtlasBuffer.cpp"
   "Upload/AtlasBuffer.h"
   "Upload/Errors.cpp"
+  "Upload/InlineTransfersCoordinator.cpp"
+  "Upload/InlineTransfersCoordinator.h"
   "Upload/RingBufferStaging.cpp"
   "Upload/RingBufferStaging.h"
   "Upload/StagingProvider.cpp"

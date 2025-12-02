@@ -144,7 +144,8 @@ public:
 
   //! Optional lifecycle notification for frame slot changes. Default no-op
   //! allows non-partitioned providers to ignore it.
-  virtual auto OnFrameStart(UploaderTag, frame::Slot /*slot*/) -> void { }
+  virtual auto OnFrameStart(UploaderTag, frame::Slot) -> void { }
+  virtual auto OnFrameStart(InlineCoordinatorTag, frame::Slot) -> void { }
 
   //! Optional telemetry; providers may override to expose stats.
   [[nodiscard]] auto GetStats() const -> const StagingStats& { return stats_; }

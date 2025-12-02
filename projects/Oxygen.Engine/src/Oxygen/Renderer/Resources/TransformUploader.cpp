@@ -42,16 +42,22 @@ namespace {
 namespace oxygen::renderer::resources {
 
 TransformUploader::TransformUploader(observer_ptr<Graphics> gfx,
-  observer_ptr<engine::upload::StagingProvider> provider)
+  observer_ptr<engine::upload::StagingProvider> provider,
+  observer_ptr<engine::upload::InlineTransfersCoordinator> inline_transfers)
   : gfx_(std::move(gfx))
   , staging_provider_(std::move(provider))
-  , worlds_buffer_(
-      gfx_, *staging_provider_, static_cast<std::uint32_t>(sizeof(glm::mat4)))
-  , normals_buffer_(
-      gfx_, *staging_provider_, static_cast<std::uint32_t>(sizeof(glm::mat4)))
+  , inline_transfers_(inline_transfers)
+  , worlds_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
+      "TransformUploader.Worlds")
+  , normals_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(glm::mat4)), inline_transfers_,
+      "TransformUploader.Normals")
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
+  DCHECK_NOTNULL_F(
+    inline_transfers_, "TransformUploader requires InlineTransfersCoordinator");
 }
 
 TransformUploader::~TransformUploader()
@@ -64,7 +70,7 @@ TransformUploader::~TransformUploader()
 }
 
 auto TransformUploader::OnFrameStart(
-  renderer::RendererTag, [[maybe_unused]] oxygen::frame::Slot slot) -> void
+  renderer::RendererTag, oxygen::frame::Slot slot) -> void
 {
   ++current_epoch_;
   if (current_epoch_ == 0U) {
@@ -72,9 +78,8 @@ auto TransformUploader::OnFrameStart(
   }
   frame_write_count_ = 0U;
 
-  // Reset transient buffers from the previous frame
-  worlds_buffer_.Reset();
-  normals_buffer_.Reset();
+  worlds_buffer_.OnFrameStart(slot);
+  normals_buffer_.OnFrameStart(slot);
 
   // Clear cached SRV indices; they will be renewed during
   // EnsureFrameResources()
@@ -181,6 +186,9 @@ auto TransformUploader::EnsureFrameResources() -> void
       result.error().message());
     return;
   }
+
+  DLOG_F(1, "TransformUploader writing {} transforms to {}", count,
+    fmt::ptr(worlds_buffer_.GetMappedPtr()));
 
   // Direct memory write (no upload descriptors needed)
   std::memcpy(worlds_buffer_.GetMappedPtr(), transforms_.data(),

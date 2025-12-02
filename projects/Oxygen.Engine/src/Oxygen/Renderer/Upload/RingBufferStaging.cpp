@@ -24,6 +24,8 @@ constexpr auto AlignUp(std::uint64_t v, std::uint64_t a) -> std::uint64_t
   return (v + (a - 1)) & ~(a - 1);
 }
 
+constexpr std::uint64_t kInitialBytesPerPartition = 10ULL * 1024ULL * 1024ULL;
+
 } // namespace
 
 namespace oxygen::engine::upload {
@@ -101,10 +103,11 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   }
 
   const auto current = capacity_per_partition_;
+  const auto baseline = current > 0 ? current : kInitialBytesPerPartition;
   const auto grow = current > 0
     ? static_cast<std::uint64_t>(current * (1.0 + static_cast<double>(slack_)))
-    : required;
-  const auto new_per_partition = std::max(required, grow);
+    : baseline;
+  const auto new_per_partition = (std::max)(required, grow);
   const auto aligned_per_partition = AlignUp(new_per_partition, alignment_);
   const auto total_capacity
     = aligned_per_partition * static_cast<std::uint64_t>(partitions_count_);
@@ -158,7 +161,8 @@ RingBufferStaging::~RingBufferStaging()
 }
 
 // Notify of frame slot change without RTTI
-auto RingBufferStaging::OnFrameStart(UploaderTag, frame::Slot slot) -> void
+auto RingBufferStaging::OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
+  -> void
 {
   SetActivePartition(slot);
   Stats().allocations_this_frame = 0; // Reset frame counter

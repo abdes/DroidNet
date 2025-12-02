@@ -18,17 +18,11 @@
 #include <Oxygen/Renderer/Resources/DrawMetadataEmitter.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
 using oxygen::engine::DrawMetadata;
 using oxygen::engine::PassMask;
 using oxygen::engine::PassMaskBit;
-using oxygen::engine::upload::AtlasBuffer;
-using oxygen::engine::upload::UploadBufferDesc;
-using oxygen::engine::upload::UploadDataView;
-using oxygen::engine::upload::UploadKind;
-using oxygen::engine::upload::UploadRequest;
-
 namespace {
 
 auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
@@ -74,19 +68,24 @@ auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
 namespace oxygen::renderer::resources {
 
 DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
-  observer_ptr<engine::upload::UploadCoordinator> uploader,
   observer_ptr<engine::upload::StagingProvider> provider,
   observer_ptr<renderer::resources::GeometryUploader> geometry,
-  observer_ptr<renderer::resources::MaterialBinder> materials) noexcept
+  observer_ptr<renderer::resources::MaterialBinder> materials,
+  observer_ptr<engine::upload::InlineTransfersCoordinator>
+    inline_transfers) noexcept
   : gfx_(std::move(gfx))
-  , uploader_(std::move(uploader))
-  , staging_provider_(std::move(provider))
   , geometry_uploader_(std::move(geometry))
   , material_binder_(std::move(materials))
+  , staging_provider_(std::move(provider))
+  , inline_transfers_(inline_transfers)
+  , draw_metadata_buffer_(gfx_, *staging_provider_,
+      static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
+      inline_transfers_, "DrawMetadataEmitter.Draws")
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-  DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
+  DCHECK_NOTNULL_F(inline_transfers_,
+    "DrawMetadataEmitter requires InlineTransfersCoordinator");
 }
 
 DrawMetadataEmitter::~DrawMetadataEmitter()
@@ -95,20 +94,8 @@ DrawMetadataEmitter::~DrawMetadataEmitter()
   LOG_F(INFO, "frames started    : {}", frames_started_count_);
   LOG_F(INFO, "total emits       : {}", total_emits_);
   LOG_F(INFO, "sort calls        : {}", sort_calls_count_);
-  LOG_F(INFO, "upload operations : {}", upload_operations_count_);
   LOG_F(INFO, "peak draws        : {}", peak_draws_);
   LOG_F(INFO, "peak partitions   : {}", peak_partitions_);
-
-  if (atlas_) {
-    const auto s = atlas_->GetStats();
-    LOG_SCOPE_F(INFO, "DrawMetadata Atlas Buffer");
-    LOG_F(INFO, "ensure calls      : {}", s.ensure_calls);
-    LOG_F(INFO, "allocations       : {}", s.allocations);
-    LOG_F(INFO, "releases          : {}", s.releases);
-    LOG_F(INFO, "capacity (elems)  : {}", s.capacity_elements);
-    LOG_F(INFO, "next index        : {}", s.next_index);
-    LOG_F(INFO, "free list size    : {}", s.free_list_size);
-  }
 }
 
 auto DrawMetadataEmitter::OnFrameStart(
@@ -118,17 +105,9 @@ auto DrawMetadataEmitter::OnFrameStart(
   Cpu().clear();
   keys_.clear();
   partitions_.clear();
-  current_frame_slot_ = slot;
-  last_frame_slot_ = slot;
-  if (!atlas_) {
-    // Lazily construct atlas for DrawMetadata with correct stride
-    atlas_ = std::make_unique<AtlasBuffer>(gfx_,
-      static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
-      "DrawMetadata");
-  }
-  if (atlas_) {
-    atlas_->OnFrameStart(slot);
-  }
+  draw_metadata_buffer_.OnFrameStart(slot);
+  draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
+  uploaded_this_frame_ = false;
   ++frames_started_count_;
 }
 
@@ -314,66 +293,39 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
 
 auto DrawMetadataEmitter::EnsureFrameResources() -> void
 {
-  if (Cpu().empty()) {
+  if (Cpu().empty() || uploaded_this_frame_) {
     return;
   }
 
-  // Ensure atlas capacity for current draw count (with minimal slack).
-  const auto required_elements
-    = std::max<std::uint32_t>(1u, static_cast<std::uint32_t>(Cpu().size()));
-  if (const auto result = atlas_->EnsureCapacity(required_elements, 0.5f);
-    !result) {
-    LOG_F(ERROR, "Failed to ensure DrawMetadata atlas capacity: {}",
+  const auto count = static_cast<std::uint32_t>(Cpu().size());
+  if (auto result = draw_metadata_buffer_.Allocate(count); !result) {
+    LOG_F(ERROR, "DrawMetadataEmitter: transient allocation failed: {}",
       result.error().message());
     return;
   }
 
-  std::vector<UploadRequest> requests;
-  requests.reserve(Cpu().size());
-  const auto stride
-    = static_cast<std::uint64_t>(sizeof(oxygen::engine::DrawMetadata));
-  const auto count = static_cast<std::uint32_t>(Cpu().size());
-
-  // Minimal emitter: create one UploadRequest per element, but submit the
-  // entire batch once. UploadPlanner will sort/pack/optimize the requests
-  // (no emitter-side coalescing required).
-  for (std::uint32_t idx = 0; idx < count; ++idx) {
-    if (auto desc = atlas_->MakeUploadDescForIndex(idx, stride)) {
-      UploadRequest req;
-      req.kind = UploadKind::kBuffer;
-      req.debug_name = "DrawMetadata";
-      req.desc = *desc;
-      req.data = UploadDataView { std::span<const std::byte>(
-        reinterpret_cast<const std::byte*>(&Cpu()[idx]), stride) };
-      requests.push_back(std::move(req));
-    } else {
-      LOG_F(ERROR, "Failed to make upload desc for DrawMetadata {}", idx);
-    }
+  auto* ptr = draw_metadata_buffer_.GetMappedPtr();
+  if (!ptr) {
+    LOG_F(ERROR, "DrawMetadataEmitter: mapped pointer is null after allocate");
+    return;
   }
 
-  if (!requests.empty()) {
-    const auto tickets = uploader_->SubmitMany(
-      std::span { requests.data(), requests.size() }, *staging_provider_);
-    upload_operations_count_ += requests.size();
-    if (!tickets) {
-      const std::error_code ec = tickets.error();
-      LOG_F(ERROR, "DrawMetadata upload submission failed: [{}] {}",
-        ec.category().name(), ec.message());
-    }
-  }
+  DLOG_F(1, "DrawMetadataEmitter writing {} draw metadata to {}", count,
+    fmt::ptr(draw_metadata_buffer_.GetMappedPtr()));
+
+  std::memcpy(
+    ptr, Cpu().data(), Cpu().size() * sizeof(oxygen::engine::DrawMetadata));
+
+  draw_metadata_srv_index_ = draw_metadata_buffer_.GetBinding().srv;
+  uploaded_this_frame_ = true;
 }
 
 auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex
 {
-  if (!atlas_) {
-    return ShaderVisibleIndex {};
+  if (draw_metadata_srv_index_ == kInvalidShaderVisibleIndex) {
+    const_cast<DrawMetadataEmitter*>(this)->EnsureFrameResources();
   }
-  // Ensure SRV is created even if no draws were emitted yet this frame.
-  if (atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
-    // Best effort: allocate minimal capacity to create SRV
-    (void)atlas_->EnsureCapacity(1u, 0.5f);
-  }
-  return atlas_->GetBinding().srv;
+  return draw_metadata_srv_index_;
 }
 
 auto DrawMetadataEmitter::GetDrawMetadataBytes() const noexcept
