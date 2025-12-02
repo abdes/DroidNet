@@ -99,6 +99,7 @@ set(
   "Types/SceneConstants.cpp"
   "Upload/AtlasBuffer.cpp"
   "Upload/AtlasBuffer.h"
+  "Upload/Errors.cpp"
   "Upload/RingBufferStaging.cpp"
   "Upload/RingBufferStaging.h"
   "Upload/StagingProvider.cpp"

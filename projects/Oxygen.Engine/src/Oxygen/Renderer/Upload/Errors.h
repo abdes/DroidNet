@@ -9,6 +9,8 @@
 #include <string>
 #include <system_error>
 
+#include <Oxygen/Renderer/api_export.h>
+
 namespace oxygen::engine::upload {
 
 //! Domain-specific Upload error codes exposed as std::error_code.
@@ -16,6 +18,7 @@ enum class UploadError : int {
   kInvalidRequest,
   kStagingAllocFailed,
   kRecordingFailed,
+  kResourceAllocFailed,
   kSubmitFailed,
   kDeviceLost,
   kProducerFailed,
@@ -43,6 +46,9 @@ public:
              "descriptors";
     case UploadError::kStagingAllocFailed:
       return "Failed to allocate staging buffer memory for upload operation";
+    case UploadError::kResourceAllocFailed:
+      return "Failed to allocate GPU resource or create resource view for "
+             "upload operation";
     case UploadError::kRecordingFailed:
       return "GPU command recording failed during upload preparation";
     case UploadError::kSubmitFailed:
@@ -60,12 +66,10 @@ public:
     }
   }
 };
-// Forward declare category accessor.
-inline const UploadErrorCategory& GetUploadErrorCategory() noexcept
-{
-  static UploadErrorCategory instance;
-  return instance;
-}
+
+// Implement in .cpp to avoid multiple definitions so that we can reliably
+// compare error_code for identity.
+OXGN_RNDR_NDAPI const UploadErrorCategory& GetUploadErrorCategory() noexcept;
 
 // Helper to create std::error_code from UploadError
 inline std::error_code make_error_code(UploadError e) noexcept
