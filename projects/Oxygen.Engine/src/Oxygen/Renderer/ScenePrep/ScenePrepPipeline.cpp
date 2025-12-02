@@ -5,12 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 
 namespace oxygen::engine::sceneprep {
 
-auto ScenePrepPipeline::Collect(const scene::Scene& scene, const View& view,
-  frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state) -> void
+auto ScenePrepPipeline::Collect(const scene::Scene& scene,
+  const ResolvedView& view, frame::SequenceNumber fseq, ScenePrepState& state,
+  bool reset_state) -> void
 {
   DLOG_SCOPE_F(1, fmt::format("ScenePrep Collect f:{}", fseq.get()).c_str());
 

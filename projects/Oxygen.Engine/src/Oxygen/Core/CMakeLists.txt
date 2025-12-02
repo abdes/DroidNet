@@ -75,11 +75,13 @@ set(
   "Types/Format.h"
   "Types/Frame.h"
   "Types/Frustum.h"
+  "Types/ResolvedView.h"
   "Types/Scissors.h"
   "Types/ShaderType.h"
   "Types/TextureType.h"
   "Types/View.h"
   "Types/ViewPort.h"
+  "Types/ViewResolver.h"
   "Version.h"
   # Generated header
   "version-info.h"
@@ -121,7 +123,7 @@ set(
   "Time/PresentationClock.cpp"
   "Time/SimulationClock.cpp"
   "Types/Frustum.cpp"
-  "Types/View.cpp"
+  "Types/ResolvedView.cpp"
   "Version.cpp"
 )
 

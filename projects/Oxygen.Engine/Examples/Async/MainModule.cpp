@@ -22,6 +22,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -50,6 +51,7 @@
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
@@ -789,22 +791,14 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   EnsureMainCamera(
     static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
-  // Create CameraView with the appropriate parameters
-  camera_view_ = std::make_shared<renderer::CameraView>(
-    renderer::CameraView::Params {
-      .camera_node = main_camera_,
-      .viewport = std::nullopt,
-      .scissor = std::nullopt,
-      .pixel_jitter = glm::vec2(0.0F, 0.0F),
-      .reverse_z = false,
-      .mirrored = false,
-    },
-    surface);
-
   // Add view to FrameContext with metadata
-  view_id_ = context.AddView(engine::ViewContext { .name = "MainView",
-    .surface = *surface,
-    .metadata = { .tag = "AsyncDemo_MainView" } });
+  view_id_ = context.AddView(engine::ViewContext {
+    .metadata = engine::ViewMetadata {
+      .name = "MainView",
+      .purpose = "AsyncDemo_MainView",
+    },
+    .surface = std::ref(*surface),
+  });
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -1390,12 +1384,9 @@ auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
   // Prepare render graph for this frame (wires up framebuffer attachments)
   render_graph_->PrepareForRenderFrame(fb);
 
-  // Resolve the camera view to get the View snapshot
-  if (!camera_view_) {
-    LOG_F(ERROR, "CameraView not available");
-    co_return;
-  }
-  const auto view_snapshot = camera_view_->Resolve();
+  auto view_resolver = renderer::SceneCameraViewResolver(
+    [this](const ViewId& /*view_id*/) { return main_camera_; });
+  const auto view_snapshot = view_resolver(view_id_);
 
   // Drive the renderer: BuildFrame ensures scene is prepared for rendering
   app_.renderer->BuildFrame(view_snapshot, context);

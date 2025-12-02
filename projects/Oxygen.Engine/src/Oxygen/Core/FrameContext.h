@@ -184,13 +184,13 @@ struct FrameError {
   std::optional<std::string> source_key;
 };
 
-// Unique identifier for a view within a frame
-using ViewId = oxygen::ViewId;
-
 // Unique identifier for a surface
 using SurfaceIdTag = struct SurfaceIdTag;
 using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
   oxygen::Hashable, oxygen::Printable>;
+
+// Unique identifier for a view within a frame
+using ViewId = oxygen::ViewId;
 
 // Presentation policy for a view
 enum class PresentPolicy : uint8_t {
@@ -199,25 +199,24 @@ enum class PresentPolicy : uint8_t {
   Composite // Compose with other views before presenting
 };
 
-// Metadata associated with a view for module discovery and presentation control
 struct ViewMetadata {
-  std::string tag; // e.g. "MainScene", "Minimap", "EditorViewport"
-  PresentPolicy present_policy { PresentPolicy::DirectToSurface };
-  std::vector<SurfaceId> target_surfaces; // Surfaces to present to
-  std::optional<ViewPort> viewport; // Override viewport
-  std::optional<Scissors> scissor; // Override scissor
-  uint32_t flags { 0 }; // HDR, MSAA, etc.
+  std::string name;
+  std::string purpose; // e.g. "primary", "shadow", "reflection"
+  PresentPolicy present_policy = PresentPolicy::DirectToSurface;
+  std::vector<SurfaceId> surfaces; // TODO: logical target identifiers
+  bool hidden = false;
 };
 
 // Complete context for a view, including its output
 struct ViewContext {
-  std::string name;
+  View view;
+  ViewMetadata metadata;
+
   // Surface reference (for presentation/sizing)
   std::variant<std::reference_wrapper<graphics::Surface>, std::string> surface;
 
-  ViewMetadata metadata;
-  std::shared_ptr<graphics::Framebuffer>
-    output; // Render target (set by Renderer/Compositor)
+  // Render target (set by Renderer/Compositor)
+  std::shared_ptr<graphics::Framebuffer> output {};
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//

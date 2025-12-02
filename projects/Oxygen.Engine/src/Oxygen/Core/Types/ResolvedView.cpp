@@ -6,26 +6,28 @@
 
 #include <glm/gtc/matrix_inverse.hpp>
 
-#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 
 namespace oxygen {
 
-View::View(const Params& p)
-  : view_(p.view)
-  , proj_(p.proj)
-  , viewport_(p.viewport)
-  , scissor_(p.scissor)
-  , pixel_jitter_(p.pixel_jitter)
-  , reverse_z_(p.reverse_z)
-  , mirrored_(p.mirrored)
+ResolvedView::ResolvedView(const Params& p)
+  : config_(p.view_config)
+  , view_(p.view_matrix)
+  , proj_(p.proj_matrix)
+  , viewport_(p.view_config.viewport)
+  , scissor_(p.view_config.scissor)
+  , pixel_jitter_(p.view_config.pixel_jitter)
+  , reverse_z_(p.view_config.reverse_z)
+  , mirrored_(p.view_config.mirrored)
+  , depth_range_(p.depth_range)
 {
   inv_view_ = glm::affineInverse(view_);
   inv_proj_ = glm::inverse(proj_);
   view_proj_ = proj_ * view_;
   inv_view_proj_ = glm::inverse(view_proj_);
 
-  if (p.has_camera_position) {
-    camera_position_ = p.camera_position;
+  if (p.camera_position) {
+    camera_position_ = *p.camera_position;
   } else {
     // Extract camera world position from inverse view (i.e., view-to-world).
     camera_position_ = glm::vec3(inv_view_[3]);
@@ -34,12 +36,7 @@ View::View(const Params& p)
   frustum_ = Frustum::FromViewProj(view_proj_, reverse_z_);
 
   // Derive vertical focal length in pixels from projection and viewport.
-  // For a standard GL/D3D perspective matrix, proj_[1][1] = f = 1/tan(fovY/2).
-  // Pixel focal length (vertical) is: f_pixels = f * (viewport_height / 2).
-  // For orthographic matrices, proj_[1][1] encodes pixels-per-world-unit in Y
-  // scaled to NDC; approximate f_pixels using viewport height and
-  // |proj_[1][1]|.
-  const float vp_h = static_cast<float>((std::max)(viewport_.height, 0.0f));
+  const float vp_h = static_cast<float>(std::max(viewport_.height, 0.0f));
   const float m11 = proj_[1][1];
   if (vp_h > 0.0f && std::isfinite(m11) && m11 > 0.0f) {
     focal_length_pixels_ = m11 * (vp_h * 0.5f);

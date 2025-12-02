@@ -20,17 +20,21 @@
 
 **New multi-view data to add to RenderContext:**
 
-- **current_view_id**: ViewId of the active view being rendered during multi-view iteration
-- **current_view**: View snapshot (matrices, frustum, viewport) for the active view being rendered
-- **current_view_retained_items**: Map of string keys to type-erased `shared_ptr<void>` for cross-pass resource communication within current view (Blackboard pattern)
+- **ViewSpecific (struct)**: Inner struct containing all view-specific iteration state
+  - `view_id`: ViewId of the active view being rendered
+  - `resolved_view`: `observer_ptr<const ResolvedView>` to ResolvedView snapshot (non-owning, application-owned, guaranteed alive)
+  - `prepared_scene`: `observer_ptr<const PreparedScene>` to per-view scene prep results (draw metadata, transforms, partitions)
+- **current_view**: Single `ViewSpecific` instance for active view state
 - **view_outputs**: Map of ViewId to `shared_ptr<Framebuffer>` for completed view renders awaiting compositing
 
-**Existing RenderContext data (unchanged):**
+**Design Rationale**: Application owns View and guarantees lifetime during render phase. Renderer uses `observer_ptr` (non-owning) to reference View. No shared_ptr needed. ViewSpecific struct prevents clutter by grouping all view-specific state in one place, making clear separation from frame-wide state.
+
+**Existing RenderContext data (removed or relocated):**
 
 - **framebuffer**: Current render target for active view (set per-view during iteration)
 - **scene_constants**: Scene-wide constant buffer (camera matrices updated per-view)
 - **material_constants**: Material constant buffer (shared across views)
-- **prepared_frame**: Immutable per-frame scene data (shared across views)
+- **prepared_frame**: REMOVED - replaced by `ViewSpecific.prepared_scene` (now per-view, not per-frame)
 - **pass_enable_flags**: Pass enable/disable flags (shared across views)
 
 ## RenderGraph and Pass Config (Application & Renderer Layers)
@@ -55,6 +59,23 @@
 - Render graph passes query `RenderContext.current_view` at runtime
 - Conditional logic selects appropriate config or conditionally executes passes
 - All within existing RenderPass coroutine model (PrepareResources/Execute)
+
+---
+
+## Implementation status
+
+| Type | Layer | Status | Location | Notes |
+|------|-------|--------|----------|-------|
+| **View** | Application | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Complete with camera matrices, viewport, scissor, jitter, frustum |
+| **ResolvedView** | Application | ❌ Missing | N/A | Design mentions this as View + resolved transforms, but `View` already contains all fields |
+| **ViewMetadata** | Application | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Has tag, present_policy, target_surfaces, viewport, scissor, flags |
+| **ViewResolver** | Application | ❌ Missing | N/A | Callback type `ResolvedView(ViewId)` not defined |
+| **ViewId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Strongly typed using NamedType pattern |
+| **SurfaceId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Strongly typed using NamedType pattern |
+| **ViewOutput** | Renderer | ❌ Missing | N/A | Currently using `shared_ptr<Framebuffer>` directly |
+| **ViewSpecific struct** | RenderContext | ❌ Missing | N/A | Inner struct for view-specific state (view_id, observer_ptr to resolved_view, retained_items) |
+| **current_view** | RenderContext | ❌ Missing | N/A | Single ViewSpecific instance for active view state |
+| **view_outputs** | RenderContext | ❌ Missing | N/A | Map of ViewId to framebuffers not present in RenderContext |
 
 ---
 

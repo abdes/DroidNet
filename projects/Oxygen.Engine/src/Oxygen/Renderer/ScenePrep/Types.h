@@ -30,9 +30,9 @@ namespace oxygen::scene {
 class Scene;
 } // namespace oxygen::scene
 
-namespace oxygen {
-class View;
-}
+namespace oxygen::core {
+struct View;
+} // namespace oxygen::core
 
 namespace oxygen::engine::sceneprep {
 

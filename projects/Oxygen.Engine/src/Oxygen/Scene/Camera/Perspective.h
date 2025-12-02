@@ -17,9 +17,9 @@
 
 namespace oxygen::scene {
 
-  namespace detail {
-    class TransformComponent;
-  } // namespace detail
+namespace detail {
+  class TransformComponent;
+} // namespace detail
 
 //! Perspective camera component for 3D scene nodes
 /*!

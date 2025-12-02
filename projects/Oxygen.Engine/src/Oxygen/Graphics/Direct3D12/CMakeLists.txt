@@ -103,6 +103,7 @@ set(
   "Detail/FormatUtils.h"
   "Detail/PipelineStateCache.cpp"
   "Detail/PipelineStateCache.h"
+  "Detail/SwapChain.h"
   "Detail/SwapChain.cpp"
   "Detail/Types.h"
   "Detail/WindowSurface.h"

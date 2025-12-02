@@ -16,9 +16,9 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
@@ -144,10 +144,7 @@ public:
   }
 
   OXGN_RNDR_API auto BuildFrame(
-    const View& view, const FrameContext& frame_context) -> std::size_t;
-
-  OXGN_RNDR_API auto BuildFrame(const renderer::CameraView& camera_view,
-    const FrameContext& frame_context) -> std::size_t;
+    const ResolvedView& view, const FrameContext& frame_context) -> std::size_t;
 
 private:
   OXGN_RNDR_API auto PreExecute(
@@ -155,7 +152,7 @@ private:
   OXGN_RNDR_API auto PostExecute(RenderContext& context) -> void;
 
   //! Update scene constants from resolved view matrices & camera state.
-  auto UpdateSceneConstantsFromView(const View& view) -> void;
+  auto UpdateSceneConstantsFromView(const ResolvedView& view) -> void;
   //! Compute current finalized draw count (post-sort) from prepared frame.
   auto CurrentDrawCount() const noexcept -> std::size_t;
 

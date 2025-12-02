@@ -11,7 +11,6 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepContext.h>
@@ -19,6 +18,10 @@
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <Oxygen/Scene/Scene.h>
+
+namespace oxygen {
+class ResolvedView;
+} // namespace oxygen::core
 
 namespace oxygen::engine::sceneprep {
 
@@ -31,9 +34,9 @@ public:
 
   virtual ~ScenePrepPipeline() = default;
 
-  OXGN_RNDR_API auto Collect(const scene::Scene& scene, const View& view,
-    frame::SequenceNumber frame_id, ScenePrepState& state, bool reset_state)
-    -> void;
+  OXGN_RNDR_API auto Collect(const scene::Scene& scene,
+    const ResolvedView& view, frame::SequenceNumber frame_id,
+    ScenePrepState& state, bool reset_state) -> void;
 
   OXGN_RNDR_API auto Finalize() -> void;
 
