@@ -22,19 +22,22 @@ namespace oxygen::engine::upload {
 
 //! Simple ring/linear staging allocator over a single mapped upload buffer.
 /*! Allocations are sub-ranges within one CPU-visible buffer. The allocator
-    linearly bumps an offset for each Allocate() and grows the buffer with
-    a slack factor when capacity is insufficient. On RetireCompleted(), the
-    allocator resets the bump pointer so the entire buffer is reused in the
-    next epoch. This avoids per-allocation fence tracking and works with
-    the coordinator's retire cycle.
+    linearly bumps an offset for each Allocate() and grows the buffer with a
+    slack factor when capacity is insufficient. On RetireCompleted(), the
+    allocator resets the bump pointer so the entire buffer is reused in the next
+    epoch. This avoids per-allocation fence tracking and works with the
+    coordinator's retire cycle.
 
     Must be created via UploadCoordinator::CreateRingBufferStaging.
 
     Notes
-    - The buffer is persistently mapped; unmapping happens only when
-  resizing or explicitly on RetireCompleted() if desired in future revisions.
-    - Offsets are aligned to a conservative boundary (default 256 bytes) to
-  be safe across backends for CopyBuffer operations.
+    - The buffer is persistently mapped; unmapping happens only when resizing or
+      explicitly on RetireCompleted() if desired in future revisions.
+    - Offsets are aligned to the configured boundary (e.g. 16 or 256 bytes).
+    - **Structured Buffers**: If using this provider for Structured Buffers (via
+      TransientStructuredBuffer), ensure that the structure stride is a multiple
+      of the alignment. Otherwise, the SRV offset (which must be stride-aligned)
+      may not match the byte offset returned by Allocate().
 */
 class RingBufferStaging final : public StagingProvider {
   friend class UploadCoordinator;
@@ -61,7 +64,7 @@ public:
   auto RetireCompleted(UploaderTag, FenceValue completed) -> void override;
 
   // Notify of frame slot change without RTTI
-  OXGN_RNDR_API auto OnFrameStart(UploaderTag, frame::Slot slot)
+  OXGN_RNDR_API auto OnFrameStart(InlineCoordinatorTag, frame::Slot slot)
     -> void override;
 
 protected:
@@ -112,7 +115,7 @@ private:
   std::uint64_t capacity_per_partition_ { 0 }; // bytes per partition
   std::vector<std::uint64_t> heads_ {}; // bump per partition
   std::uint64_t capacity_ { 0 }; // total bytes
-  std::uint32_t alignment_ { 256u };
+  std::uint32_t alignment_;
   float slack_ { 0.5f };
 
   // Retirement observation: incremented on RetireCompleted(); at Allocate()

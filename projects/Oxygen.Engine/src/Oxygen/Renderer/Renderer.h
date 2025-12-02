@@ -46,6 +46,7 @@ namespace oxygen::engine {
 namespace upload {
   class UploadCoordinator;
   class StagingProvider;
+  class InlineTransfersCoordinator;
 } // namespace upload
 
 namespace sceneprep {
@@ -165,14 +166,15 @@ private:
   auto MaybeUpdateSceneConstants(const FrameContext& frame_context) -> void;
 
   //! Wires updated buffers into the provided render context for the frame.
-  auto WireContext(RenderContext& context) -> void;
+  auto WireContext(RenderContext& context,
+    const std::shared_ptr<graphics::Buffer>& scene_consts) -> void;
 
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
 
   // Managed draw item container removed (AoS path deprecated).
 
   // Scene constants management
-  std::shared_ptr<graphics::Buffer> scene_const_buffer_;
+  std::vector<std::shared_ptr<graphics::Buffer>> scene_const_buffers_;
   SceneConstants scene_const_cpu_;
   MonotonicVersion last_uploaded_scene_const_version_ { (
     std::numeric_limits<uint64_t>::max)() };
@@ -192,7 +194,9 @@ private:
 
   // Upload coordinator: manages buffer/texture uploads and completion.
   std::unique_ptr<upload::UploadCoordinator> uploader_;
-  std::shared_ptr<upload::StagingProvider> staging_provider_;
+  std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
+  std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
+  std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
 };
 
 } // namespace oxygen::engine

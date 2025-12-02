@@ -21,10 +21,12 @@
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
-#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
-#include <Oxygen/Renderer/Upload/StagingProvider.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Renderer/api_export.h>
+
+namespace oxygen::engine::upload {
+class InlineTransfersCoordinator;
+}
 
 namespace oxygen::engine::sceneprep {
 class ScenePrepState; // fwd
@@ -72,10 +74,11 @@ namespace oxygen::renderer::resources {
 class DrawMetadataEmitter {
 public:
   OXGN_RNDR_API DrawMetadataEmitter(observer_ptr<Graphics> gfx,
-    observer_ptr<engine::upload::UploadCoordinator> uploader,
     observer_ptr<engine::upload::StagingProvider> provider,
     observer_ptr<renderer::resources::GeometryUploader> geometry,
-    observer_ptr<renderer::resources::MaterialBinder> materials) noexcept;
+    observer_ptr<renderer::resources::MaterialBinder> materials,
+    observer_ptr<engine::upload::InlineTransfersCoordinator>
+      inline_transfers) noexcept;
 
   OXYGEN_MAKE_NON_COPYABLE(DrawMetadataEmitter)
   OXYGEN_MAKE_NON_MOVABLE(DrawMetadataEmitter)
@@ -126,14 +129,16 @@ private:
 private:
   // Core state
   observer_ptr<Graphics> gfx_;
-  observer_ptr<engine::upload::UploadCoordinator> uploader_;
-  observer_ptr<engine::upload::StagingProvider> staging_provider_;
   observer_ptr<renderer::resources::GeometryUploader> geometry_uploader_;
   observer_ptr<renderer::resources::MaterialBinder> material_binder_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<engine::upload::InlineTransfersCoordinator> inline_transfers_;
 
-  // CPU shadow storage and GPU atlas buffer for DrawMetadata
+  // CPU shadow storage and transient GPU buffer for DrawMetadata
   std::vector<engine::DrawMetadata> cpu_;
-  std::unique_ptr<engine::upload::AtlasBuffer> atlas_;
+  engine::upload::TransientStructuredBuffer draw_metadata_buffer_;
+  ShaderVisibleIndex draw_metadata_srv_index_ { kInvalidShaderVisibleIndex };
+  bool uploaded_this_frame_ { false };
 
   // Sorting & partitions
   std::vector<SortingKey> keys_;
@@ -145,15 +150,10 @@ private:
   std::uint64_t last_pre_sort_hash_ { 0ULL };
 
   // Frame lifecycle
-  bool frame_started_ { false };
-  oxygen::frame::Slot current_frame_slot_ { oxygen::frame::kInvalidSlot };
-  oxygen::frame::Slot last_frame_slot_ { oxygen::frame::kInvalidSlot };
-
   // Runtime statistics (telemetry)
   std::uint64_t frames_started_count_ { 0 };
   std::uint64_t total_emits_ { 0 };
   std::uint64_t sort_calls_count_ { 0 };
-  std::uint64_t upload_operations_count_ { 0 };
   std::uint32_t peak_draws_ { 0 };
   std::uint32_t peak_partitions_ { 0 };
 

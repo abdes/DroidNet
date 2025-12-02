@@ -38,6 +38,7 @@
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
+#include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Scene/Scene.h>
 
@@ -94,22 +95,30 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
   uploader_ = std::make_unique<upload::UploadCoordinator>(
     observer_ptr { gfx.get() }, policy);
-  staging_provider_
+  upload_staging_provider_
     = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
+
+  inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
+    observer_ptr { gfx.get() });
+  inline_staging_provider_
+    = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
+  inline_transfers_->RegisterProvider(inline_staging_provider_);
 
   auto geom_uploader = std::make_unique<renderer::resources::GeometryUploader>(
     observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() });
+    observer_ptr { upload_staging_provider_.get() });
   auto xform_uploader
     = std::make_unique<renderer::resources::TransformUploader>(
-      observer_ptr { gfx.get() }, observer_ptr { staging_provider_.get() });
+      observer_ptr { gfx.get() },
+      observer_ptr { inline_staging_provider_.get() },
+      observer_ptr { inline_transfers_.get() });
   auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
     observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() });
+    observer_ptr { upload_staging_provider_.get() });
   auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
-    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() },
-    observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() });
+    observer_ptr { gfx.get() }, observer_ptr { inline_staging_provider_.get() },
+    observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() },
+    observer_ptr { inline_transfers_.get() });
 
   scene_prep_state_
     = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
@@ -119,7 +128,10 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 Renderer::~Renderer()
 {
   scene_prep_state_.reset();
-  staging_provider_.reset();
+  uploader_.reset();
+  upload_staging_provider_.reset();
+  inline_transfers_.reset();
+  inline_staging_provider_.reset();
 }
 
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
@@ -173,7 +185,12 @@ auto Renderer::PreExecute(
 
   MaybeUpdateSceneConstants(frame_context);
 
-  WireContext(render_context);
+  const auto slot = frame_context.GetFrameSlot();
+  if (scene_const_buffers_.size() > slot && scene_const_buffers_[slot]) {
+    WireContext(render_context, scene_const_buffers_[slot]);
+  } else {
+    LOG_F(ERROR, "Scene constants buffer not available for slot {}", slot);
+  }
 
   // Wire PreparedSceneFrame pointer (SoA finalized snapshot). This enables
   // passes to start consuming SoA data incrementally. Null remains valid if
@@ -241,36 +258,37 @@ auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
     frame_context.GetFrameSlot(), SceneConstants::kRenderer);
   scene_const_cpu_.SetFrameSequenceNumber(
     frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
-  const auto current_version = scene_const_cpu_.GetVersion();
-  if (scene_const_buffer_
-    && current_version == last_uploaded_scene_const_version_) {
-    DLOG_F(2, "MaybeUpdateSceneConstants: skipping upload (up-to-date)");
-    return; // up-to-date
+
+  // Use per-frame-slot buffer to avoid race conditions with in-flight frames
+  const auto slot = frame_context.GetFrameSlot();
+  if (scene_const_buffers_.size() <= slot) {
+    scene_const_buffers_.resize(slot + 1);
   }
+  auto& buffer = scene_const_buffers_[slot];
 
   auto& graphics = *graphics_ptr;
   constexpr auto size_bytes = sizeof(SceneConstants::GpuData);
-  if (!scene_const_buffer_) {
+  if (!buffer) {
     const BufferDesc desc {
       .size_bytes = size_bytes,
       .usage = BufferUsage::kConstant,
       .memory = BufferMemory::kUpload,
-      .debug_name = std::string("SceneConstants"),
+      .debug_name = std::string("SceneConstants_Slot") + std::to_string(slot),
     };
-    scene_const_buffer_ = graphics.CreateBuffer(desc);
-    scene_const_buffer_->SetName(desc.debug_name);
-    graphics.GetResourceRegistry().Register(scene_const_buffer_);
+    buffer = graphics.CreateBuffer(desc);
+    buffer->SetName(desc.debug_name);
+    graphics.GetResourceRegistry().Register(buffer);
   }
   const auto& snapshot = scene_const_cpu_.GetSnapshot();
-  void* mapped = scene_const_buffer_->Map();
+  void* mapped = buffer->Map();
   std::memcpy(mapped, &snapshot, size_bytes);
-  scene_const_buffer_->UnMap();
-  last_uploaded_scene_const_version_ = current_version;
+  buffer->UnMap();
 }
 
-auto Renderer::WireContext(RenderContext& render_context) -> void
+auto Renderer::WireContext(RenderContext& render_context,
+  const std::shared_ptr<graphics::Buffer>& scene_consts) -> void
 {
-  render_context.scene_constants = scene_const_buffer_;
+  render_context.scene_constants = scene_consts;
   // Material constants are now accessed through bindless table, not direct CBV
   const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
@@ -362,6 +380,7 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
 
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.
+  inline_transfers_->OnFrameStart(tag, frame_slot);
   uploader_->OnFrameStart(tag, frame_slot);
   // then uploaders
   scene_prep_state_->GetTransformUploader()->OnFrameStart(tag, frame_slot);

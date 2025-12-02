@@ -45,6 +45,7 @@ struct DrawMetadata {
     uint instance_metadata_buffer_index; // Bindless index into instance metadata buffer
     uint instance_metadata_offset;       // Offset into instance metadata buffer
     uint flags;                          // Bitfield: visibility, pass mask, etc.
+    uint padding[3];                     // Padding to 64 bytes
 };
 
 // Material constants structure (matches C++ MaterialConstants struct layout)

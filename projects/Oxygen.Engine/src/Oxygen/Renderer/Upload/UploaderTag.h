@@ -38,4 +38,19 @@ namespace internal {
   };
 } // namespace internal
 
+namespace internal {
+  struct InlineCoordinatorTagFactory;
+} // namespace internal
+
+class InlineCoordinatorTag {
+  friend struct internal::InlineCoordinatorTagFactory;
+  InlineCoordinatorTag() noexcept = default;
+};
+
+namespace internal {
+  struct InlineCoordinatorTagFactory {
+    static auto Get() noexcept -> InlineCoordinatorTag;
+  };
+} // namespace internal
+
 } // namespace oxygen::engine::upload

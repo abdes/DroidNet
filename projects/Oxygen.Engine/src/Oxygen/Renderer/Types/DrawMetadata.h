@@ -54,12 +54,16 @@ struct DrawMetadata {
                                            // metadata buffer
   uint32_t instance_metadata_offset; // Offset into instance metadata buffer
   PassMask flags; // uint32_t, Bitfield: visibility, pass mask, etc.
+  uint32_t padding[3]; // Padding to 64 bytes for alignment
 };
 
-// Logical field bytes: 13 x 4 = 52. We intentionally use tight packing to
-// keep StructuredBuffer stride small; HLSL struct must mirror EXACT order.
-static_assert(sizeof(DrawMetadata) == 52,
-  "Unexpected DrawMetadata size (expected 52); update HLSL DrawMetadata layout "
+// Logical field bytes: 13 x 4 = 52 + 12 padding = 64.
+// We pad to 64 bytes to ensure that when allocated from a 16-byte aligned
+// RingBufferStaging, the offset is always a multiple of the stride (64).
+// This is required for D3D12 StructuredBuffer SRV creation where FirstElement
+// is offset / stride.
+static_assert(sizeof(DrawMetadata) == 64,
+  "Unexpected DrawMetadata size (expected 64); update HLSL DrawMetadata layout "
   "accordingly");
 
 } // namespace oxygen::engine
