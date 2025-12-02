@@ -102,8 +102,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
     observer_ptr { staging_provider_.get() });
   auto xform_uploader
     = std::make_unique<renderer::resources::TransformUploader>(
-      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-      observer_ptr { staging_provider_.get() });
+      observer_ptr { gfx.get() }, observer_ptr { staging_provider_.get() });
   auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
     observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
     observer_ptr { staging_provider_.get() });

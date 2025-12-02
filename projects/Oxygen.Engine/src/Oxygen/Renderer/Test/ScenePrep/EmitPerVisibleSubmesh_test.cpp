@@ -91,8 +91,7 @@ protected:
         observer_ptr { staging_provider_.get() });
     auto transform_uploader
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
-        observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-        observer_ptr { staging_provider_.get() });
+        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() });
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
