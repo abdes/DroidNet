@@ -105,3 +105,19 @@ m_gtest_program(
     "Upload/UploadPlanner_texture_test.cpp"
     "Upload/UploadPlanner_buffer_test.cpp"
 )
+
+# TransientStructuredBuffer unit tests
+m_gtest_program(
+  TransientStructuredBuffer
+  SOURCES
+    "Fakes/Graphics.h"
+    "Upload/TransientStructuredBuffer_test.cpp"
+    "Upload/RingBufferStagingFixture.h"
+    "Upload/UploadCoordinatorTest.cpp"
+    "Upload/UploadCoordinatorTest.h"
+)
+target_compile_definitions(
+  Oxygen.Renderer.TransientStructuredBuffer.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
