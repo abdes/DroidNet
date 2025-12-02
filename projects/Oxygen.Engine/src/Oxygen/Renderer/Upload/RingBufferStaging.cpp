@@ -9,6 +9,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Upload/RingBufferStaging.h>
 
 using oxygen::engine::upload::FenceValue;
@@ -124,6 +125,7 @@ auto RingBufferStaging::EnsureCapacity(std::uint64_t required,
   UploadError error_code;
   try {
     buffer_ = gfx_->CreateBuffer(desc);
+    gfx_->GetResourceRegistry().Register(buffer_);
     Stats().buffer_growth_count++;
     auto map_result = Map(); // This may throw for now...
     if (map_result) {
@@ -150,6 +152,7 @@ RingBufferStaging::~RingBufferStaging()
     buffer_->UnMap();
     Stats().unmap_calls++;
   }
+  gfx_->GetResourceRegistry().UnRegisterResource(*buffer_);
   buffer_.reset();
   mapped_ptr_ = nullptr;
 }
