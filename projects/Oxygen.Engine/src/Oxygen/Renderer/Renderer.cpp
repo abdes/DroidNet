@@ -27,7 +27,6 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -299,8 +298,8 @@ auto Renderer::WireContext(RenderContext& render_context,
 
 // Removed obsolete Set/GetDrawMetadata accessors
 
-auto Renderer::BuildFrame(const View& view, const FrameContext& frame_context)
-  -> std::size_t
+auto Renderer::BuildFrame(
+  const ResolvedView& view, const FrameContext& frame_context) -> std::size_t
 {
   auto scene_ptr = frame_context.GetScene();
   CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
@@ -340,14 +339,7 @@ auto Renderer::PublishPreparedFrameSpans() -> void
   }
 }
 
-auto Renderer::BuildFrame(const renderer::CameraView& camera_view,
-  const FrameContext& frame_context) -> std::size_t
-{
-  const auto view = camera_view.Resolve();
-  return BuildFrame(view, frame_context);
-}
-
-auto Renderer::UpdateSceneConstantsFromView(const View& view) -> void
+auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
 {
   // Update scene constants from the provided view snapshot
   ModifySceneConstants([&](SceneConstants& sc) {

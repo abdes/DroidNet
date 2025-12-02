@@ -11,6 +11,9 @@
 #include <string>
 #include <vector>
 
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -21,8 +24,6 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Scene/Scene.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/ExampleModuleBase.h"
@@ -183,8 +184,6 @@ private:
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
 
-  // Camera view for the main viewport
-  std::shared_ptr<renderer::CameraView> camera_view_;
   // ViewId for the main viewport
   ViewId view_id_ { 0 };
 

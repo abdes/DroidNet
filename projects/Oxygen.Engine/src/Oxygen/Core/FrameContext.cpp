@@ -99,7 +99,7 @@ auto FrameContext::AddView(ViewContext view) noexcept -> ViewId
     if (!found) {
       DLOG_F(WARNING,
         "View '{}' being added with a surface not in the Frame Context",
-        view.name);
+        view.metadata.name);
     }
   }
 #endif // !defined(NDEBUG)
@@ -117,9 +117,9 @@ auto FrameContext::AddView(ViewContext view) noexcept -> ViewId
 auto FrameContext::SetViewOutput(
   ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept -> void
 {
-  // Output setting is allowed during rendering phases (FrameGraph, CommandRecord)
-  // and Compositing.
-  // CHECK_F(engine_state_.current_phase >= PhaseId::kFrameGraph &&
+  // Output setting is allowed during rendering phases (FrameGraph,
+  // CommandRecord) and Compositing. CHECK_F(engine_state_.current_phase >=
+  // PhaseId::kFrameGraph &&
   //         engine_state_.current_phase <= PhaseId::kCompositing);
 
   std::unique_lock lock(views_mutex_);
@@ -262,7 +262,7 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
         const auto& surf = std::get<0>(view_ctx.surface).get();
         if (&surf == removed_surface_ptr) {
           LOG_F(INFO, "Removing view '{}' due to surface removal",
-            view_ctx.name);
+            view_ctx.metadata.name);
           return true; // remove this view
         }
       }

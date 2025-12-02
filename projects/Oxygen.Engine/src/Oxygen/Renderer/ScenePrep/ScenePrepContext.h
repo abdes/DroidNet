@@ -14,8 +14,8 @@ class Scene;
 } // namespace oxygen::scene
 
 namespace oxygen {
-class View;
-}
+class ResolvedView;
+} // namespace oxygen::core
 
 namespace oxygen::engine::sceneprep {
 
@@ -28,8 +28,8 @@ namespace oxygen::engine::sceneprep {
 class ScenePrepContext {
 public:
   //! Construct a ScenePrepContext that borrows the provided references.
-  ScenePrepContext(
-    frame::SequenceNumber fseq, const View& v, const scene::Scene& s) noexcept
+  ScenePrepContext(frame::SequenceNumber fseq, const ResolvedView& v,
+    const scene::Scene& s) noexcept
     : frame_seq_number { fseq }
     , view_ { std::ref(v) }
     , scene_ { std::ref(s) }
@@ -54,7 +54,7 @@ private:
   frame::SequenceNumber frame_seq_number;
 
   //! View containing camera matrices and frustum for the current frame.
-  std::reference_wrapper<const View> view_;
+  std::reference_wrapper<const ResolvedView> view_;
 
   //! Scene graph being processed.
   std::reference_wrapper<const scene::Scene> scene_;

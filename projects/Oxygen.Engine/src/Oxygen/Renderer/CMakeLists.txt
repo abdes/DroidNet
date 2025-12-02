@@ -50,7 +50,6 @@ set_target_properties(
 set(
   OXYGEN_RENDERER_HEADERS
   "api_export.h"
-  "CameraView.h"
   "Errors.h"
   "Upload/Errors.h"
   "Passes/DepthPrePass.h"
@@ -61,6 +60,7 @@ set(
   "RenderContext.h"
   "RendererTag.h"
   "Renderer.h"
+  "SceneCameraViewResolver.h"
   "ScenePrep/CollectionConfig.h"
   "ScenePrep/FinalizationConfig.h"
   "Types/DrawMetadata.h"
@@ -70,7 +70,7 @@ set(
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
-  "CameraView.cpp"
+  "SceneCameraViewResolver.cpp"
   "Internal/RenderScope.h"
   "Passes/DepthPrePass.cpp"
   "Passes/RenderPass.cpp"
