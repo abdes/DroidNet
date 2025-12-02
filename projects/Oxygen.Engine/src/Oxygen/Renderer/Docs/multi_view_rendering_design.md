@@ -9,6 +9,7 @@
 ### ✅ Phase 1: Core Architecture & Data Structures (COMPLETED)
 
 **Completed Items:**
+
 - ✅ Added `PhaseId::kCompositing` phase to engine lifecycle
 - ✅ Defined `ViewId` as `Named Type<uint64_t>` with `Comparable`, `Hashable`, `Printable` skills
 - ✅ Defined`ViewMetadata` struct with `tag` field
@@ -22,6 +23,7 @@
 - ✅ Modules now call `renderer.BuildFrame()` and mark surfaces presentable
 
 **Key Architectural Decisions:**
+
 1. **Removed `RenderableView` abstraction**: Originally ViewContext held a `std::shared_ptr<RenderableView>`. This was removed in favor of a cleaner separation where:
    - `CameraView` is no longer a polymorphic class
    - Modules own `CameraView` instances and resolve them explicitly
@@ -38,6 +40,7 @@
 ### 🔄 Phase 2: Renderer Passivation & Module-Driven Rendering (NEXT)
 
 **Remaining Work:**
+
 - [ ] Refactor `Renderer::BuildFrame()` to support multiple views per frame (currently overwrites state)
 - [ ] Add `Renderer::PrepareView()` and `Renderer::RenderView()` APIs for explicit per-view control
 - [ ] Update `RenderContext` to include `observer_ptr<const View> view` member
@@ -51,6 +54,7 @@
 ### 📋 Phase 3: Multi-View Support & Compositing (FUTURE)
 
 **Planned Work:**
+
 - [ ] Add `OnFrameGraphPerView` module hook
 - [ ] Support parallel per-view culling and command recording
 - [ ] Implement view ordering and composition logic
@@ -123,6 +127,7 @@ std::unordered_map<ViewId, ViewContext> views_;
 ### 3.2. FrameContext Responsibilities
 
 **Current Implementation:**
+
 - **Storage:** Owns the authoritative set of `ViewContext`s in `std::unordered_map<ViewId, ViewContext> views_`.
 - **ID Generation:** Generates unique `ViewId`s via atomic counter (scoped per FrameContext instance).
 - **Lifecycle:** Enforces mutation windows (views can only be added before `PhaseSnapshot`).
@@ -131,6 +136,7 @@ std::unordered_map<ViewId, ViewContext> views_;
 - **Output Management:** Provides `SetViewOutput(ViewId, Framebuffer)` to update the `output` field.
 
 **APIs:**
+
 ```cpp
 // Add a view (returns unique ViewId)
 auto AddView(ViewContext view) noexcept -> ViewId;
@@ -150,6 +156,7 @@ auto GetViews() const noexcept; // returns transform_view
 `RenderContext` remains the per-frame execution wrapper.
 
 **Future Change (Phase 2):** Add `observer_ptr<const View> view` to `RenderContext`.
+
 - Explicitly links the context to the view being rendered.
 - Cleared on `Reset()`.
 
@@ -158,6 +165,7 @@ auto GetViews() const noexcept; // returns transform_view
 **Current Implementation (Phase 1):**
 
 The Renderer is **passive** and does not iterate views. Modules are responsible for:
+
 1. Creating `CameraView` instances
 2. Adding `ViewContext` to `FrameContext` (storing returned `ViewId`)
 3. Resolving `CameraView` to get `View` snapshot
@@ -167,6 +175,7 @@ The Renderer is **passive** and does not iterate views. Modules are responsible 
 7. Calling `context.SetSurfacePresentable(surfaceIndex, true)`
 
 **Example (EditorModule):**
+
 ```cpp
 // OnSceneMutation:
 camera_view_ = std::make_shared<CameraView>(params, surface);
@@ -187,6 +196,7 @@ context.SetSurfacePresentable(surfaceIndex, true);
 ```
 
 **Future Renderer API (Phase 2):**
+
 - `PrepareView(ViewId, ...)`: Performs culling/prep for a specific view.
 - `RenderView(ViewId, ...)`: Executes render graph for a specific view.
 - Support for multiple `BuildFrame` calls per frame without overwriting state.
@@ -200,12 +210,14 @@ context.SetSurfacePresentable(surfaceIndex, true);
 - Allows mutation of `kFrameState` (including view outputs).
 
 **Future Mechanism (Phase 3):**
+
 - Modules query `FrameContext::GetViewContext(ViewId)` (or find by tag) to access the `output` framebuffer.
 - Use attachments for composition (e.g., combine multiple views into final backbuffer).
 
 ### 3.6. Presentation
 
 Presentation remains the engine's synchronous responsibility at `PhasePresent`.
+
 - The engine presents surfaces that have been flagged as presentable via `FrameContext::SetSurfacePresentable()`.
 - Modules must ensure final images are ready in the backbuffers before this phase.
 
@@ -216,6 +228,7 @@ Presentation remains the engine's synchronous responsibility at `PhasePresent`.
 Passes operate against the `RenderContext` constructed by modules for each view. Pass implementations must be reentrant across views.
 
 Module responsibilities:
+
 - Modules register views during `PhaseSceneMutation`.
 - Modules drive rendering in `PhaseCommandRecord` by calling renderer APIs and executing passes.
 - Modules acquire `CommandRecorder` from the engine's graphics/commander interface.
@@ -225,10 +238,12 @@ Module responsibilities:
 Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during allowed mutation phases. Once frozen via `PublishSnapshots()`, the snapshot is read-only.
 
 **Current Implementation:**
+
 - `FrameContext::PopulateGameStateSnapshot()` copies `ViewContext` objects into the snapshot under lock.
 - Single-threaded rendering per frame (parallel rendering is Phase 3).
 
 **Future (Phase 3):**
+
 - Per-view culling and command recording may be performed in parallel.
 - Each parallel task acquires its own `CommandRecorder`.
 
@@ -239,6 +254,7 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 ### 4.1. File Changes
 
 **Core Types:**
+
 - **`Oxygen/Core/Types/View.h`**: Added `ViewId` definition using `NamedType`.
 - **`Oxygen/Core/FrameContext.h`**:
   - Added `ViewMetadata`, `ViewContext` structs
@@ -248,11 +264,13 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 - **`Oxygen/Core/Frame Context.cpp`**: Implemented view management APIs.
 
 **Phase System:**
+
 - **`Oxygen/Core/PhaseRegistry.h`**: Added `PhaseId::kCompositing` with `kBarrieredConcurrency`.
 - **`Oxygen/Core/EngineModule.h`**: Added `virtual void OnCompositing(FrameContext&)` hook.
 - **`Oxygen/Engine/AsyncEngine.cpp/h`**: Integrated `PhaseCompositing` into `FrameLoop`.
 
 **Renderer:**
+
 - **`Oxygen/Renderer/Renderer.h`**: Removed `skip_frame_render_` flag.
 - **`Oxygen/Renderer/Renderer.cpp`**:
   - Removed view iteration from `OnFrameGraph` and `OnTransformPropagation`
@@ -260,9 +278,11 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
   - Renderer is now fully passive
 
 **Camera:**
+
 - **`Oxygen/Renderer/CameraView.h`**: Removed inheritance from `RenderableView`.
 
 **Modules:**
+
 - **`Oxygen.Editor.Interop/EditorModule.cpp`**:
   - Stores `ViewId` per surface
   - Creates `CameraView`, resolves it, calls `BuildFrame`
@@ -274,18 +294,21 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 ### 4.2. Key Design Decisions
 
 **Why remove `RenderableView`?**
+
 - Eliminated unnecessary polymorphism
 - Clearer ownership model (modules own `CameraView`)
 - Simplified `ViewContext` to pure data structure
 - Modules have explicit control over view resolution timing
 
 **Why module-driven rendering?**
+
 - Renderer doesn't know which views to render or in what order
 - Modules understand their view requirements (editor multi-panel, game HUD, etc.)
 - Enables flexible composition strategies per module
 - Clearer phase boundaries and responsibilities
 
 **Why passive renderer?**
+
 - Decouples rendering policy from rendering implementation
 - Modules can choose when/how to drive BuildFrame and ExecuteRenderGraph
 - Supports diverse use cases (editor, game, tools) without renderer knowing specifics
@@ -298,6 +321,7 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 **For Module Authors:**
 
 1. **In `OnSceneMutation`:**
+
    ```cpp
    // Create CameraView
    auto camera_view = std::make_shared<renderer::CameraView>(params, surface);
@@ -313,6 +337,7 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
    ```
 
 2. **In `OnCommandRecord`:**
+
    ```cpp
    // Resolve view
    const auto view = camera_view->Resolve();
@@ -335,12 +360,14 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 ## 6. Future Work (Phase 2+)
 
 **Phase 2: Enhanced ViewMetadata & Multi-View Support**
+
 - Extend `ViewMetadata` with presentation policy, target surfaces, viewport
 - Support multiple `BuildFrame` calls per frame
 - Add `PrepareView`/`RenderView` APIs
 - Add `RenderContext::view` member
 
 **Phase 3: Parallel Rendering & Composition**
+
 - Implement `OnFrameGraphPerView` hook
 - Parallel per-view culling and command recording
 - View ordering and composition logic
@@ -360,6 +387,7 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 ## 8. Acceptance Criteria
 
 **Phase 1 (✅ Complete):**
+
 - ✅ Single view renders correctly with module-driven pattern
 - ✅ `ViewContext` is the authoritative view storage
 - ✅ Renderer is passive (no automatic view iteration)
@@ -367,11 +395,13 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 - ✅ `PhaseCompositing` exists and is callable
 
 **Phase 2:**
+
 - [ ] Multiple views can be rendered per frame
 - [ ] Each view has independent camera/projection
 - [ ] `ViewMetadata` supports all planned fields
 
 **Phase 3:**
+
 - [ ] Parallel per-view rendering works correctly
 - [ ] GPU validation shows no hazards
 - [ ] Compositing combines multiple views
@@ -383,6 +413,7 @@ Authoritative `GameStateSnapshot` and `ViewMetadata` are written only during all
 Below are the key source files modified in Phase 1:
 
 **Core / Frame lifecycle:**
+
 - [`Oxygen/Core/Types/View.h`](../../Core/Types/View.h) — ViewId definition
 - [`Oxygen/Core/FrameContext.h`](../../Core/FrameContext.h) — ViewContext, ViewMetadata, view storage
 - [`Oxygen/Core/FrameContext.cpp`](../../Core/FrameContext.cpp) — View management implementation
@@ -390,14 +421,17 @@ Below are the key source files modified in Phase 1:
 - [`Oxygen/Engine/AsyncEngine.h`](../../Engine/AsyncEngine.h) / `.cpp` — Phase integration
 
 **Renderer:**
+
 - [`Oxygen/Renderer/Renderer.h`](../Renderer.h) / `.cpp` — Passive renderer implementation
 - [`Oxygen/Renderer/CameraView.h`](../CameraView.h) — Removed RenderableView inheritance
 
 **Modules (Examples):**
+
 - `Oxygen.Editor.Interop/EditorModule.cpp` — Editor multi-panel implementation
 - `Examples/Async/MainModule.cpp` — Single-view example implementation
 - `Examples/Async/MainModule.h` — View storage pattern
 
 **Design docs:**
+
 - This document — Multi-view rendering design and status
 - `Oxygen/Renderer/README.md` — Render-graph patterns

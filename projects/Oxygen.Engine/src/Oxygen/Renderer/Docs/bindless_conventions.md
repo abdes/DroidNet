@@ -5,23 +5,25 @@ current bindless renderer implementation.
 
 ## Root bindings
 
-The common root binding order used by passes is defined in
-`RenderPass::RootBindings`:
+The common root binding order is defined by the generated enum
+`oxygen::engine::binding::RootParam` in `Generated.RootSignature.h`:
 
-```text
-enum class RenderPass::RootBindings : uint8_t {
-  kBindlessTableSrv = 0,   // descriptor table (SRVs) t0, space0
-  kSceneConstantsCbv = 1,  // direct CBV b1, space0
-  kDrawIndexConstant = 2,  // 32-bit root constant for draw index (b3, space0)
+```cpp
+enum class RootParam : uint32_t {
+  kBindlessSrvTable = 0,   // descriptor table (SRVs) t0, space0
+  kSamplerTable = 1,       // descriptor table (Samplers) s0, space0
+  kSceneConstants = 2,     // direct CBV b1, space0
+  kDrawIndex = 3,          // 32-bit root constant for draw index (b2, space0)
+  kCount = 4,
 };
 ```
 
 ## Current pass usage
 
-| Pass        | kBindlessTableSrv | kSceneConstantsCbv | kDrawIndexConstant |
-|-------------|-------------------|--------------------|--------------------|
-| DepthPrePass| Yes               | Yes                | Yes                |
-| ShaderPass  | Yes               | Yes                | Yes                |
+| Pass        | kBindlessSrvTable | kSamplerTable | kSceneConstants | kDrawIndex |
+|-------------|-------------------|---------------|-----------------|------------|
+| DepthPrePass| Yes               | Yes           | Yes             | Yes        |
+| ShaderPass  | Yes               | Yes           | Yes             | Yes        |
 
 ## Multi-draw item support
 
@@ -29,7 +31,7 @@ The renderer now supports multiple draw items (meshes) in a single frame
 through:
 
 1. Root constant for draw index: each draw call receives a unique `draw_index`
-   via root constant (b3, space0).
+   via root constant (b2, space0).
 2. Per-draw binding: before each draw call, `BindDrawIndexConstant()` sets the
    current draw index.
 3. Shader access: shaders use `g_DrawIndex` to index into per-draw arrays (e.g.,
@@ -48,8 +50,7 @@ command_recorder.Draw(vertex_count, 1, 0, 0);        // Normal draw call
 
 ```hlsl
 // Root constant declaration in shaders:
-[[vk::push_constant]]
-cbuffer DrawIndexConstants : register(b3, space0) {
+cbuffer DrawIndexConstant : register(b2, space0) {
   uint g_DrawIndex;
 }
 

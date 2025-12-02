@@ -144,10 +144,10 @@ aliasing between active and freed slots.
 - The allocator ensures efficient resource management and stable indexing
   without requiring physically separate tables.
 
-### SSoT: `Spec.yaml` (authoritative)
+### SSoT: `Bindless.yaml` (authoritative)
 
 The single source-of-truth for bindless slot/register mapping is
-`src/Oxygen/Core/Bindless/Spec.yaml`. Key facts taken from that file:
+`src/Oxygen/Core/Meta/Bindless.yaml`. Key facts taken from that file:
 
 - Domains and domain bases:
   - `scene` (CBV) : register `b1`, heap index 0, domain_base=0, capacity=1
@@ -166,7 +166,7 @@ The single source-of-truth for bindless slot/register mapping is
   - Note: These heaps are configured at runtime from a generated JSON spec
     embedded in `Generated.Heaps.D3D12.h` and loaded by
     `D3D12HeapAllocationStrategy` (see Section 3.7). The generator derives this
-    JSON from `Spec.yaml` to keep CPU, tooling, and shaders in sync.
+    JSON from `Bindless.yaml` to keep CPU, tooling, and shaders in sync.
 
 - Mappings tie domains → heaps and provide local base indices. The generator
   consumes this file and emits `BindingSlots.h`, `BindingSlots.hlsl` and a
@@ -177,26 +177,24 @@ The single source-of-truth for bindless slot/register mapping is
 ### 3.2 Index Lifetime, Reuse, and Aliasing Prevention
 
 All shader-visible indices and their CPU-side counterparts are represented by
-the project's strong types defined in `src/Oxygen/Core/Types/BindlessHandle.h`.
+the project's strong types defined in `src/Oxygen/Core/Bindless/Types.h`.
 Use these types everywhere to ensure clarity, type-safety, and correct lifetime
 semantics:
 
-- `BindlessHandle` — strongly-typed 32-bit shader-visible index.
-- `VersionedBindlessHandle` — pairs an index with a CPU-only generation counter
-  to detect stale or recycled indices safely.
-- `BindlessHandleCount`, `BindlessHandleCapacity` — strong counts/capacities for
+- `BindlessHeapIndex` — strongly-typed backend-specific descriptor heap index.
+- `ShaderVisibleIndex` — strongly-typed 32-bit shader-visible bindless index.
+- `BindlessItemCount`, `BindlessHeapCapacity` — strong counts/capacities for
   allocator APIs.
 
 Generation-based safety remains the mechanism to prevent aliasing and
 stale-usage: on release, a slot's generation is incremented only after it is
-safe to reuse (for example, after the associated GPU fence/frame completes). Use
-`VersionedBindlessHandle` for CPU-side validation and compare generations
+safe to reuse (for example, after the associated GPU fence/frame completes). CPU-side
+validation should track generation counters separately and compare generations
 against allocator shadow state when binding or issuing draws.
 
 Sentinel handling is provided by the strong types: `kInvalidBindlessIndex` is
-the designated invalid index and `BindlessHandle`/`VersionedBindlessHandle`
-expose IsValid() helpers for concise checks. Shaders should branch to default
-resources on invalid sentinels.
+the designated invalid index (also available as `kInvalidBindlessHeapIndex`).
+Shaders should branch to default resources on invalid sentinels.
 
 Slot metadata remains the same conceptually: { handle, state, shader_index,
 generation, last_used_frame, size_bytes, resident_mip_mask (textures), optional
@@ -309,14 +307,13 @@ lifetime/generation, validation, and type safety.
     embedded JSON; tests assert Reserve-exceeding-capacity returns no value.
 
 - [x] BindlessHandle type and invalid sentinel
-  - Status: Done. A strongly-typed `BindlessHandle` implementation exists at
-    `src/Oxygen/Core/Types/BindlessHandle.h` and the generated sentinel
-    `oxygen::engine::kInvalidBindlessIndex` remains authoritative in
-    `Generated.Constants.h`.
-  - Action: Introduce `using BindlessHandle = oxygen::NamedType<uint32_t, struct
-    _BindlessHandleTag>;` and adopt it in new APIs. Files: new header (e.g.,
-    `src/Oxygen/Core/Types/BindlessHandle.h` and update ScenePrep and renderer
-    code to adopt it.
+  - Status: Done. Strongly-typed bindless indices are implemented in
+    `src/Oxygen/Core/Bindless/Types.h` with `BindlessHeapIndex` (backend-specific heap index),
+    `ShaderVisibleIndex` (shader-visible bindless index), `BindlessItemCount`, and
+    `BindlessHeapCapacity`. The generated sentinel `oxygen::kInvalidBindlessIndex`
+    is authoritative in `Generated.Constants.h` and available as `kInvalidBindlessHeapIndex`
+    in the strong-typed API.
+  - Action: Continue using these types in all bindless-related APIs. No further action needed.
 
 - [ ] Deferred slot reuse and generation increment policy
   - Status: Partial. The design requires that recycled slots carry a new
@@ -350,7 +347,7 @@ lifetime/generation, validation, and type safety.
     - last_used_frame, size_bytes, resident_mip_mask, resource_key
 
     API sketches (minimal):
-    - ResourceRegistry::ReleaseSlot(VersionedBindlessHandle h, uint64_t
+    - ResourceRegistry::ReleaseSlot(handle_with_generation h, uint64_t
       pending_fence)
       - Marks slot PendingEvict, records pending_fence_or_frame :=
         pending_fence, and appends (index, pending_fence) to a per-domain
@@ -368,7 +365,7 @@ lifetime/generation, validation, and type safety.
       OnBeginFrame to avoid contention.
     - Incrementing generation must be atomic with respect to making the slot
       available; publish the new generation before any consumer may allocate the
-      index and create a new VersionedBindlessHandle with that generation.
+      index and pair it with the new generation for validation.
     - Pair with `DeferredReclaimer` to defer actual object destruction
       until the same completed_fence/frame has been observed; this prevents the
       native resource from being destroyed while GPU may still reference it.
@@ -738,15 +735,14 @@ for a practical implementation sequence; stretch/automation items are last.
     `src/Oxygen/Graphics/Common/Test/Bindless/BaseDescriptorAllocator_Domain_test.cpp`.
 
 - [ ] CPU-only generation validation for handles
-  - Status: Missing in headers and validation.
-  - Action: Keep `BindlessHandle` as a strongly-typed 32-bit shader-visible
+  - Status: Types exist; generation tracking logic to be implemented.
+  - Action: Keep `ShaderVisibleIndex` as a strongly-typed 32-bit shader-visible
     index with no bit packing. Do not emit index/generation bit masks to
-    shaders. Add debug-only validation comparing CPU-side handle.generation vs
-    slot.generation on submit. Use a single invalid sentinel:
-    `NEXUS_HANDLE_INVALID = oxygen::engine::kInvalidBindlessIndex =
-    std::numeric_limits<uint32_t>::max()`.
-  - Files: generated BindingSlots headers (sentinels only), `ResourceRegistry`,
-    renderer code.
+    shaders. Implement debug-only validation comparing CPU-side generation counters
+    vs slot.generation on submit. Use the single invalid sentinel:
+    `oxygen::kInvalidBindlessIndex = std::numeric_limits<uint32_t>::max()` from
+    `Generated.Constants.h`.
+  - Files: `ResourceRegistry`, renderer code, new generation tracking structures.
 
 - [ ] Tests & CI hooks
   - Status: Missing.
@@ -828,10 +824,10 @@ allocation policy, budget, and descriptor range (see Section 4 for binding
 slots).
 
 Handle shape (CPU): the project uses the strong types defined in
-`src/Oxygen/Core/Types/BindlessHandle.h`. Prefer `BindlessHandle` for
-shader-visible indices and `VersionedBindlessHandle` for CPU-side handles that
-include a generation counter; use the provided accessors for packing,
-validation, and debugging. Shaders must not rely on any bit-packed index format
+`src/Oxygen/Core/Bindless/Types.h`. Use `ShaderVisibleIndex` for
+shader-visible indices and track generation counters separately on the CPU for
+handles that require validation; use the provided accessors for validation
+and debugging. Shaders must not rely on any bit-packed index format
 — generation is a CPU-side concept only.
 
 - Slot metadata (per allocation): { handle, state, shader_index, generation,
