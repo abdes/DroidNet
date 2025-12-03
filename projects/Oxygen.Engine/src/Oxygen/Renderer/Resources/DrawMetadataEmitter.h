@@ -138,7 +138,6 @@ private:
   std::vector<engine::DrawMetadata> cpu_;
   engine::upload::TransientStructuredBuffer draw_metadata_buffer_;
   ShaderVisibleIndex draw_metadata_srv_index_ { kInvalidShaderVisibleIndex };
-  bool uploaded_this_frame_ { false };
 
   // Sorting & partitions
   std::vector<SortingKey> keys_;

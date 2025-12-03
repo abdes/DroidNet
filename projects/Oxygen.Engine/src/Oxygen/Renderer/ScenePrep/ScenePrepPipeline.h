@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 #include <Oxygen/Base/Macros.h>
@@ -35,8 +36,9 @@ public:
   virtual ~ScenePrepPipeline() = default;
 
   OXGN_RNDR_API auto Collect(const scene::Scene& scene,
-    const ResolvedView& view, frame::SequenceNumber frame_id,
-    ScenePrepState& state, bool reset_state) -> void;
+    std::optional<::oxygen::observer_ptr<const ResolvedView>> view,
+    frame::SequenceNumber frame_id, ScenePrepState& state, bool reset_state)
+    -> void;
 
   OXGN_RNDR_API auto Finalize() -> void;
 
@@ -79,15 +81,19 @@ public:
       }
     }
     if constexpr (CollectionCfg::has_mesh_resolver) {
-      collection_.mesh_resolver(*ctx, state, item);
-      if (item.IsDropped()) {
-        return;
+      if (ctx && ctx->HasView()) {
+        collection_.mesh_resolver(*ctx, state, item);
+        if (item.IsDropped()) {
+          return;
+        }
       }
     }
     if constexpr (CollectionCfg::has_visibility_filter) {
-      collection_.visibility_filter(*ctx, state, item);
-      if (item.IsDropped()) {
-        return;
+      if (ctx && ctx->HasView()) {
+        collection_.visibility_filter(*ctx, state, item);
+        if (item.IsDropped()) {
+          return;
+        }
       }
     }
 
@@ -95,7 +101,9 @@ public:
     const auto items_before = state.CollectedCount();
 
     if constexpr (CollectionCfg::has_producer) {
-      collection_.producer(*ctx, state, item);
+      if (ctx && ctx->HasView()) {
+        collection_.producer(*ctx, state, item);
+      }
     }
 
     // Track indices of all new items added by the producer

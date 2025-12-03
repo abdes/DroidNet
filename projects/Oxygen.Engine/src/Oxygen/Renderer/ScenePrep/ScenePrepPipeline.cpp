@@ -11,37 +11,77 @@
 namespace oxygen::engine::sceneprep {
 
 auto ScenePrepPipeline::Collect(const scene::Scene& scene,
-  const ResolvedView& view, frame::SequenceNumber fseq, ScenePrepState& state,
-  bool reset_state) -> void
+  std::optional<::oxygen::observer_ptr<const ResolvedView>> view,
+  frame::SequenceNumber fseq, ScenePrepState& state, bool reset_state) -> void
 {
   DLOG_SCOPE_F(1, fmt::format("ScenePrep Collect f:{}", fseq.get()).c_str());
 
-  prep_state_ = observer_ptr { &state };
-  ctx_.emplace(fseq, view, scene);
+  // Point prep_state_ at the provided state (non-owning).
+  prep_state_.reset(&state);
+  // Construct context with optional view (observer_ptr may be nullopt)
+  const auto vp = view.has_value() ? view.value() : ::oxygen::observer_ptr<const ResolvedView>(nullptr);
+  ctx_.emplace(fseq, vp, scene);
 
-  // Reset per-frame state if requested.
+  // Reset per-frame or per-view state if requested.
   if (reset_state) {
-    prep_state_->ResetFrameData();
+    if (view.has_value()) {
+      prep_state_->ResetViewData();
+    } else {
+      prep_state_->ResetFrameData();
+    }
   }
 
-  const auto& node_table = scene.GetNodes();
-  const auto items = node_table.Items();
-  // Reserve an upper bound to minimize reallocations in producer
-  state.ReserveCapacityForItems(items.size());
-
-  for (const auto& node_impl : items) {
-    if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
-      // Skip node if RenderItemProto construction fails (missing components)
-      continue;
+  // If we have an explicit view, iterate the cached global list produced by
+  // the Frame-phase traversal. Otherwise traverse the scene node table.
+  if (view.has_value()) {
+    const auto& nodes = prep_state_->GetFilteredSceneNodes();
+    state.ReserveCapacityForItems(nodes.size());
+    for (const auto* node_impl : nodes) {
+      if (node_impl == nullptr) {
+        continue;
+      }
+      try {
+        const auto items_before = state.CollectedCount();
+        RenderItemProto item { *node_impl };
+        CollectImpl(ctx_, *prep_state_, item);
+        // In View-phase we do not repopulate the global list.
+        (void)items_before; // silence unused warning
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+      }
     }
-    DLOG_F(3, "Node: {}", node_impl.GetName());
-    try {
-      RenderItemProto item { node_impl };
+  } else {
+    const auto& node_table = scene.GetNodes();
+    const auto items = node_table.Items();
+    // Reserve an upper bound to minimize reallocations in producer
+    state.ReserveCapacityForItems(items.size());
 
-      CollectImpl(ctx_, *prep_state_, item);
+    for (const auto& node_impl : items) {
+      if (!node_impl.HasComponent<scene::detail::RenderableComponent>()) {
+        // Skip node if RenderItemProto construction fails (missing components)
+        continue;
+      }
+      DLOG_F(3, "Node: {}", node_impl.GetName());
+      try {
+        // Track collected count before running collection for this node so we
+        // can capture indices/nodes added by the producer.
+        const auto items_before = state.CollectedCount();
+        RenderItemProto item { node_impl };
 
-    } catch (const std::exception& ex) {
-      LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+        CollectImpl(ctx_, *prep_state_, item);
+
+        const auto items_after = state.CollectedCount();
+        // If we are in Frame-phase (no view), cache a reference to the node
+        // for faster per-view iteration later. Producers may emit multiple
+        // items per node; `AddFilteredSceneNode` deduplicates consecutive
+        // inserts to avoid repeating the same node multiple times.
+        if (!ctx_->HasView()) {
+          prep_state_->AddFilteredSceneNode(&node_impl);
+        }
+
+      } catch (const std::exception& ex) {
+        LOG_F(ERROR, "-skipped- due to exception: {}", ex.what());
+      }
     }
   }
 }
@@ -54,7 +94,6 @@ auto ScenePrepPipeline::Finalize() -> void
   DLOG_SCOPE_F(1,
     fmt::format("ScenePrep Finalize f:{}", ctx_->GetFrameSequenceNumber().get())
       .c_str());
-
   FinalizeImpl(*prep_state_);
 }
 

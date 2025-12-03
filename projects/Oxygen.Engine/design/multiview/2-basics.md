@@ -66,13 +66,13 @@
 
 | Type | Layer | Status | Location | Notes |
 |------|-------|--------|----------|-------|
-| **View** | Application | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Complete with camera matrices, viewport, scissor, jitter, frustum |
-| **ResolvedView** | Application | ❌ Missing | N/A | Design mentions this as View + resolved transforms, but `View` already contains all fields |
+| **View** | Application | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Lightweight view configuration (no matrices); viewport, scissor, jitter |
+| **ResolvedView** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ResolvedView.h` | Immutable view snapshot with matrices, frustum and derived data |
 | **ViewMetadata** | Application | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Has tag, present_policy, target_surfaces, viewport, scissor, flags |
-| **ViewResolver** | Application | ❌ Missing | N/A | Callback type `ResolvedView(ViewId)` not defined |
+| **ViewResolver** | Application | ✅ Implemented | `src/Oxygen/Core/Types/ViewResolver.h` | Alias `using ViewResolver = std::function<ResolvedView(const ViewId&)>` |
 | **ViewId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/Types/View.h` | Strongly typed using NamedType pattern |
 | **SurfaceId** | FrameContext | ✅ Implemented | `src/Oxygen/Core/FrameContext.h` | Strongly typed using NamedType pattern |
-| **ViewOutput** | Renderer | ❌ Missing | N/A | Currently using `shared_ptr<Framebuffer>` directly |
+| **ViewOutput** | Renderer | Partial | `src/Oxygen/Core/FrameContext.h` | `ViewContext::output` and `FrameContext::SetViewOutput` exist, but Renderer does not yet populate outputs; examples/app modules call `SetViewOutput` manually |
 | **ViewSpecific struct** | RenderContext | ❌ Missing | N/A | Inner struct for view-specific state (view_id, observer_ptr to resolved_view, retained_items) |
 | **current_view** | RenderContext | ❌ Missing | N/A | Single ViewSpecific instance for active view state |
 | **view_outputs** | RenderContext | ❌ Missing | N/A | Map of ViewId to framebuffers not present in RenderContext |
@@ -80,5 +80,5 @@
 ---
 
 **Document Status**: Draft
-**Last Updated**: 2025-12-02
+**Last Updated**: 2025-12-03
 **Part of**: Multi-View Rendering Design Series

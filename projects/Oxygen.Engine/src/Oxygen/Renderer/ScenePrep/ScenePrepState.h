@@ -19,10 +19,9 @@
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemData.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
 
 namespace oxygen::engine::sceneprep {
-
-// Forward: extraction::RenderItemData already declared in Types.h
 
 //! Persistent and per-frame state for ScenePrep operations. Manages both
 //! temporary data (cleared each frame) and persistent caches (reused across
@@ -143,6 +142,40 @@ public:
     collected_items_.clear();
     retained_indices_.clear();
     pass_masks.clear();
+    // Clear cached per-frame filtered node list populated during Frame-phase
+    filtered_scene_nodes_.clear();
+  }
+
+  //! Reset per-view data while keeping global lists/caches intact.
+  auto ResetViewData() -> void
+  {
+    // Clear only per-view transient data; keep collected_items_ and
+    // any persistent caches intact so frame-phase work can be reused.
+    retained_indices_.clear();
+    pass_masks.clear();
+  }
+
+  //! Add a node pointer to the cached filtered scene nodes list. Populated
+  //! during Frame-phase traversal and used during View-phase to reconstruct
+  //! `RenderItemProto` objects rapidly without scanning the full scene.
+  //! This method deduplicates consecutive inserts (many producers emit
+  //! multiple RenderItemData entries per node) by checking the last added
+  //! node pointer.
+  auto AddFilteredSceneNode(const scene::SceneNodeImpl* node) -> void
+  {
+    if (node == nullptr) {
+      return;
+    }
+    if (filtered_scene_nodes_.empty() || filtered_scene_nodes_.back() != node) {
+      filtered_scene_nodes_.push_back(node);
+    }
+  }
+
+  //! Accessor for the cached filtered scene nodes.
+  auto GetFilteredSceneNodes() const
+    -> const std::vector<const scene::SceneNodeImpl*>&
+  {
+    return filtered_scene_nodes_;
   }
 
 private:
@@ -163,6 +196,14 @@ private:
 
   //! Dynamic draw metadata builder and uploader (no atlas; fully dynamic)
   std::unique_ptr<renderer::resources::DrawMetadataEmitter> draw_emitter_;
+
+  //! Cached ordered list of scene nodes that were processed during the
+  //! Frame-phase and passed the pre-filter. The pointers are non-owning and
+  //! valid for the duration of a frame; they must not be persisted across
+  //! frames. This list is deduplicated for consecutive entries to avoid
+  //! repeating the same node when a producer emits multiple per-node items.
+  std::vector<const scene::SceneNodeImpl*> filtered_scene_nodes_;
+  // (no upload ticket storage here — upload coordination is external)
 };
 
 } // namespace oxygen::engine::sceneprep

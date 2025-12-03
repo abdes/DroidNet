@@ -8,7 +8,7 @@
 
 // no extra STL headers required here
 
-#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
@@ -108,6 +108,15 @@ inline auto MeshResolver(const ScenePrepContext& ctx,
 {
   CHECK_F(!item.IsDropped());
   CHECK_NOTNULL_F(item.Geometry());
+
+  // Defensive: MeshResolver is view-dependent (needs camera position).
+  // If called without a view (frame-phase), bail out early to avoid
+  // dereferencing a null observer_ptr. The collection pipeline should
+  // normally skip mesh resolution in frame-phase, but this guard protects
+  // against misconfiguration or future changes.
+  if (!ctx.HasView()) {
+    return;
+  }
 
   // Perform LOD selection here to keep policy and resolution together.
   const auto sphere = item.Renderable().GetWorldBoundingSphere();
