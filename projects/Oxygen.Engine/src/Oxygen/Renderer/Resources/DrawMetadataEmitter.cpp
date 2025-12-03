@@ -107,7 +107,6 @@ auto DrawMetadataEmitter::OnFrameStart(
   partitions_.clear();
   draw_metadata_buffer_.OnFrameStart(slot);
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
-  uploaded_this_frame_ = false;
   ++frames_started_count_;
 }
 
@@ -293,7 +292,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
 
 auto DrawMetadataEmitter::EnsureFrameResources() -> void
 {
-  if (Cpu().empty() || uploaded_this_frame_) {
+  if (Cpu().empty()) {
     return;
   }
 
@@ -316,8 +315,10 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   std::memcpy(
     ptr, Cpu().data(), Cpu().size() * sizeof(oxygen::engine::DrawMetadata));
 
+  // Store the SRV index for the most recent allocation. This may change per
+  // view when the emitter is used in per-view mode; callers should query the
+  // SRV index after Finalize/EnsureFrameResources.
   draw_metadata_srv_index_ = draw_metadata_buffer_.GetBinding().srv;
-  uploaded_this_frame_ = true;
 }
 
 auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex

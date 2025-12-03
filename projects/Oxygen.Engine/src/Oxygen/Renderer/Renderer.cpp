@@ -306,7 +306,20 @@ auto Renderer::BuildFrame(
   auto& scene = *scene_ptr;
 
   auto frame_seq = frame_context.GetFrameSequenceNumber();
-  scene_prep_->Collect(scene, view, frame_seq, *scene_prep_state_, true);
+
+  // Two-stage ScenePrep: 1) Frame-phase (no view) to prepare shared
+  // resources and build the filtered node list; 2) View-phase (with view)
+  // to perform per-view culling and emit per-view draw metadata.
+  // Frame-phase: reset frame data so we start fresh for this frame.
+  scene_prep_->Collect(scene, std::nullopt, frame_seq, *scene_prep_state_, true);
+  scene_prep_->Finalize();
+
+  // View-phase: reset per-view transient data while reusing frame-phase
+  // collected items. This runs the visibility/extractors per view.
+  ::oxygen::observer_ptr<const ::oxygen::ResolvedView> view_obs(&view);
+  scene_prep_->Collect(scene,
+    std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(view_obs),
+    frame_seq, *scene_prep_state_, true);
   scene_prep_->Finalize();
 
   PublishPreparedFrameSpans();

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 
 namespace oxygen::scene {
@@ -28,10 +29,12 @@ namespace oxygen::engine::sceneprep {
 class ScenePrepContext {
 public:
   //! Construct a ScenePrepContext that borrows the provided references.
-  ScenePrepContext(frame::SequenceNumber fseq, const ResolvedView& v,
-    const scene::Scene& s) noexcept
+  //! The view argument is optional; a null observer_ptr indicates Frame-phase
+  //! invocation where no specific view is available.
+  ScenePrepContext(frame::SequenceNumber fseq,
+    oxygen::observer_ptr<const ResolvedView> v, const scene::Scene& s) noexcept
     : frame_seq_number { fseq }
-    , view_ { std::ref(v) }
+    , view_ { v }
     , scene_ { std::ref(s) }
   {
   }
@@ -45,7 +48,9 @@ public:
   {
     return frame_seq_number;
   }
-  [[nodiscard]] auto& GetView() const noexcept { return view_.get(); }
+  [[nodiscard]] auto HasView() const noexcept { return static_cast<bool>(view_); }
+
+  [[nodiscard]] auto GetView() const noexcept -> const ResolvedView& { return *view_; }
   [[nodiscard]] auto& GetScene() const noexcept { return scene_.get(); }
   // NOTE: RenderContext removed; reintroduce if extractors require GPU ops.
 
@@ -54,7 +59,8 @@ private:
   frame::SequenceNumber frame_seq_number;
 
   //! View containing camera matrices and frustum for the current frame.
-  std::reference_wrapper<const ResolvedView> view_;
+  //! May be null (observer) when operating in Frame-phase.
+  oxygen::observer_ptr<const ResolvedView> view_;
 
   //! Scene graph being processed.
   std::reference_wrapper<const scene::Scene> scene_;
