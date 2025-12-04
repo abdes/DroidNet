@@ -28,7 +28,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
-#include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>

@@ -89,20 +89,6 @@ auto FrameContext::RegisterView(ViewContext view) noexcept -> ViewId
 {
   // Views may only be registered before the Snapshot phase (exclusive).
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
-#if !defined(NDEBUG)
-  // In debug builds, verify that the view surface is one of the surfaces set in
-  // the FrameContext.
-  if (view.surface.index() == 0) {
-    const auto& surface = std::get<0>(view.surface).get();
-    const bool found = std::ranges::any_of(
-      surfaces_, [&](const auto& s) { return s.get() == &surface; });
-    if (!found) {
-      DLOG_F(WARNING,
-        "View '{}' being registered with a surface not in the Frame Context",
-        view.metadata.name);
-    }
-  }
-#endif // !defined(NDEBUG)
 
   std::unique_lock lock(views_mutex_);
 
@@ -145,7 +131,7 @@ auto FrameContext::RemoveView(ViewId id) noexcept -> void
 }
 
 auto FrameContext::SetViewOutput(
-  ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept -> void
+  ViewId id, observer_ptr<graphics::Framebuffer> output) noexcept -> void
 {
   // Output setting is allowed during rendering phases (FrameGraph,
   // CommandRecord) and Compositing. CHECK_F(engine_state_.current_phase >=
@@ -252,8 +238,10 @@ auto FrameContext::SetMetrics(const Metrics& metrics, EngineTag) noexcept
   metrics_ = metrics;
 }
 
-auto FrameContext::AddSurface(
-  const std::shared_ptr<graphics::Surface>& s) noexcept -> void
+// Added surface lifetime must be guaranteed for the frame duration by the
+// caller.
+auto FrameContext::AddSurface(observer_ptr<graphics::Surface> s) noexcept
+  -> void
 {
   // Surfaces are part of authoritative GameState and may be mutated until the
   // Snapshot phase (not included). Enforce with an explicit phase-order check
@@ -281,24 +269,6 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   // Capture pointer of surface being removed for view cleanup
   auto removed_surface_ptr = surfaces_[index].get();
   surfaces_.erase(surfaces_.begin() + static_cast<std::ptrdiff_t>(index));
-  // Remove any views that reference the removed surface. Do this while
-  // holding the views_mutex_ to avoid races with view mutation.
-  {
-    std::unique_lock view_lock(views_mutex_);
-    // Erase-remove idiom: keep views whose surface != removed_surface_ptr
-    std::erase_if(views_, [&](const auto& pair) {
-      const auto& view_ctx = pair.second;
-      if (view_ctx.surface.index() == 0) {
-        const auto& surf = std::get<0>(view_ctx.surface).get();
-        if (&surf == removed_surface_ptr) {
-          LOG_F(INFO, "Removing view '{}' due to surface removal",
-            view_ctx.metadata.name);
-          return true; // remove this view
-        }
-      }
-      return false;
-    });
-  }
   // Keep presentable flags in sync
   if (index < presentable_flags_.size()) {
     presentable_flags_.erase(
@@ -318,21 +288,6 @@ auto FrameContext::ClearSurfaces(EngineTag) noexcept -> void
   surfaces_.clear();
   // Keep presentable flags in sync
   presentable_flags_.clear();
-  DCHECK_F(presentable_flags_.size() == surfaces_.size());
-}
-
-auto FrameContext::SetSurfaces(
-  std::vector<std::shared_ptr<graphics::Surface>> surfaces, EngineTag) noexcept
-  -> void
-{
-  // Replacing the surfaces vector is a structural GameState mutation and must
-  // occur before the Snapshot phase (exclusive).
-  CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
-
-  std::unique_lock lock(surfaces_mutex_);
-  surfaces_ = std::move(surfaces);
-  // Reset presentable flags to match new surface count
-  presentable_flags_.assign(surfaces_.size(), 0);
   DCHECK_F(presentable_flags_.size() == surfaces_.size());
 }
 
@@ -368,10 +323,10 @@ auto FrameContext::IsSurfacePresentable(size_t index) const noexcept -> bool
 }
 
 auto FrameContext::GetPresentableSurfaces() const noexcept
-  -> std::vector<std::shared_ptr<graphics::Surface>>
+  -> std::vector<observer_ptr<graphics::Surface>>
 {
   std::shared_lock lock(surfaces_mutex_);
-  std::vector<std::shared_ptr<graphics::Surface>> presentable_surfaces;
+  std::vector<observer_ptr<graphics::Surface>> presentable_surfaces;
 
   const size_t surface_count
     = std::min(surfaces_.size(), presentable_flags_.size());

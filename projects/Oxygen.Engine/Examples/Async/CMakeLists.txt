@@ -76,7 +76,6 @@ target_link_libraries(
     oxygen::input
     oxygen::imgui
     oxygen::loader
-    oxygen::graphics-headless
     oxygen::graphics-common
     oxygen::graphics-direct3d12
     oxygen::renderer

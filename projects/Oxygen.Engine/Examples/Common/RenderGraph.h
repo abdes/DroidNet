@@ -98,10 +98,10 @@ public:
   auto ClearBackbufferReferences() -> void;
 
   auto PrepareForRenderFrame(
-    const std::shared_ptr<const oxygen::graphics::Framebuffer>& fb) -> void;
+    observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void;
 
   auto PrepareForWireframeRenderFrame(
-    const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void;
+    observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void;
 
   // Execute the configured pass list (DepthPrePass, ShaderPass,
   // TransparentPass) using the supplied recorder. This reuses the

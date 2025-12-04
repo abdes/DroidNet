@@ -84,22 +84,37 @@ auto RenderGraph::SetupRenderPasses() -> void
 
 auto RenderGraph::ClearBackbufferReferences() -> void
 {
-  LOG_SCOPE_F(4, "RenderGraph::ClearBackbufferReferences");
+  LOG_SCOPE_F(1, "RenderGraph::ClearBackbufferReferences");
 
   if (transparent_pass_config_) {
-    transparent_pass_config_->color_texture.reset();
-    transparent_pass_config_->depth_texture.reset();
+      transparent_pass_config_->color_texture.reset();
+      transparent_pass_config_->depth_texture.reset();
   }
 
   if (shader_pass_config_) {
     shader_pass_config_->color_texture.reset();
   }
+
+  // Depth pass configs may hold depth textures pointing to the swapchain
+  // backbuffer; clear those as well to avoid stale references after a
+  // resize/ recreate sequence.
+  if (depth_pass_config_) {
+    depth_pass_config_->depth_texture.reset();
+  }
+  if (wireframe_depth_pass_config_) {
+    wireframe_depth_pass_config_->depth_texture.reset();
+  }
+  // Wireframe shader hooks may also hold the color attachment — clear
+  // color references for safety.
+  if (wireframe_shader_pass_config_) {
+    wireframe_shader_pass_config_->color_texture.reset();
+  }
 }
 
 auto RenderGraph::PrepareForRenderFrame(
-  const std::shared_ptr<const oxygen::graphics::Framebuffer>& fb) -> void
+  const observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void
 {
-  LOG_SCOPE_F(4, "RenderGraph::PrepareForRenderFrame");
+  LOG_SCOPE_F(3, "RenderGraph::PrepareForRenderFrame");
 
   if (!fb) {
     return;
@@ -126,10 +141,20 @@ auto RenderGraph::PrepareForRenderFrame(
     else
       transparent_pass_config_->depth_texture.reset();
   }
+
+  // Ensure the dedicated depth-pre-pass uses the framebuffer's depth
+  // attachment (if any). This keeps depth-prepass and shader passes in
+  // sync with the swapchain/depth textures created for the frame.
+  if (depth_pass_config_) {
+    if (desc.depth_attachment.IsValid())
+      depth_pass_config_->depth_texture = desc.depth_attachment.texture;
+    else
+      depth_pass_config_->depth_texture.reset();
+  }
 }
 
 auto RenderGraph::PrepareForWireframeRenderFrame(
-  const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void
+  observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void
 {
   LOG_SCOPE_F(4, "RenderGraph::PrepareForWireframeRenderFrame");
 

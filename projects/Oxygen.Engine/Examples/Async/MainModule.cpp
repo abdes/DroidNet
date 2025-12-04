@@ -555,18 +555,20 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 
 auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 {
-  LOG_SCOPE_F(3, "MainModule::OnFrameStart");
-
-  // Start frame tracking
   StartFrameTracking();
   TrackFrameAction("Frame started");
 
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
+    TrackFrameAction("GUI update skipped - app window not available");
+    TrackPhaseEnd();
+    return;
+  }
+
+  LOG_SCOPE_F(3, "MainModule::OnFrameStart");
+
   // Call base to handle window lifecycle and surface setup
   Base::OnFrameStart(context);
-
-  // AppWindow component handles framebuffer lifecycle, including clearing
-  // before resize. RenderGraph handles render pass configuration cleanup.
-  // Surface resize is also handled by AppWindow.
 }
 
 // Initialize a default looping flight path over the scene (few control points)
@@ -796,26 +798,50 @@ auto MainModule::UpdateCameraDrone(double delta_time) -> void
 
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
+  DCHECK_NOTNULL_F(scene_);
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
+    UpdateViewRegistration(context);
+    TrackFrameAction("GUI update skipped - app window not available");
+    TrackPhaseEnd();
+    co_return;
+  }
+
   LOG_SCOPE_F(3, "MainModule::OnSceneMutation");
   TrackPhaseStart("Scene Mutation");
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
-  if (!app_window_) {
-    LOG_F(3, "Window or Surface is no longer valid");
-    TrackPhaseEnd();
-    co_return;
+  UpdateViewRegistration(context);
+
+  // Handle scene mutations (material overrides, visibility changes)
+  // Use the engine-provided frame start time so all modules use a
+  // consistent timestamp for this frame. This avoids micro-jitter caused
+  // by sampling the clock at slightly different moments inside the frame
+  // pipeline.
+  const auto now = context.GetFrameStartTime();
+  const float delta_time
+    = std::chrono::duration<float>(now - start_time_).count();
+  UpdateSceneMutations(delta_time);
+
+  TrackFrameAction("Scene mutations updated");
+  TrackPhaseEnd();
+  co_return;
+}
+
+void MainModule::UpdateViewRegistration(engine::FrameContext& context)
+{
+  bool has_view = app_window_ && app_window_->GetWindow()
+    && !app_window_->GetSurface().expired();
+
+  if (!has_view && view_id_ != ViewId { kInvalidViewId }) {
+    // Remove view if it was previously registered
+    context.RemoveView(view_id_);
+    view_id_ = ViewId { kInvalidViewId };
+    return;
   }
 
-  const auto surface = app_window_->GetSurface();
-  if (!surface) {
-    LOG_F(3, "Surface is no longer valid");
-    TrackPhaseEnd();
-    co_return;
-  }
-
-  EnsureMainCamera(
-    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
+  auto surface = app_window_->GetSurface().lock();
 
   // Add view to FrameContext with complete configuration
   // Views must be registered before kSnapshot phase
@@ -842,55 +868,42 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     .metadata = {
       .name = "MainView",
       .purpose = "primary",
-      .present_policy = engine::PresentPolicy::DirectToSurface,
     },
-    .surface = std::ref(*surface),
   };
 
-  // Get framebuffer for this view if available
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
-  if (!framebuffers.empty() && backbuffer_index < framebuffers.size()) {
-    view_ctx.output = framebuffers.at(backbuffer_index);
-  }
+  // Update the view output framebuffer at each frame. The frame buffer is
+  // only guranteed to be stable for a single frame cycle.
+  auto fb_weak = app_window_->GetCurrentFrameBuffer();
+  view_ctx.output
+    = observer_ptr { fb_weak.expired() ? nullptr : fb_weak.lock().get() };
 
-  // Register view on first frame, update on subsequent frames
-  if (view_id_.get() == 0) {
-    // First frame: register new view and get stable ViewId
+  // Register when no registration exists, update if there is one
+  if (view_id_ == ViewId { kInvalidViewId }) {
     view_id_ = context.RegisterView(std::move(view_ctx));
   } else {
-    // Subsequent frames: update existing view
     context.UpdateView(view_id_, std::move(view_ctx));
   }
 
-  // Handle scene mutations (material overrides, visibility changes)
-  // Use the engine-provided frame start time so all modules use a
-  // consistent timestamp for this frame. This avoids micro-jitter caused
-  // by sampling the clock at slightly different moments inside the frame
-  // pipeline.
-  const auto now = context.GetFrameStartTime();
-  const float delta_time
-    = std::chrono::duration<float>(now - start_time_).count();
-  UpdateSceneMutations(delta_time);
-
-  TrackFrameAction("Scene mutations updated");
-  TrackPhaseEnd();
-  co_return;
+  EnsureMainCamera(
+    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 }
 
 auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnTransformPropagation");
   TrackPhaseStart("Transform Propagation");
-  current_frame_tracker_.transform_propagation_occurred = true;
-  TrackFrameAction("Transform propagation phase started");
 
-  if (!app_window_) {
-    LOG_F(3, "Window or Surface is no longer valid");
+  // Ensure framebuffers are created after a resize
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
+    TrackFrameAction("GUI update skipped - app window not available");
     TrackPhaseEnd();
     co_return;
   }
+
+  LOG_SCOPE_F(3, "MainModule::OnTransformPropagation");
+  current_frame_tracker_.transform_propagation_occurred = true;
+  TrackFrameAction("Transform propagation phase started");
 
   // Update animations and transforms (no scene mutations)
   // Compute per-frame delta from engine frame timestamp. Clamp delta to a
@@ -951,23 +964,17 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
 
 auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnPreRender");
   TrackPhaseStart("PreRender");
-  current_frame_tracker_.frame_graph_setup = true;
-  TrackFrameAction("Pre-render setup started");
 
-  if (!app_window_) {
-    LOG_F(3, "Window or Surface is no longer valid");
+  // Ensure framebuffers are created after a resize
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
+    TrackFrameAction("GUI update skipped - app window not available");
     TrackPhaseEnd();
     co_return;
   }
 
-  // Ensure framebuffers are created after a resize (framebuffers are cleared
-  // on OnFrameStart when Surface::ShouldResize() was set). Recreate them here
-  // if necessary so the render graph has valid attachments.
-  if (app_window_->GetFramebuffers().empty()) {
-    app_window_->EnsureFramebuffers();
-  }
+  LOG_SCOPE_F(3, "MainModule::OnPreRender");
 
   // Set ImGui context before making ImGui calls
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -976,6 +983,15 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
     if (auto* imgui_context = imgui_module.GetImGuiContext()) {
       ImGui::SetCurrentContext(imgui_context);
     }
+  }
+
+  current_frame_tracker_.frame_graph_setup = true;
+  TrackFrameAction("Pre-render setup started");
+
+  if (!app_window_) {
+    LOG_F(3, "Window or Surface is no longer valid");
+    TrackPhaseEnd();
+    co_return;
   }
 
   // Ensure render passes are created/configured via the example RenderGraph
@@ -1040,17 +1056,32 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
-  TrackPhaseStart("GUI Update");
-
-  // Window must be available to render GUI
-  if (!app_window_) {
+  // Ensure framebuffers are created after a resize
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
     TrackFrameAction("GUI update skipped - app window not available");
     TrackPhaseEnd();
     co_return;
   }
+
+  MarkSurfacePresentable(context);
+  co_return;
+}
+
+auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
+{
+  TrackPhaseStart("GUI Update");
+
+  // Window must be available to render GUI
+  if (!app_window_ || !app_window_->GetWindow()) {
+    TrackFrameAction("GUI update skipped - app window not available");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  LOG_SCOPE_F(3, "MainModule::OnGuiUpdate");
 
   // Set ImGui context before making ImGui calls
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -1071,8 +1102,17 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
 auto MainModule::OnRender(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnRender");
   TrackPhaseStart("Render");
+
+  // Ensure framebuffers are created after a resize
+  DCHECK_NOTNULL_F(app_window_);
+  if (!app_window_->GetWindow()) {
+    TrackFrameAction("GUI update skipped - app window not available");
+    TrackPhaseEnd();
+    co_return;
+  }
+
+  LOG_SCOPE_F(3, "MainModule::OnRender");
   current_frame_tracker_.command_recording = true;
   TrackFrameAction("Render started");
 
@@ -1401,7 +1441,8 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
   }
 }
 
-//=== Debug Overlay Implementation ===========================================//
+//=== Debug Overlay Implementation
+//===========================================//
 
 auto MainModule::DrawDebugOverlay(engine::FrameContext& context) -> void
 {
@@ -1756,22 +1797,10 @@ auto MainModule::DrawRenderPassesPanel() -> void
 
   ImGui::Unindent();
 
-  // Framebuffer info
-  ImGui::Spacing();
-  ImGui::Text("Framebuffers:");
-  ImGui::Indent();
-  if (app_window_) {
-    const auto& framebuffers = app_window_->GetFramebuffers();
-    ImGui::Text("Count: %zu", framebuffers.size());
-  } else {
-    ImGui::Text("Count: 0 (no window)");
-  }
-  ImGui::Unindent();
-
   // Surface info
   if (app_window_) {
-    const auto surface = app_window_->GetSurface();
-    if (surface) {
+    const auto surface_weak = app_window_->GetSurface();
+    if (!surface_weak.expired()) {
       ImGui::Spacing();
       ImGui::Text("Surface: Active");
     } else {

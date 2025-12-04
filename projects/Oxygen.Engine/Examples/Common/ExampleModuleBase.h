@@ -32,16 +32,19 @@ class ExampleModuleBase : public oxygen::engine::EngineModule,
 public:
   explicit ExampleModuleBase(
     const oxygen::examples::common::AsyncEngineApp& app) noexcept;
+
+  ~ExampleModuleBase() override = default;
+
   // Lifecycle: create window and install helpers when attached to engine
   auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
     -> bool override;
+
   // Common OnFrameStart handler. Derived examples should implement
   // OnExampleFrameStart to provide per-example behavior (scene setup,
   // context.SetScene, etc.). The base handles shared lifecycle tasks such
   // as handling expired windows, resize flow, surface registration and
   // ImGui window assignment.
   auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-  ~ExampleModuleBase() override = default;
 
   //! Install helpers for an existing window using the aggregated app state
   //! provided by examples. Returns true on success.
@@ -56,12 +59,15 @@ public:
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
+protected:
+  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
+
   //! Hook: clear backbuffer references before resize. Each example must
   //! implement this to clear any texture references that point to the
-  //! backbuffer before it is resized/recreated.
+  //! backbuffer before it is resized/recreated. Typical references come from
+  //! the render graph.
   virtual auto ClearBackbufferReferences() -> void = 0;
 
-protected:
   // Reference to the shared example App state (must outlive the module)
   const oxygen::examples::common::AsyncEngineApp& app_;
 
@@ -78,10 +84,8 @@ protected:
   virtual auto OnExampleFrameStart(engine::FrameContext& /*context*/) -> void {
   }
 
-  // Note: this base no longer stores per-window surface / framebuffer
-  // state. The `AppWindow` component owns the window, surface and
-  // framebuffer data and behaviour — the base delegates via the
-  // delegates via component APIs.
+private:
+  auto OnFrameStartCommon(engine::FrameContext& context) -> void;
 };
 
 } // namespace oxygen::examples::common

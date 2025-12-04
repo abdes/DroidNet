@@ -42,8 +42,7 @@ namespace adl_helper {
 /*!
  * This is a C++23 feature that we backport here for C++20 compatibility.
  */
-template <typename Enum>
-constexpr auto to_underlying(Enum e) noexcept
+template <typename Enum> constexpr auto to_underlying(Enum e) noexcept
 {
   return static_cast<std::underlying_type_t<Enum>>(e);
 }

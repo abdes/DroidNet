@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/OxCo/Co.h>
@@ -95,6 +96,7 @@ public:
     -> co::Co<> override;
   auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
   auto OnRender(engine::FrameContext& context) -> co::Co<> override;
+  auto OnCompositing(engine::FrameContext& context) -> co::Co<>;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto ClearBackbufferReferences() -> void override;
@@ -113,6 +115,7 @@ private:
   // preserve granularity at high FPS.
   auto UpdateAnimations(double delta_time) -> void;
   auto UpdateSceneMutations(float delta_time) -> void;
+  auto UpdateViewRegistration(engine::FrameContext& context) -> void;
 
   //! Debug overlay methods.
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
@@ -184,7 +187,7 @@ private:
   scene::SceneNode main_camera_; // "MainCamera"
 
   // ViewId for the main viewport
-  ViewId view_id_ { 0 };
+  ViewId view_id_ { kInvalidViewId };
 
   // Per-example RenderGraph instance owned by this module.
   oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {

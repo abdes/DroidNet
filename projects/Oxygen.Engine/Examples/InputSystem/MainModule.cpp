@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./MainModule.h"
-
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstring>
 #include <random>
+#include <ranges>
+#include <unordered_map>
+#include <variant>
 
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -38,13 +43,7 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/ExampleModuleBase.h"
-
-#include <algorithm>
-#include <chrono>
-#include <cmath>
-#include <cstring>
-#include <unordered_map>
-#include <variant>
+#include "./MainModule.h"
 
 namespace {
 
@@ -245,6 +244,17 @@ MainModule::MainModule(const common::AsyncEngineApp& app)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
+  // Create per-module RenderGraph for this example so it can own per-frame
+  // RenderContext and pass configs. This mirrors other examples (MultiView,
+  // Async) that manage their own render_graph instance.
+  try {
+    auto& rg = AddComponent<oxygen::examples::common::RenderGraph>(app);
+    render_graph_
+      = oxygen::observer_ptr<oxygen::examples::common::RenderGraph>(&rg);
+  } catch (const std::exception& ex) {
+    LOG_F(WARNING, "Failed to create RenderGraph for InputSystem example: {}",
+      ex.what());
+  }
 }
 
 auto MainModule::OnAttached(
@@ -284,6 +294,20 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
+}
+
+auto MainModule::ClearBackbufferReferences() -> void
+{
+  // Clear any references that point to the swapchain/backbuffer before a
+  // resize. The RenderGraph component manages the per-frame RenderContext
+  // and pass configs which may hold backbuffer textures, so forward to it.
+  try {
+    if (render_graph_) {
+      render_graph_->ClearBackbufferReferences();
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(WARNING, "ClearBackbufferReferences() threw: {}", ex.what());
+  }
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -400,13 +424,10 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnPreRender(engine::FrameContext& /*context*/) -> co::Co<>
+auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 {
   // Ensure framebuffers are created after a resize
   DCHECK_NOTNULL_F(app_window_);
-  if (app_window_->GetFramebuffers().empty()) {
-    app_window_->EnsureFramebuffers();
-  }
 
   // Set ImGui context before making ImGui calls
   auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
@@ -487,14 +508,12 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  const auto wnd_weak = app_window_->GetWindowWeak();
-  const auto surface = app_window_->GetSurface();
-  if (!surface || wnd_weak.expired()) {
-    LOG_F(3, "Window or Surface is no longer valid");
+  DCHECK_NOTNULL_F(scene_);
+
+  UpdateViewRegistration(context);
+  if (!app_window_->GetWindow()) {
     co_return;
   }
-
-  DCHECK_NOTNULL_F(scene_);
 
   // Build a single-LOD sphere mesh using ProceduralMeshes + MeshBuilder
   using oxygen::data::MaterialAsset;
@@ -502,7 +521,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   using oxygen::data::pak::GeometryAssetDesc;
   using oxygen::data::pak::MeshViewDesc;
 
-  if (scene_->IsEmpty()) {
+  if (!std::ranges::any_of(scene_->GetRootNodes(),
+        [](auto& n) { return n.GetName() == "Sphere"; })) {
     auto sphere_data = oxygen::data::MakeSphereMeshAsset(24, 48);
     if (sphere_data) {
       const auto sphere_mat
@@ -544,11 +564,25 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // Ensure the main camera exists and has a valid viewport
-  EnsureMainCamera(
-    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
+  co_return;
+}
 
-  // Prepare view context for registration/update
+void MainModule::UpdateViewRegistration(engine::FrameContext& context)
+{
+  bool has_view = app_window_ && app_window_->GetWindow()
+    && !app_window_->GetSurface().expired();
+
+  if (!has_view && view_id_ != ViewId { kInvalidViewId }) {
+    // Remove view if it was previously registered
+    context.RemoveView(view_id_);
+    view_id_ = ViewId { kInvalidViewId };
+    return;
+  }
+
+  auto surface = app_window_->GetSurface().lock();
+
+  // Add view to FrameContext with complete configuration
+  // Views must be registered before kSnapshot phase
   ViewPort viewport;
   viewport.top_left_x = 0.0f;
   viewport.top_left_y = 0.0f;
@@ -570,37 +604,39 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   engine::ViewContext view_ctx {
     .view = view,
     .metadata = {
-      .name = "InputSystemView",
+      .name = "MainView",
       .purpose = "primary",
-      .present_policy = engine::PresentPolicy::DirectToSurface,
     },
-    .surface = std::ref(*surface),
   };
 
-  // Get framebuffer for this view if available
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
-  if (!framebuffers.empty() && backbuffer_index < framebuffers.size()) {
-    view_ctx.output = framebuffers.at(backbuffer_index);
-  }
+  // Update the view output framebuffer at each frame. The frame buffer is
+  // only guranteed to be stable for a single frame cycle.
+  auto fb_weak = app_window_->GetCurrentFrameBuffer();
+  view_ctx.output
+    = observer_ptr { fb_weak.expired() ? nullptr : fb_weak.lock().get() };
 
-  // Register view on first frame, update on subsequent frames
-  if (view_id_.get() == 0) {
-    // First frame: register new view
+  // Register when no registration exists, update if there is one
+  if (view_id_ == ViewId { kInvalidViewId }) {
     view_id_ = context.RegisterView(std::move(view_ctx));
   } else {
-    // Subsequent frames: update existing view
     context.UpdateView(view_id_, std::move(view_ctx));
   }
 
+  EnsureMainCamera(
+    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
+}
+
+auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
+{
+  MarkSurfacePresentable(context);
   co_return;
 }
 
 auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 {
   DCHECK_NOTNULL_F(app_window_);
-  const auto wnd_weak = app_window_->GetWindowWeak();
-  if (wnd_weak.expired()) {
+  const auto wnd = app_window_->GetWindow();
+  if (!wnd) {
     co_return;
   }
   // Set ImGui current context before making any ImGui calls
@@ -844,7 +880,8 @@ auto MainModule::InitInputBindings() noexcept -> bool
   return true;
 }
 
-//=== Debug Overlay Implementation ===========================================//
+//=== Debug Overlay Implementation
+//===========================================//
 
 auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
 {

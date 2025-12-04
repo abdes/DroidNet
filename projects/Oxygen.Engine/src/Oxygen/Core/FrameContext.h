@@ -189,18 +189,9 @@ using SurfaceIdTag = struct SurfaceIdTag;
 using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
   oxygen::Hashable, oxygen::Printable>;
 
-// Presentation policy for a view
-enum class PresentPolicy : uint8_t {
-  DirectToSurface, // Present directly to the surface (default)
-  Hidden, // Don't present (e.g., for offscreen rendering)
-  Composite // Compose with other views before presenting
-};
-
 struct ViewMetadata {
   std::string name;
   std::string purpose; // e.g. "primary", "shadow", "reflection"
-  PresentPolicy present_policy = PresentPolicy::DirectToSurface;
-  std::vector<SurfaceId> surfaces; // TODO: logical target identifiers
 };
 
 // Complete context for a view, including its output
@@ -209,11 +200,8 @@ struct ViewContext {
   View view;
   ViewMetadata metadata;
 
-  // Surface reference (for presentation/sizing)
-  std::variant<std::reference_wrapper<graphics::Surface>, std::string> surface;
-
   // Render target (set by Renderer/Compositor)
-  std::shared_ptr<graphics::Framebuffer> output {};
+  observer_ptr<graphics::Framebuffer> output {};
 };
 
 //=== ModuleData Facade Architecture ===--------------------------------------//
@@ -491,7 +479,7 @@ struct GameStateSnapshot {
   };
   UserContextHandle userContext; // optional, read-only opaque data
   // per-frame surfaces (frozen at FrameStart)
-  std::vector<std::shared_ptr<graphics::Surface>> surfaces;
+  std::vector<observer_ptr<graphics::Surface>> surfaces;
   // per-surface presentable flags (1:1 with surfaces)
   std::vector<uint8_t> presentable_flags;
 
@@ -704,7 +692,7 @@ public:
 
   // Set the output framebuffer for a view (Renderer/Compositor only)
   OXGN_CORE_API auto SetViewOutput(
-    ViewId id, std::shared_ptr<graphics::Framebuffer> output) noexcept -> void;
+    ViewId id, observer_ptr<graphics::Framebuffer> output) noexcept -> void;
 
   // Get the full context for a view
   OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;
@@ -794,7 +782,7 @@ public:
   // copy, but direct modification requires phase validation to ensure snapshot
   // consistency.
   auto GetSurfaces() const noexcept
-    -> std::vector<std::shared_ptr<graphics::Surface>>
+    -> std::vector<observer_ptr<graphics::Surface>>
   {
     std::shared_lock lock(surfaces_mutex_);
     return surfaces_;
@@ -804,9 +792,10 @@ public:
   // update the list; game modules should use these during ordered phases
   // (FrameStart / SceneMutation) only. PHASE RESTRICTION: Surface modifications
   // are only allowed during early setup phases when the frame structure is
-  // being established.
-  OXGN_CORE_API auto AddSurface(
-    const std::shared_ptr<graphics::Surface>& s) noexcept -> void;
+  // being established. Surface lifetime must be guaranteed for the frame cycle.
+  // Remove the surface if it is no longer valid.
+  OXGN_CORE_API auto AddSurface(observer_ptr<graphics::Surface> s) noexcept
+    -> void;
 
   // TODO: think if we want to allow removing surfaces directly using the
   // original pointer, or if we want to manage surface changesets and only allow
@@ -814,13 +803,6 @@ public:
   OXGN_CORE_API auto RemoveSurfaceAt(size_t index) noexcept -> bool;
 
   OXGN_CORE_API auto ClearSurfaces(EngineTag) noexcept -> void;
-
-  // Engine-only surface management for internal operations RATIONALE: Some
-  // surface operations (like swapchain recreation) are engine-internal and
-  // should bypass normal phase restrictions
-  OXGN_CORE_API auto SetSurfaces(
-    std::vector<std::shared_ptr<graphics::Surface>> surfaces,
-    EngineTag) noexcept -> void;
 
   OXGN_CORE_API auto SetSurfacePresentable(
     size_t index, bool presentable) noexcept -> void;
@@ -833,7 +815,7 @@ public:
   }
 
   OXGN_CORE_API auto GetPresentableSurfaces() const noexcept
-    -> std::vector<std::shared_ptr<graphics::Surface>>;
+    -> std::vector<observer_ptr<graphics::Surface>>;
 
   OXGN_CORE_API auto ClearPresentableFlags(EngineTag) noexcept -> void;
 
@@ -977,7 +959,7 @@ private:
   // Active surfaces. Can be mutated until the PhaseId::kSnapshot phase (not
   // included). Surface destruction must be deferred until frame completes using
   // the Graphics DeferredReclaimer.
-  std::vector<std::shared_ptr<graphics::Surface>> surfaces_;
+  std::vector<observer_ptr<graphics::Surface>> surfaces_;
 
   // Per-surface presentable flags (1:1 correspondence with surfaces vector)
   // uint8_t used for atomic operations and consistency with parallel workers.

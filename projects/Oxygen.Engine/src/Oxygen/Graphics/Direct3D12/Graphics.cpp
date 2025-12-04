@@ -240,7 +240,7 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   const observer_ptr<graphics::CommandQueue> command_queue) const
-  -> std::shared_ptr<Surface>
+  -> std::unique_ptr<Surface>
 {
   DCHECK_F(!window_weak.expired());
   DCHECK_NOTNULL_F(command_queue);
@@ -250,10 +250,10 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
 
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
-  const auto surface = std::make_shared<detail::WindowSurface>(
+  auto surface = std::make_unique<detail::WindowSurface>(
     window_weak, queue->GetCommandQueue(), this);
-  CHECK_NOTNULL_F(surface, "Failed to create surface");
-  return std::static_pointer_cast<Surface>(surface);
+  // Implicit upcast: unique_ptr<WindowSurface> → unique_ptr<Surface>
+  return std::unique_ptr<Surface>(std::move(surface));
 }
 
 auto Graphics::CreateSurfaceFromNative(void* native_handle,

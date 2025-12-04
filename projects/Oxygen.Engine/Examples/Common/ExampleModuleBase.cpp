@@ -20,18 +20,15 @@ ExampleModuleBase::ExampleModuleBase(
   const oxygen::examples::common::AsyncEngineApp& app) noexcept
   : app_(app)
 {
+  LOG_SCOPE_FUNCTION(INFO);
+
   // Construct example components eagerly so derived classes get a
   // fully-configured Composition during OnAttached. The components are
   // responsible for window creation and lifecycle — the base only adds
   // them to the composition.
-  try {
-    if (!app_.headless) {
-      auto& wnd = AddComponent<AppWindow>(app_);
-      app_window_ = oxygen::observer_ptr<AppWindow>(&wnd);
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(WARNING, "ExampleModuleBase ctor - failed to add components: {}",
-      ex.what());
+  if (!app_.headless) {
+    auto& wnd = AddComponent<AppWindow>(app_);
+    app_window_ = oxygen::observer_ptr<AppWindow>(&wnd);
   }
 }
 
@@ -53,120 +50,101 @@ auto ExampleModuleBase::BuildDefaultWindowProperties() const
 auto ExampleModuleBase::OnAttached(
   oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
 {
-  // If engine is not provided, bail out
-  if (!engine) {
-    return false;
-  }
+  DCHECK_NOTNULL_F(engine);
+  LOG_SCOPE_FUNCTION(INFO);
 
   // If headless, skip creating a window
   if (app_.headless) {
     return true;
   }
+  DCHECK_NOTNULL_F(app_window_);
 
-  // Ensure composed components and window state are exposed to the engine.
-  // Example wiring guarantees AppWindow is present for non-headless apps.
   const auto props = BuildDefaultWindowProperties();
   if (!app_window_->CreateAppWindow(props)) {
-    LOG_F(ERROR, "ExampleModuleBase::OnAttached - CreateAppWindow failed");
+    DLOG_F(INFO, "-failed- could not create application window");
     return false;
   }
-
-  // Let the AppWindow manage its surface/framebuffer lifecycle. Creation
-  // attempt failures are logged by the component itself; treat failures
-  // as non-fatal for module attachment.
-  (void)app_window_->CreateSurfaceIfNeeded();
-  (void)app_window_->EnsureFramebuffers();
 
   return true;
 }
 
 auto ExampleModuleBase::OnFrameStart(engine::FrameContext& context) -> void
 {
-  LOG_SCOPE_F(3, "ExampleModuleBase::OnFrameStart");
-
-  // First, allow derived classes to run example-specific setup (e.g.
-  // create a scene and call context.SetScene). Keeping the hook call
-  // first mirrors existing example ordering.
+  DLOG_SCOPE_FUNCTION(2);
   try {
+    OnFrameStartCommon(context);
     OnExampleFrameStart(context);
   } catch (const std::exception& ex) {
-    LOG_F(WARNING, "OnExampleFrameStart threw: {}", ex.what());
+    LOG_F(ERROR, "OnFrameStart error: {}", ex.what());
   } catch (...) {
-    DLOG_F(1, "OnExampleFrameStart threw unknown exception");
+    DLOG_F(ERROR, "OnFrameStart unknown exception");
   }
+}
 
-  // If the example window expired/was destroyed, clear surface and ImGui
-  // assignment and avoid further frame work.
+auto ExampleModuleBase::OnFrameStartCommon(engine::FrameContext& context)
+  -> void
+{
+  if (app_.headless) {
+    return;
+  }
   DCHECK_NOTNULL_F(app_window_);
-  const auto wnd_weak = app_window_->GetWindowWeak();
-  if (wnd_weak.expired()) {
-    LOG_F(WARNING, "Window expired in OnFrameStart - resetting surface");
-    app_window_->ClearFramebuffers();
-    // Best effort removal of any surface from frame context
-    try {
-      context.RemoveSurfaceAt(0);
-    } catch (...) {
-      // ignore - conservative best-effort
-    }
 
-    try {
-      auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-      if (imgui_module_ref) {
-        imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
-      }
-    } catch (...) {
-      // ignore
-    }
+  // Check the health of our window at every frame start to avoid cascades of
+  // errors when a window is abruptly closed.
 
+  if (!app_window_->GetWindow()) {
+    // probably closed
+    DLOG_F(1, "AppWindow's platform window has expired");
     return;
   }
 
-  // Resize handling — only perform work if a resize is pending.
-  if (auto w = wnd_weak.lock()) {
-    bool pending_resize = false;
-    if (const auto surface = app_window_->GetSurface()) {
-      if (surface->ShouldResize())
-        pending_resize = true;
-    }
-    if (app_window_->ShouldResize())
-      pending_resize = true;
-
-    if (pending_resize) {
-      try {
-        ClearBackbufferReferences();
-      } catch (const std::exception& ex) {
-        LOG_F(WARNING,
-          "ExampleModuleBase::OnFrameStart - clearing refs before resize "
-          "threw: {}",
-          ex.what());
-      } catch (...) {
-        DLOG_F(1,
-          "ExampleModuleBase::OnFrameStart - unknown exception while "
-          "clearing refs before resize");
-      }
-
-      app_window_->ApplyPendingResizeIfNeeded(
-        oxygen::observer_ptr<oxygen::AsyncEngine>(app_.engine.get()));
-    }
+  if (app_window_->ShouldResize()) {
+    // Clear references to backbuffer textures before applying resize.
+    ClearBackbufferReferences();
+    app_window_->ApplyPendingResize();
   }
 
-  // Register surface with the frame context
-  if (const auto surface = app_window_->GetSurface()) {
-    context.AddSurface(surface);
+  // Update our surface in the FraemContext if needed
+  auto surfaces = context.GetSurfaces();
+  if (auto surface = app_window_->GetSurface().lock()) {
+    // Check if already registered
+    const bool already_registered = std::ranges::any_of(
+      surfaces, [&](const auto& s) { return s.get() == surface.get(); });
+
+    if (!already_registered) {
+      DLOG_F(INFO, "Registering my surface in the FrameContext");
+      // Guaranteed to stay alive until next frame start.
+      context.AddSurface(observer_ptr { surface.get() });
+    }
+  } else {
+    DLOG_F(WARNING, "AppWindow has no valid surface at frame start");
+
+    // Find and remove expired surface
+    auto it = std::ranges::find_if(surfaces, [&](const auto& s) {
+      return s.get() == app_window_->GetSurface().lock().get();
+    });
+
+    if (it != surfaces.end()) {
+      DLOG_F(INFO, "Unregistering expired surface from FrameContext");
+      context.RemoveSurfaceAt(std::distance(surfaces.begin(), it));
+    }
+  }
+}
+
+auto ExampleModuleBase::MarkSurfacePresentable(engine::FrameContext& context)
+  -> void
+{
+  auto surface = app_window_->GetSurface().lock();
+  if (!surface) {
+    return;
   }
 
-  // Configure ImGui to use our main window once after initialization
-  try {
-    if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
-      auto& imgui_module = imgui_module_ref->get();
-      const auto wnd = app_window_->GetWindowWeak();
-      if (!wnd.expired())
-        imgui_module.SetWindowId(wnd.lock()->Id());
-      else
-        imgui_module.SetWindowId(platform::kInvalidWindowId);
+  const auto surfaces = context.GetSurfaces();
+  for (size_t i = 0; i < surfaces.size(); ++i) {
+    if (surfaces[i].get() == surface.get()) {
+      context.SetSurfacePresentable(i, true);
+      break;
     }
-  } catch (...) {
-    // ignore
   }
 }
 

@@ -107,7 +107,7 @@ struct RenderContext {
   std::unordered_map<size_t, bool> pass_enable_flags;
 
   //! Framebuffer object for broader rendering context.
-  std::shared_ptr<const graphics::Framebuffer> framebuffer = nullptr;
+  observer_ptr<const graphics::Framebuffer> framebuffer = nullptr;
 
   //! The constant buffer containing scene-wide constants.
   /*!
@@ -150,7 +150,7 @@ struct RenderContext {
   ViewSpecific current_view {};
 
   //! Map of per-view outputs captured by the renderer. Keys are `ViewId`.
-  std::unordered_map<oxygen::ViewId, std::shared_ptr<graphics::Framebuffer>>
+  std::unordered_map<oxygen::ViewId, observer_ptr<graphics::Framebuffer>>
     view_outputs;
 
   //=== Renderer / Graphics ===-----------------------------------------------//

@@ -133,26 +133,11 @@ auto Graphics::EndFrame(
 }
 
 auto Graphics::PresentSurfaces(
-  const std::vector<std::shared_ptr<graphics::Surface>>& surfaces) -> void
+  const std::vector<observer_ptr<graphics::Surface>>& surfaces) -> void
 {
   DLOG_SCOPE_FUNCTION(1);
 
   for (const auto& surface : surfaces) {
-    // Emit an INFO-level diagnostic showing surface and current backbuffer
-    // size (if available) so we can trace what is being presented.
-    try {
-      auto back = surface->GetCurrentBackBuffer();
-      if (back) {
-        const auto desc = back->GetDescriptor();
-          DLOG_F(2, "Graphics::PresentSurfaces presenting surface={} surface_ptr={} index={} size={}x{}",
-            surface->GetName(), fmt::ptr(surface.get()), surface->GetCurrentBackBufferIndex(), desc.width, desc.height);
-      } else {
-        DLOG_F(2, "Graphics::PresentSurfaces presenting surface={} surface_ptr={} (no current backbuffer)", surface->GetName(), fmt::ptr(surface.get()));
-      }
-    }
-    catch (...) {
-      DLOG_F(3, "Graphics::PresentSurfaces presenting surface: {}", surface->GetName());
-    }
     try {
       surface->Present();
     } catch (const std::exception& e) {

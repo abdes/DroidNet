@@ -111,6 +111,15 @@ public:
     return module_manager_->GetModule<T>();
   }
 
+  // Expose subscription API to consumers via AsyncEngine as a thin forwarder
+  // so modules and external services can subscribe for future attachments.
+  // This returns ModuleManager::Subscription which is an RAII move-only handle.
+  using ModuleSubscription = ::oxygen::engine::ModuleManager::Subscription;
+
+  OXGN_NGIN_API auto SubscribeModuleAttached(
+    ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
+    -> ModuleSubscription;
+
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
 

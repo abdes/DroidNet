@@ -221,10 +221,6 @@ private:
     const RenderGraphFactory& factory, RenderContext& render_context,
     graphics::CommandRecorder& recorder) -> co::Co<bool>;
 
-  // Handle any present policy for the given view (mark surfaces presentable).
-  auto HandlePresentationForView(
-    const FrameContext& frame_context, ViewId view_id) -> void;
-
   // Set final state for a view after render (success or failure) and emit
   // logs.
   auto FinalizeViewState(ViewId view_id, bool success) -> void;

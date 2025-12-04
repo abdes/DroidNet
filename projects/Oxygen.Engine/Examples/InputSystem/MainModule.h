@@ -10,6 +10,7 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/ExampleModuleBase.h"
+#include "../Common/RenderGraph.h"
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -46,7 +47,7 @@ public:
     using namespace core;
     return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
       PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
-      PhaseId::kFrameEnd>();
+      PhaseId::kCompositing, PhaseId::kFrameEnd>();
   }
 
   ~MainModule() override = default;
@@ -68,12 +69,17 @@ public:
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
   auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
+  auto OnCompositing(engine::FrameContext& context) -> co::Co<> override;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
+
+protected:
+  virtual auto ClearBackbufferReferences() -> void;
 
 private:
   auto InitInputBindings() noexcept -> bool;
   auto EnsureMainCamera(const int width, const int height) -> void;
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
+  auto UpdateViewRegistration(engine::FrameContext& context) -> void;
 
   // The ExampleModuleBase provides `app_` and common window/render helpers.
 
@@ -83,7 +89,13 @@ private:
   scene::SceneNode sphere_node_; // Sphere for jump animation
 
   // ViewId for the main viewport
-  ViewId view_id_ { 0 };
+  ViewId view_id_ { kInvalidViewId };
+
+  // Per-example RenderGraph instance owned by this module (used to manage
+  // RenderContext and example passes).
+  oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {
+    nullptr
+  };
 
   //! RenderGraph component in the base provides the RenderContext and passes
   //! used by this module.

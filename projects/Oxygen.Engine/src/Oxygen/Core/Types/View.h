@@ -17,6 +17,7 @@ namespace oxygen {
 // Unique identifier for a view within a frame
 using ViewIdTag = struct ViewIdTag;
 using ViewId = NamedType<uint64_t, ViewIdTag, Comparable, Hashable, Printable>;
+constexpr ViewId kInvalidViewId { std::numeric_limits<uint64_t>::max() };
 
 //! Convert a VersionedBindlessHandle to a human-readable string.
 OXGN_CORE_NDAPI auto to_string(const ViewId& v) -> std::string;

@@ -9,185 +9,265 @@
 #include "AsyncEngineApp.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <mutex>
+#include <unordered_map>
+
 using namespace oxygen;
+
+namespace {
+
+void MaybeUnhookImgui(observer_ptr<oxygen::AsyncEngine> engine)
+{
+  try {
+    auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      imgui_module_ref->get().SetWindowId(platform::kInvalidWindowId);
+    }
+  } catch (...) {
+    // ignore
+  }
+}
+
+bool MaybeHookImgui(
+  observer_ptr<oxygen::AsyncEngine> engine, platform::WindowIdType window_id)
+{
+  try {
+    auto imgui_module_ref = engine->GetModule<imgui::ImGuiModule>();
+    if (imgui_module_ref) {
+      imgui_module_ref->get().SetWindowId(window_id);
+    }
+  } catch (...) {
+    // ignore
+    return false;
+  }
+
+  return true;
+}
+
+} // namespace
 
 namespace oxygen::examples::common {
 
 AppWindow::AppWindow(
   const oxygen::examples::common::AsyncEngineApp& app) noexcept
-  : platform_(app.platform)
-  , gfx_(app.gfx_weak)
-  , engine_(app.engine.get())
+  : platform_(app.platform.get()) // observe only
+  , engine_(app.engine.get()) // observe only
+  , gfx_weak_(app.gfx_weak)
 {
-  // Lightweight constructor — AppWindow intentionally defers work until
-  // explicit lifecycle calls so examples can control creation timing.
+  // Sanity checks only; heavyweight initialization is explicit and deferred.
+  CHECK_NOTNULL_F(platform_);
+  CHECK_NOTNULL_F(engine_);
+
+  DLOG_F(INFO, "AppWindow constructed");
 }
 
-AppWindow::~AppWindow() noexcept { UninstallHandlers(); }
+// Map holding per-AppWindow subscriptions. Kept in translation unit so the
+// public header doesn't need to include heavy engine headers.
+// SubscriptionToken holds the engine subscription object for a
+// specific AppWindow instance. The type is declared in the header as
+// an opaque `SubscriptionToken` so we keep this heavy dependency in the
+// cpp file only.
+struct AppWindow::SubscriptionToken {
+  explicit SubscriptionToken(AsyncEngine::ModuleSubscription&& s)
+    : sub(std::move(s))
+  {
+  }
+
+  AsyncEngine::ModuleSubscription sub;
+};
+
+AppWindow::~AppWindow() noexcept
+{
+  DLOG_SCOPE_FUNCTION(INFO);
+  // Remove any stored subscription for this instance (subscription dtor
+  // will call Cancel()). Use best-effort and swallow exceptions.
+  // Destroy subscription token (if present) so the subscription is
+  // cancelled before this instance is torn down.
+  imgui_subscription_token_.reset();
+  // Unregister any platform-level handler we previously installed.
+  if (platform_ && window_lifecycle_token_ != 0) {
+    platform_->UnregisterWindowAboutToBeDestroyedHandler(
+      window_lifecycle_token_);
+    window_lifecycle_token_ = 0;
+  }
+}
 
 auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   -> bool
 {
-  DCHECK_NOTNULL_F(platform_);
+  DLOG_SCOPE_FUNCTION(INFO);
 
-  window_ = platform_->Windows().MakeWindow(props);
-  if (window_.expired()) {
-    LOG_F(ERROR, "AppWindow::CreateAppWindow - MakeWindow failed");
+  // No Graphics -> cannot create surface/framebuffers later.
+  if (gfx_weak_.expired()) {
+    LOG_F(ERROR, "Cannot create AppWindow without a valid Graphics instance");
     return false;
   }
 
-  // Install platform async watchers on the platform's nursery. These
-  // are expected to succeed for correctly-wired example apps — if the
-  // platform async system isn't running the watchers are a no-op.
-  if (platform_->Async().IsRunning()) {
-    // Close-request handler
-    platform_->Async().Nursery().Start([this]() -> co::Co<> {
-      while (!window_.expired()) {
-        const auto w = window_.lock();
-        if (!w)
-          break;
-        co_await w->CloseRequested();
-        if (auto sw = window_.lock())
-          sw->VoteToClose();
-      }
-      co_return;
-    });
-
-    // Resize/expose handler
-    platform_->Async().Nursery().Start([this]() -> co::Co<> {
-      using WindowEvent = platform::window::Event;
-      while (!window_.expired()) {
-        const auto w = window_.lock();
-        if (!w)
-          break;
-        const auto [from, to] = co_await w->Events().UntilChanged();
-        if (to == WindowEvent::kResized) {
-          LOG_F(INFO, "AppWindow: window was resized");
-          should_resize_.store(true, std::memory_order_relaxed);
-        }
-      }
-      co_return;
-    });
-
-    // Platform termination -> request close
-    platform_->Async().Nursery().Start([this]() -> co::Co<> {
-      co_await platform_->Async().OnTerminate();
-      LOG_F(INFO, "AppWindow: platform OnTerminate -> RequestClose()");
-      if (auto w = window_.lock())
-        w->RequestClose();
-      co_return;
-    });
+  // This is a single-window component; refuse to recreate if already present.
+  if (!window_.expired()) {
+    LOG_F(
+      ERROR, "AppWindow is a single window component, and it already has one.");
+    return false;
   }
+
+  // This is a programmatic error.
+  DCHECK_F(
+    platform_->IsRunning(), "Platform is not running, cannot create a window.");
+
+  window_ = platform_->Windows().MakeWindow(props);
+  if (window_.expired()) {
+    LOG_F(ERROR, "Failed to create a platform window");
+    return false;
+  }
+
+  // Close-request handler
+  platform_->Async().Nursery().Start([this]() -> co::Co<> {
+    while (!window_.expired()) {
+      const auto w = window_.lock();
+      if (!w)
+        break;
+      co_await w->CloseRequested();
+      if (auto sw = window_.lock())
+        sw->VoteToClose();
+    }
+    co_return;
+  });
+
+  // Resize/expose handler
+  platform_->Async().Nursery().Start([this]() -> co::Co<> {
+    using WindowEvent = platform::window::Event;
+    while (!window_.expired()) {
+      const auto w = window_.lock();
+      if (!w)
+        break;
+      const auto [from, to] = co_await w->Events().UntilChanged();
+      if (to == WindowEvent::kResized) {
+        LOG_F(1, "Window resized -> marking surface for resize");
+        surface_->ShouldResize(true);
+      }
+    }
+    co_return;
+  });
+
+  // Platform termination -> request close
+  platform_->Async().Nursery().Start([this]() -> co::Co<> {
+    co_await platform_->Async().OnTerminate();
+    LOG_F(INFO, "platform OnTerminate -> requesting window close");
+    if (auto w = window_.lock())
+      w->RequestClose();
+    co_return;
+  });
 
   // Register pre-destroy handler
   const auto win_id = window_.lock()->Id();
-  platform_window_destroy_handler_token_
-    = platform_->RegisterWindowAboutToBeDestroyedHandler(
-      [this, win_id](platform::WindowIdType closing_window_id) {
-        if (closing_window_id == win_id) {
-          LOG_F(INFO,
-            "AppWindow: platform about to destroy window {} -> detaching state",
-            win_id);
-          // clear our strong reference to platform window
-          window_.reset();
-        }
-      });
+  window_lifecycle_token_ = platform_->RegisterWindowAboutToBeDestroyedHandler(
+    [this, win_id](platform::WindowIdType closing_window_id) {
+      if (closing_window_id == win_id) {
+        LOG_F(INFO, "Platform about to destroy window {} -> detaching state",
+          win_id);
+        // Release resources and clear the state
+        MaybeUnhookImgui(engine_);
+        ClearFramebuffers();
+        surface_.reset();
+        window_.reset();
+      }
+    });
 
-  return true;
+  if (CreateSurface() && EnsureFramebuffers()) {
+
+    // Subscribe for any ImGui module attachments; replay_existing=true ensures
+    // already-attached ImGui modules will be hooked up now that we have a
+    // window available.
+    // Install per-instance subscription and keep it in the local map to avoid
+    // exposing the subscription type in the header.
+    auto sub = engine_->SubscribeModuleAttached(
+      [this](::oxygen::engine::ModuleEvent const& ev) {
+        if (ev.type_id == oxygen::imgui::ImGuiModule::ClassTypeId()) {
+          MaybeHookImgui(engine_, GetWindowId());
+        }
+      },
+      /*replay_existing=*/true);
+
+    imgui_subscription_token_
+      = std::make_unique<SubscriptionToken>(std::move(sub));
+    return true;
+  }
+
+  return false;
 }
 
-auto AppWindow::GetWindowWeak() const noexcept
-  -> std::weak_ptr<platform::Window>
+auto AppWindow::GetWindow() const noexcept -> observer_ptr<platform::Window>
 {
-  return window_;
+  return window_.expired() ? nullptr : observer_ptr { window_.lock().get() };
 }
 
 auto AppWindow::GetWindowId() const noexcept -> platform::WindowIdType
 {
-  if (auto w = window_.lock())
-    return w->Id();
-  return platform::kInvalidWindowId;
+  return window_.expired() ? platform::kInvalidWindowId : window_.lock()->Id();
 }
 
 auto AppWindow::ShouldResize() const noexcept -> bool
 {
-  return should_resize_.load(std::memory_order_relaxed);
+  return surface_ ? surface_->ShouldResize() : false;
 }
 
-auto AppWindow::MarkResizeApplied() -> void
+auto AppWindow::CreateSurface() -> bool
 {
-  should_resize_.store(false, std::memory_order_relaxed);
-}
+  // Sanity checks - all these are programming errors
+  DCHECK_F(!surface_,
+    "Surface already exists, properly reset (at frame start) before you "
+    "recreate.");
+  DCHECK_F(!window_.expired(),
+    "Cannot create surface without a valid platform window.");
+  DCHECK_F(!gfx_weak_.expired(),
+    "Cannot create surface without a valid Graphics instance.");
 
-auto AppWindow::UninstallHandlers() noexcept -> void
-{
-  // Unregister any platform-level handler we previously installed. This
-  // should be safe, and failures indicate platform state is already
-  // being torn down; in that case there's nothing we can do here.
-  if (platform_ && platform_window_destroy_handler_token_ != 0) {
-    platform_->UnregisterWindowAboutToBeDestroyedHandler(
-      platform_window_destroy_handler_token_);
-    platform_window_destroy_handler_token_ = 0;
-  }
-}
-
-// -----------------------------------------------------------
-// Surface & framebuffer lifecycle (engine thread)
-// -----------------------------------------------------------
-
-auto AppWindow::CreateSurfaceIfNeeded() -> bool
-{
-  if (surface_)
-    return true;
-
-  if (gfx_.expired() || window_.expired()) {
-    LOG_F(ERROR, "AppWindow::CreateSurfaceIfNeeded - missing gfx or window");
-    return false;
-  }
-
-  const auto gfx = gfx_.lock();
-  if (!gfx)
-    return false;
+  const auto gfx = gfx_weak_.lock();
+  CHECK_NOTNULL_F(gfx); // see above
 
   auto queue = gfx->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics);
   if (!queue) {
-    LOG_F(ERROR, "AppWindow::CreateSurfaceIfNeeded - no graphics queue");
+    LOG_F(ERROR,
+      "Failed to acquire graphics command queue for surface creation for "
+      "window {}",
+      GetWindowId());
     return false;
   }
 
   surface_ = gfx->CreateSurface(window_, queue);
   if (!surface_) {
-    LOG_F(ERROR, "AppWindow::CreateSurfaceIfNeeded - CreateSurface failed");
+    LOG_F(ERROR, "Failed to create surface for window {}", GetWindowId());
     return false;
   }
   surface_->SetName("AppWindow Surface");
-  LOG_F(INFO, "AppWindow: surface created for window {}",
-    window_.lock() ? window_.lock()->Id() : platform::kInvalidWindowId);
+  LOG_F(INFO, "Surface created for window {}", GetWindowId());
   return true;
 }
 
 auto AppWindow::EnsureFramebuffers() -> bool
 {
-  if (!surface_) {
-    LOG_F(WARNING, "AppWindow::EnsureFramebuffers - no surface");
-    return false;
-  }
+  DCHECK_NOTNULL_F(surface_, "Cannot ensure framebuffers without a surface");
+  DCHECK_F(!gfx_weak_.expired(),
+    "Cannot ensure framebuffers without a Graphics instance");
 
-  if (!gfx_.lock()) {
-    LOG_F(ERROR, "AppWindow::EnsureFramebuffers - Graphics not available");
-    return false;
-  }
+  // We will always clear existing framebuffers and recreate them anew.
+  ClearFramebuffers();
 
+  DLOG_SCOPE_FUNCTION(INFO);
   const auto surface_width = surface_->Width();
   const auto surface_height = surface_->Height();
+  DLOG_F(INFO, "surface w={} h={}", surface_->Width(), surface_->Height());
 
-  framebuffers_.clear();
+  auto failed = false;
   for (auto i = 0U; i < oxygen::frame::kFramesInFlight.get(); ++i) {
+    DLOG_SCOPE_F(INFO, fmt::format("framebuffer slot {}", i).c_str());
     oxygen::graphics::TextureDesc depth_desc;
     depth_desc.width = surface_width;
     depth_desc.height = surface_height;
@@ -199,96 +279,104 @@ auto AppWindow::EnsureFramebuffers() -> bool
     depth_desc.clear_value = { 1.0F, 0.0F, 0.0F, 0.0F };
     depth_desc.initial_state = oxygen::graphics::ResourceStates::kDepthWrite;
 
-    const auto gfx = gfx_.lock();
+    const auto gfx = gfx_weak_.lock();
     const auto depth_tex = gfx->CreateTexture(depth_desc);
+    if (!depth_tex) {
+      LOG_F(ERROR, "Failed to create depth texture for framebuffer slot {}", i);
+      failed = true;
+      break;
+    }
 
+    auto color_attachment = surface_->GetBackBuffer(i);
     auto desc = oxygen::graphics::FramebufferDesc {}
-                  .AddColorAttachment(surface_->GetBackBuffer(i))
+                  .AddColorAttachment(color_attachment)
                   .SetDepthAttachment(depth_tex);
+    DLOG_F(1, "color attachment {}", color_attachment ? "valid" : "null");
+    DLOG_F(1, "depth attachment {}",
+      desc.depth_attachment.texture ? "valid" : "null");
 
-    framebuffers_.push_back(gfx->CreateFramebuffer(desc));
-    if (!framebuffers_.back()) {
-      LOG_F(ERROR,
-        "AppWindow::EnsureFramebuffers - failed to create framebuffer {}", i);
+    framebuffers_[i] = gfx->CreateFramebuffer(desc);
+    if (!framebuffers_[i]) {
+      LOG_F(ERROR, "Failed to create framebuffer for slot {}", i);
+      failed = true;
+      break;
     }
   }
 
-  return !framebuffers_.empty();
+  if (failed) {
+    ClearFramebuffers();
+  }
+
+  return !failed;
 }
 
-auto AppWindow::ClearFramebuffers() -> void { framebuffers_.clear(); }
-
-auto AppWindow::ApplyPendingResizeIfNeeded(
-  observer_ptr<oxygen::AsyncEngine> engine) -> void
+auto AppWindow::ClearFramebuffers() -> void
 {
-  if (!surface_)
+  for (auto& fb : framebuffers_) {
+    // We are the sole owner of the framebuffer resources;
+    // resetting the shared_ptr will trigger destruction of the Framebuffer,
+    // which in turn releases GPU resources.
+    fb.reset();
+  }
+  framebuffers_.fill(nullptr);
+}
+
+auto AppWindow::ApplyPendingResize() -> void
+{
+  DCHECK_NOTNULL_F(surface_, "Cannot apply resize without a surface");
+  DCHECK_F(
+    ShouldResize(), "ApplyPendingResize called but no resize is pending");
+
+  DLOG_SCOPE_FUNCTION(INFO);
+
+  if (gfx_weak_.expired()) {
+    LOG_F(
+      WARNING, "AppWindow gfx instance expired, cannot apply pending resize");
     return;
-
-  // Combine surface internal flag with controller-observed flag
-  bool should_resize = false;
-  if (surface_->ShouldResize())
-    should_resize = true;
-  if (ShouldResize())
-    should_resize = true;
-
-  if (!should_resize)
-    return;
-
-  LOG_F(INFO, "AppWindow: Applying pending surface resize");
+  }
+  auto gfx = gfx_weak_.lock();
+  // gfx->Flush();
 
   try {
-    if (!gfx_.expired()) {
-      if (const auto gfx = gfx_.lock()) {
-        gfx->Flush();
-      }
-    }
-
     // Drop owned framebuffer references so Resize() can succeed
-    framebuffers_.clear();
-
-    if (!gfx_.expired()) {
-      if (const auto gfx = gfx_.lock()) {
-        gfx->Flush();
-      }
-    }
-
+    ClearFramebuffers();
     surface_->Resize();
+    EnsureFramebuffers();
   } catch (const std::exception& ex) {
-    LOG_F(WARNING, "AppWindow: Resize threw: {}", ex.what());
+    LOG_F(WARNING, "-failed- resize threw: {}", ex.what());
   }
 
-  // Notify ImGui module (safe no-op for non-D3D backends)
-  try {
-    if (engine) {
-      auto imgui_module_ref = engine->GetModule<oxygen::imgui::ImGuiModule>();
-      if (imgui_module_ref) {
-        imgui_module_ref->get().RecreateDeviceObjects();
-      }
-    }
-  } catch (const std::exception& e) {
-    LOG_F(WARNING, "AppWindow: notify ImGui RecreateDeviceObjects failed: {}",
-      e.what());
-  } catch (...) {
-    LOG_F(WARNING,
-      "AppWindow: notify ImGui RecreateDeviceObjects failed (unknown)");
-  }
+  //// Notify ImGui module (safe no-op for non-D3D backends)
+  // try {
+  //   if (engine_) {
+  //     auto imgui_module_ref =
+  //     engine_->GetModule<oxygen::imgui::ImGuiModule>(); if (imgui_module_ref)
+  //     {
+  //       imgui_module_ref->get().RecreateDeviceObjects();
+  //     }
+  //   }
+  // } catch (const std::exception& e) {
+  //   LOG_F(WARNING, "-failed- ImGui error: {}", e.what());
+  // } catch (...) {
+  //   LOG_F(WARNING, "-failed- ImGui error (unknown)");
+  // }
 
   // Acknowledge the resize
-  try {
-    MarkResizeApplied();
-  } catch (...) {
-  }
+  surface_->ShouldResize(false);
 }
 
-auto AppWindow::GetSurface() const -> std::shared_ptr<oxygen::graphics::Surface>
+auto AppWindow::GetSurface() const -> std::weak_ptr<oxygen::graphics::Surface>
 {
   return surface_;
 }
 
-auto AppWindow::GetFramebuffers() const
-  -> const std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>>&
+auto AppWindow::GetCurrentFrameBuffer() const
+  -> std::weak_ptr<graphics::Framebuffer>
 {
-  return framebuffers_;
+  if (!surface_) {
+    return {};
+  }
+  return framebuffers_.at(surface_->GetCurrentBackBufferIndex());
 }
 
 } // namespace oxygen::examples::common

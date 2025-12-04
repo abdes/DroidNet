@@ -71,7 +71,6 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
   const auto metadata = oxygen::engine::ViewMetadata {
     .name = config_.name,
     .purpose = config_.purpose,
-    .present_policy = oxygen::engine::PresentPolicy::Hidden,
   };
 
   if (view_id_.get() == 0) {
@@ -81,8 +80,6 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
       .id = view_id_,
       .view = view,
       .metadata = metadata,
-      .surface = std::ref(const_cast<graphics::Surface&>(*surface_)),
-      .output = framebuffer_,
     });
   } else {
     frame_context_->UpdateView(view_id_,
@@ -90,8 +87,7 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
         .id = view_id_,
         .view = view,
         .metadata = metadata,
-        .surface = std::ref(const_cast<graphics::Surface&>(*surface_)),
-        .output = framebuffer_,
+        .output = observer_ptr { framebuffer_.get() },
       });
   }
 }
