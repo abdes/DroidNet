@@ -461,8 +461,33 @@ MainModule::MainModule(const common::AsyncEngineApp& app)
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
 
+  // Construct per-module RenderGraph used by this example. Keep creation
+  // best-effort so headless or constrained environments don't crash.
+  try {
+    auto& rg = AddComponent<oxygen::examples::common::RenderGraph>(app_);
+    render_graph_
+      = oxygen::observer_ptr<oxygen::examples::common::RenderGraph>(&rg);
+  } catch (const std::exception& ex) {
+    LOG_F(
+      WARNING, "MainModule ctor: failed to create RenderGraph: {}", ex.what());
+  }
+
   // Record start time for animations (use time_point for robust delta)
   start_time_ = std::chrono::steady_clock::now();
+}
+
+auto MainModule::ClearBackbufferReferences() -> void
+{
+  // Clear any references that point to the swapchain/backbuffer before a
+  // resize. The RenderGraph component manages the per-frame RenderContext
+  // and pass configs which may hold backbuffer textures, so forward to it.
+  try {
+    if (render_graph_) {
+      render_graph_->ClearBackbufferReferences();
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(WARNING, "ClearBackbufferReferences() threw: {}", ex.what());
+  }
 }
 
 MainModule::~MainModule()

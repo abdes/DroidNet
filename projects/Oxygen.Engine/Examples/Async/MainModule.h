@@ -27,6 +27,7 @@
 
 #include "../Common/AsyncEngineApp.h"
 #include "../Common/ExampleModuleBase.h"
+#include "../Common/RenderGraph.h"
 
 namespace oxygen::examples::async {
 
@@ -96,6 +97,7 @@ public:
   auto OnRender(engine::FrameContext& context) -> co::Co<> override;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
+  auto ClearBackbufferReferences() -> void override;
 
 private:
   //! Setup functions (called once).
@@ -183,6 +185,11 @@ private:
 
   // ViewId for the main viewport
   ViewId view_id_ { 0 };
+
+  // Per-example RenderGraph instance owned by this module.
+  oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {
+    nullptr
+  };
 
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };
