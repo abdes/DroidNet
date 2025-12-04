@@ -180,6 +180,13 @@ auto AsyncEngine::UnregisterModule(std::string_view name) noexcept -> void
   module_manager_->UnregisterModule(name);
 }
 
+auto AsyncEngine::SubscribeModuleAttached(
+  ModuleAttachedCallback cb, const bool replay_existing) -> ModuleSubscription
+{
+  return module_manager_->SubscribeModuleAttached(
+    std::move(cb), replay_existing);
+}
+
 auto AsyncEngine::GetEngineConfig() const noexcept -> const EngineConfig&
 {
   return config_;

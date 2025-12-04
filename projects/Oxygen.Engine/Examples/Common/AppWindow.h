@@ -12,6 +12,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Platform/Types.h>
@@ -52,52 +53,62 @@ public:
     const oxygen::examples::common::AsyncEngineApp& app) noexcept;
   ~AppWindow() noexcept override;
 
-  // Window management
   auto CreateAppWindow(const platform::window::Properties& props) -> bool;
-  [[nodiscard]] auto GetWindowWeak() const noexcept
-    -> std::weak_ptr<platform::Window>;
+
+  [[nodiscard]] auto GetWindow() const noexcept
+    -> observer_ptr<platform::Window>;
+
   [[nodiscard]] auto GetWindowId() const noexcept -> platform::WindowIdType;
 
-  // Resize coordination
-  [[nodiscard]] auto ShouldResize() const noexcept -> bool;
-  auto MarkResizeApplied() -> void;
+  [[nodiscard]] auto GetSurface() const -> std::weak_ptr<graphics::Surface>;
 
+  [[nodiscard]] auto GetCurrentFrameBuffer() const
+    -> std::weak_ptr<graphics::Framebuffer>;
+
+  [[nodiscard]] auto ShouldResize() const noexcept -> bool;
+
+  auto ApplyPendingResize() -> void;
+
+private:
   // Surface / framebuffer lifecycle (engine thread usage)
-  auto CreateSurfaceIfNeeded() -> bool;
+  auto CreateSurface() -> bool;
+  // Ensure framebuffers are created/re-created for the current surface size.
   auto EnsureFramebuffers() -> bool;
   auto ClearFramebuffers() -> void;
 
-  // Engine-thread handling for an observed pending resize.
-  // Accepts observer_ptr to the AsyncEngine so we don't create ownership.
-  auto ApplyPendingResizeIfNeeded(observer_ptr<oxygen::AsyncEngine> engine)
-    -> void;
+  // The platform and the engine are guaranteed to outlive this component.
+  // We store them as observer_ptr to avoid unnecessarily extending their
+  // lifetime.
+  observer_ptr<Platform> platform_ {};
+  observer_ptr<AsyncEngine> engine_ {};
 
-  [[nodiscard]] auto GetSurface() const
-    -> std::shared_ptr<oxygen::graphics::Surface>;
-  [[nodiscard]] auto GetFramebuffers() const
-    -> const std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>>&;
+  // The Graphics instance is held weakly, because the engine does not guarantee
+  // its stability due to dynamic loading/unloading.
+  std::weak_ptr<Graphics> gfx_weak_ {};
 
-  // Best-effort: uninstall platform handlers
-  auto UninstallHandlers() noexcept -> void;
-
-private:
-  // Platform objects
-  std::weak_ptr<oxygen::platform::Window> window_ {};
-  std::shared_ptr<oxygen::Platform> platform_ {};
-
-  // Graphics / engine references
-  std::weak_ptr<oxygen::Graphics> gfx_ {};
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine_ { nullptr };
+  // The platform owns the window, and will expire the shared pointers it when
+  // it is closed.
+  std::weak_ptr<platform::Window> window_ {};
 
   // Platform destructor token
-  size_t platform_window_destroy_handler_token_ { 0 };
+  size_t window_lifecycle_token_ { 0 };
 
-  // Resize flag set by platform watcher
-  std::atomic<bool> should_resize_ { false };
+  // GPU state owned by this component. Because of the volatile nature of
+  // surfaces, these should nvere be shared outside of this component unless via
+  // `weak_ptr` or `observer_ptr`.
+  std::shared_ptr<graphics::Surface> surface_ {};
+  std::array<std::shared_ptr<graphics::Framebuffer>,
+    frame::kFramesInFlight.get()>
+    framebuffers_ {};
 
-  // GPU state owned by this component
-  std::shared_ptr<oxygen::graphics::Surface> surface_ {};
-  std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>> framebuffers_ {};
+  // Opaque token type used by the implementation to hold a subscription
+  // instance. This keeps the heavy engine header out of the public API.
+  struct SubscriptionToken;
+
+  // Per-instance token (opaque) stored as unique_ptr so lifetime of the
+  // subscription is tied to this component instance without exposing the
+  // concrete type in the header.
+  std::unique_ptr<SubscriptionToken> imgui_subscription_token_ {};
 };
 
 } // namespace oxygen::examples::common

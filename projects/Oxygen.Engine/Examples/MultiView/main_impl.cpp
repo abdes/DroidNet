@@ -27,7 +27,7 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Headless/Graphics.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Algorithms.h>

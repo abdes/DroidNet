@@ -58,7 +58,7 @@ public:
   OXGN_D3D12_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     observer_ptr<graphics::CommandQueue> command_queue) const
-    -> std::shared_ptr<Surface> override;
+    -> std::unique_ptr<Surface> override;
 
   OXGN_D3D12_NDAPI auto CreateSurfaceFromNative(void* native_handle,
     observer_ptr<graphics::CommandQueue> command_queue) const

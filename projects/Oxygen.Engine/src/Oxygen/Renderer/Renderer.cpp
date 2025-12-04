@@ -220,8 +220,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
         : (view_resolver_ ? &view_resolver_ : nullptr);
 
       if (resolver == nullptr) {
-        LOG_F(WARNING, "View {} has no resolver; skipping",
-          view_ctx.id.get());
+        LOG_F(WARNING, "View {} has no resolver; skipping", view_ctx.id.get());
         continue;
       }
 
@@ -346,13 +345,6 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 
       // Finalize state and instrumentation
       FinalizeViewState(view_id, rv);
-
-      // Handle presentation bookkeeping only on success
-      if (rv) {
-        HandlePresentationForView(context, view_id);
-        DLOG_F(2, "view rendered successfully", view_id.get());
-      }
-
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to render view {}: {}", view_id.get(), ex.what());
       view_ready_states_[view_id] = false;
@@ -513,34 +505,6 @@ auto Renderer::ExecuteRenderGraphForView(ViewId view_id,
     LOG_F(ERROR, "RenderGraph execution for view {} failed: unknown error",
       view_id.get());
     co_return false;
-  }
-}
-
-auto Renderer::HandlePresentationForView(
-  const FrameContext& frame_context, ViewId view_id) -> void
-{
-  const auto& view_ctx = frame_context.GetViewContext(view_id);
-  if (view_ctx.metadata.present_policy != PresentPolicy::DirectToSurface) {
-    return;
-  }
-
-  if (!std::holds_alternative<std::reference_wrapper<graphics::Surface>>(
-        view_ctx.surface)) {
-    return;
-  }
-
-  auto& surface
-    = std::get<std::reference_wrapper<graphics::Surface>>(view_ctx.surface)
-        .get();
-
-  const auto surfaces = frame_context.GetSurfaces();
-  for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i].get() == &surface) {
-      // Mark presentable
-      const_cast<FrameContext&>(frame_context).SetSurfacePresentable(i, true);
-      DLOG_F(3, "Surface {} will present view {}", i, view_id);
-      break;
-    }
   }
 }
 

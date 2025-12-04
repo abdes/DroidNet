@@ -118,17 +118,6 @@ auto Platform::OnFrameStart() -> void
 {
   if (HasComponent<WindowManager>()) {
     auto& window_manager = Windows();
-    // Scan for new windows that are pending close and queue them for next frame
-    // We do NOT destroy the native window yet; destruction happens at
-    // OnFrameEnd so the native window remains valid during the frame.
-    window_manager.ScanForPendingCloses();
-  }
-}
-
-auto Platform::OnFrameEnd() -> void
-{
-  if (HasComponent<WindowManager>()) {
-    auto& window_manager = Windows();
     // Allow registered consumers (e.g., engine modules) to react to the
     // pending window closures before we actually tear down native windows.
     // This prevents races where those modules hold pointers into the native
@@ -155,6 +144,17 @@ auto Platform::OnFrameEnd() -> void
     // the end of the frame so modules using window resources during the
     // frame are not disrupted.
     window_manager.ProcessPendingCloses();
+  }
+}
+
+auto Platform::OnFrameEnd() -> void
+{
+  if (HasComponent<WindowManager>()) {
+    auto& window_manager = Windows();
+    // Scan for new windows that are pending close and queue them for next frame
+    // We do NOT destroy the native window yet; destruction happens at
+    // OnFrameEnd so the native window remains valid during the frame.
+    window_manager.ScanForPendingCloses();
   }
 }
 

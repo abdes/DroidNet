@@ -62,10 +62,7 @@ namespace detail {
       return swap_chain_->GetCurrentBackBufferIndex();
     }
 
-    auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture>
-    {
-      return render_targets_[current_back_buffer_index_];
-    }
+    auto GetCurrentBackBuffer() const -> std::shared_ptr<Texture>;
 
     auto GetBackBuffer(uint32_t index) const -> std::shared_ptr<Texture>
     {
@@ -93,7 +90,6 @@ namespace detail {
 
     IDXGISwapChain4* swap_chain_ { nullptr };
 
-    mutable uint32_t current_back_buffer_index_ { 0 };
     StaticVector<std::shared_ptr<Texture>, frame::kFramesInFlight.get()>
       render_targets_ {};
 

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainModule.h"
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -14,6 +12,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Renderer/Renderer.h>
 
+#include "MainModule.h"
 #include "MainView.h"
 #include "PipView.h"
 
@@ -69,10 +68,12 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  const auto surface = app_window_->GetSurface();
-  if (!surface) {
+  const auto surface_weak = app_window_->GetSurface();
+  if (surface_weak.expired()) {
+    LOG_F(WARNING, "[MultiView] No surface available");
     co_return;
   }
+  const auto surface = surface_weak.lock();
 
   if (!app_.renderer) {
     co_return;
@@ -80,11 +81,6 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
   auto gfx = app_.renderer->GetGraphics();
   if (!gfx) {
-    co_return;
-  }
-
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  if (framebuffers.empty()) {
     co_return;
   }
 
@@ -143,17 +139,8 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  // CRITICAL: Ensure framebuffers exist
-  if (app_window_->GetFramebuffers().empty()) {
-    app_window_->EnsureFramebuffers();
-  }
-
-  const auto surface = app_window_->GetSurface();
-  if (!surface) {
-    co_return;
-  }
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  if (framebuffers.empty()) {
+  const auto surface_weak = app_window_->GetSurface();
+  if (surface_weak.expired()) {
     co_return;
   }
 
@@ -179,11 +166,12 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  const auto surface = app_window_->GetSurface();
-  if (!surface) {
+  const auto surface_weak = app_window_->GetSurface();
+  if (surface_weak.expired()) {
     LOG_F(WARNING, "[MultiView] No surface available");
     co_return;
   }
+  auto surface = surface_weak.lock();
 
   auto gfx = app_.renderer->GetGraphics();
   if (!gfx) {
@@ -191,21 +179,12 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
     co_return;
   }
 
-  const auto framebuffers = app_window_->GetFramebuffers();
-  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
-  LOG_F(INFO, "[MultiView] Framebuffers: count={}, backbuffer_index={}",
-    framebuffers.size(), backbuffer_index);
-
-  if (framebuffers.empty() || backbuffer_index >= framebuffers.size()) {
-    LOG_F(ERROR, "[MultiView] Invalid framebuffer state");
+  const auto fb_weak = app_window_->GetCurrentFrameBuffer();
+  if (fb_weak.expired()) {
+    LOG_F(ERROR, "[MultiView] Framebuffer is not valid");
     co_return;
   }
-
-  const auto fb = framebuffers.at(backbuffer_index);
-  if (!fb) {
-    LOG_F(ERROR, "[MultiView] Framebuffer is null");
-    co_return;
-  }
+  const auto fb = fb_weak.lock();
 
   const auto& fb_desc = fb->GetDescriptor();
   if (fb_desc.color_attachments.empty()
@@ -246,10 +225,11 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
+auto MainModule::ClearBackbufferReferences()
+  -> void
 {
-  // Called before resize - don't drop offscreen targets, only swapchain refs
-  // The old code kept this as no-op to avoid FPS drops during resize
+  // This example does offscreen rendering and only composites to the swapchain,
+  // which only uses tyemporary references to the backbuffers.
 }
 
 auto MainModule::BuildDefaultWindowProperties() const
@@ -295,7 +275,7 @@ auto MainModule::MarkSurfacePresentable(engine::FrameContext& context,
 
   const auto surfaces = context.GetSurfaces();
   for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i] == surface) {
+    if (surfaces[i].get() == surface.get()) {
       context.SetSurfacePresentable(i, true);
       break;
     }

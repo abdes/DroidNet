@@ -39,13 +39,17 @@ SwapChain::~SwapChain() noexcept
   ReleaseSwapChain();
 }
 
+auto SwapChain::GetCurrentBackBuffer() const -> std::shared_ptr<Texture>
+{
+  return render_targets_[swap_chain_->GetCurrentBackBufferIndex()];
+}
+
 auto SwapChain::Present() const -> void
 {
   DCHECK_NOTNULL_F(swap_chain_);
   // Use sync_interval of 1 for V-Sync enabled, 0 for V-Sync disabled
   const UINT sync_interval = graphics_->IsVSyncEnabled() ? 1U : 0U;
   ThrowOnFailed(swap_chain_->Present(sync_interval, 0));
-  current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
 }
 
 auto SwapChain::UpdateDependencies(
@@ -165,10 +169,14 @@ auto SwapChain::CreateRenderTargets() -> void
       },
       NativeResource(back_buffer, ClassTypeId()), graphics_);
   }
+  DLOG_F(
+    INFO, "Created {} render targets for swap chain", render_targets_.size());
 }
 
 auto SwapChain::ReleaseRenderTargets() -> void
 {
   DCHECK_F(swap_chain_ != nullptr);
+  DLOG_F(
+    INFO, "Releasing {} render targets for swap chain", render_targets_.size());
   render_targets_.clear();
 }

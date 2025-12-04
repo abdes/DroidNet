@@ -122,14 +122,14 @@ public:
     frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void;
 
   OXGN_GFX_API auto PresentSurfaces(
-    const std::vector<std::shared_ptr<graphics::Surface>>& surfaces) -> void;
+    const std::vector<observer_ptr<graphics::Surface>>& surfaces) -> void;
 
   //=== Global & pooled objects ===-----------------------------------------//
 
   [[nodiscard]] virtual OXGN_GFX_API auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     observer_ptr<graphics::CommandQueue> command_queue) const
-    -> std::shared_ptr<graphics::Surface>
+    -> std::unique_ptr<graphics::Surface>
     = 0;
 
   [[nodiscard]] virtual OXGN_GFX_API auto CreateSurfaceFromNative(

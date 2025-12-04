@@ -58,6 +58,101 @@ ModuleManager::ModuleManager(const observer_ptr<AsyncEngine> engine)
 {
 }
 
+// Subscription helpers (move/dtor/Cancel)
+ModuleManager::Subscription::Subscription(Subscription&& other) noexcept
+  : id_(other.id_)
+  , owner_(other.owner_)
+{
+  other.id_ = 0;
+  other.owner_ = nullptr;
+}
+
+ModuleManager::Subscription& ModuleManager::Subscription::operator=(
+  Subscription&& other) noexcept
+{
+  if (this != &other) {
+    Cancel();
+    id_ = other.id_;
+    owner_ = other.owner_;
+    other.id_ = 0;
+    other.owner_ = nullptr;
+  }
+  return *this;
+}
+
+ModuleManager::Subscription::~Subscription() noexcept { Cancel(); }
+
+void ModuleManager::Subscription::Cancel() noexcept
+{
+  if (id_ == 0 || !owner_) {
+    return;
+  }
+  // owner_->UnsubscribeSubscription is private; Subscription is a friend.
+  owner_->UnsubscribeSubscription(id_);
+  id_ = 0;
+  owner_ = nullptr;
+}
+
+// Subscribe and unsubscribe implementations
+auto ModuleManager::SubscribeModuleAttached(
+  ModuleAttachedCallback cb, const bool replay_existing) -> Subscription
+{
+  // Insert the subscriber and obtain id under lock.
+  uint64_t id;
+  {
+    std::scoped_lock lock(subscribers_mutex_);
+    id = next_subscriber_id_++;
+    attached_subscribers_.emplace(id, std::move(cb));
+  }
+
+  Subscription s;
+  s.id_ = id;
+  s.owner_ = observer_ptr<ModuleManager> { this };
+
+  if (replay_existing) {
+    // Capture a snapshot of existing modules in attach order and invoke the
+    // newly-registered callback synchronously. We deliberately copy the
+    // callback so it remains valid even if the subscriber cancels itself
+    // during replay.
+    ModuleAttachedCallback callback_copy;
+    {
+      std::scoped_lock lock(subscribers_mutex_);
+      auto it = attached_subscribers_.find(id);
+      if (it == attached_subscribers_.end()) {
+        // Subscription removed in-between (should be rare)
+        return s;
+      }
+      callback_copy = it->second;
+    }
+
+    // Build snapshot and invoke
+    for (const auto& up : modules_) {
+      if (!up) {
+        continue;
+      }
+      ModuleEvent ev { up->GetTypeId(), std::string { up->GetName() },
+        observer_ptr<EngineModule> { up.get() } };
+
+      try {
+        callback_copy(ev);
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "Subscriber callback threw during replay: {}", e.what());
+      } catch (...) {
+        LOG_F(
+          ERROR, "Subscriber callback threw unknown exception during replay");
+      }
+    }
+  }
+
+  return s;
+}
+
+void ModuleManager::UnsubscribeSubscription(uint64_t id) noexcept
+{
+  std::scoped_lock lock(subscribers_mutex_);
+  attached_subscribers_.erase(id);
+}
+
 ModuleManager::~ModuleManager()
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -118,9 +213,41 @@ auto ModuleManager::RegisterModule(
     return false;
   }
 
+  // Insert module and rebuild caches before notifying subscribers
   modules_.push_back(std::move(module));
 
   RebuildPhaseCache();
+
+  // Notify any synchronous subscribers about this new module. Create a
+  // lightweight ModuleEvent and call subscribers without holding the
+  // subscribers_mutex_ to avoid deadlocks or reentrancy issues.
+  {
+    ModuleEvent ev { modules_.back()->GetTypeId(),
+      std::string { modules_.back()->GetName() },
+      observer_ptr<EngineModule> { modules_.back().get() } };
+
+    // Snapshot callbacks under lock
+    std::vector<ModuleAttachedCallback> cbs;
+    {
+      std::scoped_lock lock(subscribers_mutex_);
+      cbs.reserve(attached_subscribers_.size());
+      for (auto const& kv : attached_subscribers_) {
+        cbs.push_back(kv.second);
+      }
+    }
+
+    for (auto const& cb : cbs) {
+      try {
+        cb(ev);
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "Subscriber callback threw during module attach: {}",
+          e.what());
+      } catch (...) {
+        LOG_F(ERROR,
+          "Subscriber callback threw unknown exception during module attach");
+      }
+    }
+  }
   return true;
 }
 

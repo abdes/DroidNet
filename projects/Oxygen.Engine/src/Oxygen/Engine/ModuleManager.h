@@ -5,11 +5,15 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
@@ -17,6 +21,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Engine/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -92,6 +97,32 @@ public:
         });
   }
 
+  // Minimal synchronous subscription API for module attach notifications.
+  // SubscribeModuleAttached returns a move-only Subscription RAII object
+  // that will automatically unsubscribe on destruction. If replay_existing
+  // is true the callback is invoked synchronously for already-attached
+  // modules (in attach order) after the subscription is registered.
+
+  class Subscription {
+  public:
+    Subscription() noexcept = default;
+    OXGN_NGIN_API Subscription(Subscription&& other) noexcept;
+    OXGN_NGIN_API Subscription& operator=(Subscription&& other) noexcept;
+    OXGN_NGIN_API ~Subscription() noexcept;
+
+    // Explicitly cancel early; otherwise destructor unsubscribes.
+    OXGN_NGIN_API void Cancel() noexcept;
+
+  private:
+    friend class ModuleManager;
+    uint64_t id_ { 0 };
+    observer_ptr<ModuleManager> owner_ { nullptr };
+  };
+
+  // Subscribe to module attach events. Default replay_existing=false.
+  OXGN_NGIN_API auto SubscribeModuleAttached(
+    ModuleAttachedCallback cb, bool replay_existing = false) -> Subscription;
+
 private:
   observer_ptr<AsyncEngine> engine_;
 
@@ -111,6 +142,14 @@ private:
   // failures
   auto HandleModuleErrors(FrameContext& ctx, core::PhaseId phase) noexcept
     -> void;
+
+  // Internal subscription bookkeeping (private API)
+  void UnsubscribeSubscription(uint64_t id) noexcept;
+
+  // Subscriber storage (thread-safety: minimal mutex guarding)
+  std::mutex subscribers_mutex_;
+  std::unordered_map<uint64_t, ModuleAttachedCallback> attached_subscribers_ {};
+  uint64_t next_subscriber_id_ { 1 };
 };
 
 } // namespace oxygen::engine
