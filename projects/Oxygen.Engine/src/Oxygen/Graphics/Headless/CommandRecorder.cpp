@@ -102,6 +102,14 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   }
 }
 
+auto CommandRecorder::CopyTexture(const Texture& src,
+  const TextureSlice& src_slice, const TextureSubResourceSet& src_subresources,
+  Texture& dst, const TextureSlice& dst_slice,
+  const TextureSubResourceSet& dst_subresources) -> void
+{
+  // Headless backend stub - no actual copy performed
+}
+
 auto CommandRecorder::PerformCopy(graphics::Buffer& dst, size_t dst_offset,
   const graphics::Buffer& src, size_t src_offset, size_t size) -> void
 {

@@ -128,6 +128,11 @@ public:
     const graphics::Buffer& src, std::span<const TextureUploadRegion> regions,
     Texture& dst) -> void override;
 
+  auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
+    const TextureSubResourceSet& src_subresources, Texture& dst,
+    const TextureSlice& dst_slice,
+    const TextureSubResourceSet& dst_subresources) -> void override;
+
   //! Bind shader-visible descriptor heaps to the underlying D3D12 command
   //! list. This sets up descriptor heaps only (no root-table binding).
   auto SetupDescriptorHeaps(

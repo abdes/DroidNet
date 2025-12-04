@@ -806,6 +806,69 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   }
 }
 
+auto CommandRecorder::CopyTexture(const graphics::Texture& src,
+  const TextureSlice& src_slice, const TextureSubResourceSet& src_subresources,
+  graphics::Texture& dst, const TextureSlice& dst_slice,
+  const TextureSubResourceSet& dst_subresources) -> void
+{
+  // Expectations: caller ensured resource states (src is COPY_SOURCE, dst is
+  // COPY_DEST)
+  const auto& command_list = GetConcreteCommandList();
+  auto* d3d12_command_list = command_list.GetCommandList();
+  DCHECK_NOTNULL_F(d3d12_command_list);
+
+  auto* src_resource = src.GetNativeResource()->AsPointer<ID3D12Resource>();
+  auto* dst_resource = dst.GetNativeResource()->AsPointer<ID3D12Resource>();
+  DCHECK_NOTNULL_F(src_resource);
+  DCHECK_NOTNULL_F(dst_resource);
+
+  const auto& src_desc = src.GetDescriptor();
+  const auto& dst_desc = dst.GetDescriptor();
+
+  // Resolve slices and subresources
+  auto resolved_src_slice = src_slice.Resolve(src_desc);
+  auto resolved_dst_slice = dst_slice.Resolve(dst_desc);
+  auto resolved_src_sub = src_subresources.Resolve(src_desc, false);
+  auto resolved_dst_sub = dst_subresources.Resolve(dst_desc, false);
+
+  // Iterate over array slices and mip levels
+  for (UINT si = 0; si < resolved_src_sub.num_array_slices; ++si) {
+    for (UINT mi = 0; mi < resolved_src_sub.num_mip_levels; ++mi) {
+      const UINT src_subresource_index
+        = (resolved_src_sub.base_array_slice + si) * src_desc.mip_levels
+        + (resolved_src_sub.base_mip_level + mi);
+      const UINT dst_subresource_index
+        = (resolved_dst_sub.base_array_slice + si) * dst_desc.mip_levels
+        + (resolved_dst_sub.base_mip_level + mi);
+
+      // Setup source location
+      D3D12_TEXTURE_COPY_LOCATION src_loc = {};
+      src_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+      src_loc.pResource = src_resource;
+      src_loc.SubresourceIndex = src_subresource_index;
+
+      // Setup destination location
+      D3D12_TEXTURE_COPY_LOCATION dst_loc = {};
+      dst_loc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+      dst_loc.pResource = dst_resource;
+      dst_loc.SubresourceIndex = dst_subresource_index;
+
+      // Setup source box (region to copy)
+      D3D12_BOX src_box = {};
+      src_box.left = resolved_src_slice.x;
+      src_box.top = resolved_src_slice.y;
+      src_box.front = resolved_src_slice.z;
+      src_box.right = resolved_src_slice.x + resolved_src_slice.width;
+      src_box.bottom = resolved_src_slice.y + resolved_src_slice.height;
+      src_box.back = resolved_src_slice.z + resolved_src_slice.depth;
+
+      // Copy texture region
+      d3d12_command_list->CopyTextureRegion(&dst_loc, resolved_dst_slice.x,
+        resolved_dst_slice.y, resolved_dst_slice.z, &src_loc, &src_box);
+    }
+  }
+}
+
 // D3D12 specific command implementations
 auto CommandRecorder::ClearDepthStencilView(const graphics::Texture& texture,
   const NativeView& dsv, const ClearFlags clear_flags, const float depth,
