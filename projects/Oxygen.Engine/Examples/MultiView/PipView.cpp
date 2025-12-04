@@ -244,18 +244,15 @@ void PipView::EnsurePipRenderTargets(uint32_t width, uint32_t height)
   fb_desc.depth_attachment.sub_resources = graphics::TextureSubResourceSet {};
   framebuffer_ = gfx.CreateFramebuffer(fb_desc);
 
-  // Transition textures to appropriate initial states using the stored
-  // recorder CRITICAL: Begin tracking resources before requiring their states
+  // Transition textures to appropriate initial states
   recorder.BeginTrackingResourceState(
     static_cast<const graphics::Texture&>(*color_texture_),
-    graphics::ResourceStates::kUndefined);
+    graphics::ResourceStates::kRenderTarget);
   recorder.BeginTrackingResourceState(
     static_cast<const graphics::Texture&>(*depth_texture_),
     graphics::ResourceStates::kUndefined);
 
-  recorder.RequireResourceState(
-    static_cast<const graphics::Texture&>(*color_texture_),
-    graphics::ResourceStates::kRenderTarget);
+  // Color: RenderTarget, Depth: DepthWrite
   recorder.RequireResourceState(
     static_cast<const graphics::Texture&>(*depth_texture_),
     graphics::ResourceStates::kDepthWrite);
