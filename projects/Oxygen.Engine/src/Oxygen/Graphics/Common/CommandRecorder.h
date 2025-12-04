@@ -220,6 +220,28 @@ public:
     std::span<const TextureUploadRegion> regions, Texture& dst) -> void
     = 0;
 
+  //! Copies a region from one texture to another.
+  /*!
+   Copies texture data between two textures with optional region specifications.
+   Useful for compositing, render target copies, mip generation, etc.
+
+   \param src Source texture (must be in kCopySource state).
+   \param src_slice Source region to copy from.
+   \param src_subresources Source mip/array slice specification.
+   \param dst Destination texture (must be in kCopyDest state).
+   \param dst_slice Destination region to copy to.
+   \param dst_subresources Destination mip/array slice specification.
+
+   \note The source and destination regions should have matching dimensions
+         unless the backend supports scaling during copy (check capabilities).
+   \note Ensure proper resource state transitions before calling this method.
+   */
+  virtual auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
+    const TextureSubResourceSet& src_subresources, Texture& dst,
+    const TextureSlice& dst_slice,
+    const TextureSubResourceSet& dst_subresources) -> void
+    = 0;
+
   //=== Resource State Management and Barriers (Templates) ===--------------//
 
   //! @{
