@@ -35,7 +35,6 @@
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Renderer/Renderer.h>
@@ -43,10 +42,12 @@
 #include "../Common/AsyncEngineApp.h"
 #include "MainModule.h"
 
-using namespace oxygen;
-using namespace oxygen::engine;
-using namespace oxygen::graphics;
 using namespace std::chrono_literals;
+
+namespace engine = oxygen::engine;
+namespace o = oxygen;
+namespace co = oxygen::co;
+namespace g = oxygen::graphics;
 
 namespace {
 
@@ -65,22 +66,20 @@ auto EventLoopRun(const oxygen::examples::common::AsyncEngineApp& app) -> void
 } // namespace
 
 template <>
-struct co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
-  static auto Run(oxygen::examples::common::AsyncEngineApp& app) -> void
+struct oxygen::co::EventLoopTraits<oxygen::examples::common::AsyncEngineApp> {
+  static auto Run(examples::common::AsyncEngineApp& app) -> void
   {
     EventLoopRun(app);
   }
-  static auto Stop(oxygen::examples::common::AsyncEngineApp& app) -> void
+  static auto Stop(examples::common::AsyncEngineApp& app) -> void
   {
     app.running.store(false, std::memory_order_relaxed);
   }
-  static auto IsRunning(const oxygen::examples::common::AsyncEngineApp& app)
-    -> bool
+  static auto IsRunning(const examples::common::AsyncEngineApp& app) -> bool
   {
     return app.running.load(std::memory_order_relaxed);
   }
-  static auto EventLoopId(oxygen::examples::common::AsyncEngineApp& app)
-    -> EventLoopID
+  static auto EventLoopId(examples::common::AsyncEngineApp& app) -> EventLoopID
   {
     return EventLoopID(&app);
   }
@@ -93,7 +92,7 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
 {
   LOG_F(INFO, "Registering engine modules...");
 
-  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) {
+  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) -> void {
     const bool registered = app.engine->RegisterModule(std::move(module));
     if (!registered) {
       LOG_F(ERROR, "Failed to register module");
@@ -101,24 +100,23 @@ auto RegisterEngineModules(oxygen::examples::common::AsyncEngineApp& app)
     }
   };
 
-  {
-    auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
-      app.platform->Input().ForRead());
-    app.input_system = observer_ptr { input_sys.get() };
-    register_module(std::move(input_sys));
+  auto input_sys = std::make_unique<engine::InputSystem>(
+    app.platform->Input().ForRead());
+  app.input_system = o::observer_ptr { input_sys.get() };
+  register_module(std::move(input_sys));
 
-    oxygen::RendererConfig renderer_config {
-      .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-    };
-    auto renderer_unique
-      = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
+  oxygen::RendererConfig renderer_config {
+    .upload_queue_key
+    = app.queue_strategy.KeyFor(g::QueueRole::kTransfer).get(),
+  };
+  auto renderer_unique
+    = std::make_unique<engine::Renderer>(app.gfx_weak, renderer_config);
 
-    app.renderer = observer_ptr { renderer_unique.get() };
-    register_module(
-      std::make_unique<oxygen::examples::multiview::MainModule>(app));
+  app.renderer = o::observer_ptr { renderer_unique.get() };
+  register_module(
+    std::make_unique<oxygen::examples::multiview::MainModule>(app));
 
-    register_module(std::move(renderer_unique));
-  }
+  register_module(std::move(renderer_unique));
 }
 
 auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
@@ -128,20 +126,20 @@ auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
   {
     app.running.store(true, std::memory_order_relaxed);
 
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
+    co_await n.Start(&o::Platform::ActivateAsync, std::ref(*app.platform));
     app.platform->Run();
 
     DCHECK_F(!app.gfx_weak.expired());
     auto gfx = app.gfx_weak.lock();
-    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
+    co_await n.Start(&o::Graphics::ActivateAsync, std::ref(*gfx));
     gfx->Run();
 
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
+    co_await n.Start(&o::AsyncEngine::ActivateAsync, std::ref(*app.engine));
     app.engine->Run();
 
     RegisterEngineModules(app);
 
-    n.Start([&app, &n]() -> co::Co<> {
+    n.Start([&app]() -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
       LOG_F(
         INFO, "MultiView example: last window closed -> shutting down engine");
@@ -160,7 +158,11 @@ auto AsyncMain(oxygen::examples::common::AsyncEngineApp& app, uint32_t frames)
 
 extern "C" auto MainImpl(std::span<const char*> args) -> void
 {
-  using namespace oxygen::clap;
+  using oxygen::clap::Option;
+  using oxygen::clap::Command;
+  using oxygen::clap::CommandBuilder;
+  using oxygen::clap::CliBuilder;
+  using oxygen::clap::CmdLineArgumentsError;
 
   uint32_t frames = 0U;
   uint32_t target_fps = 100U;
@@ -237,12 +239,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
     LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
     LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
 
-    app.platform = std::make_shared<Platform>(PlatformConfig {
+    app.platform = std::make_shared<o::Platform>(o::PlatformConfig {
       .headless = headless,
-      .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
+      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
-    const GraphicsConfig gfx_config {
+    const o::GraphicsConfig gfx_config {
       .enable_debug = true,
       .enable_validation = false,
       .preferred_card_name = std::nullopt,
@@ -250,17 +252,18 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
       .enable_vsync = enable_vsync,
       .extra = {},
     };
-    const auto& loader = GraphicsBackendLoader::GetInstance();
+    const auto& loader = o::GraphicsBackendLoader::GetInstance();
     app.gfx_weak = loader.LoadBackend(
-      headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config);
+      headless ? g::BackendType::kHeadless : g::BackendType::kDirect3D12,
+      gfx_config);
     CHECK_F(!app.gfx_weak.expired());
     app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
 
-    app.engine = std::make_shared<AsyncEngine>(
+    app.engine = std::make_shared<o::AsyncEngine>(
       app.platform,
       app.gfx_weak,
-      EngineConfig {
-        .application = { .name = "MultiView Example", .version = 1u, },
+      o::EngineConfig {
+        .application = { .name = "MultiView Example", .version = 1U, },
         .target_fps = target_fps,
         .frame_count = frames,
         .timing = {

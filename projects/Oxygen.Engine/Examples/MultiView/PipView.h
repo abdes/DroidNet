@@ -6,6 +6,9 @@
 
 #pragma once
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Types/Geometry.h>
+
 #include "DemoView.h"
 
 namespace oxygen::examples::multiview {
@@ -15,33 +18,32 @@ public:
   PipView();
   ~PipView() override = default;
 
+  OXYGEN_MAKE_NON_COPYABLE(PipView)
+  OXYGEN_DEFAULT_MOVABLE(PipView)
+
   void Initialize(scene::Scene& scene) override;
 
   void OnSceneMutation() override;
 
-  auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<void> override;
+  auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<> override;
 
-  auto RenderToFramebuffer(const engine::RenderContext& render_ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<void> override;
+  auto RenderFrame(const engine::RenderContext& render_ctx,
+    graphics::CommandRecorder& recorder) -> co::Co<> override;
 
   void Composite(graphics::CommandRecorder& recorder,
     graphics::Texture& backbuffer) override;
 
-  void ReleaseResources() override;
+protected:
+  void OnReleaseResources() override;
 
 private:
-  void EnsurePipRenderTargets(uint32_t width, uint32_t height);
+  void EnsurePipRenderTargets(const SubPixelExtent& viewport_extent);
 
-  auto ComputePipExtent(int surface_width, int surface_height)
-    -> std::pair<uint32_t, uint32_t>;
+  static auto ComputePipExtent(const PixelExtent& surface_extent) -> PixelExtent;
 
-  auto ComputePipViewport(int surface_width, int surface_height,
-    uint32_t pip_width, uint32_t pip_height) -> ViewPort;
+  static auto ComputePipViewport(const PixelExtent& surface_extent) -> ViewPort;
 
-  uint32_t target_width_ { 0 };
-  uint32_t target_height_ { 0 };
-  std::optional<ViewPort> destination_viewport_;
+  std::optional<ViewPort> viewport_;
 };
 
 } // namespace oxygen::examples::multiview

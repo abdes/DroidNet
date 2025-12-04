@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "SceneBootstrapper.h"
-
 #include <algorithm>
 #include <cstring>
 #include <utility>
@@ -18,7 +16,10 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Scene/Detail/RenderableComponent.h>
+
+#include "SceneBootstrapper.h"
+
+#include "Oxygen/Content/PakFile.h"
 
 namespace oxygen::examples::multiview {
 namespace {
@@ -26,12 +27,16 @@ namespace {
   constexpr const char* kSceneName = "MultiViewScene";
 
   auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba)
-    -> std::shared_ptr<const oxygen::data::MaterialAsset>
+    -> std::shared_ptr<const data::MaterialAsset>
   {
-    using namespace oxygen::data;
+    using data::AssetType;
+    using data::MaterialAsset;
+    using data::MaterialDomain;
+    using data::ShaderReference;
+    namespace pak = data::pak;
 
     pak::MaterialAssetDesc desc {};
-    desc.header.asset_type = 7;
+    desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
     constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
     const std::size_t n = (std::min)(maxn, std::strlen(name));
     std::memcpy(desc.header.name, name, n);
@@ -45,10 +50,10 @@ namespace {
     desc.base_color[1] = rgba.g;
     desc.base_color[2] = rgba.b;
     desc.base_color[3] = rgba.a;
-    desc.normal_scale = 1.0f;
-    desc.metalness = 0.0f;
-    desc.roughness = 0.5f;
-    desc.ambient_occlusion = 1.0f;
+    desc.normal_scale = 1.0F;
+    desc.metalness = 0.0F;
+    desc.roughness = 0.5F;
+    desc.ambient_occlusion = 1.0F;
     return std::make_shared<const MaterialAsset>(
       desc, std::vector<ShaderReference> {});
   }
@@ -91,7 +96,7 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
     return;
   }
 
-  auto sphere_geom_data = oxygen::data::MakeSphereMeshAsset(32, 32);
+  auto sphere_geom_data = data::MakeSphereMeshAsset(32, 32);
   if (!sphere_geom_data.has_value()) {
     LOG_F(WARNING,
       "[MultiView] SceneBootstrapper failed to create sphere mesh data.");
@@ -99,11 +104,11 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
   }
 
   auto material
-    = MakeSolidColorMaterial("SphereMaterial", { 0.2f, 0.7f, 0.3f, 1.0f });
+    = MakeSolidColorMaterial("SphereMaterial", { 0.2F, 0.7F, 0.3F, 1.0F });
 
-  using oxygen::data::MeshBuilder;
-  using oxygen::data::pak::GeometryAssetDesc;
-  using oxygen::data::pak::MeshViewDesc;
+  using data::MeshBuilder;
+  using data::pak::GeometryAssetDesc;
+  using data::pak::MeshViewDesc;
 
   auto mesh
     = MeshBuilder(0, "Sphere")
@@ -130,12 +135,12 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
 
-  auto geom_asset = std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
-    std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
+  auto geom_asset = std::make_shared<data::GeometryAsset>(
+    geo_desc, std::vector<std::shared_ptr<data::Mesh>> { std::move(mesh) });
 
   sphere_node_ = scene.CreateNode("Sphere");
   sphere_node_.GetRenderable().SetGeometry(std::move(geom_asset));
-  sphere_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, -2.0f });
+  sphere_node_.GetTransform().SetLocalPosition({ 0.0F, 0.0F, -2.0F });
 
   LOG_F(INFO,
     "[MultiView] SceneBootstrapper created sphere node (alive={}, "

@@ -8,8 +8,10 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Surface.h>
@@ -28,7 +30,7 @@ namespace oxygen::examples::multiview {
 struct ViewConfig {
   std::string name;
   std::string purpose;
-  graphics::Color clear_color { 0.0f, 0.0f, 0.0f, 1.0f };
+  graphics::Color clear_color { 0.0F, 0.0F, 0.0F, 1.0F };
   bool wireframe { false };
 };
 
@@ -66,6 +68,9 @@ class DemoView {
 public:
   virtual ~DemoView();
 
+  OXYGEN_MAKE_NON_COPYABLE(DemoView)
+  OXYGEN_DEFAULT_MOVABLE(DemoView)
+
   // Set the rendering context early. Must be called before Initialize.
   // The recorder is valid ONLY during the current phase (OnSceneMutation).
   // Do NOT use recorder after this phase ends.
@@ -92,16 +97,19 @@ public:
   virtual void RegisterRendererHooks(oxygen::engine::Renderer& renderer);
 
   // Prepare for rendering (configure renderer, register resolver/graph)
-  virtual auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<void>
-    = 0;
+  virtual auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<> = 0;
 
   // Composite the view to the backbuffer
   virtual void Composite(
     graphics::CommandRecorder& recorder, graphics::Texture& backbuffer)
     = 0;
 
-  // Release resources
-  virtual void ReleaseResources() = 0;
+  // Release resources. Public non-virtual entry point that must be called
+  // while the object is still fully alive. This will call the protected
+  // virtual hook `OnReleaseResources()` so derived types can release
+  // derived-only state and schedule any deferred releases while the
+  // derived object still exists.
+  void ReleaseResources();
 
   [[nodiscard]] auto GetViewId() const -> ViewId { return view_id_; }
 
@@ -122,19 +130,24 @@ public:
   }
 
   // Render view to its framebuffer
-  virtual auto RenderToFramebuffer(const engine::RenderContext& render_ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<void>
+  virtual auto RenderFrame(const engine::RenderContext& render_ctx,
+    graphics::CommandRecorder& recorder) -> co::Co<>
     = 0;
 
   // Set graphics context for deferred resource release
   void SetGraphicsContext(std::weak_ptr<Graphics> graphics)
   {
-    graphics_weak_ = graphics;
+    graphics_weak_ = std::move(graphics);
   }
 
 protected:
   explicit DemoView(ViewConfig config, std::weak_ptr<Graphics> graphics = {});
+
+  // Hook called by ReleaseResources() when object is alive. Derived
+  // implementations must override this instead of ReleaseResources().
+  // Implementations should schedule deferred releases for any derived
+  // resources using `graphics_weak_` exactly as the base class does.
+  virtual void OnReleaseResources();
 
   // Getters for context (safe to use after SetRenderingContext is called)
   [[nodiscard]] auto GetFrameContext() const -> engine::FrameContext&
@@ -163,6 +176,51 @@ protected:
   void UpdateCameraViewport(float width, float height);
   void RegisterView(const ViewPort& viewport, const Scissors& scissor);
 
+  // Protected accessors for derived classes (prefer using these instead of
+  // manipulating members directly so the base class can evolve safely)
+  [[nodiscard]] auto Config() const -> const ViewConfig& { return config_; }
+
+  [[nodiscard]] auto RendererRef() -> ViewRenderer& { return renderer_; }
+
+  [[nodiscard]] auto ColorTextureRef() -> std::shared_ptr<graphics::Texture>&
+  {
+    return color_texture_;
+  }
+
+  [[nodiscard]] auto DepthTextureRef() -> std::shared_ptr<graphics::Texture>&
+  {
+    return depth_texture_;
+  }
+
+  [[nodiscard]] auto FramebufferRef() -> std::shared_ptr<graphics::Framebuffer>&
+  {
+    return framebuffer_;
+  }
+
+  [[nodiscard]] auto CameraNodeRef() -> scene::SceneNode&
+  {
+    return camera_node_;
+  }
+
+  // Prefer using this setter to change the ready state of the view
+  void SetViewReady(bool ready) { view_ready_ = ready; }
+
+private:
+  // Context pointers set via SetRenderingContext
+  engine::FrameContext* frame_context_ { nullptr };
+  oxygen::Graphics* graphics_ { nullptr };
+  const graphics::Surface* surface_ { nullptr };
+  graphics::CommandRecorder* recorder_ {
+    nullptr
+  }; // Phase-specific, updated each frame
+
+  // Tracks whether ReleaseResources() was run. Destructor will avoid
+  // calling virtual methods and will only run base fallback cleanup if
+  // this flag is false.
+  bool resources_released_ { false };
+
+  // Base-owned properties (moved from protected to private) - use the
+  // protected accessors above when implementing derived views.
   ViewConfig config_;
   ViewId view_id_ {};
   scene::SceneNode camera_node_;
@@ -175,14 +233,10 @@ protected:
   ViewRenderer renderer_;
   bool view_ready_ { false };
 
-private:
-  // Context pointers set via SetRenderingContext
-  engine::FrameContext* frame_context_ { nullptr };
-  oxygen::Graphics* graphics_ { nullptr };
-  const graphics::Surface* surface_ { nullptr };
-  graphics::CommandRecorder* recorder_ {
-    nullptr
-  }; // Phase-specific, updated each frame
+  // Helper that performs non-virtual base cleanup and schedules deferred
+  // release for base-owned GPU resources. This avoids duplicating the
+  // logic across the destructor and ReleaseResources().
+  void BaseDeferredRelease();
 };
 
 } // namespace oxygen::examples::multiview

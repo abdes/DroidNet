@@ -27,7 +27,16 @@ MainModule::MainModule(const common::AsyncEngineApp& app) noexcept
   views_.push_back(std::make_unique<PipView>());
 }
 
-MainModule::~MainModule() = default;
+MainModule::~MainModule()
+{
+  // Ensure views release their resources while still alive so that
+  // derived cleanup (including deferred reclaims) runs correctly.
+  for (auto& view : views_) {
+    if (view) {
+      view->ReleaseResources();
+    }
+  }
+}
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
@@ -54,11 +63,14 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 
   // Initialize views on first frame
   if (!initialized_ && scene) {
-    scene_bootstrapper_.EnsureSceneWithContent();
-    for (auto& view : views_) {
-      view->Initialize(*scene);
+    // Ensure scene+content exists and use the returned shared_ptr (nodiscard)
+    const auto content_scene = scene_bootstrapper_.EnsureSceneWithContent();
+    if (content_scene) {
+      for (auto& view : views_) {
+        view->Initialize(*content_scene);
+      }
+      initialized_ = true;
     }
-    initialized_ = true;
   }
 }
 
@@ -225,8 +237,7 @@ auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::ClearBackbufferReferences()
-  -> void
+auto MainModule::ClearBackbufferReferences() -> void
 {
   // This example does offscreen rendering and only composites to the swapchain,
   // which only uses tyemporary references to the backbuffers.

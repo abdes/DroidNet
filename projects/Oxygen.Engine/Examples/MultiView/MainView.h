@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <Oxygen/Base/Macros.h>
+
 #include "DemoView.h"
 
 namespace oxygen::examples::multiview {
@@ -15,20 +17,23 @@ public:
   MainView();
   ~MainView() override = default;
 
+  OXYGEN_MAKE_NON_COPYABLE(MainView)
+  OXYGEN_DEFAULT_MOVABLE(MainView)
+
   void Initialize(scene::Scene& scene) override;
 
   void OnSceneMutation() override;
 
-  auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<void> override;
+  auto OnPreRender(engine::Renderer& renderer) -> co::Co<> override;
 
-  auto RenderToFramebuffer(const engine::RenderContext& render_ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<void> override;
+  auto RenderFrame(const engine::RenderContext& render_ctx,
+    graphics::CommandRecorder& recorder) -> co::Co<> override;
 
   void Composite(graphics::CommandRecorder& recorder,
     graphics::Texture& backbuffer) override;
 
-  void ReleaseResources() override;
+protected:
+  void OnReleaseResources() override;
 
 private:
   void EnsureMainRenderTargets();

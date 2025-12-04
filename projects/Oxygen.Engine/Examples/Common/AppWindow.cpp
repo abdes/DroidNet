@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "AppWindow.h"
+#include <mutex>
+#include <unordered_map>
 
-#include "AsyncEngineApp.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
@@ -14,10 +14,10 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
-
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <mutex>
-#include <unordered_map>
+
+#include "AppWindow.h"
+#include "AsyncEngineApp.h"
 
 using namespace oxygen;
 

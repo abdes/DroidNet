@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoView.h"
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -14,20 +12,36 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 
+#include <utility>
+
+#include "DemoView.h"
+
 namespace oxygen::examples::multiview {
 
 DemoView::DemoView(ViewConfig config, std::weak_ptr<Graphics> graphics)
   : config_(std::move(config))
-  , graphics_weak_(graphics)
+  , graphics_weak_(std::move(graphics))
 {
 }
 
-DemoView::~DemoView() { ReleaseResources(); }
+DemoView::~DemoView()
+{
+  if (!resources_released_) {
+    LOG_F(WARNING,
+      "[{}] ReleaseResources() was not called before destruction; performing "
+      "base-only deferred cleanup",
+      config_.name);
+    // Perform non-virtual base-only cleanup. This avoids calling virtual
+    // methods during destruction and ensures base resources get cleaned.
+    // (Derived state cannot be safely touched here.)
+    BaseDeferredRelease();
+  }
+}
 
 void DemoView::EnsureCamera(scene::Scene& scene, std::string_view node_name)
 {
-  using oxygen::scene::PerspectiveCamera;
-  using oxygen::scene::camera::ProjectionConvention;
+  using scene::PerspectiveCamera;
+  using scene::camera::ProjectionConvention;
 
   if (!camera_node_.IsAlive()) {
     camera_node_ = scene.CreateNode(std::string(node_name));
@@ -49,12 +63,14 @@ void DemoView::UpdateCameraViewport(float width, float height)
     // Aspect ratio and viewport will be set by derived classes or default here?
     // Actually, aspect ratio depends on the specific view dimensions.
     // Let's set a default viewport here matching the dimensions.
-    cam.SetViewport(ViewPort { .top_left_x = 0.0f,
-      .top_left_y = 0.0f,
+    cam.SetViewport(ViewPort {
+      .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
       .width = width,
       .height = height,
-      .min_depth = 0.0f,
-      .max_depth = 1.0f });
+      .min_depth = 0.0F,
+      .max_depth = 1.0F,
+    });
   }
 }
 
@@ -64,11 +80,11 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
     frame_context_, "frame_context must be set via SetRenderingContext");
   CHECK_NOTNULL_F(surface_, "surface must be set via SetRenderingContext");
 
-  oxygen::View view;
+  View view;
   view.viewport = viewport;
   view.scissor = scissor;
 
-  const auto metadata = oxygen::engine::ViewMetadata {
+  const auto metadata = engine::ViewMetadata {
     .name = config_.name,
     .purpose = config_.purpose,
   };
@@ -76,14 +92,14 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
   if (view_id_.get() == 0) {
     LOG_F(INFO, "[{}] Registering view (fb={})", config_.name,
       static_cast<const void*>(framebuffer_.get()));
-    view_id_ = frame_context_->RegisterView(oxygen::engine::ViewContext {
+    view_id_ = frame_context_->RegisterView(engine::ViewContext {
       .id = view_id_,
       .view = view,
       .metadata = metadata,
     });
   } else {
     frame_context_->UpdateView(view_id_,
-      oxygen::engine::ViewContext {
+      engine::ViewContext {
         .id = view_id_,
         .view = view,
         .metadata = metadata,
@@ -92,7 +108,7 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
   }
 }
 
-void DemoView::RegisterRendererHooks(oxygen::engine::Renderer& renderer)
+void DemoView::RegisterRendererHooks(engine::Renderer& renderer)
 {
   if (view_id_.get() == 0) {
     LOG_F(WARNING, "[{}] ViewId not assigned; skipping renderer hooks",
@@ -104,18 +120,16 @@ void DemoView::RegisterRendererHooks(oxygen::engine::Renderer& renderer)
     view_id_.get());
 
   renderer.RegisterViewResolverForView(view_id_,
-    [view_ptr = this](
-      const oxygen::engine::ViewContext& view_context) -> oxygen::ResolvedView {
-      oxygen::renderer::SceneCameraViewResolver resolver(
-        [view_ptr](
-          const oxygen::ViewId&) { return view_ptr->GetCameraNode(); });
+    [view_ptr = this](const engine::ViewContext& view_context) -> ResolvedView {
+      renderer::SceneCameraViewResolver resolver(
+        [view_ptr](const ViewId&) { return view_ptr->GetCameraNode(); });
       return resolver(view_context.id);
     });
 
   renderer.RegisterRenderGraph(view_id_,
-    [view_ptr = this](oxygen::ViewId view_id,
-      const oxygen::engine::RenderContext& render_context,
-      oxygen::graphics::CommandRecorder& recorder) -> co::Co<void> {
+    [view_ptr = this](ViewId view_id,
+      const engine::RenderContext& render_context,
+      graphics::CommandRecorder& recorder) -> co::Co<> {
       if (!view_ptr->IsViewReady()) {
         LOG_F(INFO, "[{}] Skipping render graph; view {} not ready",
           view_ptr->config_.name, view_id.get());
@@ -129,52 +143,71 @@ void DemoView::RegisterRendererHooks(oxygen::engine::Renderer& renderer)
         co_return;
       }
 
-      co_await view_ptr->RenderToFramebuffer(
-        render_context, recorder, *framebuffer);
+      co_await view_ptr->RenderFrame(render_context, recorder);
       co_return;
     });
 }
 
 void DemoView::ReleaseResources()
 {
-  if (!framebuffer_ && !color_texture_ && !depth_texture_) {
+  if (resources_released_) {
     return;
   }
 
   LOG_F(INFO, "[{}] Releasing resources", config_.name);
+
+  // Allow derived classes to run their cleanup while object is still alive.
+  // Derived overrides should schedule deferred releases for any derived
+  // resources if needed.
+  OnReleaseResources();
+
+  // Base cleanup: reset renderer state and phase-specific pointers.
   renderer_.ResetConfiguration();
   view_ready_ = false;
   recorder_ = nullptr; // Clear stale recorder pointer
 
   // Use deferred release for GPU resources to avoid freeing while in-flight.
-  // Match OLDMainModule pattern: lock weak_ptr and pass directly to
-  // DeferredObjectRelease.
-  const auto gfx = graphics_weak_.lock();
-  if (gfx) {
+  BaseDeferredRelease();
+  resources_released_ = true;
+}
+
+void DemoView::OnReleaseResources()
+{
+  // Default: no-op. Derived classes should override when they have
+  // additional resources to release. Important: any deferred release of
+  // derived resources should use `graphics_weak_` and DeferredObjectRelease
+  // to match the base class behavior.
+}
+
+void DemoView::BaseDeferredRelease()
+{
+  using graphics::DeferredObjectRelease;
+
+  if (const auto gfx = graphics_weak_.lock()) {
     try {
       if (color_texture_) {
-        oxygen::graphics::DeferredObjectRelease(
-          color_texture_, gfx->GetDeferredReclaimer());
+        DeferredObjectRelease(color_texture_, gfx->GetDeferredReclaimer());
       }
 
       if (depth_texture_) {
-        oxygen::graphics::DeferredObjectRelease(
-          depth_texture_, gfx->GetDeferredReclaimer());
+        DeferredObjectRelease(depth_texture_, gfx->GetDeferredReclaimer());
       }
 
       if (framebuffer_) {
-        oxygen::graphics::DeferredObjectRelease(
-          framebuffer_, gfx->GetDeferredReclaimer());
+        DeferredObjectRelease(framebuffer_, gfx->GetDeferredReclaimer());
       }
       return;
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "[{}] Failed to defer release for resources: {}",
         config_.name, ex.what());
+      // Fallback to immediate reset
+      framebuffer_.reset();
+      color_texture_.reset();
+      depth_texture_.reset();
     }
   }
 
-  // Fallback: immediate cleanup if graphics not available or deferred release
-  // failed
+  // Fallback: immediate cleanup if graphics not available
   framebuffer_.reset();
   color_texture_.reset();
   depth_texture_.reset();

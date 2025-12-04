@@ -49,7 +49,7 @@ public:
    \param backbuffer Destination swapchain framebuffer
    \param viewport Destination region (x, y, width, height)
   */
-  auto CompositeToRegion(graphics::CommandRecorder& recorder,
+  static auto CompositeToRegion(graphics::CommandRecorder& recorder,
     graphics::Texture& source_texture, graphics::Texture& backbuffer,
     const ViewPort& viewport) -> void;
 };
