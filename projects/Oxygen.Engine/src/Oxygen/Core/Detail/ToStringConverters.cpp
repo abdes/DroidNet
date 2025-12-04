@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 
 // ReSharper disable StringLiteralTypo
@@ -217,4 +218,10 @@ auto oxygen::to_string(const Scissors& scissors) -> std::string
 {
   return fmt::format("Scissors{{l={}, t={}, r={}, b={}}}", scissors.left,
     scissors.top, scissors.right, scissors.bottom);
+}
+
+// Format helpers replaced with fmt::format usages for clarity and safety.
+auto oxygen::to_string(const ViewId& v) -> std::string
+{
+  return fmt::format("ViewId({})", v.get());
 }

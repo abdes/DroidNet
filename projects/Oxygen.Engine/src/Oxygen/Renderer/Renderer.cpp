@@ -23,10 +23,12 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/RenderContext.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
@@ -122,10 +124,21 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   scene_prep_state_
     = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
       std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
+
+  // Initialize scene constants manager for per-view, per-slot Upload heap
+  // buffers
+  scene_const_manager_ = std::make_unique<upload::SceneConstantsManager>(
+    observer_ptr { gfx.get() },
+    static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
+
+  // Initialize the render-context pool helper used to claim per-frame
+  // render contexts during PreRender/Render phases.
+  render_context_pool_ = std::make_unique<RenderContextPool>();
 }
 
 Renderer::~Renderer()
 {
+  scene_const_manager_.reset();
   scene_prep_state_.reset();
   uploader_.reset();
   upload_staging_provider_.reset();
@@ -142,94 +155,214 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return graphics_ptr;
 }
 
-auto Renderer::PreExecute(
-  RenderContext& render_context, const FrameContext& frame_context) -> void
+auto Renderer::RegisterViewResolver(ViewResolver resolver) -> void
 {
-  // Contract checks (kept inline per style preference)
-  DCHECK_F(!render_context.scene_constants,
-    "RenderContext.scene_constants must be null; renderer sets it via "
-    "ModifySceneConstants/PreExecute");
-  // Legacy AoS draw list path (opaque_items_) removed from PreExecute. All
-  // per-draw GPU residency assurance now happens during SoA finalization
-  // (FinalizeScenePrepSoA) via EnsureMeshResources(). RenderContext
-  // opaque_draw_list remains intentionally untouched (empty span) for
-  // transitional compatibility with any remaining callers; passes should now
-  // consume prepared_frame / draw_metadata_bytes instead.
+  view_resolver_ = std::move(resolver);
+}
 
-  // Consolidated transform resource preparation
+auto Renderer::RegisterViewResolverForView(
+  ViewId view_id, ViewResolver resolver) -> void
+{
+  view_resolvers_.insert_or_assign(view_id, std::move(resolver));
+}
+
+auto Renderer::RegisterRenderGraph(ViewId view_id, RenderGraphFactory factory)
+  -> void
+{
+  render_graphs_[view_id] = std::move(factory);
+}
+
+auto Renderer::IsViewReady(ViewId view_id) const -> bool
+{
+  const auto it = view_ready_states_.find(view_id);
+  return it != view_ready_states_.end() && it->second;
+}
+
+auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
+{
+  LOG_SCOPE_FUNCTION(2);
+
+  if (render_graphs_.empty()) {
+    DLOG_F(WARNING, "no render graphs registered; skipping");
+    co_return;
+  }
+
+  if (!view_resolver_ && view_resolvers_.empty()) {
+    DLOG_F(WARNING, "no view resolver registered; skipping");
+    co_return;
+  }
+
+  // Failing to acquire a slot will throw, and drop the frame.
+  render_context_
+    = observer_ptr { &render_context_pool_->Acquire(context.GetFrameSlot()) };
+
+  // Clear the per-frame and per-view state
+  view_ready_states_.clear();
+  resolved_views_.clear();
+  prepared_frames_.clear();
+  per_view_storage_.clear();
+
+  // Iterate all views registered in FrameContext and prepare each one
+  auto views_range = context.GetViews();
+  bool first = true;
+
+  for (const auto& view_ref : views_range) {
+    const auto& view_ctx = view_ref.get();
+    DLOG_SCOPE_F(2,
+      fmt::format(
+        "View {} ({})", nostd::to_string(view_ctx.id), view_ctx.metadata.name)
+        .c_str());
+    try {
+      // Resolve the view (get camera, projection matrices)
+      const auto resolver_it = view_resolvers_.find(view_ctx.id);
+      const auto* resolver = resolver_it != view_resolvers_.end()
+        ? &resolver_it->second
+        : (view_resolver_ ? &view_resolver_ : nullptr);
+
+      if (resolver == nullptr) {
+        LOG_F(WARNING, "View {} has no resolver; skipping",
+          view_ctx.id.get());
+        continue;
+      }
+
+      const auto resolved = (*resolver)(view_ctx);
+
+      // Cache the resolved view for use in OnRender
+      resolved_views_.insert_or_assign(view_ctx.id, resolved);
+
+      // Build frame data for this view (scene prep, culling, draw list)
+      const auto draw_count
+        = RunScenePrep(view_ctx.id, resolved, context, first);
+      first = false;
+
+      DLOG_F(2, "view prepared with {} draws", draw_count);
+
+      // Mark view as ready for rendering
+      // Note: ViewId not directly available from GetViews() range
+      // Apps should use ViewContext metadata to identify views if needed
+
+    } catch (const std::exception& ex) {
+      LOG_F(WARNING, "-failed- : {}", ex.what());
+    }
+  }
+
+  LOG_SCOPE_F(2, "Populating renderer-level scene constants");
+
   if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
     const auto worlds_srv = transforms->GetWorldsSrvIndex();
     const auto normals_srv = transforms->GetNormalsSrvIndex();
-
+    DLOG_F(3, "Worlds: {}", worlds_srv);
+    DLOG_F(3, "Normals: {}", normals_srv);
     scene_const_cpu_.SetBindlessWorldsSlot(
       BindlessWorldsSlot(worlds_srv.get()), SceneConstants::kRenderer);
     scene_const_cpu_.SetBindlessNormalMatricesSlot(
       BindlessNormalsSlot(normals_srv.get()), SceneConstants::kRenderer);
   }
 
-  // Consolidated material resource preparation
   if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
     const auto materials_srv = materials->GetMaterialsSrvIndex();
+    DLOG_F(3, "Materials: {}", materials_srv);
     scene_const_cpu_.SetBindlessMaterialConstantsSlot(
       BindlessMaterialConstantsSlot(materials_srv.get()),
       SceneConstants::kRenderer);
   }
 
-  // Publish draw-metadata bindless slot from the ScenePrep emitter
   if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-    const auto slot = emitter->GetDrawMetadataSrvIndex();
+    const auto draw_metadata_srv = emitter->GetDrawMetadataSrvIndex();
+    DLOG_F(3, "Draw Metadata: {}", draw_metadata_srv);
     scene_const_cpu_.SetBindlessDrawMetadataSlot(
-      BindlessDrawMetadataSlot(slot.get()), SceneConstants::kRenderer);
+      BindlessDrawMetadataSlot(draw_metadata_srv.get()),
+      SceneConstants::kRenderer);
   }
 
-  MaybeUpdateSceneConstants(frame_context);
-
-  const auto slot = frame_context.GetFrameSlot();
-  if (scene_const_buffers_.size() > slot && scene_const_buffers_[slot]) {
-    WireContext(render_context, scene_const_buffers_[slot]);
-  } else {
-    LOG_F(ERROR, "Scene constants buffer not available for slot {}", slot);
-  }
-
-  // Wire PreparedSceneFrame pointer (SoA finalized snapshot). This enables
-  // passes to start consuming SoA data incrementally. Null remains valid if
-  // finalization produced an empty frame.
-  render_context.prepared_frame.reset(&prepared_frame_);
-
-  // Ensure any upload command lists are submitted promptly for this frame.
-  // if (uploader_) {
-  //   uploader_->Flush();
-  //   gfx_weak_.lock()->Flush();
-  // }
-}
-
-// ReSharper disable once CppMemberFunctionMayBeStatic
-auto Renderer::PostExecute(RenderContext& render_context) -> void
-{
-  // RenderContext::Reset now clears per-frame injected buffers (scene &
-  // material).
-  render_context.Reset();
-}
-
-auto Renderer::OnFrameGraph(FrameContext& context) -> co::Co<>
-{
-  // Renderer is now passive; modules drive rendering via
-  // BuildFrame/ExecuteRenderGraph. This method remains as a phase hook if
-  // needed for global setup.
   co_return;
 }
 
-auto Renderer::OnCommandRecord(FrameContext& context) -> co::Co<>
+auto Renderer::OnRender(FrameContext& context) -> co::Co<>
 {
-  // Currently App Module will call ExecuteRenderGraph directly on its main
-  // thread.
+  LOG_SCOPE_FUNCTION(2);
 
-  // Once done, mark surfaces for rendered views presentable.
+  // Early exit if no render render context
+  if (!render_context_) {
+    DLOG_F(WARNING, "no render context available; skipping");
+    co_return;
+  }
 
-  // Mark our surface as presentable after rendering is complete
-  // Surface presentation is now handled by the module driving the rendering
-  // (e.g. EditorModule). The renderer is passive and only executes the render
-  // graph.
+  auto graphics_ptr = gfx_weak_.lock();
+  if (!graphics_ptr) {
+    LOG_F(WARNING, "Graphics expired; skipping");
+    co_return;
+  }
+  auto& graphics = *graphics_ptr;
+
+  // Iterate all views and execute their registered render graphs
+  for (const auto& [view_id, factory] : render_graphs_) {
+    DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
+
+    // Mark view as not ready initially
+    view_ready_states_[view_id] = false;
+
+    try {
+      // Get the ViewContext for this view to access output framebuffer
+      const auto& view_ctx = context.GetViewContext(view_id);
+
+      // Skip if no output framebuffer assigned
+      if (!view_ctx.output) {
+        LOG_F(WARNING, "View {} has no output framebuffer; skipping",
+          view_id.get());
+        continue;
+      }
+
+      // Acquire command recorder for this view
+      auto recorder_ptr = AcquireRecorderForView(view_id, graphics);
+      if (!recorder_ptr) {
+        LOG_F(ERROR, "Could not acquire recorder for view {}; skipping",
+          view_id.get());
+        continue;
+      }
+      auto recorder = recorder_ptr.get();
+
+      if (!SetupFramebufferForView(
+            context, view_id, *recorder, *render_context_)) {
+        LOG_F(ERROR, "Failed to setup framebuffer for view {}; skipping",
+          view_id.get());
+        continue;
+      }
+
+      // Prepare and wire per-view SceneConstants and populate the
+      // render_context.current_view when available. The helper handles
+      // the resolved/prepared checks, logging and buffer writes.
+      if (!PrepareAndWireSceneConstantsForView(
+            view_id, context, *render_context_)) {
+        // Failure already logged inside helper; mark the view failed and
+        // skip this view's render graph.
+        FinalizeViewState(view_id, false);
+        continue;
+      }
+
+      // Execute the registered render graph for this view
+      const bool rv = co_await ExecuteRenderGraphForView(
+        view_id, factory, *render_context_, *recorder);
+
+      // Finalize state and instrumentation
+      FinalizeViewState(view_id, rv);
+
+      // Handle presentation bookkeeping only on success
+      if (rv) {
+        HandlePresentationForView(context, view_id);
+        DLOG_F(2, "view rendered successfully", view_id.get());
+      }
+
+    } catch (const std::exception& ex) {
+      LOG_F(ERROR, "Failed to render view {}: {}", view_id.get(), ex.what());
+      view_ready_states_[view_id] = false;
+    }
+  }
+
+  // Return the pooled context for this slot to a clean state and clear the
+  // debug in-use marker.
+  render_context_pool_->Release(context.GetFrameSlot());
+  render_context_.reset();
 
   co_return;
 }
@@ -241,54 +374,12 @@ auto Renderer::OnCommandRecord(FrameContext& context) -> co::Co<>
 // Removed legacy draw-metadata helpers; lifecycle now handled by
 // DrawMetadataEmitter via ScenePrepState
 
-auto Renderer::MaybeUpdateSceneConstants(const FrameContext& frame_context)
-  -> void
-{
-  // Ensure renderer-managed fields are refreshed for this frame prior to
-  // snapshot/upload. This also bumps the version when they change.
-  const auto graphics_ptr = gfx_weak_.lock();
-  if (!graphics_ptr) {
-    LOG_F(ERROR, "Graphics expired while updating scene constants");
-    return;
-  }
-
-  // Set frame information from FrameContext
-  scene_const_cpu_.SetFrameSlot(
-    frame_context.GetFrameSlot(), SceneConstants::kRenderer);
-  scene_const_cpu_.SetFrameSequenceNumber(
-    frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
-
-  // Use per-frame-slot buffer to avoid race conditions with in-flight frames
-  const auto slot = frame_context.GetFrameSlot();
-  if (scene_const_buffers_.size() <= slot) {
-    scene_const_buffers_.resize(slot + 1);
-  }
-  auto& buffer = scene_const_buffers_[slot];
-
-  auto& graphics = *graphics_ptr;
-  constexpr auto size_bytes = sizeof(SceneConstants::GpuData);
-  if (!buffer) {
-    const BufferDesc desc {
-      .size_bytes = size_bytes,
-      .usage = BufferUsage::kConstant,
-      .memory = BufferMemory::kUpload,
-      .debug_name = std::string("SceneConstants_Slot") + std::to_string(slot),
-    };
-    buffer = graphics.CreateBuffer(desc);
-    buffer->SetName(desc.debug_name);
-    graphics.GetResourceRegistry().Register(buffer);
-  }
-  const auto& snapshot = scene_const_cpu_.GetSnapshot();
-  void* mapped = buffer->Map();
-  std::memcpy(mapped, &snapshot, size_bytes);
-  buffer->UnMap();
-}
-
 auto Renderer::WireContext(RenderContext& render_context,
   const std::shared_ptr<graphics::Buffer>& scene_consts) -> void
 {
+  DLOG_SCOPE_FUNCTION(3);
+
   render_context.scene_constants = scene_consts;
-  // Material constants are now accessed through bindless table, not direct CBV
   const auto graphics_ptr = gfx_weak_.lock();
   if (!graphics_ptr) {
     throw std::runtime_error("Graphics expired in Renderer::WireContext");
@@ -296,103 +387,320 @@ auto Renderer::WireContext(RenderContext& render_context,
   render_context.SetRenderer(this, graphics_ptr.get());
 }
 
-// Removed obsolete Set/GetDrawMetadata accessors
-
-auto Renderer::BuildFrame(
-  const ResolvedView& view, const FrameContext& frame_context) -> std::size_t
+auto Renderer::AcquireRecorderForView(ViewId view_id, Graphics& gfx)
+  -> std::shared_ptr<oxygen::graphics::CommandRecorder>
 {
+  DLOG_SCOPE_FUNCTION(3);
+
+  const auto queue_key
+    = gfx.QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
+  return gfx.AcquireCommandRecorder(
+    queue_key, std::string("View_") + std::to_string(view_id.get()));
+}
+
+auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
+  ViewId view_id, graphics::CommandRecorder& recorder,
+  RenderContext& render_context) -> bool
+{
+  DLOG_SCOPE_FUNCTION(3);
+
+  const auto& view_ctx = frame_context.GetViewContext(view_id);
+
+  if (!view_ctx.output) {
+    LOG_F(WARNING, "View {} has no output", view_id.get());
+    return false;
+  }
+
+  const auto& fb_desc = view_ctx.output->GetDescriptor();
+  for (const auto& attachment : fb_desc.color_attachments) {
+    if (attachment.texture) {
+      recorder.BeginTrackingResourceState(
+        *attachment.texture, graphics::ResourceStates::kPresent, true);
+      recorder.RequireResourceState(
+        *attachment.texture, graphics::ResourceStates::kRenderTarget);
+    }
+  }
+  if (fb_desc.depth_attachment.texture) {
+    recorder.BeginTrackingResourceState(*fb_desc.depth_attachment.texture,
+      graphics::ResourceStates::kDepthWrite, true);
+    recorder.FlushBarriers();
+  }
+
+  recorder.BindFrameBuffer(*view_ctx.output);
+  render_context.framebuffer = view_ctx.output;
+  return true;
+}
+
+auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
+  const FrameContext& frame_context, RenderContext& render_context) -> bool
+{
+  DLOG_SCOPE_FUNCTION(3);
+
+  auto resolved_it = resolved_views_.find(view_id);
+  auto prepared_it = prepared_frames_.find(view_id);
+
+  if (resolved_it == resolved_views_.end()
+    || prepared_it == prepared_frames_.end()) {
+    LOG_F(ERROR, "No cached data for view {} (resolved={}, prepared={})",
+      view_id.get(), resolved_it != resolved_views_.end(),
+      prepared_it != prepared_frames_.end());
+    return false;
+  }
+
+  // Create a per-view scene constants snapshot based on the last frame-level
+  // scene_const_cpu_ and per-view SRV indices captured during RunScenePrep.
+  SceneConstants view_scene_consts = scene_const_cpu_;
+  const auto& prepared = prepared_it->second;
+  DLOG_F(3, "   worlds: {}", prepared.bindless_worlds_slot);
+  DLOG_F(3, "  normals: {}", prepared.bindless_normals_slot);
+  DLOG_F(3, "materials: {}", prepared.bindless_materials_slot);
+  DLOG_F(3, " metadata: {}", prepared.bindless_draw_metadata_slot);
+
+  view_scene_consts.SetBindlessWorldsSlot(
+    BindlessWorldsSlot(prepared.bindless_worlds_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessNormalMatricesSlot(
+    BindlessNormalsSlot(prepared.bindless_normals_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessMaterialConstantsSlot(
+    BindlessMaterialConstantsSlot(prepared.bindless_materials_slot),
+    SceneConstants::kRenderer);
+  view_scene_consts.SetBindlessDrawMetadataSlot(
+    BindlessDrawMetadataSlot(prepared.bindless_draw_metadata_slot),
+    SceneConstants::kRenderer);
+
+  const auto& proj_matrix = resolved_it->second.ProjectionMatrix();
+  view_scene_consts.SetViewMatrix(resolved_it->second.ViewMatrix())
+    .SetProjectionMatrix(proj_matrix)
+    .SetCameraPosition(resolved_it->second.CameraPosition())
+    .SetFrameSlot(frame_context.GetFrameSlot(), SceneConstants::kRenderer)
+    .SetFrameSequenceNumber(
+      frame_context.GetFrameSequenceNumber(), SceneConstants::kRenderer);
+
+  // Write constants into per-view mapped buffer
+  const auto& snapshot = view_scene_consts.GetSnapshot();
+  auto buffer_info = scene_const_manager_->WriteSceneConstants(
+    view_id, &snapshot, sizeof(SceneConstants::GpuData));
+  if (!buffer_info.buffer) {
+    LOG_F(ERROR, "Failed to write scene constants for view {}", view_id);
+    return false;
+  }
+
+  WireContext(render_context, buffer_info.buffer);
+
+  // Populate render_context.current_view
+  render_context.current_view.view_id = view_id;
+  render_context.current_view.resolved_view.reset(&resolved_it->second);
+  render_context.current_view.prepared_frame.reset(&prepared_it->second);
+
+  return true;
+}
+
+auto Renderer::ExecuteRenderGraphForView(ViewId view_id,
+  const RenderGraphFactory& factory, RenderContext& render_context,
+  graphics::CommandRecorder& recorder) -> co::Co<bool>
+{
+  DLOG_SCOPE_FUNCTION(3);
+
+  try {
+    co_await factory(view_id, render_context, recorder);
+    co_return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "RenderGraph execution for view {} failed: {}", view_id,
+      ex.what());
+    co_return false;
+  } catch (...) {
+    LOG_F(ERROR, "RenderGraph execution for view {} failed: unknown error",
+      view_id.get());
+    co_return false;
+  }
+}
+
+auto Renderer::HandlePresentationForView(
+  const FrameContext& frame_context, ViewId view_id) -> void
+{
+  const auto& view_ctx = frame_context.GetViewContext(view_id);
+  if (view_ctx.metadata.present_policy != PresentPolicy::DirectToSurface) {
+    return;
+  }
+
+  if (!std::holds_alternative<std::reference_wrapper<graphics::Surface>>(
+        view_ctx.surface)) {
+    return;
+  }
+
+  auto& surface
+    = std::get<std::reference_wrapper<graphics::Surface>>(view_ctx.surface)
+        .get();
+
+  const auto surfaces = frame_context.GetSurfaces();
+  for (size_t i = 0; i < surfaces.size(); ++i) {
+    if (surfaces[i].get() == &surface) {
+      // Mark presentable
+      const_cast<FrameContext&>(frame_context).SetSurfacePresentable(i, true);
+      DLOG_F(3, "Surface {} will present view {}", i, view_id);
+      break;
+    }
+  }
+}
+
+auto Renderer::FinalizeViewState(ViewId view_id, bool success) -> void
+{
+  DLOG_SCOPE_FUNCTION(3);
+
+  view_ready_states_[view_id] = success;
+  if (success) {
+    DLOG_F(2, "view rendered successfully");
+  } else {
+    LOG_F(WARNING, "Failed to render view {}", view_id);
+  }
+}
+
+auto Renderer::RunScenePrep(ViewId view_id, const ResolvedView& view,
+  const FrameContext& frame_context, bool run_frame_phase) -> std::size_t
+{
+  DLOG_SCOPE_FUNCTION(3);
+
   auto scene_ptr = frame_context.GetScene();
-  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in BuildFrame");
+  CHECK_NOTNULL_F(scene_ptr, "FrameContext.scene is null in RunScenePrep");
   auto& scene = *scene_ptr;
+
+  // Get or create the prepared frame for this specific view
+  auto& prepared_frame = prepared_frames_[view_id];
 
   auto frame_seq = frame_context.GetFrameSequenceNumber();
 
-  // Two-stage ScenePrep: 1) Frame-phase (no view) to prepare shared
-  // resources and build the filtered node list; 2) View-phase (with view)
-  // to perform per-view culling and emit per-view draw metadata.
-  // Frame-phase: reset frame data so we start fresh for this frame.
-  scene_prep_->Collect(scene, std::nullopt, frame_seq, *scene_prep_state_, true);
-  scene_prep_->Finalize();
+  if (run_frame_phase) {
+    DLOG_SCOPE_F(3,
+      fmt::format("frame-phase for frame seq {}", nostd::to_string(frame_seq))
+        .c_str());
+    scene_prep_->Collect(
+      scene, std::nullopt, frame_seq, *scene_prep_state_, true);
+    scene_prep_->Finalize();
+  }
 
-  // View-phase: reset per-view transient data while reusing frame-phase
-  // collected items. This runs the visibility/extractors per view.
-  ::oxygen::observer_ptr<const ::oxygen::ResolvedView> view_obs(&view);
-  scene_prep_->Collect(scene,
-    std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(view_obs),
-    frame_seq, *scene_prep_state_, true);
-  scene_prep_->Finalize();
+  ::oxygen::observer_ptr<const ::oxygen::ResolvedView> view_ptr(&view);
+  DLOG_SCOPE_F(3,
+    fmt::format("view-phase for view {}", nostd::to_string(view_id)).c_str());
+  {
+    scene_prep_->Collect(scene,
+      std::optional<::oxygen::observer_ptr<const ::oxygen::ResolvedView>>(
+        view_ptr),
+      frame_seq, *scene_prep_state_,
+      run_frame_phase); // Only reset on first view
+    scene_prep_->Finalize();
 
-  PublishPreparedFrameSpans();
+    // CRITICAL: Capture bindless SRV indices IMMEDIATELY after Finalize
+    // These indices are valid only for THIS view's finalization and will be
+    // overwritten when the next view calls Finalize. Store them in THIS view's
+    // prepared_frame so OnRender can use the correct indices.
+    if (const auto transforms = scene_prep_state_->GetTransformUploader()) {
+      prepared_frame.bindless_worlds_slot
+        = transforms->GetWorldsSrvIndex().get();
+      DLOG_F(3, " captured worlds: {}", prepared_frame.bindless_worlds_slot);
+      prepared_frame.bindless_normals_slot
+        = transforms->GetNormalsSrvIndex().get();
+      DLOG_F(3, "captured normals: {}", prepared_frame.bindless_normals_slot);
+    }
+    if (const auto materials = scene_prep_state_->GetMaterialBinder()) {
+      prepared_frame.bindless_materials_slot
+        = materials->GetMaterialsSrvIndex().get();
+    }
+    if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
+      prepared_frame.bindless_draw_metadata_slot
+        = emitter->GetDrawMetadataSrvIndex().get();
+    }
+  }
+
+  PublishPreparedFrameSpans(view_id, prepared_frame);
   UpdateSceneConstantsFromView(view);
 
-  const auto draw_count = CurrentDrawCount();
-  DLOG_F(2, "BuildFrame: finalized {} draws", draw_count);
+  const auto draw_count
+    = prepared_frame.draw_metadata_bytes.size() / sizeof(DrawMetadata);
+
+  DLOG_F(3, "draw count: {}", draw_count);
   return draw_count;
 }
 
-auto Renderer::PublishPreparedFrameSpans() -> void
+auto Renderer::PublishPreparedFrameSpans(
+  ViewId view_id, PreparedSceneFrame& prepared_frame) -> void
 {
+  DLOG_SCOPE_FUNCTION(3);
+
+  // Ensure per-view backing storage exists
+  auto& storage = per_view_storage_[view_id];
+
   const auto transforms = scene_prep_state_->GetTransformUploader();
   const auto world_span = transforms->GetWorldMatrices();
-  prepared_frame_.world_matrices = std::span<const float>(
-    reinterpret_cast<const float*>(world_span.data()), world_span.size() * 16u);
+
+  // Copy matrix floats into per-view storage so spans stay valid
+  storage.world_matrix_storage.assign(
+    reinterpret_cast<const float*>(world_span.data()),
+    reinterpret_cast<const float*>(world_span.data())
+      + world_span.size() * 16u);
+
+  prepared_frame.world_matrices = std::span<const float>(
+    storage.world_matrix_storage.data(), storage.world_matrix_storage.size());
 
   const auto normal_span = transforms->GetNormalMatrices();
-  prepared_frame_.normal_matrices
-    = std::span<const float>(reinterpret_cast<const float*>(normal_span.data()),
-      normal_span.size() * 16u);
+  storage.normal_matrix_storage.assign(
+    reinterpret_cast<const float*>(normal_span.data()),
+    reinterpret_cast<const float*>(normal_span.data())
+      + normal_span.size() * 16u);
+
+  prepared_frame.normal_matrices = std::span<const float>(
+    storage.normal_matrix_storage.data(), storage.normal_matrix_storage.size());
 
   // Publish draw metadata bytes and partitions from emitter accessors
   if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-    prepared_frame_.draw_metadata_bytes = emitter->GetDrawMetadataBytes();
+    const auto src_bytes = emitter->GetDrawMetadataBytes();
+    storage.draw_metadata_storage.assign(src_bytes.begin(), src_bytes.end());
+
+    prepared_frame.draw_metadata_bytes
+      = std::span<const std::byte>(storage.draw_metadata_storage.data(),
+        storage.draw_metadata_storage.size());
+
     using PR = oxygen::engine::PreparedSceneFrame::PartitionRange;
     const auto parts = emitter->GetPartitions();
-    prepared_frame_.partitions
-      = std::span<const PR>(parts.data(), parts.size());
+    storage.partition_storage.assign(parts.begin(), parts.end());
+
+    prepared_frame.partitions = std::span<const PR>(
+      storage.partition_storage.data(), storage.partition_storage.size());
+  } else {
+    // No emitter -> empty spans
+    prepared_frame.draw_metadata_bytes = {};
+    prepared_frame.partitions = {};
   }
 }
 
 auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
 {
   // Update scene constants from the provided view snapshot
-  ModifySceneConstants([&](SceneConstants& sc) {
-    sc.SetViewMatrix(view.ViewMatrix())
-      .SetProjectionMatrix(view.ProjectionMatrix())
-      .SetCameraPosition(view.CameraPosition());
-  });
-}
-
-auto Renderer::CurrentDrawCount() const noexcept -> std::size_t
-{
-  return prepared_frame_.draw_metadata_bytes.size() / sizeof(DrawMetadata);
-}
-
-auto Renderer::ModifySceneConstants(
-  const std::function<void(SceneConstants&)>& mutator) -> void
-{
-  mutator(scene_const_cpu_);
-}
-
-auto Renderer::GetSceneConstants() const -> const SceneConstants&
-{
-  return scene_const_cpu_;
+  scene_const_cpu_.SetViewMatrix(view.ViewMatrix())
+    .SetProjectionMatrix(view.ProjectionMatrix())
+    .SetCameraPosition(view.CameraPosition());
 }
 
 auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
+  DLOG_SCOPE_FUNCTION(2);
+
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context.GetFrameSlot();
+  auto frame_sequence = context.GetFrameSequenceNumber();
 
   // Initialize Upload Coordinator and its staging providers for the new frame
   // slot BEFORE any uploaders start allocating from them.
   inline_transfers_->OnFrameStart(tag, frame_slot);
   uploader_->OnFrameStart(tag, frame_slot);
-  // then uploaders
-  scene_prep_state_->GetTransformUploader()->OnFrameStart(tag, frame_slot);
+  // then uploaders and scene constants manager
+  scene_const_manager_->OnFrameStart(frame_slot);
+  scene_prep_state_->GetTransformUploader()->OnFrameStart(
+    tag, frame_sequence, frame_slot);
   scene_prep_state_->GetGeometryUploader()->OnFrameStart(tag, frame_slot);
   scene_prep_state_->GetMaterialBinder()->OnFrameStart(tag, frame_slot);
   if (auto emitter = scene_prep_state_->GetDrawMetadataEmitter()) {
-    emitter->OnFrameStart(tag, frame_slot);
+    emitter->OnFrameStart(tag, frame_sequence, frame_slot);
   }
 }
 
@@ -449,11 +757,13 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
 */
 auto Renderer::OnTransformPropagation(FrameContext& context) -> co::Co<>
 {
+  LOG_SCOPE_FUNCTION(2);
+
   // Acquire scene pointer (non-owning). If absent, log once per frame in debug.
   auto scene_ptr = context.GetScene();
   if (!scene_ptr) {
-    DLOG_F(
-      1, "TransformsModule: no active scene set in FrameContext (skipping)");
+    DLOG_F(WARNING,
+      "No active scene set in FrameContext; skipping transform propagation");
     co_return; // Nothing to update
   }
 

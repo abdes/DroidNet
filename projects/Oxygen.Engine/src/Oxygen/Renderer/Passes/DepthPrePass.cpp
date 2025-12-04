@@ -161,6 +161,11 @@ auto DepthPrePass::NeedRebuildPipelineState() const -> bool
     != GetDepthTexture().GetDescriptor().sample_count) {
     return true;
   }
+  // Rebuild if requested rasterizer fill-mode differs from last-built PSO
+  // Depth pre-pass must write filled triangles for correct depth buffer
+  // population; ignore any 'wireframe' hints for the depth pass.
+  // Depth pre-pass uses a fixed solid rasterizer configuration; do not
+  // trigger rebuilds based on fill-mode differences in user config.
   return false; // No need to rebuild
 }
 auto DepthPrePass::GetDepthTexture() const -> const Texture&
@@ -203,7 +208,7 @@ auto DepthPrePass::DoExecute(CommandRecorder& recorder) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  if (auto psf = Context().prepared_frame; psf && psf->IsValid()) {
+  if (auto psf = Context().current_view.prepared_frame; psf && psf->IsValid()) {
     DLOG_F(3,
       "DepthPrePass: PreparedSceneFrame matrices: world_floats={} "
       "normal_floats={}",
@@ -349,8 +354,9 @@ auto DepthPrePass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
 
-  constexpr RasterizerStateDesc raster_desc {
-    .fill_mode = FillMode::kSolid,
+  // Note: ignoring user-configured fill_mode for the depth pass
+  const RasterizerStateDesc raster_desc {
+    .fill_mode = oxygen::graphics::FillMode::kSolid,
     .cull_mode = CullMode::kBack,
     .front_counter_clockwise = true, // Default winding order for front faces
 

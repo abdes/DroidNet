@@ -98,14 +98,14 @@ DrawMetadataEmitter::~DrawMetadataEmitter()
   LOG_F(INFO, "peak partitions   : {}", peak_partitions_);
 }
 
-auto DrawMetadataEmitter::OnFrameStart(
-  renderer::RendererTag, oxygen::frame::Slot slot) -> void
+auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag,
+  oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void
 {
   // Reset per-frame CPU state; keep GPU resources
   Cpu().clear();
   keys_.clear();
   partitions_.clear();
-  draw_metadata_buffer_.OnFrameStart(slot);
+  draw_metadata_buffer_.OnFrameStart(sequence, slot);
   draw_metadata_srv_index_ = kInvalidShaderVisibleIndex;
   ++frames_started_count_;
 }
@@ -297,20 +297,21 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   }
 
   const auto count = static_cast<std::uint32_t>(Cpu().size());
-  if (auto result = draw_metadata_buffer_.Allocate(count); !result) {
+  auto result = draw_metadata_buffer_.Allocate(count);
+  if (!result) {
     LOG_F(ERROR, "DrawMetadataEmitter: transient allocation failed: {}",
       result.error().message());
     return;
   }
-
-  auto* ptr = draw_metadata_buffer_.GetMappedPtr();
+  const auto alloc = *result;
+  auto* ptr = alloc.mapped_ptr;
   if (!ptr) {
     LOG_F(ERROR, "DrawMetadataEmitter: mapped pointer is null after allocate");
     return;
   }
 
   DLOG_F(1, "DrawMetadataEmitter writing {} draw metadata to {}", count,
-    fmt::ptr(draw_metadata_buffer_.GetMappedPtr()));
+    fmt::ptr(ptr));
 
   std::memcpy(
     ptr, Cpu().data(), Cpu().size() * sizeof(oxygen::engine::DrawMetadata));
@@ -318,7 +319,7 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
   // Store the SRV index for the most recent allocation. This may change per
   // view when the emitter is used in per-view mode; callers should query the
   // SRV index after Finalize/EnsureFrameResources.
-  draw_metadata_srv_index_ = draw_metadata_buffer_.GetBinding().srv;
+  draw_metadata_srv_index_ = alloc.srv;
 }
 
 auto DrawMetadataEmitter::GetDrawMetadataSrvIndex() const -> ShaderVisibleIndex

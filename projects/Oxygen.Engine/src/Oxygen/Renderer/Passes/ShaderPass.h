@@ -38,6 +38,8 @@ struct ShaderPassConfig {
 
   //! Debug name for diagnostics.
   std::string debug_name { "ShaderPass" };
+  //! Rasterization fill mode for this pass.
+  graphics::FillMode fill_mode { graphics::FillMode::kSolid };
 };
 
 //! Shading pass: draws geometry and applies lighting in a Forward+ or forward

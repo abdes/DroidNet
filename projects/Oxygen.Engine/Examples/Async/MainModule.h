@@ -92,8 +92,8 @@ public:
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnTransformPropagation(engine::FrameContext& context)
     -> co::Co<> override;
-  auto OnFrameGraph(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCommandRecord(engine::FrameContext& context) -> co::Co<> override;
+  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
+  auto OnRender(engine::FrameContext& context) -> co::Co<> override;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
 
@@ -123,9 +123,6 @@ private:
   auto TrackFrameAction(const std::string& action) -> void;
   auto StartFrameTracking() -> void;
   auto EndFrameTracking() -> void;
-
-  //! Command recording (execute render graph).
-  auto ExecuteRenderCommands(engine::FrameContext& context) -> co::Co<>;
 
   //! Dependencies (aggregated app context, non-owning).
   const oxygen::examples::common::AsyncEngineApp& app_;

@@ -166,7 +166,9 @@ auto TransparentPass::CreatePipelineStateDesc() -> GraphicsPipelineDesc
   using graphics::PrimitiveType;
   using graphics::RasterizerStateDesc;
 
-  constexpr RasterizerStateDesc raster_desc { .fill_mode = FillMode::kSolid,
+  const auto requested_fill
+    = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
+  const RasterizerStateDesc raster_desc { .fill_mode = requested_fill,
     .cull_mode = CullMode::kNone,
     .front_counter_clockwise = true,
     .multisample_enable = false };
@@ -241,6 +243,12 @@ auto TransparentPass::NeedRebuildPipelineState() const -> bool
       != depth->GetDescriptor().format) {
       return true;
     }
+  }
+  // Rebuild pipeline state if rasterizer fill mode changed
+  const auto requested_fill
+    = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
+  if (last->RasterizerState().fill_mode != requested_fill) {
+    return true;
   }
   return false;
 }

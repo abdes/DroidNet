@@ -54,26 +54,27 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act: first allocation
   auto alloc1_result = transient_buffer.Allocate(10);
 
-  // Assert: first allocation succeeded
+  // Assert: first allocation succeeded and provides a valid allocation
   ASSERT_TRUE(alloc1_result.has_value())
     << "First Allocate failed: " << alloc1_result.error().message();
-  auto srv_initial = transient_buffer.GetBinding().srv;
-  EXPECT_NE(srv_initial, kInvalidShaderVisibleIndex);
+  const auto alloc1 = *alloc1_result;
+  EXPECT_NE(alloc1.srv, kInvalidShaderVisibleIndex);
 
   // Act: reallocate
   auto alloc2_result = transient_buffer.Allocate(20);
 
-  // Assert: reallocation succeeded and descriptor changed
+  // Assert: reallocation succeeded and provides a valid allocation
   ASSERT_TRUE(alloc2_result.has_value())
     << "Reallocate failed: " << alloc2_result.error().message();
-  auto srv_realloc = transient_buffer.GetBinding().srv;
-  EXPECT_NE(srv_realloc, kInvalidShaderVisibleIndex);
-  EXPECT_NE(srv_realloc, srv_initial);
-
-  EXPECT_NE(transient_buffer.GetMappedPtr(), nullptr);
+  const auto alloc2 = *alloc2_result;
+  EXPECT_NE(alloc2.srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(transient_buffer.GetBinding().srv, alloc2.srv);
+  EXPECT_NE(alloc2.mapped_ptr, nullptr);
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
@@ -81,6 +82,8 @@ NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act
   auto alloc_result_zero = transient_buffer.Allocate(0);
 
@@ -131,6 +134,8 @@ NOLINT_TEST_F(
 
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act
   auto alloc_result = transient_buffer.Allocate(10);
 
@@ -151,6 +156,8 @@ NOLINT_TEST_F(
   TransientStructuredBuffer transient_buffer(
     GfxPtr(), Staging(), 8); // 8-byte stride
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act
   auto alloc_result = transient_buffer.Allocate(4);
 
@@ -183,6 +190,8 @@ NOLINT_TEST_F(
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act: allocate then reset twice
   ASSERT_TRUE(transient_buffer.Allocate(2).has_value());
   transient_buffer.Reset();
@@ -202,6 +211,8 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
+  // Activate frame slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
   // Act: initial allocation
   auto r1 = transient_buffer.Allocate(4);
   ASSERT_TRUE(r1.has_value())
@@ -211,6 +222,8 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
 
   // Act: reset then allocate again
   transient_buffer.Reset();
+  // Need to re-activate slot for new frame
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
   auto r2 = transient_buffer.Allocate(4);
 
   // Assert: second allocation succeeds and provides valid mapping
@@ -221,6 +234,32 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   // It's perfectly valid for the descriptor allocator to reuse indices, so we
   // only assert that the binding is valid and mapped pointer is present.
   EXPECT_NE(transient_buffer.GetMappedPtr(), nullptr);
+}
+
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, MultipleAllocationsPersistUntilFrameReset)
+{
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 16);
+
+  // Activate slot for this frame
+  const auto seq = frame::SequenceNumber { 1 };
+  transient_buffer.OnFrameStart(seq, frame::Slot { 0 });
+
+  auto a1 = transient_buffer.Allocate(2);
+  ASSERT_TRUE(a1.has_value());
+  auto a2 = transient_buffer.Allocate(3);
+  ASSERT_TRUE(a2.has_value());
+
+  // Both allocations were created in this frame and should report valid
+  EXPECT_TRUE(a1->IsValid(seq));
+  EXPECT_TRUE(a2->IsValid(seq));
+
+  // After moving to next frame the slot is reset, and new allocations should
+  // not match the old sequence
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+
+  EXPECT_FALSE(a1->IsValid(frame::SequenceNumber { 2 }));
+  EXPECT_FALSE(a2->IsValid(frame::SequenceNumber { 2 }));
 }
 
 } // namespace oxygen::engine::upload

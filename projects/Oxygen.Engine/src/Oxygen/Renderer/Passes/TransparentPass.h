@@ -39,6 +39,8 @@ public:
     std::shared_ptr<graphics::Texture> color_texture; //!< Target color RT
     std::shared_ptr<graphics::Texture> depth_texture; //!< Shared depth buffer
     std::string debug_name { "TransparentPass" };
+    //! Rasterization fill mode for this pass (default: solid)
+    graphics::FillMode fill_mode { graphics::FillMode::kSolid };
   };
 
   OXGN_RNDR_API explicit TransparentPass(std::shared_ptr<Config> config);

@@ -36,6 +36,9 @@ namespace oxygen::engine {
  */
 struct PreparedSceneFrame {
   // Spans over finalized arrays (empty initially until finalization wired)
+  // Non-owning view of draw metadata bytes. These spans point into renderer
+  // owned backing storage (per-view) which ensures stability for the lifetime
+  // of the prepared frame.
   std::span<const std::byte> draw_metadata_bytes; // temporary generic span
   std::span<const float> world_matrices; // 16 * float per matrix
   std::span<const float> normal_matrices; // 16 * float per matrix
@@ -47,6 +50,13 @@ struct PreparedSceneFrame {
     uint32_t end = 0; // exclusive end draw index
   };
   std::span<const PartitionRange> partitions; // published ranges (may be empty)
+
+  // Bindless SRV indices captured at ScenePrep finalization time
+  // These must be captured immediately after Finalize to ensure consistency
+  uint32_t bindless_worlds_slot = 0xFFFFFFFF;
+  uint32_t bindless_normals_slot = 0xFFFFFFFF;
+  uint32_t bindless_materials_slot = 0xFFFFFFFF;
+  uint32_t bindless_draw_metadata_slot = 0xFFFFFFFF;
 
   [[nodiscard]] auto IsValid() const noexcept -> bool
   {

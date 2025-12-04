@@ -28,9 +28,6 @@ ExampleModuleBase::ExampleModuleBase(
     if (!app_.headless) {
       auto& wnd = AddComponent<AppWindow>(app_);
       app_window_ = oxygen::observer_ptr<AppWindow>(&wnd);
-
-      auto& rg = AddComponent<RenderGraph>(app_);
-      render_graph_ = oxygen::observer_ptr<RenderGraph>(&rg);
     }
   } catch (const std::exception& ex) {
     LOG_F(WARNING, "ExampleModuleBase ctor - failed to add components: {}",
@@ -136,9 +133,7 @@ auto ExampleModuleBase::OnFrameStart(engine::FrameContext& context) -> void
 
     if (pending_resize) {
       try {
-        if (render_graph_) {
-          render_graph_->ClearBackbufferReferences();
-        }
+        ClearBackbufferReferences();
       } catch (const std::exception& ex) {
         LOG_F(WARNING,
           "ExampleModuleBase::OnFrameStart - clearing refs before resize "

@@ -135,10 +135,13 @@ public:
   {
     co_return;
   }
-  virtual auto OnCommandRecord(FrameContext& /*context*/) -> co::Co<>
-  {
-    co_return;
-  }
+  // Pre-render: prepare frame-level and view-level render data (no command
+  // recording). Runs in the new `kPreRender` phase.
+  virtual auto OnPreRender(FrameContext& /*context*/) -> co::Co<> { co_return; }
+
+  // Render: record command lists and perform per-view render work. Runs in
+  // the new `kRender` phase.
+  virtual auto OnRender(FrameContext& /*context*/) -> co::Co<> { co_return; }
 
   virtual auto OnCompositing(FrameContext& /*context*/) -> co::Co<>
   {

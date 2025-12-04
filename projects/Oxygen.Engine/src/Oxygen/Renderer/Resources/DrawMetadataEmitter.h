@@ -86,8 +86,8 @@ public:
   OXGN_RNDR_API ~DrawMetadataEmitter();
 
   //! Start a new frame - must be called once per frame before any operations
-  OXGN_RNDR_API auto OnFrameStart(
-    renderer::RendererTag, oxygen::frame::Slot slot) -> void;
+  OXGN_RNDR_API auto OnFrameStart(renderer::RendererTag,
+    oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void;
 
   //! Emits one DrawMetadata from a retained RenderItemData.
   OXGN_RNDR_API auto EmitDrawMetadata(

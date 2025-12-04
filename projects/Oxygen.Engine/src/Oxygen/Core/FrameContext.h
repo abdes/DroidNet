@@ -189,9 +189,6 @@ using SurfaceIdTag = struct SurfaceIdTag;
 using SurfaceId = oxygen::NamedType<uint64_t, SurfaceIdTag, oxygen::Comparable,
   oxygen::Hashable, oxygen::Printable>;
 
-// Unique identifier for a view within a frame
-using ViewId = oxygen::ViewId;
-
 // Presentation policy for a view
 enum class PresentPolicy : uint8_t {
   DirectToSurface, // Present directly to the surface (default)
@@ -204,11 +201,11 @@ struct ViewMetadata {
   std::string purpose; // e.g. "primary", "shadow", "reflection"
   PresentPolicy present_policy = PresentPolicy::DirectToSurface;
   std::vector<SurfaceId> surfaces; // TODO: logical target identifiers
-  bool hidden = false;
 };
 
 // Complete context for a view, including its output
 struct ViewContext {
+  ViewId id {}; // Unique identifier assigned by FrameContext::AddView
   View view;
   ViewMetadata metadata;
 
@@ -692,8 +689,18 @@ public:
       views_, [](const auto& pair) { return std::cref(pair.second); });
   }
 
-  // Add individual view with phase validation
-  OXGN_CORE_API auto AddView(ViewContext view) noexcept -> ViewId;
+  // Register a new view and allocate a stable ViewId
+  // Returns the ViewId that should be used for subsequent updates/removal
+  // Phase: Must be called before kSnapshot
+  OXGN_CORE_API auto RegisterView(ViewContext view) noexcept -> ViewId;
+
+  // Update an existing view's data
+  // Phase: Must be called before kSnapshot
+  OXGN_CORE_API auto UpdateView(ViewId id, ViewContext view) noexcept -> void;
+
+  // Remove a view from the frame context
+  // Phase: Must be called before kSnapshot
+  OXGN_CORE_API auto RemoveView(ViewId id) noexcept -> void;
 
   // Set the output framebuffer for a view (Renderer/Compositor only)
   OXGN_CORE_API auto SetViewOutput(
@@ -702,7 +709,7 @@ public:
   // Get the full context for a view
   OXGN_CORE_API auto GetViewContext(ViewId id) const -> const ViewContext&;
 
-  // Clear views with phase validation
+  // Clear all views with phase validation (Engine only)
   OXGN_CORE_API auto ClearViews(EngineTag) noexcept -> void;
 
   OXGN_CORE_API auto SetCurrentPhase(core::PhaseId p, EngineTag) noexcept
