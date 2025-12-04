@@ -242,8 +242,9 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
     LOG_SCOPE_F(1, fmt::format("Frame {}", frame_number_.get()).c_str());
 
-    // Create module context for this frame
-    FrameContext context;
+    // Use persistent frame context (views persist across frames with stable
+    // IDs)
+    auto& context = frame_context_;
 
     // Fence polling, epoch advance, deferred destruction retirement
     co_await PhaseFrameStart(context);
@@ -275,24 +276,12 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // UI update phase: process UI systems, generate rendering artifacts
     co_await PhaseGuiUpdate(context);
 
+    // Frame multi-view rendering
     {
-      // SetRenderGraphBuilder(context);
-
-      // Frame graph/render pass dependency planning, resource transitions,
-      // optimization, bindless indices collection for the frame
-      co_await PhaseFrameGraph(context);
-
-      // Unified command recording and submission phase (parallel recording with
-      // ordered submission)
-      co_await PhaseCommandRecord(context);
-
-      // Compositing phase (post-rendering effects and composition)
+      co_await PhasePreRender(context);
+      co_await PhaseRender(context);
       co_await PhaseCompositing(context);
-
-      // ClearRenderGraphBuilder(context);
     }
-
-    // TODO: Ensure PhaseRecord comes out with all pending command lists flushed
 
     // Synchronous sequential presentation
     PhasePresent(context);
@@ -370,7 +359,8 @@ auto AsyncEngine::PhaseFrameStart(FrameContext& context) -> co::Co<>
 
   // TODO: setup all the properties of context that need to be set
 
-  context.ClearViews(tag); // FIXME: for now we clear views every frame
+  // NOTE: Views are now persistent with stable IDs across frames
+  // Modules register views once (RegisterView) and update them (UpdateView)
   context.ClearPresentableFlags(tag);
   context.SetFrameSequenceNumber(frame_number_, tag);
   context.SetFrameSlot(frame_slot_, tag);
@@ -639,36 +629,32 @@ auto AsyncEngine::PhaseGuiUpdate(FrameContext& context) -> co::Co<>
   co_await module_manager_->ExecutePhase(PhaseId::kGuiUpdate, context);
 }
 
+// Pre-render phase: perform renderer and module preparation work (no
+// command recording).
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseFrameGraph(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhasePreRender(FrameContext& context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kFrameGraph, tag);
+  context.SetCurrentPhase(PhaseId::kPreRender, tag);
 
-  LOG_F(2, "[F{}][A] PhaseFrameGraph", frame_number_);
+  LOG_F(2, "[F{}][A] PhasePreRender - prepare rendering data", frame_number_);
 
-  // Engine core sets the current phase
-  context.SetCurrentPhase(PhaseId::kFrameGraph, tag);
-
-  // Execute module frame graph work - modules will use
-  // context.GetRenderGraphBuilder()
-  co_await module_manager_->ExecutePhase(PhaseId::kFrameGraph, context);
+  co_await module_manager_->ExecutePhase(PhaseId::kPreRender, context);
 }
 
+// Render phase: modules record commands and perform per-view rendering.
 // ReSharper disable once CppMemberFunctionMayBeConst
-auto AsyncEngine::PhaseCommandRecord(FrameContext& context) -> co::Co<>
+auto AsyncEngine::PhaseRender(FrameContext& context) -> co::Co<>
 {
   const auto tag = internal::EngineTagFactory::Get();
-  context.SetCurrentPhase(PhaseId::kCommandRecord, tag);
+  context.SetCurrentPhase(PhaseId::kRender, tag);
 
-  LOG_F(2,
-    "[F{}][A] PhaseCommandRecord - {} surfaces (unified record+submit phase)",
+  LOG_F(2, "[F{}][A] PhaseRender - {} surfaces (record+submit phase)",
     frame_number_, context.GetSurfaces().size());
 
-  // Execute module command recording first
-  co_await module_manager_->ExecutePhase(PhaseId::kCommandRecord, context);
+  co_await module_manager_->ExecutePhase(PhaseId::kRender, context);
 
-  LOG_F(2, "[F{}][A] PhaseCommandRecord complete - modules recorded commands",
+  LOG_F(2, "[F{}][A] PhaseRender complete - modules recorded commands",
     frame_number_);
 }
 

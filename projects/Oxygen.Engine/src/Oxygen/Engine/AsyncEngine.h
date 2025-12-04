@@ -169,10 +169,10 @@ private:
   auto PhaseGuiUpdate(engine::FrameContext& context)
     -> co::Co<>; // async UI processing
 
-  auto PhaseFrameGraph(engine::FrameContext& context)
+  auto PhasePreRender(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
 
-  auto PhaseCommandRecord(engine::FrameContext& context)
+  auto PhaseRender(engine::FrameContext& context)
     -> co::Co<>; // async (simulated work)
 
   auto PhaseCompositing(engine::FrameContext& context)
@@ -224,6 +224,8 @@ private:
   frame::Slot frame_slot_ { 0 };
 
   engine::FrameSnapshot snapshot_ {};
+  engine::FrameContext
+    frame_context_; // Persistent across frames for stable view IDs
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;

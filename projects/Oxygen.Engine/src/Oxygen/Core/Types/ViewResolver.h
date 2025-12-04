@@ -11,7 +11,12 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 
 namespace oxygen {
+namespace engine {
+  struct ViewContext;
+} // namespace engine
 
-using ViewResolver = std::function<ResolvedView(const ViewId&)>;
+// Resolver now accepts a reference to a `ViewContext` so callers (renderer)
+// can work directly with the authoritative view data from `FrameContext`.
+using ViewResolver = std::function<ResolvedView(const engine::ViewContext&)>;
 
 } // namespace oxygen

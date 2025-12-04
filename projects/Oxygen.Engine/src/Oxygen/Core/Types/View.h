@@ -18,6 +18,9 @@ namespace oxygen {
 using ViewIdTag = struct ViewIdTag;
 using ViewId = NamedType<uint64_t, ViewIdTag, Comparable, Hashable, Printable>;
 
+//! Convert a VersionedBindlessHandle to a human-readable string.
+OXGN_CORE_NDAPI auto to_string(const ViewId& v) -> std::string;
+
 //! Lightweight view configuration (no matrices).
 /*!
  This struct holds per-view configuration: viewport, scissor rectangle,

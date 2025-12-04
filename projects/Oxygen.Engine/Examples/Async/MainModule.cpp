@@ -72,6 +72,7 @@ using oxygen::engine::RenderItem;
 using oxygen::graphics::Buffer;
 using oxygen::graphics::Framebuffer;
 using oxygen::scene::DistancePolicy;
+using oxygen::scene::PerspectiveCamera;
 
 namespace {
 constexpr std::uint32_t kWindowWidth = 1600;
@@ -477,8 +478,8 @@ auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
   using namespace core;
   return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-    PhaseId::kTransformPropagation, PhaseId::kGuiUpdate, PhaseId::kFrameGraph,
-    PhaseId::kCommandRecord, PhaseId::kFrameEnd>();
+    PhaseId::kTransformPropagation, PhaseId::kGuiUpdate, PhaseId::kPreRender,
+    PhaseId::kRender, PhaseId::kCompositing, PhaseId::kFrameEnd>();
 }
 
 auto MainModule::BuildDefaultWindowProperties() const
@@ -791,14 +792,51 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   EnsureMainCamera(
     static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
-  // Add view to FrameContext with metadata
-  view_id_ = context.AddView(engine::ViewContext {
-    .metadata = engine::ViewMetadata {
+  // Add view to FrameContext with complete configuration
+  // Views must be registered before kSnapshot phase
+  ViewPort viewport;
+  viewport.top_left_x = 0.0f;
+  viewport.top_left_y = 0.0f;
+  viewport.width = static_cast<float>(surface->Width());
+  viewport.height = static_cast<float>(surface->Height());
+  viewport.min_depth = 0.0f;
+  viewport.max_depth = 1.0f;
+
+  Scissors scissors;
+  scissors.left = 0;
+  scissors.top = 0;
+  scissors.right = static_cast<int32_t>(surface->Width());
+  scissors.bottom = static_cast<int32_t>(surface->Height());
+
+  View view;
+  view.viewport = viewport;
+  view.scissor = scissors;
+
+  engine::ViewContext view_ctx {
+    .view = view,
+    .metadata = {
       .name = "MainView",
-      .purpose = "AsyncDemo_MainView",
+      .purpose = "primary",
+      .present_policy = engine::PresentPolicy::DirectToSurface,
     },
     .surface = std::ref(*surface),
-  });
+  };
+
+  // Get framebuffer for this view if available
+  const auto& framebuffers = app_window_->GetFramebuffers();
+  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
+  if (!framebuffers.empty() && backbuffer_index < framebuffers.size()) {
+    view_ctx.output = framebuffers.at(backbuffer_index);
+  }
+
+  // Register view on first frame, update on subsequent frames
+  if (view_id_.get() == 0) {
+    // First frame: register new view and get stable ViewId
+    view_id_ = context.RegisterView(std::move(view_ctx));
+  } else {
+    // Subsequent frames: update existing view
+    context.UpdateView(view_id_, std::move(view_ctx));
+  }
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -886,12 +924,12 @@ auto MainModule::OnTransformPropagation(engine::FrameContext& context)
   co_return;
 }
 
-auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnFrameGraph");
-  TrackPhaseStart("Frame Graph");
+  LOG_SCOPE_F(3, "MainModule::OnPreRender");
+  TrackPhaseStart("PreRender");
   current_frame_tracker_.frame_graph_setup = true;
-  TrackFrameAction("Frame graph setup started");
+  TrackFrameAction("Pre-render setup started");
 
   if (!app_window_) {
     LOG_F(3, "Window or Surface is no longer valid");
@@ -928,6 +966,50 @@ auto MainModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<>
     }
   }
 
+  // Register view resolver and render graph only once (ViewId is now stable)
+  static bool registered = false;
+  if (!registered) {
+    // Register view resolver using SceneCameraViewResolver
+    // ViewResolver signature expects ViewContext, but SceneCameraViewResolver
+    // expects ViewId, so we wrap it to extract the id from the context
+    app_.renderer->RegisterViewResolver(
+      [this](const engine::ViewContext& vc) -> ResolvedView {
+        renderer::SceneCameraViewResolver resolver(
+          [this](const ViewId& /*id*/) { return main_camera_; });
+        return resolver(vc.id);
+      });
+
+    // Register render graph factory once with stable view_id
+    // ViewId remains stable across frames thanks to name-based identity
+    app_.renderer->RegisterRenderGraph(view_id_,
+      [this](ViewId id, const engine::RenderContext& rc,
+        graphics::CommandRecorder& rec) -> co::Co<void> {
+        // Wire up framebuffer attachments to render passes before execution
+        // The RenderContext contains the framebuffer set by the Renderer
+        if (render_graph_ && rc.framebuffer) {
+          render_graph_->PrepareForRenderFrame(rc.framebuffer);
+        }
+
+        // Run main render passes
+        co_await render_graph_->RunPasses(rc, rec);
+
+        // ImGui pass
+        auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+        if (imgui_module_ref) {
+          auto& imgui_module = imgui_module_ref->get();
+          auto imgui_pass = imgui_module.GetRenderPass();
+          if (imgui_pass) {
+            co_await imgui_pass->Render(rec);
+          }
+        }
+      });
+
+    registered = true;
+    LOG_F(INFO, "Registered view resolver and render graph for view {}",
+      view_id_.get());
+  }
+
+  TrackFrameAction("View resolver and render graph registered");
   TrackFrameAction("Frame graph and render passes configured");
   TrackPhaseEnd();
   co_return;
@@ -962,31 +1044,19 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
+auto MainModule::OnRender(engine::FrameContext& context) -> co::Co<>
 {
-  LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
-  TrackPhaseStart("Command Recording");
+  LOG_SCOPE_F(3, "MainModule::OnRender");
+  TrackPhaseStart("Render");
   current_frame_tracker_.command_recording = true;
-  TrackFrameAction("Command recording started");
+  TrackFrameAction("Render started");
 
-  if (!app_window_) {
-    LOG_F(3, "Window or Surface is no longer valid");
-    TrackFrameAction("Command recording skipped - no surface");
-    TrackPhaseEnd();
-    co_return;
-  }
+  // Renderer now handles all command recording automatically via registered
+  // render graph factories. App module just tracks that rendering happened.
 
-  if (app_.gfx_weak.expired() || !scene_) {
-    TrackFrameAction("Command recording skipped - no graphics or scene");
-    TrackPhaseEnd();
-    co_return;
-  }
-
-  // Execute the actual rendering commands
-  co_await ExecuteRenderCommands(context);
-
-  TrackFrameAction("Command recording completed");
+  TrackFrameAction("Render delegated to Renderer module");
   TrackPhaseEnd();
+  co_return;
 }
 
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
@@ -1304,128 +1374,6 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
         apply_override ? "blue" : "clear");
     }
   }
-}
-
-auto MainModule::ExecuteRenderCommands(engine::FrameContext& context)
-  -> co::Co<>
-{
-  using namespace oxygen::graphics;
-
-  LOG_SCOPE_F(3, "MainModule::ExecuteRenderCommands");
-
-  // Estimate render items (spheres + multisubmesh quad)
-  current_frame_tracker_.render_items_count
-    = static_cast<std::uint32_t>(spheres_.size() + 1);
-
-  // Early-out if graphics, scene, window, or surface are not available.
-  if (app_.gfx_weak.expired() || !scene_ || !app_window_) {
-    co_return;
-  }
-
-  const auto surface = app_window_->GetSurface();
-  if (!surface) {
-    co_return;
-  }
-
-  auto gfx = app_.gfx_weak.lock();
-
-  // Use frame slot provided by the engine context
-  const auto current_frame = context.GetFrameSlot().get();
-
-  DLOG_F(3, "Recording commands for frame index {}", current_frame);
-
-  auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "Main Window Command List");
-
-  if (!recorder) {
-    LOG_F(ERROR, "Failed to acquire command recorder");
-    co_return;
-  }
-
-  // Get framebuffers from AppWindow component
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
-  if (framebuffers.empty() || backbuffer_index >= framebuffers.size()) {
-    // Surface is not ready or has been torn down.
-    co_return;
-  }
-  const auto fb = framebuffers.at(backbuffer_index);
-  if (!fb) {
-    co_return;
-  }
-  // Manual resource tracking replacing PrepareForRender
-  const auto& fb_desc = fb->GetDescriptor();
-  for (const auto& attachment : fb_desc.color_attachments) {
-    if (attachment.texture) {
-      recorder->BeginTrackingResourceState(
-        *attachment.texture, ResourceStates::kPresent, true);
-      recorder->RequireResourceState(
-        *attachment.texture, ResourceStates::kRenderTarget);
-    }
-  }
-  if (fb_desc.depth_attachment.texture) {
-    recorder->BeginTrackingResourceState(
-      *fb_desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
-
-    // Flush barriers to ensure all resource state transitions are applied and
-    // that subsequent state transitions triggered by the frame rendering task
-    // (application) are executed in a separate batch.
-    recorder->FlushBarriers();
-  }
-  recorder->BindFrameBuffer(*fb);
-
-  // Get render graph component from base class
-  if (!render_graph_) {
-    LOG_F(ERROR, "RenderGraph component not available");
-    co_return;
-  }
-
-  // Prepare render graph for this frame (wires up framebuffer attachments)
-  render_graph_->PrepareForRenderFrame(fb);
-
-  auto view_resolver = renderer::SceneCameraViewResolver(
-    [this](const ViewId& /*view_id*/) { return main_camera_; });
-  const auto view_snapshot = view_resolver(view_id_);
-
-  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
-  app_.renderer->BuildFrame(view_snapshot, context);
-
-  // Execute render graph using the configured passes
-  co_await app_.renderer->ExecuteRenderGraph(
-    [&](const engine::RenderContext& render_context) -> co::Co<> {
-      // Run all passes via RenderGraph (DepthPrePass, ShaderPass,
-      // TransparentPass)
-      co_await render_graph_->RunPasses(render_context, *recorder);
-
-      // --- ImGuiPass configuration ---
-      auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-      if (imgui_module_ref) {
-        auto& imgui_module = imgui_module_ref->get();
-        auto imgui_pass = imgui_module.GetRenderPass();
-        if (imgui_pass) {
-          co_await imgui_pass->Render(*recorder);
-        }
-      }
-    },
-    render_graph_->GetRenderContext(), context);
-
-  // Update FrameContext with the output framebuffer
-  context.SetViewOutput(view_id_, fb);
-
-  // Mark the surface as presentable
-  const auto surfaces = context.GetSurfaces();
-  for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i] == surface) {
-      context.SetSurfacePresentable(i, true);
-      DLOG_F(3, "Marked surface at index {} as presentable", i);
-      break;
-    }
-  }
-
-  LOG_F(3, "Command recording completed for frame {}", current_frame);
-
-  co_return;
 }
 
 //=== Debug Overlay Implementation ===========================================//

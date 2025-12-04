@@ -79,8 +79,8 @@ enum class PhaseId : std::uint32_t {
   kParallelTasks = 9,
   kPostParallel = 10,
   kGuiUpdate = 11,
-  kFrameGraph = 12,
-  kCommandRecord = 13,
+  kPreRender = 12,
+  kRender = 13,
   kCompositing = 14,
   kPresent = 15,
   kAsyncPoll = 16,
@@ -335,20 +335,21 @@ mutate authoritative GameState; UI interactions queue events for the next
 frame's gameplay phase.)",
       },
       DocStrings {
-        .name = R"(FrameGraph)",
+        .name = R"(PreRender)",
         .description
-        = R"(Assemble GPU frame graph and rendering plans from the published
-FrameSnapshot and integration outputs (FrameState). FrameGraph produces
-FrameState artifacts (draw lists, barriers) and records plan metadata into
-EngineState; it should not mutate authoritative GameState.)",
+        = R"(Prepare per-frame and per-view rendering data. This phase is
+      responsible for renderer-owned preparation such as culling, draw-metadata
+      emission and upload staging. App modules may also perform work here to
+      prepare render-pass inputs. No command lists should be recorded in this
+      phase.)",
       },
       DocStrings {
-        .name = R"(CommandRecord)",
+        .name = R"(Render)",
         .description
-        = R"(Record GPU command lists from FrameState artifacts and the
-FrameSnapshot. Command recording produces GPU submission artifacts (FrameState)
-and records submission metadata into EngineState (fence/epoch markers). It
-must not mutate authoritative GameState.)",
+        = R"(Execute rendering: modules record command lists and run per-view
+      rendering logic. Render consumes prepared per-view snapshots produced in
+      PreRender. This phase may submit command lists. Modules should not mutate
+      authoritative GameState.)",
       },
       DocStrings {
         .name = R"(Compositing)",
@@ -588,14 +589,14 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
     .thread_safe = true,
   },
   PhaseDesc {
-    .id = PhaseId::kFrameGraph,
+    .id = PhaseId::kPreRender,
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations
     = AllowMutation::kFrameState | AllowMutation::kEngineState,
     .thread_safe = false,
   },
   PhaseDesc {
-    .id = PhaseId::kCommandRecord,
+    .id = PhaseId::kRender,
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations
     = AllowMutation::kFrameState | AllowMutation::kEngineState,
@@ -695,7 +696,7 @@ constexpr EnumIndexedArray<BarrierId, BarrierDesc> kBarrierRegistry = {
   },
   BarrierDesc {
     .id = BarrierId::kCommandReady,
-    .after_phase = PhaseId::kFrameGraph,
+    .after_phase = PhaseId::kPreRender,
   },
   BarrierDesc {
     .id = BarrierId::kAsyncPublishReady,

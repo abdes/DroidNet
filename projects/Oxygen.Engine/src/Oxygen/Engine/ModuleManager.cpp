@@ -432,11 +432,14 @@ auto ExecuteBarrieredConcurrencyPhase(const std::vector<EngineModule*>& list,
     case PhaseId::kGuiUpdate:
       tasks.emplace_back(RunHandlerImpl(m->OnGuiUpdate(ctx), m, ctx));
       break;
-    case PhaseId::kFrameGraph:
-      tasks.emplace_back(RunHandlerImpl(m->OnFrameGraph(ctx), m, ctx));
+    case PhaseId::kPreRender:
+      tasks.emplace_back(RunHandlerImpl(m->OnPreRender(ctx), m, ctx));
       break;
-    case PhaseId::kCommandRecord:
-      tasks.emplace_back(RunHandlerImpl(m->OnCommandRecord(ctx), m, ctx));
+    case PhaseId::kRender:
+      tasks.emplace_back(RunHandlerImpl(m->OnRender(ctx), m, ctx));
+      break;
+    case PhaseId::kCompositing:
+      tasks.emplace_back(RunHandlerImpl(m->OnCompositing(ctx), m, ctx));
       break;
     case PhaseId::kAsyncPoll:
       tasks.emplace_back(RunHandlerImpl(m->OnAsyncPoll(ctx), m, ctx));
@@ -502,8 +505,9 @@ auto ModuleManager::ExecutePhase(const PhaseId phase, FrameContext& ctx)
   case PhaseId::kTransformPropagation:
   case PhaseId::kPostParallel:
   case PhaseId::kGuiUpdate:
-  case PhaseId::kFrameGraph:
-  case PhaseId::kCommandRecord:
+  case PhaseId::kPreRender:
+  case PhaseId::kRender:
+  case PhaseId::kCompositing:
   case PhaseId::kAsyncPoll: {
     const auto& desc = kPhaseRegistry[PhaseIndex { phase }];
     if (desc.category == ExecutionModel::kBarrieredConcurrency) {

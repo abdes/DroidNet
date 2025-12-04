@@ -192,6 +192,16 @@ auto ShaderPass::SetupRenderTargets(CommandRecorder& recorder) const -> void
     recorder.SetRenderTargets(std::span(rtvs), std::nullopt);
   }
 
+  // Keep render target setup logs at debug level to avoid noisy INFO output
+  DLOG_F(2,
+    "[ShaderPass] SetupRenderTargets: color_tex={}, depth_tex={}, "
+    "clear_color=({}, {}, {}, {})",
+    static_cast<const void*>(&color_texture),
+    dsv->IsValid() ? static_cast<const void*>(
+                       fb->GetDescriptor().depth_attachment.texture.get())
+                   : nullptr,
+    GetClearColor().r, GetClearColor().g, GetClearColor().b, GetClearColor().a);
+
   recorder.ClearFramebuffer(*Context().framebuffer,
     std::vector<std::optional<graphics::Color>> { GetClearColor() },
     std::nullopt, std::nullopt);
@@ -296,10 +306,19 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   using graphics::ShaderStageDesc;
   using graphics::ShaderStageFlags;
 
+  // Determine requested rasterizer fill mode from configuration (default solid)
+  const auto requested_fill
+    = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
   // Set up rasterizer and blend state for standard color rendering
-  constexpr RasterizerStateDesc raster_desc {
-    .fill_mode = FillMode::kSolid,
-    .cull_mode = CullMode::kBack,
+  // Choose culling based on requested fill mode: when wireframe is
+  // requested disable culling so edges for all faces are visible.
+  const auto raster_cull_mode = (requested_fill == FillMode::kWireFrame)
+    ? CullMode::kNone
+    : CullMode::kBack;
+
+  const RasterizerStateDesc raster_desc {
+    .fill_mode = requested_fill,
+    .cull_mode = raster_cull_mode,
     .front_counter_clockwise = true,
     .multisample_enable = false,
   };
@@ -356,6 +375,12 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   // Future improvement: consider renaming FullScreenTriangle.hlsl to a more
   // representative name (e.g. BindlessMesh.hlsl) or splitting the fullscreen
   // utility path and mesh path if they diverge.
+  // Emit diagnostic log for rasterizer settings used to build the PSO.
+  // Creation-time rasterizer info is purely diagnostic — keep it debug-only
+  // to avoid polluting normal logs.
+  DLOG_F(2, "[ShaderPass] CreatePipelineStateDesc: fill_mode={}, cull_mode={}",
+    static_cast<int>(requested_fill), static_cast<int>(raster_cull_mode));
+
   return GraphicsPipelineDesc::Builder()
     .SetVertexShader(ShaderStageDesc { .shader
       = MakeShaderIdentifier(ShaderType::kVertex, "FullScreenTriangle.hlsl") })
@@ -391,6 +416,12 @@ auto ShaderPass::NeedRebuildPipelineState() const -> bool
 
   if (last_built->FramebufferLayout().sample_count
     != color_tex_desc.sample_count) {
+    return true;
+  }
+  // Rebuild if rasterizer fill mode changed
+  const auto requested_fill
+    = config_ ? config_->fill_mode : oxygen::graphics::FillMode::kSolid;
+  if (last_built->RasterizerState().fill_mode != requested_fill) {
     return true;
   }
 

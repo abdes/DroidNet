@@ -144,7 +144,7 @@ auto RenderPass::IssueDrawCallsOverPass(
   CommandRecorder& recorder, PassMaskBit pass_bit) const noexcept -> void
 {
   try {
-    const auto psf = Context().prepared_frame;
+    const auto psf = Context().current_view.prepared_frame;
     if (!psf || !psf->IsValid() || psf->draw_metadata_bytes.empty()) {
       return; // nothing to do
     }

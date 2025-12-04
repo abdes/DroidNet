@@ -75,6 +75,12 @@ public:
     return wireframe_shader_pass_config_;
   }
 
+  auto GetWireframeDepthPassConfig()
+    -> std::shared_ptr<oxygen::engine::DepthPrePassConfig>&
+  {
+    return wireframe_depth_pass_config_;
+  }
+
   auto GetTransparentPass() -> std::shared_ptr<oxygen::engine::TransparentPass>&
   {
     return transparent_pass_;
@@ -92,7 +98,7 @@ public:
   auto ClearBackbufferReferences() -> void;
 
   auto PrepareForRenderFrame(
-    const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void;
+    const std::shared_ptr<const oxygen::graphics::Framebuffer>& fb) -> void;
 
   auto PrepareForWireframeRenderFrame(
     const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void;

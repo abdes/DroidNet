@@ -30,6 +30,7 @@
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Platform/input.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
@@ -399,28 +400,75 @@ auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
   co_return;
 }
 
-auto MainModule::OnFrameGraph(engine::FrameContext& /*context*/) -> co::Co<>
+auto MainModule::OnPreRender(engine::FrameContext& /*context*/) -> co::Co<>
 {
-  // Ensure framebuffers are created after a resize (framebuffers are cleared
-  // on OnFrameStart when Surface::ShouldResize() was set). Recreate them here
-  // if necessary so the render graph has valid attachments.
+  // Ensure framebuffers are created after a resize
   DCHECK_NOTNULL_F(app_window_);
   if (app_window_->GetFramebuffers().empty()) {
     app_window_->EnsureFramebuffers();
   }
 
-  // Ensure render passes are created/configured via the example RenderGraph
-  if (render_graph_) {
-    render_graph_->SetupRenderPasses();
-  }
-
-  // Ensure ImGui context is set (safe to do here like in Async example)
-  if (auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>()) {
+  // Set ImGui context before making ImGui calls
+  auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+  if (imgui_module_ref) {
     auto& imgui_module = imgui_module_ref->get();
     if (auto* imgui_context = imgui_module.GetImGuiContext()) {
       ImGui::SetCurrentContext(imgui_context);
     }
   }
+
+  // Ensure render passes are created/configured via the example RenderGraph
+  if (render_graph_) {
+    render_graph_->SetupRenderPasses();
+
+    // Configure pass-specific settings
+    auto shader_pass_config = render_graph_->GetShaderPassConfig();
+    if (shader_pass_config) {
+      shader_pass_config->clear_color
+        = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
+      shader_pass_config->debug_name = "ShaderPass";
+    }
+  }
+
+  // Register view resolver and render graph only once (ViewId is stable)
+  static bool registered = false;
+  if (!registered) {
+    // Register view resolver using SceneCameraViewResolver
+    app_.renderer->RegisterViewResolver(
+      [this](const engine::ViewContext& vc) -> ResolvedView {
+        renderer::SceneCameraViewResolver resolver(
+          [this](const ViewId& /*id*/) { return main_camera_; });
+        return resolver(vc.id);
+      });
+
+    // Register render graph factory once with stable view_id
+    app_.renderer->RegisterRenderGraph(view_id_,
+      [this](ViewId id, const engine::RenderContext& rc,
+        graphics::CommandRecorder& rec) -> co::Co<void> {
+        // Wire up framebuffer attachments to render passes before execution
+        if (render_graph_ && rc.framebuffer) {
+          render_graph_->PrepareForRenderFrame(rc.framebuffer);
+        }
+
+        // Run main render passes
+        co_await render_graph_->RunPasses(rc, rec);
+
+        // ImGui pass
+        auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
+        if (imgui_module_ref) {
+          auto& imgui_module = imgui_module_ref->get();
+          auto imgui_pass = imgui_module.GetRenderPass();
+          if (imgui_pass) {
+            co_await imgui_pass->Render(rec);
+          }
+        }
+      });
+
+    registered = true;
+    LOG_F(INFO, "Registered view resolver and render graph for view {}",
+      view_id_.get());
+  }
+
   co_return;
 }
 
@@ -500,22 +548,50 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   EnsureMainCamera(
     static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 
-  // Create CameraView with the appropriate parameters
-  camera_view_ = std::make_shared<renderer::CameraView>(
-    renderer::CameraView::Params {
-      .camera_node = main_camera_,
-      .viewport = std::nullopt,
-      .scissor = std::nullopt,
-      .pixel_jitter = glm::vec2(0.0F, 0.0F),
-      .reverse_z = false,
-      .mirrored = false,
-    },
-    surface);
+  // Prepare view context for registration/update
+  ViewPort viewport;
+  viewport.top_left_x = 0.0f;
+  viewport.top_left_y = 0.0f;
+  viewport.width = static_cast<float>(surface->Width());
+  viewport.height = static_cast<float>(surface->Height());
+  viewport.min_depth = 0.0f;
+  viewport.max_depth = 1.0f;
 
-  // Add view to FrameContext with metadata
-  view_id_ = context.AddView(engine::ViewContext { .name = "InputSystemView",
-    .surface = *surface,
-    .metadata = { .tag = "InputSystem_MainView" } });
+  Scissors scissors;
+  scissors.left = 0;
+  scissors.top = 0;
+  scissors.right = static_cast<int32_t>(surface->Width());
+  scissors.bottom = static_cast<int32_t>(surface->Height());
+
+  View view;
+  view.viewport = viewport;
+  view.scissor = scissors;
+
+  engine::ViewContext view_ctx {
+    .view = view,
+    .metadata = {
+      .name = "InputSystemView",
+      .purpose = "primary",
+      .present_policy = engine::PresentPolicy::DirectToSurface,
+    },
+    .surface = std::ref(*surface),
+  };
+
+  // Get framebuffer for this view if available
+  const auto& framebuffers = app_window_->GetFramebuffers();
+  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
+  if (!framebuffers.empty() && backbuffer_index < framebuffers.size()) {
+    view_ctx.output = framebuffers.at(backbuffer_index);
+  }
+
+  // Register view on first frame, update on subsequent frames
+  if (view_id_.get() == 0) {
+    // First frame: register new view
+    view_id_ = context.RegisterView(std::move(view_ctx));
+  } else {
+    // Subsequent frames: update existing view
+    context.UpdateView(view_id_, std::move(view_ctx));
+  }
 
   co_return;
 }
@@ -537,119 +613,6 @@ auto MainModule::OnGuiUpdate(engine::FrameContext& context) -> co::Co<>
 
   DrawDebugOverlay(context);
 
-  co_return;
-}
-
-auto MainModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<>
-{
-  using namespace oxygen::graphics;
-
-  LOG_SCOPE_F(3, "MainModule::OnCommandRecord");
-
-  DCHECK_NOTNULL_F(app_window_);
-  const auto wnd_weak = app_window_->GetWindowWeak();
-  const auto surface = app_window_->GetSurface();
-  if (!surface || wnd_weak.expired()) {
-    LOG_F(3, "Window or Surface is no longer valid");
-    co_return;
-  }
-
-  if (app_.gfx_weak.expired()) {
-    LOG_F(3, "Graphics no longer valid");
-    co_return;
-  }
-  auto gfx = app_.gfx_weak.lock();
-
-  auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder
-    = gfx->AcquireCommandRecorder(queue_key, "Main Window Command List");
-
-  if (!recorder) {
-    LOG_F(ERROR, "Failed to acquire command recorder");
-    co_return;
-  }
-
-  // Always render to the framebuffer that wraps the swapchain's current
-  // backbuffer. The swapchain's backbuffer index may not match the engine's
-  // frame slot due to resize or present timing; querying the surface avoids
-  // D3D12 validation errors (WRONGSWAPCHAINBUFFERREFERENCE).
-  const auto backbuffer_index = surface->GetCurrentBackBufferIndex();
-  DCHECK_NOTNULL_F(app_window_);
-  const auto& framebuffers = app_window_->GetFramebuffers();
-  if (framebuffers.empty() || backbuffer_index >= framebuffers.size()) {
-    // Surface is not ready or has been torn down.
-    co_return;
-  }
-  const auto fb = framebuffers.at(backbuffer_index);
-  if (!fb) {
-    co_return;
-  }
-  // Manual resource tracking replacing PrepareForRender
-  const auto& fb_desc = fb->GetDescriptor();
-  for (const auto& attachment : fb_desc.color_attachments) {
-    if (attachment.texture) {
-      recorder->BeginTrackingResourceState(
-        *attachment.texture, ResourceStates::kPresent, true);
-      recorder->RequireResourceState(
-        *attachment.texture, ResourceStates::kRenderTarget);
-    }
-  }
-  if (fb_desc.depth_attachment.texture) {
-    recorder->BeginTrackingResourceState(
-      *fb_desc.depth_attachment.texture, ResourceStates::kDepthWrite, true);
-
-    // Flush barriers to ensure all resource state transitions are applied and
-    // that subsequent state transitions triggered by the frame rendering task
-    // (application) are executed in a separate batch.
-    recorder->FlushBarriers();
-  }
-  recorder->BindFrameBuffer(*fb);
-
-  // Create render context for renderer (delegated to RenderGraph component)
-  DCHECK_NOTNULL_F(render_graph_);
-  render_graph_->PrepareForRenderFrame(fb);
-
-  // Resolve the camera view to get the View snapshot
-  if (!camera_view_) {
-    LOG_F(ERROR, "CameraView not available");
-    co_return;
-  }
-  const auto view_snapshot = camera_view_->Resolve();
-
-  // Drive the renderer: BuildFrame ensures scene is prepared for rendering
-  app_.renderer->BuildFrame(view_snapshot, context);
-
-  // Execute render graph using the configured passes
-  co_await app_.renderer->ExecuteRenderGraph(
-    [&](const engine::RenderContext& render_context) -> co::Co<> {
-      // Run all passes via RenderGraph (DepthPrePass, ShaderPass,
-      // TransparentPass)
-      co_await render_graph_->RunPasses(render_context, *recorder);
-
-      // --- ImGuiPass configuration ---
-      auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-      if (imgui_module_ref) {
-        auto& imgui_module = imgui_module_ref->get();
-        auto imgui_pass = imgui_module.GetRenderPass();
-        if (imgui_pass) {
-          co_await imgui_pass->Render(*recorder);
-        }
-      }
-    },
-    render_graph_->GetRenderContext(), context);
-
-  // Update FrameContext with the output framebuffer
-  context.SetViewOutput(view_id_, fb);
-
-  // Mark the surface as presentable
-  const auto surfaces = context.GetSurfaces();
-  for (size_t i = 0; i < surfaces.size(); ++i) {
-    if (surfaces[i] == surface) {
-      context.SetSurfacePresentable(i, true);
-      LOG_F(3, "Marked surface at index {} as presentable", i);
-      break;
-    }
-  }
   co_return;
 }
 

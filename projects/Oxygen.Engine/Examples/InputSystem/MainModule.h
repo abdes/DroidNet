@@ -15,7 +15,6 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Scene/Scene.h>
 #include <glm/glm.hpp>
 
@@ -46,8 +45,8 @@ public:
   {
     using namespace core;
     return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kFrameGraph,
-      PhaseId::kCommandRecord, PhaseId::kFrameEnd>();
+      PhaseId::kGameplay, PhaseId::kGuiUpdate, PhaseId::kPreRender,
+      PhaseId::kFrameEnd>();
   }
 
   ~MainModule() override = default;
@@ -68,8 +67,7 @@ public:
   auto OnSceneMutation(engine::FrameContext& context) -> co::Co<> override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
   auto OnGameplay(engine::FrameContext& context) -> co::Co<> override;
-  auto OnFrameGraph(engine::FrameContext& context) -> co::Co<> override;
-  auto OnCommandRecord(engine::FrameContext& context) -> co::Co<> override;
+  auto OnPreRender(engine::FrameContext& context) -> co::Co<> override;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 private:
@@ -84,8 +82,6 @@ private:
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode sphere_node_; // Sphere for jump animation
 
-  // Camera view for the main viewport
-  std::shared_ptr<renderer::CameraView> camera_view_;
   // ViewId for the main viewport
   ViewId view_id_ { 0 };
 

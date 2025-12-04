@@ -79,12 +79,16 @@ struct DummySurface final : oxygen::graphics::Surface {
 };
 
 // Helper to create a minimal ViewContext for testing
-auto MakeDummyViewContext() -> oxygen::engine::ViewContext {
+auto MakeDummyViewContext() -> oxygen::engine::ViewContext
+{
   static DummySurface s;
   return oxygen::engine::ViewContext {
-    .name = "TestView",
+    .view = {},
+    .metadata = {
+      .name = "TestView",
+      .purpose = "test",
+    },
     .surface = std::ref(s),
-    .metadata = { .tag = "TestTag" },
     .output = nullptr
   };
 }
@@ -237,7 +241,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
 
   // Add a view (should succeed in GameState mutation phase)
-  ctx.AddView(MakeDummyViewContext());
+  ctx.RegisterView(MakeDummyViewContext());
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 
   // Move to snapshot phase (allows FrameState but not GameState mutations)
@@ -246,7 +250,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
 
   // Now try to mutate Views - should trigger CHECK_F (death) due to phase
   // restrictions. Use ASSERT_DEATH to verify behavior in tests.
-  NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
+  NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
   // The visible views should remain unchanged after the failed mutation.
   EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
 }
@@ -262,7 +266,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsMutatorsDieInSnapshot)
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   (void)ctx.PublishSnapshots(tag);
 
-  NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
+  NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
   NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
 }
 
@@ -325,13 +329,13 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Allowed: adding/clearing views before Snapshot
-      ctx.AddView(MakeDummyViewContext());
+      ctx.RegisterView(MakeDummyViewContext());
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
       ctx.ClearViews(tag);
       EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0u);
     } else {
       // Disallowed: should be fatal
-      NOLINT_ASSERT_DEATH(ctx.AddView(MakeDummyViewContext()), ".*");
+      NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
       NOLINT_ASSERT_DEATH(ctx.ClearViews(tag), ".*");
     }
   }

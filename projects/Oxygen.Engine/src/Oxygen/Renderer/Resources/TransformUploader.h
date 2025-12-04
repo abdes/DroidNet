@@ -42,8 +42,8 @@ public:
   OXGN_RNDR_API ~TransformUploader();
 
   //! Start a new frame - must be called once per frame before any operations
-  OXGN_RNDR_API auto OnFrameStart(
-    renderer::RendererTag, oxygen::frame::Slot slot) -> void;
+  OXGN_RNDR_API auto OnFrameStart(renderer::RendererTag,
+    oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void;
 
   //! Get or allocate a handle for the given transform matrix
   OXGN_RNDR_API auto GetOrAllocate(const glm::mat4& transform)

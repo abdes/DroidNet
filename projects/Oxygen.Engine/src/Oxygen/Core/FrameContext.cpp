@@ -85,9 +85,9 @@ auto FrameContext::SetInputSnapshot(InputBlobPtr inp, EngineTag) noexcept
   atomic_input_snapshot_.store(std::move(inp), std::memory_order_release);
 }
 
-auto FrameContext::AddView(ViewContext view) noexcept -> ViewId
+auto FrameContext::RegisterView(ViewContext view) noexcept -> ViewId
 {
-  // Views may only be added before the Snapshot phase (exclusive).
+  // Views may only be registered before the Snapshot phase (exclusive).
   CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
 #if !defined(NDEBUG)
   // In debug builds, verify that the view surface is one of the surfaces set in
@@ -98,20 +98,50 @@ auto FrameContext::AddView(ViewContext view) noexcept -> ViewId
       surfaces_, [&](const auto& s) { return s.get() == &surface; });
     if (!found) {
       DLOG_F(WARNING,
-        "View '{}' being added with a surface not in the Frame Context",
+        "View '{}' being registered with a surface not in the Frame Context",
         view.metadata.name);
     }
   }
 #endif // !defined(NDEBUG)
 
   std::unique_lock lock(views_mutex_);
-  // Generate a unique ID for this view
-  // Simple incrementing ID for now, scoped to the frame context instance
+
+  // Allocate a new unique ViewId
   static std::atomic<uint64_t> next_view_id { 1 };
   const ViewId id { next_view_id.fetch_add(1, std::memory_order_relaxed) };
 
+  // Set the id in the ViewContext before storing
+  view.id = id;
   views_.emplace(id, std::move(view));
   return id;
+}
+
+auto FrameContext::UpdateView(ViewId id, ViewContext view) noexcept -> void
+{
+  // Views may only be updated before the Snapshot phase (exclusive).
+  CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
+
+  std::unique_lock lock(views_mutex_);
+  auto it = views_.find(id);
+  if (it != views_.end()) {
+    // Preserve the ViewId when updating
+    view.id = id;
+    it->second = std::move(view);
+  } else {
+    LOG_F(WARNING, "UpdateView: ViewId {} not found", id.get());
+  }
+}
+
+auto FrameContext::RemoveView(ViewId id) noexcept -> void
+{
+  // Views may only be removed before the Snapshot phase (exclusive).
+  CHECK_F(engine_state_.current_phase < PhaseId::kSnapshot);
+
+  std::unique_lock lock(views_mutex_);
+  const auto erased = views_.erase(id);
+  if (erased == 0) {
+    LOG_F(WARNING, "RemoveView: ViewId {} not found", id.get());
+  }
 }
 
 auto FrameContext::SetViewOutput(

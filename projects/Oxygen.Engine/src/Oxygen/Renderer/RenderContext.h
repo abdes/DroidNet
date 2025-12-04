@@ -14,6 +14,8 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 
 namespace oxygen {
 class Graphics;
@@ -131,13 +133,25 @@ struct RenderContext {
   */
   std::shared_ptr<const graphics::Buffer> material_constants;
 
-  //=== SoA Prepared Frame (Renderer Finalization Output) ===-----------------
-  // Non-owning pointer to the renderer's immutable per-frame finalized SoA
-  // snapshot. Set by Renderer::PreExecute after
-  // BuildFrame/FinalizeScenePrepSoA. Nullptr until the renderer wires it;
-  // passes must gracefully handle null (legacy path) during the migration
-  // phase. Will become mandatory once AoS is fully removed.
-  observer_ptr<const struct PreparedSceneFrame> prepared_frame { nullptr };
+  // Prepared per-view SoA (prepared scene frame) are stored on the active
+  // `current_view` so that the renderer is strictly multi-view. Legacy
+  // single-view top-level `prepared_frame` has been removed.
+
+  // Per-view specific state used during multi-view execution. This groups
+  // all transient view-specific state so it is easy to reset and reason about
+  // during per-view iterations.
+  struct ViewSpecific {
+    oxygen::ViewId view_id {};
+    observer_ptr<const oxygen::ResolvedView> resolved_view { nullptr };
+    observer_ptr<const struct PreparedSceneFrame> prepared_frame { nullptr };
+  };
+
+  //! Active view iteration state for the currently-executing view.
+  ViewSpecific current_view {};
+
+  //! Map of per-view outputs captured by the renderer. Keys are `ViewId`.
+  std::unordered_map<oxygen::ViewId, std::shared_ptr<graphics::Framebuffer>>
+    view_outputs;
 
   //=== Renderer / Graphics ===-----------------------------------------------//
 
@@ -197,6 +211,7 @@ struct RenderContext {
 
 private:
   friend class Renderer;
+  friend class RenderContextPool; // allow small pool helper to Reset() contexts
 
   //! Sets the renderer and graphics for the current render graph run.
   auto SetRenderer(Renderer* the_renderer, oxygen::Graphics* the_graphics) const
@@ -227,7 +242,9 @@ private:
     graphics_.reset(nullptr);
     scene_constants.reset();
     material_constants.reset();
-    prepared_frame.reset();
+    // Reset per-view transient state and clear cached per-view outputs
+    current_view = ViewSpecific {};
+    view_outputs.clear();
   }
   mutable observer_ptr<Renderer> renderer_ { nullptr };
   mutable observer_ptr<oxygen::Graphics> graphics_ { nullptr };

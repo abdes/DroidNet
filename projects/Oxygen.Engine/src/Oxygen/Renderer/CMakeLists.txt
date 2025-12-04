@@ -104,6 +104,8 @@ set(
   "Upload/InlineTransfersCoordinator.h"
   "Upload/RingBufferStaging.cpp"
   "Upload/RingBufferStaging.h"
+  "Upload/SceneConstantsManager.cpp"
+  "Upload/SceneConstantsManager.h"
   "Upload/StagingProvider.cpp"
   "Upload/StagingProvider.h"
   "Upload/TransientStructuredBuffer.cpp"

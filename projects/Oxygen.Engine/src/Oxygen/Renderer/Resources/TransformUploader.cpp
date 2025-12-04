@@ -69,8 +69,8 @@ TransformUploader::~TransformUploader()
   LOG_F(INFO, "transforms stored : {}", transforms_.size());
 }
 
-auto TransformUploader::OnFrameStart(
-  renderer::RendererTag, oxygen::frame::Slot slot) -> void
+auto TransformUploader::OnFrameStart(renderer::RendererTag,
+  oxygen::frame::SequenceNumber sequence, oxygen::frame::Slot slot) -> void
 {
   ++current_epoch_;
   if (current_epoch_ == 0U) {
@@ -78,8 +78,8 @@ auto TransformUploader::OnFrameStart(
   }
   frame_write_count_ = 0U;
 
-  worlds_buffer_.OnFrameStart(slot);
-  normals_buffer_.OnFrameStart(slot);
+  worlds_buffer_.OnFrameStart(sequence, slot);
+  normals_buffer_.OnFrameStart(sequence, slot);
 
   // Clear cached SRV indices; they will be renewed during
   // EnsureFrameResources()
@@ -175,31 +175,35 @@ auto TransformUploader::EnsureFrameResources() -> void
   const auto count = static_cast<std::uint32_t>(transforms_.size());
 
   // Allocate transient buffers for this frame
-  if (auto result = worlds_buffer_.Allocate(count); !result) {
+  auto w_res = worlds_buffer_.Allocate(count);
+  if (!w_res) {
     LOG_F(ERROR, "Failed to allocate worlds transient buffer: {}",
-      result.error().message());
+      w_res.error().message());
     return;
   }
+  const auto w_alloc = *w_res;
 
-  if (auto result = normals_buffer_.Allocate(count); !result) {
+  auto n_res = normals_buffer_.Allocate(count);
+  if (!n_res) {
     LOG_F(ERROR, "Failed to allocate normals transient buffer: {}",
-      result.error().message());
+      n_res.error().message());
     return;
   }
+  const auto n_alloc = *n_res;
 
   DLOG_F(1, "TransformUploader writing {} transforms to {}", count,
-    fmt::ptr(worlds_buffer_.GetMappedPtr()));
+    fmt::ptr(w_alloc.mapped_ptr));
 
   // Direct memory write (no upload descriptors needed)
-  std::memcpy(worlds_buffer_.GetMappedPtr(), transforms_.data(),
+  std::memcpy(w_alloc.mapped_ptr, transforms_.data(),
     transforms_.size() * sizeof(glm::mat4));
 
-  std::memcpy(normals_buffer_.GetMappedPtr(), normal_matrices_.data(),
+  std::memcpy(n_alloc.mapped_ptr, normal_matrices_.data(),
     normal_matrices_.size() * sizeof(glm::mat4));
 
   // Cache SRV indices for GetWorldsSrvIndex() / GetNormalsSrvIndex()
-  worlds_srv_index_ = worlds_buffer_.GetBinding().srv;
-  normals_srv_index_ = normals_buffer_.GetBinding().srv;
+  worlds_srv_index_ = w_alloc.srv;
+  normals_srv_index_ = n_alloc.srv;
 
   uploaded_this_frame_ = true;
 }

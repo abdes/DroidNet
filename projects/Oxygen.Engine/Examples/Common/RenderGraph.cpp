@@ -94,27 +94,16 @@ auto RenderGraph::ClearBackbufferReferences() -> void
   if (shader_pass_config_) {
     shader_pass_config_->color_texture.reset();
   }
-
-  // Drop our shared framebuffer ref so we don't pin backbuffer resources
-  // across a ResizeBuffers call in AppWindow.
-  if (render_context_.framebuffer) {
-    DLOG_F(2,
-      "RenderGraph: clearing cached framebuffer to avoid pinning backbuffers");
-    render_context_.framebuffer.reset();
-  }
 }
 
 auto RenderGraph::PrepareForRenderFrame(
-  const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void
+  const std::shared_ptr<const oxygen::graphics::Framebuffer>& fb) -> void
 {
   LOG_SCOPE_F(4, "RenderGraph::PrepareForRenderFrame");
 
   if (!fb) {
     return;
   }
-
-  // Place the active framebuffer into the reusable RenderContext
-  render_context_.framebuffer = fb;
 
   // Assign per-pass attachments that map to the swapchain back-buffer.
   const auto& desc = fb->GetDescriptor();
@@ -147,8 +136,6 @@ auto RenderGraph::PrepareForWireframeRenderFrame(
   if (!fb) {
     return;
   }
-
-  render_context_.framebuffer = fb;
 
   const auto& desc = fb->GetDescriptor();
   if (wireframe_shader_pass_config_) {

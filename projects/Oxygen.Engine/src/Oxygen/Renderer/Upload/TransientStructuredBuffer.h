@@ -11,6 +11,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -84,37 +85,49 @@ public:
 
   OXGN_RNDR_API ~TransientStructuredBuffer();
 
-  //! Set the active frame slot for upcoming allocations.
-  OXGN_RNDR_API auto OnFrameStart(frame::Slot slot) -> void;
+  //! Set the active frame slot for upcoming allocations and the frame
+  //! sequence number which uniquely identifies this frame across slots.
+  OXGN_RNDR_API auto OnFrameStart(
+    frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
-  //! Allocate memory and create a transient SRV.
+  //! Allocate memory and create a transient SRV. Returns a handle describing
+  //! the allocation. The returned TransientAllocation stays valid for the
+  //! duration of the frame (until the next OnFrameStart is called for the
+  //! corresponding slot). Callers should check IsValid(sequence) to assert
+  //! the allocation is for the expected frame sequence.
+  struct TransientAllocation {
+    ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+    void* mapped_ptr { nullptr };
+    frame::SequenceNumber sequence { frame::SequenceNumber { 0 } };
+    frame::Slot slot { frame::kInvalidSlot };
+
+    //! Check that this allocation was created in the provided frame
+    //! sequence and therefore is still valid for consumption.
+    auto IsValid(frame::SequenceNumber seq) const noexcept -> bool
+    {
+      return sequence == seq && srv != kInvalidShaderVisibleIndex
+        && mapped_ptr != nullptr;
+    }
+  };
+
   OXGN_RNDR_API auto Allocate(std::uint32_t element_count)
-    -> std::expected<void, std::error_code>;
+    -> std::expected<TransientAllocation, std::error_code>;
 
-  //! Get the current binding (SRV + Stride).
-  OXGN_RNDR_NDAPI auto GetBinding() const noexcept -> Binding
-  {
-    if (const auto* slot = ActiveSlot(); slot != nullptr) {
-      return { slot->srv_index, stride_ };
-    }
-    return { kInvalidShaderVisibleIndex, stride_ };
-  }
-
-  //! Get pointer to mapped memory for writing.
-  OXGN_RNDR_NDAPI auto GetMappedPtr() const noexcept -> void*
-  {
-    if (const auto* slot = ActiveSlot(); slot != nullptr) {
-      return slot->allocation.has_value() ? slot->allocation->Ptr() : nullptr;
-    }
-    return nullptr;
-  }
-
+private:
   //! Release the SRV descriptor. Memory is recycled by StagingProvider
   //! automatically.
   OXGN_RNDR_API auto Reset() -> void;
+  struct SlotAlloc {
+    std::optional<StagingProvider::Allocation> allocation;
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    oxygen::graphics::NativeView native_view {};
+    frame::SequenceNumber sequence { frame::SequenceNumber { 0 } };
+  };
 
-private:
   struct SlotData {
+    // Multi-allocation per frame slot: keep all allocations until slot reset
+    std::vector<SlotAlloc> allocs {};
+    // Back-compat single active allocation used temporarily during allocation
     std::optional<StagingProvider::Allocation> allocation;
     ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
     oxygen::graphics::NativeView native_view {};
@@ -126,10 +139,14 @@ private:
   observer_ptr<InlineTransfersCoordinator> inline_transfers_;
   std::string debug_label_;
   frame::Slot current_slot_ { frame::kInvalidSlot };
+  // Sequence number for the current frame; stored so returned allocations
+  // include the frame sequence they were created in.
+  frame::SequenceNumber current_frame_ { frame::SequenceNumber { 0 } };
   std::array<SlotData, frame::kFramesInFlight.get()> slots_ {};
 
   auto ResetSlot(std::uint32_t slot_index) -> void;
   auto ReleaseSlotView(SlotData& slot) -> void;
+  auto ReleaseAllocView(SlotAlloc& slot) -> void;
   [[nodiscard]] auto ActiveSlot() const noexcept -> SlotData const*;
   [[nodiscard]] auto ActiveSlot() noexcept -> SlotData*;
 };

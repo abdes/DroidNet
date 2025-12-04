@@ -7,7 +7,6 @@
 #pragma once
 
 #include "AppWindow.h"
-#include "RenderGraph.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -57,6 +56,11 @@ public:
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
+  //! Hook: clear backbuffer references before resize. Each example must
+  //! implement this to clear any texture references that point to the
+  //! backbuffer before it is resized/recreated.
+  virtual auto ClearBackbufferReferences() -> void = 0;
+
 protected:
   // Reference to the shared example App state (must outlive the module)
   const oxygen::examples::common::AsyncEngineApp& app_;
@@ -67,9 +71,6 @@ protected:
   // directly (AddComponent is protected in Composition, deriving allows us
   // to construct components here).
   oxygen::observer_ptr<AppWindow> app_window_ { nullptr };
-
-  // Example-local render-graph helper component.
-  oxygen::observer_ptr<RenderGraph> render_graph_ { nullptr };
 
   // Hook called by the base OnFrameStart so derived examples only implement
   // the app-specific parts (scene setup, context.SetScene, etc.). Default
