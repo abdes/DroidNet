@@ -216,15 +216,12 @@ void MainView::EnsureMainRenderTargets()
   // recorder CRITICAL: Begin tracking resources before requiring their states
   recorder.BeginTrackingResourceState(
     static_cast<const graphics::Texture&>(*color_texture_),
-    graphics::ResourceStates::kUndefined);
+    graphics::ResourceStates::kRenderTarget);
   recorder.BeginTrackingResourceState(
     static_cast<const graphics::Texture&>(*depth_texture_),
     graphics::ResourceStates::kUndefined);
 
   // Color: RenderTarget, Depth: DepthWrite
-  recorder.RequireResourceState(
-    static_cast<const graphics::Texture&>(*color_texture_),
-    graphics::ResourceStates::kRenderTarget);
   recorder.RequireResourceState(
     static_cast<const graphics::Texture&>(*depth_texture_),
     graphics::ResourceStates::kDepthWrite);
