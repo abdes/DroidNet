@@ -4,20 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "ViewRenderer.h"
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
-using namespace oxygen;
-using namespace oxygen::examples::multiview;
+#include "ViewRenderer.h"
 
+namespace oxygen::examples::multiview {
 auto ViewRenderer::Configure(const Config& config) -> void
 {
   config_ = config;
@@ -43,8 +40,8 @@ auto ViewRenderer::Configure(const Config& config) -> void
   shader_pass_config_->color_texture = config.color_texture;
   shader_pass_config_->clear_color = config.clear_color;
   shader_pass_config_->fill_mode = config.wireframe
-    ? oxygen::graphics::FillMode::kWireFrame
-    : oxygen::graphics::FillMode::kSolid;
+    ? graphics::FillMode::kWireFrame
+    : graphics::FillMode::kSolid;
 
   if (!shader_pass_) {
     shader_pass_ = std::make_shared<engine::ShaderPass>(shader_pass_config_);
@@ -72,14 +69,13 @@ auto ViewRenderer::ResetConfiguration() -> void
   if (shader_pass_config_) {
     shader_pass_config_->color_texture.reset();
     shader_pass_config_->clear_color.reset();
-    shader_pass_config_->fill_mode = oxygen::graphics::FillMode::kSolid;
+    shader_pass_config_->fill_mode = graphics::FillMode::kSolid;
   }
   LOG_F(INFO, "[ViewRenderer] Configuration reset (cleared textures)");
 }
 
 auto ViewRenderer::Render(const engine::RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const graphics::Framebuffer& framebuffer)
-  -> co::Co<>
+  graphics::CommandRecorder& recorder) const -> co::Co<>
 {
   if (!config_.has_value()) {
     LOG_F(ERROR, "[ViewRenderer] Cannot render - not configured!");
@@ -96,18 +92,17 @@ auto ViewRenderer::Render(const engine::RenderContext& ctx,
     psf ? psf->draw_metadata_bytes.size() : 0);
 
   // Depth pre-pass
-  co_await RenderDepthPrePass(ctx, recorder, framebuffer);
+  co_await RenderDepthPrePass(ctx, recorder);
 
   // Color pass
-  co_await RenderColorPass(ctx, recorder, framebuffer);
+  co_await RenderColorPass(ctx, recorder);
 
   LOG_F(INFO, "[ViewRenderer] Render complete");
   co_return;
 }
 
 auto ViewRenderer::RenderDepthPrePass(const engine::RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const graphics::Framebuffer& framebuffer)
-  -> co::Co<>
+  graphics::CommandRecorder& recorder) const -> co::Co<>
 {
   LOG_SCOPE_F(INFO, "[ViewRenderer] DepthPrePass");
 
@@ -126,8 +121,7 @@ auto ViewRenderer::RenderDepthPrePass(const engine::RenderContext& ctx,
 }
 
 auto ViewRenderer::RenderColorPass(const engine::RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const graphics::Framebuffer& framebuffer)
-  -> co::Co<>
+  graphics::CommandRecorder& recorder) const -> co::Co<>
 {
   LOG_SCOPE_F(INFO, "[ViewRenderer] ColorPass");
 
@@ -144,3 +138,5 @@ auto ViewRenderer::RenderColorPass(const engine::RenderContext& ctx,
 
   co_return;
 }
+
+} // namespace oxygen::examples::multiview

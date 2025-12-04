@@ -10,8 +10,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 

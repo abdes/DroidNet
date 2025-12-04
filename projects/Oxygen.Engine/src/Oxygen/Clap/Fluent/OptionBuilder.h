@@ -16,6 +16,8 @@
 
 namespace oxygen::clap {
 
+template <typename T> class OptionValueBuilder;
+
 class OptionBuilder {
   using Self = OptionBuilder;
 
@@ -91,8 +93,6 @@ protected:
   {
   }
 };
-
-template <typename T> class OptionValueBuilder;
 
 //! Specialization of the OptionBuilder for boolean values, which will
 //! automatically define an implicit value of `true`.

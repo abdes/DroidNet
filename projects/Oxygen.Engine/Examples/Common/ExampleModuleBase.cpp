@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "ExampleModuleBase.h"
-
-#include "AsyncEngineApp.h"
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
+
+#include "AsyncEngineApp.h"
+#include "ExampleModuleBase.h"
 
 using namespace oxygen;
 

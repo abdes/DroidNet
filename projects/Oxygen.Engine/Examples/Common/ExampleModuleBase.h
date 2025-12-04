@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include "AppWindow.h"
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Platform/Window.h>
+
+#include "AppWindow.h"
 
 namespace oxygen::examples::common {
 

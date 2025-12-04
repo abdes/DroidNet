@@ -8,19 +8,17 @@
 
 #include <memory>
 
-#include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Graphics/Common/Forward.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::engine {
 class DepthPrePass;
 struct DepthPrePassConfig;
 class ShaderPass;
 struct ShaderPassConfig;
-}
+} // namespace oxygen::engine
 
 namespace oxygen::examples::multiview {
 
@@ -34,17 +32,15 @@ public:
   struct Config {
     std::shared_ptr<graphics::Texture> color_texture;
     std::shared_ptr<graphics::Texture> depth_texture;
-    graphics::Color clear_color { 0.1f, 0.2f, 0.38f, 1.0f };
+    graphics::Color clear_color { 0.1F, 0.2F, 0.38F, 1.0F };
     bool wireframe { false };
   };
 
   ViewRenderer() = default;
   ~ViewRenderer() = default;
 
-  ViewRenderer(const ViewRenderer&) = delete;
-  ViewRenderer& operator=(const ViewRenderer&) = delete;
-  ViewRenderer(ViewRenderer&&) = default;
-  ViewRenderer& operator=(ViewRenderer&&) = default;
+  OXYGEN_MAKE_NON_COPYABLE(ViewRenderer)
+  OXYGEN_DEFAULT_MOVABLE(ViewRenderer)
 
   //! Configure the renderer with textures and settings.
   auto Configure(const Config& config) -> void;
@@ -62,11 +58,9 @@ public:
    Renders depth pre-pass and color pass to the configured textures.
    \param ctx RenderContext with scene data
    \param recorder CommandRecorder for GPU commands
-   \param framebuffer Framebuffer containing color and depth attachments
   */
   auto Render(const engine::RenderContext& ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<>;
+    graphics::CommandRecorder& recorder) const -> co::Co<>;
 
   [[nodiscard]] auto IsConfigured() const -> bool
   {
@@ -75,12 +69,10 @@ public:
 
 private:
   auto RenderDepthPrePass(const engine::RenderContext& ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<>;
+    graphics::CommandRecorder& recorder) const -> co::Co<>;
 
   auto RenderColorPass(const engine::RenderContext& ctx,
-    graphics::CommandRecorder& recorder,
-    const graphics::Framebuffer& framebuffer) -> co::Co<>;
+    graphics::CommandRecorder& recorder) const -> co::Co<>;
 
   std::optional<Config> config_;
 

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "MainView.h"
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -16,6 +14,7 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
+#include "MainView.h"
 #include "OffscreenCompositor.h"
 
 namespace oxygen::examples::multiview {
@@ -24,7 +23,7 @@ MainView::MainView()
   : DemoView(ViewConfig {
       .name = "MainView",
       .purpose = "Main_Solid",
-      .clear_color = graphics::Color { 0.1f, 0.2f, 0.38f, 1.0f },
+      .clear_color = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F },
       .wireframe = false,
     })
 {
@@ -35,10 +34,10 @@ void MainView::Initialize(scene::Scene& scene)
   EnsureCamera(scene, "MainCamera");
 
   // Set initial transform
-  camera_node_.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 5.0f });
+  CameraNodeRef().GetTransform().SetLocalPosition({ 0.0F, 0.0F, 5.0F });
 
   // Log setup
-  if (const auto pos = camera_node_.GetTransform().GetLocalPosition()) {
+  if (const auto pos = CameraNodeRef().GetTransform().GetLocalPosition()) {
     LOG_F(INFO, "[MainView] Camera positioned at ({}, {}, {})", pos->x, pos->y,
       pos->z);
   }
@@ -50,35 +49,35 @@ void MainView::OnSceneMutation()
   const auto height = static_cast<float>(GetSurface().Height());
 
   // Update camera
-  const auto cam_ref = camera_node_.GetCameraAs<scene::PerspectiveCamera>();
+  const auto cam_ref = CameraNodeRef().GetCameraAs<scene::PerspectiveCamera>();
   if (cam_ref) {
     auto& cam = cam_ref->get();
-    const float aspect = height > 0 ? (width / height) : 1.0f;
-    cam.SetFieldOfView(glm::radians(45.0f));
+    const float aspect = height > 0 ? (width / height) : 1.0F;
+    cam.SetFieldOfView(glm::radians(45.0F));
     cam.SetAspectRatio(aspect);
-    cam.SetNearPlane(0.1f);
-    cam.SetFarPlane(100.0f);
-    cam.SetViewport(ViewPort { .top_left_x = 0.0f,
-      .top_left_y = 0.0f,
+    cam.SetNearPlane(0.1F);
+    cam.SetFarPlane(100.0F);
+    cam.SetViewport(ViewPort { .top_left_x = 0.0F,
+      .top_left_y = 0.0F,
       .width = width,
       .height = height,
-      .min_depth = 0.0f,
-      .max_depth = 1.0f });
+      .min_depth = 0.0F,
+      .max_depth = 1.0F });
   }
 
   // Ensure resources - views need to provide their own recorder when needed
   EnsureMainRenderTargets();
 
   // Mark view as ready for rendering
-  view_ready_ = true;
+  SetViewReady(true);
 
   // Register view
-  ViewPort viewport { .top_left_x = 0.0f,
-    .top_left_y = 0.0f,
+  ViewPort viewport { .top_left_x = 0.0F,
+    .top_left_y = 0.0F,
     .width = width,
     .height = height,
-    .min_depth = 0.0f,
-    .max_depth = 1.0f };
+    .min_depth = 0.0F,
+    .max_depth = 1.0F };
 
   Scissors scissor { .left = 0,
     .top = 0,
@@ -88,7 +87,7 @@ void MainView::OnSceneMutation()
   RegisterView(viewport, scissor);
 }
 
-auto MainView::OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<void>
+auto MainView::OnPreRender(engine::Renderer& renderer) -> co::Co<>
 {
   (void)renderer;
 
@@ -96,33 +95,32 @@ auto MainView::OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<void>
   LOG_F(INFO,
     "[MainView] OnPreRender: color_tex={}, depth_tex={}, "
     "renderer_configured={}",
-    static_cast<bool>(color_texture_), static_cast<bool>(depth_texture_),
-    renderer_.IsConfigured());
+    static_cast<bool>(ColorTextureRef()), static_cast<bool>(DepthTextureRef()),
+    RendererRef().IsConfigured());
 
-  if (color_texture_ && depth_texture_ && !renderer_.IsConfigured()) {
+  if (ColorTextureRef() && DepthTextureRef() && !RendererRef().IsConfigured()) {
     LOG_F(INFO,
       "[MainView] Configuring renderer with clear_color=({},{},{},{})",
-      config_.clear_color.r, config_.clear_color.g, config_.clear_color.b,
-      config_.clear_color.a);
+      Config().clear_color.r, Config().clear_color.g, Config().clear_color.b,
+      Config().clear_color.a);
     ViewRenderer::Config config {
-      .color_texture = color_texture_,
-      .depth_texture = depth_texture_,
-      .clear_color = config_.clear_color,
-      .wireframe = config_.wireframe,
+      .color_texture = ColorTextureRef(),
+      .depth_texture = DepthTextureRef(),
+      .clear_color = Config().clear_color,
+      .wireframe = Config().wireframe,
     };
-    renderer_.Configure(config);
+    RendererRef().Configure(config);
     LOG_F(INFO, "[MainView] Renderer configured successfully");
   }
 
   co_return;
 }
 
-auto MainView::RenderToFramebuffer(const engine::RenderContext& render_ctx,
-  graphics::CommandRecorder& recorder, const graphics::Framebuffer& framebuffer)
-  -> co::Co<void>
+auto MainView::RenderFrame(const engine::RenderContext& render_ctx,
+  graphics::CommandRecorder& recorder) -> co::Co<>
 {
-  if (renderer_.IsConfigured() && framebuffer_) {
-    co_await renderer_.Render(render_ctx, recorder, *framebuffer_);
+  if (RendererRef().IsConfigured() && FramebufferRef()) {
+    co_await RendererRef().Render(render_ctx, recorder);
   }
   co_return;
 }
@@ -130,27 +128,32 @@ auto MainView::RenderToFramebuffer(const engine::RenderContext& render_ctx,
 void MainView::Composite(
   graphics::CommandRecorder& recorder, graphics::Texture& backbuffer)
 {
-  if (view_ready_ && color_texture_) {
+  if (IsViewReady() && ColorTextureRef()) {
     OffscreenCompositor compositor;
-    compositor.CompositeFullscreen(recorder, *color_texture_, backbuffer);
+    compositor.CompositeFullscreen(recorder, *ColorTextureRef(), backbuffer);
   }
 }
 
-void MainView::ReleaseResources() { DemoView::ReleaseResources(); }
+void MainView::OnReleaseResources()
+{
+  // No derived GPU resources to schedule here in MainView; if future
+  // derived resources are added they should be deferred-released here.
+  DemoView::OnReleaseResources();
+}
 
 void MainView::EnsureMainRenderTargets()
 {
   auto& gfx = GetGraphics();
-  auto& surface = GetSurface();
+  const auto& surface = GetSurface();
   auto& recorder = GetRecorder();
 
   const auto width = surface.Width();
   const auto height = surface.Height();
 
   // Check if we need to recreate resources
-  bool recreate = !framebuffer_ || !color_texture_ || !depth_texture_;
-  if (!recreate && color_texture_) {
-    const auto& desc = color_texture_->GetDescriptor();
+  bool recreate = !FramebufferRef() || !ColorTextureRef() || !DepthTextureRef();
+  if (!recreate && ColorTextureRef()) {
+    const auto& desc = ColorTextureRef()->GetDescriptor();
     if (desc.width != width || desc.height != height) {
       recreate = true;
     }
@@ -163,67 +166,67 @@ void MainView::EnsureMainRenderTargets()
   LOG_F(INFO, "[MainView] Creating render targets ({}x{})", width, height);
 
   // Release old GPU resources ONLY
-  renderer_.ResetConfiguration();
-  view_ready_ = false;
-  color_texture_ = nullptr;
-  depth_texture_ = nullptr;
-  framebuffer_ = nullptr;
+  RendererRef().ResetConfiguration();
+  SetViewReady(false);
+  ColorTextureRef() = nullptr;
+  DepthTextureRef() = nullptr;
+  FramebufferRef() = nullptr;
 
   // Create color texture
   graphics::TextureDesc color_desc;
   color_desc.width = width;
   color_desc.height = height;
-  color_desc.format = oxygen::Format::kRGBA8UNorm;
+  color_desc.format = Format::kRGBA8UNorm;
   color_desc.is_render_target = true;
   color_desc.is_shader_resource = true;
   color_desc.debug_name = "MainView_Color";
-  color_desc.texture_type = oxygen::TextureType::kTexture2D;
+  color_desc.texture_type = TextureType::kTexture2D;
   color_desc.mip_levels = 1;
   color_desc.array_size = 1;
   color_desc.sample_count = 1;
   color_desc.depth = 1;
   color_desc.use_clear_value = true;
-  color_desc.clear_value = config_.clear_color;
-  color_texture_ = gfx.CreateTexture(color_desc);
+  color_desc.clear_value = Config().clear_color;
+  ColorTextureRef() = gfx.CreateTexture(color_desc);
 
   // Create depth texture
   graphics::TextureDesc depth_desc;
   depth_desc.width = width;
   depth_desc.height = height;
-  depth_desc.format = oxygen::Format::kDepth32;
+  depth_desc.format = Format::kDepth32;
   depth_desc.is_render_target = true;
-  depth_desc.texture_type = oxygen::TextureType::kTexture2D;
+  depth_desc.texture_type = TextureType::kTexture2D;
   depth_desc.mip_levels = 1;
   depth_desc.array_size = 1;
   depth_desc.sample_count = 1;
   depth_desc.depth = 1;
   depth_desc.is_shader_resource = false;
   depth_desc.use_clear_value = true;
-  depth_desc.clear_value = graphics::Color { 1.0f, 0.0f, 0.0f, 0.0f };
+  depth_desc.clear_value = graphics::Color { 1.0F, 0.0F, 0.0F, 0.0F };
   depth_desc.debug_name = "MainView_Depth";
-  depth_texture_ = gfx.CreateTexture(depth_desc);
+  DepthTextureRef() = gfx.CreateTexture(depth_desc);
 
   // Create framebuffer
   graphics::FramebufferDesc fb_desc;
-  fb_desc.AddColorAttachment({ .texture = color_texture_,
+  fb_desc.AddColorAttachment({ .texture = ColorTextureRef(),
     .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
-    .format = color_texture_->GetDescriptor().format });
-  fb_desc.depth_attachment.texture = depth_texture_;
+    .format = ColorTextureRef()->GetDescriptor().format });
+  fb_desc.depth_attachment.texture = DepthTextureRef();
   fb_desc.depth_attachment.sub_resources = graphics::TextureSubResourceSet {};
-  framebuffer_ = gfx.CreateFramebuffer(fb_desc);
+  FramebufferRef() = gfx.CreateFramebuffer(fb_desc);
 
   // Transition textures to appropriate initial states using the stored
   // recorder CRITICAL: Begin tracking resources before requiring their states
   recorder.BeginTrackingResourceState(
-    static_cast<const graphics::Texture&>(*color_texture_),
+    static_cast<const graphics::Texture&>(*ColorTextureRef()),
     graphics::ResourceStates::kRenderTarget);
   recorder.BeginTrackingResourceState(
-    static_cast<const graphics::Texture&>(*depth_texture_),
+    static_cast<const graphics::Texture&>(*DepthTextureRef()),
     graphics::ResourceStates::kUndefined);
 
   // Color: RenderTarget, Depth: DepthWrite
   recorder.RequireResourceState(
-    static_cast<const graphics::Texture&>(*depth_texture_),
+    static_cast<const graphics::Texture&>(*DepthTextureRef()),
     graphics::ResourceStates::kDepthWrite);
 }
 
