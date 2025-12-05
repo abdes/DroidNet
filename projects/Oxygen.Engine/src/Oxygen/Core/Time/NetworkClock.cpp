@@ -69,9 +69,10 @@ auto NetworkClock::PredictRemoteTime(PhysicalTime local_now,
 {
   // Predict by adding the window to the provided local_now and then mapping
   // to the remote timeline using the current peer offset.
-  const auto base_ns = local_now.get().time_since_epoch().count();
-  const auto pred_local = steady_clock::now()
-    + nanoseconds(base_ns + prediction_window.get().count());
+  // Use the provided local_now and add the prediction window. Do not call
+  // steady_clock::now() here — prediction must be deterministic from the
+  // caller-provided local time.
+  const auto pred_local = local_now.get() + prediction_window.get();
   const auto pred_remote = nanoseconds(
     pred_local.time_since_epoch().count() - peer_offset_.get().count());
   return NetworkTime { NetworkTime::UnderlyingType(pred_remote) };
