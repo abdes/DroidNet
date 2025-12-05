@@ -31,7 +31,9 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Renderer/Internal/SceneConstantsManager.h>
 #include <Oxygen/Renderer/RenderContext.h>
+#include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
@@ -129,7 +131,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
 
   // Initialize scene constants manager for per-view, per-slot Upload heap
   // buffers
-  scene_const_manager_ = std::make_unique<upload::SceneConstantsManager>(
+  scene_const_manager_ = std::make_unique<internal::SceneConstantsManager>(
     observer_ptr { gfx.get() },
     static_cast<std::uint32_t>(sizeof(SceneConstants::GpuData)));
 
