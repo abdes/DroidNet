@@ -458,7 +458,7 @@ auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
     const uint32_t steps = result.steps_executed;
 
     for (uint32_t s = 0; s < steps; ++s) {
-      auto module_timing = context.GetModuleTimingData();
+      ModuleTimingData module_timing = context.GetModuleTimingData();
       module_timing.fixed_delta_time = sim.GetFixedTimestep();
       module_timing.fixed_steps_this_frame = s + 1;
       context.SetModuleTimingData(module_timing, tag);
@@ -468,7 +468,7 @@ auto AsyncEngine::PhaseFixedSim(FrameContext& context) -> co::Co<>
         PhaseId::kFixedSimulation, context);
     }
 
-    auto module_timing = context.GetModuleTimingData();
+    ModuleTimingData module_timing = context.GetModuleTimingData();
     module_timing.fixed_steps_this_frame = steps;
     module_timing.interpolation_alpha
       = static_cast<float>(result.interpolation_alpha);
