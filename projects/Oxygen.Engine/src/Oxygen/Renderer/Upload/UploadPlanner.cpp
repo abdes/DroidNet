@@ -140,12 +140,33 @@ namespace oxygen::engine::upload {
     return std::unexpected(UploadError::kInvalidRequest);
   }
 
-  std::sort(valid.begin(), valid.end(), [](const auto& a, const auto& b) {
-    auto ka = MakeSortKey(a.valid);
-    auto kb = MakeSortKey(b.valid);
+  // Build deterministic ordering for destination groups based on first
+  // occurrence of the destination in the input request list. This ensures
+  // planner output is stable and does not depend on heap pointer ordering.
+  std::unordered_map<const void*, size_t> first_occurrence;
+  first_occurrence.reserve(valid.size());
+  for (const auto& iv : valid) {
+    const void* ptr = iv.valid.dst.get();
+    auto it = first_occurrence.find(ptr);
+    if (it == first_occurrence.end()) {
+      first_occurrence.emplace(ptr, iv.index);
+    } else if (iv.index < it->second) {
+      it->second = iv.index;
+    }
+  }
+
+  std::sort(valid.begin(), valid.end(), [&](const auto& a, const auto& b) {
+    const auto ka = MakeSortKey(a.valid);
+    const auto kb = MakeSortKey(b.valid);
+    const auto fa = first_occurrence[ka.dst_ptr];
+    const auto fb = first_occurrence[kb.dst_ptr];
+    if (fa != fb) {
+      return fa < fb; // group order by first appearance
+    }
     if (ka.dst_ptr == kb.dst_ptr) {
       return ka.dst_offset < kb.dst_offset;
     }
+    // Fallback to pointer ordering for stability when first-occurrence ties
     return ka.dst_ptr < kb.dst_ptr;
   });
 
