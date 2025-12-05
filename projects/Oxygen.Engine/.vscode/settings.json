@@ -24,6 +24,17 @@
         "editor.formatOnSave": false,
         "editor.formatOnType": false
     },
+    "C_Cpp.default.browse.path": [
+        "${workspaceFolder}/src",
+        "~/.conan2/**"
+    ],
+    "C_Cpp.default.browse.databaseFilename": "${workspaceFolder}/.vscode/browse.vc.db",
+    "files.exclude": {
+        "**/${workspaceFolder}/out": true
+    },
+    "search.exclude": {
+        "**/${workspaceFolder}/out": true
+    },
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools",
         "editor.formatOnSave": true

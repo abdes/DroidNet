@@ -1,0 +1,3 @@
+*.DB
+*.DB-shm
+*.DB-wal
