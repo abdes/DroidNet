@@ -17,7 +17,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/api_export.h>
 
-namespace oxygen::engine::upload {
+namespace oxygen::engine::internal {
 
 //! Manages per-view, per-frame-slot scene constants buffers for root CBV
 //! binding.
@@ -94,4 +94,4 @@ private:
   std::unordered_map<BufferKey, BufferInfo, BufferKeyHash> buffers_;
 };
 
-} // namespace oxygen::engine::upload
+} // namespace oxygen::engine::internal

@@ -9,7 +9,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 
-namespace oxygen::engine::upload {
+namespace oxygen::engine::internal {
 
 using graphics::BufferDesc;
 using graphics::BufferMemory;
@@ -118,4 +118,4 @@ auto SceneConstantsManager::WriteSceneConstants(
   return info;
 }
 
-} // namespace oxygen::engine::upload
+} // namespace oxygen::engine::internal

@@ -27,11 +27,9 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
-#include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Types/DrawMetadata.h>
 #include <Oxygen/Renderer/Types/PassMask.h>
 #include <Oxygen/Renderer/Types/SceneConstants.h>
-#include <Oxygen/Renderer/Upload/SceneConstantsManager.h>
 #include <Oxygen/Renderer/api_export.h>
 #include <mutex>
 
@@ -53,7 +51,10 @@ class Mesh;
 } // namespace oxygen::data
 
 namespace oxygen::engine {
-
+class RenderContextPool;
+namespace internal {
+  class SceneConstantsManager;
+} // namespace internal
 namespace upload {
   class UploadCoordinator;
   class StagingProvider;
@@ -224,7 +225,7 @@ private:
   // Scene constants management - uses dedicated slot-aware manager for root CBV
   // binding
   SceneConstants scene_const_cpu_;
-  std::unique_ptr<upload::SceneConstantsManager> scene_const_manager_;
+  std::unique_ptr<internal::SceneConstantsManager> scene_const_manager_;
 
   // Persistent ScenePrep state (caches transforms/materials/geometry across
   // frames). ResetFrameData() is invoked each RunScenePrep while retaining
