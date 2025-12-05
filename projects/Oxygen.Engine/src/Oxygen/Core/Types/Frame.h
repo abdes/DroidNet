@@ -116,7 +116,6 @@ using FrameSequenceNumber = NamedType<uint64_t, struct FrameSequenceNumberTag,
   // clang-format off
   DefaultInitialized,
   PreIncrementable,
-  PostIncrementable,
   Addable,
   Subtractable,
   Comparable,
