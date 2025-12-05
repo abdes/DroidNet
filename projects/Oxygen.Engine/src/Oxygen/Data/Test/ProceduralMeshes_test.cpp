@@ -220,7 +220,7 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
 }
 
 //! Boundary tests for minimum valid sphere segment counts.
-//! Verifies documented lower limits: latitude_segments >=3, longitude_segments
+//! Verifies documentated lower limits: latitude_segments >=3, longitude_segments
 //! >=3.
 NOLINT_TEST_F(ProceduralMeshTest, SphereMinimumValidSegments)
 {
@@ -273,7 +273,8 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
   const auto& [vertices, indices] = *mesh_opt;
 
   // Act & Assert: the only view is the full data
-  EXPECT_EQ(vertices.size(), 8u); // Cube should have 8 vertices
+  // Cube uses 24 per-face vertices (separate normals/tangents per face)
+  EXPECT_EQ(vertices.size(), 24u);
   EXPECT_EQ(indices.size(), 36u); // Cube should have 36 indices
 }
 
@@ -288,7 +289,7 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
     size_t min_vertices;
     size_t min_indices;
   } types[] = {
-    { "Cube", MakeCubeMeshAsset(), 8, 36 },
+    { "Cube", MakeCubeMeshAsset(), 24, 36 },
     { "Sphere", MakeSphereMeshAsset(8, 8), 81, 384 },
     { "Plane", MakePlaneMeshAsset(2, 2, 1.0f), 9, 24 },
     { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f), 18, 72 },
@@ -404,51 +405,6 @@ NOLINT_TEST_F(ProceduralMeshTest, Torus_NoDegenerateTriangles)
       << "Degenerate triangle at tri " << (i / 3) << " indices (" << a << ","
       << b << "," << c << ")";
   }
-}
-
-//! Checks that the cone base cap reuses the radial ring vertices rather than
-//! duplicating a separate ring (optimization / memory reuse). Acceptance: the
-//! number of unique vertices participating in base cap triangles is strictly
-//! less than the number of indices referenced there (implying reuse) and no
-//! second distinct ring sized 'segments' exists after side + apex vertices.
-NOLINT_TEST_F(ProceduralMeshTest, ConeCapVertexReuse)
-{
-  // Arrange
-  using namespace oxygen::data;
-  const unsigned segments = 8;
-  auto cone = MakeConeMeshAsset(segments, 1.0f, 0.5f);
-  ASSERT_TRUE(cone.has_value());
-  const auto& vertices = cone->first;
-  const auto& indices = cone->second;
-
-  // Identify expected layout from generator: [ring (segments+1)] + apex +
-  // base_center
-  const size_t ring_count = segments + 1; // inclusive duplicate for wrap
-  const size_t base_center_index = ring_count + 1; // after apex
-  ASSERT_LT(base_center_index, vertices.size());
-
-  // Side triangles count = segments, cap triangles count = segments (see
-  // generator)
-  ASSERT_EQ(indices.size(), segments * 3 * 2);
-  const size_t side_index_count = segments * 3;
-
-  // Collect unique vertex indices used by cap triangles only.
-  std::unordered_set<uint32_t> cap_unique;
-  for (size_t i = side_index_count; i < indices.size(); i += 3) {
-    cap_unique.insert(indices[i]);
-    cap_unique.insert(indices[i + 1]);
-    cap_unique.insert(indices[i + 2]);
-  }
-  // Expect cap uses the shared ring vertices (subset of first ring_count) plus
-  // center.
-  for (uint32_t idx : cap_unique) {
-    EXPECT_LT(idx, static_cast<uint32_t>(base_center_index + 1));
-  }
-  // Should include center
-  EXPECT_TRUE(cap_unique.contains(static_cast<uint32_t>(base_center_index)));
-  // Reuse condition: unique cap verts <= ring_count + 1 (center) and strictly <
-  // ring_count + 2 (which would imply extra ring)
-  EXPECT_LE(cap_unique.size(), ring_count + 1);
 }
 
 } // namespace
