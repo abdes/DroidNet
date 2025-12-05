@@ -95,9 +95,9 @@ auto Graphics::CreateCommandQueue(const QueueKey& queue_key, QueueRole role)
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> /*window_weak*/,
   observer_ptr<graphics::CommandQueue> /*command_queue*/) const
-  -> std::shared_ptr<Surface>
+  -> std::unique_ptr<Surface>
 {
-  return std::make_shared<HeadlessSurface>("headless-surface");
+  return std::make_unique<HeadlessSurface>("headless-surface");
 }
 
 auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
