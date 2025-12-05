@@ -277,6 +277,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "/utf-8") # Set character set to UTF-8
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "/GR-") # Disable RTTI
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "/W4") # Warning level 4
+  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/MP") # Multi-processor compilation
   list(APPEND OXYGEN_COMMON_CXX_FLAGS "/DNOMINMAX") # Always define NOMINMAX for MSVC
   #  list(APPEND OXYGEN_COMMON_CXX_FLAGS "/WX") # Treat warnings as errors
 else()
