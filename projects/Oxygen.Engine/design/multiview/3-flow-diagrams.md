@@ -9,18 +9,20 @@ flowchart TD
     RegisterViews --> PrepareGraph[A: Prepare Graph]
 
     PrepareGraph --> RequestRender[A: Request Render]
-    RequestRender --> ScenePrep[R: Scene Prep]
-    ScenePrep --> CreatePrepared[R: Create PreparedFrame]
+    RequestRender --> OnPreRender[P: Renderer::OnPreRender / ScenePrep]
+    OnPreRender --> CreatePrepared[R: Create PreparedFrame]
 
     CreatePrepared --> ViewLoop{R: More Views?}
 
-    subgraph RendererLoop["Renderer View Loop"]
-        ViewLoop -->|Yes| ResolveView[R: Call ViewResolver]
-        ResolveView --> UpdateContext[R: Update Context]
-        UpdateContext --> ClearRetained[R: Clear Retained]
-        ClearRetained --> ExecuteGraph[R: Execute Graph]
-        ExecuteGraph --> CaptureOutput[R: Capture Output]
-        CaptureOutput --> ViewLoop
+    subgraph RendererLoop["Renderer View Loop (OnRender)"]
+        ViewLoop -->|Yes| GetGraphPair[R: Take snapshot of registered factory/resolver]
+        GetGraphPair --> ValidateOutput[R: Validate view.output exists]
+        ValidateOutput --> AcquireRecorder[R: AcquireCommandRecorder for view]
+        AcquireRecorder --> SetupFB[R: Setup framebuffer tracking & bind]
+        SetupFB --> WireConstants[R: Prepare/write per-view SceneConstants]
+        WireConstants --> ExecGraph[R: Execute RenderGraphFactory coroutine]
+        ExecGraph --> Finalize[R: Finalize view state]
+        Finalize --> ViewLoop
     end
 
     ViewLoop -->|No| Compositing[A: Compositing]
@@ -39,16 +41,18 @@ flowchart TD
 | R: Scene Prep | Renderer | kCommandRecord | CPU culling, visibility filter, upload geometry/materials/transforms once |
 | R: Create PreparedFrame | Renderer | kCommandRecord | Package uploaded resources with bindless indices once for all views |
 | R: More Views? | Renderer | kCommandRecord | Check if more registered views remain to render |
-| R: Resolve View | Renderer | kCommandRecord | Call ViewResolver(ViewId) to get resolved View from application |
-| R: Update Context | Renderer | kCommandRecord | Set current_view_id and current_view in RenderContext |
-| R: Clear Retained | Renderer | kCommandRecord | Clear current_view_retained_items for fresh per-view state |
-| R: Execute Graph | Renderer | kCommandRecord | Execute render graph coroutine. **Check**: If pass is `ViewIndependent` and `view_index > 0`, skip execution. |
-| R: Capture Output | RenderGraph | kCommandRecord | RenderGraph registers its output framebuffer(s) in `view_outputs` map. **Note**: Must ensure transient targets are resolved/copied if underlying storage is reused. |
-| A: Compositing | Application | kCompositing | Combine multiple view_outputs into final presentation |
+| R: Resolve View / ScenePrep | Renderer | kPreRender / kCommandRecord | Run per-view scene prep (culling, drawlist), cache ResolvedView and PreparedSceneFrame in renderer maps (resolved_views_, prepared_frames_). The first view may run the frame-phase collection. |
+| R: Validate Output | Renderer | kRender | Check `FrameContext::GetViewContext(view_id).output` — if missing the view is skipped (renderer logs and continues). |
+| R: Acquire Recorder | Renderer | kRender | Acquire per-view `CommandRecorder` from Graphics (naming contains ViewId). Renderer takes a snapshot of registered factories before iterating so UnregisterView() is safe. |
+| R: Setup Framebuffer | Renderer | kRender | Begin tracking resource states for attachments, require render states, flush barriers and bind framebuffer to recorder; set `RenderContext::framebuffer`. |
+| R: Wire SceneConstants | Renderer | kRender | Write per-view SceneConstants using `SceneConstantsManager` and populate `RenderContext.current_view` with pointers to ResolvedView and PreparedSceneFrame. |
+| R: Execute Render Graph | Renderer | kRender | Await the registered `RenderGraphFactory(view_id, rc, recorder)` coroutine; exceptions mark the view as failed. Renderer updates `view_ready_states_` to reflect success/failure. |
+| R: Capture Output | RenderGraph | kRender | The render graph and passes may assume `RenderContext.framebuffer` is the target. Applications may choose to set `FrameContext::SetViewOutput()` or update `ViewContext::output` before `OnRender` — Renderer does not auto-populate FrameContext outputs. |
+| A: Compositing | Application | kCompositing | Application modules compose multiple view outputs (offscreen textures) into final backbuffer. Examples call their own compositor and then explicitly call `FrameContext::SetSurfacePresentable()` for the swapchain surface when ready. |
 | E: Present | Engine | kPresent | Swapchain present and finalize platform submission bookkeeping |
 
 ---
 
-**Document Status**: Draft
-**Last Updated**: 2025-12-02
+**Document Status**: Updated to match code
+**Last Updated**: 2025-12-05
 **Part of**: Multi-View Rendering Design Series

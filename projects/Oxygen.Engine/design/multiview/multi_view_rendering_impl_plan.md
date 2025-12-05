@@ -10,36 +10,35 @@
 
 ### ✅ Phase 2: Renderer Orchestration & Automatic Rendering (COMPLETED)
 
-### ✅ Phase 2: Renderer Orchestration & Automatic Rendering (COMPLETED)
-
 **Completed Items:**
 
 - ✅ Defined `ViewResolver` type as `std::function<ResolvedView(const ViewContext&)>`
 - ✅ Defined `RenderGraphFactory` type for per-view rendering
-- ✅ Added `Renderer::RegisterViewResolver()` for registering view resolution logic
-- ✅ Added `Renderer::RegisterRenderGraph()` for registering per-view render graph factories
+- ✅ Added `Renderer::RegisterView()` for registering a per-view resolver + render graph factory
+- ✅ Added `Renderer::UnregisterView()` to allow views to be unregistered / cleaned up
 - ✅ Added `Renderer::IsViewReady()` for querying view render status
 - ✅ Implemented automatic rendering in `Renderer::OnPreRender()`:
   - Iterates all registered views from FrameContext
   - Resolves each view using registered resolver
   - Calls `BuildFrame()` for scene preparation
-- ✅ Implemented automatic rendering in `Renderer::OnRender()`:
+-- ✅ Implemented automatic rendering in `Renderer::OnRender()`:
   - Iterates all registered render graphs
   - Acquires command recorder per view
   - Sets up framebuffer resource tracking and barriers
   - Executes registered render graph factory
-  - Handles presentation based on `PresentPolicy`
-  - Marks surfaces presentable automatically
+  - Executes per-view render graph factories via coroutines
+  - Acquires per-view command recorders and prepares per-view framebuffer tracking
+  - Wires per-view scene constants and prepared frames into the `RenderContext`
 - ✅ Exposed `ViewId` in `ViewContext` for cleaner API usage
-- ✅ Extended `ViewMetadata` with:
+-- ✅ Extended `ViewMetadata` with:
   - `name` and `purpose` fields
-  - `PresentPolicy` enum (`DirectToSurface`, `Hidden`, `Composite`)
+  - Note: a `PresentPolicy` enum is *documented* in design notes but is NOT present in the current FrameContext implementation; presentation decisions remain application-driven.
 - ✅ `ViewContext` now includes complete view configuration:
   - `ViewId id` - unique identifier (assigned by AddView)
   - `View view` - viewport and scissors
-  - `ViewMetadata metadata` - name, purpose, present policy
+  - `ViewMetadata metadata` - name, purpose
   - `surface` - reference to rendering surface
-  - `output` - framebuffer (wired by Renderer)
+  - `output` - framebuffer. Typically provided/updated by the application (e.g. via `FrameContext::UpdateView`) before `OnRender` so the Renderer can target it when executing the per-view render graph.
 
 **Key Architectural Decisions:**
 
@@ -47,14 +46,20 @@
    - Apps register views (once per frame in `OnSceneMutation`)
    - Apps register resolvers and render graphs (once at startup in `OnPreRender`)
    - Renderer executes everything automatically in `OnPreRender` and `OnRender`
-   - Apps no longer manually acquire command recorders or manage resource barriers
+   - Apps do not need to acquire command recorders for render-time recording, and the Renderer handles render-graph resource transitions; applications may still acquire command recorders in mutation phases for resource setup.
 
 2. **Registration Pattern**: Clean separation of configuration vs execution:
-   - `RegisterViewResolver()`: Maps `ViewContext` → `ResolvedView` (camera/projection)
-   - `RegisterRenderGraph()`: Maps `ViewId` → rendering coroutine
-   - Both registered once, executed automatically every frame
+   - `RegisterView(ViewId, ViewResolver, RenderGraphFactory)`: Registers both
+     the resolver (ViewContext → ResolvedView) and the per-view render
+     graph factory in one call.
+   - `UnregisterView(ViewId)`: Removes the per-view resolver, render graph
+     factory, and any cached per-view state.
+   - Both registration and unregistration are expected to be done at
+     setup/teardown times (not each frame). Registered factories are
+     executed automatically every frame.
 
 3. **SceneCameraViewResolver Helper**: Provides convenient resolver for SceneNode-based cameras:
+
    ```cpp
    renderer::SceneCameraViewResolver([](ViewId id) -> SceneNode {
      return my_camera_node;
@@ -66,23 +71,24 @@
    - Register resolver and render graphs once
    - Configure render passes (e.g., wire framebuffer attachments)
 
-### 🔄 Phase 3: Multi-View Support & Parallel Rendering (NEXT)
+### 🔄 Phase 3: Multi-View Support & Parallel Rendering (IN PROGRESS)
 
-**Remaining Work:**
+**Status & Remaining Work (updated to reflect actual implementation):**
 
-- [ ] Support multiple views rendering simultaneously per frame
-- [ ] Implement parallel per-view culling and command recording
-- [ ] Add `OnFrameGraphPerView` module hook
-- [ ] Implement compositing logic in `OnCompositing` phase hook for multi-view composition
-- [ ] Add multi-surface presentation support
-- [ ] Implement render target pooling and descriptor reuse
-- [ ] Add view ordering and composition logic
+- [x] Support multiple views rendering per frame (sequential execution): The Renderer now iterates all registered per-view render graph factories (see `render_graphs_`) and executes them in `OnRender()` using per-view command recorders and a pooled `RenderContext`.
+- [ ] Parallel per-view culling and command recording: *not implemented* — the Renderer performs scene preparation and render graph execution sequentially today.
+- [ ] Add `OnFrameGraphPerView` module hook: *not present* — module-level per-view graph hooks remain a future enhancement.
+- [x] Compositing phase available and used by examples (app-driven): The engine exposes `PhaseId::kCompositing` and the MultiView example performs application-driven compositing in `MainModule::OnCompositing()` (examples composite offscreen views into the swapchain backbuffer).
+- [ ] Multi-surface automatic presentation support: *not implemented* — the Renderer does not automatically present surfaces; examples call `FrameContext::SetSurfacePresentable()` explicitly (composition & presentation remain application responsibilities).
+- [x] Render-context pooling and per-view scene-constant management: partially implemented - A `RenderContextPool` plus `Renderer::render_context_` is used to claim a per-frame render context; `SceneConstantsManager` writes per-view constant buffers for rendering.
+- [ ] Descriptor reuse and comprehensive render-target pooling: *planned* — full render-target pooling / descriptor reuse is still a Phase‑3 goal.
+- [ ] View ordering and complex composition/dependency logic: *planned* — apps/example code currently compose in a simple order (MainView then PiP), but engine-level ordering & composition logic is a future improvement.
 
 ---
 
 ## 1. Summary
 
-- **Goal:** Render multiple, independent views per engine frame with automatic orchestration by the Renderer. Supports editor layouts, multi-viewport rendering, and flexible presentation policies.
+- **Goal:** Render multiple, independent views per engine frame with automatic orchestration by the Renderer. Supports editor layouts and multi-viewport rendering; presentation/compositing is application-driven in the current implementation.
 - **Constraint:** Clean separation between app configuration (what to render) and renderer infrastructure (how to render). Minimal app-facing API surface.
 
 ## 2. Principles
@@ -110,17 +116,14 @@ using ViewId = NamedType<uint64_t, ViewIdTag, Comparable, Hashable, Printable>;
 // In Oxygen/Core/FrameContext.h (oxygen::engine namespace)
 using ViewId = oxygen::ViewId; // namespace alias
 
-enum class PresentPolicy : uint8_t {
-  DirectToSurface, // Present directly to the surface (default)
-  Hidden,          // Don't present (e.g., for offscreen rendering)
-  Composite        // Compose with other views before presenting
-};
-
 struct ViewMetadata {
   std::string name;        // e.g. "MainView", "Minimap"
   std::string purpose;     // e.g. "primary", "shadow", "reflection"
-  PresentPolicy present_policy = PresentPolicy::DirectToSurface;
-  std::vector<SurfaceId> surfaces; // TODO: logical target identifiers
+  // Note: The live FrameContext implementation currently exposes only
+  // `name` and `purpose` in ViewMetadata. Presentation policy data (eg
+  // PresentPolicy) is a design concept but not present in the current
+  // FrameContext layout. Applications currently decide presentation timing
+  // explicitly.
 };
 
 struct ViewContext {
@@ -148,7 +151,7 @@ std::unordered_map<ViewId, ViewContext> views_;
 |---|---|---|
 | `std::string name` | Human-readable name | ✅ Implemented |
 | `std::string purpose` | View purpose tag | ✅ Implemented |
-| `PresentPolicy present_policy` | Presentation mode | ✅ Implemented |
+| `PresentPolicy present_policy` | Presentation mode | ❌ Not implemented (apps decide presentation explicitly today) |
 | `std::vector<SurfaceId> surfaces` | Logical target identifiers | ⚠️ Placeholder |
 | `uint32_t flags` | Flags for HDR, MSAA, etc. | 📋 Planned |
 
@@ -208,8 +211,10 @@ The Renderer **automatically orchestrates** all rendering infrastructure. Apps p
    - Views must be added before `kSnapshot` phase
 
 2. **In `OnPreRender` (once at startup):**
-   - Register view resolver via `RegisterViewResolver(ViewResolver)`
-   - Register render graph factories via `RegisterRenderGraph(ViewId, RenderGraphFactory)`
+   - Register per-view resolver + render graph factories via
+     `RegisterView(ViewId, ViewResolver, RenderGraphFactory)`
+   - When a view is removed permanently or temporarily, call
+     `UnregisterView(ViewId)` to clean up renderer-side registrations
    - Configure render passes (clear colors, debug names, etc.)
 
 3. **In Render Graph Factory (executed by Renderer):**
@@ -233,8 +238,8 @@ The Renderer **automatically orchestrates** all rendering infrastructure. Apps p
      - Bind framebuffer to command recorder
      - Wire framebuffer into `RenderContext`
      - Execute registered `RenderGraphFactory` coroutine
-     - Handle presentation based on `ViewContext::metadata::present_policy`
-     - Mark surfaces presentable if policy is `DirectToSurface`
+     - Populate/wire per-view SceneConstants and prepared-frame data into `RenderContext`
+     - Note: Renderer does not perform automatic surface presentation — modules and apps must call `FrameContext::SetSurfacePresentable()` when they decide to present.
      - Update `view_ready_states_` to track success/failure
 
 **Example (Async Example):**
@@ -246,7 +251,6 @@ ViewContext view_ctx {
   .metadata = {
     .name = "MainView",
     .purpose = "primary",
-    .present_policy = engine::PresentPolicy::DirectToSurface,
   },
   .surface = std::ref(*surface),
 };
@@ -255,14 +259,13 @@ view_id_ = context.AddView(std::move(view_ctx));
 // OnPreRender (once at startup):
 static bool registered = false;
 if (!registered) {
-  // Register view resolver
-  app_.renderer->RegisterViewResolver(
-    renderer::SceneCameraViewResolver([this](ViewId) {
-      return main_camera_;  // SceneNode with camera component
-    }));
-
-  // Register render graph factory
-  app_.renderer->RegisterRenderGraph(view_id_,
+  // Register per-view resolver + render graph factory in one call
+  app_.renderer->RegisterView(view_id_,
+    [this](const engine::ViewContext& vc) -> ResolvedView {
+      renderer::SceneCameraViewResolver resolver(
+        [this](const ViewId&) { return main_camera_; });
+      return resolver(vc.id);
+    },
     [this](ViewId id, const engine::RenderContext& rc,
       graphics::CommandRecorder& rec) -> co::Co<void> {
       // Wire framebuffer to pass configs
@@ -277,13 +280,12 @@ if (!registered) {
 }
 ```
 
-**Key Benefits:**
+**Key Benefits (practical):**
 
-- Apps never directly acquire command recorders
-- Apps never manage resource barriers or transitions
-- Apps never manually mark surfaces presentable
-- Renderer handles all GPU synchronization automatically
-- Clean separation: apps provide "what", Renderer handles "how"
+- Renderer centralizes per-view orchestration: it takes care of scene prep, per-view prepared frames, command-recorder acquisition for render-time workloads, and constant-buffer wiring.
+- Applications keep responsibility for resource creation/staging and may acquire a `CommandRecorder` during mutation phases (for setup) — this pattern allows deterministic resource initialization while the Renderer handles render-time recording.
+- Presentation and compositing remain application-driven; apps/modules explicitly set surface present flags when appropriate.
+- Clean separation maintained: apps express "what" to render (views, resolvers, render graphs) while the Renderer handles the "how" (execution and resource state wiring).
 
 ### 3.5. Compositing (New Phase)
 
@@ -297,19 +299,20 @@ if (!registered) {
 
 - Modules query `FrameContext::GetViewContext(ViewId)` to access the `output` framebuffer.
 - Use attachments for composition (e.g., combine multiple views into final backbuffer).
-- Register compositing render graphs via `RegisterRenderGraph()` with `Composite` present policy.
+- Register compositing render graphs via `RegisterView()` (resolver + factory) with `Composite` present policy.
 
 ### 3.6. Presentation
 
-Presentation is handled automatically by the Renderer based on `PresentPolicy`.
+Presentation is application-driven in the current implementation. The engine provides per-surface presentable flags on `FrameContext` (`SetSurfacePresentable` / `GetPresentableSurfaces`) which modules or apps set during rendering or compositing. The engine coordinator reads those flags during the `PhasePresent` step and performs presentation (e.g., swapchain present).
 
-**Current Implementation (Phase 2):**
+**Current Implementation (Phase 2 — actual behavior):**
 
-- Renderer checks `ViewContext::metadata::present_policy` after rendering each view
-- If policy is `DirectToSurface`, Renderer marks the surface as presentable via `FrameContext::SetSurfacePresentable()`
-- Engine presents marked surfaces synchronously at `PhasePresent`
+- Renderer runs per-view render graphs and populates `RenderContext` / `PreparedSceneFrame` data but does not automatically change surface present flags.
+- Modules and examples perform composition and set presentable flags explicitly when ready — see `Examples/MultiView::MainModule::OnCompositing()` where the module composites offscreen colour textures into the backbuffer and calls `FrameContext::SetSurfacePresentable()`.
 
-**App Responsibility:** Set appropriate `present_policy` in `ViewMetadata` when registering views.
+**App Responsibility:**
+
+- Ensure the view's `output` framebuffer is provided to `FrameContext` before `OnRender` (via `UpdateView()` or initial registration) and set presentable flags when appropriate.
 
 ### 3.7. Pass & Module APIs
 
@@ -337,7 +340,8 @@ auto factory = [](ViewId id, const RenderContext& rc, CommandRecorder& rec) -> c
 };
 
 // Register once
-renderer->RegisterRenderGraph(view_id, factory);
+// Register both resolver and factory for the view
+renderer->RegisterView(view_id, resolver, factory);
 ```
 
 ### 3.8. Concurrency
@@ -370,8 +374,9 @@ class Renderer : public EngineModule {
     co::Co<void>(ViewId, const RenderContext&, CommandRecorder&)>;
 
   // Registration APIs (call once at startup)
-  auto RegisterViewResolver(ViewResolver resolver) -> void;
-  auto RegisterRenderGraph(ViewId view_id, RenderGraphFactory factory) -> void;
+  auto RegisterView(ViewId view_id, ViewResolver resolver,
+    RenderGraphFactory factory) -> void;
+  auto UnregisterView(ViewId view_id) -> void;
 
   // Query API
   auto IsViewReady(ViewId view_id) const -> bool;
@@ -397,11 +402,12 @@ namespace oxygen::renderer {
   };
 }
 
-// Usage:
-renderer->RegisterViewResolver(
+// Usage (per-view registration):
+renderer->RegisterView(view_id,
   renderer::SceneCameraViewResolver([](ViewId id) {
     return my_camera_node;  // SceneNode with attached camera component
-  })
+  }),
+  factory // RenderGraphFactory coroutine defined elsewhere
 );
 ```
 
@@ -413,14 +419,13 @@ renderer->RegisterViewResolver(
 - **`Oxygen/Core/Types/ViewResolver.h`**: `ViewResolver` type alias
 - **`Oxygen/Core/FrameContext.h`**:
   - `ViewContext::id` field added
-  - `ViewMetadata` extended with `name`, `purpose`, `present_policy`
-  - `PresentPolicy` enum added
+  - `ViewMetadata` extended with `name` and `purpose` (note: `present_policy` is a design concept but is not present in the live `FrameContext` layout)
 
 **Renderer:**
 
 - **`Oxygen/Renderer/Renderer.h`**:
   - `RenderGraphFactory` type alias
-  - `RegisterViewResolver()`, `RegisterRenderGraph()`, `IsViewReady()` APIs
+  - `RegisterView()`, `UnregisterView()`, `IsViewReady()` APIs
   - Removed legacy `ExecuteRenderGraph()` and `RenderFrame()` methods
 - **`Oxygen/Renderer/Renderer.cpp`**:
   - Implemented automatic view iteration in `OnPreRender()`
@@ -461,19 +466,21 @@ context.SetSurfacePresentable(surfaceIndex, true);
 // OnSceneMutation (every frame):
 view_id_ = context.AddView(ViewContext {
   .view = view_config,
-  .metadata = { .name = "MainView", .present_policy = PresentPolicy::DirectToSurface },
+  .metadata = { .name = "MainView" },
+  // Application must also ensure the view's output framebuffer is available
+  // before render (either via a subsequent UpdateView() that includes
+  // `.output` or by providing the framebuffer during initial registration
+  // when available). Renderer requires `ViewContext::output` to exist in
+  // order to execute a registered render graph for that view.
   .surface = std::ref(*surface),
 });
 
 // OnPreRender (once at startup):
 static bool registered = false;
 if (!registered) {
-  // Register resolver
-  renderer->RegisterViewResolver(
-    SceneCameraViewResolver([this](ViewId) { return camera_node_; }));
-
-  // Register render graph
-  renderer->RegisterRenderGraph(view_id_,
+  // Register resolver + render graph together for this view id
+  renderer->RegisterView(view_id_,
+    SceneCameraViewResolver([this](ViewId) { return camera_node_; }),
     [this](ViewId, const RenderContext& rc, CommandRecorder& rec) -> co::Co<void> {
       render_graph_->PrepareForRenderFrame(rc.framebuffer);
       co_await render_graph_->RunPasses(rc, rec);
@@ -487,9 +494,9 @@ if (!registered) {
 
 **Key Changes:**
 
-1. ✅ No more manual command recorder acquisition
-2. ✅ No more `SetViewOutput()` or `SetSurfacePresentable()` calls
-3. ✅ No more `BuildFrame()` calls from app code
+1. ✅ Apps no longer call `BuildFrame()` directly — the Renderer runs scene preparation and finalization in `OnPreRender`.
+2. ⚠️ Apps still perform resource creation and may acquire command recorders in mutation phases (e.g. `OnSceneMutation`) for setup; the Renderer acquires command recorders for per-view render-time command recording.
+3. ⚠️ Surface presentation is *not* automatic — modules and apps are still responsible for marking surfaces presentable (for example `FrameContext::SetSurfacePresentable()`), particularly for composed or offscreen workflows.
 4. ✅ Register once, execute automatically every frame
 5. ✅ Framebuffer wiring happens in render graph factory via `RenderContext`
 
@@ -535,16 +542,16 @@ if (!registered) {
 
 - ✅ Renderer automatically orchestrates all rendering
 - ✅ Apps use registration pattern (resolver + render graphs)
-- ✅ Automatic presentation based on `PresentPolicy`
+- ✅ Renderer executes per-view render graphs and wires per-view outputs (see example uses)
 - ✅ `SceneCameraViewResolver` helper available
 - ✅ Single view renders correctly end-to-end
 
-**Phase 3 (Future):**
+**Phase 3 (In progress / Partial):**
 
-- [ ] Multiple views can be rendered per frame
-- [ ] Parallel per-view rendering works correctly
-- [ ] Compositing combines multiple views
-- [ ] GPU validation shows no hazards
+- ✅ Multiple views can be rendered per frame (sequential execution in the Renderer)
+- [ ] Parallel per-view rendering works correctly (future)
+- ✅ Compositing and multi-view composition are demonstrated by examples (app-driven composition in `Examples/MultiView::OnCompositing`), but engine-level automatic composition/policy handling is incomplete
+- [ ] GPU validation and robust hazard-free multi-view parallel execution (future)
 
 ---
 
@@ -554,7 +561,7 @@ if (!registered) {
 
 - [`Oxygen/Core/Types/View.h`](../../Core/Types/View.h) — ViewId definition
 - [`Oxygen/Core/Types/ViewResolver.h`](../../Core/Types/ViewResolver.h) — ViewResolver type
-- [`Oxygen/Core/FrameContext.h`](../../Core/FrameContext.h) — ViewContext, ViewMetadata, PresentPolicy
+-- [`Oxygen/Core/FrameContext.h`](../../Core/FrameContext.h) — ViewContext, ViewMetadata (name, purpose), view registration/update APIs
 - [`Oxygen/Core/FrameContext.cpp`](../../Core/FrameContext.cpp) — View management implementation
 
 **Renderer:**
@@ -567,6 +574,14 @@ if (!registered) {
 
 - `Examples/Async/MainModule.cpp` — Registration pattern implementation
 - `Examples/Async/MainModule.h` — View storage pattern
+
+**Examples / Demonstrations:**
+
+- **`Examples/MultiView`** demonstrates the new per-view registration / render-graph model in practice:
+  - Views are added/updated during `OnSceneMutation` (see `DemoView::AddViewToFrameContext`).
+  - Per-view GPU resources (color/depth textures and a framebuffer) are created by the view and the app updates the `FrameContext` with the view `output` framebuffer before rendering.
+  - Each view registers a resolver + render-graph factory using `ViewRenderer::RegisterWithEngine` which forwards render work into `ViewRenderer::Render()`.
+  - Compositing is performed in `MainModule::OnCompositing()` where all views are composited into the swapchain backbuffer and the module explicitly sets the swapchain surface presentable via `FrameContext::SetSurfacePresentable()`.
 
 **Design docs:**
 
