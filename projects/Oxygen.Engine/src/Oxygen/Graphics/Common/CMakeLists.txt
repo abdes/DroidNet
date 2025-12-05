@@ -113,6 +113,7 @@ set(
   "Internal/Commander.h"
   "Internal/CommandListPool.cpp"
   "Internal/CommandListPool.h"
+  "Internal/DeferredReclaimerComponent.h"
   "Internal/FramebufferImpl.cpp"
   "Internal/FramebufferImpl.h"
   "Internal/QueueManager.cpp"
