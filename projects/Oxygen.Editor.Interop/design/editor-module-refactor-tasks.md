@@ -35,9 +35,9 @@ msbuild "F:\projects\DroidNet\projects\Oxygen.Editor.Interop\src\Oxygen.Editor.I
 
 ### 4a: View Lifecycle Operations
 
-- [ ] **Add ViewId Type Mapping**: Create managed ViewId struct/wrapper that maps to native `engine::ViewId`. Support serialization for callbacks.
-- [ ] **Create ViewConfig Wrapper**: Managed wrapper for `EditorView::Config` to specify view name, purpose, clear color, and **compositing_target surface at creation**.
+- [x] **Add ViewId Type Mapping**: Create managed ViewId struct/wrapper that maps to native `engine::ViewId`. Support serialization for callbacks.
 - [ ] **Add CreateViewAsync Method**: Expose `EditorModule::CreateViewAsync` through `EngineRunner`. Accept config with `compositing_target` surface, return ViewId via callback.
+- [ ] **Create ViewConfig Wrapper**: Managed wrapper for `EditorView::Config` to specify view name, purpose, clear color, and **compositing_target surface at creation**.
 - [ ] **Add DestroyView Method**: Expose `EditorModule::DestroyView` through `EngineRunner`. Accept ViewId, synchronous no-op on invalid.
 - [ ] **Add View Query Methods**: `GetAllViews()`, `IsViewVisible()` to query view state from managed code.
 - [ ] **Implement Thread Safety**: Ensure view operations can be called from UI thread, route to engine thread via dispatcher.

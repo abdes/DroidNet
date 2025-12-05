@@ -11,6 +11,7 @@
 
 #include "Config.h"
 #include "Views/ViewIdManaged.h"
+#include "Views/ViewConfigManaged.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
 #include "UiThreadDispatcher.h"
@@ -177,6 +178,15 @@ namespace Oxygen::Interop {
       System::UInt32 height)
       -> System::Threading::Tasks::Task<bool>^
       ;
+
+    /// <summary>
+    /// Create a new Editor view asynchronously using the supplied managed
+    /// <c>ViewConfigManaged</c>. Returns a Task that completes with the
+    /// engine-assigned <c>ViewIdManaged</c> on success or an invalid
+    /// <c>ViewIdManaged</c> on failure.
+    /// </summary>
+    auto CreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
+      -> System::Threading::Tasks::Task<ViewIdManaged>^;
 
   private:
     // Encapsulated logging handler (forward-declared above). This hides any

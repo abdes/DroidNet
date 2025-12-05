@@ -58,4 +58,19 @@ public sealed class ViewIdManagedTests
             || s.Contains("42", System.StringComparison.OrdinalIgnoreCase))
             .Should().BeTrue("ToString should include the expected numeric representation or native-to-string formatting");
     }
+
+    [TestMethod]
+    public void CanPassToManagedCallback()
+    {
+        var called = false;
+        void Handler(ViewIdManaged vid)
+        {
+            called = true;
+            _ = vid.Value.Should().Be(777ul, "callback should receive the supplied ViewIdManaged value");
+        }
+
+        System.Action<ViewIdManaged> cb = Handler;
+        cb(new ViewIdManaged(777ul));
+        _ = called.Should().BeTrue("callback was not invoked");
+    }
 }

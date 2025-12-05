@@ -8,6 +8,7 @@
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
+    <ClCompile Include="EngineRunner_views.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
     <ClCompile Include="EditorModule\EditorCompositor.cpp">

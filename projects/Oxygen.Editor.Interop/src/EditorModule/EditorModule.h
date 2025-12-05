@@ -32,7 +32,8 @@
 #include "EditorModule/ThreadSafeQueue.h"
 #include "EditorModule/ViewManager.h"
 
-namespace oxygen::interop::module {
+namespace oxygen::interop::module
+{
 
   class RenderGraph; // forward-declare the helper at namespace scope
 
@@ -54,7 +55,8 @@ namespace oxygen::interop::module {
    multiple viewports as needed. The module is still howver, the single point of
    contact between the editor and the engine when it comes to surface lifecycle.
   */
-  class EditorModule final : public oxygen::engine::EngineModule {
+  class EditorModule final : public oxygen::engine::EngineModule
+  {
     OXYGEN_TYPED(EditorModule)
   public:
     //! Constructs the editor module with the provided surface registry, which
@@ -66,35 +68,38 @@ namespace oxygen::interop::module {
 
     ~EditorModule() override;
 
-    [[nodiscard]] auto GetName() const noexcept -> std::string_view override {
+    [[nodiscard]] auto GetName() const noexcept -> std::string_view override
+    {
       return "EditorModule";
     }
 
     [[nodiscard]] auto GetPriority() const noexcept
-      -> oxygen::engine::ModulePriority override {
+        -> oxygen::engine::ModulePriority override
+    {
       return oxygen::engine::kModulePriorityHighest;
     }
 
     [[nodiscard]] auto GetSupportedPhases() const noexcept
-      -> oxygen::engine::ModulePhaseMask override {
+        -> oxygen::engine::ModulePhaseMask override
+    {
       return oxygen::engine::MakeModuleMask<oxygen::core::PhaseId::kFrameStart,
-        oxygen::core::PhaseId::kPreRender,
-        oxygen::core::PhaseId::kRender,
-        oxygen::core::PhaseId::kCompositing,
-        oxygen::core::PhaseId::kSceneMutation>();
+                                            oxygen::core::PhaseId::kPreRender,
+                                            oxygen::core::PhaseId::kRender,
+                                            oxygen::core::PhaseId::kCompositing,
+                                            oxygen::core::PhaseId::kSceneMutation>();
     }
 
     auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
-      -> bool override;
-    auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-    auto OnSceneMutation(oxygen::engine::FrameContext& context)
-      -> oxygen::co::Co<> override;
-    auto OnPreRender(oxygen::engine::FrameContext& context)
-      -> oxygen::co::Co<> override;
-    auto OnRender(oxygen::engine::FrameContext& context)
-      -> oxygen::co::Co<> override;
-    auto OnCompositing(oxygen::engine::FrameContext& context)
-      -> oxygen::co::Co<> override;
+        -> bool override;
+    auto OnFrameStart(oxygen::engine::FrameContext &context) -> void override;
+    auto OnSceneMutation(oxygen::engine::FrameContext &context)
+        -> oxygen::co::Co<> override;
+    auto OnPreRender(oxygen::engine::FrameContext &context)
+        -> oxygen::co::Co<> override;
+    auto OnRender(oxygen::engine::FrameContext &context)
+        -> oxygen::co::Co<> override;
+    auto OnCompositing(oxygen::engine::FrameContext &context)
+        -> oxygen::co::Co<> override;
 
     // Ensure framebuffers for all registered surfaces (creates depth textures
     // and one framebuffer per backbuffer slot). Mirrors
@@ -108,15 +113,19 @@ namespace oxygen::interop::module {
     //! Enqueues a command to be executed during the SceneMutation phase.
     void Enqueue(std::unique_ptr<EditorCommand> cmd);
 
+    // Async view creation (exposed for interop layer)
+    void CreateViewAsync(EditorView::Config config,
+                         ViewManager::OnViewCreated callback);
+
   private:
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
     auto ProcessResizeRequests()
-      -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;
+        -> std::vector<std::shared_ptr<oxygen::graphics::Surface>>;
     auto SyncSurfacesWithFrameContext(
-      oxygen::engine::FrameContext& context,
-      const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& surfaces)
-      -> void;
+        oxygen::engine::FrameContext &context,
+        const std::vector<std::shared_ptr<oxygen::graphics::Surface>> &surfaces)
+        -> void;
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;

@@ -8,8 +8,9 @@
 #pragma once
 #pragma managed
 
-#include <Oxygen/Core/Types/View.h>
 #include <limits>
+
+#include <Oxygen/Core/Types/View.h>
 
 namespace Oxygen::Interop {
 
@@ -20,8 +21,8 @@ namespace Oxygen::Interop {
   /// Mirrors the native identifier (uint64_t) and provides explicit
   /// conversion helpers so managed callers can round-trip values safely.
   /// </summary>
-  public
-  value struct ViewIdManaged {
+  [System::SerializableAttribute]
+  public value struct ViewIdManaged {
   private:
     System::UInt64 value_;
 
