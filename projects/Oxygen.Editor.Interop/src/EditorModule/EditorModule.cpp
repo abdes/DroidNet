@@ -297,6 +297,18 @@ namespace oxygen::interop::module {
     return true;
   }
 
+  void EditorModule::CreateViewAsync(EditorView::Config config,
+    ViewManager::OnViewCreated callback) {
+    // Forward to view manager (thread-safe, queues into pending creates)
+    if (view_manager_) {
+      view_manager_->CreateViewAsync(std::move(config), std::move(callback));
+    }
+    else {
+      // If our view manager is not available, invoke callback with failure
+      if (callback) callback(false, kInvalidViewId);
+    }
+  }
+
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
     command_queue_.Enqueue(std::move(cmd));
   }
