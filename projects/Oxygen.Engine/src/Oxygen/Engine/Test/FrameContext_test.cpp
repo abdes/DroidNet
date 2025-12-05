@@ -88,7 +88,6 @@ auto MakeDummyViewContext() -> oxygen::engine::ViewContext
       .name = "TestView",
       .purpose = "test",
     },
-    .surface = std::ref(s),
     .output = nullptr
   };
 }
@@ -273,38 +272,40 @@ NOLINT_TEST(FrameContext_basic_test, ViewsMutatorsDieInSnapshot)
 // Surfaces: structural mutations must die in Snapshot phase
 NOLINT_TEST(FrameContext_basic_test, SurfaceMutatorsDieInSnapshot)
 {
+  using oxygen::observer_ptr;
+
   FrameContext ctx;
   auto tag = EngineTagFactory::Get();
 
   // Insert a surface while in a mutation phase so we have a valid starting
   // state for removal/presentable tests
   auto dummy_surface = std::make_shared<DummySurface>();
+  auto surface_ptr = observer_ptr { dummy_surface.get() };
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
-  ctx.AddSurface(dummy_surface);
+  ctx.AddSurface(surface_ptr);
 
   // Move to Snapshot where structural mutations must be rejected
   ctx.SetCurrentPhase(PhaseId::kSnapshot, tag);
   (void)ctx.PublishSnapshots(tag);
 
-  NOLINT_ASSERT_DEATH(ctx.AddSurface(dummy_surface), ".*");
+  NOLINT_ASSERT_DEATH(ctx.AddSurface(surface_ptr), ".*");
   NOLINT_ASSERT_DEATH(ctx.RemoveSurfaceAt(0u), ".*");
   NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(tag), ".*");
-  NOLINT_ASSERT_DEATH(
-    ctx.SetSurfaces(
-      std::vector<std::shared_ptr<oxygen::graphics::Surface>> {}, tag),
-    ".*");
 }
 
 // Presentable flags: must not be mutated at or after Present
 NOLINT_TEST(FrameContext_basic_test, PresentableFlagsDieAtOrAfterPresent)
 {
+  using oxygen::observer_ptr;
+
   FrameContext ctx;
   auto tag = EngineTagFactory::Get();
 
   // Add a surface in a mutation phase so index 0 exists
   auto dummy_surface = std::make_shared<DummySurface>();
+  auto surface_ptr = observer_ptr { dummy_surface.get() };
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
-  ctx.AddSurface(dummy_surface);
+  ctx.AddSurface(surface_ptr);
 
   // Move to Present phase and verify presentable flag mutations die
   ctx.SetCurrentPhase(PhaseId::kPresent, tag);
@@ -343,6 +344,8 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 
 NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
 {
+  using oxygen::observer_ptr;
+
   auto tag = EngineTagFactory::Get();
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
@@ -350,36 +353,33 @@ NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, tag);
 
-    auto dummy = std::make_shared<DummySurface>();
+    auto dummy_surface = std::make_shared<DummySurface>();
+    auto surface_ptr = observer_ptr { dummy_surface.get() };
 
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Structural mutations allowed before Snapshot
-      ctx.AddSurface(dummy);
+      ctx.AddSurface(surface_ptr);
       EXPECT_EQ(ctx.GetPresentableSurfaces().size(), 0u);
 
       // Removing the surface should succeed
       EXPECT_TRUE(ctx.RemoveSurfaceAt(0u));
 
       // Clear and replace operations should succeed
-      ctx.AddSurface(dummy);
+      ctx.AddSurface(surface_ptr);
       ctx.ClearSurfaces(tag);
-      ctx.SetSurfaces(
-        std::vector<std::shared_ptr<oxygen::graphics::Surface>> {}, tag);
     } else {
       // Disallowed structural mutations
-      NOLINT_ASSERT_DEATH(ctx.AddSurface(dummy), ".*");
+      NOLINT_ASSERT_DEATH(ctx.AddSurface(surface_ptr), ".*");
       NOLINT_ASSERT_DEATH(ctx.RemoveSurfaceAt(0u), ".*");
       NOLINT_ASSERT_DEATH(ctx.ClearSurfaces(tag), ".*");
-      NOLINT_ASSERT_DEATH(
-        ctx.SetSurfaces(
-          std::vector<std::shared_ptr<oxygen::graphics::Surface>> {}, tag),
-        ".*");
     }
   }
 }
 
 NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
 {
+  using oxygen::observer_ptr;
+
   auto tag = EngineTagFactory::Get();
 
   for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
@@ -388,8 +388,9 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
 
     // Ensure a surface exists by inserting in a mutation phase first
     ctx.SetCurrentPhase(PhaseId::kSceneMutation, tag);
-    auto dummy = std::make_shared<DummySurface>();
-    ctx.AddSurface(dummy);
+    auto dummy_surface = std::make_shared<DummySurface>();
+    auto surface_ptr = observer_ptr { dummy_surface.get() };
+    ctx.AddSurface(surface_ptr);
 
     // Move to the phase under test
     ctx.SetCurrentPhase(phase, tag);
