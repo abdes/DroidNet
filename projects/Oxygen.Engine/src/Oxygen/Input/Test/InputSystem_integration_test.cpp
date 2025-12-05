@@ -432,17 +432,21 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
       input_system_->ActivateMappingContext(ctx_low1);
       input_system_->ActivateMappingContext(ctx_high);
 
-      // Press+release: high triggers; both lowA and lowB should also trigger when
-      // lowB is placed after lowA (consumer after non-consumer in same context)
+      // Press: high-priority Pressed mapping should trigger on the press frame
       SendKeyEvent(Key::kSpace, ButtonState::kPressed);
       input_system_->OnFrameStart(*frame_context_);
       co_await input_system_->OnInput(*frame_context_);
 
+      EXPECT_TRUE(high->WasTriggeredThisFrame());
+      EXPECT_FALSE(lowA->WasTriggeredThisFrame());
+      EXPECT_FALSE(lowB->WasTriggeredThisFrame());
+
+      // Release: tap mappings in the low context should trigger on release
       SendKeyEvent(Key::kSpace, ButtonState::kReleased);
       input_system_->OnFrameStart(*frame_context_);
       co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(high->WasTriggeredThisFrame());
+      EXPECT_FALSE(high->WasTriggeredThisFrame());
       EXPECT_TRUE(lowA->WasTriggeredThisFrame());
       EXPECT_TRUE(lowB->WasTriggeredThisFrame());
 
@@ -469,17 +473,19 @@ NOLINT_TEST_F(InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierCon
       input_system_->AddMappingContext(ctx_low2, 0);
       input_system_->ActivateMappingContext(ctx_low2);
 
-      // Press+release: high triggers; lowB triggers and should cancel the later
-      // lowA mapping (since the consumer is earlier in the low context)
+      // Press: high triggers on press frame
       SendKeyEvent(Key::kSpace, ButtonState::kPressed);
       input_system_->OnFrameStart(*frame_context_);
       co_await input_system_->OnInput(*frame_context_);
 
+      EXPECT_TRUE(high->WasTriggeredThisFrame());
+
+      // Release: consumer lowB should trigger and cancel the later lowA mapping
       SendKeyEvent(Key::kSpace, ButtonState::kReleased);
       input_system_->OnFrameStart(*frame_context_);
       co_await input_system_->OnInput(*frame_context_);
 
-      EXPECT_TRUE(high->WasTriggeredThisFrame());
+      EXPECT_FALSE(high->WasTriggeredThisFrame());
       EXPECT_TRUE(lowB->WasTriggeredThisFrame());
       EXPECT_TRUE(lowA->WasCanceledThisFrame());
 
