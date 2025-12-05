@@ -76,19 +76,19 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto GetSupportedPhases() const noexcept
       -> oxygen::engine::ModulePhaseMask override {
       return oxygen::engine::MakeModuleMask<oxygen::core::PhaseId::kFrameStart,
-        oxygen::core::PhaseId::kCommandRecord,
-        oxygen::core::PhaseId::kSceneMutation,
-        oxygen::core::PhaseId::kFrameGraph>();
+        oxygen::core::PhaseId::kPreRender,
+        oxygen::core::PhaseId::kRender,
+        oxygen::core::PhaseId::kSceneMutation>();
     }
 
     auto OnAttached(oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
       -> bool override;
     auto OnFrameStart(oxygen::engine::FrameContext& context) -> void override;
-    auto OnCommandRecord(oxygen::engine::FrameContext& context)
-      -> oxygen::co::Co<> override;
     auto OnSceneMutation(oxygen::engine::FrameContext& context)
       -> oxygen::co::Co<> override;
-    auto OnFrameGraph(oxygen::engine::FrameContext& context)
+    auto OnPreRender(oxygen::engine::FrameContext& context)
+      -> oxygen::co::Co<> override;
+    auto OnRender(oxygen::engine::FrameContext& context)
       -> oxygen::co::Co<> override;
 
     // Ensure framebuffers for all registered surfaces (creates depth textures

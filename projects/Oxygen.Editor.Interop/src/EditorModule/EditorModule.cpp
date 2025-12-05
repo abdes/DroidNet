@@ -22,8 +22,9 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/CameraView.h>
 #include <Oxygen/Renderer/Renderer.h>
+#include <Oxygen/Renderer/SceneCameraViewResolver.h>
+#include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversal.h>
@@ -74,8 +75,7 @@ namespace oxygen::interop::module {
 
       // Camera view creation is deferred to OnSceneMutation where the
       // camera's PerspectiveCamera and its viewport are configured.
-      // This ensures the CameraView observes a correctly-initialized
-      // camera/viewport pair, matching the example module behavior.
+      // This ensures the SceneNode-based camera is correctly initialized.
     }
   }
 
@@ -152,6 +152,25 @@ namespace oxygen::interop::module {
           /* swallow */
         }
       }
+
+      // Unregister any renderer view associated with this surface so the
+      // renderer does not retain stale resolvers / factories.
+      auto it = surface_view_ids_.find(surface.get());
+      if (it != surface_view_ids_.end()) {
+        auto view_id = it->second;
+        if (engine_) {
+          auto renderer_opt = engine_->GetModule<oxygen::engine::Renderer>();
+          if (renderer_opt.has_value()) {
+            try {
+              renderer_opt->get().UnregisterView(view_id);
+            } catch (...) {
+              DLOG_F(WARNING, "Failed to unregister view {} during surface destruction", view_id.get());
+            }
+          }
+        }
+        surface_view_ids_.erase(it);
+      }
+
       // Remove any cached framebuffers for the surface so we don't hold
       // references to backbuffers after the surface is destroyed.
       // Also cleanup the camera associated with this surface.
@@ -333,30 +352,58 @@ namespace oxygen::interop::module {
         // Create camera view for this surface
         auto it = surface_cameras_.find(surface.get());
         if (it != surface_cameras_.end() && it->second.IsAlive()) {
-          auto camera_view = std::make_shared<oxygen::renderer::CameraView>(
-            oxygen::renderer::CameraView::Params{
-              .camera_node = it->second,
-              .viewport = std::nullopt,
-              .scissor = std::nullopt,
-              .pixel_jitter = glm::vec2(0.0F, 0.0F),
-              .reverse_z = false,
-              .mirrored = false,
-            },
-            surface);
+          // Build View and ViewContext for registration (use defaults)
+          View view_config; // default-initialized View (viewport/scissor default)
 
-          // Register the view with the FrameContext (metadata only, no resolve)
-          const auto view_id = context.AddView(engine::ViewContext {
-            .name = std::string(camera_view->GetName()),
-            .surface = *surface,
-            .metadata = { .tag = fmt::format("Surface_{}", fmt::ptr(surface.get())) }
-          });
+          const auto camera_name = fmt::format("EditorCamera_{}", fmt::ptr(surface.get()));
 
-          // Store the ViewId for later use in OnCommandRecord
+          engine::ViewContext vc {
+            // id assigned by RegisterView
+            .view = view_config,
+            .metadata = engine::ViewMetadata{ .name = std::string(camera_name), .purpose = std::string("editor") },
+            .output = nullptr
+          };
+
+          // Register the view with the FrameContext and keep the returned ViewId
+          const auto view_id = context.RegisterView(std::move(vc));
+
+          // Store the ViewId for later reference (e.g., when wiring outputs)
           surface_view_ids_[surface.get()] = view_id;
 
           LOG_F(INFO,
             "Editor Camera view created for surface (ptr={}) with dedicated camera. ViewId={}",
             fmt::ptr(surface.get()), view_id.get());
+
+          // Register resolver + render graph factory with the Renderer module
+          if (engine_) {
+            auto renderer_opt = engine_->GetModule<oxygen::engine::Renderer>();
+            if (renderer_opt.has_value()) {
+              try {
+                auto& renderer = renderer_opt->get();
+                // Create a ViewResolver that returns a ResolvedView using our stored SceneNode
+                const auto node = it->second; // copy
+                oxygen::engine::ViewResolver resolver = [node](const oxygen::engine::ViewContext& ctx) -> oxygen::ResolvedView {
+                  renderer::SceneCameraViewResolver scene_resolver([node](const ViewId&) { return node; });
+                  return scene_resolver(ctx.id);
+                };
+
+                // Create the RenderGraphFactory that forwards work to our RenderGraph component
+                oxygen::engine::Renderer::RenderGraphFactory factory = [this](ViewId id, const engine::RenderContext& rc, graphics::CommandRecorder& rec) -> co::Co<void> {
+                  // Prepare frame attachments and run passes using the renderer-provided RenderContext and recorder
+                  if (render_graph_) {
+                    render_graph_->PrepareForRenderFrame(rc.framebuffer);
+                    co_await render_graph_->RunPasses(rc, rec);
+                  }
+                  co_return;
+                };
+
+                renderer.RegisterView(view_id, std::move(resolver), std::move(factory));
+              }
+              catch (const std::exception& ex) {
+                DLOG_F(WARNING, "Failed to register view with renderer: {}", ex.what());
+              }
+            }
+          }
         }
       }
 
@@ -405,7 +452,7 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::OnFrameGraph(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnPreRender(engine::FrameContext& context) -> co::Co<> {
     // Ensure framebuffers are created like the examples. This will create a
     // depth texture per backbuffer and cached framebuffers for each surface.
     EnsureFramebuffers();
@@ -419,7 +466,7 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::OnCommandRecord(engine::FrameContext& context) -> co::Co<> {
+  auto EditorModule::OnRender(engine::FrameContext& context) -> co::Co<> {
     if (graphics_.expired()) {
       DLOG_F(WARNING, "Graphics instance is expired; cannot process deferred "
         "surface destructions.");
@@ -433,34 +480,21 @@ namespace oxygen::interop::module {
     // Require engine access and renderer module. If they are missing, skip
     // rendering — the editor must own and provide a valid renderer context.
     if (!engine_) {
-      DLOG_F(WARNING, "EditorModule::OnCommandRecord - no engine reference; "
+      DLOG_F(WARNING, "EditorModule::OnRender - no engine reference; "
         "skipping rendering");
       co_return;
     }
 
     auto renderer_opt = engine_->GetModule<oxygen::engine::Renderer>();
     if (!renderer_opt.has_value()) {
-      DLOG_F(WARNING, "EditorModule::OnCommandRecord - renderer module not "
+      DLOG_F(WARNING, "EditorModule::OnRender - renderer module not "
         "present; skipping rendering");
       co_return;
     }
-    auto& renderer = renderer_opt->get();
 
     for (const auto& surface : surfaces) {
-      // One command list (via command recorder acquisition) per surface.
-      auto key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-      auto recorder = gfx->AcquireCommandRecorder(key, "EditorModule");
-      if (!recorder) {
-        continue;
-      }
-
-      auto back_buffer = surface->GetCurrentBackBuffer();
-      if (!back_buffer) {
-        continue;
-      }
-
       // Use cached framebuffer vector for this surface. The
-      // EnsureFramebuffers() call should have run earlier during FrameGraph
+      // EnsureFramebuffers() call should have run earlier during PreRender
       // to populate `surface_framebuffers_`. If the cache is missing we
       // must not attempt to create transient framebuffers here — matching
       // the example/AppWindow behavior where cached framebuffers are required.
@@ -469,7 +503,7 @@ namespace oxygen::interop::module {
       auto& fb_vec = surface_framebuffers_[surface.get()];
       if (fb_vec.empty()) {
         DLOG_F(WARNING,
-          "EditorModule::OnCommandRecord - no cached framebuffers for "
+          "EditorModule::OnRender - no cached framebuffers for "
           "surface; skipping rendering for surface ptr={}",
           fmt::ptr(surface.get()));
         continue;
@@ -482,47 +516,23 @@ namespace oxygen::interop::module {
       }
       if (!fb) {
         DLOG_F(WARNING,
-          "EditorModule::OnCommandRecord - no framebuffer in cache for "
+          "EditorModule::OnRender - no framebuffer in cache for "
           "current backbuffer index; skipping surface ptr={}",
           fmt::ptr(surface.get()));
         continue;
       }
 
-      // Diagnostic: report scene node counts to help determine whether
-      // geometry exists in the scene. This is useful because passes ran
-      // successfully but produced no visible geometry in the example runs.
-      if (scene_) {
-        size_t total_nodes = 0;
-        std::function<void(oxygen::scene::SceneNode&)> count_nodes;
-        count_nodes = [&](oxygen::scene::SceneNode& node) {
-          if (!node.IsAlive())
-            return;
-          ++total_nodes;
-          auto child_opt = node.GetFirstChild();
-          while (child_opt.has_value() && child_opt->IsAlive()) {
-            count_nodes(*child_opt);
-            child_opt = child_opt->GetNextSibling();
-          }
-          };
-        for (auto& root : scene_->GetRootNodes()) {
-          count_nodes(root);
-        }
-        DLOG_F(INFO, "EditorModule: scene node count = {}", total_nodes);
-      }
-      else {
-        DLOG_F(INFO, "EditorModule: no scene present when recording commands");
-      }
-
       // Update pass configs with the current framebuffer attachments via
-      // RenderGraph
+      // RenderGraph so the factory executed by the renderer later can use
+      // the configured textures.
       if (render_graph_) {
         auto& spc = render_graph_->GetShaderPassConfig();
         if (spc) {
-          spc->color_texture = back_buffer;
+          spc->color_texture = surface->GetCurrentBackBuffer();
         }
         auto& tpc = render_graph_->GetTransparentPassConfig();
         if (tpc) {
-          tpc->color_texture = back_buffer;
+          tpc->color_texture = surface->GetCurrentBackBuffer();
           if (fb && fb->GetDescriptor().depth_attachment.IsValid()) {
             tpc->depth_texture = fb->GetDescriptor().depth_attachment.texture;
           }
@@ -532,85 +542,12 @@ namespace oxygen::interop::module {
         }
       }
 
-      // Re-create the CameraView for this surface to resolve the latest transforms
-      auto cam_it = surface_cameras_.find(surface.get());
-      if (cam_it == surface_cameras_.end() || !cam_it->second.IsAlive()) {
-          continue;
-      }
-
-      oxygen::renderer::CameraView camera_view(
-        oxygen::renderer::CameraView::Params{
-          .camera_node = cam_it->second,
-          .viewport = std::nullopt,
-          .scissor = std::nullopt,
-          .pixel_jitter = glm::vec2(0.0F, 0.0F),
-          .reverse_z = false,
-          .mirrored = false,
-        },
-        surface);
-
-      // Resolve the view now that transforms are up to date (PhaseCommandRecord > PhaseTransformPropagation)
-      const auto view_snapshot = camera_view.Resolve();
-
-      // Drive the renderer: BuildFrame -> ExecuteRenderGraph
-      // This replaces the passive iteration in Renderer::OnFrameGraph
-      renderer.BuildFrame(view_snapshot, context);
-
-      fb->PrepareForRender(*recorder);
-      recorder->BindFrameBuffer(*fb);
-
-      // Prepare the RenderGraph context for the current framebuffer so it
-      // can be passed to Renderer::ExecuteRenderGraph. This avoids pulling
-      // renderer internals into the editor.
-      if (!render_graph_) {
-        render_graph_ = std::make_unique<RenderGraph>();
-      }
-      render_graph_->PrepareForRenderFrame(fb);
-      DLOG_F(INFO,
-        "EditorModule: bound framebuffer in render context for surface "
-        "ptr={} fb_ptr={}",
-        fmt::ptr(surface.get()), fmt::ptr(fb.get()));
-      // Run our passes inside the renderer execution wrapper to ensure
-      // RenderContext.scene_constants (and related renderer-managed state)
-      // are available to passes.
-      co_await renderer.ExecuteRenderGraph(
-        [&](const engine::RenderContext& ctx) -> co::Co<> {
-          // Diagnostic logging to help trace why there are no draws. This
-          // prints whether the renderer provided a prepared frame snapshot and
-          // scene constants, the presence of a framebuffer, and view count.
-          DLOG_F(INFO, "RenderGraph run: prepared_frame={}",
-            static_cast<bool>(ctx.prepared_frame));
-          // Keep diagnostics minimal and safe: only report presence of
-          // prepared_frame. Avoid inspecting inner members which could
-          // reference memory managed elsewhere and risk UB.
-          DLOG_F(INFO, "RenderGraph run: scene_constants={}",
-            static_cast<bool>(ctx.scene_constants));
-          DLOG_F(INFO, "RenderGraph run: framebuffer={}",
-            static_cast<bool>(ctx.framebuffer));
-
-          // Delegate pass execution to the shared RenderGraph component
-          // which performs PrepareResources -> Execute for configured passes.
-          if (!render_graph_) {
-            render_graph_ = std::make_unique<RenderGraph>();
-            render_graph_->SetupRenderPasses();
-          }
-          co_await render_graph_->RunPasses(ctx, *recorder);
-          co_return;
-        },
-        render_graph_->GetRenderContext(), context);
-
-      // Update FrameContext with the output for compositing
+      // Update FrameContext with the output framebuffer for this view so the
+      // renderer can bind it when executing the registered per-view factory.
       auto vid_it = surface_view_ids_.find(surface.get());
       if (vid_it != surface_view_ids_.end()) {
-          context.SetViewOutput(vid_it->second, fb);
-      }
-
-      // Mark the surface as presentable now that we've rendered to it
-      auto idx_it = surface_indices_.find(surface.get());
-      if (idx_it != surface_indices_.end()) {
-        context.SetSurfacePresentable(idx_it->second, true);
-        DLOG_F(INFO, "Marked surface ptr={} at index {} as presentable",
-          fmt::ptr(surface.get()), idx_it->second);
+        context.SetViewOutput(vid_it->second,
+          oxygen::observer_ptr<oxygen::graphics::Framebuffer> { fb.get() });
       }
     } // End of for loop over surfaces
 
@@ -620,12 +557,6 @@ namespace oxygen::interop::module {
   auto EditorModule::CreateScene(std::string_view name) -> void {
     LOG_F(INFO, "EditorModule::CreateScene called: name='{}'", name);
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name));
-    // NOTE: Do not auto-populate scenes with default geometry here. Mesh
-    // creation should be driven by the managed layer (or other explicit
-    // callers) when a node is created. This keeps native behavior minimal
-    // and avoids surprising test/debug artefacts.
-    // render_context_.scene = scene_; // Removed as RenderContext does not hold
-    // scene directly
   }
 
   auto EditorModule::EnsureFramebuffers() -> bool {
@@ -826,7 +757,8 @@ namespace oxygen::interop::module {
 
   auto EditorModule::SyncSurfacesWithFrameContext(
     engine::FrameContext& context,
-    const std::vector<std::shared_ptr<graphics::Surface>>& surfaces) -> void {
+    const std::vector<std::shared_ptr<graphics::Surface>>& surfaces)
+      -> void {
     std::unordered_set<const graphics::Surface*> desired;
     desired.reserve(surfaces.size());
     for (const auto& surface : surfaces) {
@@ -865,7 +797,8 @@ namespace oxygen::interop::module {
         continue;
       }
 
-      context.AddSurface(surface);
+      // FrameContext expects observer_ptr for surface references
+      context.AddSurface(oxygen::observer_ptr<oxygen::graphics::Surface> { surface.get() });
       context_surfaces = context.GetSurfaces();
       current_indices[raw] = context_surfaces.size() - 1;
     }
@@ -880,6 +813,8 @@ namespace oxygen::interop::module {
 
       const auto index = iter->second;
       surface_indices_.emplace(raw, index);
+      // Do not mark presentable here - rendering is performed later by the
+      // Renderer and surfaces will be marked presentable during compositing.
       context.SetSurfacePresentable(index, true);
     }
   }

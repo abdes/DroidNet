@@ -70,7 +70,7 @@ namespace oxygen::interop::module {
   }
 
   auto RenderGraph::PrepareForRenderFrame(
-    const std::shared_ptr<oxygen::graphics::Framebuffer>& fb) -> void {
+    oxygen::observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void {
     LOG_SCOPE_F(4, "RenderGraph::PrepareForRenderFrame");
 
     if (!fb) {
