@@ -84,7 +84,7 @@ void MainView::OnSceneMutation()
     .right = static_cast<int32_t>(width),
     .bottom = static_cast<int32_t>(height) };
 
-  RegisterView(viewport, scissor);
+  AddViewToFrameContext(viewport, scissor);
 }
 
 auto MainView::OnPreRender(engine::Renderer& renderer) -> co::Co<>

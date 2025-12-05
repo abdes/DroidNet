@@ -8,16 +8,18 @@
 
 #include <memory>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Types/ViewResolver.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::engine {
 class DepthPrePass;
 struct DepthPrePassConfig;
 class ShaderPass;
 struct ShaderPassConfig;
+class Renderer; // forward declare so examples can register/unregister
 } // namespace oxygen::engine
 
 namespace oxygen::examples::multiview {
@@ -62,6 +64,17 @@ public:
   auto Render(const engine::RenderContext& ctx,
     graphics::CommandRecorder& recorder) const -> co::Co<>;
 
+  //! Register this ViewRenderer with the engine Renderer for a given view id.
+  /*!
+    This stores an internal reference to the engine renderer and registers a
+    RenderGraphFactory that forwards execution to this ViewRenderer::Render().
+  */
+  auto RegisterWithEngine(engine::Renderer& engine_renderer, ViewId view_id,
+    engine::ViewResolver resolver) -> void;
+
+  //! Unregister from the engine renderer if previously registered.
+  auto UnregisterFromEngine() -> void;
+
   [[nodiscard]] auto IsConfigured() const -> bool
   {
     return config_.has_value();
@@ -81,6 +94,12 @@ private:
   std::shared_ptr<engine::DepthPrePass> depth_pass_;
   std::shared_ptr<engine::ShaderPassConfig> shader_pass_config_;
   std::shared_ptr<engine::ShaderPass> shader_pass_;
+
+  // Optional registration bookkeeping for convenience: non-owning pointer to
+  // engine renderer and registered view id. Used by RegisterWithEngine /
+  // UnregisterFromEngine.
+  engine::Renderer* registered_engine_renderer_ { nullptr };
+  ViewId registered_view_id_ {};
 };
 
 } // namespace oxygen::examples::multiview

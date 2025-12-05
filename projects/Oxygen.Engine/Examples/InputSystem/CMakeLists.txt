@@ -45,7 +45,8 @@ add_executable(
   "../Common/RenderGraph.cpp"
   "../Common/ExampleModuleBase.h"
   "../Common/ExampleModuleBase.cpp"
-  # ExampleRenderLifecycle kept for compatibility but not used by this example
+  "../Common/SingleViewExample.h"
+  "../Common/SingleViewExample.cpp"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"

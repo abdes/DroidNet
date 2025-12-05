@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string_view>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -27,17 +29,6 @@ MainModule::MainModule(const common::AsyncEngineApp& app) noexcept
   views_.push_back(std::make_unique<PipView>());
 }
 
-MainModule::~MainModule()
-{
-  // Ensure views release their resources while still alive so that
-  // derived cleanup (including deferred reclaims) runs correctly.
-  for (auto& view : views_) {
-    if (view) {
-      view->ReleaseResources();
-    }
-  }
-}
-
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
   return engine::MakeModuleMask<core::PhaseId::kFrameStart,
@@ -50,9 +41,7 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
   // Check if we need to drop resources (e.g. resize)
   if (app_window_ && app_window_->ShouldResize()) {
     LOG_F(INFO, "[MultiView] Window resize detected, releasing view resources");
-    for (auto& view : views_) {
-      view->ReleaseResources();
-    }
+    ReleaseAllViews("window resize");
   }
 
   // CRITICAL: Ensure scene is created and set on context
@@ -77,22 +66,26 @@ auto MainModule::OnExampleFrameStart(engine::FrameContext& context) -> void
 auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 {
   if (!app_window_) {
+    ReleaseAllViews("app window unavailable");
     co_return;
   }
 
   const auto surface_weak = app_window_->GetSurface();
   if (surface_weak.expired()) {
     LOG_F(WARNING, "[MultiView] No surface available");
+    ReleaseAllViews("surface expired");
     co_return;
   }
   const auto surface = surface_weak.lock();
 
   if (!app_.renderer) {
+    ReleaseAllViews("renderer unavailable");
     co_return;
   }
 
   auto gfx = app_.renderer->GetGraphics();
   if (!gfx) {
+    ReleaseAllViews("graphics device unavailable");
     co_return;
   }
 
@@ -133,7 +126,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     view->SetRenderingContext(view_ctx);
     // Call OnSceneMutation - no parameters needed anymore
     view->OnSceneMutation();
-    view->RegisterRendererHooks(*app_.renderer);
+    view->RegisterViewForRendering(*app_.renderer);
   }
 
   // Clear the phase-specific recorder - it's no longer valid after
@@ -289,6 +282,16 @@ auto MainModule::MarkSurfacePresentable(engine::FrameContext& context,
     if (surfaces[i].get() == surface.get()) {
       context.SetSurfacePresentable(i, true);
       break;
+    }
+  }
+}
+
+auto MainModule::ReleaseAllViews(std::string_view reason) -> void
+{
+  LOG_F(INFO, "[MultiView] Releasing all views ({})", reason);
+  for (auto& view : views_) {
+    if (view) {
+      view->ReleaseResources();
     }
   }
 }
