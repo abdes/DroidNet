@@ -37,13 +37,10 @@ public:
   OXGN_HDLS_NDAPI auto CreateBuffer(const BufferDesc& desc) const
     -> std::shared_ptr<graphics::Buffer> override;
 
-  OXGN_HDLS_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
-    QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
-
   OXGN_HDLS_NDAPI auto CreateSurface(
     std::weak_ptr<platform::Window> window_weak,
     observer_ptr<graphics::CommandQueue> command_queue) const
-    -> std::shared_ptr<Surface> override;
+    -> std::unique_ptr<Surface> override;
 
   OXGN_HDLS_NDAPI auto CreateSurfaceFromNative(void* native_handle,
     observer_ptr<graphics::CommandQueue> command_queue) const
@@ -61,6 +58,9 @@ protected:
   OXGN_HDLS_NDAPI auto CreateCommandListImpl(
     QueueRole role, std::string_view command_list_name)
     -> std::unique_ptr<graphics::CommandList> override;
+
+  OXGN_HDLS_NDAPI auto CreateCommandQueue(const QueueKey& queue_key,
+    QueueRole role) -> std::shared_ptr<graphics::CommandQueue> override;
 };
 
 } // namespace oxygen::graphics::headless
