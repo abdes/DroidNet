@@ -57,6 +57,7 @@
     <ClInclude Include="EditorModule\NodeRegistry.h" />
     <ClInclude Include="EditorModule\RenderGraph.h" />
     <ClInclude Include="EditorModule\SurfaceRegistry.h" />
+    <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
     <ClInclude Include="EditorModule\ViewManager.h" />
     <ClInclude Include="EditorModule\ViewRenderer.h" />

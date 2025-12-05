@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "Config.h"
+#include "Views/ViewIdManaged.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
 #include "UiThreadDispatcher.h"
