@@ -13,6 +13,7 @@
 #include <Oxygen/Renderer/RenderContext.h>
 
 #include "ViewRenderer.h"
+#include <Oxygen/Renderer/Renderer.h>
 
 namespace oxygen::examples::multiview {
 auto ViewRenderer::Configure(const Config& config) -> void
@@ -54,6 +55,39 @@ auto ViewRenderer::Configure(const Config& config) -> void
     static_cast<const void*>(config.depth_texture.get()), config.wireframe,
     config.clear_color.r, config.clear_color.g, config.clear_color.b,
     config.clear_color.a);
+}
+
+auto ViewRenderer::RegisterWithEngine(engine::Renderer& engine_renderer,
+  ViewId view_id, engine::ViewResolver resolver) -> void
+{
+  // Store bookkeeping and register render graph factory forwarding to our
+  // Render method.
+  registered_engine_renderer_ = &engine_renderer;
+  registered_view_id_ = view_id;
+
+  LOG_F(INFO, "[ViewRenderer] RegisterWithEngine: view_id={}, renderer_ptr={}",
+    view_id.get(), static_cast<const void*>(&engine_renderer));
+
+  engine_renderer.RegisterView(view_id, std::move(resolver),
+    [this](ViewId id, const engine::RenderContext& rc,
+      graphics::CommandRecorder& rec) -> co::Co<> {
+      // Forward to the per-view renderer's Render implementation.
+      co_await this->Render(rc, rec);
+      co_return;
+    });
+}
+
+auto ViewRenderer::UnregisterFromEngine() -> void
+{
+  if (registered_engine_renderer_ && registered_view_id_.get() != 0) {
+    LOG_F(INFO,
+      "[ViewRenderer] UnregisterFromEngine: view_id={}, renderer_ptr={}",
+      registered_view_id_.get(),
+      static_cast<const void*>(registered_engine_renderer_));
+    registered_engine_renderer_->UnregisterView(registered_view_id_);
+  }
+  registered_engine_renderer_ = nullptr;
+  registered_view_id_ = ViewId {};
 }
 
 auto ViewRenderer::ResetConfiguration() -> void

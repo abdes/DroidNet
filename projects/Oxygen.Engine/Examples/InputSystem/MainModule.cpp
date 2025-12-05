@@ -13,6 +13,8 @@
 #include <unordered_map>
 #include <variant>
 
+#include <imgui.h>
+
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -39,10 +41,9 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
-#include <imgui.h>
 
 #include "../Common/AsyncEngineApp.h"
-#include "../Common/ExampleModuleBase.h"
+#include "../Common/SingleViewExample.h"
 #include "./MainModule.h"
 
 namespace {
@@ -244,17 +245,6 @@ MainModule::MainModule(const common::AsyncEngineApp& app)
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
-  // Create per-module RenderGraph for this example so it can own per-frame
-  // RenderContext and pass configs. This mirrors other examples (MultiView,
-  // Async) that manage their own render_graph instance.
-  try {
-    auto& rg = AddComponent<oxygen::examples::common::RenderGraph>(app);
-    render_graph_
-      = oxygen::observer_ptr<oxygen::examples::common::RenderGraph>(&rg);
-  } catch (const std::exception& ex) {
-    LOG_F(WARNING, "Failed to create RenderGraph for InputSystem example: {}",
-      ex.what());
-  }
 }
 
 auto MainModule::OnAttached(
@@ -294,20 +284,6 @@ auto MainModule::OnFrameStart(engine::FrameContext& context) -> void
 auto MainModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
 {
   LOG_SCOPE_F(3, "MainModule::OnFrameEnd");
-}
-
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  // Clear any references that point to the swapchain/backbuffer before a
-  // resize. The RenderGraph component manages the per-frame RenderContext
-  // and pass configs which may hold backbuffer textures, so forward to it.
-  try {
-    if (render_graph_) {
-      render_graph_->ClearBackbufferReferences();
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(WARNING, "ClearBackbufferReferences() threw: {}", ex.what());
-  }
 }
 
 auto MainModule::OnGameplay(engine::FrameContext& context) -> co::Co<>
@@ -439,11 +415,11 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   }
 
   // Ensure render passes are created/configured via the example RenderGraph
-  if (render_graph_) {
-    render_graph_->SetupRenderPasses();
+  if (auto rg = GetRenderGraph(); rg) {
+    rg->SetupRenderPasses();
 
     // Configure pass-specific settings
-    auto shader_pass_config = render_graph_->GetShaderPassConfig();
+    auto shader_pass_config = rg->GetShaderPassConfig();
     if (shader_pass_config) {
       shader_pass_config->clear_color
         = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
@@ -451,44 +427,9 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // Register view resolver and render graph only once (ViewId is stable)
-  static bool registered = false;
-  if (!registered) {
-    // Register view resolver using SceneCameraViewResolver
-    app_.renderer->RegisterViewResolver(
-      [this](const engine::ViewContext& vc) -> ResolvedView {
-        renderer::SceneCameraViewResolver resolver(
-          [this](const ViewId& /*id*/) { return main_camera_; });
-        return resolver(vc.id);
-      });
-
-    // Register render graph factory once with stable view_id
-    app_.renderer->RegisterRenderGraph(view_id_,
-      [this](ViewId id, const engine::RenderContext& rc,
-        graphics::CommandRecorder& rec) -> co::Co<void> {
-        // Wire up framebuffer attachments to render passes before execution
-        if (render_graph_ && rc.framebuffer) {
-          render_graph_->PrepareForRenderFrame(rc.framebuffer);
-        }
-
-        // Run main render passes
-        co_await render_graph_->RunPasses(rc, rec);
-
-        // ImGui pass
-        auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-        if (imgui_module_ref) {
-          auto& imgui_module = imgui_module_ref->get();
-          auto imgui_pass = imgui_module.GetRenderPass();
-          if (imgui_pass) {
-            co_await imgui_pass->Render(rec);
-          }
-        }
-      });
-
-    registered = true;
-    LOG_F(INFO, "Registered view resolver and render graph for view {}",
-      view_id_.get());
-  }
+  // Register view resolver / render graph with the renderer via the helper
+  // implemented by SingleViewExample.
+  RegisterViewForRendering(main_camera_);
 
   co_return;
 }
@@ -510,7 +451,11 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   DCHECK_NOTNULL_F(app_window_);
   DCHECK_NOTNULL_F(scene_);
 
-  UpdateViewRegistration(context);
+  // Use base helper which registers views and invokes a ready callback
+  UpdateFrameContext(context, [this](int w, int h) {
+    EnsureMainCamera(w, h);
+    RegisterViewForRendering(main_camera_);
+  });
   if (!app_window_->GetWindow()) {
     co_return;
   }
@@ -565,65 +510,6 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   }
 
   co_return;
-}
-
-void MainModule::UpdateViewRegistration(engine::FrameContext& context)
-{
-  bool has_view = app_window_ && app_window_->GetWindow()
-    && !app_window_->GetSurface().expired();
-
-  if (!has_view && view_id_ != ViewId { kInvalidViewId }) {
-    // Remove view if it was previously registered
-    context.RemoveView(view_id_);
-    view_id_ = ViewId { kInvalidViewId };
-    return;
-  }
-
-  auto surface = app_window_->GetSurface().lock();
-
-  // Add view to FrameContext with complete configuration
-  // Views must be registered before kSnapshot phase
-  ViewPort viewport;
-  viewport.top_left_x = 0.0f;
-  viewport.top_left_y = 0.0f;
-  viewport.width = static_cast<float>(surface->Width());
-  viewport.height = static_cast<float>(surface->Height());
-  viewport.min_depth = 0.0f;
-  viewport.max_depth = 1.0f;
-
-  Scissors scissors;
-  scissors.left = 0;
-  scissors.top = 0;
-  scissors.right = static_cast<int32_t>(surface->Width());
-  scissors.bottom = static_cast<int32_t>(surface->Height());
-
-  View view;
-  view.viewport = viewport;
-  view.scissor = scissors;
-
-  engine::ViewContext view_ctx {
-    .view = view,
-    .metadata = {
-      .name = "MainView",
-      .purpose = "primary",
-    },
-  };
-
-  // Update the view output framebuffer at each frame. The frame buffer is
-  // only guranteed to be stable for a single frame cycle.
-  auto fb_weak = app_window_->GetCurrentFrameBuffer();
-  view_ctx.output
-    = observer_ptr { fb_weak.expired() ? nullptr : fb_weak.lock().get() };
-
-  // Register when no registration exists, update if there is one
-  if (view_id_ == ViewId { kInvalidViewId }) {
-    view_id_ = context.RegisterView(std::move(view_ctx));
-  } else {
-    context.UpdateView(view_id_, std::move(view_ctx));
-  }
-
-  EnsureMainCamera(
-    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 }
 
 auto MainModule::OnCompositing(engine::FrameContext& context) -> co::Co<>

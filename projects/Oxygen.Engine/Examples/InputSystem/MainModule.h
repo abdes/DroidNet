@@ -8,23 +8,24 @@
 
 #include <memory>
 
-#include "../Common/AsyncEngineApp.h"
-#include "../Common/ExampleModuleBase.h"
-#include "../Common/RenderGraph.h"
+#include <glm/glm.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scene/Scene.h>
-#include <glm/glm.hpp>
+
+#include "../Common/AsyncEngineApp.h"
+#include "../Common/SingleViewExample.h"
 
 namespace oxygen::examples::input {
 
-class MainModule : public common::ExampleModuleBase {
+class MainModule : public common::SingleViewExample {
   OXYGEN_TYPED(MainModule)
 public:
-  using Base = oxygen::examples::common::ExampleModuleBase;
+  using Base = oxygen::examples::common::SingleViewExample;
 
   explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
 
@@ -73,13 +74,10 @@ public:
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
 
 protected:
-  virtual auto ClearBackbufferReferences() -> void;
-
 private:
   auto InitInputBindings() noexcept -> bool;
   auto EnsureMainCamera(const int width, const int height) -> void;
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
-  auto UpdateViewRegistration(engine::FrameContext& context) -> void;
 
   // The ExampleModuleBase provides `app_` and common window/render helpers.
 
@@ -87,20 +85,6 @@ private:
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode main_camera_; // "MainCamera"
   scene::SceneNode sphere_node_; // Sphere for jump animation
-
-  // ViewId for the main viewport
-  ViewId view_id_ { kInvalidViewId };
-
-  // Per-example RenderGraph instance owned by this module (used to manage
-  // RenderContext and example passes).
-  oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {
-    nullptr
-  };
-
-  //! RenderGraph component in the base provides the RenderContext and passes
-  //! used by this module.
-
-  // window + lifecycle + framebuffer storage live in base class
 
   // Stored actions for querying state later during frames
   std::shared_ptr<oxygen::input::Action> shift_action_;

@@ -120,10 +120,8 @@ void PipView::OnSceneMutation()
     // PiP might be larger than the surface (tiny/minimized windows).
     const auto sw = static_cast<int32_t>(surface_width);
     const auto sh = static_cast<int32_t>(surface_height);
-    const auto left
-      = static_cast<int32_t>(std::max(0.0F, viewport.top_left_x));
-    const auto top
-      = static_cast<int32_t>(std::max(0.0F, viewport.top_left_y));
+    const auto left = static_cast<int32_t>(std::max(0.0F, viewport.top_left_x));
+    const auto top = static_cast<int32_t>(std::max(0.0F, viewport.top_left_y));
     const auto right = static_cast<int32_t>(std::clamp(
       viewport.top_left_x + viewport.width, 0.0F, static_cast<float>(sw)));
     const auto bottom = static_cast<int32_t>(std::clamp(
@@ -133,7 +131,7 @@ void PipView::OnSceneMutation()
       .left = left, .top = top, .right = right, .bottom = bottom
     };
 
-    RegisterView(viewport, scissor);
+    AddViewToFrameContext(viewport, scissor);
   }
 }
 

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -43,7 +44,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
 
   explicit MainModule(const common::AsyncEngineApp& app) noexcept;
-  ~MainModule() override;
+  ~MainModule() override = default;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -76,6 +77,7 @@ private:
     const graphics::Framebuffer& framebuffer) -> void;
   auto MarkSurfacePresentable(engine::FrameContext& context,
     const std::shared_ptr<graphics::Surface>& surface) -> void;
+  auto ReleaseAllViews(std::string_view reason) -> void;
 
   const common::AsyncEngineApp& app_;
   SceneBootstrapper scene_bootstrapper_;

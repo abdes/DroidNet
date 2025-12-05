@@ -74,7 +74,8 @@ void DemoView::UpdateCameraViewport(float width, float height)
   }
 }
 
-void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
+void DemoView::AddViewToFrameContext(
+  const ViewPort& viewport, const Scissors& scissor)
 {
   CHECK_NOTNULL_F(
     frame_context_, "frame_context must be set via SetRenderingContext");
@@ -108,7 +109,7 @@ void DemoView::RegisterView(const ViewPort& viewport, const Scissors& scissor)
   }
 }
 
-void DemoView::RegisterRendererHooks(engine::Renderer& renderer)
+void DemoView::RegisterViewForRendering(engine::Renderer& renderer)
 {
   if (view_id_.get() == 0) {
     LOG_F(WARNING, "[{}] ViewId not assigned; skipping renderer hooks",
@@ -119,32 +120,12 @@ void DemoView::RegisterRendererHooks(engine::Renderer& renderer)
   LOG_F(INFO, "[{}] Registering renderer hooks for view {}", config_.name,
     view_id_.get());
 
-  renderer.RegisterViewResolverForView(view_id_,
+  // Ask our per-view renderer to register with the engine for this view id.
+  renderer_.RegisterWithEngine(renderer, view_id_,
     [view_ptr = this](const engine::ViewContext& view_context) -> ResolvedView {
       renderer::SceneCameraViewResolver resolver(
         [view_ptr](const ViewId&) { return view_ptr->GetCameraNode(); });
       return resolver(view_context.id);
-    });
-
-  renderer.RegisterRenderGraph(view_id_,
-    [view_ptr = this](ViewId view_id,
-      const engine::RenderContext& render_context,
-      graphics::CommandRecorder& recorder) -> co::Co<> {
-      if (!view_ptr->IsViewReady()) {
-        LOG_F(INFO, "[{}] Skipping render graph; view {} not ready",
-          view_ptr->config_.name, view_id.get());
-        co_return;
-      }
-
-      const auto framebuffer = view_ptr->GetFramebuffer();
-      if (!framebuffer) {
-        LOG_F(WARNING, "[{}] Render graph missing framebuffer for view {}",
-          view_ptr->config_.name, view_id.get());
-        co_return;
-      }
-
-      co_await view_ptr->RenderFrame(render_context, recorder);
-      co_return;
     });
 }
 
@@ -163,6 +144,12 @@ void DemoView::ReleaseResources()
 
   // Base cleanup: reset renderer state and phase-specific pointers.
   renderer_.ResetConfiguration();
+  // Unregister our view when releasing resources so the renderer doesn't
+  // retain stale resolvers / graph factories for this view id.
+  if (view_id_.get() != 0) {
+    renderer_.UnregisterFromEngine();
+    view_id_ = ViewId {};
+  }
   view_ready_ = false;
   recorder_ = nullptr; // Clear stale recorder pointer
 

@@ -9,6 +9,7 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -27,8 +28,7 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "../Common/AsyncEngineApp.h"
-#include "../Common/ExampleModuleBase.h"
-#include "../Common/RenderGraph.h"
+#include "../Common/SingleViewExample.h"
 
 namespace oxygen::examples::async {
 
@@ -42,13 +42,13 @@ namespace oxygen::examples::async {
  - Phase-based rendering coordination via AsyncEngine
  - Input binding for drone speed control
 
- @see ExampleModuleBase, AsyncEngine, Graphics
+@see ExampleModuleBase, AsyncEngine, Graphics
 */
-class MainModule final : public common::ExampleModuleBase {
+class MainModule final : public common::SingleViewExample {
   OXYGEN_TYPED(MainModule)
 
 public:
-  using Base = ExampleModuleBase;
+  using Base = common::SingleViewExample;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
   OXYGEN_MAKE_NON_MOVABLE(MainModule)
@@ -99,7 +99,6 @@ public:
   auto OnCompositing(engine::FrameContext& context) -> co::Co<>;
   auto OnFrameEnd(engine::FrameContext& context) -> void override;
   auto OnGuiUpdate(engine::FrameContext& context) -> co::Co<> override;
-  auto ClearBackbufferReferences() -> void override;
 
 private:
   //! Setup functions (called once).
@@ -115,7 +114,6 @@ private:
   // preserve granularity at high FPS.
   auto UpdateAnimations(double delta_time) -> void;
   auto UpdateSceneMutations(float delta_time) -> void;
-  auto UpdateViewRegistration(engine::FrameContext& context) -> void;
 
   //! Debug overlay methods.
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
@@ -185,14 +183,6 @@ private:
   //! Scene nodes for the example.
   scene::SceneNode multisubmesh_; // Per-submesh visibility/overrides
   scene::SceneNode main_camera_; // "MainCamera"
-
-  // ViewId for the main viewport
-  ViewId view_id_ { kInvalidViewId };
-
-  // Per-example RenderGraph instance owned by this module.
-  oxygen::observer_ptr<oxygen::examples::common::RenderGraph> render_graph_ {
-    nullptr
-  };
 
   //! Animation state (quad rotation removed; sphere orbits, camera fixed).
   int last_vis_toggle_ { -1 };

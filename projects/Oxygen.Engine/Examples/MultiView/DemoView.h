@@ -94,7 +94,7 @@ public:
   virtual void OnSceneMutation() = 0;
 
   //! Register resolver and render graph hooks with the shared renderer.
-  virtual void RegisterRendererHooks(oxygen::engine::Renderer& renderer);
+  virtual void RegisterViewForRendering(oxygen::engine::Renderer& renderer);
 
   // Prepare for rendering (configure renderer, register resolver/graph)
   virtual auto OnPreRender(oxygen::engine::Renderer& renderer) -> co::Co<> = 0;
@@ -174,7 +174,10 @@ protected:
   // Common helpers
   void EnsureCamera(scene::Scene& scene, std::string_view node_name);
   void UpdateCameraViewport(float width, float height);
-  void RegisterView(const ViewPort& viewport, const Scissors& scissor);
+  void AddViewToFrameContext(const ViewPort& viewport, const Scissors& scissor);
+
+  // Per-view renderer is now responsible for registering/unregistering with
+  // the engine Renderer. No need to store engine renderer pointer here.
 
   // Protected accessors for derived classes (prefer using these instead of
   // manipulating members directly so the base class can evolve safely)

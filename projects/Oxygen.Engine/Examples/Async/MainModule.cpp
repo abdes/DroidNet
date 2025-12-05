@@ -12,6 +12,7 @@
 #include <numbers>
 #include <random>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -461,43 +462,11 @@ MainModule::MainModule(const common::AsyncEngineApp& app)
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
 
-  // Construct per-module RenderGraph used by this example. Keep creation
-  // best-effort so headless or constrained environments don't crash.
-  try {
-    auto& rg = AddComponent<oxygen::examples::common::RenderGraph>(app_);
-    render_graph_
-      = oxygen::observer_ptr<oxygen::examples::common::RenderGraph>(&rg);
-  } catch (const std::exception& ex) {
-    LOG_F(
-      WARNING, "MainModule ctor: failed to create RenderGraph: {}", ex.what());
-  }
-
   // Record start time for animations (use time_point for robust delta)
   start_time_ = std::chrono::steady_clock::now();
 }
 
-auto MainModule::ClearBackbufferReferences() -> void
-{
-  // Clear any references that point to the swapchain/backbuffer before a
-  // resize. The RenderGraph component manages the per-frame RenderContext
-  // and pass configs which may hold backbuffer textures, so forward to it.
-  try {
-    if (render_graph_) {
-      render_graph_->ClearBackbufferReferences();
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(WARNING, "ClearBackbufferReferences() threw: {}", ex.what());
-  }
-}
-
-MainModule::~MainModule()
-{
-  // Cleanup scene
-  scene_.reset();
-  // app_ is non-owning; do not reset here
-  // Window, surface, and framebuffers are managed by AppWindow component (via
-  // base)
-}
+MainModule::~MainModule() { scene_.reset(); }
 
 auto MainModule::GetSupportedPhases() const noexcept -> engine::ModulePhaseMask
 {
@@ -801,7 +770,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   DCHECK_NOTNULL_F(scene_);
   DCHECK_NOTNULL_F(app_window_);
   if (!app_window_->GetWindow()) {
-    UpdateViewRegistration(context);
+    UpdateFrameContext(context, nullptr);
     TrackFrameAction("GUI update skipped - app window not available");
     TrackPhaseEnd();
     co_return;
@@ -812,7 +781,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   current_frame_tracker_.scene_mutation_occurred = true;
   TrackFrameAction("Scene mutation phase started");
 
-  UpdateViewRegistration(context);
+  UpdateFrameContext(context,
+    [this](int width, int height) { EnsureMainCamera(width, height); });
 
   // Handle scene mutations (material overrides, visibility changes)
   // Use the engine-provided frame start time so all modules use a
@@ -827,65 +797,6 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   TrackFrameAction("Scene mutations updated");
   TrackPhaseEnd();
   co_return;
-}
-
-void MainModule::UpdateViewRegistration(engine::FrameContext& context)
-{
-  bool has_view = app_window_ && app_window_->GetWindow()
-    && !app_window_->GetSurface().expired();
-
-  if (!has_view && view_id_ != ViewId { kInvalidViewId }) {
-    // Remove view if it was previously registered
-    context.RemoveView(view_id_);
-    view_id_ = ViewId { kInvalidViewId };
-    return;
-  }
-
-  auto surface = app_window_->GetSurface().lock();
-
-  // Add view to FrameContext with complete configuration
-  // Views must be registered before kSnapshot phase
-  ViewPort viewport;
-  viewport.top_left_x = 0.0f;
-  viewport.top_left_y = 0.0f;
-  viewport.width = static_cast<float>(surface->Width());
-  viewport.height = static_cast<float>(surface->Height());
-  viewport.min_depth = 0.0f;
-  viewport.max_depth = 1.0f;
-
-  Scissors scissors;
-  scissors.left = 0;
-  scissors.top = 0;
-  scissors.right = static_cast<int32_t>(surface->Width());
-  scissors.bottom = static_cast<int32_t>(surface->Height());
-
-  View view;
-  view.viewport = viewport;
-  view.scissor = scissors;
-
-  engine::ViewContext view_ctx {
-    .view = view,
-    .metadata = {
-      .name = "MainView",
-      .purpose = "primary",
-    },
-  };
-
-  // Update the view output framebuffer at each frame. The frame buffer is
-  // only guranteed to be stable for a single frame cycle.
-  auto fb_weak = app_window_->GetCurrentFrameBuffer();
-  view_ctx.output
-    = observer_ptr { fb_weak.expired() ? nullptr : fb_weak.lock().get() };
-
-  // Register when no registration exists, update if there is one
-  if (view_id_ == ViewId { kInvalidViewId }) {
-    view_id_ = context.RegisterView(std::move(view_ctx));
-  } else {
-    context.UpdateView(view_id_, std::move(view_ctx));
-  }
-
-  EnsureMainCamera(
-    static_cast<int>(surface->Width()), static_cast<int>(surface->Height()));
 }
 
 auto MainModule::OnTransformPropagation(engine::FrameContext& context)
@@ -995,11 +906,11 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   }
 
   // Ensure render passes are created/configured via the example RenderGraph
-  if (render_graph_) {
-    render_graph_->SetupRenderPasses();
+  if (auto render_graph = GetRenderGraph()) {
+    render_graph->SetupRenderPasses();
 
     // Configure pass-specific settings (clear color, debug names, etc.)
-    auto shader_pass_config = render_graph_->GetShaderPassConfig();
+    auto shader_pass_config = render_graph->GetShaderPassConfig();
     if (shader_pass_config) {
       shader_pass_config->clear_color
         = graphics::Color { 0.1F, 0.2F, 0.38F, 1.0F };
@@ -1007,48 +918,7 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
     }
   }
 
-  // Register view resolver and render graph only once (ViewId is now stable)
-  static bool registered = false;
-  if (!registered) {
-    // Register view resolver using SceneCameraViewResolver
-    // ViewResolver signature expects ViewContext, but SceneCameraViewResolver
-    // expects ViewId, so we wrap it to extract the id from the context
-    app_.renderer->RegisterViewResolver(
-      [this](const engine::ViewContext& vc) -> ResolvedView {
-        renderer::SceneCameraViewResolver resolver(
-          [this](const ViewId& /*id*/) { return main_camera_; });
-        return resolver(vc.id);
-      });
-
-    // Register render graph factory once with stable view_id
-    // ViewId remains stable across frames thanks to name-based identity
-    app_.renderer->RegisterRenderGraph(view_id_,
-      [this](ViewId id, const engine::RenderContext& rc,
-        graphics::CommandRecorder& rec) -> co::Co<void> {
-        // Wire up framebuffer attachments to render passes before execution
-        // The RenderContext contains the framebuffer set by the Renderer
-        if (render_graph_ && rc.framebuffer) {
-          render_graph_->PrepareForRenderFrame(rc.framebuffer);
-        }
-
-        // Run main render passes
-        co_await render_graph_->RunPasses(rc, rec);
-
-        // ImGui pass
-        auto imgui_module_ref = app_.engine->GetModule<imgui::ImGuiModule>();
-        if (imgui_module_ref) {
-          auto& imgui_module = imgui_module_ref->get();
-          auto imgui_pass = imgui_module.GetRenderPass();
-          if (imgui_pass) {
-            co_await imgui_pass->Render(rec);
-          }
-        }
-      });
-
-    registered = true;
-    LOG_F(INFO, "Registered view resolver and render graph for view {}",
-      view_id_.get());
-  }
+  RegisterViewForRendering(main_camera_);
 
   TrackFrameAction("View resolver and render graph registered");
   TrackFrameAction("Frame graph and render passes configured");
@@ -1780,10 +1650,10 @@ auto MainModule::DrawRenderPassesPanel() -> void
   bool depth_pass_ok = false;
   bool shader_pass_ok = false;
   bool transparent_pass_ok = false;
-  if (render_graph_) {
-    depth_pass_ok = render_graph_->GetDepthPass() != nullptr;
-    shader_pass_ok = render_graph_->GetShaderPass() != nullptr;
-    transparent_pass_ok = render_graph_->GetTransparentPass() != nullptr;
+  if (auto rg = GetRenderGraph(); rg != nullptr) {
+    depth_pass_ok = rg->GetDepthPass() != nullptr;
+    shader_pass_ok = rg->GetShaderPass() != nullptr;
+    transparent_pass_ok = rg->GetTransparentPass() != nullptr;
   }
 
   const char* pass_icon = depth_pass_ok ? "[OK]" : "[--]";
