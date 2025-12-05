@@ -7,6 +7,7 @@
 #pragma once
 
 #include <Oxygen/Renderer/Test/Upload/UploadCoordinatorTest.h>
+#include <Oxygen/Renderer/Upload/UploaderTag.h>
 
 namespace oxygen::engine::upload::testing {
 
@@ -49,6 +50,17 @@ protected:
     d.unmap_calls = after.unmap_calls - before.unmap_calls;
     d.implementation_info = after.implementation_info;
     return d;
+  }
+
+  // For RingBufferStaging tests we want to notify providers via the
+  // InlineTransfersCoordinator path (InlineCoordinatorTag) because the
+  // provider implements OnFrameStart(InlineCoordinatorTag,...). This hides
+  // the UploadCoordinatorTest::SimulateFrameStart which routes through the
+  // UploadCoordinator (UploaderTag path).
+  auto SimulateFrameStart(frame::Slot slot) -> void
+  {
+    auto tag = oxygen::engine::upload::internal::InlineCoordinatorTagFactory::Get();
+    Staging().OnFrameStart(tag, slot);
   }
 };
 

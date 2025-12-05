@@ -32,7 +32,9 @@ protected:
   auto Uploader(UploadPolicy policy = DefaultUploadPolicy())
     -> UploadCoordinator&
   {
-    uploader_ = std::make_unique<UploadCoordinator>(GfxPtr(), policy);
+    if (!uploader_) {
+      uploader_ = std::make_unique<UploadCoordinator>(GfxPtr(), policy);
+    }
     return *uploader_;
   }
 

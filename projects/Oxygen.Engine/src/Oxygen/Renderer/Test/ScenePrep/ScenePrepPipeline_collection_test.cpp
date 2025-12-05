@@ -8,6 +8,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -51,18 +52,17 @@ protected:
     child_of_a_.GetRenderable().SetGeometry(geom);
     scene_->Update();
 
-    View::Params vp {};
-    vp.view = glm::mat4(1.0f);
-    vp.proj = glm::mat4(1.0f);
-    vp.viewport = {
+    oxygen::ResolvedView::Params vp {};
+    vp.view_matrix = glm::mat4(1.0f);
+    vp.proj_matrix = glm::mat4(1.0f);
+    vp.view_config.viewport = {
       .top_left_x = 0,
       .top_left_y = 0,
       .width = 0,
       .height = 600,
     };
-    vp.has_camera_position = true;
     vp.camera_position = { 0.0f, 0.0f, 5.0f };
-    view_ = View { vp };
+    view_ = std::make_shared<oxygen::ResolvedView>(vp);
 
     // rc_ default constructed
     state_ = std::make_unique<ScenePrepState>(nullptr, nullptr, nullptr);
@@ -75,7 +75,12 @@ protected:
 
   // Accessors for convenience
   [[nodiscard]] auto SceneRef() const -> const Scene& { return *scene_; }
-  auto ViewRef() -> View& { return view_; }
+  auto ViewRef()
+    -> std::optional<oxygen::observer_ptr<const oxygen::ResolvedView>>
+  {
+    return std::optional<oxygen::observer_ptr<const oxygen::ResolvedView>>(
+      oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get()));
+  }
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto StateRef() -> ScenePrepState& { return *state_; }
 
@@ -86,7 +91,8 @@ private:
   SceneNode root_a_ {};
   SceneNode root_b_ {};
   SceneNode child_of_a_ {};
-  View view_ { View::Params {} };
+  std::shared_ptr<oxygen::ResolvedView> view_
+    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {});
   std::unique_ptr<ScenePrepState> state_ {};
 };
 
@@ -144,6 +150,11 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
+  // Run frame-phase first (no view) to populate cached filtered node list,
+  // then run per-view phase with a real ResolvedView so per-view stages
+  // execute.
+  pipeline->Collect(SceneRef(), std::nullopt,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
   pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
     StateRef(), true);
 
@@ -185,11 +196,15 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
+  pipeline->Collect(SceneRef(), std::nullopt,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
   pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
     StateRef(), true);
 
   EXPECT_EQ(StateRef().CollectedCount(), 0);
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  // pre_filter runs in both frame-phase and per-view phase, so expect 2x
+  EXPECT_EQ(
+    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
   EXPECT_EQ(res_called, 0);
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
@@ -230,11 +245,15 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
+  pipeline->Collect(SceneRef(), std::nullopt,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
   pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  // pre_filter runs twice (frame + view)
+  EXPECT_EQ(
+    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, 0);
   EXPECT_EQ(prod_called, 0);
@@ -277,11 +296,15 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
     = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
+  pipeline->Collect(SceneRef(), std::nullopt,
+    oxygen::frame::SequenceNumber { 1 }, StateRef(), true);
   pipeline->Collect(SceneRef(), ViewRef(), oxygen::frame::SequenceNumber { 1 },
     StateRef(), true);
 
   EXPECT_TRUE(StateRef().CollectedItems().empty());
-  EXPECT_EQ(pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
+  // pre_filter runs twice (frame + view)
+  EXPECT_EQ(
+    pre_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount * 2));
   EXPECT_EQ(res_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(vis_called, static_cast<int>(ScenePrepPipelineTest::kNodeCount));
   EXPECT_EQ(prod_called, 0);

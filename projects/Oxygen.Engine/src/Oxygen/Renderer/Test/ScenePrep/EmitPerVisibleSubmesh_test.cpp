@@ -25,6 +25,7 @@
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
+#include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 #include <Oxygen/Scene/Scene.h>
@@ -89,9 +90,17 @@ protected:
       = std::make_unique<oxygen::renderer::resources::GeometryUploader>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
         observer_ptr { staging_provider_.get() });
+    // We need an InlineTransfersCoordinator instance for the TransformUploader
+    // API; the uploader expects an observer_ptr to the inline transfers
+    // coordinator.
+    inline_transfers_
+      = std::make_unique<oxygen::engine::upload::InlineTransfersCoordinator>(
+        observer_ptr { gfx_.get() });
+
     auto transform_uploader
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
-        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() });
+        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() });
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
@@ -106,6 +115,8 @@ protected:
   std::shared_ptr<oxygen::renderer::testing::FakeGraphics> gfx_;
   std::unique_ptr<oxygen::engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<StagingProvider> staging_provider_;
+  std::unique_ptr<oxygen::engine::upload::InlineTransfersCoordinator>
+    inline_transfers_;
 };
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)
