@@ -13,6 +13,7 @@
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 // Required for direct access to the QueueManager component in tests
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
@@ -96,7 +97,7 @@ public:
   MOCK_METHOD((std::shared_ptr<CommandQueue>), CreateCommandQueue, (const QueueKey&, QueueRole), (override));
   // Other methods we don't care about
   MOCK_METHOD((const DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
-  MOCK_METHOD((std::shared_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
+  MOCK_METHOD((std::unique_ptr<Surface>), CreateSurface, (std::weak_ptr<Window>, observer_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<Surface>), CreateSurfaceFromNative, (void*, observer_ptr<CommandQueue>), (const, override));
   MOCK_METHOD((std::shared_ptr<IShaderByteCode>), GetShader, (std::string_view), (const, override));
   MOCK_METHOD((std::shared_ptr<Texture>), CreateTexture, (const TextureDesc&), (const, override));

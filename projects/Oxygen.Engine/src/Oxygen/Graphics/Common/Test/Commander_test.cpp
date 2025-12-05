@@ -109,6 +109,7 @@ public:
   MOCK_METHOD(void, CopyBuffer, (oxygen::graphics::Buffer&, std::size_t, const oxygen::graphics::Buffer&, std::size_t, std::size_t), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, const oxygen::graphics::TextureUploadRegion&, oxygen::graphics::Texture&), (override));
   MOCK_METHOD(void, CopyBufferToTexture, (const oxygen::graphics::Buffer&, std::span<const oxygen::graphics::TextureUploadRegion>, oxygen::graphics::Texture&), (override));
+  MOCK_METHOD(void, CopyTexture, (const oxygen::graphics::Texture&, const oxygen::graphics::TextureSlice&, const oxygen::graphics::TextureSubResourceSet&, oxygen::graphics::Texture&, const oxygen::graphics::TextureSlice&, const oxygen::graphics::TextureSubResourceSet&), (override));
   MOCK_METHOD(void, ExecuteBarriers, (std::span<const oxygen::graphics::detail::Barrier>), (override));
   // clang-format on
   // NOLINTEND
