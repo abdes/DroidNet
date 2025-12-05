@@ -586,7 +586,7 @@ constexpr EnumIndexedArray<PhaseId, PhaseDesc> kPhaseRegistry = {
     .category = ExecutionModel::kBarrieredConcurrency,
     .allowed_mutations
     = AllowMutation::kFrameState | AllowMutation::kEngineState,
-    .thread_safe = true,
+    .thread_safe = false,
   },
   PhaseDesc {
     .id = PhaseId::kPreRender,

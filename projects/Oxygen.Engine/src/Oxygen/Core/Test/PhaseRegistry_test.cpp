@@ -294,10 +294,10 @@ NOLINT_TEST(PhaseRegistryExtras, ThreadSafetyExpectations)
   auto expect_thread_safe = [](PhaseId id) {
     switch (id) {
     case PhaseId::kParallelTasks:
-    case PhaseId::kCommandRecord:
-    case PhaseId::kDetachedServices:
+    case PhaseId::kRender:
+    case PhaseId::kCompositing:
     case PhaseId::kAsyncPoll:
-    case PhaseId::kGuiUpdate:
+    case PhaseId::kDetachedServices:
       return true;
     default:
       return false;
