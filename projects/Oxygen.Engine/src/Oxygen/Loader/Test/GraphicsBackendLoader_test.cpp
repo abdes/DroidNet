@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 
@@ -47,7 +48,7 @@ public:
   // NOLINTBEGIN(modernize-use-trailing-return-type)
   MOCK_METHOD((const oxygen::graphics::DescriptorAllocator&), GetDescriptorAllocator, (), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::IShaderByteCode>, GetShader, (std::string_view), (const, override));
-  MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
+  MOCK_METHOD(std::unique_ptr<oxygen::graphics::Surface>, CreateSurface, (std::weak_ptr<oxygen::platform::Window>, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::Surface>, CreateSurfaceFromNative, (void*, oxygen::observer_ptr<oxygen::graphics::CommandQueue>), (const, override));
   MOCK_METHOD(std::shared_ptr<oxygen::graphics::CommandQueue>, CreateCommandQueue, (const oxygen::graphics::QueueKey&, oxygen::graphics::QueueRole), (override));
   MOCK_METHOD(std::unique_ptr<oxygen::graphics::CommandList>, CreateCommandListImpl, (oxygen::graphics::QueueRole, std::string_view), (override));
