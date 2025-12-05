@@ -92,6 +92,9 @@
     <ClInclude Include="EditorModule\SurfaceRegistry.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
+    <ClInclude Include="Views\ViewIdManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
     <ClInclude Include="EditorModule\ThreadSafeQueue.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
@@ -104,6 +107,9 @@
   <ItemGroup>
     <Filter Include="World">
       <UniqueIdentifier>{7722c63e-a5e7-450d-b97b-aa52bc8a891b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Views">
+      <UniqueIdentifier>{E3F1B8C3-9A41-4D3D-9B45-BC0D5A1D2E7F}</UniqueIdentifier>
     </Filter>
     <Filter Include="Base">
       <UniqueIdentifier>{3187e374-ea51-469d-8e36-92d80e02fc13}</UniqueIdentifier>
