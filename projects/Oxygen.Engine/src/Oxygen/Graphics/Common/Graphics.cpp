@@ -19,6 +19,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
+#include <Oxygen/Graphics/Common/Internal/DeferredReclaimerComponent.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -28,9 +29,9 @@
 #include <Oxygen/OxCo/Nursery.h>
 
 using oxygen::Graphics;
-using oxygen::graphics::detail::DeferredReclaimer;
 using oxygen::graphics::internal::Commander;
 using oxygen::graphics::internal::CommandListPool;
+using oxygen::graphics::internal::DeferredReclaimerComponent;
 using oxygen::graphics::internal::QueueManager;
 
 namespace {
@@ -70,7 +71,7 @@ Graphics::Graphics(const std::string_view name)
     });
   // DeferredReclaimer must be created before Commander because Commander
   // depends on oxygen::graphics::detail::DeferredReclaimer.
-  AddComponent<DeferredReclaimer>();
+  AddComponent<DeferredReclaimerComponent>();
   AddComponent<Commander>();
 }
 
@@ -101,7 +102,7 @@ auto Graphics::Flush() -> void
   FlushCommandQueues();
 
   // Process All deferred releases
-  auto& reclaimer = GetComponent<DeferredReclaimer>();
+  auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
   reclaimer.ProcessAllDeferredReleases();
 }
 
@@ -122,7 +123,7 @@ auto Graphics::BeginFrame(
   // resources
   FlushCommandQueues();
 
-  auto& reclaimer = GetComponent<DeferredReclaimer>();
+  auto& reclaimer = GetComponent<DeferredReclaimerComponent>();
   reclaimer.OnBeginFrame(frame_slot);
 }
 
@@ -242,7 +243,11 @@ auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
 }
 auto Graphics::GetDeferredReclaimer() -> graphics::detail::DeferredReclaimer&
 {
-  return GetComponent<graphics::detail::DeferredReclaimer>();
+  // The actual component stored in the composition is the internal
+  // DeferredReclaimerComponent. Return a reference to the public
+  // DeferredReclaimer interface implemented by that component.
+  auto& comp = GetComponent<graphics::internal::DeferredReclaimerComponent>();
+  return static_cast<graphics::detail::DeferredReclaimer&>(comp);
 }
 
 auto Graphics::RegisterDeferredRelease(
@@ -255,7 +260,8 @@ auto Graphics::RegisterDeferredRelease(
     return;
   }
 
-  auto& reclaimer = GetComponent<graphics::detail::DeferredReclaimer>();
+  auto& reclaimer
+    = GetComponent<graphics::internal::DeferredReclaimerComponent>();
   reclaimer.RegisterDeferredRelease(std::move(surface));
 }
 

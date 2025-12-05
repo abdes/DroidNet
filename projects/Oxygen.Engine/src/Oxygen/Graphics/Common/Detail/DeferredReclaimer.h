@@ -10,15 +10,13 @@
 #include <atomic>
 #include <concepts>
 #include <functional>
-#include <mutex>
+#include <memory>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Graphics/Common/api_export.h>
 
@@ -41,13 +39,11 @@ concept HasGetTypeName = requires(T t) {
 //! Tracks resources allocated during the rendering of a frame and releases
 //! them when no longer used by the GPU (i.e., at the beginning of the new
 //! render for that same frame index).
-class DeferredReclaimer : public Component {
-  OXYGEN_COMPONENT(DeferredReclaimer)
-  OXYGEN_COMPONENT_REQUIRES(oxygen::graphics::internal::CommandListPool)
+class DeferredReclaimer {
 
 public:
-  DeferredReclaimer() = default;
-  OXGN_GFX_API ~DeferredReclaimer() override;
+  OXGN_GFX_API DeferredReclaimer();
+  OXGN_GFX_API ~DeferredReclaimer();
 
   OXYGEN_MAKE_NON_COPYABLE(DeferredReclaimer)
   OXYGEN_MAKE_NON_MOVABLE(DeferredReclaimer)
@@ -63,10 +59,7 @@ public:
   auto RegisterDeferredRelease(std::shared_ptr<T> resource) -> void
     requires HasReleaseMethod<T>
   {
-    const auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
-    auto& frame_resources = deferred_releases_[frame_idx];
-    std::lock_guard lock(deferred_mutexes_[frame_idx]);
-    frame_resources.emplace_back([resource = std::move(resource)]() mutable {
+    RegisterDeferredAction([resource = std::move(resource)]() mutable {
       LogRelease(resource.get());
       resource->Release();
       resource.reset();
@@ -83,10 +76,7 @@ public:
   template <typename T>
   auto RegisterDeferredRelease(std::shared_ptr<T> resource) -> void
   {
-    const auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
-    auto& frame_resources = deferred_releases_[frame_idx];
-    std::lock_guard lock(deferred_mutexes_[frame_idx]);
-    frame_resources.emplace_back([resource = std::move(resource)]() mutable {
+    RegisterDeferredAction([resource = std::move(resource)]() mutable {
       LogRelease(resource.get());
       resource.reset();
     });
@@ -99,10 +89,7 @@ public:
   auto RegisterDeferredRelease(T* const resource) noexcept -> void
     requires HasReleaseMethod<T>
   {
-    const auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
-    auto& frame_resources = deferred_releases_[frame_idx];
-    std::lock_guard lock(deferred_mutexes_[frame_idx]);
-    frame_resources.emplace_back([resource]() mutable {
+    RegisterDeferredAction([resource]() mutable {
       if (resource) {
         LogRelease(resource);
         resource->Release();
@@ -128,6 +115,12 @@ private:
   //! Releases all deferred resources from the previous render of the frame.
   auto ReleaseDeferredResources(frame::Slot frame_slot) -> void;
 
+  // Private implementation (PIMPL) — keeps internal state and heavy includes
+  // out of the public header. The concrete implementation lives in the .cpp
+  // and may depend on internal headers such as CommandListPool.
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+
   //! Logs the release of a resource.
   template <typename T> static auto LogRelease(const T* resource) -> void
   {
@@ -150,16 +143,8 @@ private:
 #endif
   }
 
-  //! The current frame index.
-  std::atomic<frame::Slot::UnderlyingType> current_frame_slot_ { 0 };
-
-  //! The set of lambda functions that release the pending resources.
-  static constexpr std::size_t kFrameBuckets = frame::kFramesInFlight.get();
-  std::array<std::vector<std::function<void()>>, kFrameBuckets>
-    deferred_releases_ {};
-
-  //! Mutex per frame bucket to allow thread-safe registration from workers.
-  std::array<std::mutex, kFrameBuckets> deferred_mutexes_ {};
+  //! The header intentionally hides the per-frame storage so it does not
+  //! require any internal headers. Implementation details are in Impl.
 };
 
 } // namespace oxygen::graphics::detail

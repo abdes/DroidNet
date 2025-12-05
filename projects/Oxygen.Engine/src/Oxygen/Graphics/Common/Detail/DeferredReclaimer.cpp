@@ -4,14 +4,31 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 
 using oxygen::graphics::detail::DeferredReclaimer;
 
+struct DeferredReclaimer::Impl {
+  std::atomic<frame::Slot::UnderlyingType> current_frame_slot { 0 };
+  static constexpr std::size_t kFrameBuckets = frame::kFramesInFlight.get();
+  std::array<std::vector<std::function<void()>>, kFrameBuckets>
+    deferred_releases_ {};
+  std::array<std::mutex, kFrameBuckets> deferred_mutexes_ {};
+};
+
+DeferredReclaimer::DeferredReclaimer()
+  : impl_(std::make_unique<Impl>())
+{
+}
+
 DeferredReclaimer::~DeferredReclaimer()
 {
-  if (!std::all_of(deferred_releases_.begin(), deferred_releases_.end(),
+  if (!std::all_of(impl_->deferred_releases_.begin(),
+        impl_->deferred_releases_.end(),
         [](const auto& vec) { return vec.empty(); })) {
     LOG_F(
       WARNING, "DeferredReclaimer destroyed with pending deferred releases");
@@ -22,7 +39,7 @@ DeferredReclaimer::~DeferredReclaimer()
 auto DeferredReclaimer::OnBeginFrame(const frame::Slot frame_slot) -> void
 {
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
-  current_frame_slot_.store(frame_slot.get(), std::memory_order_release);
+  impl_->current_frame_slot.store(frame_slot.get(), std::memory_order_release);
   ReleaseDeferredResources(frame_slot);
 }
 
@@ -50,9 +67,9 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
   // to register actions concurrently.
   std::vector<std::function<void()>> local_releases;
   {
-    std::lock_guard<std::mutex> lock(deferred_mutexes_[u_frame_slot]);
-    local_releases = std::move(deferred_releases_[u_frame_slot]);
-    deferred_releases_[u_frame_slot].clear();
+    std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[u_frame_slot]);
+    local_releases = std::move(impl_->deferred_releases_[u_frame_slot]);
+    impl_->deferred_releases_[u_frame_slot].clear();
   }
 
 #if !defined(NDEBUG)
@@ -103,8 +120,9 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
 auto DeferredReclaimer::RegisterDeferredAction(std::function<void()> action)
   -> void
 {
-  const auto frame_idx = current_frame_slot_.load(std::memory_order_acquire);
-  auto& bucket = deferred_releases_[frame_idx];
-  std::lock_guard<std::mutex> lock(deferred_mutexes_[frame_idx]);
+  const auto frame_idx
+    = impl_->current_frame_slot.load(std::memory_order_acquire);
+  auto& bucket = impl_->deferred_releases_[frame_idx];
+  std::lock_guard<std::mutex> lock(impl_->deferred_mutexes_[frame_idx]);
   bucket.emplace_back(std::move(action));
 }

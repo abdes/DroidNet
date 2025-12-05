@@ -13,8 +13,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
+#include <Oxygen/Graphics/Common/Internal/DeferredReclaimerComponent.h>
 
 namespace oxygen::graphics::internal {
 
@@ -88,11 +88,13 @@ auto Commander::UpdateDependencies(
   // Dependency resolution is guaranteed by the engine's component
   // coordinator; directly resolve and cache the DeferredReclaimer
   // component pointer without defensive checks.
-  auto& comp
-    = get_component(oxygen::graphics::detail::DeferredReclaimer::ClassTypeId());
+  auto& comp = get_component(
+    oxygen::graphics::internal::DeferredReclaimerComponent::ClassTypeId());
   // `comp` is known to actually be a DeferredReclaimer; cast to the concrete
   // type and construct an observer_ptr from the raw pointer.
-  auto* dr = static_cast<oxygen::graphics::detail::DeferredReclaimer*>(&comp);
+  auto* dr
+    = static_cast<oxygen::graphics::internal::DeferredReclaimerComponent*>(
+      &comp);
   reclaimer_
     = oxygen::observer_ptr<oxygen::graphics::detail::DeferredReclaimer>(dr);
 }
