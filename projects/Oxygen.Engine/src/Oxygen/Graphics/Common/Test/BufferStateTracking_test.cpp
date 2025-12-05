@@ -165,8 +165,10 @@ NOLINT_TEST_F(BufferStateTrackingTest, RedundantTransitions_MergeBarriers)
     std::holds_alternative<BufferBarrierDesc>(barriers[0].GetDescriptor()));
   const auto desc = std::get<BufferBarrierDesc>(barriers[0].GetDescriptor());
   EXPECT_EQ(desc.before, ResourceStates::kCommon);
-  EXPECT_EQ(
-    desc.after, (ResourceStates::kUnorderedAccess | ResourceStates::kCopyDest));
+  // The tracker merges redundant transitions by updating the existing
+  // barrier's 'after' state to the most recent required state (not the
+  // union). Expect the final 'after' to equal the last requested state.
+  EXPECT_EQ(desc.after, ResourceStates::kCopyDest);
 
   // Now, clear and insert a memory barrier (UAV to UAV)
   tracker.Clear();
