@@ -19,7 +19,9 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
   // Point prep_state_ at the provided state (non-owning).
   prep_state_.reset(&state);
   // Construct context with optional view (observer_ptr may be nullopt)
-  const auto vp = view.has_value() ? view.value() : ::oxygen::observer_ptr<const ResolvedView>(nullptr);
+  const auto vp = view.has_value()
+    ? view.value()
+    : ::oxygen::observer_ptr<const ResolvedView>(nullptr);
   ctx_.emplace(fseq, vp, scene);
 
   // Reset per-frame or per-view state if requested.
@@ -65,12 +67,9 @@ auto ScenePrepPipeline::Collect(const scene::Scene& scene,
       try {
         // Track collected count before running collection for this node so we
         // can capture indices/nodes added by the producer.
-        const auto items_before = state.CollectedCount();
         RenderItemProto item { node_impl };
-
         CollectImpl(ctx_, *prep_state_, item);
 
-        const auto items_after = state.CollectedCount();
         // If we are in Frame-phase (no view), cache a reference to the node
         // for faster per-view iteration later. Producers may emit multiple
         // items per node; `AddFilteredSceneNode` deduplicates consecutive
