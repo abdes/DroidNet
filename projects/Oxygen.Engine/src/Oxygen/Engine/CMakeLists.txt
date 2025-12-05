@@ -51,6 +51,7 @@ set(
   "api_export.h"
   "AsyncEngine.h"
   "InputHandler.h"
+  "ModuleEvent.h"
   "ModuleManager.h"
   "TimeManager.h"
 )
