@@ -10,8 +10,10 @@
 #include <memory>
 #include <numeric>
 #include <ranges>
+#include <shared_mutex>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -155,25 +157,50 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
   return graphics_ptr;
 }
 
-auto Renderer::RegisterViewResolver(ViewResolver resolver) -> void
+auto Renderer::RegisterView(
+  ViewId view_id, ViewResolver resolver, RenderGraphFactory factory) -> void
 {
-  view_resolver_ = std::move(resolver);
-}
-
-auto Renderer::RegisterViewResolverForView(
-  ViewId view_id, ViewResolver resolver) -> void
-{
+  std::unique_lock lock(view_registration_mutex_);
   view_resolvers_.insert_or_assign(view_id, std::move(resolver));
+  render_graphs_.insert_or_assign(view_id, std::move(factory));
+  LOG_F(INFO, "[Renderer] RegisterView: view_id={}, total_views={}",
+    view_id.get(), render_graphs_.size());
 }
 
-auto Renderer::RegisterRenderGraph(ViewId view_id, RenderGraphFactory factory)
-  -> void
+auto Renderer::UnregisterView(ViewId view_id) -> void
 {
-  render_graphs_[view_id] = std::move(factory);
+  std::size_t removed_resolver = 0;
+  std::size_t removed_graph = 0;
+  {
+    std::unique_lock lock(view_registration_mutex_);
+    removed_resolver = view_resolvers_.erase(view_id);
+    removed_graph = render_graphs_.erase(view_id);
+  }
+
+  LOG_F(INFO,
+    "[Renderer] UnregisterView: view_id={}, removed_resolver={}, "
+    "removed_factory={}",
+    view_id.get(), removed_resolver, removed_graph);
+
+  std::size_t pending_size = 0;
+  {
+    std::lock_guard lock(pending_cleanup_mutex_);
+    pending_cleanup_.insert(view_id);
+    pending_size = pending_cleanup_.size();
+  }
+
+  LOG_F(
+    INFO, "[Renderer] UnregisterView: pending_cleanup_count={}", pending_size);
+
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    view_ready_states_.erase(view_id);
+  }
 }
 
 auto Renderer::IsViewReady(ViewId view_id) const -> bool
 {
+  std::shared_lock lock(view_state_mutex_);
   const auto it = view_ready_states_.find(view_id);
   return it != view_ready_states_.end() && it->second;
 }
@@ -182,22 +209,33 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
 {
   LOG_SCOPE_FUNCTION(2);
 
-  if (render_graphs_.empty()) {
-    DLOG_F(WARNING, "no render graphs registered; skipping");
-    co_return;
-  }
+  DrainPendingViewCleanup("OnPreRender");
 
-  if (!view_resolver_ && view_resolvers_.empty()) {
-    DLOG_F(WARNING, "no view resolver registered; skipping");
-    co_return;
+  {
+    std::shared_lock lock(view_registration_mutex_);
+    if (render_graphs_.empty()) {
+      DLOG_F(WARNING, "no render graphs registered; skipping");
+      co_return;
+    }
+
+    if (view_resolvers_.empty()) {
+      DLOG_F(WARNING, "no view resolvers registered; skipping");
+      co_return;
+    }
   }
 
   // Failing to acquire a slot will throw, and drop the frame.
   render_context_
     = observer_ptr { &render_context_pool_->Acquire(context.GetFrameSlot()) };
 
-  // Clear the per-frame and per-view state
-  view_ready_states_.clear();
+  // Clear the per-frame and per-view state (per-frame caches are refreshed
+  // at the start of PreRender). Deferred cleanup of unregistered views is
+  // performed at frame end (OnFrameEnd) to avoid destroying entries while
+  // other modules may add registrations during the frame start.
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    view_ready_states_.clear();
+  }
   resolved_views_.clear();
   prepared_frames_.clear();
   per_view_storage_.clear();
@@ -213,18 +251,21 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
         "View {} ({})", nostd::to_string(view_ctx.id), view_ctx.metadata.name)
         .c_str());
     try {
-      // Resolve the view (get camera, projection matrices)
-      const auto resolver_it = view_resolvers_.find(view_ctx.id);
-      const auto* resolver = resolver_it != view_resolvers_.end()
-        ? &resolver_it->second
-        : (view_resolver_ ? &view_resolver_ : nullptr);
-
-      if (resolver == nullptr) {
-        LOG_F(WARNING, "View {} has no resolver; skipping", view_ctx.id.get());
-        continue;
+      ViewResolver resolver_copy;
+      {
+        std::shared_lock lock(view_registration_mutex_);
+        const auto resolver_it = view_resolvers_.find(view_ctx.id);
+        if (resolver_it == view_resolvers_.end()) {
+          LOG_F(
+            WARNING, "View {} has no resolver; skipping", view_ctx.id.get());
+          continue;
+        }
+        resolver_copy = resolver_it->second; // copy function
       }
 
-      const auto resolved = (*resolver)(view_ctx);
+      // Invoke resolver outside of the registration lock to avoid locking
+      // user-provided code paths.
+      const auto resolved = resolver_copy(view_ctx);
 
       // Cache the resolved view for use in OnRender
       resolved_views_.insert_or_assign(view_ctx.id, resolved);
@@ -294,12 +335,27 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
   }
   auto& graphics = *graphics_ptr;
 
-  // Iterate all views and execute their registered render graphs
-  for (const auto& [view_id, factory] : render_graphs_) {
+  // Iterate all views and execute their registered render graphs.
+  // Take a snapshot of the registered factories under lock so
+  // UnregisterView() can safely mutate the underlying containers
+  // without invalidating our iteration.
+  std::vector<std::pair<ViewId, RenderGraphFactory>> graphs_snapshot;
+  {
+    std::shared_lock lock(view_registration_mutex_);
+    graphs_snapshot.reserve(render_graphs_.size());
+    for (const auto& kv : render_graphs_) {
+      graphs_snapshot.emplace_back(kv.first, kv.second);
+    }
+  }
+
+  for (const auto& [view_id, factory] : graphs_snapshot) {
     DLOG_SCOPE_F(2, fmt::format("View {}", nostd::to_string(view_id)).c_str());
 
     // Mark view as not ready initially
-    view_ready_states_[view_id] = false;
+    {
+      std::unique_lock state_lock(view_state_mutex_);
+      view_ready_states_[view_id] = false;
+    }
 
     try {
       // Get the ViewContext for this view to access output framebuffer
@@ -347,6 +403,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
       FinalizeViewState(view_id, rv);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to render view {}: {}", view_id.get(), ex.what());
+      std::unique_lock state_lock(view_state_mutex_);
       view_ready_states_[view_id] = false;
     }
   }
@@ -357,6 +414,42 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
   render_context_.reset();
 
   co_return;
+}
+
+auto Renderer::OnFrameEnd(FrameContext& /*context*/) -> void
+{
+  LOG_SCOPE_FUNCTION(2);
+
+  DrainPendingViewCleanup("OnFrameEnd");
+}
+
+auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
+{
+  std::unordered_set<ViewId> pending;
+  {
+    std::lock_guard lock(pending_cleanup_mutex_);
+    if (pending_cleanup_.empty()) {
+      LOG_F(INFO, "[Renderer] Pending cleanup: none ({})", reason);
+      return;
+    }
+    pending.swap(pending_cleanup_);
+  }
+
+  LOG_F(INFO, "[Renderer] Pending cleanup: processing {} views ({})",
+    pending.size(), reason);
+
+  for (const auto& id : pending) {
+    resolved_views_.erase(id);
+    prepared_frames_.erase(id);
+    per_view_storage_.erase(id);
+  }
+
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    for (const auto& id : pending) {
+      view_ready_states_.erase(id);
+    }
+  }
 }
 
 //===----------------------------------------------------------------------===//
@@ -512,7 +605,10 @@ auto Renderer::FinalizeViewState(ViewId view_id, bool success) -> void
 {
   DLOG_SCOPE_FUNCTION(3);
 
-  view_ready_states_[view_id] = success;
+  {
+    std::unique_lock state_lock(view_state_mutex_);
+    view_ready_states_[view_id] = success;
+  }
   if (success) {
     DLOG_F(2, "view rendered successfully");
   } else {
