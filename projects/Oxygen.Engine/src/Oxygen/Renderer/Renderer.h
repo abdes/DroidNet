@@ -7,12 +7,14 @@
 #pragma once
 
 #include <array>
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <shared_mutex>
+#include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -31,6 +33,7 @@
 #include <Oxygen/Renderer/Types/SceneConstants.h>
 #include <Oxygen/Renderer/Upload/SceneConstantsManager.h>
 #include <Oxygen/Renderer/api_export.h>
+#include <mutex>
 
 namespace oxygen {
 class Graphics;
@@ -106,7 +109,7 @@ public:
     // Participate in frame start, transform propagation and command record.
     return MakeModuleMask<core::PhaseId::kFrameStart,
       core::PhaseId::kTransformPropagation, core::PhaseId::kPreRender,
-      core::PhaseId::kRender>();
+      core::PhaseId::kRender, core::PhaseId::kFrameEnd>();
     // Note: PreRender work is performed via OnPreRender; Render work is in
     // kRender. Renderer participates in both via its module hooks.
   }
@@ -121,41 +124,34 @@ public:
   // Submit deferred uploads and retire completed ones during render phase.
   OXGN_RNDR_NDAPI auto OnRender(FrameContext& context) -> co::Co<> override;
 
-  //! Register a view resolver that maps ViewContext to ResolvedView.
-  /*!
-    The resolver is called during OnPreRender to obtain camera and projection
-    data for each registered view. Apps should register a resolver before
-    the PreRender phase begins.
+  // Perform deferred per-frame cleanup for views that were unregistered
+  // during the frame. This runs after rendering completes.
+  OXGN_RNDR_NDAPI auto OnFrameEnd(FrameContext& context) -> void override;
 
-    @param resolver Callable that takes ViewContext and returns ResolvedView
-  */
-  OXGN_RNDR_API auto RegisterViewResolver(ViewResolver resolver) -> void;
-
-  //! Register a view-specific resolver that overrides the default resolver.
+  //! Register a view for rendering (resolver + render-graph factory).
   /*!
-    Allows applications to register a resolver for a specific view. When a
-    view-specific resolver is registered, it takes precedence over the
-    default resolver registered via RegisterViewResolver. Use this to let
-    individual views manage their own camera resolution logic without
-    central dispatch in the main module.
+    A convenience API to register both the ViewResolver and the RenderGraph
+    factory for a particular view id in one call. This simplifies resource
+    lifetime management since the renderer can now match resolvers with
+    render graphs on a per-view basis and later remove them with
+    UnregisterView().
 
     @param view_id The unique identifier for the view
     @param resolver Callable that resolves the view using its ViewContext
-  */
-  OXGN_RNDR_API auto RegisterViewResolverForView(
-    ViewId view_id, ViewResolver resolver) -> void;
-
-  //! Register a render graph factory for a specific view.
-  /*!
-    The factory is called during OnRender to execute rendering commands for
-    the specified view. Apps register factories in OnPreRender after adding
-    views to the FrameContext.
-
-    @param view_id The unique identifier for the view
     @param factory Callable that performs rendering work for this view
   */
-  OXGN_RNDR_API auto RegisterRenderGraph(
-    ViewId view_id, RenderGraphFactory factory) -> void;
+  OXGN_RNDR_API auto RegisterView(
+    ViewId view_id, ViewResolver resolver, RenderGraphFactory factory) -> void;
+
+  //! Unregister a previously registered view.
+  /*!
+    Removes resolver and render graph entries and clears any cached per-view
+    prepared state in the renderer. Safe to call even when the view is not
+    registered.
+
+    @param view_id The unique identifier for the view to remove
+  */
+  OXGN_RNDR_API auto UnregisterView(ViewId view_id) -> void;
 
   //! Query if a view completed rendering successfully this frame.
   /*!
@@ -199,10 +195,6 @@ private:
   //! Wires updated buffers into the provided render context for the frame.
   auto WireContext(RenderContext& context,
     const std::shared_ptr<graphics::Buffer>& scene_consts) -> void;
-
-  // Cleans up a RenderContext after a run. Kept as a small helper to centralize
-  // context reset behavior.
-  auto PostExecute(RenderContext& context) -> void;
 
   // Helper extractions for OnRender to keep the main coroutine body concise.
   auto AcquireRecorderForView(ViewId view_id, Graphics& gfx)
@@ -249,10 +241,14 @@ private:
   std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
 
-  // View resolver and render graph registration (new streamlined API)
-  ViewResolver view_resolver_;
+  // View resolver and render graph registration (per-view API). Access is
+  // coordinated through a shared mutex so registration can occur from UI or
+  // background threads while render phases take consistent snapshots.
+  mutable std::shared_mutex view_registration_mutex_;
   std::unordered_map<ViewId, ViewResolver> view_resolvers_;
   std::unordered_map<ViewId, RenderGraphFactory> render_graphs_;
+
+  mutable std::shared_mutex view_state_mutex_;
   std::unordered_map<ViewId, bool> view_ready_states_;
 
   // Cache of resolved views from OnPreRender, used in OnRender to ensure
@@ -262,19 +258,16 @@ private:
   std::unique_ptr<RenderContextPool> render_context_pool_;
   observer_ptr<RenderContext> render_context_ {};
 
-  // Tracks whether a context was successfully acquired for a given frame
-  // slot during OnPreRender. If false and a render graph exists for the
-  // frame, the frame should be dropped (no OnRender work will be run for
-  // that slot).
-  // NOTE: we now use `render_context_pool_` as the single source of truth
-  // for whether a per-frame RenderContext has been claimed for this frame
-  // slot. The in-use flag is set atomically on Acquire and cleared on
-  // Release; OnRender observes the in-use state to decide whether to run
-  // render work for the slot.
-
   // Cache of prepared frames from OnPreRender, used in OnRender to ensure
   // each view renders with its own draw list (not the last view's data)
   std::unordered_map<ViewId, PreparedSceneFrame> prepared_frames_;
+
+  // Pending cleanup set guarded by a mutex so arbitrary threads may
+  // enqueue view ids for deferred cleanup while OnFrameEnd drains the set.
+  std::mutex pending_cleanup_mutex_;
+  std::unordered_set<ViewId> pending_cleanup_;
+
+  auto DrainPendingViewCleanup(std::string_view reason) -> void;
 
   // Per-view stable backing storage for the non-owning spans exposed by
   // PreparedSceneFrame. Each view gets a collection of vectors that hold the
