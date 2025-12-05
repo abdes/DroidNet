@@ -17,6 +17,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -73,16 +74,20 @@ protected:
   // this overload frequently).
   auto EmplaceContextWithView() -> void
   {
-    ctx_.emplace(frame::SequenceNumber { 0 }, view_, *scene_);
+    oxygen::observer_ptr<const oxygen::ResolvedView> rv { nullptr };
+    if (view_) {
+      rv = oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get());
+    }
+    ctx_.emplace(frame::SequenceNumber { 0 }, rv, *scene_);
   }
 
   // ReSharper disable once CppMemberFunctionMayBeConst
   auto UpdateScene() -> void { scene_->Update(); }
 
   // Helpers
-  auto SetView(const View& view) -> void
+  auto SetView(const oxygen::ResolvedView::Params& rp) -> void
   {
-    view_ = view;
+    view_ = std::make_shared<oxygen::ResolvedView>(rp);
     EmplaceContextWithView();
   }
 
@@ -95,19 +100,16 @@ protected:
   auto ConfigureView(const glm::vec3 cam_pos, const float viewport_height,
     const float m11 = 1.0f) -> void
   {
-    View::Params p {};
-    p.view = glm::mat4(1.0f);
-    p.proj = glm::mat4(1.0f);
-    p.proj[1][1] = m11;
-    p.viewport = {
-      .top_left_x = 0.0f,
+    oxygen::ResolvedView::Params p {};
+    p.view_matrix = glm::mat4(1.0f);
+    p.proj_matrix = glm::mat4(1.0f);
+    p.proj_matrix[1][1] = m11;
+    p.view_config.viewport = { .top_left_x = 0.0f,
       .top_left_y = 0.0f,
       .width = 0.0f,
-      .height = viewport_height,
-    };
-    p.has_camera_position = true;
+      .height = viewport_height };
     p.camera_position = cam_pos;
-    SetView(View { p });
+    SetView(p);
   }
 
   auto ConfigurePerspectiveView(const glm::vec3 eye, const glm::vec3 center,
@@ -115,18 +117,16 @@ protected:
     const float aspect = 1.0f, const float znear = 0.1f,
     const float zfar = 1000.0f, const float viewport = 1000.0f) -> void
   {
-    View::Params p {};
-    p.view = glm::lookAt(eye, center, up);
-    p.proj = glm::perspective(glm::radians(fovy_deg), aspect, znear, zfar);
-    p.viewport = {
-      .top_left_x = 0.0f,
+    oxygen::ResolvedView::Params p {};
+    p.view_matrix = glm::lookAt(eye, center, up);
+    p.proj_matrix
+      = glm::perspective(glm::radians(fovy_deg), aspect, znear, zfar);
+    p.view_config.viewport = { .top_left_x = 0.0f,
       .top_left_y = 0.0f,
       .width = viewport,
-      .height = viewport,
-    };
-    p.has_camera_position = true;
+      .height = viewport };
     p.camera_position = eye;
-    SetView(View { p });
+    SetView(p);
   }
 
   auto SetGeometry(const std::shared_ptr<data::GeometryAsset>& geometry) -> void
@@ -191,7 +191,10 @@ protected:
 
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode node_;
-  View view_ { View::Params {} };
+  // Provide a default (empty) ResolvedView so tests can emplace a context in
+  // SetUp without explicitly calling a Configure* helper.
+  std::shared_ptr<oxygen::ResolvedView> view_
+    = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {});
   std::optional<ScenePrepContext> ctx_;
   std::unique_ptr<ScenePrepState> state_;
   std::optional<RenderItemProto> proto_;

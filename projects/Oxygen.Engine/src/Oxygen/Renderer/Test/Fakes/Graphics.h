@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <optional>
@@ -203,6 +204,14 @@ public:
     texture_log_->regions.assign(regions.begin(), regions.end());
   }
 
+  // No-op copy texture for tests (satisfies abstract interface)
+  auto CopyTexture(const Texture& /*src*/, const graphics::TextureSlice& /*src_slice*/,
+    const graphics::TextureSubResourceSet& /*src_subresources*/, Texture& /*dst*/,
+    const graphics::TextureSlice& /*dst_slice*/,
+    const graphics::TextureSubResourceSet& /*dst_subresources*/) -> void override
+  {
+  }
+
 protected:
   auto ExecuteBarriers(std::span<const graphics::detail::Barrier>)
     -> void override
@@ -329,7 +338,7 @@ public:
   }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>) const
-    -> std::shared_ptr<graphics::Surface> override
+    -> std::unique_ptr<graphics::Surface> override
   {
     return {};
   }

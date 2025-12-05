@@ -77,6 +77,7 @@ m_gtest_program(
     "Fakes/Graphics.h"
     "Upload/RingBufferStaging_basic_test.cpp"
     "Upload/RingBufferStaging_error_test.cpp"
+    "Upload/RingBufferStagingFixture.cpp"
     "Upload/RingBufferStagingFixture.h"
     "Upload/UploadCoordinatorTest.cpp"
     "Upload/UploadCoordinatorTest.h"

@@ -29,19 +29,20 @@ protected:
   }
 };
 
-NOLINT_TEST_F(TransientStructuredBufferTest,
-  HasInvalidBindingAndNoMappedPointerAtConstruction)
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, AllocateBeforeFrameStartReturnsInvalidRequest)
 {
-  // Arrange
+  // Arrange: create transient buffer but do not start a frame slot
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
 
   // Act
-  auto binding = transient_buffer.GetBinding();
+  auto r = transient_buffer.Allocate(1);
 
-  // Assert
-  EXPECT_EQ(binding.srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(binding.stride, 64u);
-  EXPECT_EQ(transient_buffer.GetMappedPtr(), nullptr);
+  // Assert: allocation without a valid frame slot is an invalid request
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error(),
+    oxygen::engine::upload::make_error_code(
+      oxygen::engine::upload::UploadError::kInvalidRequest));
 }
 
 // Note: earlier tests covered allocate+reset behaviour together with mapped
@@ -49,7 +50,7 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
 // keep the suite concise while preserving coverage.
 
 NOLINT_TEST_F(TransientStructuredBufferTest,
-  ReallocateReplacesDescriptorAndProvidesMappedPointer)
+  MultipleAllocationsInSameSlotReturnValidAllocations)
 {
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
@@ -64,17 +65,22 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
     << "First Allocate failed: " << alloc1_result.error().message();
   const auto alloc1 = *alloc1_result;
   EXPECT_NE(alloc1.srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(alloc1.mapped_ptr, nullptr);
 
-  // Act: reallocate
+  // Act: second allocation in same slot
   auto alloc2_result = transient_buffer.Allocate(20);
 
-  // Assert: reallocation succeeded and provides a valid allocation
+  // Assert: second allocation succeeded and provides a valid allocation
   ASSERT_TRUE(alloc2_result.has_value())
-    << "Reallocate failed: " << alloc2_result.error().message();
+    << "Second Allocate failed: " << alloc2_result.error().message();
   const auto alloc2 = *alloc2_result;
   EXPECT_NE(alloc2.srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(transient_buffer.GetBinding().srv, alloc2.srv);
   EXPECT_NE(alloc2.mapped_ptr, nullptr);
+  // Both allocations should have been created within the current frame
+  EXPECT_EQ(alloc1.sequence, frame::SequenceNumber { 1 });
+  EXPECT_EQ(alloc2.sequence, frame::SequenceNumber { 1 });
+  EXPECT_EQ(alloc1.slot, frame::Slot { 0 });
+  EXPECT_EQ(alloc2.slot, frame::Slot { 0 });
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
@@ -87,11 +93,15 @@ NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
   // Act
   auto alloc_result_zero = transient_buffer.Allocate(0);
 
-  // Assert: Allocate(0) should be a no-op success
+  // Assert: Allocate(0) should be a no-op success and produce an empty/invalid
+  // transient allocation carrying the current sequence and slot
   ASSERT_TRUE(alloc_result_zero.has_value())
     << "Allocate(0) returned error: " << alloc_result_zero.error().message();
-  EXPECT_EQ(transient_buffer.GetBinding().srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(transient_buffer.GetMappedPtr(), nullptr);
+  const auto alloc0 = *alloc_result_zero;
+  EXPECT_EQ(alloc0.srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(alloc0.mapped_ptr, nullptr);
+  EXPECT_EQ(alloc0.sequence, frame::SequenceNumber { 1 });
+  EXPECT_EQ(alloc0.slot, frame::Slot { 0 });
 }
 
 NOLINT_TEST_F(TransientStructuredBufferTest,
@@ -108,6 +118,9 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
 
   // Arrange: construct transient buffer
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot so allocator will attempt staging allocation
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
 
   // Act
   auto alloc_result_fail = transient_buffer.Allocate(10);
@@ -144,13 +157,11 @@ NOLINT_TEST_F(
   EXPECT_EQ(alloc_result.error(),
     oxygen::engine::upload::make_error_code(
       oxygen::engine::upload::UploadError::kStagingMapFailed));
-  EXPECT_EQ(transient_buffer.GetBinding().srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(transient_buffer.GetMappedPtr(), nullptr);
 }
 
 // Confirm mapped pointer is valid for writes until Reset() is called
 NOLINT_TEST_F(
-  TransientStructuredBufferTest, MappedPointerWritesPersistUntilReset)
+  TransientStructuredBufferTest, MappedPointerWritesPersistUntilSlotReset)
 {
   // Arrange
   TransientStructuredBuffer transient_buffer(
@@ -165,7 +176,8 @@ NOLINT_TEST_F(
   ASSERT_TRUE(alloc_result.has_value())
     << "Allocate failed: " << alloc_result.error().message();
 
-  auto* mapped = static_cast<uint64_t*>(transient_buffer.GetMappedPtr());
+  const auto alloc = *alloc_result;
+  auto* mapped = static_cast<uint64_t*>(alloc.mapped_ptr);
   ASSERT_NE(mapped, nullptr);
 
   // Arrange/Act: write pattern to first and last element
@@ -176,11 +188,11 @@ NOLINT_TEST_F(
   EXPECT_EQ(mapped[0], 0xAABBCCDDEEFF0011ull);
   EXPECT_EQ(mapped[3], 0x1122334455667788ull);
 
-  // Act: reset
-  transient_buffer.Reset();
+  // Act: starting the next frame resets the slot
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
 
-  // Assert: mapped pointer becomes unavailable
-  EXPECT_EQ(transient_buffer.GetMappedPtr(), nullptr);
+  // Assert: allocation for previous sequence should now be considered invalid
+  EXPECT_FALSE(alloc.IsValid(frame::SequenceNumber { 2 }));
 }
 
 // Reset can be called multiple times and leaves object in cleared state
@@ -192,21 +204,27 @@ NOLINT_TEST_F(
 
   // Activate frame slot
   transient_buffer.OnFrameStart(frame::SequenceNumber { 1 }, frame::Slot { 0 });
-  // Act: allocate then reset twice
-  ASSERT_TRUE(transient_buffer.Allocate(2).has_value());
-  transient_buffer.Reset();
+  // Act: allocate then advance frame twice to emulate reset -> idempotent
+  auto initial_alloc = transient_buffer.Allocate(2);
+  ASSERT_TRUE(initial_alloc.has_value());
 
-  // Second Reset should be a no-op and must not throw
-  EXPECT_NO_THROW(transient_buffer.Reset());
+  // Idempotency: starting the next frame twice should be safe and should
+  // retire previous allocations for the slot.
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
+  EXPECT_NO_THROW(transient_buffer.OnFrameStart(
+    frame::SequenceNumber { 3 }, frame::Slot { 0 }));
 
-  // Assert: resources released and no mapped pointer
-  EXPECT_EQ(transient_buffer.GetBinding().srv, kInvalidShaderVisibleIndex);
-  EXPECT_EQ(transient_buffer.GetMappedPtr(), nullptr);
+  // After the slot reset, the earlier allocation must no longer be valid.
+  EXPECT_FALSE(initial_alloc->IsValid(frame::SequenceNumber { 3 }));
+
+  // Ensure a new allocation for the new frame succeeds.
+  auto new_alloc = transient_buffer.Allocate(1);
+  ASSERT_TRUE(new_alloc.has_value());
 }
 
 // After Reset, Allocate must re-create binding and mapped pointer
-NOLINT_TEST_F(TransientStructuredBufferTest,
-  AllocateAfterResetRecreatesValidBindingAndMappedPointer)
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, AllocateAfterResetRecreatesValidAllocation)
 {
   // Arrange
   TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
@@ -217,23 +235,25 @@ NOLINT_TEST_F(TransientStructuredBufferTest,
   auto r1 = transient_buffer.Allocate(4);
   ASSERT_TRUE(r1.has_value())
     << "Initial allocate failed: " << r1.error().message();
-  auto srv1 = transient_buffer.GetBinding().srv;
-  EXPECT_NE(srv1, kInvalidShaderVisibleIndex);
+  const auto a1 = *r1;
+  EXPECT_NE(a1.srv, kInvalidShaderVisibleIndex);
 
   // Act: reset then allocate again
-  transient_buffer.Reset();
+  // Reset the slot by moving to the next frame
+  transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
   // Need to re-activate slot for new frame
   transient_buffer.OnFrameStart(frame::SequenceNumber { 2 }, frame::Slot { 0 });
   auto r2 = transient_buffer.Allocate(4);
 
   // Assert: second allocation succeeds and provides valid mapping
   ASSERT_TRUE(r2.has_value()) << "Re-allocate failed: " << r2.error().message();
-  auto srv2 = transient_buffer.GetBinding().srv;
-  EXPECT_NE(srv2, kInvalidShaderVisibleIndex);
+  const auto a2 = *r2;
+  EXPECT_NE(a2.srv, kInvalidShaderVisibleIndex);
 
-  // It's perfectly valid for the descriptor allocator to reuse indices, so we
-  // only assert that the binding is valid and mapped pointer is present.
-  EXPECT_NE(transient_buffer.GetMappedPtr(), nullptr);
+  // Re-allocate after starting a new frame slot must succeed and return a
+  // valid mapped pointer
+  ASSERT_TRUE(r2.has_value()) << "Re-allocate failed: " << r2.error().message();
+  EXPECT_NE((*r2).mapped_ptr, nullptr);
 }
 
 NOLINT_TEST_F(
