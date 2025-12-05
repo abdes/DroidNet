@@ -4,18 +4,18 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
-    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
+    <ClCompile Include="EditorModule\EditorCompositor.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorView.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
     <ClCompile Include="EditorModule\EditorModule.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
@@ -25,7 +25,16 @@
     <ClCompile Include="EditorModule\RenderGraph.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
+    <ClCompile Include="EditorModule\ViewManager.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\ViewRenderer.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
     <ClCompile Include="World\OxygenWorld.cpp">
+      <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="World\CommandFactory.cpp">
       <Filter>World</Filter>
     </ClCompile>
   </ItemGroup>

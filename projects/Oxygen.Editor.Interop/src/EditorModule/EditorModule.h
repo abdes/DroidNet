@@ -27,8 +27,10 @@
 #include <Oxygen/Scene/Scene.h>
 
 #include "EditorModule/EditorCommand.h"
+#include "EditorModule/EditorCompositor.h"
 #include "EditorModule/SurfaceRegistry.h"
 #include "EditorModule/ThreadSafeQueue.h"
+#include "EditorModule/ViewManager.h"
 
 namespace oxygen::interop::module {
 
@@ -78,6 +80,7 @@ namespace oxygen::interop::module {
       return oxygen::engine::MakeModuleMask<oxygen::core::PhaseId::kFrameStart,
         oxygen::core::PhaseId::kPreRender,
         oxygen::core::PhaseId::kRender,
+        oxygen::core::PhaseId::kCompositing,
         oxygen::core::PhaseId::kSceneMutation>();
     }
 
@@ -89,6 +92,8 @@ namespace oxygen::interop::module {
     auto OnPreRender(oxygen::engine::FrameContext& context)
       -> oxygen::co::Co<> override;
     auto OnRender(oxygen::engine::FrameContext& context)
+      -> oxygen::co::Co<> override;
+    auto OnCompositing(oxygen::engine::FrameContext& context)
       -> oxygen::co::Co<> override;
 
     // Ensure framebuffers for all registered surfaces (creates depth textures
@@ -112,49 +117,21 @@ namespace oxygen::interop::module {
       oxygen::engine::FrameContext& context,
       const std::vector<std::shared_ptr<oxygen::graphics::Surface>>& surfaces)
       -> void;
-    void EnsureEditorCamera(const oxygen::graphics::Surface* surface,
-                           float width,
-                           float height);
-    void CleanupSurfaceCamera(const oxygen::graphics::Surface* surface);
 
     std::shared_ptr<SurfaceRegistry> registry_;
     std::weak_ptr<oxygen::Graphics> graphics_;
     oxygen::observer_ptr<oxygen::AsyncEngine> engine_{};
 
-    // Keep track of indices at which we added our render surfaces to the frame
-    // context, so that we can differentially update them each frame.
-    std::unordered_map<const oxygen::graphics::Surface*, size_t>
-      surface_indices_;
-
     std::shared_ptr<oxygen::scene::Scene> scene_;
-
-    // Shared per-frame RenderGraph helper used by the module (prepares
-    // a RenderContext for the renderer). Implemented in Unmanaged/RenderGraph
-    // and forward-declared at namespace scope above to avoid creating a
-    // nested incomplete type that conflicts with the implementation.
-    std::unique_ptr<RenderGraph> render_graph_{};
-
-    // Per-surface framebuffer cache: keep one framebuffer per swapchain
-    // back-buffer slot so we avoid recreating and re-registering resources
-    // every frame. Keyed by the raw surface pointer (non-owning).
-    std::unordered_map<
-      const oxygen::graphics::Surface*,
-      std::vector<std::shared_ptr<oxygen::graphics::Framebuffer>>>
-      surface_framebuffers_{};
 
     std::chrono::steady_clock::time_point last_frame_time_{};
 
     // Command queue for scene mutations
     ThreadSafeQueue<std::unique_ptr<EditorCommand>> command_queue_;
 
-    // Per-surface editor camera nodes (one camera per surface)
-    std::unordered_map<const oxygen::graphics::Surface*,
-                       oxygen::scene::SceneNode>
-      surface_cameras_{};
-
-    // Map surfaces to their ViewIds for the current frame
-    std::unordered_map<const oxygen::graphics::Surface*, oxygen::ViewId>
-      surface_view_ids_{};
+    // New Architecture Components
+    std::unique_ptr<ViewManager> view_manager_;
+    std::unique_ptr<EditorCompositor> compositor_;
   };
 
 } // namespace oxygen::interop::module

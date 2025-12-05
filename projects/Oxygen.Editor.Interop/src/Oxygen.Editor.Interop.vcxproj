@@ -12,9 +12,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="EditorModule\EditorCompositor.cpp" />
     <ClCompile Include="EditorModule\EditorModule.cpp" />
+    <ClCompile Include="EditorModule\EditorView.cpp" />
     <ClCompile Include="EditorModule\NodeRegistry.cpp" />
     <ClCompile Include="EditorModule\RenderGraph.cpp" />
+    <ClCompile Include="EditorModule\ViewManager.cpp" />
+    <ClCompile Include="EditorModule\ViewRenderer.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
@@ -47,11 +51,15 @@
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />
     <ClInclude Include="EditorModule\EditorCommand.h" />
+    <ClInclude Include="EditorModule\EditorCompositor.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />
+    <ClInclude Include="EditorModule\EditorView.h" />
     <ClInclude Include="EditorModule\NodeRegistry.h" />
     <ClInclude Include="EditorModule\RenderGraph.h" />
     <ClInclude Include="EditorModule\SurfaceRegistry.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
+    <ClInclude Include="EditorModule\ViewManager.h" />
+    <ClInclude Include="EditorModule\ViewRenderer.h" />
     <ClInclude Include="EngineContext.h" />
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="RenderThreadContext.h" />
