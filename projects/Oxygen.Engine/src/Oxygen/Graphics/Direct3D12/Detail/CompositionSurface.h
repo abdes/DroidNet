@@ -28,8 +28,7 @@ namespace oxygen::graphics::d3d12::detail {
 class CompositionSurface : public graphics::Surface {
 
 public:
-  CompositionSurface(dx::ICommandQueue* command_queue,
-    Graphics* graphics)
+  CompositionSurface(dx::ICommandQueue* command_queue, Graphics* graphics)
     : graphics::Surface("CompositionSurface")
   {
     AddComponent<CompositionSwapChain>(
@@ -54,8 +53,8 @@ public:
     // Mirror the resize intent onto the public Surface flag so engine modules
     // (which check Surface::ShouldResize()) will pick up and apply the
     // explicit Resize() call during frame start. RequestResize is const to
-    // allow callers who only hold a const reference to the surface; we therefore
-    // cast away constness to update the mutable engine-visible flag.
+    // allow callers who only hold a const reference to the surface; we
+    // therefore cast away constness to update the mutable engine-visible flag.
     const_cast<CompositionSurface*>(this)->ShouldResize(true);
   }
 
@@ -68,15 +67,15 @@ public:
     -> std::shared_ptr<graphics::Texture> override
   {
     // Do not apply pending resize implicitly here - applies must be
-      // explicitly triggered by the engine module at frame start by calling
-      // Resize().
+    // explicitly triggered by the engine module at frame start by calling
+    // Resize().
     return GetComponent<CompositionSwapChain>().GetCurrentBackBuffer();
   }
   auto GetBackBuffer(uint32_t index) const
     -> std::shared_ptr<graphics::Texture> override
   {
     // No implicit resize here - engine must call Resize() explicitly.
-      return GetComponent<CompositionSwapChain>().GetBackBuffer(index);
+    return GetComponent<CompositionSwapChain>().GetBackBuffer(index);
   }
 
   void Present() const override
@@ -90,7 +89,7 @@ public:
   {
     // Apply any pending resize request set by RequestResize(). If there is
     // no pending request, no-op. This keeps resize application explicit and
-      // only performed when called by the engine module at frame start.
+    // only performed when called by the engine module at frame start.
     if (!resize_pending_.exchange(false, std::memory_order_acq_rel)) {
       return;
     }
@@ -112,12 +111,16 @@ public:
 
   [[nodiscard]] auto Width() const -> uint32_t override
   {
-    return 0;
-  } // TODO: Implement size tracking
+    // Return the actual width of the swap chain backbuffers
+    auto bb = GetComponent<CompositionSwapChain>().GetBackBuffer(0);
+    return bb ? bb->GetDescriptor().width : 0;
+  }
   [[nodiscard]] auto Height() const -> uint32_t override
   {
-    return 0;
-  } // TODO: Implement size tracking
+    // Return the actual height of the swap chain backbuffers
+    auto bb = GetComponent<CompositionSwapChain>().GetBackBuffer(0);
+    return bb ? bb->GetDescriptor().height : 0;
+  }
 
 private:
   mutable std::atomic<bool> resize_pending_ { false };
