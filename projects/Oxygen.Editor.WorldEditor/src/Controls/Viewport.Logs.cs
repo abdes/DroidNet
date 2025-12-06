@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
 
@@ -220,6 +221,42 @@ public sealed partial class Viewport
 
     private void LogLeaseDisposeFailed(Exception exception)
         => LogLeaseDisposeFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "[Viewport] Created engine view for viewport={ViewportId} viewId={ViewId}")]
+    private static partial void LogViewCreated(ILogger logger, Guid viewportId, string viewId);
+
+    private void LogViewCreated(Guid viewportId, ViewIdManaged viewId)
+        => LogViewCreated(this.logger, viewportId, viewId.ToString());
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "[Viewport] Destroyed engine view for viewport={ViewportId}")]
+    private static partial void LogViewDestroyed(ILogger logger, Guid viewportId);
+
+    private void LogViewDestroyed(Guid viewportId)
+        => LogViewDestroyed(this.logger, viewportId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "[Viewport] Create view failed for viewport={ViewportId}")]
+    private static partial void LogCreateViewFailed(ILogger logger, Guid viewportId, Exception ex);
+
+    private void LogCreateViewFailed(Guid viewportId, Exception ex)
+        => LogCreateViewFailed(this.logger, viewportId, ex);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "[Viewport] Destroy view failed for viewport={ViewportId}")]
+    private static partial void LogDestroyViewFailed(ILogger logger, Guid viewportId, Exception ex);
+
+    private void LogDestroyViewFailed(Guid viewportId, Exception ex)
+        => LogDestroyViewFailed(this.logger, viewportId, ex);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

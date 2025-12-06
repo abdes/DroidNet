@@ -12,6 +12,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
 
@@ -336,7 +337,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 }
             }
 
-            var requestTag = this.Name ?? "viewport";
+            // Use a non-empty tag for surface requests — control `Name` is often
+            // the empty string (not null), so the null-coalescing operator
+            // doesn't help. Treat empty/whitespace as missing and fall back.
+            var requestTag = string.IsNullOrWhiteSpace(this.Name) ? "viewport" : this.Name;
             var request = viewModel.CreateSurfaceRequest(requestTag);
             var lease = await viewModel.EngineService.AttachViewportAsync(request, this.SwapChainPanel, cancellationToken).ConfigureAwait(true);
 
@@ -357,6 +361,40 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
             this.surfaceLease = lease;
             this.LogSurfaceAttached(viewModel.ViewportId);
+
+            // Create an engine view for this viewport and associate it with the
+            // UI-managed view model. The UI owns view lifecycle: create -> destroy.
+            try
+            {
+                // Only create if we don't already have an assigned view id
+                if (!viewModel.AssignedViewId.IsValid)
+                {
+                    // Compute a reasonable initial pixel size for the view
+                    _ = this.TryGetSwapChainPixelSize(out var pixelW, out var pixelH);
+
+                    var cfg = new ViewConfigManaged
+                    {
+                        Name = requestTag,
+                        Purpose = "Viewport",
+                        CompositingTarget = lease.Key.ViewportId,
+                        Width = pixelW,
+                        Height = pixelH,
+                        ClearColor = new ColorManaged(0.1f, 0.12f, 0.15f, 1.0f)
+                    };
+
+                    var created = await viewModel.EngineService.CreateViewAsync(cfg, cancellationToken).ConfigureAwait(true);
+                    if (created.IsValid)
+                    {
+                        viewModel.AssignedViewId = created;
+                        this.LogViewCreated(viewModel.ViewportId, created);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.LogCreateViewFailed(viewModel.ViewportId, ex);
+            }
+
             await this.NotifyViewportResizeAsync(cancellationToken).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
@@ -388,6 +426,23 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         try
         {
+            // If the UI created an engine view for this viewport, destroy it
+            // before we dispose the surface lease. The UI owns view lifecycle.
+            var vm = this.ViewModel;
+            if (vm?.AssignedViewId.IsValid == true && vm.EngineService != null)
+            {
+                try
+                {
+                    await vm.EngineService.DestroyViewAsync(vm.AssignedViewId).ConfigureAwait(true);
+                    vm.AssignedViewId = ViewIdManaged.Invalid;
+                    this.LogViewDestroyed(vm.ViewportId);
+                }
+                catch (Exception ex)
+                {
+                    this.LogDestroyViewFailed(vm.ViewportId, ex);
+                }
+            }
+
             await this.surfaceLease.DisposeAsync().ConfigureAwait(true);
             this.LogLeaseDisposed(GetViewportId(this.ViewModel));
         }
