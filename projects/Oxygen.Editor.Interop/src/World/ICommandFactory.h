@@ -5,16 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
+#pragma managed(push, on)
 
-#include <string>
 #include <array>
+#include <string>
 #include <vector>
-#include <memory>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Scene/Scene.h>
+#include <glm/fwd.hpp>
 
 namespace oxygen::interop::module::commands{
   class CreateSceneNodeCommand;
@@ -76,3 +73,5 @@ namespace Oxygen::Interop::World {
   };
 
 } // namespace Oxygen::Interop::World
+
+#pragma managed(pop)

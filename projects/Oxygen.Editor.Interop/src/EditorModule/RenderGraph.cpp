@@ -7,10 +7,7 @@
 
 #pragma unmanaged
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/OxCo/Co.h>
+#include "pch.h"
 
 #include "EditorModule/RenderGraph.h"
 

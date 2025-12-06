@@ -9,8 +9,8 @@
 #include <optional>
 
 #define WIN32_LEAN_AND_MEAN
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <EditorModule/EditorView.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 
 #include "Views/ColorManaged.h"
 
@@ -56,7 +56,8 @@ namespace Oxygen::Interop {
     // Background clear color used when building the offscreen color texture.
     property ColorManaged ClearColor;
 
-    static ViewConfigManaged^ FromNative(const native::interop::module::EditorView::Config& n) {
+    static ViewConfigManaged^
+      FromNative(const native::interop::module::EditorView::Config& n) {
       auto m = gcnew ViewConfigManaged();
       m->Name = gcnew System::String(n.name.c_str());
       m->Purpose = gcnew System::String(n.purpose.c_str());

@@ -7,30 +7,17 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <glm/vec3.hpp>
-#include <glm/gtc/quaternion.hpp>
-
 #include "EditorModule/EditorCommand.h"
 
-namespace oxygen::interop::module::commands {
+namespace oxygen::interop::module::commands{
 
 class SetLocalTransformCommand : public EditorCommand {
 public:
   SetLocalTransformCommand(oxygen::scene::NodeHandle node,
-                           const glm::vec3 &position, const glm::quat &rotation,
-                           const glm::vec3 &scale)
-      : node_(node), position_(position), rotation_(rotation), scale_(scale) {}
+                           const glm::vec3& position, const glm::quat& rotation,
+                           const glm::vec3& scale);
 
-  void Execute(CommandContext &context) override {
-    if (!context.Scene)
-      return;
-
-    auto sceneNode = context.Scene->GetNode(node_);
-    if (sceneNode && sceneNode->IsAlive()) {
-      auto transform = sceneNode->GetTransform();
-      transform.SetLocalTransform(position_, rotation_, scale_);
-    }
-  }
+  void Execute(CommandContext& context) override;
 
 private:
   oxygen::scene::NodeHandle node_;
@@ -38,6 +25,23 @@ private:
   glm::quat rotation_;
   glm::vec3 scale_;
 };
+
+inline SetLocalTransformCommand::SetLocalTransformCommand(
+    oxygen::scene::NodeHandle node, const glm::vec3& position,
+    const glm::quat& rotation, const glm::vec3& scale)
+    : node_(node), position_(position), rotation_(rotation), scale_(scale) {
+}
+
+inline void SetLocalTransformCommand::Execute(CommandContext& context) {
+  if (!context.Scene)
+    return;
+
+  auto sceneNode = context.Scene->GetNode(node_);
+  if (sceneNode && sceneNode->IsAlive()) {
+    auto transform = sceneNode->GetTransform();
+    transform.SetLocalTransform(position_, rotation_, scale_);
+  }
+}
 
 } // namespace oxygen::interop::module::commands
 

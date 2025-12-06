@@ -5,19 +5,12 @@
 
 #pragma managed
 
-#include <functional>
+#include "pch.h"
 
-#define WIN32_LEAN_AND_MEAN
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#include <msclr/marshal_cppstd.h>
-
-#include <Oxygen/Engine/AsyncEngine.h>
 #include "EditorModule/EditorModule.h"
 #include "EngineRunner.h"
-
-#include "Views/ViewIdManaged.h"
 #include "Views/ViewConfigManaged.h"
+#include "Views/ViewIdManaged.h"
 
 using namespace System;
 using namespace System::Threading::Tasks;

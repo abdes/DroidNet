@@ -5,8 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-
-#include <Oxygen/Scene/Scene.h>
+#pragma managed(push, on)
 
 #include "EngineContext.h"
 #include "World/ICommandFactory.h"
@@ -16,49 +15,51 @@ using namespace System::Numerics;
 
 namespace Oxygen::Interop::World {
 
-    // Future Enhancements:
-    // - Implement Two-Way Synchronization (Engine -> Editor events for physics/scripts).
-    // - Implement Read-Replica for thread-safe immediate property access.
+  // Future Enhancements:
+  // - Implement Two-Way Synchronization (Engine -> Editor events for physics/scripts).
+  // - Implement Read-Replica for thread-safe immediate property access.
 
-    public ref class OxygenWorld {
-    public:
-        OxygenWorld(EngineContext^ context);
-        OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory);
+  public ref class OxygenWorld {
+  public:
+    OxygenWorld(EngineContext^ context);
+    OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory);
 
-        // Scene management
-        // Scenes are identified by name on the native engine side; keep CreateScene(String) as before.
-        void CreateScene(String^ name);
+    // Scene management
+    // Scenes are identified by name on the native engine side; keep CreateScene(String) as before.
+    void CreateScene(String^ name);
 
-        // Node management (GUID-based): all node APIs accept node or parent GUIDs
-        // Creates a node and invokes the callback with the new node GUID on the engine thread.
-        void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated);
-        void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated, bool initializeWorldAsRoot);
-        void RemoveSceneNode(System::Guid nodeId);
-        void RenameSceneNode(System::Guid nodeId, String^ newName);
+    // Node management (GUID-based): all node APIs accept node or parent GUIDs
+    // Creates a node and invokes the callback with the new node GUID on the engine thread.
+    void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated);
+    void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated, bool initializeWorldAsRoot);
+    void RemoveSceneNode(System::Guid nodeId);
+    void RenameSceneNode(System::Guid nodeId, String^ newName);
 
-        // Transform management
-        void SetLocalTransform(System::Guid nodeId,
-            System::Numerics::Vector3 position,
-            System::Numerics::Quaternion rotation,
-            System::Numerics::Vector3 scale);
+    // Transform management
+    void SetLocalTransform(System::Guid nodeId,
+      System::Numerics::Vector3 position,
+      System::Numerics::Quaternion rotation,
+      System::Numerics::Vector3 scale);
 
-        // Geometry management
-        void CreateBasicMesh(System::Guid nodeId, String^ meshType);
-        void SetVisibility(System::Guid nodeId, bool visible);
+    // Geometry management
+    void CreateBasicMesh(System::Guid nodeId, String^ meshType);
+    void SetVisibility(System::Guid nodeId, bool visible);
 
-        // Selection (Editor-side state)
-        void SelectNode(System::Guid nodeId);
-        void DeselectNode(System::Guid nodeId);
+    // Selection (Editor-side state)
+    void SelectNode(System::Guid nodeId);
+    void DeselectNode(System::Guid nodeId);
 
-        // Reparent a node to a new parent (or make root when parent is null)
-        void ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform);
-        void UpdateTransformsForNodes(array<System::Guid>^ nodes);
+    // Reparent a node to a new parent (or make root when parent is null)
+    void ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform);
+    void UpdateTransformsForNodes(array<System::Guid>^ nodes);
 
-        // (All APIs are GUID-based; no scene names are accepted)
+    // (All APIs are GUID-based; no scene names are accepted)
 
-    private:
-        EngineContext^ context_;
-        ICommandFactory^ commandFactory_;
-    };
+  private:
+    EngineContext^ context_;
+    ICommandFactory^ commandFactory_;
+  };
 
 } // namespace Oxygen::Interop::World
+
+#pragma managed(pop)

@@ -5,13 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
+#pragma managed(push, off)
 
 #include <memory>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 
 namespace oxygen::graphics {
   class Surface;
@@ -35,10 +36,10 @@ namespace oxygen::interop::module {
     ~EditorCompositor();
 
     OXYGEN_MAKE_NON_COPYABLE(EditorCompositor)
-      OXYGEN_MAKE_NON_MOVABLE(EditorCompositor)
+    OXYGEN_MAKE_NON_MOVABLE(EditorCompositor)
 
-      // Ensure framebuffers exist for the surface's current backbuffer
-      void EnsureFramebuffersForSurface(const graphics::Surface& surface);
+    // Ensure framebuffers exist for the surface's current backbuffer
+    void EnsureFramebuffersForSurface(const graphics::Surface& surface);
 
     // Main compositing entry point - handles all view-to-surface compositing
     void OnCompositing();
@@ -65,3 +66,5 @@ namespace oxygen::interop::module {
   };
 
 } // namespace oxygen::interop::module
+
+#pragma managed(pop)

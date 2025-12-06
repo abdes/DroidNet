@@ -8,6 +8,8 @@
 #pragma managed(push, off)
 
 #include <array>
+#include <cstdint>
+#include <functional>
 #include <mutex>
 #include <optional>
 #include <unordered_map>

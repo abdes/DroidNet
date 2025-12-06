@@ -8,7 +8,6 @@
 #pragma managed(push, off)
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>

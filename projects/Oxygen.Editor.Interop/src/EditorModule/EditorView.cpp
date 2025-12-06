@@ -4,22 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#pragma unmanaged
+
+#include "pch.h"
+
 #include "EditorModule/EditorView.h"
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
-#include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/SceneCameraViewResolver.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Scene.h>
-
 #include "EditorModule/ViewRenderer.h"
 
 namespace oxygen::interop::module {

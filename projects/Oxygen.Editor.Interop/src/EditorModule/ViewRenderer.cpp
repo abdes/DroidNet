@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "EditorModule/ViewRenderer.h"
-#include "EditorModule/RenderGraph.h"
+#pragma unmanaged
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Renderer/Renderer.h>
+#include "pch.h"
+
+#include "EditorModule/RenderGraph.h"
+#include "EditorModule/ViewRenderer.h"
 
 namespace oxygen::interop::module {
 

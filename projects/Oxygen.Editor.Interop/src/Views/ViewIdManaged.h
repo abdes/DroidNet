@@ -8,8 +8,6 @@
 #pragma once
 #pragma managed
 
-#include <limits>
-
 #include <Oxygen/Core/Types/View.h>
 
 namespace Oxygen::Interop {
@@ -21,8 +19,7 @@ namespace Oxygen::Interop {
   /// Mirrors the native identifier (uint64_t) and provides explicit
   /// conversion helpers so managed callers can round-trip values safely.
   /// </summary>
-  [System::SerializableAttribute]
-  public value struct ViewIdManaged {
+  [System::SerializableAttribute] public value struct ViewIdManaged {
   private:
     System::UInt64 value_;
 
@@ -35,10 +32,12 @@ namespace Oxygen::Interop {
       System::UInt64 get() { return value_; }
     }
 
-    /// <summary>Whether this ViewId is valid (not equal to native::kInvalidViewId).</summary>
+    /// <summary>Whether this ViewId is valid (not equal to
+    /// native::kInvalidViewId).</summary>
     property bool IsValid {
       bool get() {
-        // Treat both zero (default value) and the native kInvalidViewId sentinel as invalid.
+        // Treat both zero (default value) and the native kInvalidViewId sentinel
+        // as invalid.
         auto invalid = static_cast<System::UInt64>(native::kInvalidViewId.get());
         return value_ != 0ULL && value_ != invalid;
       }
@@ -48,7 +47,10 @@ namespace Oxygen::Interop {
     /// Use <c>ViewIdManaged::Invalid</c> to obtain the canonical invalid id.
     /// </summary>
     static property ViewIdManaged Invalid {
-      ViewIdManaged get() { return ViewIdManaged(static_cast<System::UInt64>(native::kInvalidViewId.get())); }
+      ViewIdManaged get() {
+        return ViewIdManaged(
+          static_cast<System::UInt64>(native::kInvalidViewId.get()));
+      }
     }
 
     /// <summary>Create a managed ViewId from the native type.</summary>
@@ -56,7 +58,8 @@ namespace Oxygen::Interop {
       return ViewIdManaged(static_cast<System::UInt64>(nativeId.get()));
     }
 
-    /// <summary>Convert this managed ViewId to the native <c>oxygen::ViewId</c>.</summary>
+    /// <summary>Convert this managed ViewId to the native
+    /// <c>oxygen::ViewId</c>.</summary>
     native::ViewId ToNative() {
       return native::ViewId{ static_cast<uint64_t>(value_) };
     }
@@ -72,8 +75,10 @@ namespace Oxygen::Interop {
     }
 
     virtual bool Equals(System::Object^ obj) override {
-      if (obj == nullptr) return false;
-      if (obj->GetType() != ViewIdManaged::typeid) return false;
+      if (obj == nullptr)
+        return false;
+      if (obj->GetType() != ViewIdManaged::typeid)
+        return false;
       return safe_cast<ViewIdManaged>(obj).value_ == value_;
     }
 

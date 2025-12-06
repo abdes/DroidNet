@@ -15,7 +15,8 @@ namespace Oxygen::Interop {
   /// Simple managed value type representing an RGBA color compatible with
   /// the native <c>oxygen::graphics::Color</c> type.
   /// </summary>
-  public value struct ColorManaged {
+  public
+  value struct ColorManaged {
   public:
     float R;
     float G;
