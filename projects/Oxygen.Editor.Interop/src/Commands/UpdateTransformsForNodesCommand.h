@@ -28,7 +28,8 @@ private:
 
 inline UpdateTransformsForNodesCommand::UpdateTransformsForNodesCommand(
     std::vector<oxygen::scene::NodeHandle> nodes)
-    : nodes_(std::move(nodes)) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
+      nodes_(std::move(nodes)) {
 }
 
 inline void UpdateTransformsForNodesCommand::Execute(CommandContext& context) {

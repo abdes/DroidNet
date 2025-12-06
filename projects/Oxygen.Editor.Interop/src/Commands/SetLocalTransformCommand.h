@@ -29,7 +29,8 @@ private:
 inline SetLocalTransformCommand::SetLocalTransformCommand(
     oxygen::scene::NodeHandle node, const glm::vec3& position,
     const glm::quat& rotation, const glm::vec3& scale)
-    : node_(node), position_(position), rotation_(rotation), scale_(scale) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
+      position_(position), rotation_(rotation), scale_(scale) {
 }
 
 inline void SetLocalTransformCommand::Execute(CommandContext& context) {

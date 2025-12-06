@@ -15,6 +15,7 @@
     <ClCompile Include="Commands\HideViewCommand.cpp" />
     <ClCompile Include="Commands\ShowViewCommand.cpp" />
     <ClCompile Include="Commands\DestroyViewCommand.cpp" />
+    <ClCompile Include="Commands\CreateViewCommand.cpp" />
     <ClCompile Include="EditorModule\EditorCompositor.cpp" />
     <ClCompile Include="EditorModule\EditorModule.cpp" />
     <ClCompile Include="EditorModule\EditorView.cpp" />
@@ -51,7 +52,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Commands\HideViewCommand.h" />
-    <ClInclude Include="Commands\SceneCommands.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
     <ClInclude Include="Commands\RenameSceneNodeCommand.h" />
@@ -61,6 +61,7 @@
     <ClInclude Include="Commands\ReparentSceneNodeCommand.h" />
     <ClInclude Include="Commands\ShowViewCommand.h" />
     <ClInclude Include="Commands\DestroyViewCommand.h" />
+    <ClInclude Include="Commands\CreateViewCommand.h" />
     <ClInclude Include="Commands\UpdateTransformsForNodesCommand.h" />
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />

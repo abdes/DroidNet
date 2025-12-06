@@ -25,13 +25,13 @@
 
 #include "EditorModule/EditorCommand.h"
 
-namespace oxygen::interop::module::commands {
+namespace oxygen::interop::module::commands{
 
 class CreateBasicMeshCommand : public EditorCommand {
 public:
   CreateBasicMeshCommand(oxygen::scene::NodeHandle node, std::string meshType);
 
-  void Execute(CommandContext &context) override;
+  void Execute(CommandContext& context) override;
 
 private:
   oxygen::scene::NodeHandle node_;
@@ -40,9 +40,11 @@ private:
 
 inline CreateBasicMeshCommand::CreateBasicMeshCommand(
     oxygen::scene::NodeHandle node, std::string meshType)
-    : node_(node), meshType_(std::move(meshType)) {}
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
+      meshType_(std::move(meshType)) {
+}
 
-inline void CreateBasicMeshCommand::Execute(CommandContext &context) {
+inline void CreateBasicMeshCommand::Execute(CommandContext& context) {
   if (!context.Scene) {
     return;
   }
@@ -63,75 +65,80 @@ inline void CreateBasicMeshCommand::Execute(CommandContext &context) {
 
   if (type == "cube") {
     mesh_data = oxygen::data::MakeCubeMeshAsset();
-  } else if (type == "sphere") {
-    mesh_data = oxygen::data::MakeSphereMeshAsset();
-  } else if (type == "plane") {
-    mesh_data = oxygen::data::MakePlaneMeshAsset();
-  } else if (type == "cylinder") {
-    mesh_data = oxygen::data::MakeCylinderMeshAsset();
-  } else if (type == "cone") {
-    mesh_data = oxygen::data::MakeConeMeshAsset();
-  } else if (type == "torus") {
-    mesh_data = oxygen::data::MakeTorusMeshAsset();
   }
+ else if (type == "sphere") {
+mesh_data = oxygen::data::MakeSphereMeshAsset();
+}
+else if (type == "plane") {
+mesh_data = oxygen::data::MakePlaneMeshAsset();
+}
+else if (type == "cylinder") {
+mesh_data = oxygen::data::MakeCylinderMeshAsset();
+}
+else if (type == "cone") {
+mesh_data = oxygen::data::MakeConeMeshAsset();
+}
+else if (type == "torus") {
+mesh_data = oxygen::data::MakeTorusMeshAsset();
+}
 
-  if (!mesh_data) {
-    return;
-  }
+if (!mesh_data) {
+  return;
+}
 
-  // Create a default material
-  oxygen::data::pak::MaterialAssetDesc material_desc{};
-  material_desc.header.asset_type = 7; // Material type
-  const auto name_str = std::string("DefaultMaterial_") + type;
-  const std::size_t maxn = sizeof(material_desc.header.name) - 1;
-  const std::size_t n = (std::min)(maxn, name_str.size());
-  std::memcpy(material_desc.header.name, name_str.c_str(), n);
-  material_desc.header.name[n] = '\0';
-  material_desc.material_domain =
-      static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
+// Create a default material
+oxygen::data::pak::MaterialAssetDesc material_desc{};
+material_desc.header.asset_type = 7; // Material type
+const auto name_str = std::string("DefaultMaterial_") + type;
+const std::size_t maxn = sizeof(material_desc.header.name) - 1;
+const std::size_t n = (std::min)(maxn, name_str.size());
+std::memcpy(material_desc.header.name, name_str.c_str(), n);
+material_desc.header.name[n] = '\0';
+material_desc.material_domain =
+    static_cast<uint8_t>(oxygen::data::MaterialDomain::kOpaque);
 
-  // Simple deterministic color based on node name hash (if available) or type
-  // We don't have node name here easily without querying, so just use type
-  material_desc.base_color[0] = 0.8f;
-  material_desc.base_color[1] = 0.8f;
-  material_desc.base_color[2] = 0.8f;
-  material_desc.base_color[3] = 1.0f;
+// Simple deterministic color based on node name hash (if available) or type
+// We don't have node name here easily without querying, so just use type
+material_desc.base_color[0] = 0.8f;
+material_desc.base_color[1] = 0.8f;
+material_desc.base_color[2] = 0.8f;
+material_desc.base_color[3] = 1.0f;
 
-  auto material = std::make_shared<const oxygen::data::MaterialAsset>(
-      material_desc, std::vector<oxygen::data::ShaderReference>{});
+auto material = std::make_shared<const oxygen::data::MaterialAsset>(
+    material_desc, std::vector<oxygen::data::ShaderReference>{});
 
-  // Build mesh
-  auto &[vertices, indices] = mesh_data.value();
-  oxygen::data::pak::MeshViewDesc view_desc{};
-  view_desc.first_vertex = 0;
-  view_desc.vertex_count = static_cast<uint32_t>(vertices.size());
-  view_desc.first_index = 0;
-  view_desc.index_count = static_cast<uint32_t>(indices.size());
+// Build mesh
+auto& [vertices, indices] = mesh_data.value();
+oxygen::data::pak::MeshViewDesc view_desc{};
+view_desc.first_vertex = 0;
+view_desc.vertex_count = static_cast<uint32_t>(vertices.size());
+view_desc.first_index = 0;
+view_desc.index_count = static_cast<uint32_t>(indices.size());
 
-  auto mesh = oxygen::data::MeshBuilder(0, type)
-                  .WithVertices(vertices)
-                  .WithIndices(indices)
-                  .BeginSubMesh("default", material)
-                  .WithMeshView(view_desc)
-                  .EndSubMesh()
-                  .Build();
+auto mesh = oxygen::data::MeshBuilder(0, type)
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("default", material)
+                .WithMeshView(view_desc)
+                .EndSubMesh()
+                .Build();
 
-  // Create GeometryAsset
-  oxygen::data::pak::GeometryAssetDesc geo_desc{};
-  geo_desc.header.asset_type = 6; // Geometry type
-  const std::size_t geo_n = (std::min)(maxn, type.size());
-  std::memcpy(geo_desc.header.name, type.data(), geo_n);
-  geo_desc.header.name[geo_n] = '\0';
+// Create GeometryAsset
+oxygen::data::pak::GeometryAssetDesc geo_desc{};
+geo_desc.header.asset_type = 6; // Geometry type
+const std::size_t geo_n = (std::min)(maxn, type.size());
+std::memcpy(geo_desc.header.name, type.data(), geo_n);
+geo_desc.header.name[geo_n] = '\0';
 
-  std::vector<std::shared_ptr<oxygen::data::Mesh>> lod_meshes;
-  lod_meshes.push_back(std::move(mesh));
+std::vector<std::shared_ptr<oxygen::data::Mesh>> lod_meshes;
+lod_meshes.push_back(std::move(mesh));
 
-  auto geometry = std::make_shared<oxygen::data::GeometryAsset>(
-      geo_desc, std::move(lod_meshes));
+auto geometry = std::make_shared<oxygen::data::GeometryAsset>(
+    geo_desc, std::move(lod_meshes));
 
-  if (geometry) {
-    sceneNode->GetRenderable().SetGeometry(geometry);
-  }
+if (geometry) {
+  sceneNode->GetRenderable().SetGeometry(geometry);
+}
 }
 
 } // namespace oxygen::interop::module::commands

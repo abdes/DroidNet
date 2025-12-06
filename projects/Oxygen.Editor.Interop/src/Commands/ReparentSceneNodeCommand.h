@@ -28,7 +28,8 @@ private:
 inline ReparentSceneNodeCommand::ReparentSceneNodeCommand(
     oxygen::scene::NodeHandle child, oxygen::scene::NodeHandle parent,
     bool preserve_world_transform)
-    : child_(child), parent_(parent), preserve_(preserve_world_transform) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), child_(child),
+      parent_(parent), preserve_(preserve_world_transform) {
 }
 
 inline void ReparentSceneNodeCommand::Execute(CommandContext& context) {

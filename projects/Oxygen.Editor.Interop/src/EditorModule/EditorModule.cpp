@@ -8,10 +8,11 @@
 
 #include "pch.h"
 
-#include "EditorModule/EditorCommand.h"
-#include "Commands/ShowViewCommand.h"
-#include "Commands/HideViewCommand.h"
+#include "Commands/CreateViewCommand.h"
 #include "Commands/DestroyViewCommand.h"
+#include "Commands/HideViewCommand.h"
+#include "Commands/ShowViewCommand.h"
+#include "EditorModule/EditorCommand.h"
 #include "EditorModule/EditorCompositor.h"
 #include "EditorModule/EditorModule.h"
 #include "EditorModule/SurfaceRegistry.h"
@@ -50,19 +51,68 @@ namespace oxygen::interop::module {
     LOG_SCOPE_F(1, "EditorModule::OnFrameStart");
     DCHECK_NOTNULL_F(registry_);
 
-    // Process pending view operations
+    // Begin frame for the ViewManager: make the transient FrameContext
+    // available so FrameStart commands (executed later in this method)
+    // can perform immediate registration via ViewManager::CreateViewAsync.
     if (view_manager_ && scene_) {
       view_manager_->OnFrameStart(*scene_, context);
     }
+
+    // (ViewManager::OnFrameStart already invoked above.)
 
     ProcessSurfaceRegistrations();
     ProcessSurfaceDestructions();
     auto surfaces = ProcessResizeRequests();
     SyncSurfacesWithFrameContext(context, surfaces);
 
+    // After surface handling, execute frame-start commands related to views
+    // with a strict ordering to avoid race conditions: destroy -> create -> rest.
+    CommandContext cmd_ctx{ .Scene = observer_ptr{scene_.get()} };
+
+    // 1) Destroy view commands first
+    command_queue_.DrainIf(
+      [](const std::unique_ptr<EditorCommand>& cmd) {
+        return cmd &&
+          cmd->GetTargetPhase() == oxygen::core::PhaseId::kFrameStart &&
+          dynamic_cast<const DestroyViewCommand*>(cmd.get()) != nullptr;
+      },
+      [&](std::unique_ptr<EditorCommand>& cmd) {
+        if (cmd)
+          cmd->Execute(cmd_ctx);
+      });
+
+    // 2) Create view commands next
+    command_queue_.DrainIf(
+      [](const std::unique_ptr<EditorCommand>& cmd) {
+        return cmd &&
+          cmd->GetTargetPhase() == oxygen::core::PhaseId::kFrameStart &&
+          dynamic_cast<const CreateViewCommand*>(cmd.get()) != nullptr;
+      },
+      [&](std::unique_ptr<EditorCommand>& cmd) {
+        if (cmd)
+          cmd->Execute(cmd_ctx);
+      });
+
+    // 3) Run any remaining FrameStart commands
+    command_queue_.DrainIf(
+      [](const std::unique_ptr<EditorCommand>& cmd) {
+        return cmd &&
+          cmd->GetTargetPhase() == oxygen::core::PhaseId::kFrameStart;
+      },
+      [&](std::unique_ptr<EditorCommand>& cmd) {
+        if (cmd)
+          cmd->Execute(cmd_ctx);
+      });
+
     // After scene creation/loading:
     if (scene_) {
       context.SetScene(observer_ptr{ scene_.get() });
+    }
+
+    // Finalize views after FrameStart command processing so per-view updates
+    // (UpdateView) can be applied and the transient frame context cleared.
+    if (view_manager_) {
+      view_manager_->FinalizeViews();
     }
   }
 
@@ -200,12 +250,18 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<> {
-    // Drain the command queue and execute all pending commands
-    CommandContext cmd_context{ scene_.get() };
-    command_queue_.Drain([&](std::unique_ptr<EditorCommand>& cmd) {
-      if (cmd) {
-        cmd->Execute(cmd_context);
-      }
+    // Drain only commands targeting SceneMutation. Leave other commands for
+    // their appropriate phases so insertion order is preserved across phases.
+    CommandContext cmd_context{ .Scene = observer_ptr{scene_.get()} };
+    command_queue_.DrainIf(
+      [](const std::unique_ptr<EditorCommand>& cmd) {
+        return cmd &&
+          cmd->GetTargetPhase() == oxygen::core::PhaseId::kSceneMutation;
+      },
+      [&](std::unique_ptr<EditorCommand>& cmd) {
+        if (cmd) {
+          cmd->Execute(cmd_context);
+        }
       });
 
     if (scene_ && !graphics_.expired() && view_manager_) {
@@ -304,19 +360,24 @@ namespace oxygen::interop::module {
 
   void EditorModule::CreateViewAsync(EditorView::Config config,
     ViewManager::OnViewCreated callback) {
-    // Forward to view manager (thread-safe, queues into pending creates)
+    // Enqueue a frame-start command to unify creation through the command
+    // system while keeping the public API stable for editor-facing callers.
+    // The actual registration is performed immediately during FrameStart by
+    // the ViewManager (OnFrameStart makes the FrameContext available).
     if (view_manager_) {
-      view_manager_->CreateViewAsync(std::move(config), std::move(callback));
+      auto cmd = std::make_unique<CreateViewCommand>(
+        view_manager_.get(), std::move(config), std::move(callback));
+      Enqueue(std::move(cmd));
     }
     else {
-      // If our view manager is not available, invoke callback with failure
       if (callback)
         callback(false, kInvalidViewId);
     }
   }
 
   void EditorModule::DestroyView(ViewId view_id) {
-    if (!view_manager_) return;
+    if (!view_manager_)
+      return;
 
     // Enqueue a destroy command so the actual destruction runs on the engine
     // thread and cannot race with frame-phase iteration (OnSceneMutation /
@@ -328,7 +389,8 @@ namespace oxygen::interop::module {
   }
 
   void EditorModule::ShowView(ViewId view_id) {
-    if (!view_manager_) return;
+    if (!view_manager_)
+      return;
 
     // Create a command that will execute on the engine thread during
     // OnSceneMutation. This ensures the operation is executed in-frame and
@@ -339,7 +401,8 @@ namespace oxygen::interop::module {
   }
 
   void EditorModule::HideView(ViewId view_id) {
-    if (!view_manager_) return;
+    if (!view_manager_)
+      return;
 
     auto cmd = std::make_unique<HideViewCommand>(view_manager_.get(), view_id);
     Enqueue(std::move(cmd));
