@@ -6,33 +6,12 @@
 
 #pragma unmanaged
 
-#include <algorithm>
-#include <cstdint>
-#include <optional>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
+#include "pch.h"
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Core/Types/ViewResolver.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Graphics/Common/Types/QueueRole.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Renderer/Renderer.h>
-#include <Oxygen/Renderer/SceneCameraViewResolver.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
-
+#include "EditorModule/EditorCommand.h"
+#include "EditorModule/EditorCompositor.h"
 #include "EditorModule/EditorModule.h"
-#include "EditorModule/NodeRegistry.h"
-#include "EditorModule/RenderGraph.h"
+#include "EditorModule/SurfaceRegistry.h"
 
 namespace oxygen::interop::module {
 

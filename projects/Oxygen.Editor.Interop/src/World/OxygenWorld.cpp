@@ -4,63 +4,57 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#define WIN32_LEAN_AND_MEAN
+#pragma managed
 
-#include <memory>
+#include "pch.h"
 
-#include <msclr/marshal_cppstd.h>
-#include <msclr/auto_gcroot.h>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
-
-#include "Base/LoguruWrapper.h"
-#include "World/OxygenWorld.h"
-#include "World/CommandFactory.h"
+#include "Commands/SceneCommands.h"
 #include "EditorModule/EditorModule.h"
 #include "EditorModule/NodeRegistry.h"
-#include "Commands/SceneCommands.h"
+#include "World/CommandFactory.h"
+#include "World/OxygenWorld.h"
 
 using namespace oxygen::interop::module;
 using namespace oxygen::interop::module::commands;
 
 namespace Oxygen::Interop::World {
 
-// Managed helper that invokes the editor-provided GUID callback on the engine thread.
-ref class CallbackInvoker sealed {
-public:
+  // Managed helper that invokes the editor-provided GUID callback on the engine thread.
+  ref class CallbackInvoker sealed {
+  public:
     CallbackInvoker(System::Guid guid, System::Action<System::Guid>^ onCreated)
-        : guid_(guid), onCreated_(onCreated) {}
-
-    void OnCreated(Oxygen::Editor::Core::NodeHandle) {
-        try {
-            if (onCreated_ != nullptr) onCreated_->Invoke(guid_);
-        }
-        catch (...) {
-            // swallow to avoid crashing engine thread
-        }
+      : guid_(guid), onCreated_(onCreated) {
     }
 
-private:
+    void OnCreated(Oxygen::Editor::Core::NodeHandle) {
+      try {
+        if (onCreated_ != nullptr) onCreated_->Invoke(guid_);
+      }
+      catch (...) {
+        // swallow to avoid crashing engine thread
+      }
+    }
+
+  private:
     System::Guid guid_;
     System::Action<System::Guid>^ onCreated_;
-};
+  };
 
-OxygenWorld::OxygenWorld(EngineContext^ context) : OxygenWorld(context, nullptr) {
-}
+  OxygenWorld::OxygenWorld(EngineContext^ context) : OxygenWorld(context, nullptr) {
+  }
 
-OxygenWorld::OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory) : context_(context) {
+  OxygenWorld::OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory) : context_(context) {
     if (context == nullptr) throw gcnew System::ArgumentNullException("context");
 
     if (commandFactory == nullptr) {
-        commandFactory_ = gcnew CommandFactory();
+      commandFactory_ = gcnew CommandFactory();
     }
     else {
-        commandFactory_ = commandFactory;
+      commandFactory_ = commandFactory;
     }
-}
+  }
 
-void OxygenWorld::CreateScene(String^ name) {
+  void OxygenWorld::CreateScene(String^ name) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -70,13 +64,13 @@ void OxygenWorld::CreateScene(String^ name) {
     msclr::interop::marshal_context marshal;
     auto native_name = marshal.marshal_as<std::string>(name);
     editor_module->get().CreateScene(native_name);
-}
+  }
 
-void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated) {
+  void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated) {
     CreateSceneNode(name, nodeId, parentGuid, onCreated, false);
-}
+  }
 
-void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated, bool initializeWorldAsRoot) {
+  void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated, bool initializeWorldAsRoot) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -89,12 +83,12 @@ void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<Sy
     // Resolve parent if provided
     oxygen::scene::NodeHandle native_parent;
     if (parentGuid.HasValue) {
-        auto guid = parentGuid.Value;
-        auto bytes = guid.ToByteArray();
-        std::array<uint8_t, 16> key{};
-        for (int i = 0; i < 16; ++i) key[i] = bytes[i];
-        auto opt = NodeRegistry::Lookup(key);
-        if (opt.has_value()) native_parent = opt.value();
+      auto guid = parentGuid.Value;
+      auto bytes = guid.ToByteArray();
+      std::array<uint8_t, 16> key{};
+      for (int i = 0; i < 16; ++i) key[i] = bytes[i];
+      auto opt = NodeRegistry::Lookup(key);
+      if (opt.has_value()) native_parent = opt.value();
     }
 
     // Build registration key from caller-supplied nodeId (editor authoritative)
@@ -109,9 +103,9 @@ void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId, Nullable<Sy
     // Enqueue command that will create native node, register native handle under reg_key, then invoke managed callback
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSceneNode(native_name, native_parent, managedCallback, reg_key, initializeWorldAsRoot));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::RemoveSceneNode(System::Guid nodeId) {
+  void OxygenWorld::RemoveSceneNode(System::Guid nodeId) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -131,9 +125,9 @@ void OxygenWorld::RemoveSceneNode(System::Guid nodeId) {
 
     // Best-effort unregister
     NodeRegistry::Unregister(key);
-}
+  }
 
-void OxygenWorld::RenameSceneNode(System::Guid nodeId, String^ newName) {
+  void OxygenWorld::RenameSceneNode(System::Guid nodeId, String^ newName) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -147,13 +141,13 @@ void OxygenWorld::RenameSceneNode(System::Guid nodeId, String^ newName) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    const auto &handle = opt.value();
+    const auto& handle = opt.value();
     auto native_name = msclr::interop::marshal_as<std::string>(newName);
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateRenameSceneNode(handle, native_name));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::SetLocalTransform(System::Guid nodeId,
+  void OxygenWorld::SetLocalTransform(System::Guid nodeId,
     System::Numerics::Vector3 position,
     System::Numerics::Quaternion rotation,
     System::Numerics::Vector3 scale) {
@@ -171,7 +165,7 @@ void OxygenWorld::SetLocalTransform(System::Guid nodeId,
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    const auto &nodeHandle = opt.value();
+    const auto& nodeHandle = opt.value();
 
     glm::vec3 glm_pos(position.X, position.Y, position.Z);
     glm::quat glm_rot(rotation.W, rotation.X, rotation.Y, rotation.Z);
@@ -179,9 +173,9 @@ void OxygenWorld::SetLocalTransform(System::Guid nodeId,
 
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSetLocalTransform(nodeHandle, glm_pos, glm_rot, glm_scale));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::CreateBasicMesh(System::Guid nodeId, String^ meshType) {
+  void OxygenWorld::CreateBasicMesh(System::Guid nodeId, String^ meshType) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -195,13 +189,13 @@ void OxygenWorld::CreateBasicMesh(System::Guid nodeId, String^ meshType) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    const auto &handle = opt.value();
+    const auto& handle = opt.value();
     auto native_mesh_type = msclr::interop::marshal_as<std::string>(meshType);
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateBasicMesh(handle, native_mesh_type));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
+  void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -215,12 +209,12 @@ void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
     auto opt = NodeRegistry::Lookup(key);
     if (!opt.has_value()) return;
 
-    const auto &handle = opt.value();
+    const auto& handle = opt.value();
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateSetVisibility(handle, visible));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform) {
+  void OxygenWorld::ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -232,23 +226,23 @@ void OxygenWorld::ReparentSceneNode(System::Guid child, Nullable<System::Guid> p
     for (int i = 0; i < 16; ++i) childKey[i] = cb[i];
     auto childOpt = NodeRegistry::Lookup(childKey);
     if (!childOpt.has_value()) return;
-    const auto &childHandle = childOpt.value();
+    const auto& childHandle = childOpt.value();
 
     oxygen::scene::NodeHandle parentHandle;
     if (parent.HasValue) {
-        auto pb = parent.Value.ToByteArray();
-        std::array<uint8_t, 16> pKey{};
-        for (int i = 0; i < 16; ++i) pKey[i] = pb[i];
-        auto popt = NodeRegistry::Lookup(pKey);
-        if (!popt.has_value()) return; // parent missing
-        parentHandle = popt.value();
+      auto pb = parent.Value.ToByteArray();
+      std::array<uint8_t, 16> pKey{};
+      for (int i = 0; i < 16; ++i) pKey[i] = pb[i];
+      auto popt = NodeRegistry::Lookup(pKey);
+      if (!popt.has_value()) return; // parent missing
+      parentHandle = popt.value();
     }
 
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateReparentSceneNode(childHandle, parentHandle, preserveWorldTransform));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::UpdateTransformsForNodes(array<System::Guid>^ nodes) {
+  void OxygenWorld::UpdateTransformsForNodes(array<System::Guid>^ nodes) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) return;
 
@@ -257,27 +251,27 @@ void OxygenWorld::UpdateTransformsForNodes(array<System::Guid>^ nodes) {
 
     std::vector<oxygen::scene::NodeHandle> native_nodes;
     if (nodes != nullptr) {
-        native_nodes.reserve(nodes->Length);
-        for (int i = 0; i < nodes->Length; ++i) {
-            auto b = nodes[i].ToByteArray();
-            std::array<uint8_t, 16> key{};
-            for (int j = 0; j < 16; ++j) key[j] = b[j];
-            auto opt = NodeRegistry::Lookup(key);
-            if (opt.has_value()) native_nodes.emplace_back(opt.value());
-        }
+      native_nodes.reserve(nodes->Length);
+      for (int i = 0; i < nodes->Length; ++i) {
+        auto b = nodes[i].ToByteArray();
+        std::array<uint8_t, 16> key{};
+        for (int j = 0; j < 16; ++j) key[j] = b[j];
+        auto opt = NodeRegistry::Lookup(key);
+        if (opt.has_value()) native_nodes.emplace_back(opt.value());
+      }
     }
 
     if (native_nodes.empty()) return;
     auto cmd = std::unique_ptr<EditorCommand>(commandFactory_->CreateUpdateTransformsForNodes(std::move(native_nodes)));
     editor_module->get().Enqueue(std::move(cmd));
-}
+  }
 
-void OxygenWorld::SelectNode(System::Guid nodeId) {
+  void OxygenWorld::SelectNode(System::Guid nodeId) {
     // TODO: implement selection state handling (editor-side)
-}
+  }
 
-void OxygenWorld::DeselectNode(System::Guid nodeId) {
+  void OxygenWorld::DeselectNode(System::Guid nodeId) {
     // TODO: implement selection state handling (editor-side)
-}
+  }
 
 } // namespace Oxygen::Interop::World

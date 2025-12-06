@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include <vcclr.h>
+#include <msclr/gcroot.h>
 
-#pragma warning(disable: 4793) // function compiled as native
+#pragma warning(disable : 4793) // function compiled as native
 #include <Oxygen/Base/logging.h>
-#pragma warning(default: 4793)
+#pragma warning(default : 4793)
 
 using System::IntPtr;
 using System::String;
@@ -52,8 +52,8 @@ namespace Oxygen::Interop::Logging {
       // Same as Verbosity_INFO in every way.
       Verbosity_0 = 0,
 
-      // Verbosity levels 1-9 are generally not written to stderr, but are written
-      // to file.
+      // Verbosity levels 1-9 are generally not written to stderr, but are
+      // written to file.
       Verbosity_1 = +1,
       Verbosity_2 = +2,
       Verbosity_3 = +3,
@@ -67,11 +67,10 @@ namespace Oxygen::Interop::Logging {
 
   internal:
     // The stored delegate ref to be used later
-    LogHandler^ _handle_log;
-    void InvokeHandler(const loguru::Message& message)
-    {
-      if (_handle_log == nullptr)
-      {
+    LogHandler^
+      _handle_log;
+    void InvokeHandler(const loguru::Message& message) {
+      if (_handle_log == nullptr) {
         return;
       }
 
@@ -92,101 +91,90 @@ namespace Oxygen::Interop::Logging {
     gcroot<Loguru^>* _native_handle;
 
   public:
-    Loguru()
-    {
+    Loguru() {
       // Construct the native handle
       _native_handle = new gcroot<Loguru^>(this);
       // Null the _handle_log delegate instance
       _handle_log = nullptr;
     }
 
-    ~Loguru()
-    {
-      delete _native_handle;
-    }
+    ~Loguru() { delete _native_handle; }
 
     // The clr callback setter equivalent to the C counterpart, don't need
     // the context because in CLR we have closures
-    void AddLogHandlerCallback(LogHandler^ handleLog, Verbosity verbosity)
-    {
-      if (verbosity < Verbosity::Verbosity_FATAL || verbosity > Verbosity::Verbosity_9) {
-        throw gcnew System::ArgumentOutOfRangeException("verbosity", "Verbosity value is out of range.");
+    void AddLogHandlerCallback(LogHandler^ handleLog, Verbosity verbosity) {
+      if (verbosity < Verbosity::Verbosity_FATAL ||
+        verbosity > Verbosity::Verbosity_9) {
+        throw gcnew System::ArgumentOutOfRangeException(
+          "verbosity", "Verbosity value is out of range.");
       }
 
       _handle_log = handleLog;
-      // Call the C lib callback setter. Use _native_handle pointer as the opaque data
-      loguru::add_callback("interop", cdecl_log_handler, _native_handle, (loguru::Verbosity)verbosity);
+      // Call the C lib callback setter. Use _native_handle pointer as the
+      // opaque data
+      loguru::add_callback("interop", cdecl_log_handler, _native_handle,
+        (loguru::Verbosity)verbosity);
     }
 
-    void RemoveLogHandlerCallback()
-    {
-      // Call the C lib callback remover. Use _native_handle pointer as the opaque data
+    void RemoveLogHandlerCallback() {
+      // Call the C lib callback remover. Use _native_handle pointer as the
+      // opaque data
       loguru::remove_callback("interop");
       _handle_log = nullptr;
     }
 
     void LogInfo(String^ message) { Write(Verbosity::Verbosity_INFO, message); }
-    void LogError(String^ message) { Write(Verbosity::Verbosity_ERROR, message); }
-    void LogWarning(String^ message) { Write(Verbosity::Verbosity_WARNING, message); }
-    void LogMessage(Verbosity level, String^ message)
-    {
-      Write(level, message);
+    void LogError(String^ message) {
+      Write(Verbosity::Verbosity_ERROR, message);
     }
+    void LogWarning(String^ message) {
+      Write(Verbosity::Verbosity_WARNING, message);
+    }
+    void LogMessage(Verbosity level, String^ message) { Write(level, message); }
 
-    static void Write(Verbosity level, String^ message)
-    {
+    static void Write(Verbosity level, String^ message) {
       LogMessageInternal(level, message, false);
     }
 
-    static void WriteAndFlush(Verbosity level, String^ message)
-    {
+    static void WriteAndFlush(Verbosity level, String^ message) {
       LogMessageInternal(level, message, true);
     }
 
-    static void Flush()
-    {
-      loguru::flush();
-    }
+    static void Flush() { loguru::flush(); }
 
-    static String^ ToManagedString(const char* value)
-    {
+    static String^ ToManagedString(const char* value) {
       return value != nullptr ? gcnew String(value) : nullptr;
     }
 
-    static void LogMessageInternal(Verbosity level, String^ message, bool flush)
-    {
-      if (String::IsNullOrEmpty(message))
-      {
+    static void LogMessageInternal(Verbosity level, String^ message,
+      bool flush) {
+      if (String::IsNullOrEmpty(message)) {
         return;
       }
 
       IntPtr buffer = Marshal::StringToHGlobalAnsi(message);
       const auto native_message = static_cast<const char*>(buffer.ToPointer());
-      loguru::log(static_cast<loguru::Verbosity>(level), __FILE__, __LINE__, native_message);
-      if (flush)
-      {
+      loguru::log(static_cast<loguru::Verbosity>(level), __FILE__, __LINE__,
+        native_message);
+      if (flush) {
         loguru::flush();
       }
       Marshal::FreeHGlobal(buffer);
     }
   };
 
-  inline void cdecl_log_handler(void* user_data, const loguru::Message& message)
-  {
-    if (user_data == nullptr)
-    {
+  inline void cdecl_log_handler(void* user_data, const loguru::Message& message) {
+    if (user_data == nullptr) {
       return;
     }
 
-    auto handle = reinterpret_cast<gcroot<Loguru^>*>(user_data);
-    if (handle == nullptr)
-    {
+    auto handle = reinterpret_cast<gcroot<Loguru^> *>(user_data);
+    if (handle == nullptr) {
       return;
     }
 
     Loguru^ instance = *handle;
-    if (instance == nullptr)
-    {
+    if (instance == nullptr) {
       return;
     }
 

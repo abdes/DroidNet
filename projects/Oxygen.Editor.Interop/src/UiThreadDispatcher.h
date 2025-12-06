@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
+#pragma managed(push, off)
 
 namespace System {
   ref class Object;
@@ -126,3 +126,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

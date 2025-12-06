@@ -4,19 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#pragma unmanaged
+
+#include "pch.h"
+
 #include "EditorModule/EditorCompositor.h"
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-
 #include "EditorModule/EditorView.h"
 #include "EditorModule/ViewManager.h"
 
@@ -129,6 +121,7 @@ void EditorCompositor::OnCompositing() {
   // Query all registered views and determine which need compositing
   auto registered_views = view_manager_->GetAllRegisteredViews();
 
+  // FIXME: only add tasks for views which target is still a valid surface in the SurfaceRegistry
   for (auto *view : registered_views) {
     if (!view)
       continue;

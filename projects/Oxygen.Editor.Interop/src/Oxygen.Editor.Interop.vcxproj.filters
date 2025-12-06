@@ -4,6 +4,7 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -37,6 +38,12 @@
     </ClCompile>
     <ClCompile Include="World\CommandFactory.cpp">
       <Filter>World</Filter>
+    </ClCompile>
+    <ClCompile Include="EngineRunner_logging.cpp" />
+    <ClCompile Include="pch.cpp" />
+    <ClCompile Include="EngineRunner_surfaces.cpp" />
+    <ClCompile Include="Utils\TokenHelpers.cpp">
+      <Filter>Utils</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -99,10 +106,40 @@
     <ClInclude Include="EditorModule\ThreadSafeQueue.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
+    <ClInclude Include="World\ICommandFactory.h" />
+    <ClInclude Include="LogHandler.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Views\ViewConfigManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ViewManager.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ViewRenderer.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Views\ColorManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
+    <ClInclude Include="World\CommandFactory.h">
+      <Filter>World</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorCompositor.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils\TokenHelpers.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorView.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EditorModule">
       <UniqueIdentifier>{d9b7b4f4-9a1c-4d2c-96ae-123456789abc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Utils">
+      <UniqueIdentifier>{6ca27deb-fd2c-4b01-8bed-041a931df74e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

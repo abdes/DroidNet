@@ -5,17 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
+#pragma managed(push, on)
 
 #include <memory>
 
 #include "Config.h"
-#include "Views/ViewIdManaged.h"
-#include "Views/ViewConfigManaged.h"
+#include "EditorModule/SurfaceRegistry.h"
 #include "EngineContext.h"
 #include "RenderThreadContext.h"
 #include "UiThreadDispatcher.h"
-#include "EditorModule/SurfaceRegistry.h"
+#include "Views/ViewConfigManaged.h"
+#include "Views/ViewIdManaged.h"
 
 namespace oxygen::graphics {
 
@@ -233,3 +233,5 @@ namespace Oxygen::Interop {
   };
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)

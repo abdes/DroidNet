@@ -4,13 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause.
 //===----------------------------------------------------------------------===//
 
-#include "ViewManager.h"
+#pragma unmanaged
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Graphics/Common/Surface.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Scene/Scene.h>
+#include "pch.h"
+
+#include "ViewManager.h"
 
 namespace oxygen::interop::module {
 

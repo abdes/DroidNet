@@ -6,6 +6,8 @@
 
 #pragma unmanaged
 
+#include "pch.h"
+
 #include "EditorModule/NodeRegistry.h"
 
 namespace oxygen::interop::module {

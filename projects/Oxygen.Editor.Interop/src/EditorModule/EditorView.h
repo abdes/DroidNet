@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
+#pragma managed(push, off)
 
 #include <memory>
 #include <optional>
@@ -156,3 +157,5 @@ namespace oxygen::interop::module {
   };
 
 } // namespace oxygen::interop::module
+
+#pragma managed(pop)

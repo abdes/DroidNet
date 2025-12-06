@@ -20,9 +20,16 @@
     <ClCompile Include="EditorModule\ViewManager.cpp" />
     <ClCompile Include="EditorModule\ViewRenderer.cpp" />
     <ClCompile Include="EngineRunner.cpp" />
+    <ClCompile Include="EngineRunner_logging.cpp" />
+    <ClCompile Include="EngineRunner_surfaces.cpp" />
     <ClCompile Include="EngineRunner_views.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="RenderThreadContext.cpp" />
     <ClCompile Include="UiThreadDispatcher.cpp" />
+    <ClCompile Include="Utils\TokenHelpers.cpp" />
     <ClCompile Include="World\CommandFactory.cpp" />
     <ClCompile Include="World\OxygenWorld.cpp" />
   </ItemGroup>
@@ -58,6 +65,9 @@
     <ClInclude Include="EditorModule\NodeRegistry.h" />
     <ClInclude Include="EditorModule\RenderGraph.h" />
     <ClInclude Include="EditorModule\SurfaceRegistry.h" />
+    <ClInclude Include="LogHandler.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Utils\TokenHelpers.h" />
     <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="Views\ColorManaged.h" />
     <ClInclude Include="Views\ViewConfigManaged.h" />
@@ -146,7 +156,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -164,7 +174,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
       <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>

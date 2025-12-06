@@ -7,34 +7,40 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <string>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include "EditorModule/EditorCommand.h"
 
-namespace oxygen::interop::module::commands {
+namespace oxygen::interop::module::commands{
 
 class RemoveSceneNodeCommand : public EditorCommand {
 public:
-  explicit RemoveSceneNodeCommand(oxygen::scene::NodeHandle node)
-      : node_(node) {}
+  explicit RemoveSceneNodeCommand(oxygen::scene::NodeHandle node);
 
-  void Execute(CommandContext &context) override {
-    if (!context.Scene)
-      return;
-
-    auto sceneNode = context.Scene->GetNode(node_);
-    if (sceneNode && sceneNode->IsAlive()) {
-      if (sceneNode->HasChildren()) {
-        context.Scene->DestroyNodeHierarchy(*sceneNode);
-      } else {
-        context.Scene->DestroyNode(*sceneNode);
-      }
-    }
-  }
+  void Execute(CommandContext& context) override;
 
 private:
   oxygen::scene::NodeHandle node_;
 };
+
+inline RemoveSceneNodeCommand::RemoveSceneNodeCommand(
+    oxygen::scene::NodeHandle node)
+    : node_(node) {
+}
+
+inline void RemoveSceneNodeCommand::Execute(CommandContext& context) {
+  if (!context.Scene)
+    return;
+
+  auto sceneNode = context.Scene->GetNode(node_);
+  if (sceneNode && sceneNode->IsAlive()) {
+    if (sceneNode->HasChildren()) {
+      context.Scene->DestroyNodeHierarchy(*sceneNode);
+      return;
+    }
+    context.Scene->DestroyNode(*sceneNode);
+  }
+}
 
 } // namespace oxygen::interop::module::commands
 

@@ -9,40 +9,49 @@
 
 #include "EditorModule/EditorCommand.h"
 
-namespace oxygen::interop::module::commands {
+namespace oxygen::interop::module::commands{
 
 class ReparentSceneNodeCommand : public EditorCommand {
 public:
   ReparentSceneNodeCommand(oxygen::scene::NodeHandle child,
                            oxygen::scene::NodeHandle parent,
-                           bool preserve_world_transform = true)
-      : child_(child), parent_(parent), preserve_(preserve_world_transform) {}
+                           bool preserve_world_transform = true);
 
-  void Execute(CommandContext &context) override {
-    if (!context.Scene)
-      return;
-
-    auto sceneNode = context.Scene->GetNode(child_);
-    if (!sceneNode || !sceneNode->IsAlive())
-      return;
-
-    if (parent_.IsValid()) {
-      auto parentNode = context.Scene->GetNode(parent_);
-      if (parentNode && parentNode->IsAlive()) {
-        [[maybe_unused]] auto result =
-            context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_);
-      }
-    } else {
-      [[maybe_unused]] auto result =
-          context.Scene->MakeNodeRoot(*sceneNode, preserve_);
-    }
-  }
+  void Execute(CommandContext& context) override;
 
 private:
   oxygen::scene::NodeHandle child_;
   oxygen::scene::NodeHandle parent_;
   bool preserve_;
 };
+
+inline ReparentSceneNodeCommand::ReparentSceneNodeCommand(
+    oxygen::scene::NodeHandle child, oxygen::scene::NodeHandle parent,
+    bool preserve_world_transform)
+    : child_(child), parent_(parent), preserve_(preserve_world_transform) {
+}
+
+inline void ReparentSceneNodeCommand::Execute(CommandContext& context) {
+  if (!context.Scene) {
+    return;
+  }
+
+  auto sceneNode = context.Scene->GetNode(child_);
+  if (!sceneNode || !sceneNode->IsAlive()) {
+    return;
+  }
+
+  if (parent_.IsValid()) {
+    auto parentNode = context.Scene->GetNode(parent_);
+    if (parentNode && parentNode->IsAlive()) {
+      (void)context.Scene->ReparentNode(*sceneNode, *parentNode, preserve_);
+    }
+    return;
+  }
+
+  // Reparent to root
+  (void)context.Scene->MakeNodeRoot(*sceneNode, preserve_);
+}
 
 } // namespace oxygen::interop::module::commands
 

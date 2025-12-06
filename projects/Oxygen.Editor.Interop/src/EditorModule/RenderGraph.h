@@ -11,14 +11,25 @@
 #include <memory>
 
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Renderer/Passes/DepthPrePass.h>
-#include <Oxygen/Renderer/Passes/ShaderPass.h>
-#include <Oxygen/Renderer/Passes/TransparentPass.h>
 #include <Oxygen/Renderer/RenderContext.h>
 
 namespace oxygen::graphics {
   class Framebuffer;
+  class CommandRecorder;
 } // namespace oxygen::graphics
+
+namespace oxygen::engine {
+  class DepthPrePass;
+  struct DepthPrePassConfig;
+  class ShaderPass;
+  struct ShaderPassConfig;
+  class TransparentPass;
+} // namespace oxygen::engine
+
+// Forward-declare nested Config type for TransparentPass
+namespace oxygen::engine {
+  struct TransparentPass::Config;
+} // namespace oxygen::engine
 
 namespace oxygen::interop::module {
 

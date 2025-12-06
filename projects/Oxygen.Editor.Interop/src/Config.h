@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #pragma once
-#pragma managed
+#pragma managed(push, on)
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/EngineConfig.h>
@@ -314,3 +314,5 @@ namespace Oxygen::Interop {
   ;
 
 } // namespace Oxygen::Interop
+
+#pragma managed(pop)
