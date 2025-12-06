@@ -72,7 +72,7 @@ public:
    that the recording did not produce a valid command list, and the recorder
    must give away ownership of the command list.
   */
-  OXGN_GFX_API virtual auto End() -> std::shared_ptr<CommandList>;
+  OXGN_GFX_API virtual auto End() noexcept -> std::shared_ptr<CommandList>;
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
 

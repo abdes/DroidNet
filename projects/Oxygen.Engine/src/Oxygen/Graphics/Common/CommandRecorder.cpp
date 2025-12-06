@@ -31,14 +31,16 @@ CommandRecorder::~CommandRecorder() { DLOG_F(2, "recorder destroyed"); }
 
 void CommandRecorder::Begin()
 {
-  DLOG_F(2, "CommandRecorder::Begin()");
+  DCHECK_NOTNULL_F(command_list_);
+  DLOG_F(2, "CommandRecorder::Begin() for: {}", command_list_->GetName());
   DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
   command_list_->OnBeginRecording();
 }
 
-auto CommandRecorder::End() -> std::shared_ptr<CommandList>
+auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
 {
-  DLOG_F(2, "CommandRecorder::End()");
+  DCHECK_NOTNULL_F(command_list_);
+  DLOG_F(2, "CommandRecorder::End() for: ", command_list_->GetName());
   DCHECK_NOTNULL_F(command_list_);
   try {
     // Give a chance to the resource state tracker to restore initial states
@@ -51,6 +53,7 @@ auto CommandRecorder::End() -> std::shared_ptr<CommandList>
     return std::move(command_list_);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
+    command_list_->OnFailed(); // noexcept
     command_list_.reset();
     return {};
   }
@@ -62,7 +65,7 @@ void CommandRecorder::FlushBarriers()
     return;
   }
 
-  LOG_SCOPE_F(2, "Flushing barriers");
+  LOG_SCOPE_F(2, "Flushing barriers for : {}", command_list_->GetName());
 
   // Execute the pending barriers by calling an abstract method to be
   // implemented by the backend-specific Commander
@@ -103,8 +106,7 @@ void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
   LOG_F(4, "buffer: begin tracking state 0x{} initial={} {}",
-    nostd::to_string(resource.GetNativeResource()).c_str(),
-    nostd::to_string(initial_state).c_str(),
+    resource.GetName(), initial_state,
     keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->BeginTrackingResourceState(
     resource, initial_state, keep_initial_state);
@@ -143,8 +145,7 @@ void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
   LOG_F(4, "texture: begin tracking state 0x{} initial={} {}",
-    nostd::to_string(resource.GetNativeResource()).c_str(),
-    nostd::to_string(initial_state).c_str(),
+    resource.GetName(), initial_state,
     keep_initial_state ? " (preserve it)" : "");
   resource_state_tracker_->BeginTrackingResourceState(
     resource, initial_state, keep_initial_state);

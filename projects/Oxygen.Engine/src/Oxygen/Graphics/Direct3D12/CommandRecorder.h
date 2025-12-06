@@ -43,12 +43,10 @@ public:
     std::shared_ptr<graphics::CommandList> command_list,
     observer_ptr<graphics::CommandQueue> target_queue);
 
-  OXGN_D3D12_API ~CommandRecorder() override;
+  ~CommandRecorder() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(CommandRecorder)
   OXYGEN_MAKE_NON_MOVABLE(CommandRecorder)
-
-  auto Begin() -> void override;
 
   //! Returns the underlying native D3D12 command list for cases where backend
   //! implementations need direct access to the ID3D12GraphicsCommandList.
