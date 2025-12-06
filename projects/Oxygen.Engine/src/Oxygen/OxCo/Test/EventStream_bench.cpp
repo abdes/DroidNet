@@ -9,8 +9,7 @@
 #include <random>
 #include <utility>
 
-#include <catch2/benchmark/catch_benchmark.hpp>
-#include <catch2/catch_test_macros.hpp>
+#include <benchmark/benchmark.h>
 
 #include "Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Algorithms.h>
@@ -60,10 +59,13 @@ void DoSomething(EventType event)
   }
 }
 
-TEST_CASE("DoSomething timing")
+static void BM_DoSomething(benchmark::State& state)
 {
-  BENCHMARK("DoSomething") { DoSomething(MakeEvent()); };
+  for (auto _ : state) {
+    DoSomething(MakeEvent());
+  }
 }
+BENCHMARK(BM_DoSomething);
 
 constexpr size_t kIterations { 1'000'000 };
 
@@ -145,57 +147,72 @@ TEST_CASE("Event Stream - Synchronized Shared Benchmark")
   size_t events_processed { 0UL };
   bool done { false };
 
-  BENCHMARK("synchronized shared")
-  {
-    Run(el, [&]() -> Co<> {
-      OXCO_WITH_NURSERY(nursery)
-      {
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          while (!done) {
-            sh_pump.PollOne();
-            // co_await el.Sleep(1ms);
-            co_await kYield;
-          }
+  benchmark::RegisterBenchmark(
+    "synchronized_shared", [&](benchmark::State& state) {
+      for (auto _b : state) {
+        std::atomic<int> errors { 0 };
+        Run(el, [&]() -> Co<> {
+          OXCO_WITH_NURSERY(nursery)
+          {
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              while (!done) {
+                sh_pump.PollOne();
+                // co_await el.Sleep(1ms);
+                co_await kYield;
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              started();
+              while (!done) {
+                const auto event = co_await sh_pump.NextEvent();
+                auto _ = sh_pump.Lock();
+                ++events_processed;
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+                DoSomething(event);
+                done = events_processed == kIterations;
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              started();
+              while (!done) {
+                const auto event = co_await sh_pump.NextEvent();
+                auto _ = sh_pump.Lock();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              started();
+              while (!done) {
+                const auto event = co_await sh_pump.NextEvent();
+                auto _ = sh_pump.Lock();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              started();
+              while (!done) {
+                const auto event = co_await sh_pump.NextEvent();
+                auto _ = sh_pump.Lock();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            co_return kJoin;
+          };
         });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await sh_pump.NextEvent();
-            auto _ = sh_pump.Lock();
-            ++events_processed;
-            CHECK_EQ_F(event, MakeEvent());
-            DoSomething(event);
-            done = events_processed == kIterations;
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await sh_pump.NextEvent();
-            auto _ = sh_pump.Lock();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await sh_pump.NextEvent();
-            auto _ = sh_pump.Lock();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await sh_pump.NextEvent();
-            auto _ = sh_pump.Lock();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        co_return kJoin;
-      };
+        if (errors.load() != 0) {
+          state.SkipWithError("synchronized_shared: event mismatch");
+          break;
+        }
+      }
     });
-  };
 }
 
 TEST_CASE("Event Stream - Multi Channel benchmark")
@@ -229,59 +246,73 @@ TEST_CASE("Event Stream - Multi Channel benchmark")
   size_t events_processed { 0UL };
   bool done { false };
 
-  BENCHMARK("multi-channel")
-  {
-    return Run(el, [&]() -> Co<> {
-      OXCO_WITH_NURSERY(nursery)
-      {
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          while (!done) {
-            mc_pump.PollOne();
-            // co_await el.Sleep(1ms);
-            co_await kYield;
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          while (!done) {
-            co_await mc_pump.PumpEvent();
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            auto event = co_await mc_pump.channels_[0].Receive();
-            ++events_processed;
-            CHECK_EQ_F(event, MakeEvent());
-            // Do something that takes a long time with the event
-            DoSomething(*event);
-            done = events_processed == kIterations;
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await mc_pump.channels_[1].Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await mc_pump.channels_[2].Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          started();
-          while (!done) {
-            const auto event = co_await mc_pump.channels_[3].Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        co_return kJoin;
-      };
-    });
-  };
+  benchmark::RegisterBenchmark("multi_channel", [&](benchmark::State& state) {
+    for (auto _b : state) {
+      std::atomic<int> errors { 0 };
+      Run(el, [&]() -> Co<> {
+        OXCO_WITH_NURSERY(nursery)
+        {
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            while (!done) {
+              mc_pump.PollOne();
+              // co_await el.Sleep(1ms);
+              co_await kYield;
+            }
+          });
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            while (!done) {
+              co_await mc_pump.PumpEvent();
+            }
+          });
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            started();
+            while (!done) {
+              auto event = co_await mc_pump.channels_[0].Receive();
+              ++events_processed;
+              if (!(*event == MakeEvent())) {
+                errors.fetch_add(1);
+              }
+              // Do something that takes a long time with the event
+              DoSomething(*event);
+              done = events_processed == kIterations;
+            }
+          });
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            started();
+            while (!done) {
+              const auto event = co_await mc_pump.channels_[1].Receive();
+              if (!(event == MakeEvent())) {
+                errors.fetch_add(1);
+              }
+            }
+          });
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            started();
+            while (!done) {
+              const auto event = co_await mc_pump.channels_[2].Receive();
+              if (!(event == MakeEvent())) {
+                errors.fetch_add(1);
+              }
+            }
+          });
+          nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+            started();
+            while (!done) {
+              const auto event = co_await mc_pump.channels_[3].Receive();
+              if (!(event == MakeEvent())) {
+                errors.fetch_add(1);
+              }
+            }
+          });
+          co_return kJoin;
+        };
+      });
+      if (errors.load() != 0) {
+        state.SkipWithError("multi_channel: event mismatch");
+        break;
+      }
+    }
+  });
 }
 
 TEST_CASE("Event Stream - BroadcastChannel benchmark")
@@ -314,63 +345,78 @@ TEST_CASE("Event Stream - BroadcastChannel benchmark")
   size_t events_processed { 0UL };
   bool done { false };
 
-  BENCHMARK("broadcast-channel")
-  {
-    return Run(el, [&]() -> Co<> {
-      OXCO_WITH_NURSERY(nursery)
-      {
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          while (!done) {
-            bc_pump.PollOne();
-            // co_await el.Sleep(1ms);
-            co_await kYield;
-          }
+  benchmark::RegisterBenchmark(
+    "broadcast_channel", [&](benchmark::State& state) {
+      for (auto _b : state) {
+        std::atomic<int> errors { 0 };
+        Run(el, [&]() -> Co<> {
+          OXCO_WITH_NURSERY(nursery)
+          {
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              while (!done) {
+                bc_pump.PollOne();
+                // co_await el.Sleep(1ms);
+                co_await kYield;
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              while (!done) {
+                co_await bc_pump.PumpEvent();
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              auto r = bc_pump.channel_.ForRead();
+              started();
+              while (!done) {
+                auto event = co_await r.Receive();
+                ++events_processed;
+                if (!(*event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+                // Do something that takes a long time with the event
+                DoSomething(*event);
+                done = events_processed == kIterations;
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              auto r = bc_pump.channel_.ForRead();
+              started();
+              while (!done) {
+                const auto event = co_await r.Receive();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              auto r = bc_pump.channel_.ForRead();
+              started();
+              while (!done) {
+                const auto event = co_await r.Receive();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
+              auto r = bc_pump.channel_.ForRead();
+              started();
+              while (!done) {
+                const auto event = co_await r.Receive();
+                if (!(event == MakeEvent())) {
+                  errors.fetch_add(1);
+                }
+              }
+            });
+            co_return kJoin;
+          };
         });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          while (!done) {
-            co_await bc_pump.PumpEvent();
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          auto r = bc_pump.channel_.ForRead();
-          started();
-          while (!done) {
-            auto event = co_await r.Receive();
-            ++events_processed;
-            CHECK_EQ_F(event, MakeEvent());
-            // Do something that takes a long time with the event
-            DoSomething(*event);
-            done = events_processed == kIterations;
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          auto r = bc_pump.channel_.ForRead();
-          started();
-          while (!done) {
-            const auto event = co_await r.Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          auto r = bc_pump.channel_.ForRead();
-          started();
-          while (!done) {
-            const auto event = co_await r.Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        nursery.Start([&](TaskStarted<> started = {}) -> Co<> {
-          auto r = bc_pump.channel_.ForRead();
-          started();
-          while (!done) {
-            const auto event = co_await r.Receive();
-            CHECK_EQ_F(event, MakeEvent());
-          }
-        });
-        co_return kJoin;
-      };
+        if (errors.load() != 0) {
+          state.SkipWithError("broadcast_channel: event mismatch");
+          break;
+        }
+      }
     });
-  };
 }
 
 } // namespace

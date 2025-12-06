@@ -4,20 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/ReturnAddress.h>
-#include <catch2/catch_test_macros.hpp>
 
 namespace {
 
 auto TestReturnAddress() -> void* { return oxygen::ReturnAddress<>(); }
 
-TEST_CASE("ReturnAddress macro", "[ReturnAddress]")
+//! Tests that `oxygen::ReturnAddress` returns a non-null address.
+NOLINT_TEST(ReturnAddressTest, ReturnsNonNullAddress)
 {
-  SECTION("returns non null address")
-  {
-    void* address = TestReturnAddress();
-    REQUIRE(address != nullptr);
-  }
+  void* address = TestReturnAddress();
+  EXPECT_NE(address, nullptr);
 }
 
 } // namespace

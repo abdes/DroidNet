@@ -110,10 +110,6 @@ class OxygenConan(ConanFile):
         self.test_requires(ref)
         self._test_deps.add(ref.split("/")[0])
 
-        ref = "catch2/3.8.0"
-        self.test_requires(ref)
-        self._test_deps.add(ref.split("/")[0])
-
     def configure(self):
         if self.options.shared:
             self.options.rm_safe("fPIC")
