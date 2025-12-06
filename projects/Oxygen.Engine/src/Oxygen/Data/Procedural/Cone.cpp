@@ -104,9 +104,11 @@ auto oxygen::data::MakeConeMeshAsset(
   });
   uint32_t apex_index = static_cast<uint32_t>(vertices.size() - 1);
   // Side indices
+  // Ensure side triangles are wound CCW when viewed from outside so
+  // the computed normals point outward. Use (base_current, apex, base_next).
   for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(apex_index);
     indices.push_back(i);
+    indices.push_back(apex_index);
     indices.push_back(i + 1);
   }
   // Center vertex for base cap

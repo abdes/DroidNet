@@ -74,12 +74,16 @@ auto oxygen::data::MakePlaneMeshAsset(
       uint32_t i1 = i0 + 1;
       uint32_t i2 = i0 + (x_segments + 1);
       uint32_t i3 = i2 + 1;
+      // Wind triangles CCW when viewed from +Y (up) so the normal {0,1,0}
+      // matches the vertex winding and back-face culling behaves correctly.
+      // First triangle: bottom-left, bottom-right, top-left
       indices.push_back(i0);
-      indices.push_back(i2);
-      indices.push_back(i1);
       indices.push_back(i1);
       indices.push_back(i2);
+      // Second triangle: bottom-right, top-right, top-left
+      indices.push_back(i1);
       indices.push_back(i3);
+      indices.push_back(i2);
     }
   }
 
