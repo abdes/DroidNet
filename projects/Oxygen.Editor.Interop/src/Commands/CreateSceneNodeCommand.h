@@ -8,9 +8,9 @@
 #pragma managed(push, on)
 
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <string>
-#include <cstdint>
 
 #include <msclr/auto_gcroot.h>
 
@@ -59,7 +59,8 @@ private:
 inline CreateSceneNodeCommand::CreateSceneNodeCommand(
     std::string name, oxygen::scene::NodeHandle parent, Callback callback,
     bool initializeWorldAsRoot)
-    : name_(std::move(name)), parent_(parent), callback_(std::move(callback)),
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
+      name_(std::move(name)), parent_(parent), callback_(std::move(callback)),
       managed_callback_(nullptr), has_managed_callback_(false),
       has_register_key_(false),
       initialize_world_as_root_(initializeWorldAsRoot) {
@@ -70,7 +71,8 @@ inline CreateSceneNodeCommand::CreateSceneNodeCommand(
     std::string name, oxygen::scene::NodeHandle parent,
     System::Action<Oxygen::Editor::Core::NodeHandle>^ managedCallback,
     bool initializeWorldAsRoot)
-    : name_(std::move(name)), parent_(parent),
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
+      name_(std::move(name)), parent_(parent),
       managed_callback_(managedCallback), has_managed_callback_(true),
       has_register_key_(false),
       initialize_world_as_root_(initializeWorldAsRoot) {
@@ -80,9 +82,9 @@ inline CreateSceneNodeCommand::CreateSceneNodeCommand(
 inline CreateSceneNodeCommand::CreateSceneNodeCommand(
     std::string name, oxygen::scene::NodeHandle parent,
     System::Action<Oxygen::Editor::Core::NodeHandle>^ managedCallback,
-    const std::array<uint8_t, 16>& registerKey,
-    bool initializeWorldAsRoot)
-    : name_(std::move(name)), parent_(parent),
+    const std::array<uint8_t, 16>& registerKey, bool initializeWorldAsRoot)
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
+      name_(std::move(name)), parent_(parent),
       managed_callback_(managedCallback), has_managed_callback_(true),
       register_key_(registerKey), has_register_key_(true),
       initialize_world_as_root_(initializeWorldAsRoot) {

@@ -15,17 +15,56 @@ namespace oxygen::interop::module {
   ViewManager::ViewManager() = default;
   ViewManager::~ViewManager() = default;
 
-  void ViewManager::CreateViewAsync(EditorView::Config config,
+  void ViewManager::CreateViewNow(EditorView::Config config,
     OnViewCreated callback) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    PendingCreate entry;
-    entry.config = std::move(config);
-    entry.callback = std::move(callback);
+    CHECK_NOTNULL_F(active_frame_ctx_.get());
 
-    pending_creates_.emplace_back(std::move(entry));
+    try {
+      auto view = std::make_unique<EditorView>(config);
+      // Resolve the scene from the active FrameContext rather than caching
+      // it so we don't hold cross-frame references.
+      auto scene = active_frame_ctx_->GetScene();
+      if (!scene) {
+        LOG_F(WARNING, "CreateViewNow: frame context has no scene");
+        if (callback)
+          callback(false, kInvalidViewId);
+        return;
+      }
+      view->Initialize(*scene);
 
-    LOG_F(INFO, "Queued view creation '{}'", entry.config.name);
+      engine::ViewContext vc{
+          .view = View{},
+          .metadata =
+              engine::ViewMetadata{
+                  .name = config.name,
+                  .purpose = config.purpose,
+              },
+          .output = nullptr,
+      };
+
+      ViewId engine_id = active_frame_ctx_->RegisterView(std::move(vc));
+      view->SetViewId(engine_id);
+
+      views_[engine_id] = ViewEntry{ std::move(view), true };
+
+      LOG_F(INFO, "CreateViewNow created view '{}' id {}", config.name,
+        engine_id.get());
+
+      if (callback)
+        callback(true, engine_id);
+    }
+    catch (const std::exception& e) {
+      LOG_F(ERROR, "CreateViewNow failed for '{}': {}", config.name, e.what());
+      if (callback)
+        callback(false, kInvalidViewId);
+    }
+    catch (...) {
+      LOG_F(ERROR, "CreateViewNow failed for '{}': unknown error", config.name);
+      if (callback)
+        callback(false, kInvalidViewId);
+    }
   }
 
   void ViewManager::DestroyView(ViewId engine_id) {
@@ -68,98 +107,7 @@ namespace oxygen::interop::module {
 
   void ViewManager::OnFrameStart(scene::Scene& scene,
     engine::FrameContext& frame_ctx) {
-    // Process pending creates
-    auto pending = DrainPendingCreates();
-
-    for (auto& pc : pending) {
-      try {
-        // Create EditorView
-        auto view = std::make_unique<EditorView>(pc.config);
-
-        // Initialize with scene
-        view->Initialize(scene);
-
-        // Build ViewContext for FrameContext registration
-        engine::ViewContext vc{
-            .view = View{}, // Default view config
-            .metadata =
-                engine::ViewMetadata{
-                    .name = pc.config.name,
-                    .purpose = pc.config.purpose,
-                },
-            .output = nullptr,
-        };
-
-        // Register with FrameContext - this assigns the engine ViewId
-        ViewId engine_id = frame_ctx.RegisterView(std::move(vc));
-
-        // Ensure the EditorView instance knows its engine-assigned ViewId so
-        // it doesn't attempt to RegisterView again later during scene
-        // mutation (which would allocate a duplicate ViewId).
-        view->SetViewId(engine_id);
-
-        // Store in views map
-        views_[engine_id] = ViewEntry{ std::move(view), true };
-
-        LOG_F(INFO, "Created view '{}' with engine id {}", pc.config.name,
-          engine_id.get());
-
-        // Invoke callback with success
-        if (pc.callback) {
-          pc.callback(true, engine_id);
-        }
-
-      }
-      catch (const std::exception& e) {
-        LOG_F(ERROR, "Failed to create view '{}': {}", pc.config.name, e.what());
-
-        if (pc.callback) {
-          pc.callback(false, kInvalidViewId);
-        }
-      }
-      catch (...) {
-        LOG_F(ERROR, "Failed to create view '{}': unknown error", pc.config.name);
-
-        if (pc.callback) {
-          pc.callback(false, kInvalidViewId);
-        }
-      }
-    }
-
-    // Update FrameContext for all registered views
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& [id, entry] : views_) {
-      if (entry.is_registered) {
-        const float w = entry.view->GetWidth();
-        const float h = entry.view->GetHeight();
-
-        View view;
-        view.viewport = ViewPort{
-            .top_left_x = 0.0f,
-            .top_left_y = 0.0f,
-            .width = w,
-            .height = h,
-            .min_depth = 0.0f,
-            .max_depth = 1.0f,
-        };
-        view.scissor = Scissors{
-            .left = 0,
-            .top = 0,
-            .right = static_cast<int32_t>(w),
-            .bottom = static_cast<int32_t>(h),
-        };
-
-        engine::ViewContext vc{
-            .view = view,
-            .metadata =
-                engine::ViewMetadata{.name = entry.view->GetConfig().name,
-                                     .purpose = entry.view->GetConfig().purpose},
-            .output = nullptr,
-        };
-
-        frame_ctx.UpdateView(id, std::move(vc));
-      }
-    }
+    active_frame_ctx_ = observer_ptr{ &frame_ctx };
   }
 
   auto ViewManager::GetView(ViewId engine_id) -> EditorView* {
@@ -197,13 +145,8 @@ namespace oxygen::interop::module {
     return result;
   }
 
-  auto ViewManager::DrainPendingCreates() -> std::vector<PendingCreate> {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    std::vector<PendingCreate> result;
-    result.swap(pending_creates_);
-
-    return result;
+  auto ViewManager::HasActiveFrameContext() const -> bool {
+    return active_frame_ctx_.get() != nullptr;
   }
 
   void ViewManager::OnSurfaceResized(graphics::Surface* surface) {
@@ -241,6 +184,53 @@ namespace oxygen::interop::module {
         }
       }
     }
+  }
+
+  // EndFrame removed: FinalizeViews is used instead.
+
+  void ViewManager::FinalizeViews() {
+    // Update FrameContext for all registered views while frame_ctx pointer is
+    // still valid. Use the transient pointer set in OnFrameStart.
+    CHECK_NOTNULL_F(active_frame_ctx_.get());
+
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& [id, entry] : views_) {
+      if (entry.is_registered) {
+        const float w = entry.view->GetWidth();
+        const float h = entry.view->GetHeight();
+
+        View view;
+        view.viewport = ViewPort{
+            .top_left_x = 0.0f,
+            .top_left_y = 0.0f,
+            .width = w,
+            .height = h,
+            .min_depth = 0.0f,
+            .max_depth = 1.0f,
+        };
+        view.scissor = Scissors{
+            .left = 0,
+            .top = 0,
+            .right = static_cast<int32_t>(w),
+            .bottom = static_cast<int32_t>(h),
+        };
+
+        engine::ViewContext vc{
+            .view = view,
+            .metadata =
+                engine::ViewMetadata{.name = entry.view->GetConfig().name,
+                                     .purpose = entry.view->GetConfig().purpose},
+            .output = nullptr,
+        };
+
+        active_frame_ctx_->UpdateView(id, std::move(vc));
+      }
+    }
+
+    // Clear transient pointers to denote end of frame processing window.
+    active_frame_ctx_ = {};
+    // previously cleared active_scene_ here; we do not cache the scene so
+    // there is nothing to clear.
   }
 
 } // namespace oxygen::interop::module

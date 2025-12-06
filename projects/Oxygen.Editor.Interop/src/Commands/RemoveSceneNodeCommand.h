@@ -25,7 +25,7 @@ private:
 
 inline RemoveSceneNodeCommand::RemoveSceneNodeCommand(
     oxygen::scene::NodeHandle node)
-    : node_(node) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node) {
 }
 
 inline void RemoveSceneNodeCommand::Execute(CommandContext& context) {

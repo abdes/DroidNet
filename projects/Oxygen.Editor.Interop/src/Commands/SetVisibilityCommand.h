@@ -26,7 +26,8 @@ private:
 
 inline SetVisibilityCommand::SetVisibilityCommand(
     oxygen::scene::NodeHandle node, bool visible)
-    : node_(node), visible_(visible) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
+      visible_(visible) {
 }
 
 inline void SetVisibilityCommand::Execute(CommandContext& context) {

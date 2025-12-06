@@ -7,23 +7,28 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/View.h>
+
 #include "EditorModule/EditorCommand.h"
 
 namespace oxygen::interop::module {
 
-class ViewManager;
+  class ViewManager;
 
-class ShowViewCommand : public EditorCommand {
-public:
-  explicit ShowViewCommand(ViewManager* manager, ViewId view_id)
-      : manager_(manager), view_id_(view_id) {}
+  class ShowViewCommand : public EditorCommand {
+  public:
+    explicit ShowViewCommand(ViewManager* manager, ViewId view_id)
+      : EditorCommand(oxygen::core::PhaseId::kSceneMutation), view_manager_(manager),
+      view_id_(view_id) {
+    }
 
-  void Execute(CommandContext& /*context*/) override;
+    void Execute(CommandContext& /*context*/) override;
 
-private:
-  ViewManager* manager_;
-  ViewId view_id_;
-};
+  private:
+    ViewManager* view_manager_;
+    ViewId view_id_;
+  };
 
 } // namespace oxygen::interop::module
 

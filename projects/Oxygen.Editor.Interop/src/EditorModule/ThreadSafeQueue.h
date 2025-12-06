@@ -49,6 +49,46 @@ namespace oxygen::interop::module {
       }
     }
 
+    //! Drains only items matching the provided predicate, preserving the
+    //! insertion order of remaining items. The consumer is invoked for each
+    //! matched item outside of the lock.
+    void DrainIf(std::function<bool(const T&)> predicate, Consumer consumer) {
+      std::vector<T> current_batch;
+      {
+        std::lock_guard<std::mutex> lock(mutex_);
+        if (items_.empty()) {
+          return;
+        }
+        current_batch.swap(items_);
+      }
+
+      std::vector<T> remaining;
+      remaining.reserve(current_batch.size());
+
+      for (auto& item : current_batch) {
+        if (predicate(item)) {
+          consumer(item);
+        }
+        else {
+          remaining.push_back(std::move(item));
+        }
+      }
+
+      // Put remaining items back into the queue, preserving relative order
+      // and appending any entries that were enqueued while we were processing.
+      std::lock_guard<std::mutex> lock(mutex_);
+      if (!remaining.empty()) {
+        // Prepend remaining then append new items that arrived while we processed
+        std::vector<T> new_items;
+        new_items.reserve(remaining.size() + items_.size());
+        for (auto& r : remaining)
+          new_items.push_back(std::move(r));
+        for (auto& i : items_)
+          new_items.push_back(std::move(i));
+        items_.swap(new_items);
+      }
+    }
+
     //! Clears the queue.
     void Clear() {
       std::lock_guard<std::mutex> lock(mutex_);

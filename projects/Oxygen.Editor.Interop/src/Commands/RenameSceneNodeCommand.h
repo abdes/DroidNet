@@ -30,7 +30,8 @@ private:
 
 inline RenameSceneNodeCommand::RenameSceneNodeCommand(
     oxygen::scene::NodeHandle node, std::string newName)
-    : node_(node), newName_(std::move(newName)) {
+    : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
+      newName_(std::move(newName)) {
 }
 
 inline void RenameSceneNodeCommand::Execute(CommandContext& context) {
