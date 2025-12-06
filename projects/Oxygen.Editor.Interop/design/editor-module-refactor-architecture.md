@@ -1,8 +1,8 @@
 # EditorModule Refactor - Architecture Design
 
-**Version:** 2.0
-**Date:** December 6, 2025
-**Status:** ✅ Implementation Complete
+**Version:** 2.1
+**Date:** December 7, 2025
+**Status:** ✅ Implementation On Track
 
 ---
 
@@ -27,6 +27,142 @@ Introduce **four core abstractions** with clear responsibilities:
 - **`ViewRenderer`** - Per-view rendering encapsulation (render passes + graph)
 - **`ViewManager`** - Centralized view lifecycle and surface association coordinator
 - **`EditorCompositor`** - Surface backbuffer management and composition orchestration
+
+---
+
+## Command System Architecture
+
+The refactored EditorModule uses a **deferred command execution model** to safely coordinate surface/view/scene mutations across thread boundaries and frame phases. This solves a critical problem: the Interop layer (running on the UI thread) must communicate mutations to the engine (running on the engine thread) in a thread-safe, frame-synchronized manner.
+
+### Command Concept
+
+An `EditorCommand` is a deferred mutation operation that:
+
+1. **Encapsulates state change** - Contains all data needed to perform a mutation
+2. **Targets a specific phase** - Executes only during its designated frame phase
+3. **Executes on engine thread** - Called from within the engine's frame loop
+4. **Has no blocking overhead** - Enqueuing is fast; actual work deferred to safe time
+
+### Command Lifecycle
+
+```mermaid
+graph LR
+    A["UI Thread<br/>Caller"] -->|Enqueue<br/>thread-safe| B["ThreadSafeQueue<br/>mutex-protected"]
+    B -->|Next Frame| C["Engine Thread<br/>Phase Handler"]
+    C -->|DrainIf<br/>predicate| D["Command::Execute<br/>on engine thread"]
+    D -->|Mutation| E["Scene/Views/Surfaces<br/>Updated State"]
+    E -->|Visible to| F["Subsequent Phases<br/>in Same Frame"]
+```
+
+### Phase-Specific Execution
+
+Each command specifies its target phase and is executed only during that phase. The engine drains commands phase-by-phase using predicates:
+
+**Available phases:**
+
+- **`kFrameStart`** - Immediate frame bookkeeping (view creation, destruction, visibility toggle)
+- **`kSceneMutation`** - Scene graph changes (node creation, removal, parenting, transform)
+- **Future: `kPreRender`, `kCompositing`** - Specialized phases for rendering-specific operations
+
+**Execution ordering within a phase:**
+
+For `kFrameStart`, commands are drained in strict order to prevent race conditions:
+
+1. Destroy commands first (release resources early)
+2. Create commands next (reuse released resources)
+3. All remaining FrameStart commands
+
+For `kSceneMutation` and other phases, commands are drained in FIFO order matching their insertion sequence.
+
+### Thread Safety Model
+
+```mermaid
+graph TB
+    subgraph UI["UI Thread (Any Context)"]
+        A["CreateViewAsync()"]
+        B["DestroyView()"]
+        C["ShowView/HideView()"]
+    end
+
+    subgraph Queue["ThreadSafeQueue"]
+        D["Mutex-Protected<br/>Command Queue"]
+    end
+
+    subgraph Engine["Engine Thread (Frame Loop)"]
+        E["OnFrameStart"]
+        F["OnSceneMutation"]
+        G["OnPreRender"]
+    end
+
+    A -->|Enqueue| D
+    B -->|Enqueue| D
+    C -->|Enqueue| D
+
+    D -->|DrainIf| E
+    D -->|DrainIf| F
+    D -->|DrainIf| G
+
+    E -->|Execute| H["Mutations Applied<br/>Visible to Next Phase"]
+    F -->|Execute| H
+    G -->|Execute| H
+```
+
+**Benefits:**
+
+- ✅ No locks held during command execution
+- ✅ No race conditions (commands execute on single thread)
+- ✅ Deterministic ordering (FIFO per phase)
+- ✅ Caller doesn't block (enqueue is fast)
+- ✅ Frame-safe (mutations at well-defined points)
+
+### CommandContext
+
+Every command receives a `CommandContext` during execution containing the scene and future subsystems:
+
+**Critical note:** Pointers in `CommandContext` are volatile (only valid during `Execute()`). Commands must not store pointers beyond their `Execute()` method to prevent dangling pointers if resources are destroyed between frames.
+
+### Built-in Commands
+
+The command system provides a comprehensive set of commands for view and scene graph management:
+
+#### View Management Commands
+
+| Command | Phase | Purpose |
+|---------|-------|---------|
+| `CreateViewCommand` | kFrameStart | Create new view and register with engine |
+| `DestroyViewCommand` | kFrameStart | Destroy view and schedule deferred GPU cleanup |
+| `ShowViewCommand` | kSceneMutation | Make hidden view visible and register with FrameContext |
+| `HideViewCommand` | kSceneMutation | Make visible view hidden and unregister from FrameContext |
+
+#### Scene Graph Mutation Commands
+
+| Command | Phase | Purpose |
+|---------|-------|---------|
+| `CreateSceneNodeCommand` | kSceneMutation | Create new scene node with optional callback for native handle |
+| `RemoveSceneNodeCommand` | kSceneMutation | Remove scene node from tree and clean up |
+| `ReparentSceneNodeCommand` | kSceneMutation | Change parent of a node with optional world transform preservation |
+| `RenameSceneNodeCommand` | kSceneMutation | Rename a scene node |
+| `SetLocalTransformCommand` | kSceneMutation | Update position, rotation, and scale of a node |
+| `UpdateTransformsForNodesCommand` | kSceneMutation | Batch update transforms for multiple nodes |
+
+#### Scene Content Commands
+
+| Command | Phase | Purpose |
+|---------|-------|---------|
+| `CreateBasicMeshCommand` | kSceneMutation | Create basic geometric shapes (cube, sphere, plane, etc.) |
+| `SetVisibilityCommand` | kSceneMutation | Toggle node visibility in scene rendering |
+
+### Command Extension Pattern
+
+Custom domain-specific commands can be implemented by inheriting from `EditorCommand`:
+
+- Specify target phase in constructor
+- Implement mutation logic in `Execute(CommandContext&)`
+- Enqueue via `editor_module->Enqueue()`
+- Execute synchronously during target phase
+- Results immediately visible to subsequent phases
+
+Example use case: Creating a custom game object with specific components, applying batch physics updates, or custom editor operations.
 
 ---
 
@@ -62,8 +198,8 @@ enum class ViewState {
 
 | Phase | EditorModule | ViewManager | EditorView | EditorCompositor |
 |-------|--------------|-------------|------------|------------------|
-| **FrameStart** | Process surface lifecycle, cleanup destroyed views | Remove destroyed views, handle surface invalidation | N/A | Update backbuffer framebuffers for resized surfaces |
-| **SceneMutation** | Drain commands, set scene | Register/update active views with FrameContext | Update camera, create offscreen resources | N/A |
+| **FrameStart** | Drain kFrameStart commands (destroy → create → other), process surface lifecycle, make FrameContext available to ViewManager | OnFrameStart receives FrameContext, registers views; FinalizeViews applies visibility state updates | N/A | Update backbuffer framebuffers for resized surfaces |
+| **SceneMutation** | Drain kSceneMutation commands, set scene | Register/update active views with FrameContext | Update camera, create offscreen resources | N/A |
 | **PreRender** | Coordinate view preparation | N/A | Configure renderer with offscreen textures | N/A |
 | **Render** | N/A | N/A | N/A (handled by Renderer) | N/A |
 | **Compositing** | Orchestrate composition, mark surfaces presentable | N/A | Provide offscreen textures for composition | Blit view textures to surface backbuffers |
@@ -82,6 +218,7 @@ ViewManager owns:
     - Collection of EditorView instances
     - View-to-Surface associations
     - View visibility state
+    - Transient frame context (only during OnFrameStart)
 
 EditorCompositor owns:
     - Surface backbuffer framebuffers (one per surface)
@@ -90,6 +227,7 @@ EditorCompositor owns:
     - Resource state transitions for backbuffers
 
 EditorModule owns:
+    - ThreadSafeQueue<EditorCommand> (command queue)
     - ViewManager
     - EditorCompositor
     - Scene
@@ -184,20 +322,25 @@ EditorModule owns:
 
 ## Refactored EditorModule
 
-**Responsibility**: Orchestrate frame lifecycle phases and delegate specialized operations to subsystems.
+**Responsibility**: Orchestrate frame lifecycle phases and delegate specialized operations to subsystems. Acts as the command hub for thread-safe mutations from the Interop layer.
 
 **Key Features:**
 
 - Implements EngineModule interface with phase-specific hooks (OnFrameStart, OnSceneMutation, OnPreRender, OnRender, OnCompositing)
+- Owns ThreadSafeQueue for deferred command execution
 - Manages surface lifecycle (registration, resizing, destruction)
 - Coordinates view lifecycle through ViewManager
 - Orchestrates composition through EditorCompositor
-- Provides public API for Interop layer (CreateView, DestroyView, ShowView, HideView, etc.)
+- Provides public API for Interop layer (CreateViewAsync, DestroyView, ShowView, HideView, Enqueue, etc.)
 - Manages scene and command queue
+- Enables thread-safe mutations via command system
 
 **New Responsibilities** (vs current design):
 
 - Orchestrate frame lifecycle phases
+- Drain and execute commands in phase-specific order
+- Provide command queueing for thread-safe mutations
+- Coordinate ViewManager lifecycle (OnFrameStart, FinalizeViews)
 - Delegate to ViewManager for view operations
 - Manage surface lifecycle (unchanged)
 - Provide public API to Interop layer
@@ -219,69 +362,43 @@ Registration happens at **two levels** with **clear orchestration**:
 
 #### 1. FrameContext Registration (View Identification)
 
-- **Who:** `EditorView` registers itself
-- **When:** During `OnSceneMutation()` phase
-- **What:** Calls `frame_context.RegisterView()` or `UpdateView()` to get/update `ViewId`
-- **Result:** View gets ViewId, viewport, and scissor rect assigned
+**Initial Registration (OnFrameStart):**
+
+- **Who:** `CreateViewCommand::Execute()` calls `ViewManager::CreateViewNow()`
+- **When:** During `OnFrameStart` phase (while FrameContext is active)
+- **What:** Immediately registers view with FrameContext and gets initial `ViewId`
+- **Result:** View tracked by engine with ViewId, viewport, and scissor rect
+
+**Per-Frame Updates (OnSceneMutation):**
+
+- **Who:** `EditorView` via `view->OnSceneMutation()`
+- **When:** During `OnSceneMutation()` phase on every frame
+- **What:** Calls `frame_context.UpdateView()` to refresh viewport, scissor, and visibility state
+- **Result:** Engine has latest view parameters for rendering
 
 #### 2. Renderer Registration (Render Hooks)
 
 - **Who:** `EditorModule` orchestrates, `EditorView` executes via `ViewRenderer`
-- **When:** During `OnSceneMutation()` after view's self-registration
+- **When:** During `OnSceneMutation()` after view's per-frame update
 - **What:** EditorModule calls `view->RegisterViewForRendering(renderer)` which delegates to `ViewRenderer::RegisterWithEngine()`
 - **Result:** Renderer has resolver lambda (to get camera) and render graph factory
 
-#### Orchestration Flow (from MultiView MainModule pattern)
+#### Key Flow Sequence
 
-```cpp
-// OnSceneMutation phase:
-void EditorModule::OnSceneMutation(engine::FrameContext& context) {
-    // 1. Create phase context
-    ViewContext ctx {
-        .frame_context = context,
-        .graphics = *graphics_.lock(),
-        .surface = *surface,
-        .recorder = *phase_recorder  // Valid ONLY during this phase
-    };
-
-    // 2. For each visible view:
-    for (auto* view : view_manager_->GetVisibleViews()) {
-        // 2a. Set context (provides Graphics/Surface/Recorder)
-        view->SetRenderingContext(ctx);
-
-        // 2b. View initializes itself (first time only)
-        if (view->NeedsInitialization()) {
-            view->Initialize(*scene_);
-        }
-
-        // 2c. View mutates scene and self-registers with FrameContext
-        view->OnSceneMutation();
-        // Inside OnSceneMutation:
-        //   - Updates camera
-        //   - Creates offscreen textures/framebuffer
-        //   - Calls frame_context_->RegisterView() or UpdateView()
-        //     (gets ViewId assigned)
-
-        // 2d. EditorModule triggers renderer registration
-        view->RegisterViewForRendering(*engine_->GetRenderer());
-        // Inside RegisterViewForRendering:
-        //   - Delegates to renderer_.RegisterWithEngine()
-        //   - Passes resolver lambda: [this] { return camera_node_; }
-        //   - Passes render graph factory
-
-        // 2e. Clear phase-specific recorder pointer
-        view->ClearPhaseRecorder();
-    }
-}
-```
+1. **OnFrameStart**: `CreateViewCommand` executes → `CreateViewNow()` → Initial FrameContext registration (gets ViewId)
+2. **OnSceneMutation**: For each registered view → `UpdateView()` with current viewport/scissor
+3. **OnSceneMutation**: For each registered view → `RegisterViewForRendering()` (renderer hooks)
+4. **OnRender**: Renderer calls resolver to get camera, executes render graph to offscreen texture
+5. **OnCompositing**: Compositor blits offscreen textures to surface backbuffers
 
 #### Why This Pattern?
 
 - **Separation of Concerns**: FrameContext manages view identity/viewport, Renderer manages rendering hooks
 - **Orchestration Clarity**: EditorModule drives the sequence but doesn't do the work
-- **View Autonomy**: Views control their own FrameContext registration details
-- **Phase Safety**: Recorder pointer cleared after OnSceneMutation prevents misuse
+- **View Autonomy**: Views control their own registration and update details
+- **Phase Safety**: Operations occur in correct phases with valid context
 - **Testability**: Each step can be tested independently
+- **Thread Safety**: Command system allows UI thread to queue operations without blocking
 
 ---
 
@@ -290,105 +407,155 @@ void EditorModule::OnSceneMutation(engine::FrameContext& context) {
 ### View Creation Flow
 
 ```text
-[Interop] CreateView(name, purpose)
+[UI Thread] → editor_module->CreateViewAsync(config, callback)
+    ↓ Enqueues CreateViewCommand with target phase = kFrameStart
+    ↓ Returns immediately
+
+--- Next Frame: OnFrameStart Phase ---
+
+[Engine Thread] EditorModule::OnFrameStart()
+    ↓ Make FrameContext available to ViewManager (OnFrameStart call)
+    ↓ Drain kFrameStart commands (destroy → create → other)
+    ↓ CreateViewCommand::Execute() runs on engine thread
     ↓
-[EditorModule] → ViewManager::CreateView()
+[EditorModule] → ViewManager::CreateViewNow()
     ↓
 [ViewManager] → new EditorView(config) → ViewId assigned
     ↓
 [EditorView] → state = kCreating
+    ↓ RegisterView(FrameContext) called immediately
+    ↓ ViewId registered with FrameContext (engine tracks view)
     ↓
-[Returns ViewId to Interop]
+[EditorModule] ViewManager::FinalizeViews() (after command draining)
+    ↓ Clears transient FrameContext reference
+    ↓
+[Callback invoked on engine thread] callback(true, view_id)
+    ↓ Returns to Interop, which marshals result to UI thread
 
---- Next Frame: OnSceneMutation ---
+--- Same Frame: OnSceneMutation Phase ---
 
-[EditorModule] Create ViewContext (graphics, surface, recorder)
+[EditorModule] → Drain kSceneMutation commands
     ↓
-[EditorModule] → ViewManager::GetVisibleViews()
+[EditorModule] → ViewManager::GetAllRegisteredViews()
     ↓
-[For each view] → EditorView::SetRenderingContext(ctx)
+[For each visible view] → EditorView::SetRenderingContext(ctx)
+    ↓ Provides frame context, graphics, and recorder
     ↓
 [EditorView] → EditorView::Initialize(scene) // First time only
     ↓ Creates camera node, positions it
 [EditorView] → EditorView::OnSceneMutation() // Every frame
     ↓ Updates camera viewport/aspect
-    ↓ Creates offscreen render textures
-    ↓ Creates offscreen framebuffer
-    ↓ Registers with FrameContext
+    ↓ Creates offscreen render textures (if needed)
+    ↓ Creates offscreen framebuffer (if needed)
+    ↓ RegisterView() or UpdateView() with FrameContext
+    ↓ Registers resolver lambda with Renderer
     ↓ state = kReady
 [EditorView] → EditorView::ClearPhaseRecorder() // After mutation phase
     ↓ Clears recorder pointer (no longer valid)
+
+--- Same Frame: OnPreRender Phase ---
+
+[EditorModule] EnsureFramebuffers() → Compositor creates backbuffer framebuffers
+    ↓
+[EditorModule] → ViewManager::GetAllRegisteredViews()
+    ↓
+[For each view] → EditorView::OnPreRender(renderer)
+    ↓ Configure ViewRenderer with offscreen textures
 ```
 
 ### Rendering Flow (Per Frame)
 
 ```text
 OnFrameStart:
-    [EditorModule] → Process surface resize
-    [EditorModule] → compositor_->ReleaseSurfaceResources(surface)
-    [EditorModule] → Surface->Resize()
-    [EditorModule] → compositor_->EnsureFramebuffersForSurface(surface)
+    [EditorModule] Make FrameContext available to ViewManager
+    [EditorModule] Drain kFrameStart commands
+        [CreateViewCommand::Execute()] → Create view, register with FrameContext
+        [DestroyViewCommand::Execute()] → Destroy view, release resources
+        [ShowViewCommand::Execute() // if targeting kFrameStart]
+        [HideViewCommand::Execute() // if targeting kFrameStart]
+    [EditorModule] ViewManager::FinalizeViews() (clears FrameContext ref)
+    [EditorModule] Process surface lifecycle (registration, destruction, resize)
+        [Compositor] → ReleaseSurfaceResources(resized_surface)
+        [Surface] → Resize()
+        [ViewManager] → OnSurfaceResized() (notify views)
+    [EditorModule] Set scene in FrameContext
+    [EditorModule] SyncSurfacesWithFrameContext (add/remove surfaces)
 
 OnSceneMutation:
-    [EditorModule] Drain commands, set scene
-    [EditorModule] Create ViewContext (graphics, surface, recorder)
-    [EditorModule] → For each visible view:
-        [EditorView] → SetRenderingContext(ctx)
+    [EditorModule] Drain kSceneMutation commands
+        [Custom SceneNodeCommand::Execute()] → Mutate scene graph
+        [ShowViewCommand::Execute() // if targeting kSceneMutation]
+        [HideViewCommand::Execute() // if targeting kSceneMutation]
+    [EditorModule] → For each registered view:
+        [EditorView] → SetRenderingContext(ctx with FrameContext, graphics)
         [EditorView] → Initialize(scene) // First time only
         [EditorView] → OnSceneMutation()
             - Update camera
             - Ensure offscreen resources (textures, framebuffer)
-            - Register view with FrameContext
+            - RegisterView() or UpdateView() with FrameContext
             - Register resolver + graph with Renderer
         [EditorView] → ClearPhaseRecorder()
 
 OnPreRender:
-    [EditorModule] → For each visible view:
+    [EditorModule] EnsureFramebuffers()
+        [Compositor] Create backbuffer framebuffers for all surfaces
+    [EditorModule] → For each registered view:
+        [EditorView] → SetRenderingContext(ctx)
         [EditorView] → OnPreRender(renderer)
             [ViewRenderer] → Configure(offscreen_color_tex, offscreen_depth_tex)
+        [EditorView] → ClearPhaseRecorder()
 
 OnRender:
     [Engine Renderer] → For each registered view:
-        Calls resolver → gets camera
+        Calls resolver lambda → gets camera node
         Calls render graph factory →
             [ViewRenderer::Render()] executes passes to offscreen textures
+            Results: View color and depth textures populated
 
 OnCompositing:
-    [EditorModule] → For each surface:
-        Get backbuffer from compositor_->GetCurrentFramebuffer(surface)
-        Acquire command recorder
-        compositor_->TrackBackbufferFramebuffer(recorder, framebuffer)
-        [EditorModule] → For each view on this surface:
-            [EditorView] → Composite(recorder, backbuffer_texture, viewport)
-                [EditorCompositor] → CompositeToRegion() or CompositeFullscreen()
-                    Blit offscreen texture → backbuffer region
-        compositor_->TransitionBackbufferToPresent(recorder, backbuffer)
-    [EditorModule] → Mark surfaces presentable
+    [EditorModule] → Compositor::OnCompositing()
+        [Compositor] → For each surface:
+            Get backbuffer framebuffer from current swapchain slot
+            Acquire command recorder
+            TrackBackbufferFramebuffer(recorder, framebuffer)
+            [EditorModule] → For each view targeting this surface:
+                [EditorView] → Composite(recorder, backbuffer_viewport)
+                    [Compositor] → CompositeToRegion() or CompositeFullscreen()
+                        Blit view's offscreen color texture → backbuffer region
+            TransitionBackbufferToPresent(recorder, backbuffer)
+    [EditorModule] Mark surfaces presentable
 ```
 
 ### View Destruction Flow
 
 ```text
-[Interop] DestroyView(view_id)
+[UI Thread] → editor_module->DestroyView(view_id)
+    ↓ Enqueues DestroyViewCommand with target phase = kFrameStart
+    ↓ Returns immediately
+
+--- Next Frame: OnFrameStart Phase ---
+
+[Engine Thread] EditorModule::OnFrameStart()
+    ↓ Make FrameContext available to ViewManager
+    ↓ Drain kFrameStart commands (destroy commands processed first)
+    ↓ DestroyViewCommand::Execute() runs on engine thread
     ↓
-[EditorModule] → ViewManager::DestroyView(view_id)
+[ViewManager] → Lookup view by view_id
     ↓
-[ViewManager] → EditorView::ReleaseResources()
-    ↓
-[EditorView] → state = kReleasing
-    ↓ UnregisterFromRenderer()
+[EditorView] → ReleaseResources()
+    ↓ state = kReleasing
+    ↓ UnregisterFromFrameContext()
+    ↓ UnregisterFromRenderer() (remove resolver/graph from Renderer)
     ↓ Schedule deferred GPU resource release (textures, framebuffer)
     ↓ Detach camera from scene
     ↓ state = kDestroyed
     ↓
-[ViewManager] → Mark for removal
-
---- Next Frame: OnFrameStart ---
-
-[EditorModule] → ViewManager::ProcessDestroyedViews()
+[ViewManager] → Mark view for removal in destroyed_views_ set
     ↓
-[ViewManager] → Remove destroyed view entries
-    ↓ std::unique_ptr<EditorView> destroyed
+[EditorModule] ViewManager::FinalizeViews()
+    ↓ Processes destroyed views and removes them from registry
+    ↓ std::unique_ptr<EditorView> destroyed (entry removed)
+    ↓ GPU resources released (on next frame when in-flight work completes)
 ```
 
 ---
@@ -459,7 +626,7 @@ editor_module->SetViewRenderGraph(pip_view, wireframe_graph);
 
 ---
 
-## Key Improvements Over Current Design
+## Key Improvements Over Old Design
 
 | Aspect | Current | Refactored |
 |--------|---------|------------|
@@ -472,188 +639,6 @@ editor_module->SetViewRenderGraph(pip_view, wireframe_graph);
 | **Flexibility** | Single global graph | Per-view customizable graphs |
 | **Testability** | Monolith, hard to test | Components easily mockable |
 | **Maintenance** | 700-line God class | Clean separation, 4 focused components |
-
----
-
-## Migration Path
-
-### Phase 1: Introduce Core Classes (No Behavior Change)
-
-1. Create EditorView, ViewRenderer, ViewManager skeletons
-2. Keep existing EditorModule logic intact
-3. Verify compilation, no runtime changes
-
-### Phase 2: Move View State to EditorView
-
-1. Migrate camera management to EditorView
-2. Move texture/framebuffer creation to EditorView
-3. EditorModule delegates to ViewManager for view operations
-
-### Phase 3: Implement Per-View Rendering
-
-1. Replace global RenderGraph with per-view ViewRenderer
-2. Implement view-specific render graph registration
-3. Test with single surface
-
-### Phase 4: Add Compositing Phase
-
-1. Change views to render offscreen
-2. Implement Compositing phase with blitting
-3. Test with multiple views on single surface
-
-### Phase 5: Full Multi-Surface Support
-
-1. Test multiple surfaces with multiple views
-2. Add surface invalidation handling
-3. Performance testing and optimization
-
----
-
-## Implementation Benefits
-
-### Compared to Current Design
-
-| Aspect | Current | Refactored | Improvement |
-|--------|---------|------------|-------------|
-| **View Concept** | None - views implicit in surface mapping | `EditorView` first-class entity | Clear abstractions |
-| **Resource Ownership** | Scattered maps, unclear lifecycle | Clear ownership: Views (offscreen), Compositor (backbuffers) | Maintainable |
-| **Multi-Surface Support** | Shared RenderGraph, crashes with multiple surfaces | Per-view ViewRenderer + Compositor, scales cleanly | Stable |
-| **Lifecycle Management** | Implicit cleanup in scattered code | Explicit states + phase hooks | Debuggable |
-| **Compositing** | Direct to backbuffer in Render phase | Offscreen render + Compositor blits in Compositing phase | Flexible |
-| **Backbuffer Management** | Mixed with view logic | Centralized in EditorCompositor | Decoupled |
-| **Render Graph Flexibility** | Single global graph | Per-view customizable graphs | Extensible |
-| **Testability** | Monolith, hard to test | Components easily mockable | Better coverage |
-| **Code Organization** | 700-line God class | Clean separation (~200 lines per component) | Maintainable |
-
-### Performance Impact
-
-No Performance Penalty:
-
-- Same number of draw calls
-- Same GPU work
-- Additional CPU overhead per view: ~0.1ms (negligible)
-
-Potential Improvements:
-
-- View pooling → eliminate allocation overhead
-- Shared render graphs → reduce pass creation
-- Frustum culling per view → reduce draw calls
-
----
-
-## Success Criteria
-
-### Must Have (MVP)
-
-✅ Multiple surfaces render correctly without crashes
-✅ Multiple views per surface work (PiP, overlays)
-✅ View creation/destruction is stable
-✅ Surface resize doesn't crash
-✅ Resources are properly cleaned up (no leaks)
-
-### Should Have
-
-✅ Performance parity with current implementation
-✅ Clear public API for Interop layer
-✅ Comprehensive documentation
-✅ Unit tests for all components
-
-### Nice to Have
-
-✅ View pooling for performance
-✅ Render graph library (wireframe, debug modes)
-✅ Camera control API
-✅ Input handling integration (centralized routing)
-
----
-
-## Risk Mitigation
-
-### Identified Risks
-
-1. **Regression in single-surface case** - Existing functionality breaks
-2. **Performance degradation** - More overhead per view
-3. **Interop API breakage** - .NET code needs updates
-4. **Resource leaks** - Improper deferred cleanup scheduling
-
-### Mitigations
-
-| Risk | Mitigation Strategy |
-|------|-------------------|
-| **Regression** | Comprehensive unit and integration tests; gradual rollout with feature flags |
-| **Performance** | Performance benchmarking in each phase; profiles show negligible overhead |
-| **API Breakage** | Version compatibility layer; deprecation warnings during transition |
-| **Resource Leaks** | Strict review of deferred cleanup patterns; memory profiling in testing |
-
----
-
-## Future Enhancements
-
-### View Pooling
-
-Maintain a pool of pre-allocated EditorView instances for fast view creation/destruction cycles, eliminating allocation overhead.
-
-### View Templates
-
-Pre-configured view types (e.g., "default", "wireframe", "unlit", "debug_overlay") for common scenarios.
-
-### View Groups
-
-Batch operations on multiple views for efficient visibility toggling, resource sharing, or synchronized updates.
-
-### Render Graph Library
-
-Standard render graphs for common use cases: solid shading, wireframe, unlit, debug visualization modes.
-
-### Camera Control API
-
-Public interface for external camera manipulation, enabling script-driven or tool-driven camera control.
-
-### Scene Filtering
-
-Per-view scene subset rendering (visibility culling, layer filtering) for specialized views.
-
----
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-- EditorView lifecycle state transitions
-- ViewManager view-to-surface association logic
-- ViewRenderer configuration and registration
-
-### Integration Tests
-
-- Single surface, single view (baseline)
-- Single surface, multiple views (PiP scenario)
-- Multiple surfaces, one view each (multi-panel)
-- Surface resize with active views
-- View creation/destruction during frame
-
-### Performance Tests
-
-- 10 views on single surface
-- 5 surfaces with 2 views each
-- View creation/destruction every frame (stress test)
-
----
-
-## Conclusion
-
-This refactored architecture provides:
-
-✅ **Clear Separation**: View/Rendering/Surface/Input management decoupled
-✅ **Explicit Lifecycle**: Every view state is tracked and managed
-✅ **Robust Multi-Surface**: Per-view resources scale to any number of surfaces
-✅ **Flexible Rendering**: Customizable render graphs per view
-✅ **Centralized Input**: Routing decoupled from Interop layer
-✅ **Maintainable Code**: Clean separation vs 700-line monolith
-✅ **Future-Proof**: Easy to extend with pooling, templates, groups
-
-The design follows proven patterns from MultiView while adapting to the editor's unique requirements for dynamic view management, flexible surface composition, and robust input handling.
 
 ---
 
