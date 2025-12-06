@@ -122,7 +122,7 @@ void EditorView::OnSceneMutation() {
   // Update camera for this frame
   UpdateCameraForFrame();
 
-  LOG_F(INFO,
+  LOG_F(2,
         "EditorView '{}' OnSceneMutation: Updating ViewContext with size {}x{}",
         config_.name, width_, height_);
 
