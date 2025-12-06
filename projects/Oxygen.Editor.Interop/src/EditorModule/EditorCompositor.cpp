@@ -315,7 +315,7 @@ namespace oxygen::interop::module {
 
     // Transition the source texture back to its original state.
     DLOG_F(3, "transition source: -> {}", src_initial);
-    recorder.RequireResourceState(*backbuffer, src_initial);
+    recorder.RequireResourceState(source_texture, src_initial);
 
     // Transition backbuffer to Present
     DLOG_F(3, "transition target: -> {}", graphics::ResourceStates::kPresent);
