@@ -88,12 +88,15 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
     uint32_t i1 = i0 + 1;
     uint32_t i2 = i0 + 2;
     uint32_t i3 = i0 + 3;
+    // Wind side quads CCW when viewed from outside (match engine CCW convention)
+    // First triangle: bottom_current (i0), top_current (i1), bottom_next (i2)
     indices.push_back(i0);
-    indices.push_back(i2);
-    indices.push_back(i1);
     indices.push_back(i1);
     indices.push_back(i2);
+    // Second triangle: top_current (i1), top_next (i3), bottom_next (i2)
+    indices.push_back(i1);
     indices.push_back(i3);
+    indices.push_back(i2);
   }
   // Head (cone)
   uint32_t cone_base_start = static_cast<uint32_t>(vertices.size());
@@ -127,10 +130,10 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
     .color = head_color,
   });
   uint32_t apex_index = static_cast<uint32_t>(vertices.size() - 1);
-  // Cone side indices
+  // Cone side indices — order base, apex, next_base so side triangles are CCW
   for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(apex_index);
     indices.push_back(cone_base_start + i);
+    indices.push_back(apex_index);
     indices.push_back(cone_base_start + i + 1);
   }
   // Cone base center

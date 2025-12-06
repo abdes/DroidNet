@@ -77,18 +77,18 @@ auto oxygen::data::MakeCubeMeshAsset()
   };
   std::vector<uint32_t> indices = {
     // clang-format off
-    // -Z face (back)
-    0, 1, 2, 0, 2, 3,
+    // -Z face (back) - triangle winding must produce outward normal = -Z
+    0, 2, 1, 0, 3, 2,
     // +Z face (front)
     4, 5, 6, 4, 6, 7,
-    // -X face (left)
-    8, 9,10, 8,10,11,
+    // -X face (left) - triangle winding must produce outward normal = -X
+    8,10,9, 8,11,10,
     // +X face (right)
     12,13,14,12,14,15,
     // -Y face (bottom)
     16,17,18,16,18,19,
-    // +Y face (top)
-    20,21,22,20,22,23,
+    // +Y face (top) - triangle winding must produce outward normal = +Y
+    20,22,21,20,23,22,
     // clang-format off
   };
 

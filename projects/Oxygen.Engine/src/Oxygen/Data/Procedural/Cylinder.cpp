@@ -120,12 +120,15 @@ auto oxygen::data::MakeCylinderMeshAsset(
     uint32_t i1 = i0 + 1;
     uint32_t i2 = i0 + 2;
     uint32_t i3 = i0 + 3;
+    // Ensure side triangles are wound CCW when viewed from outside so
+    // the computed normals point outward. Use (bottom_current, top_current,
+    // bottom_next) and (top_current, top_next, bottom_next).
     indices.push_back(i0);
-    indices.push_back(i2);
-    indices.push_back(i1);
     indices.push_back(i1);
     indices.push_back(i2);
+    indices.push_back(i1);
     indices.push_back(i3);
+    indices.push_back(i2);
   }
   // Center vertices for caps
   uint32_t bottom_center_index = static_cast<uint32_t>(vertices.size());
@@ -153,15 +156,17 @@ auto oxygen::data::MakeCylinderMeshAsset(
     // Bottom cap
     uint32_t v0 = bottom_cap_rim_indices[i];
     uint32_t v1 = bottom_cap_rim_indices[(i + 1) % segments];
+    // Bottom cap: wind so normal points down (-Y) -> use center, current, next
     indices.push_back(bottom_center_index);
-    indices.push_back(v1);
     indices.push_back(v0);
+    indices.push_back(v1);
     // Top cap
     uint32_t v2 = top_cap_rim_indices[i];
     uint32_t v3 = top_cap_rim_indices[(i + 1) % segments];
+    // Top cap: wind so normal points up (+Y) -> use center, next, current
     indices.push_back(top_center_index);
-    indices.push_back(v2);
     indices.push_back(v3);
+    indices.push_back(v2);
   }
 
   return { { std::move(vertices), std::move(indices) } };
