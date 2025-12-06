@@ -184,4 +184,76 @@ namespace Oxygen::Interop {
     }
   }
 
+  auto EngineRunner::ShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    // Ensure called on UI thread
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"ShowViewAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto nativeId = viewId.ToNative();
+
+    // Find the EditorModule
+    auto editor_module_opt = native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      editor_module_opt->get().ShowView(nativeId);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
+  auto EngineRunner::HideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    // Ensure called on UI thread
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"HideViewAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto nativeId = viewId.ToNative();
+
+    // Find the EditorModule
+    auto editor_module_opt = native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      editor_module_opt->get().HideView(nativeId);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+  }
+
 } // namespace Oxygen::Interop

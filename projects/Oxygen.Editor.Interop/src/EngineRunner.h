@@ -196,6 +196,27 @@ namespace Oxygen::Interop {
     auto DestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
       -> System::Threading::Tasks::Task<bool>^;
 
+      /// <summary>
+    /// Queue a Show operation for a managed `ViewIdManaged`.
+    /// This is a fire-and-forget operation: the native module will execute the
+    /// associated show command on the engine thread during the next frame so the
+    /// change is applied in-frame and does not destabilize rendering.
+    /// Returns a Task<bool> that completes immediately indicating whether the
+    /// request was accepted (not whether the view has finished showing).
+    /// </summary>
+    auto ShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+      -> System::Threading::Tasks::Task<bool>^;
+
+    /// <summary>
+    /// Queue a Hide operation for a managed `ViewIdManaged`.
+    /// This operation is enqueued and executed on the engine thread during the
+    /// next frame (fire-and-forget). The returned Task<bool> completes quickly
+    /// to indicate the request was accepted; it does not imply the hide has
+    /// already taken effect.
+    /// </summary>
+    auto HideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+      -> System::Threading::Tasks::Task<bool>^;
+
   private:
     // Encapsulated logging handler (forward-declared above). This hides any
     // references to native logging libraries from this header.

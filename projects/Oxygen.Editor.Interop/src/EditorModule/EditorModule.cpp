@@ -9,6 +9,8 @@
 #include "pch.h"
 
 #include "EditorModule/EditorCommand.h"
+#include "Commands/ShowViewCommand.h"
+#include "Commands/HideViewCommand.h"
 #include "EditorModule/EditorCompositor.h"
 #include "EditorModule/EditorModule.h"
 #include "EditorModule/SurfaceRegistry.h"
@@ -316,6 +318,25 @@ namespace oxygen::interop::module {
     if (view_manager_) {
       view_manager_->DestroyView(view_id);
     }
+  }
+
+  void EditorModule::ShowView(ViewId view_id) {
+    if (!view_manager_) return;
+
+    // Create a command that will execute on the engine thread during
+    // OnSceneMutation. This ensures the operation is executed in-frame and
+    // avoids immediate state transitions from off-thread callers.
+    auto cmd = std::make_unique<ShowViewCommand>(view_manager_.get(), view_id);
+    Enqueue(std::move(cmd));
+    LOG_F(INFO, "ShowView: queued show request for view {}", view_id.get());
+  }
+
+  void EditorModule::HideView(ViewId view_id) {
+    if (!view_manager_) return;
+
+    auto cmd = std::make_unique<HideViewCommand>(view_manager_.get(), view_id);
+    Enqueue(std::move(cmd));
+    LOG_F(INFO, "HideView: queued hide request for view {}", view_id.get());
   }
 
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
