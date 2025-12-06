@@ -222,12 +222,12 @@ def render_cpp_root_signature(root_sig: List[Dict[str, Any]]) -> Dict[str, str]:
                 space_n = _num(r.get("register_space"))
                 nd = r.get("num_descriptors")
                 if isinstance(nd, str) and nd == "unbounded":
-                    nd_v = "std::numeric_limits<uint32_t>::max()"
+                    nd_v = "(std::numeric_limits<uint32_t>::max)()"
                 else:
                     try:
                         nd_v = f"{int(nd)}U"
                     except Exception:
-                        nd_v = "std::numeric_limits<uint32_t>::max()"
+                        nd_v = "(std::numeric_limits<uint32_t>::max)()"
                 range_lines.append(
                     f"    RootParamRange{{ {rt_v}, {base}U, {space_n}U, {nd_v} }},"
                 )

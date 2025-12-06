@@ -65,7 +65,7 @@ struct RootParamDesc {
 
 
 static constexpr std::array<RootParamRange, 1> kRootParam0Ranges = { {
-    RootParamRange{ RangeType::SRV, 0U, 0U, std::numeric_limits<uint32_t>::max() },
+    RootParamRange{ RangeType::SRV, 0U, 0U, (std::numeric_limits<uint32_t>::max)() },
 } };
 
 static constexpr std::array<RootParamRange, 1> kRootParam1Ranges = { {
