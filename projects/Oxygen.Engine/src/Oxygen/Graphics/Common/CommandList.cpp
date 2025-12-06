@@ -66,3 +66,10 @@ void CommandList::OnExecuted()
   }
   state_ = State::kFree;
 }
+
+void CommandList::OnFailed() noexcept
+{
+  state_ = State::kFree;
+  DLOG_F(WARNING, "'{}' errored, and its state will be force reset to 'Free'",
+    GetName());
+}
