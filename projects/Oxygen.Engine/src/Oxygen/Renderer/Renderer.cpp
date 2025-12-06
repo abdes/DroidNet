@@ -258,8 +258,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
         std::shared_lock lock(view_registration_mutex_);
         const auto resolver_it = view_resolvers_.find(view_ctx.id);
         if (resolver_it == view_resolvers_.end()) {
-          LOG_F(
-            WARNING, "View {} has no resolver; skipping", view_ctx.id.get());
+          LOG_F(2, "View {} has no resolver; skipping", view_ctx.id.get());
           continue;
         }
         resolver_copy = resolver_it->second; // copy function
