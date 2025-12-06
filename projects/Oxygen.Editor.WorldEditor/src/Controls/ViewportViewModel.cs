@@ -14,6 +14,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Documents;
+using Oxygen.Interop;
 using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.WorldEditor.Controls;
@@ -98,6 +99,14 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// Gets the unique viewport identifier.
     /// </summary>
     public Guid ViewportId { get; } = Guid.NewGuid();
+
+    /// <summary>
+    /// If the UI requested an engine view for this viewport, the engine-assigned
+    /// identifier will be stored here so the view can be destroyed later during
+    /// teardown. Managed and owned by the UI layer — engine surface/lease code is
+    /// unaffected by this property.
+    /// </summary>
+    public ViewIdManaged AssignedViewId { get; set; } = ViewIdManaged.Invalid;
 
     /// <summary>
     /// Gets the engine service reference, enabling views to request surfaces.

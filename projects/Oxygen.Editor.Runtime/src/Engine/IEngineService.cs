@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop.World;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -103,4 +104,19 @@ public interface IEngineService : IAsyncDisposable
     /// </summary>
     /// <param name="verbosity">Logging verbosity, typically between MinLoggingVerbosity and MaxLoggingVerbosity.</param>
     public void SetEngineLoggingVerbosity(int verbosity);
+
+    /// <summary>
+    /// Create an Editor view in the native engine using the supplied managed
+    /// <see cref="ViewConfigManaged"/>. Returns a Task that completes with the
+    /// engine-assigned view id on success or an invalid id on failure.
+    /// </summary>
+    /// <param name="config">Configuration used to create the view.</param>
+    /// <param name="cancellationToken">Optional cancellation token.</param>
+    public System.Threading.Tasks.Task<ViewIdManaged> CreateViewAsync(ViewConfigManaged config, System.Threading.CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Destroy a previously created engine view. Returns true if the destroy
+    /// request was accepted by the native engine.
+    /// </summary>
+    public System.Threading.Tasks.Task<bool> DestroyViewAsync(ViewIdManaged viewId, System.Threading.CancellationToken cancellationToken = default);
 }
