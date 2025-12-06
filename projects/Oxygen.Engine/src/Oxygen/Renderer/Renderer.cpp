@@ -385,6 +385,11 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
         continue;
       }
 
+      auto update_view_state = [&](ViewId view_id, bool success) -> void {
+        std::unique_lock state_lock(view_state_mutex_);
+        view_ready_states_[view_id] = success;
+      };
+
       // Prepare and wire per-view SceneConstants and populate the
       // render_context.current_view when available. The helper handles
       // the resolved/prepared checks, logging and buffer writes.
@@ -392,7 +397,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
             view_id, context, *render_context_)) {
         // Failure already logged inside helper; mark the view failed and
         // skip this view's render graph.
-        FinalizeViewState(view_id, false);
+        update_view_state(view_id, false);
         continue;
       }
 
@@ -401,7 +406,7 @@ auto Renderer::OnRender(FrameContext& context) -> co::Co<>
         view_id, factory, *render_context_, *recorder);
 
       // Finalize state and instrumentation
-      FinalizeViewState(view_id, rv);
+      update_view_state(view_id, rv);
     } catch (const std::exception& ex) {
       LOG_F(ERROR, "Failed to render view {}: {}", view_id.get(), ex.what());
       std::unique_lock state_lock(view_state_mutex_);
@@ -541,7 +546,7 @@ auto Renderer::PrepareAndWireSceneConstantsForView(ViewId view_id,
 
   if (resolved_it == resolved_views_.end()
     || prepared_it == prepared_frames_.end()) {
-    LOG_F(ERROR, "No cached data for view {} (resolved={}, prepared={})",
+    LOG_F(2, "No cached data for view {} (resolved={}, prepared={})",
       view_id.get(), resolved_it != resolved_views_.end(),
       prepared_it != prepared_frames_.end());
     return false;
@@ -613,21 +618,6 @@ auto Renderer::ExecuteRenderGraphForView(ViewId view_id,
     LOG_F(ERROR, "RenderGraph execution for view {} failed: unknown error",
       view_id.get());
     co_return false;
-  }
-}
-
-auto Renderer::FinalizeViewState(ViewId view_id, bool success) -> void
-{
-  DLOG_SCOPE_FUNCTION(3);
-
-  {
-    std::unique_lock state_lock(view_state_mutex_);
-    view_ready_states_[view_id] = success;
-  }
-  if (success) {
-    DLOG_F(2, "view rendered successfully");
-  } else {
-    LOG_F(WARNING, "Failed to render view {}", view_id);
   }
 }
 

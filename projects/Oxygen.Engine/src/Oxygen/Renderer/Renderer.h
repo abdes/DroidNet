@@ -214,10 +214,6 @@ private:
     const RenderGraphFactory& factory, RenderContext& render_context,
     graphics::CommandRecorder& recorder) -> co::Co<bool>;
 
-  // Set final state for a view after render (success or failure) and emit
-  // logs.
-  auto FinalizeViewState(ViewId view_id, bool success) -> void;
-
   std::weak_ptr<Graphics> gfx_weak_; // New AsyncEngine path
 
   // Managed draw item container removed (AoS path deprecated).
