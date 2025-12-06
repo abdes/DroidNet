@@ -38,21 +38,28 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ViewManager)
   OXYGEN_MAKE_NON_MOVABLE(ViewManager)
 
-  // Async: View creation (callback invoked on engine thread with engine-assigned ViewId)
+  // Async: View creation (callback invoked on engine thread with
+  // engine-assigned ViewId)
   void CreateViewAsync(EditorView::Config config, OnViewCreated callback);
 
   // Sync: Fire-and-forget operations
-  void DestroyView(ViewId engine_id);       // Destroys completely
-  bool RegisterView(ViewId engine_id);      // Add to FrameContext (returns false if bad ID)
-  void UnregisterView(ViewId engine_id);    // Remove from FrameContext (keeps resources)
+  void DestroyView(ViewId engine_id); // Destroys completely
+  bool RegisterView(
+      ViewId engine_id); // Add to FrameContext (returns false if bad ID)
+  void UnregisterView(
+      ViewId engine_id); // Remove from FrameContext (keeps resources)
 
   // Engine thread hook (called by EditorModule::OnFrameStart)
-  void OnFrameStart(scene::Scene& scene, engine::FrameContext& frame_ctx);
+  void OnFrameStart(scene::Scene &scene, engine::FrameContext &frame_ctx);
+
+  // Called when a surface is resized to update dependent views
+  void OnSurfaceResized(graphics::Surface *surface);
 
   // Accessors
-  auto GetView(ViewId engine_id) -> EditorView*;
-  auto GetAllViews() -> std::vector<EditorView*>;              // All views
-  auto GetAllRegisteredViews() -> std::vector<EditorView*>;    // Only views in FrameContext
+  auto GetView(ViewId engine_id) -> EditorView *;
+  auto GetAllViews() -> std::vector<EditorView *>; // All views
+  auto GetAllRegisteredViews()
+      -> std::vector<EditorView *>; // Only views in FrameContext
 
 private:
   struct PendingCreate {
@@ -62,7 +69,7 @@ private:
 
   struct ViewEntry {
     std::unique_ptr<EditorView> view;
-    bool is_registered;  // Is in FrameContext
+    bool is_registered; // Is in FrameContext
   };
 
   auto DrainPendingCreates() -> std::vector<PendingCreate>;
