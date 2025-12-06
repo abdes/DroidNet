@@ -501,12 +501,26 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
   const auto& fb_desc = view_ctx.output->GetDescriptor();
   for (const auto& attachment : fb_desc.color_attachments) {
     if (attachment.texture) {
-      recorder.BeginTrackingResourceState(
-        *attachment.texture, graphics::ResourceStates::kPresent, true);
+      // Use the texture's own descriptor initial_state when available.
+      // Previously we assumed swapchain backbuffers for all color
+      // attachments and used kPresent which breaks for render-to-texture
+      // targets (e.g. EditorView). Honoring the texture descriptor avoids
+      // conflicting initial states being tracked and prevents invalid
+      // barrier sequences.
+      auto initial = attachment.texture->GetDescriptor().initial_state;
+      if (initial == graphics::ResourceStates::kUnknown
+        || initial == graphics::ResourceStates::kUndefined) {
+        initial = graphics::ResourceStates::kPresent;
+      }
+      recorder.BeginTrackingResourceState(*attachment.texture, initial, true);
+      LOG_F(INFO, "Renderer: BeginTracking color attachment {} initial={}",
+        static_cast<const void*>(attachment.texture.get()),
+        nostd::to_string(initial));
       recorder.RequireResourceState(
         *attachment.texture, graphics::ResourceStates::kRenderTarget);
     }
   }
+
   if (fb_desc.depth_attachment.texture) {
     recorder.BeginTrackingResourceState(*fb_desc.depth_attachment.texture,
       graphics::ResourceStates::kDepthWrite, true);
