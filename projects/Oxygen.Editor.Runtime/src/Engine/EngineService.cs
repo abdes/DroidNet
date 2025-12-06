@@ -357,8 +357,6 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
                 // See EngineRunner.cpp for the implementation of the inverse transform.
                 initialPixelWidth = (uint)Math.Max(1, Math.Round(panel.ActualWidth * raster));
                 initialPixelHeight = (uint)Math.Max(1, Math.Round(panel.ActualHeight * raster));
-                this.logger.LogWarning("AttachLeaseAsync: requesting initial pixels {0}x{1} (Actual={2}x{3} dips raster={4})",
-                    initialPixelWidth, initialPixelHeight, panel.ActualWidth, panel.ActualHeight, raster);
             }
             catch
             {
