@@ -115,7 +115,12 @@ namespace oxygen::interop::module
 
     // Async view creation (exposed for interop layer)
     void CreateViewAsync(EditorView::Config config,
-                         ViewManager::OnViewCreated callback);
+               ViewManager::OnViewCreated callback);
+
+    // Destroy a previously created view. This forwards to the ViewManager
+    // and is safe to call from interop. If the view id is invalid this is
+    // a no-op.
+    void DestroyView(ViewId view_id);
 
   private:
     void ProcessSurfaceRegistrations();

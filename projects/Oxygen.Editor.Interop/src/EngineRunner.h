@@ -188,6 +188,14 @@ namespace Oxygen::Interop {
     auto CreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
       -> System::Threading::Tasks::Task<ViewIdManaged>^;
 
+    /// <summary>
+    /// Destroy a view previously created in the engine. This attempts to
+    /// remove the view from the editor module and returns whether the
+    /// request was accepted.
+    /// </summary>
+    auto DestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+      -> System::Threading::Tasks::Task<bool>^;
+
   private:
     // Encapsulated logging handler (forward-declared above). This hides any
     // references to native logging libraries from this header.
