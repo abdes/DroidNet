@@ -87,7 +87,12 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
                 this.engineRunner = new EngineRunner();
                 if (loggerFactory is { } factory)
                 {
-                    var loggingConfig = new LoggingConfig { Verbosity = 3, IsColored = false };
+                    var loggingConfig = new LoggingConfig
+                    {
+                        Verbosity = 0,
+                        IsColored = false,
+                        ModuleOverrides = string.Empty, // "**/Renderer/*=0,**/*Interop/**/*=3,**/Graphics/**/Command*=0",
+                    };
                     var engineLogger = factory.CreateLogger("Oxygen.Engine");
                     _ = this.engineRunner.ConfigureLogging(loggingConfig, engineLogger);
                 }
