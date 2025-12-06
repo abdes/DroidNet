@@ -55,6 +55,7 @@ public:
   OXGN_GFX_API virtual auto OnEndRecording() -> void;
   OXGN_GFX_API virtual auto OnSubmitted() -> void;
   OXGN_GFX_API virtual auto OnExecuted() -> void;
+  OXGN_GFX_API virtual auto OnFailed() noexcept -> void;
 
   enum class State : int8_t {
     kInvalid = -1, //<! Invalid state
