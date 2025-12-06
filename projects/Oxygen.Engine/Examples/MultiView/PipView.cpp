@@ -28,8 +28,8 @@
 namespace oxygen::examples::multiview {
 
 namespace {
-  constexpr float kPipWidthRatio = 0.33F;
-  constexpr float kPipHeightRatio = 0.33F;
+  constexpr float kPipWidthRatio = 0.45F;
+  constexpr float kPipHeightRatio = 0.45F;
   constexpr float kPipMargin = 24.0F;
 }
 
@@ -37,7 +37,7 @@ PipView::PipView()
   : DemoView(ViewConfig {
       .name = "WireframePiP",
       .purpose = "PiP_Wireframe",
-      .clear_color = graphics::Color { 0.03F, 0.03F, 0.03F, 1.0F },
+      .clear_color = graphics::Color { 0.1F, 0.1F, 0.1F, 1.0F },
       .wireframe = true,
     })
 {
@@ -48,7 +48,7 @@ void PipView::Initialize(scene::Scene& scene)
   EnsureCamera(scene, "PiPCamera");
 
   // Position the PiP camera
-  constexpr glm::vec3 pip_position = glm::vec3(-0.8F, 0.6F, 0.5F);
+  constexpr glm::vec3 pip_position = glm::vec3(-5.0F, 0.4F, 4.0F);
   CameraNodeRef().GetTransform().SetLocalPosition(pip_position);
 
   // Compute LookAt rotation: point camera from pip_position toward target.
