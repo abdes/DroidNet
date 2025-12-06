@@ -10,6 +10,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "EditorModule/SurfaceRegistry.h"
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -32,7 +33,8 @@ namespace oxygen::interop::module {
   class EditorCompositor {
   public:
     explicit EditorCompositor(std::shared_ptr<oxygen::Graphics> graphics,
-      ViewManager& view_manager);
+      ViewManager& view_manager,
+      SurfaceRegistry& registry);
     ~EditorCompositor();
 
     OXYGEN_MAKE_NON_COPYABLE(EditorCompositor)
@@ -63,6 +65,7 @@ namespace oxygen::interop::module {
 
     std::weak_ptr<oxygen::Graphics> graphics_;
     oxygen::observer_ptr<ViewManager> view_manager_;
+    oxygen::observer_ptr<SurfaceRegistry> registry_;
   };
 
 } // namespace oxygen::interop::module
