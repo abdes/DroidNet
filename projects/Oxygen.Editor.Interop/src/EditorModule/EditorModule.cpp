@@ -11,6 +11,7 @@
 #include "EditorModule/EditorCommand.h"
 #include "Commands/ShowViewCommand.h"
 #include "Commands/HideViewCommand.h"
+#include "Commands/DestroyViewCommand.h"
 #include "EditorModule/EditorCompositor.h"
 #include "EditorModule/EditorModule.h"
 #include "EditorModule/SurfaceRegistry.h"
@@ -315,9 +316,15 @@ namespace oxygen::interop::module {
   }
 
   void EditorModule::DestroyView(ViewId view_id) {
-    if (view_manager_) {
-      view_manager_->DestroyView(view_id);
-    }
+    if (!view_manager_) return;
+
+    // Enqueue a destroy command so the actual destruction runs on the engine
+    // thread and cannot race with frame-phase iteration (OnSceneMutation /
+    // OnPreRender). This avoids use-after-free when the UI requests
+    // destruction from a different thread.
+    auto cmd = std::make_unique<DestroyViewCommand>(view_manager_.get(), view_id);
+    Enqueue(std::move(cmd));
+    LOG_F(INFO, "DestroyView: queued destroy request for view {}", view_id.get());
   }
 
   void EditorModule::ShowView(ViewId view_id) {
