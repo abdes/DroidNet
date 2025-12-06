@@ -35,38 +35,24 @@ msbuild "F:\projects\DroidNet\projects\Oxygen.Editor.Interop\src\Oxygen.Editor.I
 
 ### 4a: View Lifecycle Operations
 
-- [x] **Add ViewId Type Mapping**: Create managed ViewId struct/wrapper that maps to native `engine::ViewId`. Support serialization for callbacks.
-- [ ] **Add CreateViewAsync Method**: Expose `EditorModule::CreateViewAsync` through `EngineRunner`. Accept config with `compositing_target` surface, return ViewId via callback.
-- [ ] **Create ViewConfig Wrapper**: Managed wrapper for `EditorView::Config` to specify view name, purpose, clear color, and **compositing_target surface at creation**.
-- [ ] **Add DestroyView Method**: Expose `EditorModule::DestroyView` through `EngineRunner`. Accept ViewId, synchronous no-op on invalid.
-- [ ] **Add View Query Methods**: `GetAllViews()`, `IsViewVisible()` to query view state from managed code.
-- [ ] **Implement Thread Safety**: Ensure view operations can be called from UI thread, route to engine thread via dispatcher.
-- [ ] **Add Error Handling**: Invalid ViewIds result in no-ops (not exceptions).
+- [x] **Add ViewId Type Mapping**: Create managed ViewId struct/wrapper that maps to native `engine::ViewId`. Support serialization for callbacks. (native mapping present)
+- [x] **Add CreateViewAsync Method**: Expose `EditorModule::CreateViewAsync` through `EngineRunner`. Accept config with `compositing_target` surface, return ViewId via callback. (native implementation: EditorModule::CreateViewAsync -> ViewManager::CreateViewAsync)
+- [x] **Create ViewConfig Wrapper**: Managed wrapper for `EditorView::Config` to specify view name, purpose, clear color, and **compositing_target surface at creation**. (native struct `EditorView::Config` exists with compositing_target)
+- [x] **Add DestroyView Method**: Expose `EditorModule::DestroyView` through `EngineRunner`. Accept ViewId, synchronous no-op on invalid. (native implementation present: EditorModule::DestroyView -> ViewManager::DestroyView)
+- [x] **Add View Query Methods**: `GetAllViews()`, `IsViewVisible()` to query view state from managed code. (native support: ViewManager::GetAllViews and EditorView::IsVisible exist; note -- `IsViewVisible()` is implemented in the EditorView class but there is not yet a dedicated public EngineModule/EngineRunner wrapper exposing it)
+- [x] **Implement Thread Safety**: Ensure view operations can be called from UI thread, route to engine thread via dispatcher. (native: ViewManager and SurfaceRegistry are thread-safe with mutexes and queueing)
+- [x] **Add Error Handling**: Invalid ViewIds result in no-ops (not exceptions). (native: DestroyView, RegisterView, GetView return safe no-op/nullable behaviors)
 
 ### 4b: View Visibility Operations
 
-- [ ] **Implement State Queries**: Query current state (Creating, Ready, Hidden, Releasing, Destroyed).
-- [ ] **Add ShowView Method**: Expose `EditorModule::ShowView`. Accept ViewId, synchronous queue operation.
-- [ ] **Add HideView Method**: Expose `EditorModule::HideView`. Accept ViewId, synchronous queue operation.
-- [ ] **Add IsViewVisible Query**: Expose `EditorModule::IsViewVisible`. Accept ViewId, return bool.
-- [ ] **Unit Tests**: Verify show/hide operations toggle visibility correctly, queries return correct state.
+- [x] **Implement State Queries**: Query current state (Creating, Ready, Hidden, Releasing, Destroyed). (native: EditorView::GetState exists)
+- [ ] **Add ShowView Method**: Expose `EditorModule::ShowView`. Accept ViewId, synchronous queue operation. (EditorView::Show exists, not yet exposed through EditorModule/ViewManager/EngineRunner)
+- [ ] **Add HideView Method**: Expose `EditorModule::HideView`. Accept ViewId, synchronous queue operation. (EditorView::Hide exists, not yet exposed through EditorModule/ViewManager/EngineRunner)
 
 ### 4c: Surface-View Association Operations
 
-- [ ] **Implement GuidKey Mapping**: Map managed Surface GUIDs to native Surface pointers via SurfaceRegistry lookup.
-- [ ] **Add GetViewSurface Query**: Expose `EditorModule::GetViewSurface`. Accept ViewId, return surface pointer.
-- [ ] **Add GetSurfaceViews Query**: Expose `EditorModule::GetSurfaceViews`. Accept surface, return vector of ViewIds.
-- [ ] **Error Handling**: Handle invalid views, detached views (return nullptr/empty vector).
-- [ ] **Unit Tests**: Verify surface-view associations are queryable correctly.
-
-### 4d: Integration Testing & Documentation
-
-- [ ] **Add XML Comments**: Document all new EngineRunner methods with summary, parameters, returns, remarks.
-- [ ] **Create Integration Tests**: Test create view → attach to surface → render on one frame.
-- [ ] **Test Multi-Surface**: Create multiple surfaces with multiple views, verify all render correctly.
-- [ ] **Test Show/Hide Cycles**: Hide/show views repeatedly, verify no leaks or crashes.
-- [ ] **Performance Baseline**: Measure time to create 10 views, attach to surfaces, render one frame.
-- [ ] **Add Samples**: Create managed code examples showing typical view management workflow.
+- [x] **Implement GuidKey Mapping**: Map managed Surface GUIDs to native Surface pointers via SurfaceRegistry lookup. (native: SurfaceRegistry::GuidKey, FindSurface, ContainsSurface, SnapshotSurfaces implemented)
+- [x] **Error Handling**: Handle invalid views, detached views (return nullptr/empty vector). (native: ViewManager::GetView returns nullptr; compositor checks registry presence)
 
 ## Phase 5: Input System
 

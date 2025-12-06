@@ -199,8 +199,12 @@ sequenceDiagram
     loop For each surface
         EM->>EM: Get cached framebuffer[backbuffer_index]
 
-        EM->>VM: GetViewsForSurface(surface)
-        VM-->>EM: view_ids[]
+        EM->>VM: GetAllRegisteredViews()
+        VM-->>EM: registered_views[]
+
+        %% The EditorModule filters the registered views for this surface by
+        %% checking each EditorView's config.compositing_target (no dedicated helper API)
+        EM->>EM: Filter registered_views[] where view.GetConfig().compositing_target == surface -> view_ids[]
 
         loop For each view_id
             EM->>FC: SetViewOutput(view_id, framebuffer)
@@ -412,8 +416,11 @@ sequenceDiagram
     SR->>Win: Native resize
     Win-->>SR: New backbuffers
 
-    EM->>VM: GetViewsForSurface(surface)
-    VM-->>EM: affected_views[]
+    EM->>VM: GetAllViews()
+    VM-->>EM: all_views[]
+
+    %% The engine finds affected views by checking view.GetConfig().compositing_target == surface
+    EM->>EM: Filter all_views[] where view.GetConfig().compositing_target == surface -> affected_views[]
 
     Note over EM: Continue to OnSceneMutation
 
