@@ -165,8 +165,8 @@ auto Renderer::RegisterView(
   std::unique_lock lock(view_registration_mutex_);
   view_resolvers_.insert_or_assign(view_id, std::move(resolver));
   render_graphs_.insert_or_assign(view_id, std::move(factory));
-  LOG_F(INFO, "[Renderer] RegisterView: view_id={}, total_views={}",
-    view_id.get(), render_graphs_.size());
+  LOG_F(INFO, "RegisterView: view_id={}, total_views={}", view_id.get(),
+    render_graphs_.size());
 }
 
 auto Renderer::UnregisterView(ViewId view_id) -> void
@@ -180,8 +180,7 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
   }
 
   LOG_F(INFO,
-    "[Renderer] UnregisterView: view_id={}, removed_resolver={}, "
-    "removed_factory={}",
+    "UnregisterView: view_id={}, removed_resolver={}, removed_factory={}",
     view_id.get(), removed_resolver, removed_graph);
 
   std::size_t pending_size = 0;
@@ -191,8 +190,7 @@ auto Renderer::UnregisterView(ViewId view_id) -> void
     pending_size = pending_cleanup_.size();
   }
 
-  LOG_F(
-    INFO, "[Renderer] UnregisterView: pending_cleanup_count={}", pending_size);
+  LOG_F(INFO, "UnregisterView: pending_cleanup_count={}", pending_size);
 
   {
     std::unique_lock state_lock(view_state_mutex_);
@@ -435,14 +433,13 @@ auto Renderer::DrainPendingViewCleanup(std::string_view reason) -> void
   {
     std::lock_guard lock(pending_cleanup_mutex_);
     if (pending_cleanup_.empty()) {
-      LOG_F(INFO, "[Renderer] Pending cleanup: none ({})", reason);
       return;
     }
     pending.swap(pending_cleanup_);
   }
 
-  LOG_F(INFO, "[Renderer] Pending cleanup: processing {} views ({})",
-    pending.size(), reason);
+  LOG_F(
+    INFO, "Pending cleanup: processing {} views ({})", pending.size(), reason);
 
   for (const auto& id : pending) {
     resolved_views_.erase(id);
@@ -517,9 +514,6 @@ auto Renderer::SetupFramebufferForView(const FrameContext& frame_context,
         initial = graphics::ResourceStates::kPresent;
       }
       recorder.BeginTrackingResourceState(*attachment.texture, initial, true);
-      LOG_F(INFO, "Renderer: BeginTracking color attachment {} initial={}",
-        static_cast<const void*>(attachment.texture.get()),
-        nostd::to_string(initial));
       recorder.RequireResourceState(
         *attachment.texture, graphics::ResourceStates::kRenderTarget);
     }
