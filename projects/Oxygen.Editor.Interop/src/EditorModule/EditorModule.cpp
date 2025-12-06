@@ -253,10 +253,26 @@ namespace oxygen::interop::module {
       auto renderer_opt = engine_->GetModule<oxygen::engine::Renderer>();
       if (renderer_opt.has_value()) {
         auto& renderer = renderer_opt->get();
-        // Iterate over all registered views and allow them to prepare for rendering
-        for (auto* view : view_manager_->GetAllRegisteredViews()) {
-          if (view) {
+        // Iterate over all registered views and allow them to prepare for rendering.
+        // Provide a rendering context for each view (frame context + graphics)
+        // so the view can update FrameContext outputs and prepare its framebuffer.
+        if (!graphics_.expired()) {
+          auto gfx = graphics_.lock();
+          for (auto* view : view_manager_->GetAllRegisteredViews()) {
+            if (!view) continue;
+
+            EditorViewContext view_ctx{ .frame_context = context, .graphics = *gfx, .recorder = nullptr };
+            view->SetRenderingContext(view_ctx);
             co_await view->OnPreRender(renderer);
+            // Clear the per-phase recorder/context pointer after PreRender
+            view->ClearPhaseRecorder();
+          }
+        } else {
+          // Fall back to calling OnPreRender without a graphics context if the
+          // Graphics instance has expired. Views which require resources will
+          // no-op in that case.
+          for (auto* view : view_manager_->GetAllRegisteredViews()) {
+            if (view) co_await view->OnPreRender(renderer);
           }
         }
       }
@@ -306,6 +322,12 @@ namespace oxygen::interop::module {
     else {
       // If our view manager is not available, invoke callback with failure
       if (callback) callback(false, kInvalidViewId);
+    }
+  }
+
+  void EditorModule::DestroyView(ViewId view_id) {
+    if (view_manager_) {
+      view_manager_->DestroyView(view_id);
     }
   }
 

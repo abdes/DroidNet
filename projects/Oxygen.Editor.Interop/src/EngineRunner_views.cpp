@@ -80,6 +80,11 @@ namespace Oxygen::Interop {
     // Convert managed config to native EditorView::Config
     oxygen::interop::module::EditorView::Config native_cfg;
     native_cfg.name = marshal_as<std::string>(cfg->Name);
+    // Defensive: if managed caller still supplied an empty string, set a
+    // clear fallback name so native logs are useful for debugging.
+    if (native_cfg.name.empty()) {
+      native_cfg.name = "EditorView:Unnamed";
+    }
     native_cfg.purpose = marshal_as<std::string>(cfg->Purpose);
     native_cfg.width = static_cast<uint32_t>(cfg->Width);
     native_cfg.height = static_cast<uint32_t>(cfg->Height);
@@ -147,6 +152,43 @@ namespace Oxygen::Interop {
     }
 
     return tcs->Task;
+  }
+
+  auto EngineRunner::DestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    -> System::Threading::Tasks::Task<bool>^
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (disposed_) {
+      throw gcnew ObjectDisposedException("EngineRunner");
+    }
+
+    // Ensure called from UI thread
+    ui_dispatcher_->VerifyAccess(
+      gcnew String(L"DestroyViewAsync requires the UI thread. Call CreateEngine() on the UI thread first."));
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    auto nativeId = viewId.ToNative();
+
+    // Find the EditorModule
+    auto editor_module_opt = native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
+
+    try {
+      // Forward destroy request to the EditorModule (synchronous)
+      editor_module_opt->get().DestroyView(nativeId);
+      return System::Threading::Tasks::Task<bool>::FromResult(true);
+    }
+    catch (...) {
+      return System::Threading::Tasks::Task<bool>::FromResult(false);
+    }
   }
 
 } // namespace Oxygen::Interop

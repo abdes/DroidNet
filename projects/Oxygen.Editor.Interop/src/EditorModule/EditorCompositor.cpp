@@ -206,11 +206,40 @@ void EditorCompositor::CompositeToSurface(
     return;
   }
 
-  // Track source texture state (like OffscreenCompositor example)
-  recorder.BeginTrackingResourceState(source_texture, graphics::ResourceStates::kCommon);
+  // Track source texture state using the texture's descriptor initial state
+  // (falls back to Common if unspecified). This keeps the command-recording
+  // resource tracker consistent with how the texture was created.
+  try {
+    const auto& src_desc = source_texture.GetDescriptor();
+    auto src_initial = src_desc.initial_state;
+    if (src_initial == graphics::ResourceStates::kUnknown || src_initial == graphics::ResourceStates::kUndefined) {
+      src_initial = graphics::ResourceStates::kCommon;
+    }
+    recorder.BeginTrackingResourceState(source_texture, src_initial);
+  } catch (...) {
+    /* ignore if already tracked or tracking not supported */
+  }
 
   // Transition source to CopySource
   recorder.RequireResourceState(source_texture, graphics::ResourceStates::kCopySource);
+
+  // Ensure the recorder is tracking the backbuffer's current state first.
+  // Some backbuffers may have been used earlier in this command list (e.g.
+  // as shader resources) and the state tracker needs to know the actual
+  // starting state. Use the backbuffer descriptor's initial_state when
+  // available, otherwise assume Present as a safe default for swapchain
+  // images.
+  try {
+    auto bb_desc = backbuffer->GetDescriptor();
+    auto bb_initial = bb_desc.initial_state;
+    if (bb_initial == graphics::ResourceStates::kUnknown || bb_initial == graphics::ResourceStates::kUndefined) {
+      bb_initial = graphics::ResourceStates::kPresent;
+    }
+    recorder.BeginTrackingResourceState(*backbuffer, bb_initial);
+  } catch (...) {
+    // Ignore if already tracked or other issues; RequireResourceState will
+    // validate/transition relative to the tracked state.
+  }
 
   // Transition backbuffer to CopyDest
   recorder.RequireResourceState(*backbuffer, graphics::ResourceStates::kCopyDest);
@@ -257,8 +286,21 @@ void EditorCompositor::CompositeToSurface(
 
   recorder.CopyTexture(source_texture, src_slice, src_sub, *backbuffer, dst_slice, dst_sub);
 
-  // Reset source texture to Common state (like OffscreenCompositor example)
-  recorder.RequireResourceState(source_texture, graphics::ResourceStates::kCommon);
+  // Reset source texture to its neutral state (use descriptor if available,
+  // otherwise fallback to Common). Using the descriptor keeps semantics
+  // consistent with how the texture was created and avoids incorrect
+  // transition assumptions.
+  try {
+    const auto& src_desc = source_texture.GetDescriptor();
+    auto src_final = src_desc.initial_state;
+    if (src_final == graphics::ResourceStates::kUnknown || src_final == graphics::ResourceStates::kUndefined) {
+      src_final = graphics::ResourceStates::kCommon;
+    }
+    recorder.RequireResourceState(source_texture, src_final);
+  } catch (...) {
+    // fall back to common if anything goes wrong
+    recorder.RequireResourceState(source_texture, graphics::ResourceStates::kCommon);
+  }
 
   // Transition backbuffer to Present
   recorder.RequireResourceState(*backbuffer, graphics::ResourceStates::kPresent);

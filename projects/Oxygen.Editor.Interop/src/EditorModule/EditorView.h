@@ -93,6 +93,10 @@ public:
   void ReleaseResources();
 
   [[nodiscard]] auto GetViewId() const -> ViewId;
+  // Allow external owner (e.g. ViewManager) to set the engine-assigned ViewId
+  // when the View is registered in FrameContext to avoid duplicate
+  // registrations from EditorView::OnSceneMutation.
+  void SetViewId(ViewId id) { view_id_ = id; }
   [[nodiscard]] auto GetState() const -> ViewState;
   [[nodiscard]] auto IsVisible() const -> bool;
   [[nodiscard]] auto GetCameraNode() const -> scene::SceneNode;

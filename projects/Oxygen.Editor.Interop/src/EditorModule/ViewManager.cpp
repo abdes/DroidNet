@@ -94,6 +94,11 @@ void ViewManager::OnFrameStart(scene::Scene& scene, engine::FrameContext& frame_
       // Register with FrameContext - this assigns the engine ViewId
       ViewId engine_id = frame_ctx.RegisterView(std::move(vc));
 
+      // Ensure the EditorView instance knows its engine-assigned ViewId so
+      // it doesn't attempt to RegisterView again later during scene
+      // mutation (which would allocate a duplicate ViewId).
+      view->SetViewId(engine_id);
+
       // Store in views map
       views_[engine_id] = ViewEntry{ std::move(view), true };
 
