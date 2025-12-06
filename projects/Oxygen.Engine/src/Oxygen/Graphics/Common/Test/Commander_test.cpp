@@ -87,7 +87,7 @@ public:
   // NOLINTBEGIN
   // clang-format off
   MOCK_METHOD(void, Begin, (), (override));
-  MOCK_METHOD(CommandListPtr, End, (), (override));
+  MOCK_METHOD(CommandListPtr, End, (), (noexcept, override));
   MOCK_METHOD(void, RecordQueueSignal, (std::uint64_t), (override));
   MOCK_METHOD(void, RecordQueueWait, (std::uint64_t), (override));
   MOCK_METHOD(void, SetPipelineState, (oxygen::graphics::GraphicsPipelineDesc), (override));

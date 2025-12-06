@@ -198,13 +198,6 @@ CommandRecorder::CommandRecorder(std::weak_ptr<Graphics> graphics_weak,
   DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
 }
 
-CommandRecorder::~CommandRecorder()
-{
-  DCHECK_F(!graphics_weak_.expired(), "Graphics backend cannot be null");
-}
-
-auto CommandRecorder::Begin() -> void { graphics::CommandRecorder::Begin(); }
-
 namespace {
 // Bindless root signature layout indices must match Generated.RootSignature.h
 // Root Param 0: Single unbounded SRV descriptor table (t0, space0)
@@ -488,7 +481,13 @@ auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
   std::vector<D3D12_RESOURCE_BARRIER> d3d12_barriers;
   d3d12_barriers.reserve(barriers.size());
 
-  DLOG_F(4, "executing {} barriers", barriers.size());
+  // Diasgnostic logs
+  if (!barriers.empty()) {
+    DLOG_SCOPE_F(3, "Executing barriers");
+    for (const auto& b : barriers) {
+      DLOG_F(3, "  - {}", oxygen::graphics::detail::to_string(b));
+    }
+  }
 
   for (const auto& barrier : barriers) {
     const auto& desc_variant = barrier.GetDescriptor();
