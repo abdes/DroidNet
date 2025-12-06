@@ -12,6 +12,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
+using Oxygen.Interop;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Controls;
 
@@ -28,6 +29,17 @@ public partial class SceneEditorViewModel : ObservableObject
     private readonly IContainer container;
     private IMenuSource? quickAddMenu;
     private SceneViewLayout? previousLayout;
+    // A small palette of candidate clear colors shared by viewports. We wrap the
+    // palette here so the Scene Editor decides the per-viewport colors.
+    private static readonly ColorManaged[] DefaultViewportClearColors = new[]
+    {
+        new ColorManaged(0.10f, 0.12f, 0.15f, 1.0f), // default blue-ish
+        new ColorManaged(0.18f, 0.09f, 0.09f, 1.0f), // warm
+        new ColorManaged(0.09f, 0.18f, 0.09f, 1.0f), // green
+        new ColorManaged(0.09f, 0.12f, 0.18f, 1.0f), // deep blue
+        new ColorManaged(0.18f, 0.12f, 0.08f, 1.0f), // orange
+        new ColorManaged(0.14f, 0.09f, 0.18f, 1.0f), // purple
+    };
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
@@ -165,10 +177,50 @@ public partial class SceneEditorViewModel : ObservableObject
         var requiredCount = placements.Count;
 
         // Adjust viewports count
-        while (this.Viewports.Count < requiredCount)
+            while (this.Viewports.Count < requiredCount)
         {
             var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
             var viewport = new ViewportViewModel(metadata.DocumentId, this.engineService, settings, this.loggerFactory);
+            // Choose a color for this viewport deterministically using the
+            // viewport GUID. Start with a GUID-derived index, but prefer a
+            // palette entry that is not already used by existing viewports so
+            // simultaneous viewports tend to get unique clear colors.
+            var paletteLen = DefaultViewportClearColors.Length;
+            var preferred = (int)(((uint)viewport.ViewportId.GetHashCode()) % (uint)paletteLen);
+
+            // Build a set of colors already assigned to current viewports so
+            // we can avoid duplicates when possible.
+            var used = new HashSet<int>(this.Viewports
+                .Select(vm =>
+                {
+                    // map existing color back to palette index; if not found, -1
+                    for (var idx = 0; idx < DefaultViewportClearColors.Length; idx++)
+                    {
+                        var c = DefaultViewportClearColors[idx];
+                        if (vm.ClearColor.R == c.R && vm.ClearColor.G == c.G && vm.ClearColor.B == c.B && vm.ClearColor.A == c.A)
+                            return idx;
+                    }
+                    return -1;
+                })
+                .Where(i => i >= 0));
+
+            var chosen = -1;
+            for (var i = 0; i < paletteLen; i++)
+            {
+                var idx = (preferred + i) % paletteLen;
+                if (!used.Contains(idx))
+                {
+                    chosen = idx;
+                    break;
+                }
+            }
+
+            if (chosen < 0)
+            {
+                chosen = preferred; // fall back to preferred if all are used
+            }
+
+            viewport.ClearColor = DefaultViewportClearColors[chosen];
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
             this.Viewports.Add(viewport);
@@ -204,16 +256,18 @@ public partial class SceneEditorViewModel : ObservableObject
         }
         else
         {
-            // Maximize
-            this.previousLayout = this.CurrentLayout;
-            this.CurrentLayout = SceneViewLayout.OnePane;
-
-            // Move the maximized viewport to the first position so it stays visible
+            // Maximize — move the requested viewport into the first position
+            // before we change the layout. This prevents the collapse path in
+            // UpdateLayout from removing the intended viewport when the list
+            // is truncated to a single viewport.
             var index = this.Viewports.IndexOf(viewport);
             if (index > 0)
             {
                 this.Viewports.Move(index, 0);
             }
+
+            this.previousLayout = this.CurrentLayout;
+            this.CurrentLayout = SceneViewLayout.OnePane;
         }
     }
 

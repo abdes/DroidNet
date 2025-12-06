@@ -379,7 +379,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         CompositingTarget = lease.Key.ViewportId,
                         Width = pixelW,
                         Height = pixelH,
-                        ClearColor = new ColorManaged(0.1f, 0.12f, 0.15f, 1.0f)
+                        ClearColor = viewModel.ClearColor
                     };
 
                     var created = await viewModel.EngineService.CreateViewAsync(cfg, cancellationToken).ConfigureAwait(true);

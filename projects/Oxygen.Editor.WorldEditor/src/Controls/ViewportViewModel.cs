@@ -138,6 +138,11 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     /// </summary>
     public ICommand? ToggleMaximizeCommand { get; set; }
 
+    // Background clear color used when creating a matching engine view. Exposed
+    // from the view-model so each viewport can choose its own diagnostic tint.
+    [ObservableProperty]
+    public partial ColorManaged ClearColor { get; set; } = new ColorManaged(0.1f, 0.12f, 0.15f, 1.0f);
+
     /// <summary>
     /// Gets the menu source for the Layout menu. Built lazily on first access.
     /// </summary>

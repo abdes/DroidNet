@@ -70,7 +70,16 @@ void EditorView::Resize(uint32_t width, uint32_t height) {
 
 void EditorView::SetRenderingContext(const EditorViewContext &ctx) {
   current_context_ = &ctx;
-  graphics_ = ctx.graphics.weak_from_this();
+  // Avoid assigning an invalid weak_ptr into the member if the Graphics
+  // instance isn't currently owned by a shared_ptr. This helps prevent
+  // surprising control-block corruption in rare shutdown/race cases.
+  auto tmp = ctx.graphics.weak_from_this();
+  if (tmp.expired()) {
+    DLOG_F(WARNING, "EditorView::SetRenderingContext - graphics weak pointer is expired");
+    graphics_.reset();
+  } else {
+    graphics_ = std::move(tmp);
+  }
 }
 
 void EditorView::ClearPhaseRecorder() { current_context_ = nullptr; }
