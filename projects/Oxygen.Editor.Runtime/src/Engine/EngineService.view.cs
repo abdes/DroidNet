@@ -58,4 +58,48 @@ public sealed partial class EngineService
             return false;
         }
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> ShowViewAsync(ViewIdManaged viewId, CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+
+        try
+        {
+            // The native operation is queued and will be executed on the engine
+            // thread during the next frame. This call returns quickly to indicate
+            // the request was accepted.
+            var ok = await this.engineRunner.ShowViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "ShowViewAsync failed for view {ViewId}", viewId);
+            return false;
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> HideViewAsync(ViewIdManaged viewId, CancellationToken cancellationToken = default)
+    {
+        this.ThrowIfDisposed();
+        this.EnsureEngineCreated();
+        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
+
+        try
+        {
+            // The native operation is queued and will be executed on the engine
+            // thread during the next frame. This call returns quickly to indicate
+            // the request was accepted.
+            var ok = await this.engineRunner.HideViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "HideViewAsync failed for view {ViewId}", viewId);
+            return false;
+        }
+    }
 }

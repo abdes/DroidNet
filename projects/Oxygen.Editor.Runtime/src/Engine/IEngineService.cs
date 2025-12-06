@@ -119,4 +119,16 @@ public interface IEngineService : IAsyncDisposable
     /// request was accepted by the native engine.
     /// </summary>
     public System.Threading.Tasks.Task<bool> DestroyViewAsync(ViewIdManaged viewId, System.Threading.CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Make an existing view visible (resume rendering). Returns true if the
+    /// request was accepted by the native engine.
+    /// </summary>
+    public System.Threading.Tasks.Task<bool> ShowViewAsync(ViewIdManaged viewId, System.Threading.CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hide an existing view (pause rendering while retaining resources).
+    /// Returns true if the request was accepted by the native engine.
+    /// </summary>
+    public System.Threading.Tasks.Task<bool> HideViewAsync(ViewIdManaged viewId, System.Threading.CancellationToken cancellationToken = default);
 }

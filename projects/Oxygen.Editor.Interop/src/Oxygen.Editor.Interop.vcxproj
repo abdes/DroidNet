@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="Commands\HideViewCommand.cpp" />
+    <ClCompile Include="Commands\ShowViewCommand.cpp" />
     <ClCompile Include="EditorModule\EditorCompositor.cpp" />
     <ClCompile Include="EditorModule\EditorModule.cpp" />
     <ClCompile Include="EditorModule\EditorView.cpp" />
@@ -47,6 +49,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Commands\HideViewCommand.h" />
     <ClInclude Include="Commands\SceneCommands.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
@@ -55,6 +58,7 @@
     <ClInclude Include="Commands\CreateBasicMeshCommand.h" />
     <ClInclude Include="Commands\SetVisibilityCommand.h" />
     <ClInclude Include="Commands\ReparentSceneNodeCommand.h" />
+    <ClInclude Include="Commands\ShowViewCommand.h" />
     <ClInclude Include="Commands\UpdateTransformsForNodesCommand.h" />
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />

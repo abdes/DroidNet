@@ -39,15 +39,15 @@ msbuild "F:\projects\DroidNet\projects\Oxygen.Editor.Interop\src\Oxygen.Editor.I
 - [x] **Add CreateViewAsync Method**: Expose `EditorModule::CreateViewAsync` through `EngineRunner`. Accept config with `compositing_target` surface, return ViewId via callback. (native implementation: EditorModule::CreateViewAsync -> ViewManager::CreateViewAsync)
 - [x] **Create ViewConfig Wrapper**: Managed wrapper for `EditorView::Config` to specify view name, purpose, clear color, and **compositing_target surface at creation**. (native struct `EditorView::Config` exists with compositing_target)
 - [x] **Add DestroyView Method**: Expose `EditorModule::DestroyView` through `EngineRunner`. Accept ViewId, synchronous no-op on invalid. (native implementation present: EditorModule::DestroyView -> ViewManager::DestroyView)
-- [x] **Add View Query Methods**: `GetAllViews()`, `IsViewVisible()` to query view state from managed code. (native support: ViewManager::GetAllViews and EditorView::IsVisible exist; note -- `IsViewVisible()` is implemented in the EditorView class but there is not yet a dedicated public EngineModule/EngineRunner wrapper exposing it)
+- [x] **Add View Query Methods**: `GetAllViews()` to query view state from managed code. (native support: ViewManager::GetAllViews exists; `IsViewVisible()` intentionally not exposed — the Editor should inspect EditorView state in native/interop layer if needed)
 - [x] **Implement Thread Safety**: Ensure view operations can be called from UI thread, route to engine thread via dispatcher. (native: ViewManager and SurfaceRegistry are thread-safe with mutexes and queueing)
 - [x] **Add Error Handling**: Invalid ViewIds result in no-ops (not exceptions). (native: DestroyView, RegisterView, GetView return safe no-op/nullable behaviors)
 
 ### 4b: View Visibility Operations
 
 - [x] **Implement State Queries**: Query current state (Creating, Ready, Hidden, Releasing, Destroyed). (native: EditorView::GetState exists)
-- [ ] **Add ShowView Method**: Expose `EditorModule::ShowView`. Accept ViewId, synchronous queue operation. (EditorView::Show exists, not yet exposed through EditorModule/ViewManager/EngineRunner)
-- [ ] **Add HideView Method**: Expose `EditorModule::HideView`. Accept ViewId, synchronous queue operation. (EditorView::Hide exists, not yet exposed through EditorModule/ViewManager/EngineRunner)
+- [x] **Add ShowView Method**: Expose `EditorModule::ShowView`. Accept ViewId, synchronous queue operation. (EditorView::Show exists; exposed via EditorModule + EngineRunner + EngineService)
+- [x] **Add HideView Method**: Expose `EditorModule::HideView`. Accept ViewId, synchronous queue operation. (EditorView::Hide exists; exposed via EditorModule + EngineRunner + EngineService)
 
 ### 4c: Surface-View Association Operations
 

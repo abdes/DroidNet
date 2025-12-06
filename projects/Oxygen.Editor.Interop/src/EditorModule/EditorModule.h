@@ -124,6 +124,10 @@ public:
   // and is safe to call from interop. If the view id is invalid this is
   // a no-op.
   void DestroyView(ViewId view_id);
+  // Visibility helpers - EditorModule acts as the choreographer for view
+  // visibility changes (keeps the ViewManager API surface unchanged).
+  void ShowView(ViewId view_id);
+  void HideView(ViewId view_id);
 
 private:
   void ProcessSurfaceRegistrations();
