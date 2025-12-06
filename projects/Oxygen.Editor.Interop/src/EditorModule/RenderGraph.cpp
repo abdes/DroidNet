@@ -17,7 +17,7 @@
 namespace oxygen::interop::module {
 
   auto RenderGraph::SetupRenderPasses() -> void {
-    LOG_SCOPE_F(3, "RenderGraph::SetupRenderPasses");
+    DLOG_SCOPE_FUNCTION(3);
 
     // DepthPrePass
     if (!depth_pass_config_) {
@@ -31,7 +31,6 @@ namespace oxygen::interop::module {
     // Shader pass
     if (!shader_pass_config_) {
       shader_pass_config_ = std::make_shared<engine::ShaderPassConfig>();
-      shader_pass_config_->clear_color = graphics::Color{ 0.1F, 0.2F, 0.38F, 1.0F };
       shader_pass_config_->debug_name = "ShaderPass";
     }
     if (!shader_pass_) {
@@ -51,7 +50,7 @@ namespace oxygen::interop::module {
   }
 
   auto RenderGraph::ClearBackbufferReferences() -> void {
-    LOG_SCOPE_F(4, "RenderGraph::ClearBackbufferReferences");
+    DLOG_SCOPE_FUNCTION(3);
 
     if (transparent_pass_config_) {
       transparent_pass_config_->color_texture.reset();
@@ -63,7 +62,7 @@ namespace oxygen::interop::module {
     }
 
     if (render_context_.framebuffer) {
-      DLOG_F(2, "RenderGraph: clearing cached framebuffer to avoid pinning "
+      DLOG_F(4, "RenderGraph: clearing cached framebuffer to avoid pinning "
         "backbuffers");
       render_context_.framebuffer.reset();
     }
@@ -71,7 +70,7 @@ namespace oxygen::interop::module {
 
   auto RenderGraph::PrepareForRenderFrame(
     oxygen::observer_ptr<const oxygen::graphics::Framebuffer> fb) -> void {
-    LOG_SCOPE_F(4, "RenderGraph::PrepareForRenderFrame");
+    DLOG_SCOPE_FUNCTION(3);
 
     if (!fb) {
       return;
@@ -89,6 +88,16 @@ namespace oxygen::interop::module {
         shader_pass_config_->color_texture.reset();
     }
 
+    if (shader_pass_config_ && shader_pass_config_->color_texture) {
+      const auto& tex = *shader_pass_config_->color_texture;
+      const auto& td = tex.GetDescriptor();
+      LOG_F(4,
+        "RenderGraph: bound shader pass color_texture {} (initial={} "
+        "use_clear={})",
+        static_cast<const void*>(&tex), nostd::to_string(td.initial_state),
+        td.use_clear_value);
+    }
+
     if (transparent_pass_config_) {
       if (!desc.color_attachments.empty())
         transparent_pass_config_->color_texture =
@@ -100,6 +109,16 @@ namespace oxygen::interop::module {
         transparent_pass_config_->depth_texture = desc.depth_attachment.texture;
       else
         transparent_pass_config_->depth_texture.reset();
+    }
+
+    if (transparent_pass_config_ && transparent_pass_config_->color_texture) {
+      const auto& tex = *transparent_pass_config_->color_texture;
+      const auto& td = tex.GetDescriptor();
+      LOG_F(4,
+        "RenderGraph: bound transparent pass color_texture {} (initial={} "
+        "use_clear={})",
+        static_cast<const void*>(&tex), nostd::to_string(td.initial_state),
+        td.use_clear_value);
     }
 
     if (depth_pass_config_) {
@@ -118,12 +137,11 @@ namespace oxygen::interop::module {
     // Depth Pre-Pass execution
     if (depth_pass_) {
       try {
-        DLOG_F(INFO, "RenderGraph: running DepthPrePass (depth_texture_valid={})",
+        DLOG_F(3, "RenderGraph: Running DepthPrePass (depth_texture_valid={})",
           static_cast<bool>(depth_pass_config_ &&
             depth_pass_config_->depth_texture));
         co_await depth_pass_->PrepareResources(ctx, recorder);
         co_await depth_pass_->Execute(ctx, recorder);
-        DLOG_F(INFO, "RenderGraph: DepthPrePass completed successfully");
       }
       catch (const std::exception& e) {
         DLOG_F(WARNING, "RenderGraph: DepthPrePass threw: {}", e.what());
@@ -136,12 +154,11 @@ namespace oxygen::interop::module {
     // Shader Pass execution
     if (shader_pass_) {
       try {
-        DLOG_F(INFO, "RenderGraph: running ShaderPass (color_texture_valid={})",
+        DLOG_F(3, "RenderGraph: running ShaderPass (color_texture_valid={})",
           static_cast<bool>(shader_pass_config_ &&
             shader_pass_config_->color_texture));
         co_await shader_pass_->PrepareResources(ctx, recorder);
         co_await shader_pass_->Execute(ctx, recorder);
-        DLOG_F(INFO, "RenderGraph: ShaderPass completed successfully");
       }
       catch (const std::exception& e) {
         DLOG_F(WARNING, "RenderGraph: ShaderPass threw: {}", e.what());
@@ -154,7 +171,7 @@ namespace oxygen::interop::module {
     // Transparent Pass execution
     if (transparent_pass_) {
       try {
-        DLOG_F(INFO,
+        DLOG_F(3,
           "RenderGraph: running TransparentPass (color_valid={} "
           "depth_valid={})",
           static_cast<bool>(transparent_pass_config_ &&
@@ -163,7 +180,6 @@ namespace oxygen::interop::module {
             transparent_pass_config_->depth_texture));
         co_await transparent_pass_->PrepareResources(ctx, recorder);
         co_await transparent_pass_->Execute(ctx, recorder);
-        DLOG_F(INFO, "RenderGraph: TransparentPass completed successfully");
       }
       catch (const std::exception& e) {
         DLOG_F(WARNING, "RenderGraph: TransparentPass threw: {}", e.what());
