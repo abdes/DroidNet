@@ -6,9 +6,12 @@
 
 #include <Oxygen/OxCo/Semaphore.h>
 
-#include <catch2/catch_test_macros.hpp>
 #include <chrono>
 
+#include <Oxygen/Testing/GTest.h>
+#include <gmock/gmock.h>
+
+#include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -19,148 +22,155 @@ using oxygen::co::Co;
 using oxygen::co::kJoin;
 using oxygen::co::Run;
 using oxygen::co::Semaphore;
-using oxygen::co::testing::TestEventLoop;
 
 // NOLINTBEGIN(*-avoid-do-while)
 // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
-TEST_CASE("Semaphore")
+class SemaphoreTest : public oxygen::co::testing::OxCoTestFixture { };
+
+NOLINT_TEST_F(SemaphoreTest, BasicOperation)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
-    SECTION("basic operation")
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(5);
+    int concurrency = 0;
+    auto worker = [&]() -> Co<> {
+      auto lk = co_await sem.Lock();
+      ++concurrency;
+      EXPECT_LE(concurrency, 5);
+      co_await el_->Sleep(1ms);
+      --concurrency;
+    };
+    OXCO_WITH_NURSERY(nursery)
     {
-      Semaphore sem(5);
-      int concurrency = 0;
-      auto worker = [&]() -> Co<> {
-        auto lk = co_await sem.Lock();
-        ++concurrency;
-        CHECK(concurrency <= 5);
-        co_await el.Sleep(1ms);
-        --concurrency;
-      };
-      OXCO_WITH_NURSERY(nursery)
-      {
-        for (int i = 0; i != 20; ++i) {
-          nursery.Start(worker);
-        }
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 4ms);
-    }
+      for (int i = 0; i != 20; ++i) {
+        nursery.Start(worker);
+      }
+      co_return kJoin;
+    };
+  });
+  EXPECT_EQ(el_->Now(), 4ms);
+}
 
-    SECTION("initialization")
-    {
-      Semaphore sem1(1);
-      CHECK(sem1.Value() == 1);
+NOLINT_TEST_F(SemaphoreTest, Initialization)
+{
+  Semaphore sem1(1);
+  EXPECT_EQ(sem1.Value(), 1);
 
-      Semaphore sem2(10);
-      CHECK(sem2.Value() == 10);
+  Semaphore sem2(10);
+  EXPECT_EQ(sem2.Value(), 10);
 
-      Semaphore sem3(0);
-      CHECK(sem3.Value() == 0);
-    }
+  Semaphore sem3(0);
+  EXPECT_EQ(sem3.Value(), 0);
+}
 
-    SECTION("acquire and release")
-    {
-      Semaphore sem(1);
-      CHECK(sem.Value() == 1);
+NOLINT_TEST_F(SemaphoreTest, AcquireAndRelease)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(1);
+    EXPECT_EQ(sem.Value(), 1);
 
+    co_await sem.Acquire();
+    EXPECT_EQ(sem.Value(), 0);
+
+    sem.Release();
+    EXPECT_EQ(sem.Value(), 1);
+  });
+}
+
+NOLINT_TEST_F(SemaphoreTest, LockGuardMoveSemantics)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(1);
+    auto lk1 = co_await sem.Lock();
+    EXPECT_EQ(sem.Value(), 0);
+
+    auto lk2 = std::move(lk1);
+    EXPECT_EQ(sem.Value(), 0);
+  });
+}
+
+NOLINT_TEST_F(SemaphoreTest, ZeroInitialValue)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(0);
+    bool acquired = false;
+
+    auto worker = [&]() -> Co<> {
       co_await sem.Acquire();
-      CHECK(sem.Value() == 0);
+      acquired = true;
+    };
+
+    OXCO_WITH_NURSERY(nursery)
+    {
+      nursery.Start(worker);
+      co_await el_->Sleep(1ms);
+      EXPECT_FALSE(acquired);
 
       sem.Release();
-      CHECK(sem.Value() == 1);
-    }
+      co_await el_->Sleep(1ms);
+      EXPECT_TRUE(acquired);
 
-    SECTION("lock guard move semantics")
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(SemaphoreTest, MultipleReleases)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(0);
+    int acquired_count = 0;
+
+    auto worker = [&]() -> Co<> {
+      co_await sem.Acquire();
+      ++acquired_count;
+    };
+
+    OXCO_WITH_NURSERY(nursery)
     {
-      Semaphore sem(1);
-      auto lk1 = co_await sem.Lock();
-      CHECK(sem.Value() == 0);
-
-      auto lk2 = std::move(lk1);
-      CHECK(sem.Value() == 0);
-    }
-
-    SECTION("zero initial value")
-    {
-      Semaphore sem(0);
-      bool acquired = false;
-
-      auto worker = [&]() -> Co<> {
-        co_await sem.Acquire();
-        acquired = true;
-      };
-
-      OXCO_WITH_NURSERY(nursery)
-      {
+      for (int i = 0; i != 3; ++i) {
         nursery.Start(worker);
-        co_await el.Sleep(1ms);
-        CHECK(!acquired);
+      }
 
-        sem.Release();
-        co_await el.Sleep(1ms);
-        CHECK(acquired);
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(acquired_count, 0);
 
-        co_return kJoin;
-      };
-    }
+      sem.Release();
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(acquired_count, 1);
 
-    SECTION("multiple releases")
+      sem.Release();
+      sem.Release();
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(acquired_count, 3);
+
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(SemaphoreTest, ImmediateCancellation)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Semaphore sem(1);
+    bool cancelled = false;
+
+    auto worker = [&]() -> Co<> {
+      auto lk = co_await sem.Lock();
+      cancelled = true;
+    };
+
+    OXCO_WITH_NURSERY(nursery)
     {
-      Semaphore sem(0);
-      int acquired_count = 0;
+      nursery.Start(worker);
+      nursery.Cancel();
+      co_await el_->Sleep(1ms);
+      EXPECT_TRUE(cancelled);
 
-      auto worker = [&]() -> Co<> {
-        co_await sem.Acquire();
-        ++acquired_count;
-      };
-
-      OXCO_WITH_NURSERY(nursery)
-      {
-        for (int i = 0; i != 3; ++i) {
-          nursery.Start(worker);
-        }
-
-        co_await el.Sleep(1ms);
-        CHECK(acquired_count == 0);
-
-        sem.Release();
-        co_await el.Sleep(1ms);
-        CHECK(acquired_count == 1);
-
-        sem.Release();
-        sem.Release();
-        co_await el.Sleep(1ms);
-        CHECK(acquired_count == 3);
-
-        co_return kJoin;
-      };
-    }
-
-    SECTION("immediate cancellation")
-    {
-      Semaphore sem(1);
-      bool cancelled = false;
-
-      auto worker = [&]() -> Co<> {
-        auto lk = co_await sem.Lock();
-        cancelled = true;
-      };
-
-      OXCO_WITH_NURSERY(nursery)
-      {
-        nursery.Start(worker);
-        nursery.Cancel();
-        co_await el.Sleep(1ms);
-        CHECK(cancelled);
-
-        co_return kJoin;
-      };
-    }
+      co_return kJoin;
+    };
   });
 }
 

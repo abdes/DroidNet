@@ -4,17 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Testing/GTest.h>
+
 #include <Oxygen/Base/NoInline.h>
-#include <catch2/catch_test_macros.hpp>
 
 namespace {
 
 OXYGEN_NOINLINE auto NoInlineFunction(const int x) -> int { return x * 2; }
 
-TEST_CASE("NoInline compiles", "[NoInline]")
+//! Tests that `NoInlineFunction` multiplies its input by two.
+NOLINT_TEST(NoInlineFunctionTest, MultipliesByTwo)
 {
-  REQUIRE(NoInlineFunction(2) == 4);
-  REQUIRE(NoInlineFunction(3) == 6);
+  EXPECT_EQ(NoInlineFunction(2), 4);
+  EXPECT_EQ(NoInlineFunction(3), 6);
 }
 
 } // namespace

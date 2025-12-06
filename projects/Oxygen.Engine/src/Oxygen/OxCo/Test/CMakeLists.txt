@@ -38,15 +38,10 @@ m_gtest_program(AsioTest SOURCES Asio_test.cpp)
 m_gtest_program(SharedTest SOURCES Shared_test.cpp)
 m_gtest_program(BroadcastChannel SOURCES BroadcastChannel_test.cpp)
 m_gtest_program(RepeatableSharedTest SOURCES RepeatableShared_test.cpp)
-
-# -- Catch2 Test Programs ------------------------------------------------------
-
-include(Catch2Helpers)
-
-m_catch2_program(Sequence SOURCES Sequence_test.cpp)
-m_catch2_program(Semaphore SOURCES Semaphore_test.cpp)
-m_catch2_program(Value SOURCES Value_test.cpp)
-m_catch2_program(Nursery SOURCES Nursery_test.cpp)
+m_gtest_program(Sequence SOURCES Sequence_test.cpp)
+m_gtest_program(Semaphore SOURCES Semaphore_test.cpp)
+m_gtest_program(Value SOURCES Value_test.cpp)
+m_gtest_program(Nursery SOURCES Nursery_test.cpp)
 
 # -- Additional Functional Test ------------------------------------------------
 
@@ -68,7 +63,3 @@ if(OXYGEN_WITH_COVERAGE)
   target_compile_options(${func_tests_target} PRIVATE "--coverage")
   target_link_options(${func_tests_target} PRIVATE "--coverage")
 endif()
-
-# -- Benchmarks ----------------------------------------------------------------
-
-# m_catch2_program(EventStreamBench SOURCES EventStream_bench.cpp)

@@ -78,28 +78,6 @@ m_gtest_program(
 # Hash utilities tests
 m_gtest_program(Hash SOURCES "Hash_test.cpp")
 
-# -- Catch2 Test Programs -------------------------------------------------------
-
-include(Catch2Helpers)
-
-# -- Catch2 custom main --------------------------------------------------------
-
-add_library(catch2_main STATIC "catch2_main.cpp")
-add_library(${META_MODULE_TARGET_ALIAS}::catch2 ALIAS catch2_main)
-set_target_properties(
-  catch2_main
-  PROPERTIES
-    FOLDER
-      "Testing"
-)
-target_compile_options(catch2_main PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
-target_link_libraries(
-  catch2_main
-  PUBLIC
-    Catch2::Catch2
-    oxygen::base
-)
-
-m_catch2_program(Unreachable SOURCES "Unreachable_test.cpp")
-m_catch2_program(NoInline SOURCES "NoInline_test.cpp")
-m_catch2_program(ReturnAddress SOURCES "ReturnAddress_test.cpp")
+m_gtest_program(NoInline SOURCES "NoInline_test.cpp")
+m_gtest_program(ReturnAddress SOURCES "ReturnAddress_test.cpp")
+m_gtest_program(Unreachable SOURCES "Unreachable_test.cpp")

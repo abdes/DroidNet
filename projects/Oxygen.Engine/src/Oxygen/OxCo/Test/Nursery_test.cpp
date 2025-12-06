@@ -8,9 +8,10 @@
 
 #include <chrono>
 
-#include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
+#include <Oxygen/Testing/GTest.h>
+#include <gmock/gmock.h>
 
+#include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
@@ -43,13 +44,14 @@ using oxygen::co::testing::TestEventLoop;
 
 namespace {
 
-TEST_CASE("Nursery is a scope for its started tasks")
+class NurseryTest : public oxygen::co::testing::OxCoTestFixture { };
+
+NOLINT_TEST_F(NurseryTest, ScopeForStartedTasks)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     size_t count = 0;
     auto increment_after = [&](const milliseconds delay) -> Co<> {
-      co_await el.Sleep(delay);
+      co_await el_->Sleep(delay);
       ++count;
     };
     co_yield Nursery::Factory {} % [&](Nursery& n) -> Co<NurseryBodyRetVal> {
@@ -57,53 +59,68 @@ TEST_CASE("Nursery is a scope for its started tasks")
       n.Start(increment_after, 3ms);
       n.Start(increment_after, 5ms);
 
-      co_await el.Sleep(4ms);
-      CHECK(count == 2);
+      co_await el_->Sleep(4ms);
+      EXPECT_EQ(count, 2);
 
-      co_await el.Sleep(2ms);
-      CHECK(count == 3);
+      co_await el_->Sleep(2ms);
+      EXPECT_EQ(count, 3);
 
       co_return kJoin;
     };
   });
 }
 
-TEST_CASE("Nursery::Start() ensures args live as long as task")
+NOLINT_TEST_F(NurseryTest, StartEnsuresArgsImplicitlyConstructed)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     auto func = [&](const std::string& s) -> Co<> {
-      co_await el.Sleep(1ms);
-      CHECK(s == "hello world! I am a long(ish) string.");
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(s, "hello world! I am a long(ish) string.");
     };
-
-    const std::string ext = "hello world! I am a long(ish) string.";
 
     OXCO_WITH_NURSERY(n)
     {
-      SECTION("for implicitly constructed objects")
-      {
-        n.Start(func, "hello world! I am a long(ish) string.");
-      }
-
-      SECTION("for existing objects")
-      {
-        const std::string str = "hello world! I am a long(ish) string.";
-        n.Start(func, str);
-      }
-
-      SECTION("for objects passed by std::cref()")
-      {
-        // Passing a string defined outside the nursery block by reference
-        n.Start(func, std::cref(ext));
-      }
-
+      n.Start(func, "hello world! I am a long(ish) string.");
       co_return kJoin;
     };
   });
 }
 
-TEST_CASE("Nursery can start a task with a member function")
+NOLINT_TEST_F(NurseryTest, StartEnsuresArgsExistingObjects)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto func = [&](const std::string& s) -> Co<> {
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(s, "hello world! I am a long(ish) string.");
+    };
+
+    const std::string str = "hello world! I am a long(ish) string.";
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(func, str);
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, StartEnsuresArgsPassedByCref)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto func = [&](const std::string& s) -> Co<> {
+      co_await el_->Sleep(1ms);
+      EXPECT_EQ(s, "hello world! I am a long(ish) string.");
+    };
+
+    const std::string ext = "hello world! I am a long(ish) string.";
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(func, std::cref(ext));
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_Pointer)
 {
   constexpr int kInitialValue = 42;
   constexpr int kModifiedValue = 43;
@@ -113,83 +130,119 @@ TEST_CASE("Nursery can start a task with a member function")
     auto Func(TestEventLoop& el, const int expected) const -> Co<>
     {
       co_await el.Sleep(1ms);
-      CHECK(x == expected);
+      EXPECT_EQ(x, expected);
     }
   };
 
   Test obj;
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
-      SECTION("passing the object as a pointer")
-      {
-        n.Start(&Test::Func, &obj, std::ref(el), kModifiedValue);
-        obj.x = kModifiedValue;
-      }
-      SECTION("passing the object as a std::ref()")
-      {
-        n.Start(&Test::Func, std::ref(obj), std::ref(el), kModifiedValue);
-        obj.x = kModifiedValue;
-      }
-      SECTION("passing the object by value")
-      {
-        // `this` passed by value, so subsequent changes to `obj`
-        // should not be visible by the spawned task
-        n.Start(&Test::Func, obj, std::ref(el), kInitialValue);
-        obj.x = kModifiedValue;
-      }
+      n.Start(&Test::Func, &obj, std::ref(*el_), kModifiedValue);
+      obj.x = kModifiedValue;
       co_return kJoin;
     };
-    CHECK(el.Now() == 1ms);
   });
 }
 
-TEST_CASE("Nursery completion policies")
+NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_Ref)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
-    auto sleep
-      = [&](const milliseconds delay) -> Co<> { co_await el.Sleep(delay); };
+  constexpr int kInitialValue = 42;
+  constexpr int kModifiedValue = 43;
 
-    SECTION("normally with `co_await kJoin`")
+  struct Test {
+    int x = kInitialValue;
+    auto Func(TestEventLoop& el, const int expected) const -> Co<>
     {
-      OXCO_WITH_NURSERY(n)
+      co_await el.Sleep(1ms);
+      EXPECT_EQ(x, expected);
+    }
+  };
+
+  Test obj;
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(&Test::Func, std::ref(obj), std::ref(*el_), kModifiedValue);
+      obj.x = kModifiedValue;
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, StartWithMemberFunction_ByValue)
+{
+  constexpr int kInitialValue = 42;
+  constexpr int kModifiedValue = 43;
+
+  struct Test {
+    int x = kInitialValue;
+    auto Func(TestEventLoop& el, const int expected) const -> Co<>
+    {
+      co_await el.Sleep(1ms);
+      EXPECT_EQ(x, expected);
+    }
+  };
+
+  Test obj;
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(&Test::Func, obj, std::ref(*el_), kInitialValue);
+      obj.x = kModifiedValue;
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 1ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, CompletionPolicies_Join)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto sleep
+      = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(sleep, 5ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 5ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, CompletionPolicies_Cancel)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto sleep
+      = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(sleep, 5ms);
+      co_return kCancel;
+    };
+    EXPECT_EQ(el_->Now(), 0ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, CompletionPolicies_CancelledFromOutside)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto sleep
+      = [&](const milliseconds delay) -> Co<> { co_await el_->Sleep(delay); };
+    co_await AnyOf(sleep(5ms), [&]() -> Co<> {
+      OXCO_WITH_NURSERY(/*unused*/)
       {
-        n.Start(sleep, 5ms);
+        co_await kSuspendForever;
         co_return kJoin;
       };
-      CHECK(el.Now() == 5ms);
-    }
-
-    SECTION("through cancellation of its tasks with `co_await kCancel`")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        n.Start(sleep, 5ms);
-        co_return kCancel;
-      };
-      CHECK(el.Now() == 0ms);
-    }
-
-    SECTION("by getting cancelled from outside")
-    {
-      co_await AnyOf(sleep(5ms), [&]() -> Co<> {
-        OXCO_WITH_NURSERY(/*unused*/)
-        {
-          co_await kSuspendForever;
-          co_return kJoin;
-        };
-      });
-      CHECK(el.Now() == 5ms);
-    }
+    });
+    EXPECT_EQ(el_->Now(), 5ms);
   });
 }
 
-TEST_CASE("Nursery early cancels tasks")
+NOLINT_TEST_F(NurseryTest, EarlyCancelsTasks)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     bool started = false;
     OXCO_WITH_NURSERY(nursery)
     {
@@ -197,45 +250,43 @@ TEST_CASE("Nursery early cancels tasks")
         nursery.Start([&]() -> Co<> {
           started = true;
           co_await kYield;
-          FAIL_CHECK("should never reach here");
+          ADD_FAILURE() << "should never reach here";
           co_return;
         });
       });
       co_return kCancel;
     };
-    CHECK(started);
+    EXPECT_TRUE(started);
   });
 }
 
-TEST_CASE("Nursery synchronous cancellation")
+NOLINT_TEST_F(NurseryTest, SynchronousCancellation)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     bool cancelled = false;
     OXCO_WITH_NURSERY(n)
     {
       n.Start([&]() -> Co<> {
         ScopeGuard guard([&]() noexcept { cancelled = true; });
-        co_await el.Sleep(5ms);
+        co_await el_->Sleep(5ms);
       });
-      co_await el.Sleep(1ms);
-      CHECK(!cancelled);
+      co_await el_->Sleep(1ms);
+      EXPECT_FALSE(cancelled);
       n.Cancel();
-      CHECK(!cancelled);
+      EXPECT_FALSE(cancelled);
       co_await kYield;
-      FAIL_CHECK("should not reach here");
+      ADD_FAILURE() << "should not reach here";
       co_return kCancel;
     };
-    CHECK(cancelled);
+    EXPECT_TRUE(cancelled);
   });
 }
 
-TEST_CASE("Nursery can handle multiple cancelled tasks")
+NOLINT_TEST_F(NurseryTest, MultipleCancelledTasks)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     auto task = [&](Nursery& n) -> Co<> {
-      co_await el.Sleep(1ms, kNonCancellable);
+      co_await el_->Sleep(1ms, kNonCancellable);
       n.Cancel();
     };
     OXCO_WITH_NURSERY(n)
@@ -248,12 +299,11 @@ TEST_CASE("Nursery can handle multiple cancelled tasks")
   });
 }
 
-TEST_CASE("Nursery can handle multiple exceptions")
+NOLINT_TEST_F(NurseryTest, MultipleExceptions)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     auto task = [&]([[maybe_unused]] Nursery& n) -> Co<> {
-      co_await el.Sleep(1ms, kNonCancellable);
+      co_await el_->Sleep(1ms, kNonCancellable);
       throw std::runtime_error("boo!");
     };
     try {
@@ -264,348 +314,346 @@ TEST_CASE("Nursery can handle multiple exceptions")
         n.Start(task, std::ref(n));
         co_return kJoin;
       };
-    } catch (std::runtime_error& ex) {
+    } catch (std::runtime_error& /*ex*/) {
       // expected
-      (void)ex;
     }
   });
 }
 
-TEST_CASE("Nursery cancel and exception")
+NOLINT_TEST_F(NurseryTest, CancelAndException)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
-    CHECK_THROWS_WITH(
-      OXCO_WITH_NURSERY(n) {
-        // This task will throw an exception that get propagated to the
-        // nursery
+  ::Run(*el_, [&]() -> Co<> {
+    try {
+      OXCO_WITH_NURSERY(n)
+      {
         n.Start([&]() -> Co<> {
-          co_await el.Sleep(2ms, kNonCancellable);
+          co_await el_->Sleep(2ms, kNonCancellable);
           throw std::runtime_error("boo!");
         });
-        // This task cannot be cancelled and will complete
-        n.Start([&]() -> Co<> { co_await el.Sleep(3ms, kNonCancellable); });
-        co_await el.Sleep(1ms);
-        // Requesting cancellation of the nursery tasks will not cancel
-        // the 3ms task
+        n.Start([&]() -> Co<> { co_await el_->Sleep(3ms, kNonCancellable); });
+        co_await el_->Sleep(1ms);
         co_return kCancel;
-      },
-      // We should get the exception
-      Catch::Matchers::Equals("boo!"));
-    // and we should finish after the 3ms task is done
-    CHECK(el.Now() == 3ms);
+      };
+      // Should have thrown
+      ADD_FAILURE() << "Expected exception was not thrown";
+    } catch (const std::runtime_error& ex) {
+      EXPECT_EQ(std::string_view(ex.what()), "boo!");
+    }
+    EXPECT_EQ(el_->Now(), 3ms);
   });
 }
 
-TEST_CASE("Nursery cancel from outside")
+NOLINT_TEST_F(NurseryTest, CancelFromOutside)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
-      n.Start([&]() -> Co<> { co_await el.Sleep(10ms); });
-      el.Schedule(1ms, [&] { n.Cancel(); });
+      n.Start([&]() -> Co<> { co_await el_->Sleep(10ms); });
+      el_->Schedule(1ms, [&] { n.Cancel(); });
       co_return kJoin;
     };
 
-    CHECK(el.Now() == 1ms);
+    EXPECT_EQ(el_->Now(), 1ms);
   });
 }
 
-TEST_CASE("Nursery propagates exceptions")
+NOLINT_TEST_F(NurseryTest, PropagatesExceptions)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
-    // This task can be cancelled, and will be early cancelled due to the
-    // early exception thrown in the next task
-    auto t1 = [&]() -> Co<> { co_await el.Sleep(2ms); };
-    // This task throws immediately and should cause the nursery to get the
-    // exception immediately
+  ::Run(*el_, [&]() -> Co<> {
+    auto t1 = [&]() -> Co<> { co_await el_->Sleep(2ms); };
     auto t2 = [&]() -> Co<> {
       co_await std::suspend_never();
       throw std::runtime_error("boo!");
     };
 
-    CHECK_THROWS_WITH(
-      OXCO_WITH_NURSERY(n) {
+    try {
+      OXCO_WITH_NURSERY(n)
+      {
         n.Start(t1);
         n.Start(t2);
         co_return kJoin;
-      },
-      Catch::Matchers::Equals("boo!"));
+      };
+      ADD_FAILURE() << "Expected exception was not thrown";
+    } catch (const std::runtime_error& ex) {
+      EXPECT_EQ(std::string_view(ex.what()), "boo!");
+    }
 
-    // Early cancellation and early exception
-    CHECK(el.Now() == 0ms);
+    EXPECT_EQ(el_->Now(), 0ms);
   });
 }
 
-TEST_CASE("Nursery `Start` with `TaskStarted`")
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CoawaitInit)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
-    SECTION("started, co_await initialization")
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
     {
-      OXCO_WITH_NURSERY(n)
-      {
-        co_await n.Start(
-          [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(delay);
-            started();
-            co_await el.Sleep(5ms);
-          },
-          2ms);
-        CHECK(el.Now() == 2ms);
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 7ms);
-    }
-
-    SECTION("started, no co_await initialization")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        // Not waiting for the initialization
-        n.Start(
-          [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(delay);
-            started();
-          },
-          2ms);
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 2ms);
-    }
-
-    SECTION("optional arg, co_await initialization")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        // The default constructed `TaskStarted` performs no operation
-        // when it is called.
-        co_await n.Start(
-          [&](const milliseconds delay, TaskStarted<> started = {}) -> Co<> {
-            co_await el.Sleep(delay);
-            started();
-          },
-          2ms);
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 2ms);
-    }
-
-    SECTION("optional arg, no co_await initialization")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        // Behaves like "optional arg, co_await initialization"
-        n.Start(
-          [&](const milliseconds delay, TaskStarted<> started = {}) -> Co<> {
-            co_await el.Sleep(delay);
-            started();
-          },
-          2ms);
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 2ms);
-    }
-
-    SECTION("works with combiners")
-    {
-      auto task = [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
-        co_await el.Sleep(delay);
-        started();
-        co_await el.Sleep(delay);
-      };
-      OXCO_WITH_NURSERY(n)
-      {
-        co_await AllOf(n.Start(task, 2ms), n.Start(task, 3ms));
-        CHECK(el.Now() == 3ms);
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 6ms);
-    }
-
-    SECTION("gets the return value from started")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        const int ret = co_await n.Start([](TaskStarted<int> started) -> Co<> {
-          co_await kYield; // make this a coroutine
-          started(42);
-        });
-        CHECK(ret == 42);
-        co_return kJoin;
-      };
-    }
-
-    SECTION("passes arguments to the callable")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        const int ret = co_await n.Start<int>(
-          [](auto arg, TaskStarted<int> started) -> Co<> {
-            co_await kYield; // make this a coroutine
-            started(arg);
-          },
-          42);
-        CHECK(ret == 42);
-        co_return kJoin;
-      };
-    }
-
-    SECTION("handle exception thrown during initialization")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        try {
-          co_await n.Start([]([[maybe_unused]] TaskStarted<> started) -> Co<> {
-            co_await kYield; // make this a coroutine
-            throw std::runtime_error("boo!");
-          });
-          FAIL_CHECK("should never reach here");
-        } catch (const std::runtime_error& e) {
-          CHECK(e.what() == std::string_view("boo!"));
-        }
-        co_return kJoin;
-      };
-    }
-
-    SECTION("works when task cancelled before initialization completes")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        auto [done, timedOut] = co_await AnyOf(
-          n.Start([&]([[maybe_unused]] TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(5ms);
-            FAIL_CHECK("should never reach here");
-          }),
-          el.Sleep(2ms));
-        CHECK(!done);
-        CHECK(el.Now() == 2ms);
-        co_return kJoin;
-      };
-    }
-
-    SECTION("works when task rejects cancellation")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        auto [done, timedOut]
-          = co_await AnyOf(n.Start([&](TaskStarted<> started) -> Co<> {
-              co_await NonCancellable(el.Sleep(5ms));
-              started();
-            }),
-            // This task completion will cause cancellation request of
-            // the other task, which will be rejected.
-            el.Sleep(2ms));
-        // Task completes normally after 5ms
-        CHECK(!done);
-        CHECK(el.Now() == 5ms);
-        co_return kJoin;
-      };
-    }
-
-    SECTION("works when inner nursery is cancelled")
-    {
-      Nursery* inner = nullptr;
-      Event cancelInner;
-      OXCO_WITH_NURSERY(outer)
-      {
-        // Start task with OpenNursery
-        co_await outer.Start([&](TaskStarted<> started) -> Co<> {
-          co_await AnyOf(
-            OpenNursery(std::ref(inner), std::move(started)), cancelInner);
-        });
-
-        REQUIRE(inner);
-
-        // Start task in outer nursery
-        outer.Start([&]() -> Co<> {
-          co_await inner->Start([&](TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(5ms);
-            started();
-            co_await el.Sleep(1ms);
-          });
-        });
-
-        // Cancel inner nursery after 1ms
-        co_await el.Sleep(1ms);
-        cancelInner.Trigger();
-        co_await el.Sleep(1ms);
-        CHECK(inner);
-        co_await el.Sleep(5ms);
-        // outer task completes
-        CHECK(!inner);
-
-        co_return kJoin;
-      };
-    }
-
-    SECTION("works with task that is immediately ready")
-    {
-      OXCO_WITH_NURSERY(n)
-      {
-        co_await n.Start([](TaskStarted<> started) -> Co<> {
+      co_await n.Start(
+        [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(delay);
           started();
-          return NoOp();
-        });
-        // Everything completes immediately
-        co_return kJoin;
-      };
-      CHECK(el.Now() == 0ms);
-    }
-
-    SECTION("cancel-before-handoff")
-    {
-      // If TaskStarted<> is invoked in a cancelled context, handing
-      // off a coroutine pending cancellation to a cancelled nursery,
-      // this should not result in double cancellation.
-      co_await AnyOf(el.Sleep(1ms), [&]() -> Co<> {
-        OXCO_WITH_NURSERY(n)
-        {
-          co_await n.Start([&](TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(5ms, kNonCancellable);
-            started();
-
-            co_await el.Sleep(1ms, kNonCancellable);
-
-            // The cancellation should happen, though
-            co_await kYield;
-            CHECK(!"should never reach here");
-          });
-
-          // The task in the middle of its cancellation should not
-          // be reparented, and the above `n.Start()` should not
-          // complete early.
-          CHECK(!"should never reach here");
-
-          co_return kJoin;
-        };
-      });
-    }
-
-    SECTION("cancel-before-handoff-2")
-    {
-      // Cancelling `n.Start()` before handoff and *then* cancelling
-      // the nursery should not result in double cancellation either.
-      OXCO_WITH_NURSERY(n)
-      {
-        co_await AnyOf(
-          el.Sleep(1ms), n.Start([&](TaskStarted<> started) -> Co<> {
-            co_await el.Sleep(2ms, kNonCancellable);
-            started();
-            co_await el.Sleep(2ms, kNonCancellable);
-          }));
-        co_return kCancel;
-      };
-    }
+          co_await el_->Sleep(5ms);
+        },
+        2ms);
+      EXPECT_EQ(el_->Now(), 2ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 7ms);
   });
 }
 
-TEST_CASE("Open inner nursery")
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_NoCoawaitInit)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(
+        [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(delay);
+          started();
+        },
+        2ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 2ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_CoawaitInit)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(
+        [&](const milliseconds delay, TaskStarted<> started = {}) -> Co<> {
+          co_await el_->Sleep(delay);
+          started();
+        },
+        2ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 2ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_OptionalArg_NoCoawaitInit)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      n.Start(
+        [&](const milliseconds delay, TaskStarted<> started = {}) -> Co<> {
+          co_await el_->Sleep(delay);
+          started();
+        },
+        2ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 2ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_WithCombiners)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    auto task = [&](const milliseconds delay, TaskStarted<> started) -> Co<> {
+      co_await el_->Sleep(delay);
+      started();
+      co_await el_->Sleep(delay);
+    };
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await AllOf(n.Start(task, 2ms), n.Start(task, 3ms));
+      EXPECT_EQ(el_->Now(), 3ms);
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 6ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ReturnValue)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      const int ret = co_await n.Start([](TaskStarted<int> started) -> Co<> {
+        co_await kYield; // make this a coroutine
+        started(42);
+      });
+      EXPECT_EQ(ret, 42);
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_PassesArguments)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      const int ret = co_await n.Start<int>(
+        [](auto arg, TaskStarted<int> started) -> Co<> {
+          co_await kYield; // make this a coroutine
+          started(arg);
+        },
+        42);
+      EXPECT_EQ(ret, 42);
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_HandleInitException)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      try {
+        co_await n.Start([]([[maybe_unused]] TaskStarted<> started) -> Co<> {
+          co_await kYield; // make this a coroutine
+          throw std::runtime_error("boo!");
+        });
+        ADD_FAILURE() << "should never reach here";
+      } catch (const std::runtime_error& e) {
+        EXPECT_EQ(e.what(), std::string_view("boo!"));
+      }
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeInit)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      auto [done, timedOut] = co_await AnyOf(
+        n.Start([&]([[maybe_unused]] TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(5ms);
+          ADD_FAILURE() << "should never reach here";
+        }),
+        el_->Sleep(2ms));
+      EXPECT_FALSE(done);
+      EXPECT_EQ(el_->Now(), 2ms);
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_RejectedCancellation)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      auto [done, timedOut]
+        = co_await AnyOf(n.Start([&](TaskStarted<> started) -> Co<> {
+            co_await NonCancellable(el_->Sleep(5ms));
+            started();
+          }),
+          // This task completion will cause cancellation request of
+          // the other task, which will be rejected.
+          el_->Sleep(2ms));
+      EXPECT_FALSE(done);
+      EXPECT_EQ(el_->Now(), 5ms);
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_InnerNurseryCancelled)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    Nursery* inner = nullptr;
+    Event cancelInner;
+    OXCO_WITH_NURSERY(outer)
+    {
+      co_await outer.Start([&](TaskStarted<> started) -> Co<> {
+        co_await AnyOf(
+          OpenNursery(std::ref(inner), std::move(started)), cancelInner);
+      });
+
+      if (!inner) {
+        ADD_FAILURE() << "Inner nursery was not created";
+        co_return kJoin;
+      }
+
+      outer.Start([&]() -> Co<> {
+        co_await inner->Start([&](TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(5ms);
+          started();
+          co_await el_->Sleep(1ms);
+        });
+      });
+
+      co_await el_->Sleep(1ms);
+      cancelInner.Trigger();
+      co_await el_->Sleep(1ms);
+      EXPECT_NE(inner, nullptr);
+      co_await el_->Sleep(5ms);
+      EXPECT_EQ(inner, nullptr);
+
+      co_return kJoin;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_ImmediatelyReady)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start([](TaskStarted<> started) -> Co<> {
+        started();
+        return NoOp();
+      });
+      co_return kJoin;
+    };
+    EXPECT_EQ(el_->Now(), 0ms);
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    co_await AnyOf(el_->Sleep(1ms), [&]() -> Co<> {
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start([&](TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(5ms, kNonCancellable);
+          started();
+
+          co_await el_->Sleep(1ms, kNonCancellable);
+
+          co_await kYield;
+          ADD_FAILURE() << "should never reach here";
+        });
+
+        ADD_FAILURE() << "should never reach here";
+
+        co_return kJoin;
+      };
+    });
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, Start_TaskStarted_CancelBeforeHandoff2)
+{
+  ::Run(*el_, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await AnyOf(
+        el_->Sleep(1ms), n.Start([&](TaskStarted<> started) -> Co<> {
+          co_await el_->Sleep(2ms, kNonCancellable);
+          started();
+          co_await el_->Sleep(2ms, kNonCancellable);
+        }));
+      co_return kCancel;
+    };
+  });
+}
+
+NOLINT_TEST_F(NurseryTest, OpenInnerNursery)
+{
+  ::Run(*el_, [&]() -> Co<> {
     Nursery* inner = nullptr;
     OXCO_WITH_NURSERY(outer)
     {
@@ -616,23 +664,20 @@ TEST_CASE("Open inner nursery")
   });
 }
 
-TEST_CASE("Open inner nursery and cancel")
+NOLINT_TEST_F(NurseryTest, OpenInnerNurseryAndCancel)
 {
-  TestEventLoop el;
-  Run(el, [&]() -> Co<> {
+  ::Run(*el_, [&]() -> Co<> {
     Nursery* n = nullptr;
     OXCO_WITH_NURSERY(n2)
     {
       co_await n2.Start(OpenNursery, std::ref(n));
-      // This task is not early cancellable
       n->Start([&]() -> Co<> {
-        co_await el.Sleep(1ms, kNonCancellable);
+        co_await el_->Sleep(1ms, kNonCancellable);
         n->Start([&]() -> Co<> { co_return; });
       });
-      // Will cancel but after the 1ms sleep completes
       co_return kCancel;
     };
-    CHECK(el.Now() == 1ms);
+    EXPECT_EQ(el_->Now(), 1ms);
   });
 }
 
