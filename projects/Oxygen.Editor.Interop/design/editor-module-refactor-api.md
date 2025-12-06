@@ -1,7 +1,7 @@
 # EditorModule Refactor - External API Specification
 
-**Version:** 2.0
-**Date:** December 6, 2025
+**Version:** 2.1
+**Date:** December 7, 2025
 **Audience:** Interop Layer Developers
 
 ---
@@ -39,7 +39,7 @@ constexpr ViewId kInvalidViewId{0};
 
 **Usage:**
 
-- Returned by `CreateView()`
+- Returned by `CreateViewAsync()`
 - Used to identify views in all subsequent operations
 - **Persistent**: Valid for the lifetime of the view
 - **Shared**: Same ID used internally by the Engine's FrameContext
@@ -86,11 +86,15 @@ void CreateViewAsync(EditorView::Config config, OnViewCreated callback);
 
 **Behavior:**
 
-- View creation is queued and executed during next `OnFrameStart` phase
-- View is created in `kCreating` state
-- Initialized during `OnSceneMutation` → `kReady`
+- View creation is queued and executed during the next `OnFrameStart` phase.
+- The engine-side registration (FrameContext registration) and the view's
+    initial initialization are performed immediately during that `OnFrameStart`
+    window (the implementation's CreateViewNow registers the view and calls
+    Initialize()).
+- Per-frame lifecycle callbacks such as `OnSceneMutation` will run later in
+    the frame cycle and are used by the view for ongoing per-frame updates.
 - Callback invoked on engine thread when creation completes
-- Visible by default (starts rendering immediately after initialization)
+- Visible by default (starts rendering when the view is fully initialized)
 
 **Thread Safety:** Call from **any thread**. Callback executes on engine thread.
 
@@ -103,7 +107,7 @@ EditorView::Config config {
     .compositing_target = main_surface  // Bind surface at creation
 };
 
-view_manager->CreateViewAsync(config, [](bool success, ViewId view_id) {
+editor_module->CreateViewAsync(config, [](bool success, ViewId view_id) {
     if (success) {
         LOG_F(INFO, "View created with ID: {}", view_id.get());
         // View is now ready and rendering
@@ -147,7 +151,7 @@ EditorView::Config cfg {
     .compositing_target = main_surface,
     .clear_color = {0.03f, 0.03f, 0.03f, 1.0f}
 };
-view_manager->CreateViewAsync(cfg, callback);
+editor_module->CreateViewAsync(cfg, callback);
 ```
 
 ---
@@ -200,7 +204,10 @@ void ShowView(ViewId view_id);
 **Behavior:**
 
 - Sets view's `visible` flag to `true`
-- View will be registered with FrameContext/Renderer in next `OnSceneMutation`
+- Marks the view as visible and requests registration. The actual engine
+    FrameContext registration/update occurs during the following frame's
+    `OnFrameStart` (when `ViewManager::FinalizeViews` runs) — i.e. changes
+    take effect at the next frame start.
 - Rendering resumes using existing resources (no allocation)
 - No-op if view is already visible or invalid
 
@@ -235,7 +242,10 @@ void HideView(ViewId view_id);
 **Behavior:**
 
 - Sets view's `visible` flag to `false`
-- View will be unregistered from FrameContext/Renderer
+- Marks the view as hidden and requests unregistration. The actual
+    engine FrameContext unregistration/update occurs during the following
+    frame's `OnFrameStart` (when `ViewManager::FinalizeViews` runs), so
+    the visible/unregistered state is applied on the next frame start.
 - Resources are **retained** (fast to show again)
 - No rendering occurs while hidden
 - No-op if view is already hidden or invalid
@@ -269,7 +279,7 @@ EditorView::Config config {
     .compositing_target = main_surface  // ← Bind surface here
 };
 
-view_manager->CreateViewAsync(config, callback);
+editor_module->CreateViewAsync(config, callback);
 ```
 
 **Purpose:** Associate a view with a surface at creation time.
@@ -295,14 +305,14 @@ EditorView::Config main_config {
     .name = "MainView",
     .compositing_target = main_surface
 };
-view_manager->CreateViewAsync(main_config, callback1);
+editor_module->CreateViewAsync(main_config, callback1);
 
 // PiP view (overlay on same surface)
 EditorView::Config pip_config {
     .name = "PiPView",
     .compositing_target = main_surface  // Same surface!
 };
-view_manager->CreateViewAsync(pip_config, callback2);
+editor_module->CreateViewAsync(pip_config, callback2);
 ```
 
 ---
@@ -310,6 +320,9 @@ view_manager->CreateViewAsync(pip_config, callback2);
 ### Render Graph Customization
 
 #### SetViewRenderGraph
+
+**Status:** Planned — this API is part of the design but is not implemented in the current codebase.
+When implemented it will allow assigning a custom render graph factory to a view.
 
 ```cpp
 void SetViewRenderGraph(ViewId view_id,
@@ -362,11 +375,20 @@ void CreateScene(std::string_view name);
 
 **Behavior:**
 
-- Creates new empty scene
-- Scene is set on FrameContext during `OnFrameStart`
-- All views use this scene (single scene per editor module)
+- Creates a new empty scene immediately (synchronous in the current
+    implementation). The EditorModule stores the scene and the engine will set
+    that scene onto the FrameContext during the next `OnFrameStart` call so
+    views and frame processing will see the new scene starting the following
+    frame.
+- The previous scene (if any) will be released when there are no remaining
+    references.
 
-**Thread Safety:** Call from **any thread**. Execution deferred.
+**Thread Safety:** This call is synchronous and modifies the module's
+internal state directly. In the current implementation it is expected to be
+called from the UI/host thread or otherwise coordinated with the engine; it
+is not currently protected by internal synchronization for concurrent
+callers. If you need cross-thread safety, call via a host-provided wrapper
+that marshals the operation to the engine thread or enqueue mutations instead.
 
 **Example:**
 
@@ -382,14 +404,10 @@ editor_module->CreateScene("UntitledScene");
 [[nodiscard]] auto GetScene() const -> std::shared_ptr<scene::Scene>;
 ```
 
-**Purpose:** Get the current scene.
-
-**Returns:**
-
-- Shared pointer to scene
-- `nullptr` if no scene created
-
-**Thread Safety:** Call from **any thread**. Returns current scene.
+**Status:** Not implemented in the current EditorModule. The module
+maintains an internal scene (accessible via `CreateScene`) but a public
+`GetScene()` accessor is not exposed yet. It may be added in a future
+iteration if interop callers require direct scene access.
 
 ---
 
@@ -442,7 +460,12 @@ void ProcessInputEvent(const platform::InputEvent& event);
 
 - `event` - The input event (Mouse, Keyboard, etc.)
 
-**Behavior:**
+**Status:** Planned — the `ProcessInputEvent` entry point is described but is
+not yet implemented in the current EditorModule. When implemented it will
+queue input events and route them to the appropriate view(s) on the engine
+thread.
+
+**Behavior (expected when implemented):**
 
 - Event is queued and processed in the next frame
 - Routed to the appropriate `EditorView` via `ViewManager`
@@ -473,7 +496,7 @@ EditorView::Config config {
     .compositing_target = main_surface
 };
 
-view_manager->CreateViewAsync(config, [](bool success, ViewId view_id) {
+editor_module->CreateViewAsync(config, [](bool success, ViewId view_id) {
     if (success) {
         LOG_F(INFO, "View {} created and rendering to surface", view_id.get());
         // View is now initialized, rendering, and compositing
@@ -493,7 +516,7 @@ EditorView::Config main_config {
     .compositing_target = main_surface
 };
 
-view_manager->CreateViewAsync(main_config, [](bool success, ViewId main_view) {
+editor_module->CreateViewAsync(main_config, [](bool success, ViewId main_view) {
     if (success) {
         LOG_F(INFO, "Main view created");
     }
@@ -506,7 +529,7 @@ EditorView::Config pip_config {
     .compositing_target = main_surface  // Same surface!
 };
 
-view_manager->CreateViewAsync(pip_config, [](bool success, ViewId pip_view) {
+editor_module->CreateViewAsync(pip_config, [](bool success, ViewId pip_view) {
     if (success) {
         LOG_F(INFO, "PiP view created");
         // TODO: Apply wireframe render graph when API available
@@ -529,7 +552,7 @@ EditorView::Config left_config {
     .purpose = "scene_view",
     .compositing_target = left_surface
 };
-view_manager->CreateViewAsync(left_config, callback);
+editor_module->CreateViewAsync(left_config, callback);
 
 // Center panel (main viewport)
 EditorView::Config center_config {
@@ -537,7 +560,7 @@ EditorView::Config center_config {
     .purpose = "main_view",
     .compositing_target = center_surface
 };
-view_manager->CreateViewAsync(center_config, callback);
+editor_module->CreateViewAsync(center_config, callback);
 
 // Right panel
 EditorView::Config right_config {
@@ -545,7 +568,7 @@ EditorView::Config right_config {
     .purpose = "wireframe_view",
     .compositing_target = right_surface
 };
-view_manager->CreateViewAsync(right_config, callback);
+editor_module->CreateViewAsync(right_config, callback);
 
 // Three independent surfaces, three independent views
 // Each renders and composites independently
@@ -556,12 +579,25 @@ view_manager->CreateViewAsync(right_config, callback);
 ### Example 4: Toggle Debug Overlay
 
 ```cpp
-// Create overlay once
-auto debug_overlay = editor_module->CreateView("DebugOverlay", "debug");
-editor_module->AttachViewToSurface(debug_overlay, main_surface);
 
-auto debug_graph = CreateDebugOverlayRenderGraph();
-editor_module->SetViewRenderGraph(debug_overlay, debug_graph);
+// Create overlay once (use CreateViewAsync and supply a compositing target
+// at creation time — AttachViewToSurface is not present in the current
+// implementation).
+EditorView::Config debug_cfg{
+    .name = "DebugOverlay",
+    .purpose = "debug",
+    .compositing_target = main_surface
+};
+
+ViewId debug_overlay = kInvalidViewId;
+editor_module->CreateViewAsync(debug_cfg,
+    [&](bool success, ViewId id) {
+        if (success) debug_overlay = id;
+    });
+
+// NOTE: SetViewRenderGraph is part of the design but not yet available in
+// the current codebase — when implemented it can be called to customize
+// the view's render graph.
 
 bool overlay_visible = true;
 
@@ -585,8 +621,18 @@ std::vector<ViewId> auxiliary_views;
 
 // User clicks "Add Top View"
 void OnAddTopView() {
-    auto top_view = editor_module->CreateView("TopView", "auxiliary");
-    editor_module->AttachViewToSurface(top_view, new_panel_surface);
+    // Create the view and bind the compositing target at creation time
+    EditorView::Config cfg{
+        .name = "TopView",
+        .purpose = "auxiliary",
+        .compositing_target = new_panel_surface
+    };
+
+    ViewId top_view = kInvalidViewId;
+    editor_module->CreateViewAsync(cfg,
+        [&](bool success, ViewId id) {
+            if (success) top_view = id;
+        });
 
     // Position camera looking down
     // (via command to be executed in next SceneMutation)
@@ -626,11 +672,48 @@ void OnCloseAuxiliaryViews() {
 
 ### Frame Lifecycle Guarantees
 
-- ✅ View creation takes effect in **next frame's OnSceneMutation**
+- ✅ View creation takes effect during **next frame's OnFrameStart** (the
+    engine will register the view and perform initial initialization during the
+    CreateViewNow/OnFrameStart window).
 - ✅ View destruction completes in **next frame's OnFrameStart**
-- ✅ Visibility changes take effect in **next frame's OnSceneMutation**
 - ✅ Surface attachments take effect in **next frame's OnCompositing**
 - ✅ Render graph changes take effect in **next frame's OnPreRender**
+- ✅ View Visibility changes take effect at the following frame's
+  **OnFrameStart** (via `ViewManager::FinalizeViews`).
+- ✅ Scene mutations (node creation, removal, rename, reparent, transform
+    updates) applied via `Enqueue` and targeting **OnSceneMutation** execute
+    during that phase and take effect immediately — they are visible to
+    subsequent per-frame steps (e.g., `OnPreRender`) within the same frame.
+    Callbacks tied to these commands are invoked on the engine thread while the
+    command executes.
+        - Commands enqueued via `Enqueue(std::unique_ptr<EditorCommand>)` that
+            target `PhaseId::kSceneMutation` will execute during the engine's
+            `OnSceneMutation` phase in FIFO order. - Node creation and removal
+        commands (for example `CreateSceneNodeCommand`,
+            `RemoveSceneNodeCommand`, `RenameSceneNodeCommand`,
+            `ReparentSceneNodeCommand`, `SetLocalTransformCommand`, etc.)
+            execute during `OnSceneMutation` and operate on the
+        `CommandContext.Scene` pointer provided by the EditorModule. - Commands
+            which create nodes will register native handles (when requested) and
+            will invoke the provided callback synchronously as part of the
+            command's `Execute()` method — i.e. the callback runs on the engine
+        thread while the command executes. - Removal commands will modify the
+            scene immediately in `OnSceneMutation`; any
+            registration/unregistration helpers (e.g., `NodeRegistry`) should be
+            treated as best-effort and often performed by the caller-side
+            wrapper before or after enqueueing (the managed wrapper does a
+        best-effort unregister in the current implementation). - Because
+            `OnSceneMutation` commands are drained before per-view
+            `OnSceneMutation` callbacks are invoked, scene changes made by these
+            commands are visible to views during the same frame's subsequent
+            phases (for example `OnPreRender`). In other words: create/remove
+        operations take effect for the remainder of the current frame once the
+            `OnSceneMutation` phase runs. - If the `CommandContext.Scene` is
+            null (no scene created), scene mutation commands are no-ops.
+
+    This model ensures deterministic ordering and frame-safety for scene edits
+    and makes it safe for UI callers to request mutations from any thread via the
+    provided interop wrappers that enqueue commands on the engine's command queue.
 
 ### Error Handling
 
@@ -649,8 +732,9 @@ void OnCloseAuxiliaryViews() {
 
 ### Input Handling
 
-- ✅ **Thread-safe input** - `ProcessInputEvent` can be called from any thread
-- ✅ **View routing** - Events automatically routed to focused/hovered view
+- ❗ **Planned:** `ProcessInputEvent` is not yet implemented in the
+    current codebase. When available it will be thread-safe and route events to
+    the focused/hovered view(s).
 
 ---
 
@@ -698,10 +782,13 @@ auto surface = GetSurface();
 EnsureEditorCamera(surface, width, height);
 // Camera automatically attached to surface
 
-// NEW (explicit)
-auto view = CreateView("MyView", "scene_view");
-AttachViewToSurface(view, surface);
-// Camera automatically created and managed by view
+// NEW (explicit) — bind surface at creation time using the view config
+EditorView::Config cfg{ .name = "MyView", .purpose = "scene_view",
+                                                .compositing_target = surface };
+editor_module->CreateViewAsync(cfg, [](bool success, ViewId id) {
+    // Created view will be initialized and registered by the engine in
+    // the next frame's OnFrameStart window
+});
 ```
 
 ---
