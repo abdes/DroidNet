@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
@@ -224,7 +225,7 @@ public class VisualUserInterfaceTests
             });
 
         _ = await taskCompletionSource.Task.ConfigureAwait(true);
-        Assert.IsTrue(content.IsLoaded);
+        _ = content.IsLoaded.Should().BeTrue();
         return;
 
         // ReSharper disable once AsyncVoidMethod
@@ -285,6 +286,28 @@ public class VisualUserInterfaceTests
     /// <returns>A task representing the asynchronous operation.</returns>
     protected static async Task WaitForRenderAsync()
         => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+    protected static async Task WaitForStateAsync(TestVisualStateManager vsm, FrameworkElement control, string stateName, TimeSpan timeout)
+    {
+        ArgumentNullException.ThrowIfNull(vsm);
+        ArgumentNullException.ThrowIfNull(control);
+
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < timeout)
+        {
+            var states = vsm.GetCurrentStates(control);
+            if (states?.Contains(stateName, StringComparer.Ordinal) == true)
+            {
+                return;
+            }
+
+            await WaitForRenderAsync().ConfigureAwait(true);
+        }
+
+        throw new TimeoutException($"State '{stateName}' was not recorded for the control within {timeout}.");
+    }
 
     /// <summary>
     /// Performs additional asynchronous setup steps for derived test classes.
