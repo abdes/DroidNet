@@ -32,7 +32,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBar\src\Controls.ToolBar.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBars\src\Controls.ToolBars.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />

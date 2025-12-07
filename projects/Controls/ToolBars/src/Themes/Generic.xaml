@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+
+    <!--  ReSharper disable Xaml.PathError  -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.ToolBars/ToolBar.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.ToolBars/ToolBarButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.ToolBars/ToolBarToggleButton.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.ToolBars/ToolBarSeparator.xaml" />
+        <ResourceDictionary Source="ms-appx:///DroidNet.Controls.ToolBars/ToolBarElementHost.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>
