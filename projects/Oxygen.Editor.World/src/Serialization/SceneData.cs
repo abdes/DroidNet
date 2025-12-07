@@ -13,4 +13,11 @@ public record SceneData : GameObjectData
     /// Gets or initializes the list of root nodes in the scene.
     /// </summary>
     public IList<SceneNodeData> RootNodes { get; init; } = [];
+
+    /// <summary>
+    /// Optional editor-only data representing the scene explorer layout (folders and node references).
+    /// This field is ignored by runtime code but saved/loaded to preserve editor state.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public IList<ExplorerEntryData>? ExplorerLayout { get; init; } = null;
 }
