@@ -40,6 +40,14 @@ public interface ISceneEngineSync
     /// <returns>A task that completes when the node is removed.</returns>
     Task RemoveNodeAsync(Guid nodeId);
 
+    /// <summary>
+    ///     Reparents a node in the engine to the provided parent (null = root).
+    /// </summary>
+    /// <param name="nodeId">Node id to reparent.</param>
+    /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make a root node.</param>
+    /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
+    Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
+
     // ============================================================================
     // Transform Operations
     // ============================================================================

@@ -122,6 +122,29 @@ public sealed class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
+    public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
+    {
+        var world = this.engineService.World;
+        if (world is null)
+        {
+            this.logger.LogWarning("OxygenWorld is not available; cannot reparent node '{NodeId}'", nodeId);
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            world.ReparentSceneNode(nodeId, newParentGuid, preserveWorldTransform);
+            this.logger.LogDebug("Reparented node {NodeId} -> {ParentId}", nodeId, newParentGuid);
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogError(ex, "Failed to reparent node '{NodeId}'", nodeId);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
     public Task UpdateNodeTransformAsync(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
