@@ -1,0 +1,112 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Collections.ObjectModel;
+using DroidNet.Controls;
+using Oxygen.Editor.Core;
+
+namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+
+/// <summary>
+/// Editor-only tree adapter representing a folder/grouping inside the Scene Explorer.
+/// Folders only exist in the explorer UI and reference nodes by adapter objects — they
+/// do not correspond to SceneNode instances in the scene graph.
+/// </summary>
+public sealed class FolderAdapter : TreeItemAdapter
+{
+    private readonly ObservableCollection<ITreeItem> children = new();
+
+    public FolderAdapter(Guid id, string name)
+    {
+        this.Id = id;
+        this.Name = name;
+        // Keep IconGlyph up to date when children change
+        this.children.CollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
+    }
+
+    public Guid Id { get; }
+
+    public string Name { get; set; }
+
+    public override string Label
+    {
+        get => this.Name;
+        set
+        {
+            if (string.Equals(value, this.Name, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.Name = value;
+            this.OnPropertyChanged();
+        }
+    }
+
+    protected override int DoGetChildrenCount() => this.children.Count;
+
+    protected override async Task LoadChildren()
+    {
+        this.ClearChildren();
+        foreach (var child in this.children)
+        {
+            if (child is TreeItemAdapter adapter)
+            {
+                this.AddChildInternal(adapter);
+            }
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    public void AddChildAdapter(ITreeItem child)
+    {
+        if (child is TreeItemAdapter adapter)
+        {
+            this.children.Add(adapter);
+            if (this.IsExpanded)
+            {
+                this.AddChildInternal(adapter);
+            }
+        }
+    }
+
+    public bool RemoveChildAdapter(ITreeItem child)
+    {
+        var removed = this.children.Remove(child);
+        if (removed && child is TreeItemAdapter adapter)
+        {
+            // Ensure children collection has been initialized, then remove the
+            // adapter from the base class children collection. Use RemoveChildAsync
+            // synchronously here because this helper is synchronous.
+            _ = this.Children.ConfigureAwait(false);
+            _ = this.RemoveChildAsync(adapter).GetAwaiter().GetResult();
+        }
+
+        return removed;
+    }
+
+    /// <summary>
+    /// Expose the underlying child adapters as a read-only list for layout updates.
+    /// </summary>
+    public IReadOnlyList<ITreeItem> ChildAdapters => this.children.ToList();
+
+    /// <summary>
+    /// Glyph for showing open/closed folder icon in thumbnail.
+    /// Mirrors ProjectExplorer's FolderGlyph behavior (open when expanded and has children).
+    /// </summary>
+    public string IconGlyph => this.IsExpanded && this.children.Count > 0 ? "\uE838" : "\uE8B7";
+
+    /// <inheritdoc/>
+    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+
+    protected override void OnPropertyChanged(System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName?.Equals(nameof(this.IsExpanded), StringComparison.Ordinal) == true)
+        {
+            this.OnPropertyChanged(nameof(this.IconGlyph));
+        }
+    }
+}

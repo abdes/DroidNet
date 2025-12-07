@@ -1,0 +1,103 @@
+{
+  "Name": "MainScene",
+  "Id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "RootNodes": [
+    {
+      "Name": "Player",
+      "Id": "550e8400-e29b-41d4-a716-446655440000",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": -3.0, "y": 1.0, "z": 0.0 },
+          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        {
+          "$type": "GeometryComponent",
+          "Name": "PlayerMesh",
+          "GeometryUri": "asset://Generated/BasicShapes/Cube",
+          "OverrideSlots": [ { "$type": "RenderingSlot", "IsVisible": { "Value": true } } ],
+          "TargetedOverrides": [
+            {
+              "LodIndex": 0,
+              "SubmeshIndex": 0,
+              "OverrideSlots": [ { "$type": "MaterialsSlot", "Material": { "Uri": "asset://Generated/Materials/Default" } } ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "Name": "Enemy",
+      "Id": "550e8400-e29b-41d4-a716-446655440001",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": 0.0, "y": -0.5, "z": 1.0 },
+          "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset://Generated/BasicShapes/Sphere" }
+      ]
+    },
+    {
+      "Name": "Camera",
+      "Id": "550e8400-e29b-41d4-a716-446655440002",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": 1.5, "y": 1.5, "z": 10.0 },
+          "LocalRotation": { "x": -0.156434, "y": 0.0, "z": 0.0, "w": 0.987688 },
+          "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
+        },
+        {
+          "$type": "PerspectiveCamera",
+          "Name": "MainCamera",
+          "NearPlane": 0.1,
+          "FarPlane": 1000.0
+        }
+      ]
+    },
+    {
+      "Name": "Pickup",
+      "Id": "d4a76010-0000-0000-0000-000000000010",
+      "IsActive": true,
+      "Components": [
+        {
+          "$type": "Transform",
+          "Name": "Transform",
+          "LocalPosition": { "x": 4.0, "y": 0.0, "z": -4.5 },
+          "LocalRotation": { "x": 10.2, "y": 20.3, "z": 0.0, "w": 1.0 },
+          "LocalScale": { "x": 2.0, "y": 2.0, "z": 4.0 }
+        },
+        { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset://Generated/BasicShapes/Cylinder" }
+      ]
+    }
+  ],
+  "ExplorerLayout": [
+    {
+      "Type": "Folder",
+      "FolderId": "3b8f6c2a-95fb-4f5b-9a8d-9f3e2d1e6b8c",
+      "Name": "Characters",
+      "Children": [
+        { "Type": "Node", "NodeId": "550e8400-e29b-41d4-a716-446655440000" },
+        { "Type": "Node", "NodeId": "550e8400-e29b-41d4-a716-446655440001" }
+      ]
+    },
+    { "Type": "Node", "NodeId": "550e8400-e29b-41d4-a716-446655440002" },
+    {
+      "Type": "Folder",
+      "FolderId": "6f9d0f22-8c39-4523-a761-5c8b0b2e5f94",
+      "Name": "Pickups",
+      "Children": [
+        { "Type": "Node", "NodeId": "d4a76010-0000-0000-0000-000000000010" }
+      ]
+    }
+  ]
+}
