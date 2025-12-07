@@ -49,7 +49,7 @@ namespace DroidNet.Tests;
 /// ]]>
 /// </example>
 [SuppressMessage("Usage", "CA1812:Avoid uninstantiated internal classes", Justification = "Used by tests / XAML reflection")]
-internal sealed partial class TestVisualStateManager : VisualStateManager
+public sealed partial class TestVisualStateManager : VisualStateManager
 {
     private readonly Dictionary<FrameworkElement, List<string>> controlStates = [];
 
@@ -63,7 +63,7 @@ internal sealed partial class TestVisualStateManager : VisualStateManager
     /// </summary>
     /// <param name="control">The control to get the current state for.</param>
     /// <returns>The name of the current state of the control.</returns>
-    public List<string>? GetCurrentStates(FrameworkElement? control)
+    public IList<string>? GetCurrentStates(FrameworkElement? control)
         => control is null ? null : this.controlStates.TryGetValue(control, out var state) ? state : [];
 
     /// <summary>
