@@ -6,22 +6,89 @@ using CommunityToolkit.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace DroidNet.Controls;
 
 /// <summary>
-/// Represents a toggle button control for use in a toolbar, supporting icon, label, and compact visual states.
+/// Represents a button control for use in a toolbar, supporting icon, label, and compact visual states.
 /// </summary>
-[TemplatePart(Name = LayoutGridPartName, Type = typeof(Grid))]
+[TemplateVisualState(Name = NormalVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = PointerOverVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = PressedVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = DisabledVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = StandardVisualState, GroupName = DensityVisualStates)]
+[TemplateVisualState(Name = CompactVisualState, GroupName = DensityVisualStates)]
+[TemplatePart(Name = RootGridPartName, Type = typeof(Grid))]
 [TemplatePart(Name = LayoutGridPartName, Type = typeof(Grid))]
 [TemplatePart(Name = IconPresenterPartName, Type = typeof(IconSourceElement))]
 [TemplatePart(Name = LabelTextPartName, Type = typeof(TextBlock))]
-public partial class ToolBarToggleButton : ToggleButton
+[TemplatePart(Name = ContentPresenterPartName, Type = typeof(ContentPresenter))]
+public partial class ToolBarButton : Button
 {
-    private const string LayoutGridPartName = "PartLayoutGrid";
-    private const string IconPresenterPartName = "IconPresenter";
-    private const string LabelTextPartName = "LabelText";
+    /// <summary>
+    ///     Group name for common interaction visual states (Normal/PointerOver/Pressed/Disabled).
+    /// </summary>
+    public const string CommonVisualStates = "CommonStates";
+
+    /// <summary>
+    ///     Visual state for the normal (default) appearance.
+    /// </summary>
+    public const string NormalVisualState = "Normal";
+
+    /// <summary>
+    ///     Visual state when the pointer is over the control.
+    /// </summary>
+    public const string PointerOverVisualState = "PointerOver";
+
+    /// <summary>
+    ///     Visual state when the control is being pressed.
+    /// </summary>
+    public const string PressedVisualState = "Pressed";
+
+    /// <summary>
+    ///     Visual state when the control is disabled.
+    /// </summary>
+    public const string DisabledVisualState = "Disabled";
+
+    /// <summary>
+    ///     Group name for density/size visual states.
+    /// </summary>
+    public const string DensityVisualStates = "DensityStates";
+
+    /// <summary>
+    ///     Visual state used for the standard density variant.
+    /// </summary>
+    public const string StandardVisualState = "Standard";
+
+    /// <summary>
+    ///     Visual state used for the compact density variant.
+    /// </summary>
+    public const string CompactVisualState = "Compact";
+
+    /// <summary>
+    ///     The name of the root Grid element in the control template (required).
+    /// </summary>
+    public const string RootGridPartName = "PartRootGrid";
+
+    /// <summary>
+    ///     The name of the Icon presenter element (binds Icon property).
+    /// </summary>
+    public const string ContentPresenterPartName = "PartContentPresenter";
+
+    /// <summary>
+    ///     The name of the layout Grid that hosts the label and icon.
+    /// </summary>
+    public const string LayoutGridPartName = "PartLayoutGrid";
+
+    /// <summary>
+    ///     The name of the Icon presenter element (binds Icon property).
+    /// </summary>
+    public const string IconPresenterPartName = "PartIconPresenter";
+
+    /// <summary>
+    ///     The name of the TextBlock that displays the label text.
+    /// </summary>
+    public const string LabelTextPartName = "PartLabelText";
 
     private Grid? layoutGrid;
     private IconSourceElement? iconPresenter;
@@ -30,11 +97,11 @@ public partial class ToolBarToggleButton : ToggleButton
     private ILogger? logger;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ToolBarToggleButton"/> class.
+    /// Initializes a new instance of the <see cref="ToolBarButton"/> class.
     /// </summary>
-    public ToolBarToggleButton()
+    public ToolBarButton()
     {
-        this.DefaultStyleKey = typeof(ToolBarToggleButton);
+        this.DefaultStyleKey = typeof(ToolBarButton);
         this.Loaded += (s, e) => this.UpdateLabelPosition();
     }
 
@@ -126,7 +193,7 @@ public partial class ToolBarToggleButton : ToggleButton
     /// </summary>
     private void UpdateVisualState()
     {
-        var state = this.IsCompact ? "Compact" : "Standard";
+        var state = this.IsCompact ? CompactVisualState : StandardVisualState;
         this.LogVisualStateUpdated(state);
         _ = VisualStateManager.GoToState(this, state, useTransitions: true);
     }

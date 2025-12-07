@@ -12,4 +12,4 @@ using System.Runtime.CompilerServices;
  https://aka.ms/assembly-info-properties
 */
 
-[assembly: InternalsVisibleTo("DroidNet.Controls.ToolBar.UI.Tests")]
+[assembly: InternalsVisibleTo("DroidNet.Controls.ToolBars.UI.Tests")]

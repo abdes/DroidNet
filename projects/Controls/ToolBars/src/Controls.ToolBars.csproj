@@ -5,15 +5,15 @@
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <RootNamespace>$(RootNamespace).Controls</RootNamespace>
-        <AssemblyName>DroidNet.Controls.ToolBar</AssemblyName>
+        <AssemblyName>DroidNet.Controls.ToolBars</AssemblyName>
 
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <UseWinUI>true</UseWinUI>
 
         <Title>ToolBar controls</Title>
-        <Description>Custom controls for ToolBar.</Description>
+        <Description>Custom controls for a configurable, compact, replacement of the rigid WinUI 3 toolbars.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
-        <PackageTags>winui;controls;toolbar</PackageTags>
+        <PackageTags>winui;controls;toolbar;appbar;button</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 

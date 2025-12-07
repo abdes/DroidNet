@@ -39,7 +39,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBar\src\Controls.ToolBar.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBars\src\Controls.ToolBars.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputLog\src\Controls.OutputLog.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
