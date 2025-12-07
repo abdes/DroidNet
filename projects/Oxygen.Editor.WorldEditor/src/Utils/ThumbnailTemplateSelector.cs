@@ -27,6 +27,10 @@ public class ThumbnailTemplateSelector : DataTemplateSelector
     ///     Gets or sets the template used for entities.
     /// </summary>
     public DataTemplate? EntityTemplate { get; set; }
+    /// <summary>
+    ///     Gets or sets the template used for folders.
+    /// </summary>
+    public DataTemplate? FolderTemplate { get; set; }
 
     /// <summary>
     ///     Selects a data template based on the type of the item.
@@ -42,6 +46,7 @@ public class ThumbnailTemplateSelector : DataTemplateSelector
         {
             SceneAdapter => this.SceneTemplate,
             SceneNodeAdapter => this.EntityTemplate,
+            Oxygen.Editor.WorldEditor.SceneExplorer.FolderAdapter => this.FolderTemplate,
             _ => null,
         };
 }

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.SceneExplorer.SceneExplorerView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -6,6 +6,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:scene="using:Oxygen.Editor.WorldEditor.SceneExplorer"
     xmlns:utils="using:Oxygen.Editor.WorldEditor.Utils"
     KeyboardAcceleratorPlacementMode="Hidden"
     mc:Ignorable="d">
@@ -23,9 +24,17 @@
                     Symbol="{x:Bind utils:ThumbnailGenerator.GetThumbnailForEntity((dnc:TreeItemAdapter))}" />
             </DataTemplate>
 
+            <DataTemplate x:Key="FolderThumbnailTemplate" x:DataType="scene:FolderAdapter">
+                <FontIcon
+                    Width="24"
+                    Height="24"
+                    Glyph="{x:Bind IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
             <utils:ThumbnailTemplateSelector
                 x:Key="ThumbnailTemplateSelector"
                 EntityTemplate="{StaticResource EntityThumbnailTemplate}"
+                FolderTemplate="{StaticResource FolderThumbnailTemplate}"
                 SceneTemplate="{StaticResource SceneThumbnailTemplate}" />
 
         </ResourceDictionary>
@@ -72,38 +81,67 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <CommandBar
+
+            <dnc:ToolBar
                 Grid.Column="1"
                 DefaultLabelPosition="Collapsed"
+                IsCompact="False"
                 OverflowButtonVisibility="Collapsed">
-                <AppBarButton
-                    Icon="Rename"
-                    IsCompact="True"
-                    Label="Rename" />
-                <AppBarButton
-                    Icon="Repair"
-                    IsCompact="True"
-                    Label="Edit Properties" />
-                <AppBarButton
-                    Command="{x:Bind ViewModel.AddEntityCommand}"
-                    IsCompact="True"
-                    Label="Add Entity">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xECC8;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <!--<AppBarButton
-                    Command="{x:Bind ViewModel.AddSceneCommand}"
-                    Icon="Add"
-                    IsCompact="True"
-                    Label="Create New Scene" />-->
-                <AppBarButton
-                    Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
-                    Icon="Delete"
-                    IsCompact="True"
-                    Label="Delete"
-                    ToolTipService.ToolTip="Delete (Del)" />
-            </CommandBar>
+                <dnc:ToolBar.PrimaryItems>
+                    <!--  New scene node  -->
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.AddEntityCommand}" Label="New Node">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Add" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <!--  New folder from selection  -->
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.CreateFolderFromSelectionCommand}"
+                        IsEnabled="{x:Bind ViewModel.HasUnlockedSelectedItems, Mode=OneWay}"
+                        Label="New Folder">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Folder" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarSeparator />
+
+                    <!--  Rename / Cut / Copy / Paste / Delete  -->
+                    <dnc:ToolBarButton Click="Rename_Click" Label="Rename">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Rename" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Click="Cut_Click" Label="Cut">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Cut" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Click="Copy_Click" Label="Copy">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Copy" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Click="Paste_Click" Label="Paste">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Paste" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
+                        Label="Delete"
+                        ToolTipService.ToolTip="Delete (Del)">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Delete" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+                </dnc:ToolBar.PrimaryItems>
+            </dnc:ToolBar>
         </Grid>
     </Grid>
 </UserControl>
