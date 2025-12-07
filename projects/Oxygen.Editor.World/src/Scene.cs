@@ -45,6 +45,13 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
+    /// Editor-only explorer layout persisted alongside the scene file.
+    /// This is ignored by the runtime scene graph but included in scene DTOs.
+    /// </summary>
+    [JsonIgnore]
+    public IList<Serialization.ExplorerEntryData>? ExplorerLayout { get; set; }
+
+    /// <summary>
     ///     Creates and hydrates a <see cref="Scene"/> instance from the specified DTO.
     /// </summary>
     /// <param name="project">Owner project for the new scene.</param>
@@ -87,6 +94,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Name = this.Name,
             Id = this.Id,
             RootNodes = this.RootNodes.Select(n => n.Dehydrate()).ToList(),
+            ExplorerLayout = this.ExplorerLayout,
         };
     }
 }

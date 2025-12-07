@@ -49,7 +49,10 @@ public class SceneSerializer(IProject project)
             .ConfigureAwait(false) ?? throw new JsonException("Failed to deserialize scene data.");
 
         // Use the canonical factory to set required init-only properties then hydrate.
-        return Scene.CreateAndHydrate(project, data);
+        var scene = Scene.CreateAndHydrate(project, data);
+        // Preserve editor-only explorer layout on the returned Scene instance so UI can read it.
+        scene.ExplorerLayout = data.ExplorerLayout;
+        return scene;
     }
 
     /// <summary>
@@ -70,7 +73,9 @@ public class SceneSerializer(IProject project)
             return;
         }
 
+        // Hydrate scene content (nodes) but also transfer editor-only explorer layout
         targetScene.Hydrate(data);
+        targetScene.ExplorerLayout = data.ExplorerLayout;
     }
 
     /// <summary>

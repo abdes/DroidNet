@@ -133,6 +133,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             scene.RootNodes.Add(sceneNode);
         }
 
+        // Also copy any editor-only explorer layout so UI can show folders / grouping
+        scene.ExplorerLayout = loadedScene.ExplorerLayout;
+
         return true;
     }
 
