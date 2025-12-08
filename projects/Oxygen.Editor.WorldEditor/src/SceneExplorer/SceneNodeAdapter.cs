@@ -22,13 +22,30 @@ public class SceneNodeAdapter : TreeItemAdapter, ITreeItem<SceneNode>
     public SceneNodeAdapter(SceneNode sceneNode)
     {
         this.AttachedObject = sceneNode;
+        this.IsExpanded = sceneNode.IsExpanded;
+
         this.AttachedObject.PropertyChanged += (_, args) =>
         {
             if (args.PropertyName?.Equals(nameof(SceneNode.Name), StringComparison.Ordinal) == true)
             {
                 this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Label)));
             }
+            else if (args.PropertyName?.Equals(nameof(SceneNode.IsExpanded), StringComparison.Ordinal) == true)
+            {
+                this.IsExpanded = this.AttachedObject.IsExpanded;
+            }
         };
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (e.PropertyName == nameof(this.IsExpanded))
+        {
+            this.AttachedObject.IsExpanded = this.IsExpanded;
+        }
     }
 
     /// <inheritdoc />

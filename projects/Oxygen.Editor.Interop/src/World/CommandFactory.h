@@ -24,7 +24,9 @@ namespace oxygen::interop::module::commands{
   class CreateBasicMeshCommand;
   class SetVisibilityCommand;
   class ReparentSceneNodeCommand;
+  class ReparentSceneNodesCommand;
   class UpdateTransformsForNodesCommand;
+  class RemoveSceneNodesCommand;
 } // namespace oxygen::interop::module::commands
 
 namespace oxygen::scene {
@@ -75,7 +77,17 @@ namespace Oxygen::Interop::World {
       bool preserveWorldTransform
     );
 
+    virtual oxygen::interop::module::commands::ReparentSceneNodesCommand* CreateReparentSceneNodes(
+      std::vector<oxygen::scene::NodeHandle> children,
+      oxygen::scene::NodeHandle parent,
+      bool preserveWorldTransform
+    );
+
     virtual oxygen::interop::module::commands::UpdateTransformsForNodesCommand* CreateUpdateTransformsForNodes(
+      std::vector<oxygen::scene::NodeHandle> nodes
+    );
+
+    virtual oxygen::interop::module::commands::RemoveSceneNodesCommand* CreateRemoveSceneNodes(
       std::vector<oxygen::scene::NodeHandle> nodes
     );
   };

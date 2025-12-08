@@ -48,6 +48,13 @@ public interface ISceneEngineSync
     Task RemoveNodeHierarchyAsync(Guid rootNodeId);
 
     /// <summary>
+    ///     Removes multiple scene node hierarchies (nodes and all descendants) from the engine.
+    /// </summary>
+    /// <param name="rootNodeIds">The GUIDs of the hierarchy roots to remove.</param>
+    /// <returns>A task that completes when the hierarchies are removed.</returns>
+    Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds);
+
+    /// <summary>
     ///     Reparents a node in the engine to the provided parent (null = root).
     /// </summary>
     /// <param name="nodeId">Node id to reparent.</param>

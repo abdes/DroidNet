@@ -98,7 +98,47 @@ public sealed class SceneOrganizer : ISceneOrganizer
             PreviousLayout: previousLayout,
             NewLayout: layout,
             ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
-            ParentLists: new List<IList<ExplorerEntryData>> { folderParentList ?? layout });
+            ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
+    }
+
+    public LayoutChangeRecord RemoveNodeFromFolder(Guid nodeId, Guid folderId, Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var layout = RequireLayout(scene);
+
+        var (folderEntry, folderParentList) = FindFolderEntryWithParent(layout, folderId);
+        if (folderEntry is null)
+        {
+            throw new InvalidOperationException($"Folder '{folderId}' not found.");
+        }
+
+        if (folderEntry.Children is null)
+        {
+            // Nothing to remove
+            return new LayoutChangeRecord(
+                OperationName: "RemoveNodeFromFolder",
+                PreviousLayout: previousLayout,
+                NewLayout: layout,
+                ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
+                ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
+        }
+
+        var nodeEntry = folderEntry.Children.FirstOrDefault(e => TypeComparer.Equals(e.Type, "Node") && e.NodeId == nodeId);
+        if (nodeEntry is not null)
+        {
+            _ = folderEntry.Children.Remove(nodeEntry);
+        }
+
+        scene.ExplorerLayout = layout;
+
+        return new LayoutChangeRecord(
+            OperationName: "RemoveNodeFromFolder",
+            PreviousLayout: previousLayout,
+            NewLayout: layout,
+            ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
+            ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
     }
 
     public LayoutChangeRecord MoveFolderToParent(Guid folderId, Guid? newParentFolderId, Scene scene)

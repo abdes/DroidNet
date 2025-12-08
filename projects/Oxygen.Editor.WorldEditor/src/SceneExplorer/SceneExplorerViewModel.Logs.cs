@@ -282,4 +282,13 @@ public partial class SceneExplorerViewModel
 
     private void LogItemRemoved(string itemName)
         => LogItemRemoved(this.logger, itemName);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to perform batch removal of scene nodes. Falling back to individual removal.")]
+    private static partial void LogBatchRemovalFailed(ILogger logger, Exception ex);
+
+    private void LogBatchRemovalFailed(Exception ex)
+        => LogBatchRemovalFailed(this.logger, ex);
 }

@@ -17,7 +17,7 @@ public class SceneExplorerViewModelMessagingTests
     [TestMethod]
     public async Task CreateNodeAtRoot_SendsSceneNodeAddedMessage()
     {
-        var (vm, scene, _, _, messenger) = CreateViewModel();
+        var (vm, scene, _, _, messenger, _) = CreateViewModel();
         SceneNodeAddedMessage? capturedMessage = null;
         messenger.Register<SceneNodeAddedMessage>(this, (r, m) => capturedMessage = m);
 
@@ -38,7 +38,7 @@ public class SceneExplorerViewModelMessagingTests
     [TestMethod]
     public async Task ReparentNode_SendsSceneNodeReparentedMessage()
     {
-        var (vm, scene, _, _, messenger) = CreateViewModel();
+        var (vm, scene, _, _, messenger, _) = CreateViewModel();
         SceneNodeReparentedMessage? capturedMessage = null;
         messenger.Register<SceneNodeReparentedMessage>(this, (r, m) => capturedMessage = m);
 
@@ -67,7 +67,7 @@ public class SceneExplorerViewModelMessagingTests
     [TestMethod]
     public async Task RemoveNode_SendsSceneNodeRemovedMessage()
     {
-        var (vm, scene, _, _, messenger) = CreateViewModel();
+        var (vm, scene, _, _, messenger, _) = CreateViewModel();
         SceneNodeRemovedMessage? capturedMessage = null;
         messenger.Register<SceneNodeRemovedMessage>(this, (r, m) => capturedMessage = m);
 

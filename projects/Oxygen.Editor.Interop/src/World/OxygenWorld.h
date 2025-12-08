@@ -51,7 +51,9 @@ namespace Oxygen::Interop::World {
 
     // Reparent a node to a new parent (or make root when parent is null)
     void ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform);
+    void ReparentSceneNodes(array<System::Guid>^ children, Nullable<System::Guid> parent, bool preserveWorldTransform);
     void UpdateTransformsForNodes(array<System::Guid>^ nodes);
+    void RemoveSceneNodes(array<System::Guid>^ nodes);
 
     // (All APIs are GUID-based; no scene names are accepted)
 

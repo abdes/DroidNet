@@ -41,4 +41,10 @@ public record ExplorerEntryData
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public IList<ExplorerEntryData>? Children { get; init; } = null;
+
+    /// <summary>
+    /// Gets or initializes a value indicating whether the item is expanded in the explorer view.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsExpanded { get; set; }
 }

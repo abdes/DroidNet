@@ -18,7 +18,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public async Task RemoveSelectedItems_UndoRedo_RestoresAndRemovesNode()
     {
-        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
@@ -89,45 +89,24 @@ public class SceneExplorerViewModelUndoRedoTests
         await vm.ExpandItemForTestAsync(folder).ConfigureAwait(false);
         var folderKids = await folder.Children.ConfigureAwait(false);
         _ = folderKids.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
-        _ = vm.UndoStack.Count.Should().Be(3);
+        _ = vm.UndoStack.Count.Should().Be(2);
         _ = vm.RedoStack.Count.Should().Be(0);
 
         UndoRedo.Default[vm].Undo();
         var childrenAfterUndo = await sceneAdapter.Children.ConfigureAwait(false);
-        var folderAfterFirstUndo = childrenAfterUndo.OfType<FolderAdapter>().Single();
-        await vm.ExpandItemForTestAsync(folderAfterFirstUndo).ConfigureAwait(false);
-        var folderAfterFirstUndoKids = await folderAfterFirstUndo.Children.ConfigureAwait(false);
-        _ = folderAfterFirstUndoKids.Should().BeEmpty();
+        _ = childrenAfterUndo.OfType<FolderAdapter>().Should().BeEmpty();
         _ = childrenAfterUndo.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
-        _ = vm.UndoStack.Count.Should().Be(2);
-        _ = vm.RedoStack.Count.Should().Be(1);
-
-        // Second undo removes the folder entirely, leaving the node at root
-        UndoRedo.Default[vm].Undo();
-        var childrenAfterSecondUndo = await sceneAdapter.Children.ConfigureAwait(false);
-        _ = childrenAfterSecondUndo.OfType<FolderAdapter>().Should().BeEmpty();
-        _ = childrenAfterSecondUndo.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
         _ = vm.UndoStack.Count.Should().Be(1);
-        _ = vm.RedoStack.Count.Should().Be(2);
-
-        // First redo reintroduces the empty folder while node stays at root
-        UndoRedo.Default[vm].Redo();
-        var childrenAfterFirstRedo = await sceneAdapter.Children.ConfigureAwait(false);
-        var folderAfterFirstRedo = childrenAfterFirstRedo.OfType<FolderAdapter>().Single();
-        await vm.ExpandItemForTestAsync(folderAfterFirstRedo).ConfigureAwait(false);
-        var folderKidsAfterFirstRedo = await folderAfterFirstRedo.Children.ConfigureAwait(false);
-        _ = folderKidsAfterFirstRedo.Should().BeEmpty();
-        _ = childrenAfterFirstRedo.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
-        _ = vm.UndoStack.Count.Should().Be(2);
         _ = vm.RedoStack.Count.Should().Be(1);
 
+        // Redo reintroduces the folder with the node
         UndoRedo.Default[vm].Redo();
-        var childrenAfterSecondRedo = await sceneAdapter.Children.ConfigureAwait(false);
-        var folderAfterSecondRedo = childrenAfterSecondRedo.OfType<FolderAdapter>().Single();
-        await vm.ExpandItemForTestAsync(folderAfterSecondRedo).ConfigureAwait(false);
-        var folderKidsAfterSecondRedo = await folderAfterSecondRedo.Children.ConfigureAwait(false);
-        _ = folderKidsAfterSecondRedo.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
-        _ = vm.UndoStack.Count.Should().Be(3);
+        var childrenAfterRedo = await sceneAdapter.Children.ConfigureAwait(false);
+        var folderAfterRedo = childrenAfterRedo.OfType<FolderAdapter>().Single();
+        await vm.ExpandItemForTestAsync(folderAfterRedo).ConfigureAwait(false);
+        var folderKidsAfterRedo = await folderAfterRedo.Children.ConfigureAwait(false);
+        _ = folderKidsAfterRedo.Any(item => GetNodeId(item) == nodeId).Should().BeTrue();
+        _ = vm.UndoStack.Count.Should().Be(2);
         _ = vm.RedoStack.Count.Should().Be(0);
     }
 
@@ -159,7 +138,7 @@ public class SceneExplorerViewModelUndoRedoTests
 
     private static async Task<(SceneExplorerViewModelTestFixture.TestSceneExplorerViewModel vm, SceneAdapter sceneAdapter, ITreeItem nodeAdapter, Guid nodeId)> CreateSceneWithSingleNodeAsync()
     {
-        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
 
         var sceneAdapter = vm.Scene ?? throw new InvalidOperationException("Scene not initialized");
@@ -179,7 +158,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void RegisterCreateFolderUndo_RestoresLayoutsOnUndoRedo()
     {
-        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var previousLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = Guid.NewGuid() } };
@@ -200,7 +179,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void ApplyFolderCreationAsync_InsertsFolderMovesChildrenAndRegistersUndo()
     {
-        var (vm, scene, _, organizer, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, organizer, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
         var initialLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
@@ -239,24 +218,11 @@ public class SceneExplorerViewModelUndoRedoTests
         var folderKids = folderAdapter.Children.ConfigureAwait(false).GetAwaiter().GetResult();
         _ = folderKids.Should().Contain(layoutNode);
 
-        // Assert first undo: folder remains, children moved out
-        UndoRedo.Default[vm].Undo();
-        _ = scene.ExplorerLayout.Should().NotBeNull();
-        _ = scene.ExplorerLayout!.Count.Should().Be(2);
-        _ = scene.ExplorerLayout.Should().Contain(e => string.Equals(e.Type, "Folder", StringComparison.OrdinalIgnoreCase));
-        _ = scene.ExplorerLayout.Should().Contain(e => e.NodeId == node.Id);
-
-        // Assert second undo: folder removed, layout restored
+        // Assert first undo: folder removed, layout restored
         UndoRedo.Default[vm].Undo();
         _ = scene.ExplorerLayout.Should().BeEquivalentTo(layoutChange.PreviousLayout, options => options.WithStrictOrdering());
 
         // Redo sequence restores folder and children move
-        UndoRedo.Default[vm].Redo();
-        _ = scene.ExplorerLayout.Should().NotBeNull();
-        _ = scene.ExplorerLayout!.Count.Should().Be(2);
-        _ = scene.ExplorerLayout.Should().Contain(e => string.Equals(e.Type, "Folder", StringComparison.OrdinalIgnoreCase));
-        _ = scene.ExplorerLayout.Should().Contain(e => e.NodeId == node.Id);
-
         UndoRedo.Default[vm].Redo();
         _ = scene.ExplorerLayout.Should().BeEquivalentTo(layoutChange.NewLayout, options => options.WithStrictOrdering());
     }
