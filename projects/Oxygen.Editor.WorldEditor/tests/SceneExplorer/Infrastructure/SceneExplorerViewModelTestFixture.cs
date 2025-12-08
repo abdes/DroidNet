@@ -6,9 +6,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
-using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
@@ -363,9 +361,6 @@ internal static class SceneExplorerViewModelTestFixture
 
         public Task InvokeHandleItemRemovedAsync(TreeItemRemovedEventArgs args)
             => this.HandleItemRemovedAsync(args);
-
-        public Task<int> InvokeMoveAdaptersIntoFolderAsync(SceneAdapter sceneAdapter, FolderAdapter folderAdapter, ExplorerEntryData folderEntry)
-            => this.MoveAdaptersIntoFolderAsync(sceneAdapter, folderAdapter, folderEntry);
 
         public Task InvokeExpandAndSelectFolderAsync(SceneAdapter sceneAdapter, FolderAdapter folderAdapter, ExplorerEntryData folderEntry)
             => this.ExpandAndSelectFolderAsync(sceneAdapter, folderAdapter, folderEntry);

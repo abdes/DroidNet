@@ -2,14 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Linq;
+using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.WorldEditor.SceneExplorer;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
 
 /// <summary>
-/// Default implementation of <see cref="ISceneOrganizer" /> that mutates only <see cref="Scene.ExplorerLayout" />.
+/// Default implementation of <see cref="ISceneOrganizer" /> that manages <see cref="Scene.ExplorerLayout" />
+/// and reconciles layout adapters without mutating the runtime scene graph.
 /// </summary>
 public sealed class SceneOrganizer : ISceneOrganizer
 {
@@ -212,6 +216,240 @@ public sealed class SceneOrganizer : ISceneOrganizer
             ModifiedFolders: new List<ExplorerEntryData> { folderEntry });
     }
 
+    public void ApplyLayoutChange(Scene scene, LayoutChangeRecord change)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(change);
+
+        var expanded = GetExpandedFolderIds(scene.ExplorerLayout);
+        var clone = CloneLayout(change.NewLayout);
+
+        if (clone is not null && expanded.Count > 0)
+        {
+            foreach (var id in expanded)
+            {
+                var entry = FindFolderEntry(clone, id);
+                if (entry is not null)
+                {
+                    entry.IsExpanded = true;
+                }
+            }
+        }
+
+        scene.ExplorerLayout = clone;
+    }
+
+    private static LayoutNodeAdapter? WrapAsLayoutNodeAdapter(TreeItemAdapter adapter)
+        => adapter switch
+        {
+            LayoutNodeAdapter existing => existing,
+            SceneNodeAdapter sceneNode => new LayoutNodeAdapter(sceneNode),
+            _ => null,
+        };
+
+    private static async Task<List<ITreeItem>> FlattenVisibleAsync(ITreeItem root)
+    {
+        var list = new List<ITreeItem> { root };
+
+        if (!root.IsExpanded)
+        {
+            return list;
+        }
+
+        var children = await root.Children.ConfigureAwait(true);
+        foreach (var child in children)
+        {
+            list.AddRange(await FlattenVisibleAsync(child).ConfigureAwait(true));
+        }
+
+        return list;
+    }
+
+    private static async Task MoveAdapterAndRefreshAsync(
+        TreeItemAdapter nodeAdapter,
+        FolderAdapter folderAdapter,
+        bool wasExpanded,
+        SceneAdapter sceneAdapter,
+        ILayoutContext layoutContext)
+    {
+        if (nodeAdapter.Parent is TreeItemAdapter parentAdapter)
+        {
+            _ = await parentAdapter.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
+        }
+
+        var layoutNodeAdapter = WrapAsLayoutNodeAdapter(nodeAdapter);
+        if (layoutNodeAdapter is null)
+        {
+            return;
+        }
+
+        layoutNodeAdapter.IsExpanded = wasExpanded;
+        folderAdapter.AddChildAdapter(layoutNodeAdapter);
+        await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
+    }
+
+    public async Task ApplyLayoutRestoreAsync(
+        SceneAdapter sceneAdapter,
+        Scene scene,
+        IList<ExplorerEntryData>? layout,
+        ILayoutContext layoutContext)
+    {
+        ArgumentNullException.ThrowIfNull(sceneAdapter);
+        ArgumentNullException.ThrowIfNull(scene);
+        ArgumentNullException.ThrowIfNull(layoutContext);
+
+        var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
+        var layoutClone = CloneLayout(layout);
+
+        if (layoutClone is not null)
+        {
+            foreach (var id in expandedFolderIds)
+            {
+                var entry = FindFolderEntry(layoutClone, id);
+                if (entry is not null)
+                {
+                    entry.IsExpanded = true;
+                }
+            }
+        }
+
+        scene.ExplorerLayout = layoutClone;
+        await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
+    }
+
+    public async Task<int> MoveAdaptersIntoFolderAsync(
+        SceneAdapter sceneAdapter,
+        FolderAdapter folderAdapter,
+        ExplorerEntryData folderEntry,
+        ILayoutContext layoutContext)
+    {
+        ArgumentNullException.ThrowIfNull(sceneAdapter);
+        ArgumentNullException.ThrowIfNull(folderAdapter);
+        ArgumentNullException.ThrowIfNull(folderEntry);
+        ArgumentNullException.ThrowIfNull(layoutContext);
+
+        if (folderEntry.Children is null || folderEntry.Children.Count == 0)
+        {
+            return 0;
+        }
+
+        folderAdapter.IsExpanded = true;
+
+        var movedAdapterCount = 0;
+        foreach (var moved in folderEntry.Children)
+        {
+            if (moved.NodeId is null)
+            {
+                continue;
+            }
+
+            var nodeAdapter = await FindAdapterForNodeIdAsync(sceneAdapter, moved.NodeId.Value).ConfigureAwait(true);
+            if (nodeAdapter is null)
+            {
+                this.logger.LogDebug("MoveAdaptersIntoFolderAsync: adapter for node {NodeId} not found.", moved.NodeId);
+                continue;
+            }
+
+            var wasExpanded = nodeAdapter.IsExpanded;
+            nodeAdapter.IsExpanded = false;
+
+            if (!layoutContext.TryGetVisibleSpan(nodeAdapter, out var removeStart, out var removeCount))
+            {
+                // Fallback to a single refresh when visibility is unknown
+                await MoveAdapterAndRefreshAsync(nodeAdapter, folderAdapter, wasExpanded, sceneAdapter, layoutContext).ConfigureAwait(true);
+                ++movedAdapterCount;
+                continue;
+            }
+
+            if (nodeAdapter.Parent is TreeItemAdapter parentAdapter)
+            {
+                _ = await parentAdapter.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
+            }
+
+            var layoutNodeAdapter = WrapAsLayoutNodeAdapter(nodeAdapter);
+            if (layoutNodeAdapter is null)
+            {
+                continue;
+            }
+
+            folderAdapter.AddChildAdapter(layoutNodeAdapter);
+            layoutNodeAdapter.IsExpanded = wasExpanded;
+
+            var insertIndex = layoutContext.GetShownIndex(folderAdapter);
+            if (insertIndex is null)
+            {
+                await MoveAdapterAndRefreshAsync(nodeAdapter, folderAdapter, wasExpanded, sceneAdapter, layoutContext).ConfigureAwait(true);
+                ++movedAdapterCount;
+                continue;
+            }
+
+            var flattenedInsertItems = await FlattenVisibleAsync(layoutNodeAdapter).ConfigureAwait(true);
+            var targetIndex = insertIndex.Value + 1;
+            if (removeStart < targetIndex)
+            {
+                targetIndex -= removeCount;
+            }
+
+            var delta = new ShownItemsDelta(removeStart, removeCount, targetIndex, flattenedInsertItems);
+            layoutContext.ApplyShownDelta(delta);
+
+            ++movedAdapterCount;
+        }
+
+        return movedAdapterCount;
+    }
+
+    private static async Task<TreeItemAdapter?> FindAdapterForNodeIdAsync(ITreeItem root, Guid nodeId)
+    {
+        if (root is LayoutNodeAdapter lna && lna.AttachedObject.AttachedObject.Id == nodeId)
+        {
+            return lna;
+        }
+
+        if (root is SceneNodeAdapter sna && sna.AttachedObject.Id == nodeId)
+        {
+            return sna;
+        }
+
+        var children = await root.Children.ConfigureAwait(true);
+        foreach (var child in children)
+        {
+            if (child is LayoutNodeAdapter childLayout && childLayout.AttachedObject.AttachedObject.Id == nodeId)
+            {
+                return childLayout;
+            }
+
+            if (child is SceneNodeAdapter childNode && childNode.AttachedObject.Id == nodeId)
+            {
+                return childNode;
+            }
+
+            var nested = await FindAdapterForNodeIdAsync(child, nodeId).ConfigureAwait(true);
+            if (nested is not null)
+            {
+                return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDescendant(ITreeItem item, ITreeItem ancestor)
+    {
+        var current = item.Parent;
+        while (current != null)
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
+    }
+
     private static IList<ExplorerEntryData> RequireLayout(Scene scene)
     {
         if (scene.ExplorerLayout is null)
@@ -316,6 +554,28 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
 
         return expandedIds;
+    }
+
+    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData> entries, Guid folderId)
+    {
+        foreach (var entry in entries)
+        {
+            if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId == folderId)
+            {
+                return entry;
+            }
+
+            if (entry.Children != null)
+            {
+                var found = FindFolderEntry(entry.Children, folderId);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+        }
+
+        return null;
     }
 
     public void EnsureLayoutContainsNodes(Scene scene, IEnumerable<Guid> nodeIds)
