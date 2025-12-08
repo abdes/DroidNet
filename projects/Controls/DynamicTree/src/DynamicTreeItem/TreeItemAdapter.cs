@@ -71,11 +71,12 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     protected TreeItemAdapter(bool isRoot = false, bool isHidden = false)
     {
         this.IsRoot = isRoot;
-        this.Depth = isHidden ? -1 : 0;
 
         this.childrenLazy
             = new Lazy<Task<ReadOnlyObservableCollection<ITreeItem>>>(this.InitializeChildrenCollectionAsync);
         this.children.CollectionChanged += (_, args) => this.ChildrenCollectionChanged?.Invoke(this, args);
+
+        this.Depth = isHidden ? -1 : 0;
     }
 
     /// <inheritdoc />
@@ -131,6 +132,17 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
             field = value;
             this.OnPropertyChanged();
+
+            if (this.childrenLazy.IsValueCreated)
+            {
+                foreach (var child in this.children)
+                {
+                    if (child is TreeItemAdapter childAdapter)
+                    {
+                        childAdapter.Depth = field + 1;
+                    }
+                }
+            }
         }
     }
 

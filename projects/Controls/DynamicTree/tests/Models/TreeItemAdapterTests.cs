@@ -436,6 +436,52 @@ public class TreeItemAdapterTests
                 args => args.OldItems != null && args.OldItems.Count == 1 && args.OldItems.Contains(child));
     }
 
+    [TestMethod]
+    public async Task Depth_UpdatesRecursively_WhenParentChanges()
+    {
+        var rootMock = new Mock<TreeItemAdapterStub>(true, false) { CallBase = true };
+        var root = rootMock.Object;
+        root.Label = "Root";
+
+        var folderMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
+        var folder = folderMock.Object;
+        folder.Label = "Folder";
+
+        var parentMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
+        var parent = parentMock.Object;
+        parent.Label = "Parent";
+
+        var childMock = new Mock<TreeItemAdapterStub>(false, false) { CallBase = true };
+        var child = childMock.Object;
+        child.Label = "Child";
+
+        rootMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        folderMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        parentMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+        childMock.Setup(x => x.LoadChildrenPublic()).Returns(Task.CompletedTask);
+
+        // Build initial tree: Root -> Parent -> Child
+        await root.AddChildAsync(parent).ConfigureAwait(false);
+        await parent.AddChildAsync(child).ConfigureAwait(false);
+
+        // Verify initial depths
+        _ = root.Depth.Should().Be(0);
+        _ = parent.Depth.Should().Be(1);
+        _ = child.Depth.Should().Be(2);
+
+        // Add Folder to Root
+        await root.AddChildAsync(folder).ConfigureAwait(false);
+        _ = folder.Depth.Should().Be(1);
+
+        // Move Parent to Folder
+        await root.RemoveChildAsync(parent).ConfigureAwait(false);
+        await folder.AddChildAsync(parent).ConfigureAwait(false);
+
+        // Verify new depths
+        _ = parent.Depth.Should().Be(2);
+        _ = child.Depth.Should().Be(3);
+    }
+
     internal abstract class TreeItemAdapterStub(bool isRoot = false, bool isHidden = false)
         : TreeItemAdapter(isRoot, isHidden)
     {
