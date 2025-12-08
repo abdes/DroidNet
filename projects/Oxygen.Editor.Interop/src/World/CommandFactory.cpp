@@ -14,9 +14,11 @@
 #include <Commands/RemoveSceneNodeCommand.h>
 #include <Commands/RenameSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodeCommand.h>
+#include <Commands/ReparentSceneNodesCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
+#include <Commands/RemoveSceneNodesCommand.h>
 
 using namespace oxygen::interop::module::commands;
 
@@ -76,10 +78,24 @@ namespace Oxygen::Interop::World {
     return new ReparentSceneNodeCommand(child, parent, preserveWorldTransform);
   }
 
+  ReparentSceneNodesCommand* CommandFactory::CreateReparentSceneNodes(
+    std::vector<oxygen::scene::NodeHandle> children,
+    oxygen::scene::NodeHandle parent,
+    bool preserveWorldTransform
+  ) {
+    return new ReparentSceneNodesCommand(std::move(children), parent, preserveWorldTransform);
+  }
+
   UpdateTransformsForNodesCommand* CommandFactory::CreateUpdateTransformsForNodes(
     std::vector<oxygen::scene::NodeHandle> nodes
   ) {
     return new UpdateTransformsForNodesCommand(std::move(nodes));
+  }
+
+  RemoveSceneNodesCommand* CommandFactory::CreateRemoveSceneNodes(
+    std::vector<oxygen::scene::NodeHandle> nodes
+  ) {
+    return new RemoveSceneNodesCommand(std::move(nodes));
   }
 
 }

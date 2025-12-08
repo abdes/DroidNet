@@ -124,8 +124,35 @@ public sealed class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task RemoveNodeHierarchyAsync(Guid rootNodeId)
     {
-        // OxygenWorld currently exposes only single-node removal. Avoid silent partial behavior.
-        throw new NotImplementedException("Hierarchy removal not yet supported by engine interop. Add a dedicated OxygenWorld API before enabling.");
+        var world = this.engineService.World;
+        if (world is null)
+        {
+            this.logger.LogWarning("OxygenWorld is not available; cannot remove node hierarchy '{NodeId}'", rootNodeId);
+            return Task.CompletedTask;
+        }
+
+        // OxygenWorld's RemoveSceneNode handles hierarchy destruction if children exist.
+        world.RemoveSceneNode(rootNodeId);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds)
+    {
+        if (rootNodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var world = this.engineService.World;
+        if (world is null)
+        {
+            this.logger.LogWarning("OxygenWorld is not available; cannot remove node hierarchies");
+            return Task.CompletedTask;
+        }
+
+        world.RemoveSceneNodes(rootNodeIds.ToArray());
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -154,8 +181,20 @@ public sealed class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false)
     {
-        // OxygenWorld exposes only single-node reparent. Avoid partial hierarchy moves without native support.
-        throw new NotImplementedException("Hierarchy reparent not yet supported by engine interop. Add batch/recursive API before enabling.");
+        if (nodeIds.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        var world = this.engineService.World;
+        if (world is null)
+        {
+            this.logger.LogWarning("OxygenWorld is not available; cannot reparent hierarchies");
+            return Task.CompletedTask;
+        }
+
+        world.ReparentSceneNodes(nodeIds.ToArray(), newParentGuid, preserveWorldTransform);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>

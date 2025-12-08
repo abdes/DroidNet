@@ -20,7 +20,7 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer.Tests.Infrastructure;
 
 internal static class SceneExplorerViewModelTestFixture
 {
-    public static (TestSceneExplorerViewModel vm, Scene scene, Mock<ISceneMutator> mutator, Mock<ISceneOrganizer> organizer, IMessenger messenger) CreateViewModel()
+    public static (TestSceneExplorerViewModel vm, Scene scene, Mock<ISceneMutator> mutator, Mock<ISceneOrganizer> organizer, IMessenger messenger, Mock<ISceneEngineSync> engineSync) CreateViewModel()
     {
         var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -120,7 +120,8 @@ internal static class SceneExplorerViewModelTestFixture
             .Returns((HashSet<Guid> ids, Scene s, SceneAdapter _) =>
             {
                 var previousLayout = s.ExplorerLayout?.ToList()
-                                     ?? ids.Select(id => new ExplorerEntryData { Type = "Node", NodeId = id }).ToList();
+                                     ?? s.RootNodes.Select(n => new ExplorerEntryData { Type = "Node", NodeId = n.Id, IsExpanded = n.IsExpanded }).ToList();
+
                 var folderId = Guid.NewGuid();
                 var folderEntry = new ExplorerEntryData
                 {
@@ -128,9 +129,25 @@ internal static class SceneExplorerViewModelTestFixture
                     FolderId = folderId,
                     Name = "New Folder",
                     Children = ids.Select(id => new ExplorerEntryData { Type = "Node", NodeId = id }).ToList(),
+                    IsExpanded = true
                 };
 
-                var newLayout = new List<ExplorerEntryData> { folderEntry };
+                // Create new layout: keep items NOT in selection, add new folder
+                var newLayout = new List<ExplorerEntryData>();
+
+                // Add existing items that are not being moved
+                foreach (var entry in previousLayout)
+                {
+                    if (entry.NodeId.HasValue && ids.Contains(entry.NodeId.Value))
+                    {
+                        continue;
+                    }
+                    // Note: This simple mock doesn't handle nested folders/nodes recursively for removal,
+                    // but sufficient for flat list tests.
+                    newLayout.Add(entry);
+                }
+
+                newLayout.Insert(0, folderEntry); // Insert at top for simplicity
                 s.ExplorerLayout = newLayout;
 
                 return new LayoutChangeRecord(
@@ -152,7 +169,7 @@ internal static class SceneExplorerViewModelTestFixture
             organizer.Object,
             loggerFactory);
 
-        return (vm, scene, mutator, organizer, messenger);
+        return (vm, scene, mutator, organizer, messenger, engineSync);
     }
 
     internal sealed class TestSceneExplorerViewModel : SceneExplorerViewModel
@@ -175,6 +192,9 @@ internal static class SceneExplorerViewModelTestFixture
 
         public void InvokeHandleItemBeingRemoved(Scene scene, SceneNodeAdapter adapter, TreeItemBeingRemovedEventArgs args)
             => this.HandleItemBeingRemoved(scene, adapter, args);
+
+        public void InvokeOnItemBeingRemoved(TreeItemBeingRemovedEventArgs args)
+            => this.OnItemBeingRemoved(this, args);
 
         public Task InvokeHandleItemAddedAsync(TreeItemAddedEventArgs args)
             => this.HandleItemAddedAsync(args);

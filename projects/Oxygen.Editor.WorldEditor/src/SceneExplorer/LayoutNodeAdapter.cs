@@ -20,6 +20,7 @@ public sealed class LayoutNodeAdapter : TreeItemAdapter, ITreeItem<SceneNodeAdap
     public LayoutNodeAdapter(SceneNodeAdapter payload)
     {
         this.payload = payload ?? throw new ArgumentNullException(nameof(payload));
+        this.IsExpanded = this.payload.IsExpanded;
         this.payload.PropertyChanged += this.OnPayloadPropertyChanged;
     }
 
@@ -78,6 +79,21 @@ public sealed class LayoutNodeAdapter : TreeItemAdapter, ITreeItem<SceneNodeAdap
         if (args.PropertyName?.Equals(nameof(this.Label), StringComparison.Ordinal) == true)
         {
             this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Label)));
+        }
+        else if (args.PropertyName?.Equals(nameof(this.IsExpanded), StringComparison.Ordinal) == true)
+        {
+            this.IsExpanded = this.payload.IsExpanded;
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (e.PropertyName == nameof(this.IsExpanded))
+        {
+            this.payload.IsExpanded = this.IsExpanded;
         }
     }
 }

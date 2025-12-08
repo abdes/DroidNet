@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using DroidNet.Controls;
 using Oxygen.Editor.Core;
+using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 
@@ -16,6 +18,24 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 public sealed class FolderAdapter : TreeItemAdapter
 {
     private readonly ObservableCollection<ITreeItem> children = new();
+    private readonly ExplorerEntryData? entryData;
+
+    public FolderAdapter(ExplorerEntryData entry)
+        : this(entry.FolderId ?? Guid.NewGuid(), entry.Name ?? "Folder")
+    {
+        this.entryData = entry;
+        this.IsExpanded = entry.IsExpanded ?? false;
+
+        // Keep the underlying data model in sync with the UI state so that layout serialization
+        // and restoration (e.g. during Undo/Redo) preserves the expansion state.
+        this.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(this.IsExpanded))
+            {
+                this.entryData.IsExpanded = this.IsExpanded;
+            }
+        };
+    }
 
     public FolderAdapter(Guid id, string name)
     {
@@ -112,6 +132,10 @@ public sealed class FolderAdapter : TreeItemAdapter
         if (e.PropertyName?.Equals(nameof(this.IsExpanded), StringComparison.Ordinal) == true)
         {
             this.OnPropertyChanged(nameof(this.IconGlyph));
+            if (this.entryData is not null)
+            {
+                this.entryData.IsExpanded = this.IsExpanded;
+            }
         }
     }
 }

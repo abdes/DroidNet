@@ -313,6 +313,32 @@ public class SceneOrganizerTests
         _ = folder.Children!.Single().NodeId.Should().Be(node.Id);
     }
 
+    [TestMethod]
+    public void RemoveNodeFromFolder_RemovesEntryFromLayout()
+    {
+        var scene = CreateScene();
+        var folderId = Guid.NewGuid();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        scene.ExplorerLayout =
+        [
+            new ExplorerEntryData
+            {
+                Type = "Folder",
+                FolderId = folderId,
+                Name = "Folder",
+                Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } }
+            }
+        ];
+
+        var change = this.organizer.RemoveNodeFromFolder(node.Id, folderId, scene);
+
+        _ = scene.ExplorerLayout.Should().BeSameAs(change.NewLayout);
+        var folder = change.NewLayout.First(e => e.FolderId == folderId);
+        _ = folder.Children.Should().BeEmpty();
+        _ = change.ModifiedFolders.Should().Contain(folder);
+    }
+
     private static Scene CreateScene()
     {
         var project = new Mock<IProject>().Object;

@@ -45,6 +45,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private readonly Dictionary<SceneNodeAdapter, LayoutChangeRecord> pendingLayoutChanges = new();
     private int nextEntityIndex;
     private bool isPerformingLayoutMove;
+    private bool isPerformingBatchDelete;
+    private List<SceneNode>? batchRemovedNodes;
 
     private bool isDisposed;
     // When true we are performing an explicit delete operation and the tree's
@@ -203,10 +205,38 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         try
         {
             this.isPerformingDelete = true;
+            this.batchRemovedNodes = new List<SceneNode>();
+
+            // Attempt batch removal from the engine first to optimize performance and ensure atomicity.
+            // If successful, we set a flag to suppress individual engine syncs during the tree removal process.
+            var selectedAdapters = new List<SceneNodeAdapter>();
+            if (this.SelectionModel is MultipleSelectionModel<ITreeItem> multiple)
+            {
+                selectedAdapters.AddRange(multiple.SelectedItems.OfType<SceneNodeAdapter>());
+            }
+            else if (this.SelectionModel?.SelectedItem is SceneNodeAdapter single)
+            {
+                selectedAdapters.Add(single);
+            }
+
+            if (selectedAdapters.Count > 0)
+            {
+                var ids = selectedAdapters.Select(a => a.AttachedObject.Id).ToList();
+                await this.sceneEngineSync.RemoveNodeHierarchiesAsync(ids).ConfigureAwait(false);
+                this.isPerformingBatchDelete = true;
+            }
+
             await base.RemoveSelectedItems().ConfigureAwait(false);
+
+            if (this.batchRemovedNodes.Count > 0)
+            {
+                _ = this.messenger.Send(new SceneNodeRemovedMessage(this.batchRemovedNodes));
+            }
         }
         finally
         {
+            this.batchRemovedNodes = null;
+            this.isPerformingBatchDelete = false;
             this.isPerformingDelete = false;
             UndoRedo.Default[this].EndChangeSet();
         }
@@ -381,8 +411,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
+        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
+
         if (!this.suppressUndoRecording)
         {
+            // Check if this was a scene creation operation that requires explicit delete on undo
+            var requiresExplicitDelete = addedAdapter != null &&
+                                         this.pendingSceneChanges.TryGetValue(addedAdapter, out var change) &&
+                                         (change.OperationName == "CreateNodeAtRoot" || change.OperationName == "CreateNodeUnderParent");
+
             // Add a safe undo action that only attempts removal if the item is still
             // present in the tree. This avoids assert failures when multiple programmatic
             // operations modify the tree before the undo is applied.
@@ -394,6 +431,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                     {
                         try
                         {
+                            if (requiresExplicitDelete)
+                            {
+                                this.isPerformingDelete = true;
+                            }
+
                             // If item has a parent, verify the parent currently contains the item
                             if (item.Parent is TreeItemAdapter pa)
                             {
@@ -419,12 +461,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                             // log for diagnostics.
                             this.LogUndoRemoveFailed(ex, item.Label);
                         }
+                        finally
+                        {
+                            if (requiresExplicitDelete)
+                            {
+                                this.isPerformingDelete = false;
+                            }
+                        }
                     });
         }
 
         this.LogItemAdded(args.TreeItem.Label);
 
-        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
         if (addedAdapter is null)
         {
             return;
@@ -515,7 +563,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
         else if (wasDeletion)
         {
-            _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { removedAdapter.AttachedObject }));
+            if (this.batchRemovedNodes is not null)
+            {
+                this.batchRemovedNodes.Add(removedAdapter.AttachedObject);
+            }
+            else
+            {
+                _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { removedAdapter.AttachedObject }));
+            }
         }
 
         this.TryApplyLayoutChange(removedAdapter);
@@ -701,7 +756,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
-    private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
+    protected internal virtual void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
     {
         _ = sender; // unused
 
@@ -716,6 +771,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         if (!this.isPerformingDelete)
         {
             this.CaptureOldParentForMove(entityAdapter, entityAdapter.Parent);
+
+            // If removing from a folder (and not deleting), update layout to reflect removal
+            if (args.TreeItem.Parent is FolderAdapter folderAdapter)
+            {
+                var folderScene = entity.Scene ?? ResolveSceneFromTree(folderAdapter);
+                if (folderScene != null)
+                {
+                    var change = this.sceneOrganizer.RemoveNodeFromFolder(entity.Id, folderAdapter.Id, folderScene);
+                    this.pendingLayoutChanges[entityAdapter] = change;
+                }
+            }
+
             return;
         }
 
@@ -762,6 +829,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         var entity = entityAdapter.AttachedObject;
 
         var change = this.sceneMutator.RemoveNode(entity.Id, scene);
+
+        if (this.isPerformingBatchDelete)
+        {
+            change = change with { RequiresEngineSync = false };
+        }
+
         this.pendingSceneChanges[entityAdapter] = change;
         _ = this.deletedAdapters.Add(entityAdapter);
     }
@@ -985,11 +1058,28 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 _ = await nodeAdapter.Parent.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
             }
 
-            await this.InsertItemAsync(folderAdapter.ChildrenCount, folderAdapter, nodeAdapter).ConfigureAwait(true);
+            // Wrap the scene node adapter in a layout node adapter
+            LayoutNodeAdapter layoutNodeAdapter;
+            if (nodeAdapter is SceneNodeAdapter sceneNodeAdapter)
+            {
+                layoutNodeAdapter = new LayoutNodeAdapter(sceneNodeAdapter);
+            }
+            else if (nodeAdapter is LayoutNodeAdapter lna)
+            {
+                layoutNodeAdapter = lna;
+            }
+            else
+            {
+                continue;
+            }
+
+            // Use AddChildAdapter to ensure the FolderAdapter's internal collection is updated.
+            // InsertItemAsync would bypass the internal collection of FolderAdapter.
+            folderAdapter.AddChildAdapter(layoutNodeAdapter);
 
             if (wasExpanded)
             {
-                await this.ExpandItemAsync(nodeAdapter).ConfigureAwait(true);
+                await this.ExpandItemAsync(layoutNodeAdapter).ConfigureAwait(true);
             }
 
             ++movedAdapterCount;
@@ -1051,61 +1141,86 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         LayoutChangeRecord layoutChange,
         string folderName)
     {
-        if (layoutChange.NewFolder?.Children is null || layoutChange.NewFolder.Children.Count == 0)
+        UndoRedo.Default[this].BeginChangeSet($"Create Folder ({folderName})");
+        try
         {
-            var previousLayoutSingle = layoutChange.PreviousLayout;
-            var newLayoutSingle = layoutChange.NewLayout;
+            if (layoutChange.NewFolder?.Children is null || layoutChange.NewFolder.Children.Count == 0)
+            {
+                var previousLayoutSingle = layoutChange.PreviousLayout;
+                var newLayoutSingle = layoutChange.NewLayout;
 
-            this.LogLayoutState("RegisterCreateFolderUndo(single).previous", previousLayoutSingle);
-            this.LogLayoutState("RegisterCreateFolderUndo(single).new", newLayoutSingle);
+                this.LogLayoutState("RegisterCreateFolderUndo(single).previous", previousLayoutSingle);
+                this.LogLayoutState("RegisterCreateFolderUndo(single).new", newLayoutSingle);
 
+                UndoRedo.Default[this].AddChange(
+                    new LayoutUndoRedoChange(
+                        this,
+                        sceneAdapter,
+                        scene,
+                        previousLayoutSingle,
+                        newLayoutSingle)
+                    {
+                        Key = $"Create Folder ({folderName})",
+                    });
+
+                return;
+            }
+
+            var folderOnlyLayout = BuildFolderOnlyLayout(layoutChange);
+            var previousLayout = layoutChange.PreviousLayout;
+            var newLayout = layoutChange.NewLayout;
+
+            this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).previous", previousLayout);
+            this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).folderOnly", folderOnlyLayout);
+            this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).new", newLayout);
+
+            // DEBUG: Print layout details
+            if (previousLayout != null)
+            {
+                Console.WriteLine("DEBUG: RegisterCreateFolderUndo previousLayout:");
+                foreach (var entry in previousLayout)
+                {
+                    Console.WriteLine($"  Entry: {entry.Type}, Name: {entry.Name}, Children: {entry.Children?.Count ?? 0}");
+                    if (entry.Children != null)
+                    {
+                        foreach (var child in entry.Children)
+                        {
+                            Console.WriteLine($"    Child: {child.Type}, NodeId: {child.NodeId}");
+                        }
+                    }
+                }
+            }
+
+            // Order: top = move-items change (its undo pushes two redo entries), below = create/remove folder
             UndoRedo.Default[this].AddChange(
                 new LayoutUndoRedoChange(
                     this,
                     sceneAdapter,
                     scene,
-                    previousLayoutSingle,
-                    newLayoutSingle)
+                    previousLayout,
+                    folderOnlyLayout)
                 {
                     Key = $"Create Folder ({folderName})",
                 });
 
-            return;
+            // Top of stack: move items change (undo -> folderOnly, redo -> newLayout)
+            UndoRedo.Default[this].AddChange(
+                new MoveItemsWithFolderRemovalUndoChange(
+                    this,
+                    sceneAdapter,
+                    scene,
+                    folderOnlyLayout,
+                    previousLayout,
+                    newLayout,
+                    folderName)
+                {
+                    Key = $"Move Items To Folder ({folderName})",
+                });
         }
-
-        var folderOnlyLayout = BuildFolderOnlyLayout(layoutChange);
-        var previousLayout = layoutChange.PreviousLayout;
-        var newLayout = layoutChange.NewLayout;
-
-        this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).previous", previousLayout);
-        this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).folderOnly", folderOnlyLayout);
-        this.LogLayoutState("RegisterCreateFolderUndo(folderOnly).new", newLayout);
-
-        // Order: top = move-items change (its undo pushes two redo entries), below = create/remove folder
-        UndoRedo.Default[this].AddChange(
-            new LayoutUndoRedoChange(
-                this,
-                sceneAdapter,
-                scene,
-                previousLayout,
-                folderOnlyLayout)
-            {
-                Key = $"Create Folder ({folderName})",
-            });
-
-        // Top of stack: move items change (undo -> folderOnly, redo -> newLayout)
-        UndoRedo.Default[this].AddChange(
-            new MoveItemsWithFolderRemovalUndoChange(
-                this,
-                sceneAdapter,
-                scene,
-                folderOnlyLayout,
-                previousLayout,
-                newLayout,
-                folderName)
-            {
-                Key = $"Move Items To Folder ({folderName})",
-            });
+        finally
+        {
+            UndoRedo.Default[this].EndChangeSet();
+        }
     }
 
     private static IList<ExplorerEntryData> BuildFolderOnlyLayout(LayoutChangeRecord layoutChange)
@@ -1132,6 +1247,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             FolderId = folder.FolderId,
             Name = folder.Name,
             Children = [],
+            IsExpanded = folder.IsExpanded,
         };
 
         // Insert folder at the same position it appears in the new layout (best-effort), else append
@@ -1261,7 +1377,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         var list = new List<ExplorerEntryData>();
         foreach (var node in scene.RootNodes)
         {
-            list.Add(new ExplorerEntryData { Type = "Node", NodeId = node.Id });
+            list.Add(new ExplorerEntryData { Type = "Node", NodeId = node.Id, IsExpanded = node.IsExpanded });
         }
 
         return list;
@@ -1284,7 +1400,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                     NodeId = e.NodeId,
                     FolderId = e.FolderId,
                     Name = e.Name,
-                    Children = e.Children is null ? null : CopyList(e.Children)
+                    Children = e.Children is null ? null : CopyList(e.Children),
+                    IsExpanded = e.IsExpanded,
                 });
             }
 
@@ -1438,19 +1555,57 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 this.Scene = sceneAdapter;
             }
 
+            // Capture expansion state from the current layout data (fast, no UI traversal)
+            var expandedFolderIds = GetExpandedFolderIds(scene.ExplorerLayout);
+
             // Ensure the adapter is initialized before reloading children
             this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
 
             var layoutClone = CloneLayout(layout);
+
             scene.ExplorerLayout = layoutClone;
             this.LogLayoutState("ApplyLayoutRestore", layoutClone);
-            sceneAdapter.ReloadChildrenAsync().GetAwaiter().GetResult();
+            sceneAdapter.ReloadChildrenAsync(expandedFolderIds, preserveNodeExpansion: true).GetAwaiter().GetResult();
             this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
         }
         finally
         {
             this.suppressUndoRecording = false;
         }
+    }
+
+    private static HashSet<Guid> GetExpandedFolderIds(IList<ExplorerEntryData>? layout)
+    {
+        var expandedIds = new HashSet<Guid>();
+        if (layout is null)
+        {
+            return expandedIds;
+        }
+
+        var stack = new Stack<IList<ExplorerEntryData>>();
+        stack.Push(layout);
+
+        while (stack.Count > 0)
+        {
+            var list = stack.Pop();
+            foreach (var entry in list)
+            {
+                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (entry.IsExpanded == true && entry.FolderId.HasValue)
+                    {
+                        _ = expandedIds.Add(entry.FolderId.Value);
+                    }
+
+                    if (entry.Children is not null)
+                    {
+                        stack.Push(entry.Children);
+                    }
+                }
+            }
+        }
+
+        return expandedIds;
     }
 
     private void LogLayoutState(string label, IList<ExplorerEntryData>? layout)
@@ -1662,7 +1817,14 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
             if (broadcastRemoval)
             {
-                _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { change.AffectedNode }));
+                if (this.batchRemovedNodes is not null)
+                {
+                    this.batchRemovedNodes.Add(change.AffectedNode);
+                }
+                else
+                {
+                    _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { change.AffectedNode }));
+                }
             }
         }
         catch (Exception ex)

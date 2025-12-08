@@ -18,7 +18,7 @@ public class SceneExplorerViewModelEngineSyncTests
     [TestMethod]
     public async Task CreateNodeAtRoot_CallsEngineSync()
     {
-        var (vm, scene, mutator, _, _) = CreateViewModel();
+        var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var node = new SceneNode(scene) { Name = "NewNode" };
         var nodeAdapter = new SceneNodeAdapter(node);
@@ -43,7 +43,7 @@ public class SceneExplorerViewModelEngineSyncTests
     [TestMethod]
     public async Task CreateNodeUnderParent_CallsEngineSync()
     {
-        var (vm, scene, mutator, _, _) = CreateViewModel();
+        var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var parent = new SceneNode(scene) { Name = "Parent" };
         scene.RootNodes.Add(parent);
         var parentAdapter = new SceneNodeAdapter(parent);
@@ -69,7 +69,7 @@ public class SceneExplorerViewModelEngineSyncTests
     [TestMethod]
     public async Task ReparentNode_CallsEngineSync()
     {
-        var (vm, scene, mutator, _, _) = CreateViewModel();
+        var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var parentA = new SceneNode(scene) { Name = "ParentA" };
         var parentB = new SceneNode(scene) { Name = "ParentB" };
         var child = new SceneNode(scene) { Name = "Child" };
@@ -103,7 +103,7 @@ public class SceneExplorerViewModelEngineSyncTests
     [TestMethod]
     public async Task RemoveNode_CallsEngineSync()
     {
-        var (vm, scene, mutator, _, _) = CreateViewModel();
+        var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);

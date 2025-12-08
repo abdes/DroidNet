@@ -56,7 +56,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         await this.LoadSceneChildrenAsync().ConfigureAwait(false);
     }
 
-    private async Task LoadLayoutChildrenAsync()
+    private async Task LoadLayoutChildrenAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
     {
         // Build layout using LayoutNodeAdapter wrappers so layout operations stay scene-agnostic.
         var layout = this.AttachedObject.ExplorerLayout;
@@ -68,8 +68,11 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
                 {
-                    var folderId = entry.FolderId ?? Guid.NewGuid();
-                    var folder = new FolderAdapter(folderId, entry.Name ?? "Folder") { IsExpanded = false };
+                    var folder = new FolderAdapter(entry);
+                    if (expandedFolderIds is not null && entry.FolderId.HasValue && expandedFolderIds.Contains(entry.FolderId.Value))
+                    {
+                        folder.IsExpanded = true;
+                    }
 
                     if (entry.Children is not null)
                     {
@@ -102,8 +105,12 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     return;
                 }
 
-                var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
-                var layoutNode = new LayoutNodeAdapter(nodeAdapter) { IsExpanded = false };
+                var nodeAdapter = new SceneNodeAdapter(node);
+                if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
+                {
+                    nodeAdapter.IsExpanded = entry.IsExpanded.Value;
+                }
+                var layoutNode = new LayoutNodeAdapter(nodeAdapter);
                 _ = seenNodeIds.Add(node.Id);
 
                 if (parent is FolderAdapter folderContainer)
@@ -128,8 +135,8 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 continue;
             }
 
-            var nodeAdapter = new SceneNodeAdapter(entity) { IsExpanded = false };
-            var layoutNode = new LayoutNodeAdapter(nodeAdapter) { IsExpanded = false };
+            var nodeAdapter = new SceneNodeAdapter(entity);
+            var layoutNode = new LayoutNodeAdapter(nodeAdapter);
             this.AddChildInternal(layoutNode);
         }
 
@@ -148,8 +155,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             {
                 if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
                 {
-                    var folderId = entry.FolderId ?? Guid.NewGuid();
-                    var folder = new FolderAdapter(folderId, entry.Name ?? "Folder") { IsExpanded = false };
+                    var folder = new FolderAdapter(entry);
 
                     if (entry.Children is not null)
                     {
@@ -173,7 +179,11 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
                     if (node is not null)
                     {
-                        var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
+                        var nodeAdapter = new SceneNodeAdapter(node);
+                        if (entry.IsExpanded.HasValue)
+                        {
+                            nodeAdapter.IsExpanded = entry.IsExpanded.Value;
+                        }
                         _ = seenNodeIds.Add(node.Id);
 
                         if (parent is FolderAdapter folderParent)
@@ -200,7 +210,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         {
             if (!seenNodeIds.Contains(entity.Id))
             {
-                this.AddChildInternal(new SceneNodeAdapter(entity) { IsExpanded = false });
+                this.AddChildInternal(new SceneNodeAdapter(entity));
             }
         }
 
@@ -212,12 +222,19 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     ///     or the scene root nodes. This forces a refresh of adapters in-place without creating a
     ///     new SceneAdapter instance which would unnecessarily recreate parent links and view state.
     /// </summary>
-    public async Task ReloadChildrenAsync()
+    /// <param name="expandedFolderIds">Optional set of folder IDs that should be expanded.</param>
+    /// <param name="preserveNodeExpansion">If true, ignores layout expansion state for nodes and uses the current SceneNode state.</param>
+    public async Task ReloadChildrenAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
     {
         // Clear the cached children then call the same loading path used by InitializeChildrenCollectionAsync
         this.ClearChildren();
 
-        // Load children using the same implementation as LoadChildren()
-        await this.LoadChildren().ConfigureAwait(true);
+        if (this.UseLayoutAdapters)
+        {
+            await this.LoadLayoutChildrenAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+            return;
+        }
+
+        await this.LoadSceneChildrenAsync().ConfigureAwait(false);
     }
 }

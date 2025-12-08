@@ -11,8 +11,10 @@
 #include "Commands/CreateBasicMeshCommand.h"
 #include "Commands/CreateSceneNodeCommand.h"
 #include "Commands/RemoveSceneNodeCommand.h"
+#include "Commands/RemoveSceneNodesCommand.h"
 #include "Commands/RenameSceneNodeCommand.h"
 #include "Commands/ReparentSceneNodeCommand.h"
+#include "Commands/ReparentSceneNodesCommand.h"
 #include "Commands/SetLocalTransformCommand.h"
 #include "Commands/SetVisibilityCommand.h"
 #include "Commands/UpdateTransformsForNodesCommand.h"
@@ -158,9 +160,40 @@ namespace Oxygen::Interop::World {
     auto cmd = std::unique_ptr<RemoveSceneNodeCommand>(
       commandFactory_->CreateRemoveSceneNode(handle));
     editor_module->get().Enqueue(std::move(cmd));
+  }
 
-    // Best-effort unregister
-    NodeRegistry::Unregister(key);
+  void OxygenWorld::RemoveSceneNodes(array<System::Guid>^ nodes) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    std::vector<oxygen::scene::NodeHandle> native_nodes;
+    if (nodes != nullptr) {
+      native_nodes.reserve(nodes->Length);
+      for (int i = 0; i < nodes->Length; ++i) {
+        auto b = nodes[i].ToByteArray();
+        std::array<uint8_t, 16> key{};
+        for (int j = 0; j < 16; ++j)
+          key[j] = b[j];
+        auto opt = NodeRegistry::Lookup(key);
+        if (opt.has_value()) {
+          native_nodes.emplace_back(opt.value());
+          // Best-effort unregister
+          NodeRegistry::Unregister(key);
+        }
+      }
+    }
+
+    if (native_nodes.empty())
+      return;
+
+    auto cmd = std::unique_ptr<RemoveSceneNodesCommand>(
+      commandFactory_->CreateRemoveSceneNodes(std::move(native_nodes)));
+    editor_module->get().Enqueue(std::move(cmd));
   }
 
   void OxygenWorld::RenameSceneNode(System::Guid nodeId, String^ newName) {
@@ -305,6 +338,52 @@ namespace Oxygen::Interop::World {
 
     auto cmd = std::unique_ptr<ReparentSceneNodeCommand>(
       commandFactory_->CreateReparentSceneNode(childHandle, parentHandle,
+        preserveWorldTransform));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
+  void OxygenWorld::ReparentSceneNodes(array<System::Guid>^ children,
+    Nullable<System::Guid> parent,
+    bool preserveWorldTransform) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    std::vector<oxygen::scene::NodeHandle> native_children;
+    if (children != nullptr) {
+      native_children.reserve(children->Length);
+      for (int i = 0; i < children->Length; ++i) {
+        auto cb = children[i].ToByteArray();
+        std::array<uint8_t, 16> childKey{};
+        for (int j = 0; j < 16; ++j)
+          childKey[j] = cb[j];
+        auto childOpt = NodeRegistry::Lookup(childKey);
+        if (childOpt.has_value())
+          native_children.emplace_back(childOpt.value());
+      }
+    }
+
+    if (native_children.empty())
+      return;
+
+    oxygen::scene::NodeHandle parentHandle;
+    if (parent.HasValue) {
+      auto pb = parent.Value.ToByteArray();
+      std::array<uint8_t, 16> pKey{};
+      for (int i = 0; i < 16; ++i)
+        pKey[i] = pb[i];
+      auto popt = NodeRegistry::Lookup(pKey);
+      if (!popt.has_value())
+        return; // parent missing
+      parentHandle = popt.value();
+    }
+
+    auto cmd = std::unique_ptr<ReparentSceneNodesCommand>(
+      commandFactory_->CreateReparentSceneNodes(std::move(native_children), parentHandle,
         preserveWorldTransform));
     editor_module->get().Enqueue(std::move(cmd));
   }

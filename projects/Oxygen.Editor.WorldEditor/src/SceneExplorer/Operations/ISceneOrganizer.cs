@@ -32,6 +32,15 @@ public interface ISceneOrganizer
     LayoutChangeRecord MoveNodeToFolder(Guid nodeId, Guid folderId, Scene scene);
 
     /// <summary>
+    /// Removes a scene node from the specified folder (effectively moving it to root in the layout).
+    /// </summary>
+    /// <param name="nodeId">The node identifier to remove.</param>
+    /// <param name="folderId">The folder identifier to remove from.</param>
+    /// <param name="scene">The owning scene.</param>
+    /// <returns>A layout change record with the updated layout.</returns>
+    LayoutChangeRecord RemoveNodeFromFolder(Guid nodeId, Guid folderId, Scene scene);
+
+    /// <summary>
     /// Moves a folder to a new parent folder or root.
     /// </summary>
     /// <param name="folderId">The folder to move.</param>
