@@ -73,6 +73,10 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         folder.IsExpanded = true;
                     }
+                    else if (entry.IsExpanded == true)
+                    {
+                        folder.IsExpanded = true;
+                    }
 
                     if (entry.Children is not null)
                     {
@@ -236,5 +240,47 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         }
 
         await this.LoadSceneChildrenAsync().ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Retrieves the IDs of all currently expanded folders in the UI tree.
+    /// This is used to preserve expansion state during Undo/Redo operations.
+    /// </summary>
+    public HashSet<Guid> GetExpandedFolderIds()
+    {
+        var expanded = new HashSet<Guid>();
+
+        // We assume children are loaded when this is called during Undo/Redo.
+        // If the Children task is not completed, we block, which is acceptable here
+        // as we are restoring state and need the current UI state.
+        var rootChildren = this.Children.IsCompleted
+            ? this.Children.Result
+            : this.Children.GetAwaiter().GetResult();
+
+        if (rootChildren is null)
+        {
+            return expanded;
+        }
+
+        var stack = new Stack<ITreeItem>(rootChildren);
+
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            if (item is FolderAdapter folder)
+            {
+                if (folder.IsExpanded)
+                {
+                    expanded.Add(folder.Id);
+                }
+
+                foreach (var child in folder.InternalChildren)
+                {
+                    stack.Push(child);
+                }
+            }
+        }
+
+        return expanded;
     }
 }

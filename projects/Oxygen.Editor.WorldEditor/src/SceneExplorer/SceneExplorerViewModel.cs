@@ -873,7 +873,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
 
         var scene = sceneAdapter.AttachedObject;
-        var topLevelSelection = FilterTopLevelSelectedNodeIds(selection.NodeIds, scene);
+        var topLevelSelection = this.sceneOrganizer.FilterTopLevelSelectedNodeIds(selection.NodeIds, scene);
 
         var creationContext = this.CreateFolderCreationContext(sceneAdapter, scene, topLevelSelection);
         if (creationContext is null)
@@ -950,7 +950,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         // Only pre-materialize layout entries when a layout already exists; keep null untouched for tests that expect it.
         if (scene.ExplorerLayout is not null)
         {
-            EnsureLayoutContainsSelectedNodes(scene, selectedIds);
+            this.sceneOrganizer.EnsureLayoutContainsNodes(scene, selectedIds);
         }
 
         var layoutChange = this.sceneOrganizer.CreateFolderFromSelection(selectedIds, scene, sceneAdapter);
@@ -1077,6 +1077,40 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             // InsertItemAsync would bypass the internal collection of FolderAdapter.
             folderAdapter.AddChildAdapter(layoutNodeAdapter);
 
+            // Fix: Update ShownItems if the folder is expanded, otherwise the item disappears from the UI
+            if (folderAdapter.IsExpanded)
+            {
+                var folderIndex = this.ShownItems.IndexOf(folderAdapter);
+                if (folderIndex != -1)
+                {
+                    var insertIndex = folderIndex + 1;
+                    var children = folderAdapter.InternalChildren.ToList();
+                    if (children.Count > 1)
+                    {
+                        var prevChild = children[children.Count - 2];
+                        var prevIndex = this.ShownItems.IndexOf(prevChild);
+                        if (prevIndex != -1)
+                        {
+                            insertIndex = prevIndex + 1;
+                            // Skip descendants of the previous child
+                            while (insertIndex < this.ShownItems.Count)
+                            {
+                                var item = this.ShownItems[insertIndex];
+                                if (IsDescendant(item, prevChild))
+                                {
+                                    insertIndex++;
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    this.ShownItems.Insert(insertIndex, layoutNodeAdapter);
+                }
+            }
+
             if (wasExpanded)
             {
                 await this.ExpandItemAsync(layoutNodeAdapter).ConfigureAwait(true);
@@ -1087,6 +1121,22 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
 
         return movedAdapterCount;
+    }
+
+    private static bool IsDescendant(ITreeItem item, ITreeItem ancestor)
+    {
+        var current = item.Parent;
+        while (current != null)
+        {
+            if (current == ancestor)
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
     }
 
     /// <summary>
@@ -1166,7 +1216,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 return;
             }
 
-            var folderOnlyLayout = BuildFolderOnlyLayout(layoutChange);
+            var folderOnlyLayout = this.sceneOrganizer.BuildFolderOnlyLayout(layoutChange);
             var previousLayout = layoutChange.PreviousLayout;
             var newLayout = layoutChange.NewLayout;
 
@@ -1221,69 +1271,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         {
             UndoRedo.Default[this].EndChangeSet();
         }
-    }
-
-    private static IList<ExplorerEntryData> BuildFolderOnlyLayout(LayoutChangeRecord layoutChange)
-    {
-        // Start from previous layout (so nodes remain outside the folder for first undo)
-        var baseLayout = layoutChange.PreviousLayout is null
-            ? new List<ExplorerEntryData>()
-            : new List<ExplorerEntryData>(layoutChange.PreviousLayout);
-        if (baseLayout.Count == 0 && layoutChange.NewLayout is not null)
-        {
-            baseLayout = new List<ExplorerEntryData>(layoutChange.NewLayout);
-        }
-
-        var folder = layoutChange.NewFolder ?? new ExplorerEntryData
-        {
-            Type = "Folder",
-            FolderId = Guid.NewGuid(),
-            Name = "Folder",
-        };
-
-        var emptyFolder = new ExplorerEntryData
-        {
-            Type = "Folder",
-            FolderId = folder.FolderId,
-            Name = folder.Name,
-            Children = [],
-            IsExpanded = folder.IsExpanded,
-        };
-
-        // Insert folder at the same position it appears in the new layout (best-effort), else append
-        var insertIndex = 0;
-        if (layoutChange.NewLayout is not null)
-        {
-            var found = layoutChange.NewLayout.Select((entry, index) => (entry, index))
-                .FirstOrDefault(tuple => tuple.entry.FolderId == folder.FolderId);
-            insertIndex = found.entry is null ? baseLayout.Count : Math.Min(found.index, baseLayout.Count);
-        }
-        else
-        {
-            insertIndex = baseLayout.Count;
-        }
-
-        baseLayout.Insert(insertIndex, emptyFolder);
-
-        // Ensure original node entries remain present (if missing due to cloning source)
-        if (layoutChange.PreviousLayout is not null)
-        {
-            foreach (var entry in layoutChange.PreviousLayout)
-            {
-                // avoid duplicating folder we just inserted
-                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                if (!baseLayout.Any(e => e.NodeId == entry.NodeId))
-                {
-                    baseLayout.Add(entry);
-                }
-            }
-        }
-
-        return baseLayout;
     }
 
     private sealed class LayoutUndoRedoChange : Change
@@ -1347,9 +1334,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             this.owner = owner;
             this.sceneAdapter = sceneAdapter;
             this.scene = scene;
-            this.moveUndoLayout = CloneLayout(moveUndoLayout);
-            this.createUndoLayout = CloneLayout(createUndoLayout);
-            this.moveRedoLayout = CloneLayout(moveRedoLayout);
+            this.moveUndoLayout = owner.sceneOrganizer.CloneLayout(moveUndoLayout);
+            this.createUndoLayout = owner.sceneOrganizer.CloneLayout(createUndoLayout);
+            this.moveRedoLayout = owner.sceneOrganizer.CloneLayout(moveRedoLayout);
             this.folderName = folderName;
         }
 
@@ -1371,68 +1358,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
-    // Build a top-level ExplorerLayout that mirrors the current Scene.RootNodes.
-    private static IList<ExplorerEntryData> BuildLayoutFromRootNodes(Scene scene)
-    {
-        var list = new List<ExplorerEntryData>();
-        foreach (var node in scene.RootNodes)
-        {
-            list.Add(new ExplorerEntryData { Type = "Node", NodeId = node.Id, IsExpanded = node.IsExpanded });
-        }
 
-        return list;
-    }
-
-    // Clone layout deeply (simple recursive copy)
-    private static IList<ExplorerEntryData>? CloneLayout(IList<ExplorerEntryData>? layout)
-    {
-        if (layout is null)
-            return null;
-
-        IList<ExplorerEntryData> CopyList(IList<ExplorerEntryData> src)
-        {
-            var res = new List<ExplorerEntryData>();
-            foreach (var e in src)
-            {
-                res.Add(new ExplorerEntryData
-                {
-                    Type = e.Type,
-                    NodeId = e.NodeId,
-                    FolderId = e.FolderId,
-                    Name = e.Name,
-                    Children = e.Children is null ? null : CopyList(e.Children),
-                    IsExpanded = e.IsExpanded,
-                });
-            }
-
-            return res;
-        }
-
-        return CopyList(layout);
-    }
-
-    // Remove entries representing the provided node ids from layout recursively.
-    // Removed node entries are added to collectedEntries (as new Node entries).
-    private static void RemoveEntriesForNodeIds(IList<ExplorerEntryData> layout, HashSet<System.Guid> nodeIds, List<ExplorerEntryData> collectedEntries)
-    {
-        for (int i = layout.Count - 1; i >= 0; --i)
-        {
-            var entry = layout[i];
-            if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId is not null && nodeIds.Contains(entry.NodeId.Value))
-            {
-                // collect and remove
-                collectedEntries.Add(new ExplorerEntryData { Type = "Node", NodeId = entry.NodeId });
-                layout.RemoveAt(i);
-                continue;
-            }
-
-            if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.Children is not null)
-            {
-                RemoveEntriesForNodeIds(entry.Children, nodeIds, collectedEntries);
-                // Optionally remove empty folders — keep them for now (could be cleaned up later)
-            }
-        }
-    }
 
     private bool CanCreateFolderFromSelection()
     {
@@ -1555,13 +1481,26 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 this.Scene = sceneAdapter;
             }
 
-            // Capture expansion state from the current layout data (fast, no UI traversal)
-            var expandedFolderIds = GetExpandedFolderIds(scene.ExplorerLayout);
+            // Capture expansion state from the current UI adapter (more reliable than data model)
+            var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
 
             // Ensure the adapter is initialized before reloading children
             this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
 
-            var layoutClone = CloneLayout(layout);
+            var layoutClone = this.sceneOrganizer.CloneLayout(layout);
+
+            // Merge expansion state into the new layout clone
+            if (layoutClone != null)
+            {
+                foreach (var id in expandedFolderIds)
+                {
+                    var entry = FindFolderEntry(layoutClone, id);
+                    if (entry != null)
+                    {
+                        entry.IsExpanded = true;
+                    }
+                }
+            }
 
             scene.ExplorerLayout = layoutClone;
             this.LogLayoutState("ApplyLayoutRestore", layoutClone);
@@ -1574,39 +1513,24 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
-    private static HashSet<Guid> GetExpandedFolderIds(IList<ExplorerEntryData>? layout)
+    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData> entries, Guid folderId)
     {
-        var expandedIds = new HashSet<Guid>();
-        if (layout is null)
+        foreach (var entry in entries)
         {
-            return expandedIds;
-        }
-
-        var stack = new Stack<IList<ExplorerEntryData>>();
-        stack.Push(layout);
-
-        while (stack.Count > 0)
-        {
-            var list = stack.Pop();
-            foreach (var entry in list)
+            if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId == folderId)
             {
-                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (entry.IsExpanded == true && entry.FolderId.HasValue)
-                    {
-                        _ = expandedIds.Add(entry.FolderId.Value);
-                    }
-
-                    if (entry.Children is not null)
-                    {
-                        stack.Push(entry.Children);
-                    }
-                }
+                return entry;
+            }
+            if (entry.Children != null)
+            {
+                var found = FindFolderEntry(entry.Children, folderId);
+                if (found != null) return found;
             }
         }
-
-        return expandedIds;
+        return null;
     }
+
+
 
     private void LogLayoutState(string label, IList<ExplorerEntryData>? layout)
     {
@@ -1625,73 +1549,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.LogLayoutEntries(label, entries);
     }
 
-    private static HashSet<System.Guid> FilterTopLevelSelectedNodeIds(HashSet<System.Guid> selectedIds, Scene scene)
-    {
-        var topLevel = new HashSet<System.Guid>();
-        foreach (var id in selectedIds)
-        {
-            if (HasAncestorInSelection(id, selectedIds, scene))
-            {
-                continue; // skip children when parent is also selected
-            }
-
-            _ = topLevel.Add(id);
-        }
-
-        return topLevel;
-    }
-
-    private static void EnsureLayoutContainsSelectedNodes(Scene scene, IEnumerable<System.Guid> selectedIds)
-    {
-        // Ensure layout exists
-        scene.ExplorerLayout ??= BuildLayoutFromRootNodes(scene);
-
-        foreach (var id in selectedIds)
-        {
-            if (LayoutContainsNode(scene.ExplorerLayout, id))
-            {
-                continue;
-            }
-
-            scene.ExplorerLayout.Add(new ExplorerEntryData { Type = "Node", NodeId = id });
-        }
-
-        static bool LayoutContainsNode(IList<ExplorerEntryData> layout, System.Guid nodeId)
-        {
-            foreach (var entry in layout)
-            {
-                if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId == nodeId)
-                {
-                    return true;
-                }
-
-                if (entry.Children is not null && LayoutContainsNode(entry.Children, nodeId))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-    }
-
-    private static bool HasAncestorInSelection(System.Guid nodeId, HashSet<System.Guid> selectedIds, Scene scene)
-    {
-        var node = FindNodeById(scene, nodeId);
-        var current = node?.Parent;
-        while (current is not null)
-        {
-            if (selectedIds.Contains(current.Id))
-            {
-                return true;
-            }
-
-            current = current.Parent;
-        }
-
-        return false;
-    }
-
     private static bool SceneContainsNode(Scene scene, System.Guid nodeId)
     {
         foreach (var root in scene.RootNodes)
@@ -1708,39 +1565,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
 
         return false;
-    }
-
-    private static SceneNode? FindNodeById(Scene scene, System.Guid nodeId)
-    {
-        foreach (var root in scene.RootNodes)
-        {
-            var found = FindInTree(root);
-            if (found is not null)
-            {
-                return found;
-            }
-        }
-
-        return null;
-
-        SceneNode? FindInTree(SceneNode node)
-        {
-            if (node.Id == nodeId)
-            {
-                return node;
-            }
-
-            foreach (var child in node.Children)
-            {
-                var found = FindInTree(child);
-                if (found is not null)
-                {
-                    return found;
-                }
-            }
-
-            return null;
-        }
     }
 
     private async Task ApplySceneAdditionAsync(SceneNodeChangeRecord change)

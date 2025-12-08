@@ -116,6 +116,80 @@ internal static class SceneExplorerViewModelTestFixture
         var organizer = new Mock<ISceneOrganizer>();
         organizer.Setup(o => o.MoveNodeToFolder(It.IsAny<Guid>(), It.IsAny<Guid>(), It.IsAny<Scene>()))
             .Returns((Guid n, Guid f, Scene s) => new LayoutChangeRecord("MoveNodeToFolder", [], [], null, null));
+
+        // Setup for FilterTopLevelSelectedNodeIds
+        organizer.Setup(o => o.FilterTopLevelSelectedNodeIds(It.IsAny<HashSet<Guid>>(), It.IsAny<Scene>()))
+            .Returns((HashSet<Guid> ids, Scene s) => ids); // Simple pass-through for flat tests
+
+        // Setup for CloneLayout
+        organizer.Setup(o => o.CloneLayout(It.IsAny<IList<ExplorerEntryData>?>()))
+            .Returns((IList<ExplorerEntryData>? layout) =>
+            {
+                if (layout == null) return null;
+                // Shallow copy for tests is usually enough if we don't mutate deep structure
+                // But let's do a slightly better job
+                return layout.Select(e => new ExplorerEntryData
+                {
+                    Type = e.Type,
+                    NodeId = e.NodeId,
+                    FolderId = e.FolderId,
+                    Name = e.Name,
+                    Children = e.Children != null ? new List<ExplorerEntryData>(e.Children) : null,
+                    IsExpanded = e.IsExpanded
+                }).ToList();
+            });
+
+        // Setup for GetExpandedFolderIds
+        organizer.Setup(o => o.GetExpandedFolderIds(It.IsAny<IList<ExplorerEntryData>?>()))
+            .Returns((IList<ExplorerEntryData>? layout) =>
+            {
+                var ids = new HashSet<Guid>();
+                if (layout == null) return ids;
+
+                void Visit(IEnumerable<ExplorerEntryData> entries)
+                {
+                    foreach (var e in entries)
+                    {
+                        if (string.Equals(e.Type, "Folder", StringComparison.OrdinalIgnoreCase) && e.IsExpanded == true && e.FolderId.HasValue)
+                        {
+                            ids.Add(e.FolderId.Value);
+                        }
+                        if (e.Children != null)
+                        {
+                            Visit(e.Children);
+                        }
+                    }
+                }
+                Visit(layout);
+                return ids;
+            });
+
+        // Setup for EnsureLayoutContainsNodes
+        organizer.Setup(o => o.EnsureLayoutContainsNodes(It.IsAny<Scene>(), It.IsAny<IEnumerable<Guid>>()))
+            .Callback((Scene s, IEnumerable<Guid> ids) =>
+            {
+                s.ExplorerLayout ??= s.RootNodes.Select(n => new ExplorerEntryData { Type = "Node", NodeId = n.Id }).ToList();
+            });
+
+        // Setup for BuildFolderOnlyLayout
+        organizer.Setup(o => o.BuildFolderOnlyLayout(It.IsAny<LayoutChangeRecord>()))
+            .Returns((LayoutChangeRecord r) =>
+            {
+                var list = r.PreviousLayout != null ? new List<ExplorerEntryData>(r.PreviousLayout) : new List<ExplorerEntryData>();
+                if (r.NewFolder != null)
+                {
+                    list.Insert(0, new ExplorerEntryData
+                    {
+                        Type = "Folder",
+                        FolderId = r.NewFolder.FolderId,
+                        Name = r.NewFolder.Name,
+                        Children = new List<ExplorerEntryData>(),
+                        IsExpanded = r.NewFolder.IsExpanded
+                    });
+                }
+                return list;
+            });
+
         organizer.Setup(o => o.CreateFolderFromSelection(It.IsAny<HashSet<Guid>>(), It.IsAny<Scene>(), It.IsAny<SceneAdapter>()))
             .Returns((HashSet<Guid> ids, Scene s, SceneAdapter _) =>
             {
@@ -167,6 +241,94 @@ internal static class SceneExplorerViewModelTestFixture
             engineSync.Object,
             mutator.Object,
             organizer.Object,
+            loggerFactory);
+
+        return (vm, scene, mutator, organizer, messenger, engineSync);
+    }
+
+    public static (TestSceneExplorerViewModel vm, Scene scene, Mock<ISceneMutator> mutator, ISceneOrganizer organizer, IMessenger messenger, Mock<ISceneEngineSync> engineSync) CreateIntegrationViewModel()
+    {
+        var loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.SetMinimumLevel(LogLevel.Debug);
+            builder.AddDebug();
+            builder.AddConsole();
+        });
+
+        var messenger = new WeakReferenceMessenger();
+        var project = new Mock<IProject>();
+        var scene = new Scene(project.Object) { Name = "Scene" };
+        project.Setup(p => p.Scenes).Returns(new List<Scene> { scene });
+        project.SetupProperty(p => p.ActiveScene, scene);
+
+        var projectManager = new Mock<IProjectManagerService>();
+        projectManager.Setup(pm => pm.CurrentProject).Returns(project.Object);
+        projectManager.Setup(pm => pm.LoadSceneAsync(It.IsAny<Scene>())).ReturnsAsync(true);
+
+        var documentService = new Mock<IDocumentService>();
+        var router = new Mock<IRouter>();
+        var engineSync = new Mock<ISceneEngineSync>();
+        engineSync.Setup(es => es.SyncSceneAsync(It.IsAny<Scene>())).Returns(Task.CompletedTask);
+        engineSync.Setup(es => es.CreateNodeAsync(It.IsAny<SceneNode>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
+        engineSync.Setup(es => es.ReparentNodeAsync(It.IsAny<Guid>(), It.IsAny<Guid?>())).Returns(Task.CompletedTask);
+        engineSync.Setup(es => es.RemoveNodeAsync(It.IsAny<Guid>())).Returns(Task.CompletedTask);
+
+        var mutator = new Mock<ISceneMutator>();
+
+        mutator.Setup(m => m.CreateNodeAtRoot(It.IsAny<SceneNode>(), It.IsAny<Scene>()))
+            .Returns((SceneNode n, Scene s) =>
+            {
+                if (!s.RootNodes.Contains(n)) s.RootNodes.Add(n);
+                return new SceneNodeChangeRecord("CreateNodeAtRoot", n, null, null, true, true, false);
+            });
+        mutator.Setup(m => m.CreateNodeUnderParent(It.IsAny<SceneNode>(), It.IsAny<SceneNode>(), It.IsAny<Scene>()))
+            .Returns((SceneNode n, SceneNode p, Scene s) =>
+            {
+                if (!p.Children.Contains(n)) p.Children.Add(n);
+                return new SceneNodeChangeRecord("CreateNodeUnderParent", n, null, p.Id, true, false, false);
+            });
+        mutator.Setup(m => m.RemoveNode(It.IsAny<Guid>(), It.IsAny<Scene>()))
+            .Returns((Guid id, Scene s) =>
+            {
+                var node = s.AllNodes.FirstOrDefault(n => n.Id == id);
+                if (node != null)
+                {
+                    if (node.Parent is null) s.RootNodes.Remove(node);
+                    else node.Parent.Children.Remove(node);
+                }
+                return new SceneNodeChangeRecord("RemoveNode", node ?? new SceneNode(s) { Name = "Temp" }, id, null, true, false, true);
+            });
+        mutator.Setup(m => m.ReparentNode(It.IsAny<Guid>(), It.IsAny<Guid?>(), It.IsAny<Guid?>(), It.IsAny<Scene>()))
+            .Returns((Guid nodeId, Guid? oldParent, Guid? newParent, Scene s) =>
+            {
+                var node = s.AllNodes.FirstOrDefault(n => n.Id == nodeId);
+                if (node == null) return new SceneNodeChangeRecord("ReparentNode", new SceneNode(s) { Name = "Temp" }, oldParent, newParent, false, false, false);
+
+                if (node.Parent != null) node.Parent.Children.Remove(node);
+                else s.RootNodes.Remove(node);
+
+                if (newParent == null)
+                {
+                    s.RootNodes.Add(node);
+                }
+                else
+                {
+                    var parentNode = s.AllNodes.FirstOrDefault(p => p.Id == newParent.Value);
+                    if (parentNode != null) parentNode.Children.Add(node);
+                }
+                return new SceneNodeChangeRecord("ReparentNode", node, oldParent, newParent, true, false, false);
+            });
+
+        var organizer = new SceneOrganizer(loggerFactory.CreateLogger<SceneOrganizer>());
+
+        var vm = new TestSceneExplorerViewModel(
+            projectManager.Object,
+            messenger,
+            router.Object,
+            documentService.Object,
+            engineSync.Object,
+            mutator.Object,
+            organizer,
             loggerFactory);
 
         return (vm, scene, mutator, organizer, messenger, engineSync);

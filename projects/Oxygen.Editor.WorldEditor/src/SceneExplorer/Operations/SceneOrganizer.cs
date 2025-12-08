@@ -34,7 +34,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
             throw new InvalidOperationException("Cannot create folder with empty selection.");
         }
 
-        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var previousLayout = CloneLayout(scene.ExplorerLayout) ?? BuildLayoutFromRootNodes(scene);
         var layout = scene.ExplorerLayout?.ToList() ?? BuildLayoutFromRootNodes(scene);
 
         // Determine placement: highest common ancestor among selected nodes' layout lineage
@@ -274,14 +274,148 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
     }
 
-    private static IList<ExplorerEntryData> CloneLayout(IList<ExplorerEntryData>? layout)
+    public IList<ExplorerEntryData>? CloneLayout(IList<ExplorerEntryData>? layout)
     {
         if (layout is null)
         {
-            return new List<ExplorerEntryData>();
+            return null;
         }
 
         return layout.Select(CloneEntry).ToList();
+    }
+
+    public HashSet<Guid> GetExpandedFolderIds(IList<ExplorerEntryData>? layout)
+    {
+        var expandedIds = new HashSet<Guid>();
+        if (layout is null)
+        {
+            return expandedIds;
+        }
+
+        var stack = new Stack<IList<ExplorerEntryData>>();
+        stack.Push(layout);
+
+        while (stack.Count > 0)
+        {
+            var list = stack.Pop();
+            foreach (var entry in list)
+            {
+                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (entry.IsExpanded == true && entry.FolderId.HasValue)
+                    {
+                        _ = expandedIds.Add(entry.FolderId.Value);
+                    }
+
+                    if (entry.Children is not null)
+                    {
+                        stack.Push(entry.Children);
+                    }
+                }
+            }
+        }
+
+        return expandedIds;
+    }
+
+    public void EnsureLayoutContainsNodes(Scene scene, IEnumerable<Guid> nodeIds)
+    {
+        // Ensure layout exists
+        scene.ExplorerLayout ??= BuildLayoutFromRootNodes(scene);
+
+        foreach (var id in nodeIds)
+        {
+            if (LayoutContainsNode(scene.ExplorerLayout, id))
+            {
+                continue;
+            }
+
+            scene.ExplorerLayout.Add(new ExplorerEntryData { Type = "Node", NodeId = id });
+        }
+
+        static bool LayoutContainsNode(IList<ExplorerEntryData> layout, Guid nodeId)
+        {
+            foreach (var entry in layout)
+            {
+                if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId == nodeId)
+                {
+                    return true;
+                }
+
+                if (entry.Children is not null && LayoutContainsNode(entry.Children, nodeId))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    public IList<ExplorerEntryData> BuildFolderOnlyLayout(LayoutChangeRecord layoutChange)
+    {
+        Console.WriteLine($"DEBUG: BuildFolderOnlyLayout. NewFolder is null? {layoutChange.NewFolder is null}");
+        if (layoutChange.NewFolder != null)
+        {
+            Console.WriteLine($"DEBUG: NewFolder ID: {layoutChange.NewFolder.FolderId}");
+        }
+
+        // Start from previous layout (so nodes remain outside the folder for first undo)
+        var baseLayout = layoutChange.PreviousLayout is null
+            ? new List<ExplorerEntryData>()
+            : new List<ExplorerEntryData>(layoutChange.PreviousLayout);
+
+        var folder = layoutChange.NewFolder ?? new ExplorerEntryData
+        {
+            Type = "Folder",
+            FolderId = Guid.NewGuid(),
+            Name = "Folder",
+        };
+        Console.WriteLine($"DEBUG: Using folder ID: {folder.FolderId}");
+
+        var emptyFolder = new ExplorerEntryData
+        {
+            Type = "Folder",
+            FolderId = folder.FolderId,
+            Name = folder.Name,
+            Children = [],
+            IsExpanded = folder.IsExpanded,
+        };
+
+        // Insert folder at the same position it appears in the new layout (best-effort), else append
+        var insertIndex = 0;
+        if (layoutChange.NewLayout is not null)
+        {
+            var found = layoutChange.NewLayout.Select((entry, index) => (entry, index))
+                .FirstOrDefault(tuple => tuple.entry.FolderId == folder.FolderId);
+            insertIndex = found.entry is null ? baseLayout.Count : Math.Min(found.index, baseLayout.Count);
+        }
+        else
+        {
+            insertIndex = baseLayout.Count;
+        }
+
+        baseLayout.Insert(insertIndex, emptyFolder);
+
+        // Ensure original node entries remain present (if missing due to cloning source)
+        if (layoutChange.PreviousLayout is not null)
+        {
+            foreach (var entry in layoutChange.PreviousLayout)
+            {
+                // avoid duplicating folder we just inserted
+                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId == folder.FolderId)
+                {
+                    continue;
+                }
+
+                if (!baseLayout.Any(e => e.NodeId == entry.NodeId))
+                {
+                    baseLayout.Add(entry);
+                }
+            }
+        }
+
+        return baseLayout;
     }
 
     private static ExplorerEntryData CloneEntry(ExplorerEntryData entry)
@@ -293,6 +427,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
             NodeId = entry.NodeId,
             Name = entry.Name,
             Children = entry.Children is null ? null : entry.Children.Select(CloneEntry).ToList(),
+            IsExpanded = entry.IsExpanded,
         };
     }
 
@@ -472,7 +607,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
         return (null, null);
     }
 
-    private static HashSet<Guid> FilterTopLevelSelectedNodeIds(HashSet<Guid> selectedIds, Scene scene)
+    public HashSet<Guid> FilterTopLevelSelectedNodeIds(HashSet<Guid> selectedIds, Scene scene)
     {
         var topLevel = new HashSet<Guid>();
         foreach (var id in selectedIds)

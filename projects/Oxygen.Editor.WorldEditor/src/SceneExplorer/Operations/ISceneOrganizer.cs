@@ -57,6 +57,44 @@ public interface ISceneOrganizer
     /// <param name="scene">The owning scene.</param>
     /// <returns>A layout change record with the updated layout.</returns>
     LayoutChangeRecord RemoveFolder(Guid folderId, bool promoteChildrenToParent, Scene scene);
+
+    /// <summary>
+    /// Deeply clones a layout.
+    /// </summary>
+    /// <param name="layout">The layout to clone.</param>
+    /// <returns>A deep copy of the layout.</returns>
+    IList<ExplorerEntryData>? CloneLayout(IList<ExplorerEntryData>? layout);
+
+    /// <summary>
+    /// Extracts the IDs of all expanded folders in the layout.
+    /// </summary>
+    /// <param name="layout">The layout to inspect.</param>
+    /// <returns>A set of expanded folder IDs.</returns>
+    HashSet<Guid> GetExpandedFolderIds(IList<ExplorerEntryData>? layout);
+
+    /// <summary>
+    /// Ensures that the scene's layout contains entries for the specified nodes.
+    /// If the layout does not exist, it is created from the root nodes.
+    /// </summary>
+    /// <param name="scene">The scene to update.</param>
+    /// <param name="nodeIds">The node IDs to ensure exist in the layout.</param>
+    void EnsureLayoutContainsNodes(Scene scene, IEnumerable<Guid> nodeIds);
+
+    /// <summary>
+    /// Builds a layout representing the state where a folder is created but empty,
+    /// used for granular undo/redo operations.
+    /// </summary>
+    /// <param name="layoutChange">The layout change record from the folder creation.</param>
+    /// <returns>A layout with the new folder inserted but empty.</returns>
+    IList<ExplorerEntryData> BuildFolderOnlyLayout(LayoutChangeRecord layoutChange);
+
+    /// <summary>
+    /// Filters the selected node IDs to return only the top-level nodes (i.e., excludes nodes whose ancestors are also selected).
+    /// </summary>
+    /// <param name="selectedIds">The set of selected node IDs.</param>
+    /// <param name="scene">The scene to check hierarchy against.</param>
+    /// <returns>A set of top-level selected node IDs.</returns>
+    HashSet<Guid> FilterTopLevelSelectedNodeIds(HashSet<Guid> selectedIds, Scene scene);
 }
 
 /// <summary>
