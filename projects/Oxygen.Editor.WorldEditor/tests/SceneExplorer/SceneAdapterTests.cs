@@ -187,4 +187,38 @@ public class SceneAdapterTests
         _ = children[2].Should().BeOfType<LayoutNodeAdapter>();
         _ = ((LayoutNodeAdapter)children[2]).AttachedObject.AttachedObject.Should().Be(missingRoot);
     }
+
+    [TestMethod]
+    public async Task SceneNodeAdapter_LoadsChildrenFromSceneGraph()
+    {
+        var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+
+        var adapter = new SceneNodeAdapter(parent);
+        var children = await adapter.Children.ConfigureAwait(false);
+
+        _ = children.Count.Should().Be(1);
+        _ = (children[0] as SceneNodeAdapter).Should().NotBeNull();
+        _ = ((SceneNodeAdapter)children[0]).AttachedObject.Should().Be(child);
+    }
+
+    [TestMethod]
+    public async Task LayoutNodeAdapter_LoadsChildrenFromWrappedSceneNode()
+    {
+        var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+
+        var sceneNodeAdapter = new SceneNodeAdapter(parent);
+        var layoutNodeAdapter = new LayoutNodeAdapter(sceneNodeAdapter);
+
+        var children = await layoutNodeAdapter.Children.ConfigureAwait(false);
+
+        _ = children.Count.Should().Be(1);
+        _ = (children[0] as LayoutNodeAdapter).Should().NotBeNull();
+        _ = ((LayoutNodeAdapter)children[0]).AttachedObject.AttachedObject.Should().Be(child);
+    }
 }

@@ -367,7 +367,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private async void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
     {
         _ = sender; // unused
+        await this.HandleItemAddedAsync(args).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// Core logic for handling an item added event. Separated for testability.
+    /// </summary>
+    /// <param name="args">Event arguments.</param>
+    protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
+    {
         if (this.isPerformingLayoutMove)
         {
             return;
@@ -434,7 +442,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private async void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
+        await this.HandleItemRemovedAsync(args).ConfigureAwait(false);
+    }
 
+    /// <summary>
+    /// Core logic for handling an item removed event. Separated for testability.
+    /// </summary>
+    /// <param name="args">Event arguments.</param>
+    protected internal virtual async Task HandleItemRemovedAsync(TreeItemRemovedEventArgs args)
+    {
         if (this.isPerformingLayoutMove)
         {
             return;
@@ -952,8 +968,29 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 continue;
             }
 
-            await this.RemoveItemAsync(nodeAdapter, updateSelection: false).ConfigureAwait(true);
+            var wasExpanded = nodeAdapter.IsExpanded;
+            if (wasExpanded)
+            {
+                await this.CollapseItemAsync(nodeAdapter).ConfigureAwait(true);
+            }
+
+            var removeIndex = this.ShownItems.IndexOf(nodeAdapter);
+            if (removeIndex != -1)
+            {
+                this.ShownItems.RemoveAt(removeIndex);
+            }
+
+            if (nodeAdapter.Parent is not null)
+            {
+                _ = await nodeAdapter.Parent.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
+            }
+
             await this.InsertItemAsync(folderAdapter.ChildrenCount, folderAdapter, nodeAdapter).ConfigureAwait(true);
+
+            if (wasExpanded)
+            {
+                await this.ExpandItemAsync(nodeAdapter).ConfigureAwait(true);
+            }
 
             ++movedAdapterCount;
             this.LogCreateFolderMovedAdapter(nodeAdapter.Label, folderAdapter.Label);
