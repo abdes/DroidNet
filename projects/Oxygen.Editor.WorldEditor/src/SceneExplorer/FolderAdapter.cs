@@ -18,6 +18,7 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 public sealed class FolderAdapter : TreeItemAdapter
 {
     private readonly ObservableCollection<ITreeItem> children = new();
+    internal IEnumerable<ITreeItem> InternalChildren => this.children;
     private readonly ExplorerEntryData? entryData;
 
     public FolderAdapter(ExplorerEntryData entry)

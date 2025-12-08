@@ -13,12 +13,95 @@ using Oxygen.Editor.WorldEditor.SceneExplorer.Tests.Infrastructure;
 namespace Oxygen.Editor.WorldEditor.SceneExplorer.Tests;
 
 [TestClass]
-public class SceneExplorerViewModelUndoRedoTests
+public class SceneExplorerViewModelIntegrationTests
 {
+    [TestMethod]
+    public async Task CreateFolderFromSelection_CreatesFolderAndMovesItems()
+    {
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
+        await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
+        var sceneAdapter = vm.Scene!;
+        await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
+
+        // Setup: Root -> Parent (Expanded) -> Child
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+
+        // Add Parent to tree (simulating dynamic add or load)
+        var parentAdapter = new SceneNodeAdapter(parent);
+
+        await vm.InvokeInsertItemAsync(0, sceneAdapter, parentAdapter).ConfigureAwait(false);
+        await vm.ExpandItemForTestAsync(parentAdapter).ConfigureAwait(false);
+
+        // Verify setup
+        _ = parentAdapter.IsExpanded.Should().BeTrue();
+        var parentChildren = await parentAdapter.Children.ConfigureAwait(false);
+        var childAdapter = parentChildren.OfType<SceneNodeAdapter>().FirstOrDefault(c => c.AttachedObject == child);
+        _ = childAdapter.Should().NotBeNull();
+
+        // Select Parent
+        vm.SelectionMode = SelectionMode.Single;
+        vm.SelectItem(parentAdapter);
+
+        // Create Folder
+        await vm.CreateFolderFromSelectionCommand.ExecuteAsync(null).ConfigureAwait(false);
+
+        // Verify Parent is inside Folder
+        var folder = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<FolderAdapter>().First();
+        var movedParent = (await folder.Children.ConfigureAwait(false)).First();
+
+        // Verify Parent is still expanded
+        _ = movedParent.IsExpanded.Should().BeTrue("Moved node should remain expanded");
+
+        // Verify Child is still present
+        var children = await movedParent.Children.ConfigureAwait(false);
+        _ = children.Should().Contain(c => c is LayoutNodeAdapter && ((LayoutNodeAdapter)c).AttachedObject.AttachedObject == child, "Moved node should retain its children");
+    }
+
+    [TestMethod]
+    public async Task UndoRedo_CreateFolderFromSelection_RestoresLayout()
+    {
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
+        await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
+        var sceneAdapter = vm.Scene!;
+
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+        var nodeAdapter = new SceneNodeAdapter(node);
+        await vm.InvokeInsertItemAsync(0, sceneAdapter, nodeAdapter).ConfigureAwait(false);
+
+        vm.SelectionMode = SelectionMode.Single;
+        vm.SelectItem(nodeAdapter);
+
+        // Execute
+        await vm.CreateFolderFromSelectionCommand.ExecuteAsync(null).ConfigureAwait(false);
+
+        var folder = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<FolderAdapter>().FirstOrDefault();
+        _ = folder.Should().NotBeNull();
+        _ = (await folder!.Children.ConfigureAwait(false)).Should().Contain(c => c is LayoutNodeAdapter && ((LayoutNodeAdapter)c).AttachedObject.AttachedObject == node);
+
+        // Undo
+        UndoRedo.Default[vm].Undo();
+
+        var childrenAfterUndo = await sceneAdapter.Children.ConfigureAwait(false);
+        _ = childrenAfterUndo.OfType<FolderAdapter>().Should().BeEmpty();
+        _ = childrenAfterUndo.OfType<LayoutNodeAdapter>().Any(n => n.AttachedObject.AttachedObject == node).Should().BeTrue();
+
+        // Redo
+        UndoRedo.Default[vm].Redo();
+
+        var childrenAfterRedo = await sceneAdapter.Children.ConfigureAwait(false);
+        var folderAfterRedo = childrenAfterRedo.OfType<FolderAdapter>().FirstOrDefault();
+        _ = folderAfterRedo.Should().NotBeNull();
+        _ = (await folderAfterRedo!.Children.ConfigureAwait(false)).Should().Contain(c => c is LayoutNodeAdapter && ((LayoutNodeAdapter)c).AttachedObject.AttachedObject == node);
+    }
+
     [TestMethod]
     public async Task RemoveSelectedItems_UndoRedo_RestoresAndRemovesNode()
     {
-        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
@@ -138,7 +221,7 @@ public class SceneExplorerViewModelUndoRedoTests
 
     private static async Task<(SceneExplorerViewModelTestFixture.TestSceneExplorerViewModel vm, SceneAdapter sceneAdapter, ITreeItem nodeAdapter, Guid nodeId)> CreateSceneWithSingleNodeAsync()
     {
-        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
         await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
 
         var sceneAdapter = vm.Scene ?? throw new InvalidOperationException("Scene not initialized");
@@ -158,7 +241,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void RegisterCreateFolderUndo_RestoresLayoutsOnUndoRedo()
     {
-        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var previousLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = Guid.NewGuid() } };
@@ -179,7 +262,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void ApplyFolderCreationAsync_InsertsFolderMovesChildrenAndRegistersUndo()
     {
-        var (vm, scene, _, organizer, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, organizer, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
         var initialLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
@@ -236,4 +319,56 @@ public class SceneExplorerViewModelUndoRedoTests
             .FirstOrDefault(),
         _ => throw new InvalidOperationException("Unsupported tree item type"),
     };
+
+    [TestMethod]
+    public async Task UndoRedo_PreservesExpansionState_WhenRestoringLayout()
+    {
+        var (vm, scene, _, _, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
+        await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
+        var sceneAdapter = vm.Scene!;
+
+        // Setup: Root -> Node1
+        var node1 = new SceneNode(scene) { Name = "Node1" };
+        scene.RootNodes.Add(node1);
+        var node1Adapter = new SceneNodeAdapter(node1);
+        await vm.InvokeInsertItemAsync(0, sceneAdapter, node1Adapter).ConfigureAwait(false);
+
+        // Create Folder1 from Node1
+        vm.SelectionMode = SelectionMode.Single;
+        vm.SelectItem(node1Adapter);
+        await vm.CreateFolderFromSelectionCommand.ExecuteAsync(null).ConfigureAwait(false);
+
+        var folder1 = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<FolderAdapter>().First();
+        folder1.IsExpanded = true; // Ensure it is expanded
+
+        // Setup: Root -> Node2
+        var node2 = new SceneNode(scene) { Name = "Node2" };
+        scene.RootNodes.Add(node2);
+        var node2Adapter = new SceneNodeAdapter(node2);
+        await vm.InvokeInsertItemAsync(1, sceneAdapter, node2Adapter).ConfigureAwait(false);
+
+        // Action: Create Folder2 from Node2
+        vm.SelectItem(node2Adapter);
+        await vm.CreateFolderFromSelectionCommand.ExecuteAsync(null).ConfigureAwait(false);
+
+        // Verify Folder1 is still expanded
+        folder1 = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<FolderAdapter>().First(f => f.ChildAdapters.OfType<LayoutNodeAdapter>().Any(c => c.AttachedObject.AttachedObject == node1));
+        _ = folder1.IsExpanded.Should().BeTrue();
+
+        // Undo (Removes Folder2)
+        UndoRedo.Default[vm].Undo();
+
+        // Verify Folder1 is STILL expanded
+        var children = await sceneAdapter.Children.ConfigureAwait(false);
+        folder1 = children.OfType<FolderAdapter>().First(f => f.ChildAdapters.OfType<LayoutNodeAdapter>().Any(c => c.AttachedObject.AttachedObject == node1));
+        _ = folder1.IsExpanded.Should().BeTrue("Folder1 should remain expanded after Undo");
+
+        // Redo (Re-creates Folder2)
+        UndoRedo.Default[vm].Redo();
+
+        // Verify Folder1 is STILL expanded
+        children = await sceneAdapter.Children.ConfigureAwait(false);
+        folder1 = children.OfType<FolderAdapter>().First(f => f.ChildAdapters.OfType<LayoutNodeAdapter>().Any(c => c.AttachedObject.AttachedObject == node1));
+        _ = folder1.IsExpanded.Should().BeTrue("Folder1 should remain expanded after Redo");
+    }
 }

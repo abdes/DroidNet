@@ -344,4 +344,111 @@ public class SceneOrganizerTests
         var project = new Mock<IProject>().Object;
         return new Scene(project) { Name = "TestScene" };
     }
+
+    [TestMethod]
+    public void CloneLayout_DeepCopiesStructure()
+    {
+        var layout = new List<ExplorerEntryData>
+        {
+            new()
+            {
+                Type = "Folder",
+                FolderId = Guid.NewGuid(),
+                Name = "Folder",
+                Children = new List<ExplorerEntryData>
+                {
+                    new() { Type = "Node", NodeId = Guid.NewGuid() }
+                }
+            }
+        };
+
+        var clone = this.organizer.CloneLayout(layout);
+
+        _ = clone.Should().NotBeSameAs(layout);
+        _ = clone.Should().BeEquivalentTo(layout);
+        _ = clone![0].Children.Should().NotBeSameAs(layout[0].Children);
+    }
+
+    [TestMethod]
+    public void GetExpandedFolderIds_ReturnsExpandedFoldersRecursively()
+    {
+        var f1 = Guid.NewGuid();
+        var f2 = Guid.NewGuid();
+        var f3 = Guid.NewGuid();
+
+        var layout = new List<ExplorerEntryData>
+        {
+            new()
+            {
+                Type = "Folder",
+                FolderId = f1,
+                IsExpanded = true,
+                Children = new List<ExplorerEntryData>
+                {
+                    new()
+                    {
+                        Type = "Folder",
+                        FolderId = f2,
+                        IsExpanded = false,
+                        Children = new List<ExplorerEntryData>
+                        {
+                            new() { Type = "Folder", FolderId = f3, IsExpanded = true }
+                        }
+                    }
+                }
+            }
+        };
+
+        var expanded = this.organizer.GetExpandedFolderIds(layout);
+
+        _ = expanded.Should().Contain(f1);
+        _ = expanded.Should().NotContain(f2);
+        _ = expanded.Should().Contain(f3);
+    }
+
+    [TestMethod]
+    public void BuildFolderOnlyLayout_ConstructsLayoutWithOnlyFolders()
+    {
+        var f1 = Guid.NewGuid();
+        var f2 = Guid.NewGuid();
+        var n1 = Guid.NewGuid();
+
+        var layout = new List<ExplorerEntryData>
+        {
+            new()
+            {
+                Type = "Folder",
+                FolderId = f1,
+                Children = new List<ExplorerEntryData>
+                {
+                    new() { Type = "Node", NodeId = n1 },
+                    new() { Type = "Folder", FolderId = f2 }
+                }
+            },
+            new() { Type = "Node", NodeId = Guid.NewGuid() }
+        };
+
+        var change = new LayoutChangeRecord("Test", null, layout, layout[0]);
+        var folderOnly = this.organizer.BuildFolderOnlyLayout(change);
+
+        _ = folderOnly.Should().HaveCount(1);
+        _ = folderOnly[0].FolderId.Should().Be(f1);
+        _ = folderOnly[0].Children.Should().BeEmpty();
+    }
+
+    [TestMethod]
+    public void FilterTopLevelSelectedNodeIds_ReturnsOnlyTopLevelNodesInSelection()
+    {
+        var scene = CreateScene();
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+
+        var selection = new HashSet<Guid> { parent.Id, child.Id };
+        var filtered = this.organizer.FilterTopLevelSelectedNodeIds(selection, scene);
+
+        _ = filtered.Should().Contain(parent.Id);
+        _ = filtered.Should().NotContain(child.Id);
+    }
 }
