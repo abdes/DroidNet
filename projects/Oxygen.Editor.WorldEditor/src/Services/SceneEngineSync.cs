@@ -122,6 +122,13 @@ public sealed class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
+    public Task RemoveNodeHierarchyAsync(Guid rootNodeId)
+    {
+        // OxygenWorld currently exposes only single-node removal. Avoid silent partial behavior.
+        throw new NotImplementedException("Hierarchy removal not yet supported by engine interop. Add a dedicated OxygenWorld API before enabling.");
+    }
+
+    /// <inheritdoc/>
     public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
     {
         var world = this.engineService.World;
@@ -142,6 +149,13 @@ public sealed class SceneEngineSync : ISceneEngineSync
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <inheritdoc/>
+    public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false)
+    {
+        // OxygenWorld exposes only single-node reparent. Avoid partial hierarchy moves without native support.
+        throw new NotImplementedException("Hierarchy reparent not yet supported by engine interop. Add batch/recursive API before enabling.");
     }
 
     /// <inheritdoc/>

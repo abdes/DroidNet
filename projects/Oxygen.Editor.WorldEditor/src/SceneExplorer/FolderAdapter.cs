@@ -67,7 +67,12 @@ public sealed class FolderAdapter : TreeItemAdapter
             this.children.Add(adapter);
             if (this.IsExpanded)
             {
-                this.AddChildInternal(adapter);
+                // Ensure the underlying children collection is initialized before adding to it
+                var realizedChildren = this.Children.ConfigureAwait(false).GetAwaiter().GetResult();
+                if (!realizedChildren.Contains(adapter))
+                {
+                    this.AddChildInternal(adapter);
+                }
             }
         }
     }
