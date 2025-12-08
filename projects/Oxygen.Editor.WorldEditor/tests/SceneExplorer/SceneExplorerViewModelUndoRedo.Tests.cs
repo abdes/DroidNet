@@ -18,7 +18,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public async Task RemoveSelectedItems_UndoRedo_RestoresAndRemovesNode()
     {
-        var (vm, scene, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
@@ -159,7 +159,7 @@ public class SceneExplorerViewModelUndoRedoTests
 
     private static async Task<(SceneExplorerViewModelTestFixture.TestSceneExplorerViewModel vm, SceneAdapter sceneAdapter, ITreeItem nodeAdapter, Guid nodeId)> CreateSceneWithSingleNodeAsync()
     {
-        var (vm, scene, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
 
         var sceneAdapter = vm.Scene ?? throw new InvalidOperationException("Scene not initialized");
@@ -179,7 +179,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void RegisterCreateFolderUndo_RestoresLayoutsOnUndoRedo()
     {
-        var (vm, scene, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, _, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var previousLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = Guid.NewGuid() } };
@@ -200,7 +200,7 @@ public class SceneExplorerViewModelUndoRedoTests
     [TestMethod]
     public void ApplyFolderCreationAsync_InsertsFolderMovesChildrenAndRegistersUndo()
     {
-        var (vm, scene, _, organizer) = SceneExplorerViewModelTestFixture.CreateViewModel();
+        var (vm, scene, _, organizer, _) = SceneExplorerViewModelTestFixture.CreateViewModel();
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
         var initialLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };

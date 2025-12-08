@@ -21,7 +21,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_RoutesToMutatorForSceneNodeParent()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var parentNode = new SceneNode(scene) { Name = "Parent" };
         scene.RootNodes.Add(parentNode);
@@ -40,7 +40,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_RoutesToOrganizerForFolderParent()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
         var folder = new FolderAdapter(Guid.NewGuid(), "Folder");
 
         var node = new SceneNode(scene) { Name = "Node" };
@@ -58,7 +58,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_WithSceneAdapterParentCreatesNodeAtRoot()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var nodeAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "NewNode" });
@@ -74,7 +74,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CaptureSelectionForFolderCreation_NoSelectionReturnsEmpty()
     {
-        var (vm, _, _, _) = CreateViewModel();
+        var (vm, _, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.Single;
 
         var capture = vm.CaptureSelectionForFolderCreation();
@@ -86,7 +86,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_ReparentsExistingNodeBetweenParents()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var parentA = new SceneNode(scene) { Name = "ParentA" };
         var parentB = new SceneNode(scene) { Name = "ParentB" };
@@ -111,7 +111,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingRemoved_WhenDeleteCallsMutatorRemove()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
@@ -128,7 +128,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingRemoved_DuringMoveCapturesOldParentForReparent()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var parent = new SceneNode(scene) { Name = "Parent" };
         var child = new SceneNode(scene) { Name = "Child" };
@@ -155,7 +155,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_WithCapturedOldParentReparentsToRoot()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var parent = new SceneNode(scene) { Name = "Parent" };
         var child = new SceneNode(scene) { Name = "Child" };
@@ -180,7 +180,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void OnItemBeingAdded_WhenFolderMoveRejectedSetsProceedFalse()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
         var folder = new FolderAdapter(Guid.NewGuid(), "Folder");
 
         var node = new SceneNode(scene) { Name = "Node" };
@@ -207,7 +207,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public async Task MoveAdaptersIntoFolderAsync_SkipsMissingNode()
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         await vm.InitializeSceneAsync(sceneAdapter).ConfigureAwait(false);
         await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
@@ -235,7 +235,7 @@ public class SceneExplorerViewModelTests
     [DataRow(false)]
     public async Task MoveAdaptersIntoFolderAsync_MovesExistingNode(bool preExpanded)
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
         scene.ExplorerLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
@@ -269,7 +269,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public async Task ExpandAndSelectFolderAsync_ExpandsExistingFolder()
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         await vm.InitializeSceneAsync(sceneAdapter).ConfigureAwait(false);
         await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
@@ -290,7 +290,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public async Task RemoveSelectedItems_DeletesSelectedNode()
     {
-        var (vm, scene, mutator, organizer) = CreateViewModel();
+        var (vm, scene, mutator, organizer, _) = CreateViewModel();
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
@@ -313,7 +313,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CaptureSelectionForFolderCreation_UsesSingleSelectionModel()
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.Single;
 
         var adapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Node" });
@@ -329,7 +329,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CaptureSelectionForFolderCreation_UsesMultipleSelectionModelAndIgnoresFolders()
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.Multiple;
 
         var nodeAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Node" });
@@ -349,7 +349,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CaptureSelectionForFolderCreation_FallsBackToShownItems()
     {
-        var (vm, scene, _, _) = CreateViewModel();
+        var (vm, scene, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.None;
 
         var shownAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Shown" }) { IsSelected = true };
@@ -364,7 +364,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CreateFolderCreationContext_WhenFolderMissingIdReturnsNull()
     {
-        var (vm, scene, _, organizer) = CreateViewModel();
+        var (vm, scene, _, organizer, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var layout = new List<ExplorerEntryData>();
@@ -381,7 +381,7 @@ public class SceneExplorerViewModelTests
     [TestMethod]
     public void CreateFolderCreationContext_AppliesLayoutAndBuildsFolderAdapter()
     {
-        var (vm, scene, _, organizer) = CreateViewModel();
+        var (vm, scene, _, organizer, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var layout = new List<ExplorerEntryData>();
@@ -398,4 +398,48 @@ public class SceneExplorerViewModelTests
         _ = result.Value.FolderAdapter.Label.Should().Be("New Folder");
     }
 
+    [TestMethod]
+    public async Task CreateFolderFromSelection_PreservesExpansionStateOfMovedNodes()
+    {
+        var (vm, scene, _, _, _) = CreateViewModel();
+        await vm.HandleDocumentOpenedForTestAsync(scene).ConfigureAwait(false);
+        var sceneAdapter = vm.Scene!;
+        await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
+
+        // Setup: Root -> Parent (Expanded) -> Child
+        var parent = new SceneNode(scene) { Name = "Parent" };
+        var child = new SceneNode(scene) { Name = "Child" };
+        parent.AddChild(child);
+        scene.RootNodes.Add(parent);
+
+        // Add Parent to tree (simulating dynamic add or load)
+        var parentAdapter = new SceneNodeAdapter(parent);
+
+        await vm.InvokeInsertItemAsync(0, sceneAdapter, parentAdapter).ConfigureAwait(false);
+        await vm.ExpandItemForTestAsync(parentAdapter).ConfigureAwait(false);
+
+        // Verify setup
+        _ = parentAdapter.IsExpanded.Should().BeTrue();
+        var parentChildren = await parentAdapter.Children.ConfigureAwait(false);
+        var childAdapter = parentChildren.OfType<SceneNodeAdapter>().FirstOrDefault(c => c.AttachedObject == child);
+        _ = childAdapter.Should().NotBeNull();
+
+        // Select Parent
+        vm.SelectionMode = SelectionMode.Single;
+        vm.SelectItem(parentAdapter);
+
+        // Create Folder
+        await vm.CreateFolderFromSelectionCommand.ExecuteAsync(null).ConfigureAwait(false);
+
+        // Verify Parent is inside Folder
+        var folder = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<FolderAdapter>().First();
+        var movedParent = (await folder.Children.ConfigureAwait(false)).First();
+
+        // Verify Parent is still expanded
+        _ = movedParent.IsExpanded.Should().BeTrue("Moved node should remain expanded");
+
+        // Verify Child is still present
+        var children = await movedParent.Children.ConfigureAwait(false);
+        _ = children.Should().Contain(childAdapter, "Moved node should retain its children");
+    }
 }

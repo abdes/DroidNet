@@ -20,7 +20,7 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer.Tests.Infrastructure;
 
 internal static class SceneExplorerViewModelTestFixture
 {
-    public static (TestSceneExplorerViewModel vm, Scene scene, Mock<ISceneMutator> mutator, Mock<ISceneOrganizer> organizer) CreateViewModel()
+    public static (TestSceneExplorerViewModel vm, Scene scene, Mock<ISceneMutator> mutator, Mock<ISceneOrganizer> organizer, IMessenger messenger) CreateViewModel()
     {
         var loggerFactory = LoggerFactory.Create(builder =>
         {
@@ -29,7 +29,7 @@ internal static class SceneExplorerViewModelTestFixture
             builder.AddConsole();
         });
 
-        var messenger = new Mock<IMessenger>();
+        var messenger = new WeakReferenceMessenger();
         var project = new Mock<IProject>();
         var scene = new Scene(project.Object) { Name = "Scene" };
         project.Setup(p => p.Scenes).Returns(new List<Scene> { scene });
@@ -144,7 +144,7 @@ internal static class SceneExplorerViewModelTestFixture
 
         var vm = new TestSceneExplorerViewModel(
             projectManager.Object,
-            messenger.Object,
+            messenger,
             router.Object,
             documentService.Object,
             engineSync.Object,
@@ -152,7 +152,7 @@ internal static class SceneExplorerViewModelTestFixture
             organizer.Object,
             loggerFactory);
 
-        return (vm, scene, mutator, organizer);
+        return (vm, scene, mutator, organizer, messenger);
     }
 
     internal sealed class TestSceneExplorerViewModel : SceneExplorerViewModel
@@ -176,6 +176,12 @@ internal static class SceneExplorerViewModelTestFixture
         public void InvokeHandleItemBeingRemoved(Scene scene, SceneNodeAdapter adapter, TreeItemBeingRemovedEventArgs args)
             => this.HandleItemBeingRemoved(scene, adapter, args);
 
+        public Task InvokeHandleItemAddedAsync(TreeItemAddedEventArgs args)
+            => this.HandleItemAddedAsync(args);
+
+        public Task InvokeHandleItemRemovedAsync(TreeItemRemovedEventArgs args)
+            => this.HandleItemRemovedAsync(args);
+
         public Task<int> InvokeMoveAdaptersIntoFolderAsync(SceneAdapter sceneAdapter, FolderAdapter folderAdapter, ExplorerEntryData folderEntry)
             => this.MoveAdaptersIntoFolderAsync(sceneAdapter, folderAdapter, folderEntry);
 
@@ -187,6 +193,9 @@ internal static class SceneExplorerViewModelTestFixture
 
         public Task AddFolderToSceneAdapter(SceneAdapter sceneAdapter, FolderAdapter folderAdapter)
             => this.InsertItemAsync(0, sceneAdapter, folderAdapter);
+
+        public Task InvokeInsertItemAsync(int index, ITreeItem parent, ITreeItem item)
+            => this.InsertItemAsync(index, parent, item);
 
         public Task InitializeSceneAsync(SceneAdapter sceneAdapter)
             => this.InitializeRootAsync(sceneAdapter, skipRoot: false);

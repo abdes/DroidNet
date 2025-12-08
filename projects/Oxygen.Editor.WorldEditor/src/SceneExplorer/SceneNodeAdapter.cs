@@ -54,8 +54,17 @@ public class SceneNodeAdapter : TreeItemAdapter, ITreeItem<SceneNode>
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     /// <inheritdoc />
-    protected override int DoGetChildrenCount() => 0;
+    protected override int DoGetChildrenCount() => this.AttachedObject.Children.Count;
 
     /// <inheritdoc />
-    protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
+    protected override async Task LoadChildren()
+    {
+        this.ClearChildren();
+        foreach (var child in this.AttachedObject.Children)
+        {
+            this.AddChildInternal(new SceneNodeAdapter(child));
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
 }

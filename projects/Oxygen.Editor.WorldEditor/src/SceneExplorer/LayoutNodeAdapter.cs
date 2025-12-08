@@ -58,9 +58,19 @@ public sealed class LayoutNodeAdapter : TreeItemAdapter, ITreeItem<SceneNodeAdap
         this.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.Label)));
     }
 
-    protected override int DoGetChildrenCount() => 0;
+    protected override int DoGetChildrenCount() => this.AttachedObject.AttachedObject.Children.Count;
 
-    protected override async Task LoadChildren() => await Task.CompletedTask.ConfigureAwait(false);
+    protected override async Task LoadChildren()
+    {
+        this.ClearChildren();
+        foreach (var child in this.AttachedObject.AttachedObject.Children)
+        {
+            var childAdapter = new SceneNodeAdapter(child);
+            this.AddChildInternal(new LayoutNodeAdapter(childAdapter));
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
 
     private void OnPayloadPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
