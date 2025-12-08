@@ -41,12 +41,27 @@ public interface ISceneEngineSync
     Task RemoveNodeAsync(Guid nodeId);
 
     /// <summary>
+    ///     Removes a scene node hierarchy (node and all descendants) from the engine.
+    /// </summary>
+    /// <param name="rootNodeId">The GUID of the hierarchy root to remove.</param>
+    /// <returns>A task that completes when the hierarchy is removed.</returns>
+    Task RemoveNodeHierarchyAsync(Guid rootNodeId);
+
+    /// <summary>
     ///     Reparents a node in the engine to the provided parent (null = root).
     /// </summary>
     /// <param name="nodeId">Node id to reparent.</param>
     /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make a root node.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
     Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
+
+    /// <summary>
+    ///     Reparents multiple node hierarchies to the same parent in the engine.
+    /// </summary>
+    /// <param name="nodeIds">Hierarchy roots to move.</param>
+    /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make roots.</param>
+    /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
+    Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     // ============================================================================
     // Transform Operations

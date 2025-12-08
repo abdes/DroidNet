@@ -13,6 +13,7 @@ using Oxygen.Editor.WorldEditor.Output;
 using Oxygen.Editor.WorldEditor.PropertiesEditor;
 using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.SceneExplorer;
+using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
 using Oxygen.Editor.WorldEditor.Services;
 
 namespace Oxygen.Editor.WorldEditor.Workspace;
@@ -100,6 +101,8 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
+        childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
+        childContainer.Register<ISceneOrganizer, SceneOrganizer>(Reuse.Singleton);
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);

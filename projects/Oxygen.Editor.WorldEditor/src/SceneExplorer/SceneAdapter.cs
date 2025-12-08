@@ -15,6 +15,8 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 /// <param name="scene">The <see cref="SceneNode" /> object to wrap as a <see cref="ITreeItem" />.</param>
 public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scene>
 {
+    internal bool UseLayoutAdapters { get; init; }
+
     /// <inheritdoc />
     public override string Label
     {
@@ -45,16 +47,24 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     {
         this.ClearChildren();
 
-        // If an editor supplied explorer layout exists, use it to build the
-        // visual tree (folders + node references). Otherwise fall back to the
-        // simple flat listing of root nodes.
+        if (this.UseLayoutAdapters)
+        {
+            await this.LoadLayoutChildrenAsync().ConfigureAwait(false);
+            return;
+        }
+
+        await this.LoadSceneChildrenAsync().ConfigureAwait(false);
+    }
+
+    private async Task LoadLayoutChildrenAsync()
+    {
+        // Build layout using LayoutNodeAdapter wrappers so layout operations stay scene-agnostic.
         var layout = this.AttachedObject.ExplorerLayout;
         var seenNodeIds = new HashSet<System.Guid>();
 
         if (layout is not null && layout.Count > 0)
         {
-            // Recursive local function to build items from entry data
-            void BuildFromEntry(ExplorerEntryData entry)
+            void BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
             {
                 if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
                 {
@@ -65,68 +75,123 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         foreach (var childEntry in entry.Children)
                         {
-                            // recurse and add child adapters directly to the folder
-                            if (string.Equals(childEntry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                            {
-                                // Use AddChildInternal after building children to preserve parent links
-                                var subFolderId = childEntry.FolderId ?? Guid.NewGuid();
-                                var subFolder = new FolderAdapter(subFolderId, childEntry.Name ?? "Folder") { IsExpanded = false };
-                                // nested entries will be appended later by the simple approach below
-                                // populate children of subFolder
-                                if (childEntry.Children is not null)
-                                {
-                                    foreach (var nested in childEntry.Children)
-                                    {
-                                        // For nested items we either add node adapters or deeper folders
-                                        if (string.Equals(nested.Type, "Node", StringComparison.OrdinalIgnoreCase) && nested.NodeId is not null)
-                                        {
-                                            var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == nested.NodeId);
-                                            if (node is not null)
-                                            {
-                                                var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
-                                                subFolder.AddChildAdapter(nodeAdapter);
-                                                seenNodeIds.Add(node.Id);
-                                            }
-                                        }
-                                        else if (string.Equals(nested.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            // deeper nesting - build an inner folder recursively (simple approach)
-                                            BuildFromEntry(nested);
-                                        }
-                                    }
-                                }
-
-                                folder.AddChildAdapter(subFolder);
-                            }
-                            else if (string.Equals(childEntry.Type, "Node", StringComparison.OrdinalIgnoreCase) && childEntry.NodeId is not null)
-                            {
-                                var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == childEntry.NodeId);
-                                if (node is not null)
-                                {
-                                    var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
-                                    folder.AddChildAdapter(nodeAdapter);
-                                    seenNodeIds.Add(node.Id);
-                                }
-                            }
+                            BuildFromEntry(childEntry, folder);
                         }
                     }
 
-                    this.AddChildInternal(folder);
+                    if (parent is FolderAdapter folderParent)
+                    {
+                        folderParent.AddChildAdapter(folder);
+                    }
+                    else
+                    {
+                        this.AddChildInternal(folder);
+                    }
+
+                    return;
+                }
+
+                if (!string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) || entry.NodeId is null)
+                {
+                    return;
+                }
+
+                var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
+                if (node is null)
+                {
+                    return;
+                }
+
+                var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
+                var layoutNode = new LayoutNodeAdapter(nodeAdapter) { IsExpanded = false };
+                _ = seenNodeIds.Add(node.Id);
+
+                if (parent is FolderAdapter folderContainer)
+                {
+                    folderContainer.AddChildAdapter(layoutNode);
+                    return;
+                }
+
+                this.AddChildInternal(layoutNode);
+            }
+
+            foreach (var entry in layout)
+            {
+                BuildFromEntry(entry, this);
+            }
+        }
+
+        foreach (var entity in this.AttachedObject.RootNodes)
+        {
+            if (seenNodeIds.Contains(entity.Id))
+            {
+                continue;
+            }
+
+            var nodeAdapter = new SceneNodeAdapter(entity) { IsExpanded = false };
+            var layoutNode = new LayoutNodeAdapter(nodeAdapter) { IsExpanded = false };
+            this.AddChildInternal(layoutNode);
+        }
+
+        await Task.CompletedTask.ConfigureAwait(false);
+    }
+
+    private async Task LoadSceneChildrenAsync()
+    {
+        // Original path: build tree using SceneNodeAdapter only (no layout separation)
+        var layout = this.AttachedObject.ExplorerLayout;
+        var seenNodeIds = new HashSet<System.Guid>();
+
+        if (layout is not null && layout.Count > 0)
+        {
+            void BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
+            {
+                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
+                {
+                    var folderId = entry.FolderId ?? Guid.NewGuid();
+                    var folder = new FolderAdapter(folderId, entry.Name ?? "Folder") { IsExpanded = false };
+
+                    if (entry.Children is not null)
+                    {
+                        foreach (var childEntry in entry.Children)
+                        {
+                            BuildFromEntry(childEntry, folder);
+                        }
+                    }
+
+                    if (parent is FolderAdapter folderParent)
+                    {
+                        folderParent.AddChildAdapter(folder);
+                    }
+                    else
+                    {
+                        this.AddChildInternal(folder);
+                    }
                 }
                 else if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId is not null)
                 {
                     var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
                     if (node is not null)
                     {
-                        this.AddChildInternal(new SceneNodeAdapter(node) { IsExpanded = false });
-                        seenNodeIds.Add(node.Id);
+                        var nodeAdapter = new SceneNodeAdapter(node) { IsExpanded = false };
+                        _ = seenNodeIds.Add(node.Id);
+
+                        if (parent is FolderAdapter folderParent)
+                        {
+                            folderParent.AddChildAdapter(nodeAdapter);
+                        }
+                        else if (parent is SceneAdapter sceneParent)
+                        {
+                            // Only SceneAdapter can attach SceneNodeAdapter children at the root level
+                            sceneParent.AddChildInternal(nodeAdapter);
+                        }
                     }
                 }
             }
 
             foreach (var entry in layout)
             {
-                BuildFromEntry(entry);
+                BuildFromEntry(entry, this);
             }
         }
 
@@ -139,7 +204,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
             }
         }
 
-        await Task.CompletedTask.ConfigureAwait(true);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     /// <summary>
