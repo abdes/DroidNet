@@ -205,68 +205,6 @@ public class SceneExplorerViewModelTests
     }
 
     [TestMethod]
-    public async Task MoveAdaptersIntoFolderAsync_SkipsMissingNode()
-    {
-        var (vm, scene, _, _, _, _) = CreateViewModel();
-        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
-        await vm.InitializeSceneAsync(sceneAdapter).ConfigureAwait(false);
-        await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
-        var folderId = Guid.NewGuid();
-        var folderAdapter = new FolderAdapter(folderId, "Folder");
-        await vm.AddFolderToSceneAdapter(sceneAdapter, folderAdapter).ConfigureAwait(false);
-        await vm.ExpandItemForTestAsync(folderAdapter).ConfigureAwait(false);
-
-        var folderEntry = new ExplorerEntryData
-        {
-            FolderId = folderId,
-            Name = "Folder",
-            Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = Guid.NewGuid() } },
-        };
-
-        var moved = await vm.InvokeMoveAdaptersIntoFolderAsync(sceneAdapter, folderAdapter, folderEntry).ConfigureAwait(false);
-
-        _ = moved.Should().Be(0);
-        var kids = await folderAdapter.Children.ConfigureAwait(false);
-        _ = kids.Should().BeEmpty();
-    }
-
-    [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public async Task MoveAdaptersIntoFolderAsync_MovesExistingNode(bool preExpanded)
-    {
-        var (vm, scene, _, _, _, _) = CreateViewModel();
-        var node = new SceneNode(scene) { Name = "Node" };
-        scene.RootNodes.Add(node);
-        scene.ExplorerLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
-
-        // Rebuild layout so adapter tree contains the node
-        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
-        await vm.InitializeSceneAsync(sceneAdapter).ConfigureAwait(false);
-        await vm.ExpandItemForTestAsync(sceneAdapter).ConfigureAwait(false);
-        var layoutNode = (await sceneAdapter.Children.ConfigureAwait(false)).OfType<LayoutNodeAdapter>().Single();
-
-        var folderId = Guid.NewGuid();
-        var folderAdapter = new FolderAdapter(folderId, "Folder");
-        await vm.AddFolderToSceneAdapter(sceneAdapter, folderAdapter).ConfigureAwait(false);
-        folderAdapter.IsExpanded = preExpanded;
-
-        var folderEntry = new ExplorerEntryData
-        {
-            FolderId = folderId,
-            Name = "Folder",
-            Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } },
-        };
-
-        var moved = await vm.InvokeMoveAdaptersIntoFolderAsync(sceneAdapter, folderAdapter, folderEntry).ConfigureAwait(false);
-
-        _ = moved.Should().Be(1);
-        var kids = await folderAdapter.Children.ConfigureAwait(false);
-        _ = kids.Should().Contain(layoutNode);
-        _ = folderAdapter.IsExpanded.Should().BeTrue("folder should auto-expand on move when not pre-expanded");
-    }
-
-    [TestMethod]
     public async Task ExpandAndSelectFolderAsync_ExpandsExistingFolder()
     {
         var (vm, scene, _, _, _, _) = CreateViewModel();

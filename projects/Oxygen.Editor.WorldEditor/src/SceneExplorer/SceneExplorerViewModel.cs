@@ -41,6 +41,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ISceneMutator sceneMutator;
     private readonly ISceneOrganizer sceneOrganizer;
+    private readonly ILayoutContext layoutContext;
     private readonly Dictionary<SceneNodeAdapter, SceneNodeChangeRecord> pendingSceneChanges = new();
     private readonly Dictionary<SceneNodeAdapter, LayoutChangeRecord> pendingLayoutChanges = new();
     private int nextEntityIndex;
@@ -101,6 +102,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.sceneEngineSync = sceneEngineSync;
         this.sceneMutator = sceneMutator;
         this.sceneOrganizer = sceneOrganizer;
+        this.layoutContext = new LayoutContext(this);
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -490,6 +492,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private async void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
+
+        this.RemoveVisibleSpan(args.TreeItem);
+
         await this.HandleItemRemovedAsync(args).ConfigureAwait(false);
     }
 
@@ -839,6 +844,28 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         _ = this.deletedAdapters.Add(entityAdapter);
     }
 
+    private void RemoveVisibleSpan(ITreeItem item)
+    {
+        if (this.layoutContext.TryGetVisibleSpan(item, out var start, out var count))
+        {
+            for (var i = 0; i < count; i++)
+            {
+                this.ShownItems.RemoveAt(start);
+            }
+
+            this.logger.LogDebug("RemoveVisibleSpan: removed {Count} items starting at {Start} for {Label}.", count, start, item.Label);
+            return;
+        }
+
+        // Fallback: if we cannot find the span (e.g., moved but not visible), refresh the tree to avoid orphans.
+        var sceneAdapter = this.Scene;
+        if (sceneAdapter is not null)
+        {
+            this.logger.LogDebug("RemoveVisibleSpan: span not found for {Label}, refreshing tree.", item.Label);
+            this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
+        }
+    }
+
     protected internal readonly record struct SelectionCapture(HashSet<System.Guid> NodeIds, bool UsedShownItemsFallback);
 
     protected internal readonly record struct FolderCreationContext(
@@ -983,7 +1010,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         {
             await this.InsertItemAsync(0, sceneAdapter, context.FolderAdapter).ConfigureAwait(true);
 
-            var movedAdapterCount = await this.MoveAdaptersIntoFolderAsync(sceneAdapter, context.FolderAdapter, context.FolderEntry)
+            var movedAdapterCount = await this.sceneOrganizer.MoveAdaptersIntoFolderAsync(
+                    sceneAdapter,
+                    context.FolderAdapter,
+                    context.FolderEntry,
+                    this.layoutContext)
                 .ConfigureAwait(true);
             this.LogCreateFolderMovedAdaptersCount(movedAdapterCount);
         }
@@ -999,145 +1030,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.RegisterCreateFolderUndo(sceneAdapter, scene, context.LayoutChange, context.FolderEntry.Name ?? "Folder");
     }
 
-    /// <summary>
-    /// Moves adapters corresponding to folder children into the created folder adapter.
-    /// </summary>
-    protected internal virtual async Task<int> MoveAdaptersIntoFolderAsync(
-        SceneAdapter sceneAdapter,
-        FolderAdapter folderAdapter,
-        ExplorerEntryData folderEntry)
-    {
-        if (folderEntry.Children is null || folderEntry.Children.Count == 0)
-        {
-            return 0;
-        }
-
-        // Ensure the target folder is visible/expanded before inserting children
-        if (!folderAdapter.IsExpanded)
-        {
-            try
-            {
-                await this.ExpandItemAsync(folderAdapter).ConfigureAwait(true);
-            }
-            catch (InvalidOperationException)
-            {
-                // If the folder is not yet visible (e.g., not in ShownItems), fall back to marking it expanded
-                folderAdapter.IsExpanded = true;
-            }
-        }
-
-        var movedAdapterCount = 0;
-        foreach (var moved in folderEntry.Children)
-        {
-            if (moved.NodeId is null)
-            {
-                continue;
-            }
-
-            var nodeAdapter = await FindAdapterForNodeIdAsync(sceneAdapter, moved.NodeId.Value).ConfigureAwait(true);
-            if (nodeAdapter is null)
-            {
-                this.LogCreateFolderNodeAdapterNotFound(moved.NodeId.Value);
-                continue;
-            }
-
-            var wasExpanded = nodeAdapter.IsExpanded;
-            if (wasExpanded)
-            {
-                await this.CollapseItemAsync(nodeAdapter).ConfigureAwait(true);
-            }
-
-            var removeIndex = this.ShownItems.IndexOf(nodeAdapter);
-            if (removeIndex != -1)
-            {
-                this.ShownItems.RemoveAt(removeIndex);
-            }
-
-            if (nodeAdapter.Parent is not null)
-            {
-                _ = await nodeAdapter.Parent.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
-            }
-
-            // Wrap the scene node adapter in a layout node adapter
-            LayoutNodeAdapter layoutNodeAdapter;
-            if (nodeAdapter is SceneNodeAdapter sceneNodeAdapter)
-            {
-                layoutNodeAdapter = new LayoutNodeAdapter(sceneNodeAdapter);
-            }
-            else if (nodeAdapter is LayoutNodeAdapter lna)
-            {
-                layoutNodeAdapter = lna;
-            }
-            else
-            {
-                continue;
-            }
-
-            // Use AddChildAdapter to ensure the FolderAdapter's internal collection is updated.
-            // InsertItemAsync would bypass the internal collection of FolderAdapter.
-            folderAdapter.AddChildAdapter(layoutNodeAdapter);
-
-            // Fix: Update ShownItems if the folder is expanded, otherwise the item disappears from the UI
-            if (folderAdapter.IsExpanded)
-            {
-                var folderIndex = this.ShownItems.IndexOf(folderAdapter);
-                if (folderIndex != -1)
-                {
-                    var insertIndex = folderIndex + 1;
-                    var children = folderAdapter.InternalChildren.ToList();
-                    if (children.Count > 1)
-                    {
-                        var prevChild = children[children.Count - 2];
-                        var prevIndex = this.ShownItems.IndexOf(prevChild);
-                        if (prevIndex != -1)
-                        {
-                            insertIndex = prevIndex + 1;
-                            // Skip descendants of the previous child
-                            while (insertIndex < this.ShownItems.Count)
-                            {
-                                var item = this.ShownItems[insertIndex];
-                                if (IsDescendant(item, prevChild))
-                                {
-                                    insertIndex++;
-                                }
-                                else
-                                {
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    this.ShownItems.Insert(insertIndex, layoutNodeAdapter);
-                }
-            }
-
-            if (wasExpanded)
-            {
-                await this.ExpandItemAsync(layoutNodeAdapter).ConfigureAwait(true);
-            }
-
-            ++movedAdapterCount;
-            this.LogCreateFolderMovedAdapter(nodeAdapter.Label, folderAdapter.Label);
-        }
-
-        return movedAdapterCount;
-    }
-
-    private static bool IsDescendant(ITreeItem item, ITreeItem ancestor)
-    {
-        var current = item.Parent;
-        while (current != null)
-        {
-            if (current == ancestor)
-            {
-                return true;
-            }
-
-            current = current.Parent;
-        }
-
-        return false;
-    }
 
     /// <summary>
     /// Expands and selects the newly created folder, logging failures if the adapter cannot be found.
@@ -1358,6 +1250,107 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
+    private sealed class LayoutContext : ILayoutContext
+    {
+        private readonly SceneExplorerViewModel owner;
+
+        public LayoutContext(SceneExplorerViewModel owner)
+        {
+            this.owner = owner;
+        }
+
+        public int? GetShownIndex(ITreeItem item)
+        {
+            var index = this.owner.ShownItems.IndexOf(item);
+            return index == -1 ? null : index;
+        }
+
+        public bool TryRemoveShownItem(ITreeItem item)
+        {
+            if (!this.TryGetVisibleSpan(item, out var index, out var count))
+            {
+                this.owner.logger.LogDebug("TryRemoveShownItem: item {Label} not visible; no removal performed.", item.Label);
+                return false;
+            }
+
+            for (var i = 0; i < count; i++)
+            {
+                this.owner.ShownItems.RemoveAt(index);
+            }
+
+            this.owner.logger.LogDebug("TryRemoveShownItem: removed span start={Start} count={Count} for {Label}.", index, count, item.Label);
+            return true;
+        }
+
+        public void InsertShownItem(int index, ITreeItem item)
+        {
+            this.owner.ShownItems.Insert(index, item);
+        }
+
+        public Task RefreshTreeAsync(SceneAdapter sceneAdapter)
+            => this.owner.InitializeRootAsync(sceneAdapter, skipRoot: false);
+
+        public bool TryGetVisibleSpan(ITreeItem root, out int startIndex, out int count)
+        {
+            startIndex = this.owner.ShownItems.IndexOf(root);
+            if (startIndex == -1)
+            {
+                this.owner.logger.LogDebug("TryGetVisibleSpan: item {Label} not in shown list.", root.Label);
+                count = 0;
+                return false;
+            }
+
+            count = 1;
+            var cursor = startIndex + 1;
+            while (cursor < this.owner.ShownItems.Count && IsDescendant(this.owner.ShownItems[cursor], root))
+            {
+                ++count;
+                ++cursor;
+            }
+
+            this.owner.logger.LogDebug("TryGetVisibleSpan: item {Label} span start={Start} count={Count}.", root.Label, startIndex, count);
+
+            return true;
+        }
+
+        public void ApplyShownDelta(ShownItemsDelta delta)
+        {
+            for (var i = 0; i < delta.RemoveCount; i++)
+            {
+                this.owner.ShownItems.RemoveAt(delta.RemoveStart);
+            }
+
+            var insertIndex = delta.InsertIndex;
+            foreach (var item in delta.InsertItems)
+            {
+                this.owner.ShownItems.Insert(insertIndex++, item);
+            }
+
+            this.owner.logger.LogDebug(
+                "ApplyShownDelta: removed start={Start} count={Count}, inserted={InsertedCount} at index={InsertIndex}.",
+                delta.RemoveStart,
+                delta.RemoveCount,
+                delta.InsertItems.Count,
+                delta.InsertIndex);
+        }
+
+        private static bool IsDescendant(ITreeItem item, ITreeItem ancestor)
+        {
+            var current = item.Parent;
+            while (current != null)
+            {
+                if (current == ancestor)
+                {
+                    return true;
+                }
+
+                current = current.Parent;
+            }
+
+            return false;
+        }
+    }
+
 
 
     private bool CanCreateFolderFromSelection()
@@ -1382,47 +1375,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     {
         this.AddEntityCommand.NotifyCanExecuteChanged();
         this.CreateFolderFromSelectionCommand.NotifyCanExecuteChanged();
-    }
-
-    /// <summary>
-    ///     Recursively searches the adapter tree starting at <paramref name="root"/> to find a
-    ///     SceneNodeAdapter whose AttachedObject.Id matches <paramref name="nodeId"/>.
-    /// </summary>
-    private static async Task<TreeItemAdapter?> FindAdapterForNodeIdAsync(ITreeItem root, System.Guid nodeId)
-    {
-        // Check if the root itself matches the requested node id
-        if (root is LayoutNodeAdapter lna && lna.AttachedObject.AttachedObject.Id == nodeId)
-        {
-            return lna;
-        }
-
-        if (root is SceneNodeAdapter sna && sna.AttachedObject.Id == nodeId)
-        {
-            return sna;
-        }
-
-        // Search through children recursively
-        var children = await root.Children.ConfigureAwait(true);
-        foreach (var child in children)
-        {
-            if (child is LayoutNodeAdapter childLayout && childLayout.AttachedObject.AttachedObject.Id == nodeId)
-            {
-                return childLayout;
-            }
-
-            if (child is SceneNodeAdapter childNode && childNode.AttachedObject.Id == nodeId)
-            {
-                return childNode;
-            }
-
-            var nested = await FindAdapterForNodeIdAsync(child, nodeId).ConfigureAwait(true);
-            if (nested is not null)
-            {
-                return nested;
-            }
-        }
-
-        return null;
     }
 
     private string GetNextEntityName()
@@ -1476,58 +1428,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.suppressUndoRecording = true;
         try
         {
-            if (this.Scene is null)
-            {
-                this.Scene = sceneAdapter;
-            }
+            this.Scene ??= sceneAdapter;
 
-            // Capture expansion state from the current UI adapter (more reliable than data model)
-            var expandedFolderIds = sceneAdapter.GetExpandedFolderIds();
-
-            // Ensure the adapter is initialized before reloading children
-            this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
-
-            var layoutClone = this.sceneOrganizer.CloneLayout(layout);
-
-            // Merge expansion state into the new layout clone
-            if (layoutClone != null)
-            {
-                foreach (var id in expandedFolderIds)
-                {
-                    var entry = FindFolderEntry(layoutClone, id);
-                    if (entry != null)
-                    {
-                        entry.IsExpanded = true;
-                    }
-                }
-            }
-
-            scene.ExplorerLayout = layoutClone;
-            this.LogLayoutState("ApplyLayoutRestore", layoutClone);
-            sceneAdapter.ReloadChildrenAsync(expandedFolderIds, preserveNodeExpansion: true).GetAwaiter().GetResult();
-            this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
+            this.sceneOrganizer
+                .ApplyLayoutRestoreAsync(sceneAdapter, scene, layout, this.layoutContext)
+                .GetAwaiter()
+                .GetResult();
+            this.LogLayoutState("ApplyLayoutRestore", scene.ExplorerLayout);
         }
         finally
         {
             this.suppressUndoRecording = false;
         }
-    }
-
-    private static ExplorerEntryData? FindFolderEntry(IList<ExplorerEntryData> entries, Guid folderId)
-    {
-        foreach (var entry in entries)
-        {
-            if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId == folderId)
-            {
-                return entry;
-            }
-            if (entry.Children != null)
-            {
-                var found = FindFolderEntry(entry.Children, folderId);
-                if (found != null) return found;
-            }
-        }
-        return null;
     }
 
 
@@ -1657,6 +1569,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
+    // pendingRemovalSpans removed; span cleanup now handled directly in RemoveVisibleSpan.
+
     private void ApplyLayoutChange(LayoutChangeRecord change)
     {
         ArgumentNullException.ThrowIfNull(change);
@@ -1668,6 +1582,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        scene.ExplorerLayout = change.NewLayout;
+        this.sceneOrganizer.ApplyLayoutChange(scene, change);
     }
 }
