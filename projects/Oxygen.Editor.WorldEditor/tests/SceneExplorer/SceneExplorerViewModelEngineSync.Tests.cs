@@ -21,7 +21,7 @@ public class SceneExplorerViewModelEngineSyncTests
         var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var node = new SceneNode(scene) { Name = "NewNode" };
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         // 1. Simulate "Being Added" to queue the change
         var beingAddedArgs = new TreeItemBeingAddedEventArgs { Parent = sceneAdapter, TreeItem = nodeAdapter };
@@ -46,10 +46,10 @@ public class SceneExplorerViewModelEngineSyncTests
         var (vm, scene, mutator, _, _, _) = CreateViewModel();
         var parent = new SceneNode(scene) { Name = "Parent" };
         scene.RootNodes.Add(parent);
-        var parentAdapter = new SceneNodeAdapter(parent);
+        var parentAdapter = new LayoutNodeAdapter(parent);
 
         var node = new SceneNode(scene) { Name = "Child" };
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         // 1. Simulate "Being Added"
         var beingAddedArgs = new TreeItemBeingAddedEventArgs { Parent = parentAdapter, TreeItem = nodeAdapter };
@@ -77,8 +77,8 @@ public class SceneExplorerViewModelEngineSyncTests
         scene.RootNodes.Add(parentA);
         scene.RootNodes.Add(parentB);
 
-        var parentBAdapter = new SceneNodeAdapter(parentB);
-        var childAdapter = new SceneNodeAdapter(child);
+        var parentBAdapter = new LayoutNodeAdapter(parentB);
+        var childAdapter = new LayoutNodeAdapter(child);
 
         // 1. Simulate "Being Added" (Reparenting)
         var beingAddedArgs = new TreeItemBeingAddedEventArgs { Parent = parentBAdapter, TreeItem = childAdapter };
@@ -107,7 +107,7 @@ public class SceneExplorerViewModelEngineSyncTests
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         // 1. Simulate "Being Removed"
         var beingRemovedArgs = new TreeItemBeingRemovedEventArgs { TreeItem = nodeAdapter };

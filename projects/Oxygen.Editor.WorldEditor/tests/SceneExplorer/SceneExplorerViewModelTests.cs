@@ -11,6 +11,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Messages;
 using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+using Oxygen.Editor.WorldEditor.SceneExplorer.Tests.Infrastructure;
 using static Oxygen.Editor.WorldEditor.SceneExplorer.Tests.Infrastructure.SceneExplorerViewModelTestFixture;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer.Tests;
@@ -25,9 +26,9 @@ public class SceneExplorerViewModelTests
 
         var parentNode = new SceneNode(scene) { Name = "Parent" };
         scene.RootNodes.Add(parentNode);
-        var parentAdapter = new SceneNodeAdapter(parentNode);
+        var parentAdapter = new LayoutNodeAdapter(parentNode);
 
-        var newNode = new SceneNodeAdapter(new SceneNode(scene) { Name = "Child" });
+        var newNode = new LayoutNodeAdapter(new SceneNode(scene) { Name = "Child" });
 
         var args = new TreeItemBeingAddedEventArgs { Parent = parentAdapter, TreeItem = newNode };
 
@@ -45,7 +46,7 @@ public class SceneExplorerViewModelTests
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         var args = new TreeItemBeingAddedEventArgs { Parent = folder, TreeItem = nodeAdapter };
 
@@ -61,7 +62,7 @@ public class SceneExplorerViewModelTests
         var (vm, scene, mutator, organizer, _, _) = CreateViewModel();
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
-        var nodeAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "NewNode" });
+        var nodeAdapter = new LayoutNodeAdapter(new SceneNode(scene) { Name = "NewNode" });
         var args = new TreeItemBeingAddedEventArgs { Parent = sceneAdapter, TreeItem = nodeAdapter };
 
         vm.InvokeHandleItemBeingAdded(scene, nodeAdapter, sceneAdapter, args);
@@ -95,9 +96,9 @@ public class SceneExplorerViewModelTests
         scene.RootNodes.Add(parentA);
         scene.RootNodes.Add(parentB);
 
-        var parentAAdapter = new SceneNodeAdapter(parentA);
-        var parentBAdapter = new SceneNodeAdapter(parentB);
-        var childAdapter = new SceneNodeAdapter(child);
+        var parentAAdapter = new LayoutNodeAdapter(parentA);
+        var parentBAdapter = new LayoutNodeAdapter(parentB);
+        var childAdapter = new LayoutNodeAdapter(child);
 
         var args = new TreeItemBeingAddedEventArgs { Parent = parentBAdapter, TreeItem = childAdapter };
 
@@ -115,7 +116,7 @@ public class SceneExplorerViewModelTests
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         var args = new TreeItemBeingRemovedEventArgs { TreeItem = nodeAdapter };
 
@@ -135,8 +136,8 @@ public class SceneExplorerViewModelTests
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
 
-        var parentAdapter = new SceneNodeAdapter(parent);
-        var childAdapter = new SceneNodeAdapter(child);
+        var parentAdapter = new LayoutNodeAdapter(parent);
+        var childAdapter = new LayoutNodeAdapter(child);
 
         // Capture move intent without reflection
         vm.CaptureOldParentForMove(childAdapter, parentAdapter);
@@ -162,9 +163,9 @@ public class SceneExplorerViewModelTests
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
 
-        var childAdapter = new SceneNodeAdapter(child);
+        var childAdapter = new LayoutNodeAdapter(child);
 
-        vm.CaptureOldParentForMove(childAdapter, new SceneNodeAdapter(parent));
+        vm.CaptureOldParentForMove(childAdapter, new LayoutNodeAdapter(parent));
         child.SetParent(newParent: null);
 
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
@@ -189,7 +190,7 @@ public class SceneExplorerViewModelTests
         var layout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
         scene.ExplorerLayout = layout;
 
-        var adapter = new SceneNodeAdapter(node);
+        var adapter = new LayoutNodeAdapter(node);
         var args = new TreeItemBeingAddedEventArgs { Parent = folder, TreeItem = adapter, Proceed = true };
 
         organizer.Setup(o => o.MoveNodeToFolder(node.Id, folder.Id, scene))
@@ -219,7 +220,7 @@ public class SceneExplorerViewModelTests
         var folderEntry = new ExplorerEntryData { FolderId = folderId, Name = "Folder" };
 
         vm.SelectionMode = SelectionMode.Single;
-        await vm.InvokeExpandAndSelectFolderAsync(sceneAdapter, folderAdapter, folderEntry).ConfigureAwait(false);
+        await vm.InvokeExpandAndSelectFolderAsync(folderAdapter, folderEntry).ConfigureAwait(false);
 
         _ = folderAdapter.IsExpanded.Should().BeTrue();
         _ = folderAdapter.IsSelected.Should().BeTrue();
@@ -254,7 +255,7 @@ public class SceneExplorerViewModelTests
         var (vm, scene, _, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.Single;
 
-        var adapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Node" });
+        var adapter = new LayoutNodeAdapter(new SceneNode(scene) { Name = "Node" });
         vm.ShownItems.Add(adapter);
         vm.SelectItem(adapter);
 
@@ -270,7 +271,7 @@ public class SceneExplorerViewModelTests
         var (vm, scene, _, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.Multiple;
 
-        var nodeAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Node" });
+        var nodeAdapter = new LayoutNodeAdapter(new SceneNode(scene) { Name = "Node" });
         var folder = new FolderAdapter(Guid.NewGuid(), "Folder");
         vm.ShownItems.Add(folder);
         vm.ShownItems.Add(nodeAdapter);
@@ -290,7 +291,7 @@ public class SceneExplorerViewModelTests
         var (vm, scene, _, _, _, _) = CreateViewModel();
         vm.SelectionMode = SelectionMode.None;
 
-        var shownAdapter = new SceneNodeAdapter(new SceneNode(scene) { Name = "Shown" }) { IsSelected = true };
+        var shownAdapter = new LayoutNodeAdapter(new SceneNode(scene) { Name = "Shown" }) { IsSelected = true };
         vm.ShownItems.Add(shownAdapter);
 
         var capture = vm.CaptureSelectionForFolderCreation();
@@ -352,7 +353,7 @@ public class SceneExplorerViewModelTests
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
 
         // Insert node into folder
         await vm.InvokeInsertItemAsync(0, folderAdapter, nodeAdapter).ConfigureAwait(false);
@@ -405,8 +406,8 @@ public class SceneExplorerViewModelTests
         scene.RootNodes.Add(node2);
 
         // Add to tree
-        var node1Adapter = new SceneNodeAdapter(node1);
-        var node2Adapter = new SceneNodeAdapter(node2);
+        var node1Adapter = new LayoutNodeAdapter(node1);
+        var node2Adapter = new LayoutNodeAdapter(node2);
         await vm.InvokeInsertItemAsync(0, sceneAdapter, node1Adapter).ConfigureAwait(false);
         await vm.InvokeInsertItemAsync(1, sceneAdapter, node2Adapter).ConfigureAwait(false);
 
@@ -442,7 +443,7 @@ public class SceneExplorerViewModelTests
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new SceneNodeAdapter(node);
+        var nodeAdapter = new LayoutNodeAdapter(node);
         await vm.InvokeInsertItemAsync(0, sceneAdapter, nodeAdapter).ConfigureAwait(false);
 
         engineSync.Invocations.Clear();
@@ -459,5 +460,88 @@ public class SceneExplorerViewModelTests
         engineSync.Verify(es => es.RemoveNodeAsync(It.IsAny<Guid>()), Times.Never);
         engineSync.Verify(es => es.RemoveNodeHierarchiesAsync(It.IsAny<IReadOnlyList<Guid>>()), Times.Never);
         engineSync.Verify(es => es.ReparentHierarchiesAsync(It.IsAny<IReadOnlyList<Guid>>(), It.IsAny<Guid?>()), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task RegisterCreateFolderUndo_UndoRedoRestoresFolderLayout()
+    {
+        var (vm, scene, _, organizer, _, _) = SceneExplorerViewModelTestFixture.CreateIntegrationViewModel();
+
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+
+        var previousLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
+        scene.ExplorerLayout = previousLayout;
+
+        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
+        await vm.InitializeSceneAsync(sceneAdapter).ConfigureAwait(false);
+
+        var folderId = Guid.NewGuid();
+        var folderEntry = new ExplorerEntryData
+        {
+            Type = "Folder",
+            FolderId = folderId,
+            Name = "Folder",
+            Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } },
+        };
+        var newLayout = new List<ExplorerEntryData> { folderEntry };
+        scene.ExplorerLayout = newLayout;
+
+        var layoutContext = new TestLayoutContext();
+        await organizer.ReconcileLayoutAsync(sceneAdapter, scene, newLayout, layoutContext, preserveNodeExpansion: true).ConfigureAwait(false);
+
+        var change = new LayoutChangeRecord("CreateFolder", previousLayout, newLayout, folderEntry);
+
+        vm.InvokeRegisterCreateFolderUndo(sceneAdapter, scene, change, "Folder");
+
+        UndoRedo.Default[vm].Undo();
+        _ = scene.ExplorerLayout.Should().BeEquivalentTo(previousLayout, options => options.WithStrictOrdering());
+
+        UndoRedo.Default[vm].Redo();
+        _ = scene.ExplorerLayout.Should().BeEquivalentTo(newLayout, options => options.WithStrictOrdering());
+
+        var childrenAfterRedo = await sceneAdapter.Children.ConfigureAwait(false);
+        var folderAfterRedo = childrenAfterRedo.OfType<FolderAdapter>().Single();
+        var folderKidsAfterRedo = await folderAfterRedo.Children.ConfigureAwait(false);
+        _ = folderKidsAfterRedo.OfType<LayoutNodeAdapter>().Should().ContainSingle(c => ReferenceEquals(c.AttachedObject, node));
+    }
+
+    private sealed class TestLayoutContext : ILayoutContext
+    {
+        public int RefreshCount { get; private set; }
+
+        public int? GetShownIndex(ITreeItem item) => null;
+
+        public bool TryRemoveShownItem(ITreeItem item)
+        {
+            _ = item;
+            return false;
+        }
+
+        public void InsertShownItem(int index, ITreeItem item)
+        {
+            _ = index;
+            _ = item;
+        }
+
+        public Task RefreshTreeAsync(SceneAdapter sceneAdapter)
+        {
+            _ = sceneAdapter;
+            ++this.RefreshCount;
+            return Task.CompletedTask;
+        }
+
+        public bool TryGetVisibleSpan(ITreeItem root, out int startIndex, out int count)
+        {
+            _ = root;
+            startIndex = 0;
+            count = 0;
+            return false;
+        }
+
+        public void ApplyShownDelta(ShownItemsDelta delta)
+        {
+            _ = delta;
+        }
     }
 }

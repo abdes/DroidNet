@@ -64,7 +64,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
         if (layout is not null && layout.Count > 0)
         {
-            void BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
+            async Task BuildFromEntry(ExplorerEntryData entry, object parent)
             {
                 if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
                 {
@@ -82,7 +82,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         foreach (var childEntry in entry.Children)
                         {
-                            BuildFromEntry(childEntry, folder);
+                            await BuildFromEntry(childEntry, folder).ConfigureAwait(false);
                         }
                     }
 
@@ -90,9 +90,13 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         folderParent.AddChildAdapter(folder);
                     }
-                    else
+                    else if (parent is SceneAdapter sceneParent)
                     {
-                        this.AddChildInternal(folder);
+                        sceneParent.AddChildInternal(folder);
+                    }
+                    else if (parent is LayoutNodeAdapter layoutParent)
+                    {
+                        layoutParent.AddLayoutChild(folder);
                     }
 
                     return;
@@ -109,13 +113,23 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     return;
                 }
 
-                var nodeAdapter = new SceneNodeAdapter(node);
+                var layoutNode = new LayoutNodeAdapter(node);
+
                 if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
                 {
-                    nodeAdapter.IsExpanded = entry.IsExpanded.Value;
+                    layoutNode.IsExpanded = entry.IsExpanded.Value;
                 }
-                var layoutNode = new LayoutNodeAdapter(nodeAdapter);
+
                 _ = seenNodeIds.Add(node.Id);
+
+                // Recurse into declared layout children and add them to the layoutNode
+                if (entry.Children is not null)
+                {
+                    foreach (var childEntry in entry.Children)
+                    {
+                        await BuildFromEntry(childEntry, layoutNode).ConfigureAwait(false);
+                    }
+                }
 
                 if (parent is FolderAdapter folderContainer)
                 {
@@ -123,15 +137,24 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     return;
                 }
 
-                this.AddChildInternal(layoutNode);
+                if (parent is SceneAdapter sceneParentRoot)
+                {
+                    sceneParentRoot.AddChildInternal(layoutNode);
+                }
+
+                if (parent is LayoutNodeAdapter layoutParentNode)
+                {
+                    layoutParentNode.AddLayoutChild(layoutNode);
+                }
             }
 
             foreach (var entry in layout)
             {
-                BuildFromEntry(entry, this);
+                await BuildFromEntry(entry, this).ConfigureAwait(false);
             }
         }
 
+        // Add any root nodes that were not present in the layout (layout-first fallback)
         foreach (var entity in this.AttachedObject.RootNodes)
         {
             if (seenNodeIds.Contains(entity.Id))
@@ -139,9 +162,16 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 continue;
             }
 
-            var nodeAdapter = new SceneNodeAdapter(entity);
-            var layoutNode = new LayoutNodeAdapter(nodeAdapter);
-            this.AddChildInternal(layoutNode);
+            var rootLayoutNode = new LayoutNodeAdapter(entity);
+
+            // Populate layout children from the scene graph for explorer fallback.
+            foreach (var child in entity.Children)
+            {
+                var childLayout = new LayoutNodeAdapter(child);
+                rootLayoutNode.AddLayoutChild(childLayout);
+            }
+
+            this.AddChildInternal(rootLayoutNode);
         }
 
         await Task.CompletedTask.ConfigureAwait(false);
@@ -155,7 +185,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
         if (layout is not null && layout.Count > 0)
         {
-            void BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
+            async Task BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
             {
                 if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
                 {
@@ -165,7 +195,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         foreach (var childEntry in entry.Children)
                         {
-                            BuildFromEntry(childEntry, folder);
+                            await BuildFromEntry(childEntry, folder).ConfigureAwait(false);
                         }
                     }
 
@@ -183,21 +213,22 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
                     if (node is not null)
                     {
-                        var nodeAdapter = new SceneNodeAdapter(node);
+                        var layoutNode = new LayoutNodeAdapter(node);
+
                         if (entry.IsExpanded.HasValue)
                         {
-                            nodeAdapter.IsExpanded = entry.IsExpanded.Value;
+                            layoutNode.IsExpanded = entry.IsExpanded.Value;
                         }
                         _ = seenNodeIds.Add(node.Id);
 
                         if (parent is FolderAdapter folderParent)
                         {
-                            folderParent.AddChildAdapter(nodeAdapter);
+                            folderParent.AddChildAdapter(layoutNode);
                         }
                         else if (parent is SceneAdapter sceneParent)
                         {
-                            // Only SceneAdapter can attach SceneNodeAdapter children at the root level
-                            sceneParent.AddChildInternal(nodeAdapter);
+                            // Only SceneAdapter can attach node adapters at the root level
+                            sceneParent.AddChildInternal(layoutNode);
                         }
                     }
                 }
@@ -205,16 +236,25 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
 
             foreach (var entry in layout)
             {
-                BuildFromEntry(entry, this);
+                await BuildFromEntry(entry, this).ConfigureAwait(false);
             }
         }
 
-        // Add any root nodes that were not present in the layout (backward-compatibility)
+        // Add any root nodes that were not present in the layout
         foreach (var entity in this.AttachedObject.RootNodes)
         {
             if (!seenNodeIds.Contains(entity.Id))
             {
-                this.AddChildInternal(new SceneNodeAdapter(entity));
+                var layoutNode = new LayoutNodeAdapter(entity);
+
+                // Populate layout children from scene graph for fallback
+                foreach (var child in entity.Children)
+                {
+                    var childLayout = new LayoutNodeAdapter(child);
+                    layoutNode.AddLayoutChild(childLayout);
+                }
+
+                this.AddChildInternal(layoutNode);
             }
         }
 

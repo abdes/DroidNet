@@ -61,35 +61,20 @@ public interface ISceneOrganizer
     public LayoutChangeRecord RemoveFolder(Guid folderId, bool promoteChildrenToParent, Scene scene);
 
     /// <summary>
-    /// Applies a layout change to the owning scene and reconciles adapter state.
-    /// </summary>
-    /// <param name="scene">The owning scene.</param>
-    /// <param name="change">The layout change to apply.</param>
-    public void ApplyLayoutChange(Scene scene, LayoutChangeRecord change);
-
-    /// <summary>
-    /// Restores a layout snapshot, preserving expansion state and updating the adapter tree.
+    /// Reconciles the adapter tree to the provided layout snapshot deterministically, reusing
+    /// existing adapters when possible and performing a single refresh via the layout context.
     /// </summary>
     /// <param name="sceneAdapter">The scene adapter backing the explorer.</param>
     /// <param name="scene">The owning scene.</param>
-    /// <param name="layout">The layout snapshot to restore.</param>
-    /// <param name="layoutContext">Adapter context used to manipulate the tree.</param>
-    /// <returns>Task that completes when reconciliation finishes.</returns>
-    public Task ApplyLayoutRestoreAsync(SceneAdapter sceneAdapter, Scene scene, IList<ExplorerEntryData>? layout, ILayoutContext layoutContext);
-
-    /// <summary>
-    /// Moves adapters corresponding to a folder's children into that folder, preserving expansion state.
-    /// </summary>
-    /// <param name="sceneAdapter">The scene adapter owning the folder.</param>
-    /// <param name="folderAdapter">The target folder adapter.</param>
-    /// <param name="folderEntry">The folder entry describing children to move.</param>
-    /// <param name="layoutContext">Adapter context used to manipulate the tree.</param>
-    /// <returns>The number of adapters moved.</returns>
-    public Task<int> MoveAdaptersIntoFolderAsync(
+    /// <param name="layout">The layout snapshot to apply (uses scene root nodes when null).</param>
+    /// <param name="layoutContext">Adapter context used to refresh shown items.</param>
+    /// <param name="preserveNodeExpansion">When true, keeps existing node expansion instead of layout flags.</param>
+    public Task ReconcileLayoutAsync(
         SceneAdapter sceneAdapter,
-        FolderAdapter folderAdapter,
-        ExplorerEntryData folderEntry,
-        ILayoutContext layoutContext);
+        Scene scene,
+        IList<ExplorerEntryData>? layout,
+        ILayoutContext layoutContext,
+        bool preserveNodeExpansion = false);
 
     /// <summary>
     /// Deeply clones a layout.

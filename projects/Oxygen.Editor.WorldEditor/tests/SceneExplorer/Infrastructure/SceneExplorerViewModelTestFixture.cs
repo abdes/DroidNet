@@ -347,10 +347,10 @@ internal static class SceneExplorerViewModelTestFixture
         {
         }
 
-        public void InvokeHandleItemBeingAdded(Scene scene, SceneNodeAdapter adapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
+        public void InvokeHandleItemBeingAdded(Scene scene, LayoutNodeAdapter adapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
             => this.HandleItemBeingAdded(scene, adapter, parent, args);
 
-        public void InvokeHandleItemBeingRemoved(Scene scene, SceneNodeAdapter adapter, TreeItemBeingRemovedEventArgs args)
+        public void InvokeHandleItemBeingRemoved(Scene scene, LayoutNodeAdapter adapter, TreeItemBeingRemovedEventArgs args)
             => this.HandleItemBeingRemoved(scene, adapter, args);
 
         public void InvokeOnItemBeingRemoved(TreeItemBeingRemovedEventArgs args)
@@ -362,8 +362,8 @@ internal static class SceneExplorerViewModelTestFixture
         public Task InvokeHandleItemRemovedAsync(TreeItemRemovedEventArgs args)
             => this.HandleItemRemovedAsync(args);
 
-        public Task InvokeExpandAndSelectFolderAsync(SceneAdapter sceneAdapter, FolderAdapter folderAdapter, ExplorerEntryData folderEntry)
-            => this.ExpandAndSelectFolderAsync(sceneAdapter, folderAdapter, folderEntry);
+        public Task InvokeExpandAndSelectFolderAsync(FolderAdapter folderAdapter, ExplorerEntryData folderEntry)
+            => this.ExpandAndSelectFolderAsync(folderAdapter, folderEntry);
 
         public void InvokeRegisterCreateFolderUndo(SceneAdapter sceneAdapter, Scene scene, LayoutChangeRecord layoutChange, string folderName)
             => this.RegisterCreateFolderUndo(sceneAdapter, scene, layoutChange, folderName);

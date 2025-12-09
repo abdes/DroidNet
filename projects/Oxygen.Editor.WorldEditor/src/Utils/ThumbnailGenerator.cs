@@ -8,7 +8,6 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using LayoutNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.LayoutNodeAdapter;
-using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 
 namespace Oxygen.Editor.WorldEditor.Utils;
 
@@ -49,14 +48,13 @@ public static class ThumbnailGenerator
     /// <returns>A <see cref="Symbol" /> representing the thumbnail for the entity.</returns>
     public static Symbol GetThumbnailForEntity(TreeItemAdapter adapter)
     {
-        var sceneNodeAdapter = adapter switch
+        var sceneNode = adapter switch
         {
-            SceneNodeAdapter sna => sna,
             LayoutNodeAdapter lna => lna.AttachedObject,
             _ => null
         };
 
-        return sceneNodeAdapter is not null && sceneNodeAdapter.AttachedObject.Name.EndsWith('1')
+        return sceneNode is not null && sceneNode.Name.EndsWith('1')
             ? Symbol.Camera
             : Symbol.Calculator;
     }
