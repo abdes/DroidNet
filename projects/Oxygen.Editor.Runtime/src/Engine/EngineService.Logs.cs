@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
@@ -11,6 +12,15 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public sealed partial class EngineService
 {
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Engine runner is already initialized (State: {State}).")]
+    private static partial void LogAlreadyInitialized(ILogger logger, EngineServiceState state);
+
+    private void LogAlreadyInitialized()
+        => LogAlreadyInitialized(this.logger, this.State);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
@@ -37,6 +47,24 @@ public sealed partial class EngineService
 
     private void LogResizeFailed(uint width, uint height, Exception? exception = null)
         => LogResizeFailed(this.logger, width, height, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Failed to compute initial surface pixels: {ExceptionMessage}")]
+    private static partial void LogComputeInitialPixelsFailed(ILogger logger, string exceptionMessage);
+
+    private void LogComputeInitialPixelsFailed(Exception exception)
+        => LogComputeInitialPixelsFailed(this.logger, exception.Message);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Invalid panel measurements for initial surface pixels: ActualWidth={ActualWidth} ActualHeight={ActualHeight}")]
+    private static partial void LogComputeInitialPixelsInvalidMeasurements(ILogger logger, double actualWidth, double actualHeight);
+
+    private void LogComputeInitialPixelsInvalidMeasurements(double actualWidth, double actualHeight)
+        => LogComputeInitialPixelsInvalidMeasurements(this.logger, actualWidth, actualHeight);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -128,11 +156,11 @@ public sealed partial class EngineService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "StopEngineAsync requested in state {State}, (keepContextAlive={KeepContextAlive}).")]
-    private static partial void LogStopEngineRequested(ILogger logger, EngineServiceState state, bool keepContextAlive);
+        Message = "Engine shutdown requested in state {State}.")]
+    private static partial void LogShutdownRequested(ILogger logger, EngineServiceState state);
 
-    private void LogStopEngineRequested(bool keepContextAlive)
-        => LogStopEngineRequested(this.logger, this.state, keepContextAlive);
+    private void LogShutdownRequested()
+        => LogShutdownRequested(this.logger, this.state);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -173,20 +201,26 @@ public sealed partial class EngineService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Engine target FPS retrieved: {Fps}.")]
-    private static partial void LogTargetFpsRetrieved(ILogger logger, uint fps);
-
-    private void LogTargetFpsRetrieved(uint fps)
-        => LogTargetFpsRetrieved(this.logger, fps);
+        Message = "Engine target FPS set to {Fps}.")]
+    private static partial void LogTargetFpsSet(ILogger logger, uint fps);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Engine target FPS set to {Fps}.")]
-    private static partial void LogTargetFpsSet(ILogger logger, uint fps);
+        Message = "Engine target FPS set to {Requested} (clamped from {Clamped}).")]
+    private static partial void LogTargetFpsClamped(ILogger logger, uint requested, uint clamped);
 
-    private void LogTargetFpsSet(uint fps)
-        => LogTargetFpsSet(this.logger, fps);
+    private void LogTargetFpsSet(uint fps, uint clamped)
+    {
+        if (fps != clamped)
+        {
+            LogTargetFpsClamped(this.logger, fps, clamped);
+        }
+        else
+        {
+            LogTargetFpsSet(this.logger, fps);
+        }
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -228,17 +262,47 @@ public sealed partial class EngineService
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to set engine logging verbosity to {Verbosity}.")]
-    private static partial void LogSetLoggingVerbosityFailed(ILogger logger, int verbosity, Exception exception);
+    private static partial void LogSetLoggingVerbosityFailed(ILogger logger, int verbosity, Exception? exception);
 
-    private void LogSetLoggingVerbosityFailed(int verbosity, Exception exception)
+    private void LogSetLoggingVerbosityFailed(int verbosity, Exception? exception = null)
         => LogSetLoggingVerbosityFailed(this.logger, verbosity, exception);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Failed to retrieve engine logging verbosity.")]
-    private static partial void LogGetLoggingVerbosityFailed(ILogger logger, Exception exception);
+        Level = LogLevel.Warning,
+        Message = "Requesting view ('{Name}'/'{Purpose}') from the engine: Extent={Width}x{Height}, {TargetInfo}")]
+    private static partial void LogCreateView(ILogger logger, string name, string purpose, uint width, uint height, string targetInfo);
 
-    private void LogGetLoggingVerbosityFailed(Exception exception)
-        => LogGetLoggingVerbosityFailed(this.logger, exception);
+    private void LogCreateView(ViewConfigManaged config)
+    {
+        var hasTarget = config.CompositingTarget != null ? $"composing to: {config.CompositingTarget}" : "without target";
+        LogCreateView(this.logger, config.Name, config.Purpose, config.Width, config.Height, hasTarget);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to be destroyed.")]
+    private static partial void LogDestroyView(ILogger logger, ulong viewId);
+
+    private void LogDestroyView(ViewIdManaged viewId)
+        => LogDestroyView(this.logger, viewId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to be hidden.")]
+    private static partial void LogHideView(ILogger logger, ulong viewId);
+
+    private void LogHideView(ViewIdManaged viewId)
+        => LogHideView(this.logger, viewId.Value);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Requesting view with id '{ViewId}' to be shown.")]
+    private static partial void LogShowView(ILogger logger, ulong viewId);
+
+    private void LogShowView(ViewIdManaged viewId)
+        => LogShowView(this.logger, viewId.Value);
 }

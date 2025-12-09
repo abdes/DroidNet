@@ -176,9 +176,16 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 this.DispatcherQueue); // WinUI 3 dispatcher
 
             this.sizeChangedSubscription ??= this.sizeChangedSubject
-                .Throttle(TimeSpan.FromMilliseconds(150))
+                // Use the dispatcher scheduler for throttle timing so debounce and callbacks
+                // are scheduled on the UI dispatcher. This avoids cross-thread timing races
+                // and ensures the factory passed to FromAsync runs on the dispatcher.
+                .Throttle(TimeSpan.FromMilliseconds(150), dispatcherScheduler)
                 .ObserveOn(dispatcherScheduler)
-                .SelectMany(_ => Observable.FromAsync(this.NotifyViewportResizeAsync))
+                // Use Switch to cancel any previous in-flight resize when a new
+                // debounced event arrives. Each inner observable is created from
+                // the async resize method and receives the Rx cancellation token.
+                .Select(_ => Observable.FromAsync(ct => this.NotifyViewportResizeAsync(ct)))
+                .Switch()
                 .Subscribe(
                     _ => { },
                     ex => this.LogResizeFailed(ex));
@@ -202,7 +209,18 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         // have OnSwapChainPanelSizeChanged called and want to behave like before.
         if (this.sizeChangedSubject != null)
         {
-            this.sizeChangedSubject.OnNext(e);
+            try
+            {
+                this.sizeChangedSubject.OnNext(e);
+            }
+            catch (ObjectDisposedException)
+            {
+                // Subscription/subject disposed concurrently; ignore safely.
+            }
+            catch (Exception ex)
+            {
+                this.LogResizeFailed(ex);
+            }
         }
         else
         {
@@ -382,7 +400,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         ClearColor = viewModel.ClearColor
                     };
 
-                    var created = await viewModel.EngineService.CreateViewAsync(cfg, cancellationToken).ConfigureAwait(true);
+                    var created = await viewModel.EngineService.CreateViewAsync(cfg).ConfigureAwait(true);
                     if (created.IsValid)
                     {
                         viewModel.AssignedViewId = created;
@@ -395,7 +413,11 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 this.LogCreateViewFailed(viewModel.ViewportId, ex);
             }
 
-            await this.NotifyViewportResizeAsync(cancellationToken).ConfigureAwait(true);
+            // Perform the initial resize unconditionally (do not cancel via the
+            // attach token) so the swapchain receives its first backbuffer size.
+            // Subsequent resize events are handled by the debounced pipeline and
+            // are cancellable.
+            await this.NotifyViewportResizeAsync(CancellationToken.None).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {

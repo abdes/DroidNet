@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Oxygen.Editor.Runtime** module provides the infrastructure layer that bridges the managed .NET editor with the native Oxygen Engine. It serves as the runtime integration layer for all editor types, managing engine lifecycle, viewport rendering surfaces, and synchronizing world domain models with the running engine.
+The **Oxygen.Editor.Runtime** module provides the infrastructure layer that bridges the managed .NET editor with the native Oxygen Engine. It serves as the runtime integration layer for all editor types, managing engine lifecycle and viewport rendering surfaces.
 
 This module sits between the editor UI layer and the lower-level components, providing high-level services that editor features can consume.
 
@@ -12,20 +12,21 @@ The Runtime module exists to:
 
 1. **Manage Engine Lifecycle** - Initialize, start, stop, and configure the embedded native engine
 2. **Arbitrate Rendering Surfaces** - Allocate and manage viewport surfaces across multiple editor documents
-3. **Synchronize Game Objects** - Keep world domain models (scenes, nodes, components) in sync with the running engine
+3. **Provide View Management** - Create, show, hide, and destroy views in the native engine
 4. **Provide Editor Services** - Expose a clean, high-level API for editor features to consume
 
 By centralizing these concerns, we achieve:
+
 - **Reusability** across different editor types (World Editor, Material Editor, Particle Editor, etc.)
 - **Clear separation** between UI concerns and engine integration
 - **Testability** through well-defined interfaces
-- **Performance** via batching and intelligent synchronization
+- **Resource Safety** via surface limits and lease patterns
 
 ## Architecture
 
 ### Module Layering
 
-The Runtime module occupies the integration layer between presentation and platform:
+The Runtime module occupies the integration layer between presentation and the native engine:
 
 ```mermaid
 graph TD
@@ -37,25 +38,21 @@ graph TD
 
     subgraph Runtime["Runtime Integration Layer"]
         ENG[Engine Subsystem]
-        SYNC[Sync Subsystem]
     end
 
     subgraph Foundation["Foundation Layer"]
         INTEROP[Interop<br/>C++/CLI Bridge]
         WORLD[World<br/>Domain Models]
         PROJECTS[Projects<br/>Workspace Management]
-        CORE[Core<br/>Low-level Utilities]
     end
 
     WE --> ENG
-    WE --> SYNC
     ME -.Future.-> ENG
     PE -.Future.-> ENG
 
     ENG --> INTEROP
-    SYNC --> INTEROP
-    SYNC --> WORLD
     ENG --> WORLD
+    ENG --> PROJECTS
 
     style Runtime fill:#0d47a1,stroke:#64b5f6,stroke-width:3px
     style Presentation fill:#4a148c,stroke:#ba68c8
@@ -64,157 +61,146 @@ graph TD
 
 ### Core Components
 
-The module is organized into two primary subsystems:
+The module's Engine subsystem consists of:
 
 ```mermaid
 graph LR
     subgraph Runtime["Oxygen.Editor.Runtime"]
         subgraph Engine["Engine/"]
+            IES[IEngineService]
             ES[EngineService]
             VSL[ViewportSurfaceLease]
             VSR[ViewportSurfaceRequest]
             ESS[EngineServiceState]
-            LIMITS[EngineSurfaceLimits]
-        end
-
-        subgraph Sync["Sync/"]
-            SS[SceneSynchronizer]
-            NS[NodeSynchronizer]
-            NSS[NodeSyncState]
-            SB[SyncBatch]
+            EC[EngineConstants]
         end
     end
 
+    IES --> ES
     ES -.manages.-> VSL
     VSR -.creates.-> VSL
-    SS -.uses.-> NS
-    NS -.tracks.-> NSS
-    SS -.batches via.-> SB
+    ES -.enforces.-> EC
 
     style Engine fill:#1b5e20,stroke:#81c784
-    style Sync fill:#f57f17,stroke:#ffd54f
 ```
 
 ## Engine Subsystem
 
 ### Responsibilities
 
-1. **Lifecycle Management**: Initialize, run, and shutdown the native engine
-2. **Surface Allocation**: Provide rendering surfaces to viewports
-3. **Resource Arbitration**: Enforce limits on surface allocation
-4. **Configuration**: Manage engine settings (FPS, logging, etc.)
-5. **Thread Safety**: Ensure UI-thread-bound operations are safe
+1. **Lifecycle Management**: Initialize, start, and shutdown the native engine
+2. **Viewport Surface Management**: Provide and manage rendering surfaces attached to WinUI SwapChainPanels
+3. **Resource Arbitration**: Enforce surface allocation limits
+4. **Engine Configuration**: Manage engine settings (target FPS, logging verbosity)
+5. **Engine Access**: Provide a world instance for querying and mutating the engine world
+6. **View Management**: Create, destroy, show, and hide editor views in the native engine
 
 ### Engine Lifecycle State Machine
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Created: Service instantiated
+    [*] --> NoEngine: Service created
 
-    Created --> Initializing: InitializeAsync()
+    NoEngine --> Initializing: InitializeAsync()
     Initializing --> Ready: Success
     Initializing --> Faulted: Failure
 
-    Ready --> Running: First surface attached
-    Running --> Ready: All surfaces detached
-    Running --> Stopping: StopEngine()
-    Ready --> Stopping: Dispose()
+    Ready --> Starting: StartAsync()
+    Starting --> Running: Success
+    Starting --> Faulted: Failure
 
-    Stopping --> Created: Cleanup complete
+    Ready --> ShuttingDown: ShutdownAsync()
+    Running --> ShuttingDown: ShutdownAsync()
+    ShuttingDown --> NoEngine: Success
+    ShuttingDown --> Faulted: Failure
 
-    Faulted --> [*]: Service unusable
-    Created --> [*]: DisposeAsync()
+    Faulted --> Initializing: InitializeAsync() retry
 
-    note right of Created
+    note right of NoEngine
         No engine resources allocated
-        Can be initialized
+        Can call InitializeAsync()
+    end note
+
+    note right of Initializing
+        Transient state
+        Creating and initializing engine
+        No operations allowed
     end note
 
     note right of Ready
         Engine initialized in headless mode
-        Render loop NOT running
-        Ready to attach surfaces
+        Render loop not running
+        Can query/modify properties
+        Can call StartAsync()
+    end note
+
+    note right of Starting
+        Transient state
+        Spawning engine loop task
+        No operations allowed
     end note
 
     note right of Running
-        Render loop active
-        At least one surface attached
-        Rendering to viewports
+        Engine frame loop active
+        Surface and view operations allowed
+        Can call ShutdownAsync()
+    end note
+
+    note right of ShuttingDown
+        Transient state
+        Stopping engine and releasing resources
+        No operations allowed
+    end note
+
+    note right of Faulted
+        Fatal error occurred
+        Only InitializeAsync() allowed
     end note
 ```
 
 ### Surface Leasing Model
 
-Viewports acquire rendering surfaces through a resource lease pattern, with operations queued and processed by the EditorModule:
+Viewports acquire rendering surfaces through a resource lease pattern. The EngineService manages surface attachment, resizing, and cleanup. The engine must be in the Running state before surfaces can be attached:
 
 ```mermaid
 sequenceDiagram
-    participant VM as ViewportViewModel
+    participant Caller as Caller
     participant ES as EngineService
     participant ER as EngineRunner<br/>(Interop)
-    participant SR as SurfaceRegistry<br/>(Queue)
-    participant EM as EditorModule<br/>(EngineModule)
     participant ENG as Native Engine
 
-    VM->>ES: AttachViewportAsync(request, panel)
+    Caller->>ES: InitializeAsync()
+    ES->>ER: Create engine in headless mode
+    ER->>ENG: CreateEngine()
+    ER-->>ES: EngineContext
 
-    ES->>ES: Check state (must be Ready/Running)
+    Caller->>ES: StartAsync()
+    ES->>ER: RunEngineAsync()
+    ER->>ENG: Start render loop
+    ER-->>ES: Loop running
+
+    Caller->>ES: AttachViewportAsync(request, panel)
+    ES->>ES: Check state is Running
     ES->>ES: Validate surface limits
     ES->>ES: Get or create lease
 
-    alt Engine not running
-        ES->>ER: RunEngineAsync()
-        ER->>ENG: Start render loop
-        ES->>ES: State = Running
-    end
-
     ES->>ER: RegisterSurfaceAsync(panel)
-    ER->>SR: Queue registration request
-    Note over SR: Request queued<br/>Returns immediately
-    ER-->>ES: Task (pending)
-    ES-->>VM: Return IViewportSurfaceLease
+    ER->>ENG: Register surface with engine
+    ER-->>ES: Async completion
+    ES-->>Caller: Return IViewportSurfaceLease
 
-    Note over ENG: Next frame starts
-    ENG->>EM: OnFrameStart()
-    EM->>SR: DrainPendingRegistrations()
-    SR-->>EM: Queued registration
-    EM->>ENG: Create & register surface
-    EM->>SR: CommitRegistration()
-    EM->>ER: Invoke callback (success)
-    ER-->>ES: Registration complete
-
-    Note over VM: User resizes viewport
-    VM->>ES: lease.ResizeAsync(w, h)
+    Note over Caller: User resizes viewport
+    Caller->>ES: lease.ResizeAsync(w, h)
     ES->>ER: ResizeSurfaceAsync()
-    ER->>SR: Queue resize request
-    SR-->>ER: Queued
+    ER->>ENG: Resize surface
+    ER-->>ES: Async completion
 
-    Note over ENG: Next frame starts
-    ENG->>EM: OnFrameStart()
-    EM->>SR: ProcessResizeRequests()
-    EM->>ENG: Apply resize on surface
-    EM->>ER: Invoke callback (success)
-
-    Note over VM: Viewport closed
-    VM->>ES: lease.DisposeAsync()
+    Note over Caller: Viewport closed
+    Caller->>ES: lease.DisposeAsync()
     ES->>ER: UnregisterSurfaceAsync()
-    ER->>SR: Queue destruction request
-    SR-->>ER: Queued
-
-    Note over ENG: Next frame starts
-    ENG->>EM: OnFrameStart()
-    EM->>SR: DrainPendingDestructions()
-    SR-->>EM: Queued destruction
-    EM->>ENG: RegisterDeferredRelease()
-    EM->>ER: Invoke callback (success)
-
-    alt No more surfaces
-        ES->>ER: StopEngine()
-        ER->>ENG: Stop render loop
-        ES->>ES: State = Ready
-    end
+    ER->>ENG: Unregister surface
+    ER-->>ES: Async completion
 ```
-
 
 ### Surface Limits
 
@@ -239,493 +225,83 @@ graph TD
     style GRANT fill:#1b5e20,stroke:#81c784
 ```
 
-**Default Limits:**
-- Maximum total surfaces: 16 (configurable)
-- Maximum surfaces per document: 4 (configurable)
+**Surface Limits:**
 
-## Sync Subsystem
-
-### Responsibilities
-
-1. **Change Observation**: Monitor property changes on domain models
-2. **Translation**: Convert editor model changes to engine API calls
-3. **Batching**: Coalesce rapid changes for performance
-4. **Throttling**: Prevent overwhelming the engine with updates
-5. **Lifecycle Management**: Handle component add/remove/update
-6. **State Tracking**: Know which nodes are synchronized
-
-### Synchronization Architecture
-
-```mermaid
-graph TB
-    subgraph Editor["World Domain Models"]
-        SCENE[Scene]
-        NODE1[SceneNode 1]
-        NODE2[SceneNode 2]
-        TRANS1[Transform]
-        TRANS2[Transform]
-
-        SCENE --> NODE1
-        SCENE --> NODE2
-        NODE1 --> TRANS1
-        NODE2 --> TRANS2
-    end
-
-    subgraph Observer["Synchronizer Layer"]
-        SS[SceneSynchronizer]
-        NS1[NodeSynchronizer 1]
-        NS2[NodeSynchronizer 2]
-        BATCH[SyncBatch]
-
-        SS --> NS1
-        SS --> NS2
-        NS1 --> BATCH
-        NS2 --> BATCH
-    end
-
-    subgraph Engine["Engine Layer"]
-        ER[EngineRunner]
-        NENG[Native Engine]
-    end
-
-    NODE1 -.PropertyChanged.-> NS1
-    NODE2 -.PropertyChanged.-> NS2
-    TRANS1 -.PropertyChanged.-> NS1
-    TRANS2 -.PropertyChanged.-> NS2
-
-    BATCH --> ER
-    ER --> NENG
-
-    style Editor fill:#0d47a1,stroke:#64b5f6
-    style Observer fill:#f57f17,stroke:#ffd54f
-    style Engine fill:#1b5e20,stroke:#81c784
-```
-
-### Synchronization Flow
-
-```mermaid
-sequenceDiagram
-    participant Model as SceneNode/Component
-    participant Obs as PropertyChanged Event
-    participant Sync as SceneSynchronizer
-    participant Batch as SyncBatch
-    participant ER as EngineRunner
-    participant Eng as Native Engine
-
-    Note over Model: User modifies property
-    Model->>Model: SetField(ref field, value)
-    Model->>Obs: OnPropertyChanged("Position")
-
-    Obs->>Sync: PropertyChanged event
-
-    Sync->>Sync: Check if node.IsActive
-
-    alt Node is active
-        Sync->>Batch: Queue change
-
-        Note over Batch: Coalesce similar changes<br/>(e.g., multiple Position updates)
-
-        alt Batch full OR timeout
-            Batch->>ER: UpdateTransformAsync(nodeId, transform)
-            ER->>Eng: Native API call
-        end
-    else Node is inactive
-        Sync->>Sync: Ignore (not in engine)
-    end
-```
-
-### Node Synchronization States
-
-A SceneNode can be in different sync states:
-
-```mermaid
-stateDiagram-v2
-    [*] --> Untracked: Node created
-
-    Untracked --> Observed: Synchronizer.AttachNode()
-
-    Observed --> Syncing: IsActive = true
-    Syncing --> Observed: IsActive = false
-
-    Observed --> Syncing: Sync requested
-
-    Syncing --> Synced: Engine acknowledges
-    Synced --> Syncing: Property changed
-
-    Syncing --> Failed: Engine error
-    Failed --> Syncing: Retry
-
-    Observed --> [*]: Synchronizer.DetachNode()
-    Synced --> [*]: Node destroyed
-
-    note right of Untracked
-        Node exists in editor
-        Not monitored by synchronizer
-    end note
-
-    note right of Observed
-        Synchronizer listening to changes
-        NOT in engine yet
-        Changes queued but not sent
-    end note
-
-    note right of Synced
-        Node exists in engine
-        Editor and engine in sync
-        Changes propagated immediately
-    end note
-```
-
-### Batching Strategy
-
-To optimize performance, the synchronizer batches changes:
-
-```mermaid
-graph LR
-    subgraph Changes["Property Changes"]
-        PC1[Position: 1,0,0]
-        PC2[Position: 1.5,0,0]
-        PC3[Position: 2,0,0]
-        RC1[Rotation: 0,45,0]
-    end
-
-    subgraph Batch["Batch Window<br/>(16ms)"]
-        COAL[Coalesce]
-    end
-
-    subgraph Result["Sent to Engine"]
-        FINAL[Position: 2,0,0<br/>Rotation: 0,45,0]
-    end
-
-    PC1 --> COAL
-    PC2 --> COAL
-    PC3 --> COAL
-    RC1 --> COAL
-
-    COAL --> FINAL
-
-    style Batch fill:#f57f17,stroke:#ffd54f
-    style Result fill:#1b5e20,stroke:#81c784
-```
-
-**Batching Rules:**
-- Batch window: One frame (~16ms at 60 FPS)
-- Coalesce: Later values override earlier ones for same property
-- Flush: On frame boundary or when batch reaches size limit
-- Priority: Critical changes (e.g., IsActive) may bypass batch
-
-### Synchronization Modes
-
-```mermaid
-graph TD
-    MODE{Sync Mode}
-
-    MODE --> ACTIVE[Active Sync]
-    MODE --> PASSIVE[Passive Mode]
-    MODE --> BI[Bidirectional<br/>Future]
-
-    ACTIVE --> A1[Node.IsActive = true]
-    ACTIVE --> A2[Changes sent to engine]
-    ACTIVE --> A3[Batched for performance]
-
-    PASSIVE --> P1[Node.IsActive = false]
-    PASSIVE --> P2[Changes observed]
-    PASSIVE --> P3[NOT sent to engine]
-
-    BI --> B1[Engine → Editor updates]
-    BI --> B2[Physics, animations]
-    BI --> B3[Not yet implemented]
-
-    style ACTIVE fill:#1b5e20,stroke:#81c784
-    style PASSIVE fill:#f57f17,stroke:#ffd54f
-    style BI fill:#0d47a1,stroke:#64b5f6,stroke-dasharray: 5 5
-```
+- Maximum total surfaces: 8 (defined in `EngineConstants.MaxTotalSurfaces`)
+- Maximum surfaces per document: 4 (defined in `EngineConstants.MaxSurfacesPerDocument`)
 
 ## Design Patterns
 
-### Observable Pattern
-- Domain models implement `INotifyPropertyChanged`
-- Synchronizers subscribe to property change events
-- Decouples models from sync logic
-
 ### Lease Pattern
+
 - Viewports don't directly own resources
 - Resources released automatically on dispose
 - Prevents resource leaks
 
 ### Singleton Service (EngineService)
+
 - One engine instance per application
 - Globally accessible via DI
 - Manages shared state (surfaces, lifecycle)
 
-### Per-Document Synchronizer
-- Each Scene has its own SceneSynchronizer
-- Independent lifecycles
-- Isolated failure domains
-
 ## Threading Model
 
-The Runtime module operates across **three distinct threading domains**: the editor UI thread, the managed editor space (any thread), and the native engine threads (main thread and render thread pools). The critical bridge between these domains is the **EditorModule**, a native C++ engine module that ensures all engine operations happen at the correct frame cycle phase.
+The Runtime module operates across **two distinct threading domains**: the editor UI thread (where WinUI operations must occur) and the managed editor code space (any thread for queries and configuration).
 
-### Thread Domains and Boundaries
-
-```mermaid
-graph TB
-    subgraph EDITOR["Editor Domain (Managed .NET)"]
-        subgraph UI["UI Thread"]
-            VM[ViewModels]
-            PANEL[SwapChainPanel]
-            ES_UI[EngineService<br/>Surface Ops]
-        end
-
-        subgraph ANY["Any Thread"]
-            ES_QUERY[EngineService<br/>Queries]
-            SYNC[SceneSynchronizer<br/>Property Observers]
-        end
-
-        subgraph INTEROP["Interop Layer (C++/CLI)"]
-            ER[EngineRunner<br/>Managed Facade]
-            SR[SurfaceRegistry<br/>Thread-safe Queue]
-        end
-    end
-
-    subgraph ENGINE["Engine Domain (Native C++)"]
-        subgraph MAIN["Engine Main Thread"]
-            EDMOD[EditorModule<br/>Frame-cycle aware]
-            FRAME[Frame Lifecycle]
-        end
-
-        subgraph RENDER["Render Thread Pool"]
-            CMD[Command Recording]
-            PRESENT[Present/Swap]
-        end
-    end
-
-    VM --> ES_UI
-    ES_UI --> PANEL
-    VM --> SYNC
-    VM --> ES_QUERY
-
-    ES_UI --> ER
-    SYNC --> ER
-    ES_QUERY --> ER
-
-    ER --> SR
-    SR -.Queues Requests.-> EDMOD
-
-    EDMOD --> FRAME
-    FRAME --> CMD
-    FRAME --> PRESENT
-
-    style EDITOR fill:#0d47a1,stroke:#64b5f6
-    style ENGINE fill:#e65100,stroke:#ffab91
-    style INTEROP fill:#4a148c,stroke:#ba68c8,stroke-width:2px
-    style EDMOD fill:#1b5e20,stroke:#81c784,stroke-width:3px
-```
-
-### EditorModule: The Phase-Aware Bridge
-
-The **EditorModule** is a native C++ `EngineModule` that runs **inside the engine** as part of its frame lifecycle. This design provides:
-
-1. **Thread Safety**: All engine state mutations occur on the engine's main thread
-2. **Phase Awareness**: Operations execute at the correct frame cycle phase
-3. **Clean Separation**: Editor threads never directly touch engine internals
-4. **Asynchronous Queuing**: Editor operations are queued and processed by the module
-
-**Key Characteristics:**
-- **Priority**: `kModulePriorityHighest` - Runs before other modules
-- **Phases**: Participates in `kFrameStart` and `kCommandRecord`
-- **Ownership**: Owns the `SurfaceRegistry` for thread-safe surface management
-
-### Frame Cycle Integration
-
-The EditorModule processes editor requests at specific phases of each engine frame:
-
-```mermaid
-sequenceDiagram
-    participant Editor as Editor Thread<br/>(UI or Any)
-    participant Interop as EngineRunner<br/>(C++/CLI)
-    participant Registry as SurfaceRegistry<br/>(Thread-safe Queue)
-    participant Module as EditorModule<br/>(Engine Module)
-    participant Engine as Engine<br/>(Frame Lifecycle)
-
-    Note over Engine: Frame N starts
-    Engine->>Module: OnFrameStart()
-
-    Note over Module: Process queued operations
-    Module->>Registry: DrainPendingRegistrations()
-    Registry-->>Module: Surface registrations
-    Module->>Module: CommitRegistration()
-
-    Module->>Registry: DrainPendingDestructions()
-    Registry-->>Module: Surface destructions
-    Module->>Module: RegisterDeferredRelease()
-
-    Module->>Registry: SnapshotSurfaces()
-    Registry-->>Module: Active surfaces
-    Module->>Module: ProcessResizeRequests()
-
-    Module->>Engine: SyncSurfacesWithFrameContext()
-
-    Note over Editor: User action occurs<br/>(e.g., resize viewport)
-    Editor->>Interop: ResizeSurfaceAsync()
-    Interop->>Registry: QueueResize()
-
-    Note over Engine: Continue to CommandRecord phase
-    Engine->>Module: OnCommandRecord()
-    Module->>Module: Render to surfaces
-
-    Note over Engine: Frame N+1 starts
-    Engine->>Module: OnFrameStart()
-    Module->>Registry: DrainResizeCallbacks()
-    Registry-->>Module: Callbacks for Frame N resize
-    Module->>Interop: Invoke callbacks
-    Interop-->>Editor: Resize complete
-```
-
-### Phase-Specific Processing
-
-The EditorModule operates in two key phases:
-
-```mermaid
-graph TD
-    subgraph FrameStart["kFrameStart Phase"]
-        REG[Process Surface Registrations]
-        DEST[Process Surface Destructions]
-        RESIZE[Process Resize Requests]
-        SYNC[Sync Surfaces with FrameContext]
-
-        REG --> DEST
-        DEST --> RESIZE
-        RESIZE --> SYNC
-    end
-
-    subgraph CommandRecord["kCommandRecord Phase"]
-        SNAP[Get Surfaces from FrameContext]
-        ACQ[Acquire Command Recorder]
-        BIND[Bind Framebuffer]
-        RENDER[Render to Surface]
-
-        SNAP --> ACQ
-        ACQ --> BIND
-        BIND --> RENDER
-    end
-
-    FrameStart -.Next Phase.-> CommandRecord
-
-    style FrameStart fill:#1b5e20,stroke:#81c784
-    style CommandRecord fill:#f57f17,stroke:#ffd54f
-```
-
-**kFrameStart Phase:**
-1. **Drain Queues**: Pull pending operations from `SurfaceRegistry`
-2. **Commit Registrations**: Add new surfaces to the engine
-3. **Defer Destructions**: Queue surface cleanup for safe deferred release
-4. **Apply Resizes**: Execute resize operations on the engine thread
-5. **Sync Frame Context**: Update the frame's surface list
-
-**kCommandRecord Phase:**
-1. **Iterate Surfaces**: Process each surface registered in the frame
-2. **Acquire Recorder**: Get a command recorder for the graphics queue
-3. **Create Framebuffer**: Set up rendering target
-4. **Record Commands**: Clear and render to the surface
-
-### Thread-Safe Communication Pattern
-
-Operations from editor threads are queued and deferred to the appropriate engine phase:
-
-```mermaid
-stateDiagram-v2
-    [*] --> EditorThread: User action
-
-    EditorThread --> EngineRunner: Call async method
-    EngineRunner --> SurfaceRegistry: Queue operation
-    SurfaceRegistry --> [*]: Returns immediately
-
-    [*] --> EngineMainThread: Frame starts
-    EngineMainThread --> EditorModule: OnFrameStart()
-    EditorModule --> SurfaceRegistry: Drain queue
-    SurfaceRegistry --> EditorModule: Pending operations
-    EditorModule --> EngineInternal: Execute on engine thread
-    EngineInternal --> Callback: Invoke completion
-    Callback --> EditorThread: Notify result
-
-    note right of SurfaceRegistry
-        Thread-safe queue
-        Lock-protected access
-        Supports concurrent reads/writes
-    end note
-
-    note right of EditorModule
-        Runs on engine main thread
-        Phase-aware processing
-        Frame-synchronized operations
-    end note
-```
-
-### Thread Safety Guarantees
+### Thread Domains and Thread Safety
 
 | Component | Thread Affinity | Safety Mechanism |
 |-----------|----------------|------------------|
-| **EngineService** (queries) | Any thread | Internal locks, immutable state |
-| **EngineService** (surface ops) | UI thread only | `HostingContext.Dispatcher` check |
-| **SceneSynchronizer** | Any thread | Queues to `EditorModule` |
-| **SurfaceRegistry** | Any thread | Mutex-protected queues |
-| **EditorModule** | Engine main thread | Engine phase system |
-| **EngineRunner** | Any thread → queue | Delegates to `SurfaceRegistry` |
-| **WinUI SwapChainPanel** | UI thread only | WinUI requirement |
+| **EngineService** (queries/config) | UI thread only for surface ops | `HostingContext.Dispatcher` validation in surface attachment |
+| **EngineService** (lifecycle/properties) | UI thread | Single-threaded access via gates |
+| **EngineRunner** (Interop) | UI thread | Delegates to engine via C++/CLI bridge |
+| **WinUI SwapChainPanel** | UI thread only | WinUI framework requirement |
 
-### Why This Design?
+### Design Rationale
 
-**Problem**: The editor UI and domain models live on managed .NET threads, but the engine requires all state mutations to happen on its own main thread at specific frame phases.
+**Surface Operations (AttachViewportAsync)** require the UI thread because they:
 
-**Solution**: The EditorModule acts as a **phase-aware adapter**:
+1. Accept a `SwapChainPanel` parameter (WinUI component)
+2. Must compute DPI-aware dimensions based on `XamlRoot.RasterizationScale`
+3. Marshal the panel to a native COM pointer for engine registration
+4. Interact with the WinUI dispatcher context
 
-1. **Editor threads** call `EngineRunner` methods (e.g., `RegisterSurfaceAsync()`)
-2. **EngineRunner** queues the request in the thread-safe `SurfaceRegistry`
-3. **EditorModule** drains the queue during `OnFrameStart()` on the engine main thread
-4. **Operations execute** safely within the engine's frame lifecycle
-5. **Callbacks** notify the editor thread of completion
+**Lifecycle and Configuration** operations enforce UI thread access to ensure:
 
-**Benefits:**
-- ✅ **No race conditions**: Engine state only mutated on engine thread
-- ✅ **No frame tearing**: Operations synchronized with frame boundaries
-- ✅ **Editor simplicity**: Editor code remains async/await, unaware of engine phases
-- ✅ **Clean separation**: Editor and engine threading models are independent
+1. Consistent state transitions without race conditions
+2. Serialized access to the engine runner instance
+3. Safe coordination between initialization, starting, and shutdown
 
+### Asynchronous Operations
 
+While surface attachment and engine operations occur on the UI thread, they are exposed as `async` / `ValueTask` methods to allow non-blocking UI updates. The underlying implementation delegates to the `EngineRunner` (C++/CLI) which communicates with the native engine asynchronously.
 
 ## Performance Considerations
 
-### Batching
-- Coalesce rapid property changes (e.g., dragging)
-- Flush on frame boundaries
-- Reduces interop overhead
-
-### Throttling
-- Limit update frequency for high-churn properties
-- Use debouncing for Transform updates
-- Prevent engine overload
-
 ### Resource Limits
+
 - Cap total surfaces (prevents memory exhaustion)
 - Cap per-document surfaces (prevents single document monopoly)
 - Fail fast on limit violation
 
-### Lazy Activation
-- Engine starts only when first surface attached
-- Engine stops when all surfaces detached
-- Conserves resources when no viewports open
+### Explicit Lifecycle Management
+
+- Engine is created during `InitializeAsync()` in headless mode (no render loop yet)
+- Engine loop starts explicitly via `StartAsync()` - not automatic
+- Requires explicit `StartAsync()` call before attaching viewports
+- Caller must coordinate initialization and startup explicitly
 
 ## Dependencies
 
 ### Project References
+
 - `Oxygen.Editor.Interop` - C++/CLI bridge to native engine
 - `Oxygen.Editor.World` - World domain models (Scene, SceneNode, Transform, components)
 - `Oxygen.Editor.Projects` - Project/workspace management (Project, ProjectInfo)
 - `DroidNet.Hosting.WinUI` - UI thread context management
 
 ### NuGet Packages
+
 - `Microsoft.WindowsAppSDK` - WinUI integration
 - `Microsoft.Extensions.DependencyInjection` - Service registration
 - `Microsoft.Extensions.Logging` - Diagnostic logging
@@ -733,6 +309,15 @@ stateDiagram-v2
 ## Future Enhancements
 
 ### Planned Features
+
+- **Lazy Engine Loop Start**: Automatically start the engine frame loop when the first viewport surface is attached, rather than requiring explicit `StartAsync()` call
+- **Engine Loop Auto-Tuning**: Dynamically adjust engine behavior based on rendering workload
+  - Pause render loop when no views are active (conserve CPU/GPU)
+  - Resume render loop when views become active
+- **Synchronization Subsystem**: Monitor and propagate editor model changes to the engine
+  - Domain model property observation
+  - Batched change application for performance
+  - Active/passive synchronization modes
 - **Bidirectional Sync**: Engine → Editor updates (physics, animations)
 - **Play Mode Sync**: Different behavior during play/simulate
 - **Undo/Redo Integration**: Command pattern for synchronization
@@ -740,25 +325,24 @@ stateDiagram-v2
 - **Network Sync**: Multi-user collaborative editing
 
 ### Extensibility Points
-- Custom synchronizer implementations via `ISceneSynchronizer`
-- Pluggable batching strategies
+
+- Pluggable synchronization implementations
+- Custom surface allocation strategies
 - Alternative engine backends via `IEngineService`
 
 ## Design Principles
 
-1. **Separation of Concerns**: Engine and Sync are distinct subsystems
-2. **Interface-Based Design**: Depend on abstractions, not concretions
-3. **Observable Models**: Models remain pure, synchronizers observe
-4. **Resource Safety**: Leases prevent resource leaks
-5. **Performance First**: Batching and throttling are core design elements
+1. **Separation of Concerns**: Lifecycle, surfaces, and views managed distinctly
+2. **Interface-Based Design**: `IEngineService` and `IViewportSurfaceLease` abstractions
+3. **Resource Safety**: Lease pattern prevents surface leaks
+4. **Thread Safety**: UI thread requirements enforced at boundaries
+5. **Async/Await**: Modern async patterns for non-blocking operations
 
 ## Related Documentation
 
 - [Oxygen.Editor.Interop](../Oxygen.Editor.Interop/README.md) - Platform bridge layer
 - [Oxygen.Editor.World](../Oxygen.Editor.World/) - World domain models
 - [Oxygen.Editor.Projects](../Oxygen.Editor.Projects/) - Project workspace management
-- [Synchronization Design](./docs/sync-design.md) - Detailed sync architecture
-- [Surface Management](./docs/surface-management.md) - Detailed surface allocation
 
 ## License
 
