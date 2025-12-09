@@ -3,18 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.Runtime.InteropServices;
+using System.Globalization;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
+// TODO: engine config options for InitializeAsync to be exposed via EngineService
+// TODO: auto-tune the engine target FPS based on whether we have active views to render or not
+
 /// <summary>
-/// Application-wide coordinator that keeps the native engine alive and arbitrates access to composition surfaces.
+///     Application-wide coordinator that keeps the native engine alive and arbitrates access to
+///     presentation surfaces and views used by the editor.
 /// </summary>
 /// <param name="hostingContext">Provides access to the UI dispatcher context.</param>
 /// <param name="loggerFactory">Optional factory used to bridge native engine logging.</param>
@@ -27,78 +30,148 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     private readonly Dictionary<Guid, int> documentSurfaceCounts = [];
     private readonly Dictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = [];
 
-    private EngineRunner? engineRunner;
-    private EngineContext? engineContext;
+#pragma warning disable CA2213 // Disposable fields should be disposed
+    private EngineRunner? engineRunner; // disposed in ShutDownAsync, called by DiosposeAsync
+    private EngineContext? engineContext; // disposed in TryDestroyEngineContext, called by ShutDownAsync
+#pragma warning restore CA2213 // Disposable fields should be disposed
     private Task? engineLoopTask;
-    private EngineServiceState state = EngineServiceState.Created;
+    private EngineServiceState state = EngineServiceState.NoEngine;
     private bool disposed;
 
-    /// <summary>
-    /// Gets the current lifecycle state of the service.
-    /// </summary>
+    /// <inheritdoc/>
     public EngineServiceState State => this.state;
 
-    /// <summary>
-    /// Gets the number of active viewport leases currently tracked by the service.
-    /// </summary>
-    public int ActiveSurfaceCount => this.activeLeases.Count;
-
-    /// <inheritdoc />
-    public OxygenWorld? World { get; private set; }
-
-    /// <summary>
-    /// Gets the maximum allowed target frames-per-second defined by the native
-    /// engine configuration (exposed to consumers so they don't need interop
-    /// types).
-    /// </summary>
-    public uint MaxTargetFps => EngineConfig.MaxTargetFps;
-
-    /// <summary>
-    /// Gets the minimum logging verbosity allowed by the native engine runtime.
-    /// </summary>
-    public int MinLoggingVerbosity => LoggingConfig.MinVerbosity;
-
-    /// <summary>
-    /// Gets the maximum logging verbosity allowed by the native engine runtime.
-    /// </summary>
-    public int MaxLoggingVerbosity => LoggingConfig.MaxVerbosity;
-    /// <inheritdoc />
-    public async ValueTask InitializeAsync(CancellationToken cancellationToken = default)
+    /// <inheritdoc/>
+    public int EngineLoggingVerbosity
     {
-        this.ThrowIfDisposed();
-
-        if (this.state is EngineServiceState.Ready or EngineServiceState.Running)
+        get
         {
-            return;
+            var runner = this.EnsureIsReadyOrRunning();
+            var cfg = runner.GetLoggingConfig(this.engineContext);
+            return cfg.Verbosity;
         }
 
+        set
+        {
+            if (value is < EngineConstants.MinLoggingVerbosity or > EngineConstants.MaxLoggingVerbosity)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(value),
+                    value,
+                    string.Create(CultureInfo.InvariantCulture, $"Logging verbosity must be between {EngineConstants.MinLoggingVerbosity} and {EngineConstants.MaxLoggingVerbosity}."));
+            }
+
+            var runner = this.EnsureIsReadyOrRunning();
+            try
+            {
+                var cfg = runner.GetLoggingConfig(this.engineContext);
+                cfg.Verbosity = value;
+                if (!runner.ConfigureLogging(cfg))
+                {
+                    this.LogSetLoggingVerbosityFailed(value);
+                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Failed to configure native engine logging with verbosity {value}."));
+                }
+
+                this.LogLoggingVerbositySet(value);
+            }
+            catch (Exception ex)
+            {
+                this.LogSetLoggingVerbosityFailed(value, ex);
+                throw;
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public uint MaxTargetFps
+    {
+        get
+        {
+            _ = this.EnsureIsReadyOrRunning();
+            return EngineConfig.MaxTargetFps; // FIXME: this should be queried from the engine as it will change based on monitor, and other factors
+        }
+    }
+
+    /// <inheritdoc/>
+    public uint TargetFps
+    {
+        get
+        {
+            var runner = this.EnsureIsReadyOrRunning();
+            var cfg = runner.GetEngineConfig(this.engineContext);
+            Debug.Assert(cfg is not null, "A ready or running engine should return a valid EngineConfig object");
+            return cfg.TargetFps;
+        }
+
+        set
+        {
+            var runner = this.EnsureIsReadyOrRunning();
+            var clamped = Math.Clamp(value, 0, this.MaxTargetFps);
+            runner.SetTargetFps(this.engineContext, value);
+            this.LogTargetFpsSet(value, clamped);
+        }
+    }
+
+    /// <inheritdoc/>
+    public int ActiveSurfaceCount
+    {
+        get
+        {
+            _ = this.EnsureIsReadyOrRunning();
+            return this.activeLeases.Count;
+        }
+    }
+
+    /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
+    public OxygenWorld World
+    {
+        get
+        {
+            _ = this.EnsureIsReadyOrRunning();
+            return field;
+        }
+
+        private set => field = value;
+    }
+    = null!; // will be initialized during engine initialization
+
+    /// <inheritdoc />
+    public async ValueTask<bool> InitializeAsync(CancellationToken cancellationToken = default)
+    {
         await this.initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (this.state is EngineServiceState.Ready or EngineServiceState.Running)
+            if (this.state is not (EngineServiceState.NoEngine or EngineServiceState.Faulted))
             {
-                return;
+                this.LogAlreadyInitialized();
+                return true; // No-op
             }
 
+            if (this.State is EngineServiceState.Faulted)
+            {
+                // Clearing the faulted state is needed to allow re-initialization. We will try to
+                // shutdown the engine, because it was not done cleanly before calling
+                // InitializeAsync, but we must not fail if shutdown throws.
+                await this.TryShutdownAsync().ConfigureAwait(false);
+            }
+
+            Debug.Assert(this.engineRunner == null, "Expecting engine runner to be null before initialization starts.");
             this.state = EngineServiceState.Initializing;
-
-            if (this.engineRunner == null)
+            this.engineRunner = new EngineRunner();
+            if (loggerFactory is { } factory) // TODO: pass parameters to InitializeAsync to configure logging
             {
-                this.engineRunner = new EngineRunner();
-                if (loggerFactory is { } factory)
+                var loggingConfig = new LoggingConfig
                 {
-                    var loggingConfig = new LoggingConfig
-                    {
-                        Verbosity = 0,
-                        IsColored = false,
-                        ModuleOverrides = string.Empty, // "**/Renderer/*=0,**/*Interop/**/*=3,**/Graphics/**/Command*=0",
-                    };
-                    var engineLogger = factory.CreateLogger("Oxygen.Engine");
-                    _ = this.engineRunner.ConfigureLogging(loggingConfig, engineLogger);
-                }
-
-                this.LogRunnerInitialized();
+                    Verbosity = 0,
+                    IsColored = false,
+                    ModuleOverrides = string.Empty, // "**/Renderer/*=0,**/*Interop/**/*=3,**/Graphics/**/Command*=0",
+                };
+                var engineLogger = factory.CreateLogger("Oxygen.Engine");
+                _ = this.engineRunner.ConfigureLogging(loggingConfig, engineLogger);
             }
+
+            this.LogRunnerInitialized();
 
             // Configure the engine for headless operation
             var config = ConfigFactory.CreateDefaultEngineConfig();
@@ -116,11 +189,12 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
 
             this.LogContextReady();
             this.state = EngineServiceState.Ready;
+            return true;
         }
         catch (Exception ex)
         {
-            this.state = EngineServiceState.Faulted;
             this.LogInitializationFailed(ex);
+            await this.TryShutdownAsync().ConfigureAwait(false);
             throw;
         }
         finally
@@ -130,131 +204,48 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     }
 
     /// <inheritdoc />
-    public async ValueTask<IViewportSurfaceLease> AttachViewportAsync(ViewportSurfaceRequest request, SwapChainPanel panel, CancellationToken cancellationToken = default)
+    public async ValueTask StartAsync()
     {
-        ArgumentNullException.ThrowIfNull(request);
-        ArgumentNullException.ThrowIfNull(panel);
-        this.ThrowIfDisposed();
-        this.EnsureOnDispatcherThread();
-        this.EnsureEngineReady();
+        this.LogStartingEngineLoop();
 
-        var key = request.ToKey();
-        var lease = await this.GetOrCreateLeaseAsync(key, cancellationToken).ConfigureAwait(true);
-        await lease.AttachAsync(panel, cancellationToken).ConfigureAwait(true);
-        return lease;
+        this.EnsureInStates(
+           EngineServiceState.Ready,
+           EngineServiceState.Starting,
+           EngineServiceState.Running);
+
+        if (this.state is EngineServiceState.Starting or EngineServiceState.Running)
+        {
+            return; // No-op
+        }
+
+        var runner = this.engineRunner;
+        Debug.Assert(runner is not null, "Engine runner should be initialized when engine is ready.");
+
+        this.state = EngineServiceState.Starting;
+
+        // Spawn the engine loop task
+        this.engineLoopTask = runner.RunEngineAsync(this.engineContext);
+
+        this.state = EngineServiceState.Running;
     }
 
     /// <inheritdoc />
-    public async ValueTask ReleaseDocumentSurfacesAsync(Guid documentId, CancellationToken cancellationToken = default)
+    public async ValueTask ShutdownAsync()
     {
-        this.ThrowIfDisposed();
+        this.LogShutdownRequested();
 
-        List<ViewportSurfaceLease> targetLeases;
-        await this.leaseGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
+        this.EnsureInStates(
+           EngineServiceState.NoEngine,
+           EngineServiceState.Ready,
+           EngineServiceState.Running,
+           EngineServiceState.Faulted);
+
+        if (this.state is EngineServiceState.NoEngine)
         {
-            targetLeases = this.activeLeases
-                .Where(pair => pair.Key.DocumentId == documentId)
-                .Select(pair => pair.Value)
-                .ToList();
-        }
-        finally
-        {
-            _ = this.leaseGate.Release();
+            return; // No-op
         }
 
-        foreach (var lease in targetLeases)
-        {
-            await lease.DisposeAsync().ConfigureAwait(true);
-        }
-    }
-
-    /// <summary>
-    /// Gets the current engine target frames-per-second setting. 0 = uncapped.
-    /// </summary>
-    /// <returns>The configured target FPS.</returns>
-    public uint GetEngineTargetFps()
-    {
-        this.ThrowIfDisposed();
-        this.EnsureEngineCreated();
-        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
-        var cfg = this.engineRunner.GetEngineConfig(this.engineContext);
-        return cfg.TargetFps;
-    }
-
-    /// <summary>
-    /// Gets the current native engine logging verbosity.
-    /// </summary>
-    public int GetEngineLoggingVerbosity()
-    {
-        this.ThrowIfDisposed();
-        this.EnsureEngineCreated();
-        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
-        var cfg = this.engineRunner.GetLoggingConfig(this.engineContext);
-        this.LogLoggingVerbosityRetrieved(cfg.Verbosity);
-        return cfg.Verbosity;
-    }
-
-    /// <summary>
-    /// Sets the engine target frames-per-second at runtime. 0 = uncapped.
-    /// </summary>
-    /// <param name="fps">Target frames per second.</param>
-    public void SetEngineTargetFps(uint fps)
-    {
-        this.ThrowIfDisposed();
-        this.EnsureEngineCreated();
-        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
-        this.engineRunner.SetTargetFps(this.engineContext, fps);
-        this.LogTargetFpsSet(fps);
-    }
-
-    /// <summary>
-    /// Sets the native engine logging verbosity via the engine interop bridge (loguru).
-    /// </summary>
-    /// <param name="verbosity">Desired verbosity.</param>
-    public void SetEngineLoggingVerbosity(int verbosity)
-    {
-        this.ThrowIfDisposed();
-        this.EnsureEngineCreated();
-        Debug.Assert(this.engineRunner != null, "Engine runner should be initialized when engine is created.");
-
-        try
-        {
-            // Read the current logging config from the native engine and update
-            // only the verbosity field so other logging settings are preserved.
-            var current = this.engineRunner.GetLoggingConfig(this.engineContext);
-            if (current == null)
-            {
-                throw new InvalidOperationException("Failed to read existing engine logging configuration.");
-            }
-
-            current.Verbosity = verbosity;
-            var ok = this.engineRunner.ConfigureLogging(current);
-            if (!ok)
-            {
-                throw new InvalidOperationException("Failed to configure native engine logging.");
-            }
-
-            this.LogLoggingVerbositySet(verbosity);
-        }
-        catch (Exception ex)
-        {
-            this.LogSetLoggingVerbosityFailed(verbosity, ex);
-            throw;
-        }
-    }
-
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        this.disposed = true;
-        this.state = EngineServiceState.Stopping;
-
+        this.state = EngineServiceState.ShuttingDown;
         List<ViewportSurfaceLease> leasesSnapshot;
         await this.leaseGate.WaitAsync().ConfigureAwait(false);
         try
@@ -273,331 +264,104 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             lease.MarkDetached();
         }
 
-        await this.StopEngineAsync(keepContextAlive: false).ConfigureAwait(false);
-        this.DestroyEngineContext();
-        this.engineRunner?.Dispose();
+        try
+        {
+            await this.TryStopEngineAsync().ConfigureAwait(false);
+            this.TryDestroyEngineContext();
+        }
+        finally
+        {
+            this.engineRunner?.Dispose();
+            this.engineRunner = null;
+        }
+
+        this.state = EngineServiceState.NoEngine;
+    }
+
+    /// <inheritdoc />
+    public async ValueTask DisposeAsync()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+        await this.TryShutdownAsync().ConfigureAwait(false);
         this.initializationGate.Dispose();
         this.leaseGate.Dispose();
-        this.state = EngineServiceState.Created;
     }
 
-    private void EnsureEngineCreated()
+    private async ValueTask TryStopEngineAsync()
     {
-        if (this.engineRunner is not null && this.engineContext?.IsValid == true)
-        {
-            // We assume that we are ok, if we have a valid context
-            return;
-        }
+        var runner = this.EnsureIsRunning();
 
-        throw new InvalidOperationException("Expecting engine to have been created.");
-    }
-
-    private void EnsureEngineReady()
-    {
-        if (this.state is EngineServiceState.Ready or EngineServiceState.Running)
-        {
-            return;
-        }
-
-        throw new InvalidOperationException("Engine must be running or at least ready to run.");
-    }
-
-    private void EnsureEngineRunning()
-    {
-        if (this.state is EngineServiceState.Running)
-        {
-            Debug.Assert(this.engineLoopTask != null, "Engine loop task should be active when engine is running.");
-            return;
-        }
-
-        // Otherwise, it must have been Ready
-        if (this.state != EngineServiceState.Ready)
-        {
-            throw new InvalidOperationException("Engine must be running or at least ready to run.");
-        }
-
-        Debug.Assert(this.engineRunner is not null, "Engine runner should be initialized when engine is ready.");
-        this.LogStartingEngineLoop();
-        this.engineLoopTask = this.engineRunner.RunEngineAsync(this.engineContext);
-        this.state = EngineServiceState.Running;
-    }
-
-    /// <summary>
-    /// Ensures the specified lease is connected to a running engine instance.
-    /// </summary>
-    private async ValueTask AttachLeaseAsync(ViewportSurfaceLease lease, SwapChainPanel panel, CancellationToken cancellationToken)
-    {
-        // Engine must be running to actually attach surfaces.
-        this.EnsureEngineRunning();
-        Debug.Assert(this.engineRunner is not null, "Engine runner should be initialized when engine is running.");
-
-        var panelPtr = IntPtr.Zero;
-        // Initial pixel sizes captured prior to attachment - declared here
-        // so they remain visible after the try/finally block.
-        uint initialPixelWidth = 0u;
-        uint initialPixelHeight = 0u;
-        float raster = 1.0f;
-        try
-        {
-            panelPtr = Marshal.GetIUnknownForObject(panel);
-            // Compute a robust initial pixel size using the XamlRoot rasterization
-            // scale only. The compositor's composition scale is handled at
-            // presentation time - including it here would over-scale the
-            // requested buffers and lead to mismatch/clipping during present.
-            // assign into the variables declared above
-            try
-            {
-                raster = (float)(panel.XamlRoot?.RasterizationScale ?? 1.0);
-                // Compute the initial requested pixels using rasterization scale
-                // only (DIPs -> physical pixels).
-                //
-                // IMPORTANT: We pass the 'raster' (CompositionScale) to the engine so it can
-                // apply an inverse scale transform to the SwapChain. This prevents WinUI from
-                // double-scaling the content on high DPI screens, which causes truncation.
-                // See EngineRunner.cpp for the implementation of the inverse transform.
-                initialPixelWidth = (uint)Math.Max(1, Math.Round(panel.ActualWidth * raster));
-                initialPixelHeight = (uint)Math.Max(1, Math.Round(panel.ActualHeight * raster));
-            }
-            catch
-            {
-                // Fall back to zero - native side will decide how to proceed.
-                initialPixelWidth = 0u;
-                initialPixelHeight = 0u;
-            }
-
-            var registered = await this.engineRunner.RegisterSurfaceAsync(
-                this.engineContext,
-                lease.Key.DocumentId,
-                lease.Key.ViewportId,
-                lease.Key.DisplayName,
-                panelPtr,
-                initialPixelWidth,
-                initialPixelHeight,
-                raster).ConfigureAwait(true);
-
-            if (!registered)
-            {
-                // FIXME: check if we are back to idle and should stop the engine loop
-                throw new InvalidOperationException("Failed to register viewport surface with the native engine.");
-            }
-        }
-        finally
-        {
-            if (panelPtr != IntPtr.Zero)
-            {
-                _ = Marshal.Release(panelPtr);
-            }
-        }
-
-        // Registration requested an initial resize (if the UI reported a
-        // measurable size). The engine registration path will mark the surface
-        // for resize so the native side will create backbuffers of the
-        // requested dimensions prior to the next engine frame. No additional
-        // staged resize is required here.
-
-        lease.MarkAttached(panel);
-        this.LogLeaseAttached(lease.Key.DisplayName, panel.GetHashCode(), this.state);
-    }
-
-    /// <summary>
-    /// Forwards a resize request to the native engine.
-    /// </summary>
-    private async ValueTask ResizeViewportAsync(ViewportSurfaceKey key, uint pixelWidth, uint pixelHeight, bool waitForProcessed = false)
-    {
-        if (this.engineRunner == null)
-        {
-            throw new InvalidOperationException("Engine runner not initialized.");
-        }
-
-        if (pixelWidth == 0 || pixelHeight == 0)
-        {
-            return;
-        }
-
-        try
-        {
-            var result = await this.engineRunner.ResizeSurfaceAsync(key.ViewportId, pixelWidth, pixelHeight).ConfigureAwait(true);
-            if (!result)
-            {
-                this.LogResizeFailed(pixelWidth, pixelHeight);
-            }
-        }
-        catch (Exception ex)
-        {
-            this.LogResizeFailed(pixelWidth, pixelHeight, ex);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Releases the resources associated with the specified lease.
-    /// </summary>
-    private async ValueTask ReleaseLeaseAsync(ViewportSurfaceLease lease, bool waitForProcessed = false)
-    {
-        if (this.engineRunner == null)
-        {
-            throw new InvalidOperationException("Engine runner not initialized.");
-        }
-
-        await this.leaseGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            if (!this.activeLeases.Remove(lease.Key))
-            {
-                return;
-            }
-
-            if (this.documentSurfaceCounts.TryGetValue(lease.Key.DocumentId, out var count))
-            {
-                count--;
-                if (count <= 0)
-                {
-                    _ = this.documentSurfaceCounts.Remove(lease.Key.DocumentId);
-                }
-                else
-                {
-                    this.documentSurfaceCounts[lease.Key.DocumentId] = count;
-                }
-            }
-        }
-        finally
-        {
-            _ = this.leaseGate.Release();
-        }
-
-        // FIXME: Consider waiting for the unregister to complete before marking detached and updating the collections
-        lease.MarkDetached();
-        var result = await this.engineRunner.UnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(true);
-        this.LogLeaseReleased(lease.Key.DisplayName, lease.Key.DocumentId, result);
-    }
-
-    private async ValueTask<ViewportSurfaceLease> GetOrCreateLeaseAsync(ViewportSurfaceKey key, CancellationToken cancellationToken)
-    {
-        await this.leaseGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            if (this.activeLeases.TryGetValue(key, out var existing))
-            {
-                this.LogLeaseReused(key.DisplayName, key.DocumentId, this.activeLeases.Count, this.GetDocumentSurfaceCount(key.DocumentId));
-                return existing;
-            }
-
-            this.ThrowIfSurfaceLimitExceeded(key.DocumentId);
-            var lease = new ViewportSurfaceLease(this, key);
-            this.activeLeases.Add(key, lease);
-            var documentCount = this.IncrementDocumentSurfaceCount(key.DocumentId);
-            this.LogLeaseCreated(key.DisplayName, key.DocumentId, this.activeLeases.Count, documentCount);
-            return lease;
-        }
-        finally
-        {
-            _ = this.leaseGate.Release();
-        }
-    }
-
-    private void ThrowIfSurfaceLimitExceeded(Guid documentId)
-    {
-        if (this.activeLeases.Count >= EngineSurfaceLimits.MaxTotalSurfaces)
-        {
-            throw new InvalidOperationException($"Cannot attach viewport: reached the global limit of {EngineSurfaceLimits.MaxTotalSurfaces} surfaces.");
-        }
-
-        var perDocumentCount = this.documentSurfaceCounts.TryGetValue(documentId, out var value) ? value : 0;
-        if (perDocumentCount >= EngineSurfaceLimits.MaxSurfacesPerDocument)
-        {
-            throw new InvalidOperationException($"Document {documentId} already owns the maximum of {EngineSurfaceLimits.MaxSurfacesPerDocument} surfaces.");
-        }
-    }
-
-    private int IncrementDocumentSurfaceCount(Guid documentId)
-    {
-        if (this.documentSurfaceCounts.TryGetValue(documentId, out var count))
-        {
-            count++;
-            this.documentSurfaceCounts[documentId] = count;
-            return count;
-        }
-
-        this.documentSurfaceCounts[documentId] = 1;
-        return 1;
-    }
-
-    private int GetDocumentSurfaceCount(Guid documentId)
-        => this.documentSurfaceCounts.TryGetValue(documentId, out var count) ? count : 0;
-
-    private async ValueTask StopEngineAsync(bool keepContextAlive = true)
-    {
-        if (this.engineRunner is null)
-        {
-            this.LogStopEngineSkipped("engine is not created or was destroyed");
-            return;
-        }
-
-        Debug.Assert(this.engineLoopTask != null, "Engine loop task should be active when engine is running.");
-        Debug.Assert(this.engineContext != null, "Engine context should be valid when engine is running.");
-
-        this.LogStopEngineRequested(keepContextAlive);
-
-        if (this.engineLoopTask == null || this.engineContext == null)
-        {
-            if (!keepContextAlive)
-            {
-                this.DestroyEngineContext();
-                this.state = EngineServiceState.Created;
-            }
-            else if (this.engineContext?.IsValid == true)
-            {
-                this.state = EngineServiceState.Ready;
-            }
-            else
-            {
-                this.state = EngineServiceState.Created;
-            }
-
-            this.LogStopEngineCompleted(keepContextAlive, this.state);
-            return;
-        }
+        Debug.Assert(this.engineLoopTask is not null, "Engine loop task should be active when engine is running.");
+        Debug.Assert(this.engineContext is not null, "Engine context should be valid when engine is running.");
 
         this.LogStoppingEngineLoop();
-        this.state = EngineServiceState.Stopping;
-
         try
         {
-            this.engineRunner.StopEngine(this.engineContext);
+            runner.StopEngine(this.engineContext);
             if (this.engineLoopTask != null)
             {
                 await this.engineLoopTask.ConfigureAwait(false);
             }
         }
-        catch (ObjectDisposedException ex)
-        {
-            this.LogEngineStopFault(ex);
-            throw;
-        }
-        catch (InvalidOperationException ex)
-        {
-            this.LogEngineStopFault(ex);
-            throw;
-        }
         finally
         {
             this.engineLoopTask = null;
-            if (keepContextAlive && this.engineContext != null)
-            {
-                this.state = EngineServiceState.Ready;
-            }
-            else
-            {
-                this.DestroyEngineContext();
-                this.state = EngineServiceState.Created;
-            }
-
-            this.LogStopEngineCompleted(keepContextAlive, this.state);
+            this.state = EngineServiceState.Ready;
         }
     }
 
-    private void ThrowIfDisposed()
-        => ObjectDisposedException.ThrowIf(this.disposed, this);
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "must not throw")]
+    private async ValueTask TryShutdownAsync()
+    {
+        // Defensively try to shutdown the engine. Shutdown is idempotent, can
+        // be called in any state, and will have no effect if the engine was
+        // already shutdown.
+        try
+        {
+            await this.ShutdownAsync().ConfigureAwait(false);
+        }
+        catch
+        {
+            // Swallow exceptions because we are in a best-effort cleanup path.
+        }
+        finally
+        {
+            this.state = EngineServiceState.NoEngine;
+        }
+    }
+
+    private EngineRunner EnsureIsReadyOrRunning()
+    {
+        var validStates = new EngineServiceState[] { EngineServiceState.Ready, EngineServiceState.Running };
+        this.EnsureInStates(validStates);
+
+        Debug.Assert(this.engineRunner is not null, $"Engine runner should be initialized when state is in [{string.Join(", ", validStates)}].");
+        return this.engineRunner;
+    }
+
+    private EngineRunner EnsureIsRunning()
+    {
+        var validStates = new EngineServiceState[] { EngineServiceState.Running };
+        this.EnsureInStates(validStates);
+
+        Debug.Assert(this.engineRunner is not null, $"Engine runner should be initialized when state is in [{string.Join(", ", validStates)}].");
+        return this.engineRunner;
+    }
+
+    private void EnsureInStates(params EngineServiceState[] validStates)
+    {
+        if (Array.IndexOf(validStates, this.state) < 0)
+        {
+            var message = $"Engine must be in state: {string.Join(", ", validStates)}. Current state: {this.state}.";
+            Debug.Fail(message);
+            throw new InvalidOperationException(message);
+        }
+    }
 
     private void EnsureOnDispatcherThread()
     {
@@ -607,7 +371,8 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         }
     }
 
-    private void DestroyEngineContext()
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "in the dispose path, cannot throw")]
+    private void TryDestroyEngineContext()
     {
         if (this.engineContext == null)
         {
@@ -625,60 +390,8 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         finally
         {
             this.engineContext = null;
-            this.World = null;
+            this.World = null!;
             this.LogContextDestroyed();
         }
-    }
-
-    private sealed class ViewportSurfaceLease : IViewportSurfaceLease
-    {
-        private readonly EngineService owner;
-        private SwapChainPanel? panel;
-        private bool disposed;
-
-        internal ViewportSurfaceLease(EngineService owner, ViewportSurfaceKey key)
-        {
-            this.owner = owner;
-            this.Key = key;
-        }
-
-        public ViewportSurfaceKey Key { get; }
-
-        public bool IsAttached => this.panel != null;
-
-        public async ValueTask AttachAsync(SwapChainPanel panel, CancellationToken cancellationToken = default)
-        {
-            ArgumentNullException.ThrowIfNull(panel);
-            this.ThrowIfDisposed();
-            await this.owner.AttachLeaseAsync(this, panel, cancellationToken).ConfigureAwait(true);
-        }
-
-        public async ValueTask ResizeAsync(uint pixelWidth, uint pixelHeight, CancellationToken cancellationToken = default)
-        {
-            if (!this.IsAttached)
-            {
-                return;
-            }
-
-            await this.owner.ResizeViewportAsync(this.Key, pixelWidth, pixelHeight, waitForProcessed: false).ConfigureAwait(true);
-            return;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            if (this.disposed)
-            {
-                return;
-            }
-
-            this.disposed = true;
-            await this.owner.ReleaseLeaseAsync(this).ConfigureAwait(false);
-        }
-
-        internal void MarkAttached(SwapChainPanel panel) => this.panel = panel;
-
-        internal void MarkDetached() => this.panel = null;
-
-        private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(this.disposed, this);
     }
 }

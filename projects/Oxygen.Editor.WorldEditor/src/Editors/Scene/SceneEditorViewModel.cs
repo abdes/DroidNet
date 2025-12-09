@@ -12,9 +12,9 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
-using Oxygen.Interop;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Controls;
+using Oxygen.Interop;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 
@@ -103,7 +103,7 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             try
             {
-                var raw = (int)this.engineService.GetEngineTargetFps();
+                var raw = (int)this.engineService.TargetFps;
                 var max = (int)this.engineService.MaxTargetFps;
                 return System.Math.Clamp(raw, 0, max);
             }
@@ -121,7 +121,7 @@ public partial class SceneEditorViewModel : ObservableObject
                 // Clamp UI value to engine supported range before forwarding.
                 var max = (int)this.engineService.MaxTargetFps;
                 var clamped = System.Math.Clamp(value, 0, max);
-                this.engineService.SetEngineTargetFps((uint)clamped);
+                this.engineService.TargetFps = (uint)clamped;
 
                 // Notify UI that the value may have changed (source of truth is the service).
                 this.OnPropertyChanged(nameof(this.RunAtFps));
@@ -136,12 +136,12 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <summary>
     /// Minimum allowed native logging verbosity value for the engine (e.g. -9).
     /// </summary>
-    public int MinLoggingVerbosity => (int)this.engineService.MinLoggingVerbosity;
+    public int MinLoggingVerbosity => EngineConstants.MinLoggingVerbosity;
 
     /// <summary>
     /// Maximum allowed native logging verbosity value for the engine (e.g. +9).
     /// </summary>
-    public int MaxLoggingVerbosity => (int)this.engineService.MaxLoggingVerbosity;
+    public int MaxLoggingVerbosity => EngineConstants.MaxLoggingVerbosity;
 
     /// <summary>
     /// Current native engine logging verbosity; sourced from the engine service.
@@ -152,13 +152,13 @@ public partial class SceneEditorViewModel : ObservableObject
     {
         get
         {
-            var raw = this.engineService.GetEngineLoggingVerbosity();
+            var raw = this.engineService.EngineLoggingVerbosity;
             return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
         }
         set
         {
             var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
-            this.engineService.SetEngineLoggingVerbosity(clamped);
+            this.engineService.EngineLoggingVerbosity = clamped;
             this.OnPropertyChanged(nameof(this.LoggingVerbosity));
         }
     }
@@ -177,7 +177,7 @@ public partial class SceneEditorViewModel : ObservableObject
         var requiredCount = placements.Count;
 
         // Adjust viewports count
-            while (this.Viewports.Count < requiredCount)
+        while (this.Viewports.Count < requiredCount)
         {
             var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
             var viewport = new ViewportViewModel(metadata.DocumentId, this.engineService, settings, this.loggerFactory);

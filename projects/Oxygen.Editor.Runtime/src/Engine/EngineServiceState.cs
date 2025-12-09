@@ -5,37 +5,60 @@
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>
-/// Represents the lifecycle state of the <see cref="IEngineService"/> singleton.
+///     Represents the lifecycle state of the <see cref="IEngineService"/> singleton.
 /// </summary>
 public enum EngineServiceState
 {
     /// <summary>
-    /// The service has been constructed but the native engine was not initialized yet.
+    ///     No runtime engine has not been created yet, or the service has been already disposed.
     /// </summary>
-    Created = 0,
+    NoEngine = 0,
 
     /// <summary>
-    /// The service is currently creating and starting the native engine loop.
+    ///     The service is currently creating and initializing the runtime engine. Upon completion,
+    ///     the service will transition to either the <see cref="Ready"/> state on success, or the
+    ///     <see cref="Faulted"/> state on failure.
     /// </summary>
+    /// <remarks>
+    ///    This is a transient state that takes some time, and while in it, no operations on the
+    ///    engine are allowed.
+    /// </remarks>
     Initializing,
 
     /// <summary>
-    /// The native layer is fully configured in headless mode and awaiting viewport attachments.
+    ///     The runtime engine is initialized, and ready to be started. At this point, certain
+    ///     properties may be queried and modified, and certain operations may be performed, but the
+    ///     engine loop is not yet running until <see cref="IEngineService.StartAsync"/> is called.
     /// </summary>
     Ready,
 
     /// <summary>
-    /// The engine loop is running and at least one viewport surface is attached.
+    ///     The engine frame loop is starting. Upon completion, the service will transition to the
+    ///     <see cref="Running"/> state on success and to the <see cref="Faulted"/> state on failure.
+    /// </summary>
+    Starting,
+
+    /// <summary>
+    ///     The engine is running. You may call <see cref="IEngineService.ShutdownAsync"/> to shut
+    ///     it down and return to the <see cref="NoEngine"/> state.
     /// </summary>
     Running,
 
     /// <summary>
-    /// The engine loop is stopping.
+    ///     The engine is in the process of shutting down. Upon completion, the service will
+    ///     transition back to the <see cref="NoEngine"/> state on success and to the <see
+    ///     cref="Faulted"/> state on failure.
     /// </summary>
-    Stopping,
+    /// <remarks>
+    ///    This is a transient state that takes some time, and while in it, no operations on the
+    ///    engine are allowed.
+    /// </remarks>
+    ShuttingDown,
 
     /// <summary>
-    /// The service failed to start or encountered a fatal error.
+    ///     The engine reported a fatal error. No further operations other than <see
+    ///     cref="IEngineService.InitializeAsync"/> to re-create and re-attempt initialize the
+    ///     engine may be performed.
     /// </summary>
     Faulted,
 }

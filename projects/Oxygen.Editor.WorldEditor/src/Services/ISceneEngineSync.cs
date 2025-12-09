@@ -23,7 +23,7 @@ public interface ISceneEngineSync
     /// </summary>
     /// <param name="scene">The scene to synchronize.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    Task SyncSceneAsync(Scene scene);
+    public Task SyncSceneAsync(Scene scene);
 
     /// <summary>
     ///     Creates a new scene node in the engine.
@@ -31,28 +31,28 @@ public interface ISceneEngineSync
     /// <param name="node">The scene node to create.</param>
     /// <param name="parentGuid">Optional parent node GUID. If null, the node becomes a root node.</param>
     /// <returns>A task that completes when the node is created and initialized.</returns>
-    Task CreateNodeAsync(SceneNode node, Guid? parentGuid = null);
+    public Task CreateNodeAsync(SceneNode node, Guid? parentGuid = null);
 
     /// <summary>
     ///     Removes a scene node from the engine.
     /// </summary>
     /// <param name="nodeId">The GUID of the node to remove.</param>
     /// <returns>A task that completes when the node is removed.</returns>
-    Task RemoveNodeAsync(Guid nodeId);
+    public Task RemoveNodeAsync(Guid nodeId);
 
     /// <summary>
     ///     Removes a scene node hierarchy (node and all descendants) from the engine.
     /// </summary>
     /// <param name="rootNodeId">The GUID of the hierarchy root to remove.</param>
     /// <returns>A task that completes when the hierarchy is removed.</returns>
-    Task RemoveNodeHierarchyAsync(Guid rootNodeId);
+    public Task RemoveNodeHierarchyAsync(Guid rootNodeId);
 
     /// <summary>
     ///     Removes multiple scene node hierarchies (nodes and all descendants) from the engine.
     /// </summary>
     /// <param name="rootNodeIds">The GUIDs of the hierarchy roots to remove.</param>
     /// <returns>A task that completes when the hierarchies are removed.</returns>
-    Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds);
+    public Task RemoveNodeHierarchiesAsync(IReadOnlyList<Guid> rootNodeIds);
 
     /// <summary>
     ///     Reparents a node in the engine to the provided parent (null = root).
@@ -60,7 +60,7 @@ public interface ISceneEngineSync
     /// <param name="nodeId">Node id to reparent.</param>
     /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make a root node.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
-    Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
+    public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     /// <summary>
     ///     Reparents multiple node hierarchies to the same parent in the engine.
@@ -68,7 +68,7 @@ public interface ISceneEngineSync
     /// <param name="nodeIds">Hierarchy roots to move.</param>
     /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make roots.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
-    Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
+    public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     // ============================================================================
     // Transform Operations
@@ -79,7 +79,7 @@ public interface ISceneEngineSync
     /// </summary>
     /// <param name="node">The scene node with updated transform data.</param>
     /// <returns>A task that completes when the transform is updated.</returns>
-    Task UpdateNodeTransformAsync(SceneNode node);
+    public Task UpdateNodeTransformAsync(SceneNode node);
 
     // ============================================================================
     // Geometry Operations - Coarse-Grained
@@ -95,14 +95,14 @@ public interface ISceneEngineSync
     ///     This replaces the entire geometry mesh. For granular updates to materials or
     ///     LODs, use the specific update methods instead.
     /// </remarks>
-    Task AttachGeometryAsync(SceneNode node, GeometryComponent geometry);
+    public Task AttachGeometryAsync(SceneNode node, GeometryComponent geometry);
 
     /// <summary>
     ///     Detaches all geometry from a scene node.
     /// </summary>
     /// <param name="nodeId">The GUID of the node.</param>
     /// <returns>A task that completes when the geometry is detached.</returns>
-    Task DetachGeometryAsync(Guid nodeId);
+    public Task DetachGeometryAsync(Guid nodeId);
 
     // ============================================================================
     // Geometry Operations - Fine-Grained Material Updates
@@ -118,7 +118,7 @@ public interface ISceneEngineSync
     ///     Component-level overrides apply to the entire geometry. For LOD or submesh-specific
     ///     overrides, use <see cref="UpdateTargetedMaterialOverrideAsync"/>.
     /// </remarks>
-    Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot);
+    public Task UpdateMaterialOverrideAsync(Guid nodeId, OverrideSlot slot);
 
     /// <summary>
     ///     Updates a targeted material override for a specific LOD and/or submesh.
@@ -132,7 +132,7 @@ public interface ISceneEngineSync
     ///     Allows fine-grained control over specific parts of the geometry. For example,
     ///     you can apply different materials to different submeshes or LOD levels.
     /// </remarks>
-    Task UpdateTargetedMaterialOverrideAsync(
+    public Task UpdateTargetedMaterialOverrideAsync(
         Guid nodeId,
         int lodIndex,
         int submeshIndex,
@@ -144,7 +144,7 @@ public interface ISceneEngineSync
     /// <param name="nodeId">The GUID of the node.</param>
     /// <param name="slotType">The type of override slot to remove (e.g., typeof(MaterialsSlot)).</param>
     /// <returns>A task that completes when the override is removed.</returns>
-    Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType);
+    public Task RemoveMaterialOverrideAsync(Guid nodeId, Type slotType);
 
     /// <summary>
     ///     Removes a targeted material override.
@@ -154,7 +154,7 @@ public interface ISceneEngineSync
     /// <param name="submeshIndex">Submesh index that was targeted.</param>
     /// <param name="slotType">The type of override slot to remove.</param>
     /// <returns>A task that completes when the targeted override is removed.</returns>
-    Task RemoveTargetedMaterialOverrideAsync(
+    public Task RemoveTargetedMaterialOverrideAsync(
         Guid nodeId,
         int lodIndex,
         int submeshIndex,
@@ -174,7 +174,7 @@ public interface ISceneEngineSync
     ///     This updates how the engine selects which LOD to render (e.g., distance-based,
     ///     screen-space error, or fixed LOD).
     /// </remarks>
-    Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot);
+    public Task UpdateLodPolicyAsync(Guid nodeId, LevelOfDetailSlot lodSlot);
 
     /// <summary>
     ///     Updates rendering settings (e.g., visibility) for a geometry component.
@@ -182,7 +182,7 @@ public interface ISceneEngineSync
     /// <param name="nodeId">The GUID of the node.</param>
     /// <param name="renderingSlot">The RenderingSlot containing rendering settings.</param>
     /// <returns>A task that completes when the rendering settings are updated.</returns>
-    Task UpdateRenderingSettingsAsync(Guid nodeId, RenderingSlot renderingSlot);
+    public Task UpdateRenderingSettingsAsync(Guid nodeId, RenderingSlot renderingSlot);
 
     /// <summary>
     ///     Updates lighting settings (e.g., shadow casting/receiving) for a geometry component.
@@ -193,5 +193,5 @@ public interface ISceneEngineSync
     /// <remarks>
     ///     Controls whether the geometry casts shadows and receives shadows from other objects.
     /// </remarks>
-    Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot);
+    public Task UpdateLightingSettingsAsync(Guid nodeId, LightingSlot lightingSlot);
 }

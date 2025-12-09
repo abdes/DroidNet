@@ -111,7 +111,7 @@ namespace oxygen::interop::module {
 
     // Finalize views after FrameStart command processing so per-view updates
     // (UpdateView) can be applied and the transient frame context cleared.
-    if (view_manager_) {
+    if (view_manager_ && scene_) {
       view_manager_->FinalizeViews();
     }
   }
