@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Controls;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.World;
@@ -267,6 +268,86 @@ public class SceneOrganizerTests
     }
 
     [TestMethod]
+    public async Task ReconcileLayoutAsync_AttachesFolderAndMovesNode()
+    {
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+
+        var folderId = Guid.NewGuid();
+        var layout = new List<ExplorerEntryData>
+        {
+            new()
+            {
+                Type = "Folder",
+                FolderId = folderId,
+                Name = "Folder",
+                Children = new List<ExplorerEntryData>
+                {
+                    new() { Type = "Node", NodeId = node.Id },
+                },
+            },
+        };
+
+        scene.ExplorerLayout = layout;
+        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
+        var layoutContext = new TestLayoutContext();
+
+        await this.organizer.ReconcileLayoutAsync(sceneAdapter, scene, layout, layoutContext, preserveNodeExpansion: true).ConfigureAwait(false);
+
+        var children = await sceneAdapter.Children.ConfigureAwait(false);
+        var folder = children.OfType<FolderAdapter>().FirstOrDefault();
+        _ = folder.Should().NotBeNull("Folder entry should be attached to the scene adapter");
+        _ = folder!.Id.Should().Be(folderId);
+
+        _ = folder.ChildAdapters.OfType<LayoutNodeAdapter>().Should()
+            .ContainSingle(lna => ReferenceEquals(lna.AttachedObject, node), "Node should move under the new folder");
+
+        _ = layoutContext.RefreshCount.Should().Be(1);
+    }
+
+    [TestMethod]
+    public async Task ReconcileLayoutAsync_RoundTripsLayoutThroughUndoRedoShape()
+    {
+        var scene = CreateScene();
+        var node = new SceneNode(scene) { Name = "Node" };
+        scene.RootNodes.Add(node);
+
+        var previousLayout = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } };
+        scene.ExplorerLayout = previousLayout;
+        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
+
+        var folderId = Guid.NewGuid();
+        var newLayout = new List<ExplorerEntryData>
+        {
+            new()
+            {
+                Type = "Folder",
+                FolderId = folderId,
+                Name = "Folder",
+                Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = node.Id } },
+            },
+        };
+
+        var layoutContext = new TestLayoutContext();
+
+        await this.organizer.ReconcileLayoutAsync(sceneAdapter, scene, newLayout, layoutContext, preserveNodeExpansion: true).ConfigureAwait(false);
+        _ = scene.ExplorerLayout.Should().BeEquivalentTo(newLayout, options => options.WithStrictOrdering());
+
+        // Undo simulation: restore previous layout
+        await this.organizer.ReconcileLayoutAsync(sceneAdapter, scene, previousLayout, layoutContext, preserveNodeExpansion: true).ConfigureAwait(false);
+        _ = scene.ExplorerLayout.Should().BeEquivalentTo(previousLayout, options => options.WithStrictOrdering());
+
+        // Redo simulation: apply folder layout again
+        await this.organizer.ReconcileLayoutAsync(sceneAdapter, scene, newLayout, layoutContext, preserveNodeExpansion: true).ConfigureAwait(false);
+
+        var children = await sceneAdapter.Children.ConfigureAwait(false);
+        var folder = children.OfType<FolderAdapter>().Single();
+        var folderChildren = await folder.Children.ConfigureAwait(false);
+        _ = folderChildren.OfType<LayoutNodeAdapter>().Should().ContainSingle(lna => ReferenceEquals(lna.AttachedObject, node));
+    }
+
+    [TestMethod]
     public void RemoveFolder_DropsChildrenWhenNotPromoting()
     {
         var scene = CreateScene();
@@ -450,5 +531,111 @@ public class SceneOrganizerTests
 
         _ = filtered.Should().Contain(parent.Id);
         _ = filtered.Should().NotContain(child.Id);
+    }
+
+    [TestMethod]
+    public async Task ReconcileLayoutAsync_ReusesAdaptersAndRefreshesOnce()
+    {
+        var scene = CreateScene();
+        var nodeA = new SceneNode(scene) { Name = "A" };
+        var nodeB = new SceneNode(scene) { Name = "B" };
+        scene.RootNodes.Add(nodeA);
+        scene.RootNodes.Add(nodeB);
+
+        var initialLayout = new List<ExplorerEntryData>
+        {
+            new() { Type = "Node", NodeId = nodeA.Id },
+            new()
+            {
+                Type = "Folder",
+                FolderId = Guid.NewGuid(),
+                Name = "Folder",
+                Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = nodeB.Id } },
+            },
+        };
+
+        scene.ExplorerLayout = initialLayout;
+        var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
+        var initialChildren = await sceneAdapter.Children.ConfigureAwait(false);
+
+        var adapterA = initialChildren.OfType<LayoutNodeAdapter>().First(a => a.AttachedObject == nodeA);
+        var folder = initialChildren.OfType<FolderAdapter>().Single();
+        var adapterB = folder.ChildAdapters.OfType<LayoutNodeAdapter>().Single();
+
+        var newFolderId = Guid.NewGuid();
+        var newLayout = new List<ExplorerEntryData>
+        {
+            new() { Type = "Node", NodeId = nodeB.Id },
+            new()
+            {
+                Type = "Folder",
+                FolderId = newFolderId,
+                Name = "NewFolder",
+                Children = new List<ExplorerEntryData> { new() { Type = "Node", NodeId = nodeA.Id } },
+            },
+        };
+
+        var context = new TestLayoutContext();
+
+        await this.organizer.ReconcileLayoutAsync(sceneAdapter, scene, newLayout, context, preserveNodeExpansion: true)
+            .ConfigureAwait(false);
+
+        var reconciledChildren = await sceneAdapter.Children.ConfigureAwait(false);
+
+        _ = reconciledChildren.Should().HaveCount(2);
+        _ = reconciledChildren[0].Should().BeSameAs(adapterB, "node B adapter should be reused at root");
+
+        var newFolder = reconciledChildren[1] as FolderAdapter;
+        _ = newFolder.Should().NotBeNull();
+        _ = newFolder!.Id.Should().Be(newFolderId);
+        _ = newFolder.ChildAdapters.Should().HaveCount(1);
+        _ = newFolder.ChildAdapters[0].Should().BeSameAs(adapterA, "node A adapter should be reused under new folder");
+
+        _ = scene.ExplorerLayout.Should().NotBeSameAs(newLayout, "layout should be cloned");
+        _ = scene.ExplorerLayout.Should().BeEquivalentTo(newLayout, options => options.WithStrictOrdering());
+        _ = context.RefreshCount.Should().Be(1, "reconcile should request a single refresh");
+    }
+
+    private sealed class TestLayoutContext : ILayoutContext
+    {
+        public int RefreshCount { get; private set; }
+
+        public int? GetShownIndex(ITreeItem item)
+        {
+            _ = item;
+            return null;
+        }
+
+        public bool TryRemoveShownItem(ITreeItem item)
+        {
+            _ = item;
+            return false;
+        }
+
+        public void InsertShownItem(int index, ITreeItem item)
+        {
+            _ = index;
+            _ = item;
+        }
+
+        public Task RefreshTreeAsync(SceneAdapter sceneAdapter)
+        {
+            _ = sceneAdapter;
+            ++this.RefreshCount;
+            return Task.CompletedTask;
+        }
+
+        public bool TryGetVisibleSpan(ITreeItem root, out int startIndex, out int count)
+        {
+            _ = root;
+            startIndex = 0;
+            count = 0;
+            return false;
+        }
+
+        public void ApplyShownDelta(ShownItemsDelta delta)
+        {
+            _ = delta;
+        }
     }
 }

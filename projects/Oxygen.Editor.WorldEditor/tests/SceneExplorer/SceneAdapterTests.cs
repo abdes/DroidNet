@@ -49,11 +49,11 @@ public class SceneAdapterTests
         _ = folder!.Label.Should().Be("Group");
         _ = folder.ChildAdapters.Count.Should().Be(1);
 
-        var folderChild = folder.ChildAdapters[0] as SceneNodeAdapter;
+        var folderChild = folder.ChildAdapters[0] as LayoutNodeAdapter;
         _ = folderChild.Should().NotBeNull();
         _ = folderChild!.AttachedObject.Should().Be(nodeInFolder);
 
-        var fallback = children[1] as SceneNodeAdapter;
+        var fallback = children[1] as LayoutNodeAdapter;
         _ = fallback.Should().NotBeNull();
         _ = fallback!.AttachedObject.Should().Be(missingRoot);
         _ = fallback.Parent.Should().Be(adapter);
@@ -65,7 +65,7 @@ public class SceneAdapterTests
         var folder = new FolderAdapter(Guid.NewGuid(), "Folder") { IsExpanded = true };
         var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
-        var childAdapter = new SceneNodeAdapter(node);
+        var childAdapter = new LayoutNodeAdapter(node);
 
         folder.AddChildAdapter(childAdapter);
 
@@ -93,10 +93,10 @@ public class SceneAdapterTests
         var children = await adapter.Children.ConfigureAwait(false);
 
         _ = children.Count.Should().Be(2);
-        _ = (children[0] as SceneNodeAdapter).Should().NotBeNull();
-        _ = ((SceneNodeAdapter)children[0]).AttachedObject.Should().Be(root1);
-        _ = (children[1] as SceneNodeAdapter).Should().NotBeNull();
-        _ = ((SceneNodeAdapter)children[1]).AttachedObject.Should().Be(root2);
+        _ = (children[0] as LayoutNodeAdapter).Should().NotBeNull();
+        _ = ((LayoutNodeAdapter)children[0]).AttachedObject.Should().Be(root1);
+        _ = (children[1] as LayoutNodeAdapter).Should().NotBeNull();
+        _ = ((LayoutNodeAdapter)children[1]).AttachedObject.Should().Be(root2);
     }
 
     [TestMethod]
@@ -105,7 +105,7 @@ public class SceneAdapterTests
         var folder = new FolderAdapter(Guid.NewGuid(), "Folder") { IsExpanded = true };
         var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Node" };
-        var childAdapter = new SceneNodeAdapter(node);
+        var childAdapter = new LayoutNodeAdapter(node);
 
         folder.AddChildAdapter(childAdapter);
         var children = await folder.Children.ConfigureAwait(false);
@@ -124,7 +124,7 @@ public class SceneAdapterTests
     {
         var scene = new Scene(new Mock<IProject>().Object) { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
-        var adapter = new SceneNodeAdapter(node);
+        var adapter = new LayoutNodeAdapter(node);
 
         string? lastProperty = null;
         adapter.PropertyChanged += (_, args) => lastProperty = args.PropertyName;
@@ -179,13 +179,13 @@ public class SceneAdapterTests
         _ = folder!.Label.Should().Be("Group");
         _ = folder.ChildAdapters.Count.Should().Be(1);
         _ = folder.ChildAdapters[0].Should().BeOfType<LayoutNodeAdapter>();
-        _ = ((LayoutNodeAdapter)folder.ChildAdapters[0]).AttachedObject.AttachedObject.Should().Be(nodeInFolder);
+        _ = ((LayoutNodeAdapter)folder.ChildAdapters[0]).AttachedObject.Should().Be(nodeInFolder);
 
         _ = children[1].Should().BeOfType<LayoutNodeAdapter>();
-        _ = ((LayoutNodeAdapter)children[1]).AttachedObject.AttachedObject.Should().Be(nodeAtRoot);
+        _ = ((LayoutNodeAdapter)children[1]).AttachedObject.Should().Be(nodeAtRoot);
 
         _ = children[2].Should().BeOfType<LayoutNodeAdapter>();
-        _ = ((LayoutNodeAdapter)children[2]).AttachedObject.AttachedObject.Should().Be(missingRoot);
+        _ = ((LayoutNodeAdapter)children[2]).AttachedObject.Should().Be(missingRoot);
     }
 
     [TestMethod]
@@ -196,12 +196,12 @@ public class SceneAdapterTests
         var child = new SceneNode(scene) { Name = "Child" };
         parent.AddChild(child);
 
-        var adapter = new SceneNodeAdapter(parent);
+        var adapter = new LayoutNodeAdapter(parent);
         var children = await adapter.Children.ConfigureAwait(false);
 
         _ = children.Count.Should().Be(1);
-        _ = (children[0] as SceneNodeAdapter).Should().NotBeNull();
-        _ = ((SceneNodeAdapter)children[0]).AttachedObject.Should().Be(child);
+        _ = (children[0] as LayoutNodeAdapter).Should().NotBeNull();
+        _ = ((LayoutNodeAdapter)children[0]).AttachedObject.Should().Be(child);
     }
 
     [TestMethod]
@@ -212,13 +212,12 @@ public class SceneAdapterTests
         var child = new SceneNode(scene) { Name = "Child" };
         parent.AddChild(child);
 
-        var sceneNodeAdapter = new SceneNodeAdapter(parent);
-        var layoutNodeAdapter = new LayoutNodeAdapter(sceneNodeAdapter);
+        var layoutNodeAdapter = new LayoutNodeAdapter(parent);
 
         var children = await layoutNodeAdapter.Children.ConfigureAwait(false);
 
         _ = children.Count.Should().Be(1);
         _ = (children[0] as LayoutNodeAdapter).Should().NotBeNull();
-        _ = ((LayoutNodeAdapter)children[0]).AttachedObject.AttachedObject.Should().Be(child);
+        _ = ((LayoutNodeAdapter)children[0]).AttachedObject.Should().Be(child);
     }
 }

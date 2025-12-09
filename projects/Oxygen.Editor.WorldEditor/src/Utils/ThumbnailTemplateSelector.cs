@@ -6,9 +6,8 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
-using SceneAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneAdapter;
-using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 using LayoutNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.LayoutNodeAdapter;
+using SceneAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneAdapter;
 
 namespace Oxygen.Editor.WorldEditor.Utils;
 
@@ -46,7 +45,6 @@ public class ThumbnailTemplateSelector : DataTemplateSelector
         => item switch
         {
             SceneAdapter => this.SceneTemplate,
-            SceneNodeAdapter => this.EntityTemplate,
             LayoutNodeAdapter => this.EntityTemplate,
             Oxygen.Editor.WorldEditor.SceneExplorer.FolderAdapter => this.FolderTemplate,
             _ => null,
