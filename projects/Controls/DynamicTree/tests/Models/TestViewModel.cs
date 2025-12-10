@@ -22,6 +22,14 @@ internal partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactor
     /// <inheritdoc cref="DynamicTreeViewModel.InsertItemAsync"/>
     public async Task InsertItemAsyncPublic(int relativeIndex, ITreeItem parent, ITreeItem item) => await this.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(false);
 
+    public async Task MoveItemAsyncPublic(ITreeItem item, ITreeItem newParent, int newIndex) => await this.MoveItemAsync(item, newParent, newIndex).ConfigureAwait(false);
+
+    public async Task MoveItemsAsyncPublic(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex) => await this.MoveItemsAsync(items, newParent, startIndex).ConfigureAwait(false);
+
+    public async Task ReorderItemAsyncPublic(ITreeItem item, int newIndex) => await this.ReorderItemAsync(item, newIndex).ConfigureAwait(false);
+
+    public async Task ReorderItemsAsyncPublic(IReadOnlyList<ITreeItem> items, int startIndex) => await this.ReorderItemsAsync(items, startIndex).ConfigureAwait(false);
+
     /// <inheritdoc cref="DynamicTreeViewModel.SelectionModel"/>
     public SelectionModel<ITreeItem>? GetSelectionModel() => this.SelectionModel;
 

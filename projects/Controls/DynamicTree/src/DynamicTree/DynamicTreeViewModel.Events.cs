@@ -43,4 +43,22 @@ public abstract partial class DynamicTreeViewModel
     ///     Fires when an item is added to the dynamic tree.
     /// </summary>
     public event EventHandler<TreeItemAddedEventArgs>? ItemAdded;
+
+    /// <summary>
+    ///     Fires before an item is moved within the dynamic tree.
+    /// </summary>
+    /// <remarks>
+    ///     Handlers may veto the move by setting <see cref="TreeItemBeingMovedEventArgs.Proceed" /> to
+    ///     <see langword="false" />, or adjust the target parent and index via the event args.
+    /// </remarks>
+    public event EventHandler<TreeItemBeingMovedEventArgs>? ItemBeingMoved;
+
+    /// <summary>
+    ///     Fires after one or more items have been moved within the dynamic tree.
+    /// </summary>
+    /// <remarks>
+    ///     Even single-item moves are reported via <see cref="TreeItemsMovedEventArgs" /> with a single entry
+    ///     in <see cref="TreeItemsMovedEventArgs.Moves" />.
+    /// </remarks>
+    public event EventHandler<TreeItemsMovedEventArgs>? ItemMoved;
 }
