@@ -201,7 +201,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
-    protected override async Task RemoveSelectedItems()
+    public override async Task RemoveSelectedItems()
     {
         // When users delete items, the tree triggers ItemBeingRemoved/ItemRemoved events.
         // Those same events are also raised when items are moved in the tree (drag/drop).

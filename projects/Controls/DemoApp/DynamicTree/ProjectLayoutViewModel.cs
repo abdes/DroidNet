@@ -84,7 +84,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
     /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
-    protected override async Task RemoveSelectedItems()
+    public override async Task RemoveSelectedItems()
     {
         UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
         await base.RemoveSelectedItems().ConfigureAwait(false);

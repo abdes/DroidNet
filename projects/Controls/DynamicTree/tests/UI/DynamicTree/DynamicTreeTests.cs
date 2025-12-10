@@ -38,7 +38,7 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
             // Assert
             _ = this.viewModel.Should().NotBeNull();
             var shownItems = this.viewModel!.ShownItems;
-            _ = shownItems.Count.Should().Be(1);
+            _ = shownItems.Should().ContainSingle();
 
             var rootItem = shownItems.FirstOrDefault();
             _ = rootItem.Should().NotBeNull();
@@ -80,6 +80,31 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
                 var item = itemsSourceView.GetAt(i);
                 _ = item.Should().Be(this.viewModel.ShownItems[i]);
             }
+        });
+
+    [TestMethod]
+    public Task MoveItems_MultiSelectionPreserved_Async() => EnqueueAsync(
+        async () =>
+        {
+            // Arrange
+            var vm = this.viewModel!;
+            var root = (TreeItemAdapter)vm.ShownItems[0];
+            await vm.ExpandItemAsync(root).ConfigureAwait(true);
+
+            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var secondChild = (TreeItemAdapter)vm.ShownItems[2];
+
+            vm.ClearAndSelectItem(firstChild);
+            vm.SelectItem(secondChild);
+
+            // Act
+            await vm.MoveItemsAsync([firstChild, secondChild], root, 0).ConfigureAwait(true);
+
+            // Assert
+            var selectedItems = vm.ShownItems.Where(item => item.IsSelected).ToList();
+            _ = selectedItems.Should().HaveCount(2);
+            _ = selectedItems[0].Should().BeSameAs(firstChild);
+            _ = selectedItems[1].Should().BeSameAs(secondChild);
         });
 
     protected override async Task TestSetupAsync()

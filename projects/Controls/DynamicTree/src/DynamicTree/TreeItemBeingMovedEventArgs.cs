@@ -14,7 +14,7 @@ namespace DroidNet.Controls;
 public class TreeItemBeingMovedEventArgs : DynamicTreeEventArgs
 {
     /// <summary>
-    ///     Gets or sets the parent the item currently belongs to.
+    ///     Gets the parent the item currently belongs to.
     /// </summary>
     public required ITreeItem PreviousParent { get; init; }
 

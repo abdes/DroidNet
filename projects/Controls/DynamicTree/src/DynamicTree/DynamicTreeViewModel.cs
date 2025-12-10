@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using static DroidNet.Controls.TreeDisplayHelper;
 
 namespace DroidNet.Controls;
 
@@ -31,6 +32,7 @@ namespace DroidNet.Controls;
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
+    private TreeDisplayHelper? displayHelper;
 
     /* TODO: need to make this private and expose a read only collection*/
 
@@ -48,6 +50,32 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
     /// </summary>
     public ILoggerFactory? LoggerFactory { get; } = loggerFactory;
+
+    private TreeDisplayHelper DisplayHelper => this.displayHelper ??=
+        new TreeDisplayHelper(
+            this.ShownItems,
+            () => this.SelectionModel,
+            this.ExpandItemAsync,
+            new TreeDisplayEventCallbacks(
+                args =>
+                {
+                    this.ItemBeingAdded?.Invoke(this, args);
+                    return args.Proceed;
+                },
+                args => this.ItemAdded?.Invoke(this, args),
+                args =>
+                {
+                    this.ItemBeingRemoved?.Invoke(this, args);
+                    return args.Proceed;
+                },
+                args => this.ItemRemoved?.Invoke(this, args),
+                args =>
+                {
+                    this.ItemBeingMoved?.Invoke(this, args);
+                    return args.Proceed;
+                },
+                args => this.ItemMoved?.Invoke(this, args)),
+            this.logger);
 
     /// <summary>
     ///     Expands the specified tree item (which must be visible in the tree) asynchronously.
@@ -102,7 +130,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     only its children are added.
     /// </param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    protected async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
+    public async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
     {
         this.LogInitializeRoot(root, skipRoot);
         this.SelectionModel?.ClearSelection();
@@ -134,7 +162,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="parent">The parent that receives the child.</param>
     /// <param name="item">The child item to insert.</param>
     /// <returns>A task that completes when the insertion finishes.</returns>
-    protected async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
+    public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
         await this.DisplayHelper.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(true);
     }
@@ -145,7 +173,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="item">The item to remove.</param>
     /// <param name="updateSelection">Whether selection should be updated after removal.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
-    protected async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
+    public async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
     {
         await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
     }
@@ -162,10 +190,46 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     selected items that are not locked are removed; selection updates are deferred during
     ///     batch removes to avoid a burst of selection change events.
     /// </remarks>
-    protected virtual async Task RemoveSelectedItems()
-    {
-        await this.DisplayHelper.RemoveSelectedItemsAsync().ConfigureAwait(true);
-    }
+    public virtual async Task RemoveSelectedItems()
+        => await this.DisplayHelper.RemoveSelectedItemsAsync().ConfigureAwait(true);
+
+    /// <summary>
+    ///     Moves an item to a different parent and position within the tree asynchronously.
+    /// </summary>
+    /// <param name="item">The item to move.</param>
+    /// <param name="newParent">The new parent under which the item is inserted.</param>
+    /// <param name="newIndex">The zero-based index at which the item is inserted beneath the new parent.</param>
+    /// <returns>A task that completes once the move finishes.</returns>
+    public Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
+        => this.DisplayHelper.MoveItemAsync(item, newParent, newIndex);
+
+    /// <summary>
+    ///     Moves a batch of items into a new parent while preserving their relative order.
+    /// </summary>
+    /// <param name="items">The list of items to move.</param>
+    /// <param name="newParent">The parent that receives the moved items.</param>
+    /// <param name="startIndex">The index within <paramref name="newParent" /> where the first item is inserted.</param>
+    /// <returns>A task that completes once the batch move finishes.</returns>
+    public Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
+        => this.DisplayHelper.MoveItemsAsync(items, newParent, startIndex);
+
+    /// <summary>
+    ///     Reorders a single item among its siblings asynchronously.
+    /// </summary>
+    /// <param name="item">The item whose shown position should change.</param>
+    /// <param name="newIndex">The new zero-based index among the current parent&apos;s children.</param>
+    /// <returns>A task that completes once the reorder finishes.</returns>
+    public Task ReorderItemAsync(ITreeItem item, int newIndex)
+        => this.DisplayHelper.ReorderItemAsync(item, newIndex);
+
+    /// <summary>
+    ///     Reorders a contiguous block of shown items beneath their current parent asynchronously.
+    /// </summary>
+    /// <param name="items">The ordered list of items to reposition.</param>
+    /// <param name="startIndex">The destination index of the first item in <paramref name="items" />.</param>
+    /// <returns>A task that completes once the block reorder finishes.</returns>
+    public Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
+        => this.DisplayHelper.ReorderItemsAsync(items, startIndex);
 
     /// <summary>
     ///     Toggles the expansion state of the specified tree item asynchronously.

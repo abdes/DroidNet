@@ -3,14 +3,16 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:lc="using:DroidNet.Controls">
+    xmlns:dnc="using:DroidNet.Controls">
 
-    <Style BasedOn="{StaticResource DefaultDynamicTreeStyle}" TargetType="lc:DynamicTree" />
+    <dnc:DropIndicatorEqualsConverter x:Key="DropIndicatorEqualsConverter" />
 
-    <Style x:Key="DefaultDynamicTreeStyle" TargetType="lc:DynamicTree">
+    <Style BasedOn="{StaticResource DefaultDynamicTreeStyle}" TargetType="dnc:DynamicTree" />
+
+    <Style x:Key="DefaultDynamicTreeStyle" TargetType="dnc:DynamicTree">
         <Setter Property="Template">
             <Setter.Value>
-                <ControlTemplate TargetType="lc:DynamicTree">
+                <ControlTemplate TargetType="dnc:DynamicTree">
                     <Grid
                         Name="PartRootGrid"
                         Background="{Binding Path=Background, RelativeSource={RelativeSource Mode=TemplatedParent}}"
@@ -20,7 +22,29 @@
                             <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=ViewModel.ShownItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate>
-                                        <lc:DynamicTreeItem x:Name="PartTreeItem" ItemAdapter="{Binding}" />
+                                        <Grid AllowDrop="True">
+                                            <Border
+                                                Height="2"
+                                                Margin="0,-1,0,0"
+                                                VerticalAlignment="Top"
+                                                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                                Canvas.ZIndex="1"
+                                                IsHitTestVisible="False"
+                                                Visibility="{Binding ElementName=PartTreeItem, Path=(dnc:DynamicTree.DropIndicator), Converter={StaticResource DropIndicatorEqualsConverter}, ConverterParameter=Before}" />
+                                            <Border
+                                                Height="2"
+                                                Margin="0,0,0,-1"
+                                                VerticalAlignment="Bottom"
+                                                Background="{ThemeResource SystemControlHighlightAccentBrush}"
+                                                Canvas.ZIndex="1"
+                                                IsHitTestVisible="False"
+                                                Visibility="{Binding ElementName=PartTreeItem, Path=(dnc:DynamicTree.DropIndicator), Converter={StaticResource DropIndicatorEqualsConverter}, ConverterParameter=After}" />
+                                            <dnc:DynamicTreeItem
+                                                x:Name="PartTreeItem"
+                                                AllowDrop="True"
+                                                CanDrag="True"
+                                                ItemAdapter="{Binding}" />
+                                        </Grid>
                                     </DataTemplate>
                                 </ItemsRepeater.ItemTemplate>
                             </ItemsRepeater>
