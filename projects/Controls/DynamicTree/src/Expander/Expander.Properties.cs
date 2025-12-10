@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls;
@@ -24,6 +26,16 @@ public partial class Expander
             (d, e) => ((Expander)d).OnIsExpandedChanged((bool)e.OldValue, (bool)e.NewValue)));
 
     /// <summary>
+    ///     Identifies the <see cref="LoggerFactory" /> dependency property. Hosts can provide an
+    ///     <see cref="ILoggerFactory" /> to enable logging for NumberBox instances.
+    /// </summary>
+    public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
+        nameof(ILoggerFactory),
+        typeof(ILoggerFactory),
+        typeof(Expander),
+        new PropertyMetadata(defaultValue: null, (d, e) => ((Expander)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>
     ///     Gets or sets a value indicating whether the <see cref="Expander" /> is in the expanded or collapsed state.
     /// </summary>
     /// <value>
@@ -40,6 +52,17 @@ public partial class Expander
     }
 
     /// <summary>
+    ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
+    ///     Assigning the factory will initialize the internal logger to a non-null logger instance
+    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    /// </summary>
+    public ILoggerFactory? LoggerFactory
+    {
+        get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
+        set => this.SetValue(LoggerFactoryProperty, value);
+    }
+
+    /// <summary>
     ///     Called when the <see cref="IsExpanded" /> property changes.
     /// </summary>
     /// <param name="oldValue">The previous value of the <see cref="IsExpanded" /> property.</param>
@@ -51,4 +74,8 @@ public partial class Expander
             "expecting SetValue() to not call this method when the value does not change");
         this.UpdateVisualState();
     }
+
+    // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
+    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
+        this.logger = loggerFactory?.CreateLogger<Expander>() ?? NullLoggerFactory.Instance.CreateLogger<Expander>();
 }

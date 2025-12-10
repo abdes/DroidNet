@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.ProjectExplorer.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -39,9 +39,6 @@
     </UserControl.Resources>
 
     <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-        <dnc:DynamicTree
-            SelectionMode="Multiple"
-            ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-            ViewModel="{x:Bind ViewModel}" />
+        <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
     </Border>
 </UserControl>

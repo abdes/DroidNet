@@ -27,11 +27,11 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
         () =>
         {
             // Assert
-            _ = this.treeItem!.FindDescendant<Grid>(e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, "PartContentPresenter", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, "PartExpander", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<TextBlock>(e => string.Equals(e.Name, "PartItemName", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem!.FindDescendant<Popup>(e => string.Equals(e.Name, "PartInPlaceRename", StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ContentPresenterPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<TextBlock>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ItemNamePart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Popup>(e => string.Equals(e.Name, Controls.DynamicTreeItem.InPlaceRenamePart, StringComparison.Ordinal)).Should().NotBeNull();
         });
 
     [TestMethod]
@@ -46,11 +46,11 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             this.treeItem.ItemAdapter = new TreeItemAdapterMock { Label = "Modified Item" };
 
             // Assert
-            _ = this.treeItem.FindDescendant<Grid>(e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, "PartContentPresenter", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, "PartExpander", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem.FindDescendant<TextBlock>(e => string.Equals(e.Name, "PartItemName", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.treeItem.FindDescendant<Popup>(e => string.Equals(e.Name, "PartInPlaceRename", StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<ContentPresenter>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ContentPresenterPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<TextBlock>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ItemNamePart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.treeItem!.FindDescendant<Popup>(e => string.Equals(e.Name, Controls.DynamicTreeItem.InPlaceRenamePart, StringComparison.Ordinal)).Should().NotBeNull();
         });
 
     [TestMethod]
@@ -61,7 +61,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
         var eventFired = false;
 
         // Find the Expander
-        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, "PartExpander", StringComparison.Ordinal));
+        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
         _ = expander.Should().NotBeNull();
 
         // Handle the treeItem's Expand event and set IsExpanded to true
@@ -87,7 +87,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
         var eventFired = false;
 
         // Find the Expander
-        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, "PartExpander", StringComparison.Ordinal));
+        var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
         _ = expander.Should().NotBeNull();
 
         // Initially expand it
@@ -120,7 +120,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
         this.itemAdapter!.IsSelected = true;
 
         // Assert
-        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain("Selected");
+        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.SelectedVisualState);
     });
 
     [TestMethod]
@@ -134,7 +134,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
         this.itemAdapter!.IsSelected = false;
 
         // Assert
-        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain("Normal");
+        _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.NormalVisualState);
     });
 
     [TestMethod]
@@ -144,13 +144,13 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             // Setup
             this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: false) { IsExpanded = false };
             this.itemAdapter!.IsSelected = true;
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain("Collapsed");
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(Controls.DynamicTreeItem.CollapsedVisualState);
 
             // Act
             this.treeItem.ItemAdapter.IsExpanded = true;
 
             // Assert
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain(["Expanded"]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.ExpandedVisualState]);
         });
 
     [TestMethod]
@@ -161,8 +161,8 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: true) { IsExpanded = false };
 
             // Assert
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(["WithChildren", "Collapsed"]);
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain(["Expanded"]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain([Controls.DynamicTreeItem.WithChildrenVisualState, Controls.DynamicTreeItem.CollapsedVisualState]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.ExpandedVisualState]);
         });
 
     [TestMethod]
@@ -173,11 +173,11 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             this.treeItem!.ItemAdapter = new TreeItemAdapterMock(withChildren: true) { IsExpanded = true };
 
             // Assert
-            var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, "PartExpander", StringComparison.Ordinal));
+            var expander = this.treeItem!.FindDescendant<Controls.Expander>(e => string.Equals(e.Name, Controls.DynamicTreeItem.ExpanderPart, StringComparison.Ordinal));
             _ = expander.Should().NotBeNull();
             _ = expander!.IsExpanded.Should().BeTrue();
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain(["WithChildren", "Expanded"]);
-            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain(["Collapsed"]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().Contain([Controls.DynamicTreeItem.WithChildrenVisualState, Controls.DynamicTreeItem.ExpandedVisualState]);
+            _ = this.vsm!.GetCurrentStates(this.treeItem).Should().NotContain([Controls.DynamicTreeItem.CollapsedVisualState]);
         });
 
     protected override async Task TestSetupAsync()
@@ -192,7 +192,7 @@ public partial class DynamicTreeItemTests : VisualUserInterfaceTests
             this.treeItem = new Controls.DynamicTreeItem() { ItemAdapter = this.itemAdapter };
             await LoadTestContentAsync(this.treeItem).ConfigureAwait(true);
 
-            var vsmTarget = this.treeItem.FindDescendant<Grid>(e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal));
+            var vsmTarget = this.treeItem.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTreeItem.RootGridPart, StringComparison.Ordinal));
             _ = vsmTarget.Should().NotBeNull();
             this.vsm = new TestVisualStateManager();
             VisualStateManager.SetCustomVisualStateManager(vsmTarget, this.vsm);

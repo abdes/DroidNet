@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.DynamicTree.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -38,10 +38,7 @@
             BorderBrush="Red"
             BorderThickness="1"
             CornerRadius="3">
-            <dnc:DynamicTree
-                SelectionMode="Multiple"
-                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
-                ViewModel="{x:Bind ViewModel}" />
+            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
         </Border>
         <Grid Grid.Row="1">
             <Grid.Resources>

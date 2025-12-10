@@ -4,7 +4,9 @@
 
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -24,9 +26,23 @@ namespace DroidNet.Controls;
 [ViewModel(typeof(DynamicTreeViewModel))]
 public partial class DynamicTree : Control
 {
-    private const string RootGridPart = "PartRootGrid";
-    private const string ItemsRepeaterPart = "PartItemsRepeater";
-    private const string TreeItemPart = "PartTreeItem";
+    /// <summary>
+    /// The name of the root grid part in the DynamicTree control template.
+    /// </summary>
+    public const string RootGridPart = "PartRootGrid";
+
+    /// <summary>
+    /// The name of the ItemsRepeater part in the DynamicTree control template.
+    /// </summary>
+    public const string ItemsRepeaterPart = "PartItemsRepeater";
+
+    /// <summary>
+    /// The name of an instantiated tree item part within the DynamicTree item template.
+    /// Use to locate the nested <see cref="DynamicTreeItem" /> within the ItemsRepeater.
+    /// </summary>
+    public const string TreeItemPart = "PartTreeItem";
+
+    private ILogger? logger;
 
     private ItemsRepeater? itemsRepeater;
     private Grid? rootGrid;
@@ -38,22 +54,8 @@ public partial class DynamicTree : Control
     {
         this.DefaultStyleKey = typeof(DynamicTree);
 
-        this.Loaded += (_, _) =>
-        {
-            // Update the ViewModel SelectionMode property on load and whenever the ViewModel changes.
-            this.ViewModel!.SelectionMode = this.SelectionMode;
-
-            // Handle key bindings
-            this.KeyDown += this.OnKeyDown;
-        };
-
-        this.ViewModelChanged += (_, _) =>
-        {
-            if (this.ViewModel is not null && this.IsLoaded)
-            {
-                this.ViewModel.SelectionMode = this.SelectionMode;
-            }
-        };
+        this.Loaded += this.OnLoaded;
+        this.Unloaded += this.OnUnloaded;
     }
 
     /// <inheritdoc />
@@ -71,7 +73,7 @@ public partial class DynamicTree : Control
 
         if (this.GetTemplateChild(ItemsRepeaterPart) is not ItemsRepeater itemsRepeaterPart)
         {
-            throw new InvalidOperationException("PartItemsRepeater not found in the control template.");
+            throw new InvalidOperationException($"{ItemsRepeaterPart} not found in the control template.");
         }
 
         this.itemsRepeater = itemsRepeaterPart;
@@ -95,6 +97,31 @@ public partial class DynamicTree : Control
     private static bool IsShiftKeyDown() => InputKeyboardSource
         .GetKeyStateForCurrentThread(VirtualKey.Shift)
         .HasFlag(CoreVirtualKeyStates.Down);
+
+    private void OnLoaded(object? sender, RoutedEventArgs args)
+    {
+        // Handle key bindings
+        this.KeyDown += this.OnKeyDown;
+
+        // Subscribe to view model change notifications and attach to any existing ViewModel
+        this.ViewModelChanged += this.OnViewModelChanged;
+        this.OnViewModelChanged(this, new ViewModelChangedEventArgs<DynamicTreeViewModel>(oldValue: null));
+    }
+
+    private void OnUnloaded(object? sender, RoutedEventArgs args)
+    {
+        // Remove handlers that were added on load
+        this.KeyDown -= this.OnKeyDown;
+
+        // Remove subscriptions to the ViewModel
+        if (this.ViewModel is not null)
+        {
+            this.ViewModel.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        }
+
+        // Stop listening to the ViewModelChanged event while unloaded
+        this.ViewModelChanged -= this.OnViewModelChanged;
+    }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
     {
@@ -121,12 +148,9 @@ public partial class DynamicTree : Control
     }
 
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
-    [SuppressMessage(
-        "ReSharper",
-        "SwitchStatementMissingSomeEnumCasesNoDefault",
-        Justification = "we only handle some keys")]
     private void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
+        this.LogKeyDown(args.Key);
         switch (args.Key)
         {
             case VirtualKey.A when IsControlKeyDown():
@@ -168,6 +192,11 @@ public partial class DynamicTree : Control
 
         element.OnElementPrepared();
 
+        // Propagate the control's view model logger factory to the realized element.
+        // The ViewModel.LoggerFactory never changes after construction, so we set it once
+        // when the element gets prepared.
+        element.LoggerFactory = this.ViewModel?.LoggerFactory;
+
         element.PointerPressed += this.TreeItem_PointerPressed;
 
         // If we have a TreeItemPart with a DynamicTreeItem, then setup event handlers on it for
@@ -182,6 +211,28 @@ public partial class DynamicTree : Control
         treeItem.DoubleTapped += this.TreeItem_DoubleTapped;
 
         treeItem.UpdateItemMargin();
+    }
+
+    private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<DynamicTreeViewModel> args)
+    {
+        // Detach any handlers from the previous ViewModel
+        if (args.OldValue is not null)
+        {
+            args.OldValue.PropertyChanged -= this.ViewModel_OnPropertyChanged;
+        }
+
+        // Attach handlers to the new ViewModel
+        if (this.ViewModel is not null)
+        {
+            this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>();
+
+            this.ViewModel.PropertyChanged += this.ViewModel_OnPropertyChanged;
+        }
+    }
+
+    private void ViewModel_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        // No action needed for now; placeholder for future property change handling.
     }
 
     private void TreeItem_PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -236,14 +287,12 @@ public partial class DynamicTree : Control
         args.Handled = true;
 
         // TODO: decide what to do when tree item is double tapped
-        Debug.WriteLine($"Item double tapped: {sender}");
+        this.LogDoubleTapped(args.OriginalSource);
     }
 
-    [SuppressMessage("ReSharper", "AsyncVoidMethod", Justification = "void event handler")]
     private async void OnExpandTreeItem(object? sender, DynamicTreeEventArgs args)
         => await this.ViewModel!.ExpandItemAsync(args.TreeItem).ConfigureAwait(true);
 
-    [SuppressMessage("ReSharper", "AsyncVoidMethod", Justification = "void event handler")]
     private async void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
         => await this.ViewModel!.CollapseItemAsync(args.TreeItem).ConfigureAwait(true);
 }

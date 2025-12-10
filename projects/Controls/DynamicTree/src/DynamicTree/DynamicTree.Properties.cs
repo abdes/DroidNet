@@ -13,15 +13,6 @@ namespace DroidNet.Controls;
 public partial class DynamicTree
 {
     /// <summary>
-    ///     The backing <see cref="DependencyProperty" /> for the <see cref="SelectionMode" /> property.
-    /// </summary>
-    public static readonly DependencyProperty SelectionModeProperty = DependencyProperty.Register(
-        nameof(SelectionMode),
-        typeof(SelectionMode),
-        typeof(DynamicTree),
-        new PropertyMetadata(SelectionMode.None));
-
-    /// <summary>
     ///     The backing <see cref="DependencyProperty" /> for the <see cref="ThumbnailTemplateSelector" /> property.
     /// </summary>
     public static readonly DependencyProperty ThumbnailTemplateSelectorProperty = DependencyProperty.Register(
@@ -29,15 +20,6 @@ public partial class DynamicTree
         typeof(DataTemplateSelector),
         typeof(DynamicTree),
         new PropertyMetadata(defaultValue: null));
-
-    /// <summary>
-    ///     Gets or sets the selection mode of the dynamic tree.
-    /// </summary>
-    public SelectionMode SelectionMode
-    {
-        get => (SelectionMode)this.GetValue(SelectionModeProperty);
-        set => this.SetValue(SelectionModeProperty, value);
-    }
 
     /// <summary>
     ///     Gets or sets the data template selector for the thumbnails in the dynamic tree.

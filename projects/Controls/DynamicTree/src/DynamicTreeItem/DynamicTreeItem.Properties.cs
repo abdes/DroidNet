@@ -5,6 +5,8 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 
 namespace DroidNet.Controls;
@@ -31,6 +33,16 @@ public partial class DynamicTreeItem
             (d, e) => ((DynamicTreeItem)d).OnItemAdapterChanged((ITreeItem)e.OldValue, (ITreeItem)e.NewValue)));
 
     /// <summary>
+    ///     Identifies the <see cref="ILoggerFactory" /> dependency property. Hosts can provide an
+    ///     <see cref="ILoggerFactory" /> to enable logging for NumberBox instances.
+    /// </summary>
+    public static readonly DependencyProperty LoggerFactoryProperty = DependencyProperty.Register(
+        nameof(ILoggerFactory),
+        typeof(ILoggerFactory),
+        typeof(DynamicTreeItem),
+        new PropertyMetadata(defaultValue: null, (d, e) => ((DynamicTreeItem)d).OnLoggerFactoryChanged((ILoggerFactory?)e.NewValue)));
+
+    /// <summary>
     ///     Gets or sets the adapter that provides data for the tree item.
     /// </summary>
     /// <value>
@@ -46,6 +58,17 @@ public partial class DynamicTreeItem
     {
         get => (TreeItemAdapter)this.GetValue(ItemAdapterProperty);
         set => this.SetValue(ItemAdapterProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets the <see cref="ILoggerFactory" /> used to create a logger for this control.
+    ///     Assigning the factory will initialize the internal logger to a non-null logger instance
+    ///     (falls back to <see cref="NullLoggerFactory.Instance"/> if null).
+    /// </summary>
+    public ILoggerFactory? LoggerFactory
+    {
+        get => (ILoggerFactory?)this.GetValue(LoggerFactoryProperty);
+        set => this.SetValue(LoggerFactoryProperty, value);
     }
 
     /// <summary>
@@ -90,4 +113,8 @@ public partial class DynamicTreeItem
         Debug.WriteLine($"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
         this.UpdateSelectionVisualState(adapter.IsSelected);
     }
+
+    // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
+    private void OnLoggerFactoryChanged(ILoggerFactory? loggerFactory) =>
+        this.logger = loggerFactory?.CreateLogger<DynamicTreeItem>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeItem>();
 }

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -35,11 +36,27 @@ namespace DroidNet.Controls;
 [TemplatePart(Name = ActiveElement, Type = typeof(UIElement))]
 public partial class Expander : Control
 {
-    private const string ExpansionVisualStates = "ExpansionStates";
-    private const string ExpandedVisualState = "Expanded";
-    private const string CollapsedVisualState = "Collapsed";
+    /// <summary>
+    /// The name of the VisualStateGroup that contains the expand/collapse states.
+    /// </summary>
+    public const string ExpansionVisualStates = "ExpansionStates";
 
-    private const string ActiveElement = "PART_ActiveElement";
+    /// <summary>
+    /// Visual state name used when the control is expanded.
+    /// </summary>
+    public const string ExpandedVisualState = "Expanded";
+
+    /// <summary>
+    /// Visual state name used when the control is collapsed.
+    /// </summary>
+    public const string CollapsedVisualState = "Collapsed";
+
+    /// <summary>
+    /// The name of the active element part used to handle input events.
+    /// </summary>
+    public const string ActiveElement = "PART_ActiveElement";
+
+    private ILogger? logger;
 
     private UIElement? activeElement;
 
@@ -81,6 +98,8 @@ public partial class Expander : Control
     /// </example>
     public void Toggle()
     {
+        this.LogToggle();
+
         if (!this.IsExpanded)
         {
             this.Expand?.Invoke(this, EventArgs.Empty);

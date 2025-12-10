@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls.Tests;
 
@@ -12,7 +13,22 @@ namespace DroidNet.Controls.Tests;
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
 public class ViewModelExpansionTests
 {
-    private readonly TestViewModel viewModel = new(skipRoot: false);
+    private readonly ILoggerFactory loggerFactory;
+    private readonly TestViewModel viewModel;
+
+    public ViewModelExpansionTests()
+    {
+        this.loggerFactory = LoggerFactory.Create(builder =>
+        {
+            _ = builder.AddDebug();
+            _ = builder.SetMinimumLevel(LogLevel.Trace);
+        });
+
+        this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.loggerFactory);
+    }
+
+    [TestCleanup]
+    public void Cleanup() => this.loggerFactory.Dispose();
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
@@ -67,7 +83,16 @@ public class ViewModelExpansionTests
 
         // Assert
         _ = await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("item not yet visible in the tree, cannot expand it").ConfigureAwait(false);
+            .WithMessage("*not expanded*").ConfigureAwait(false);
+
+        // Act - Expand then collapse parent
+        await this.viewModel.ExpandItemAsync(parentItem).ConfigureAwait(false);
+        await this.viewModel.CollapseItemAsync(parentItem).ConfigureAwait(false);
+        act = async () => await this.viewModel.ExpandItemAsync(childItem).ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not expanded*").ConfigureAwait(false);
     }
 
     [TestMethod]

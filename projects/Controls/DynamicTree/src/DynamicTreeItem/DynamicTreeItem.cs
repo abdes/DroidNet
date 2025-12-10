@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using System.Diagnostics;
+using Microsoft.Extensions.Logging;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -149,32 +150,115 @@ namespace DroidNet.Controls;
 [ContentProperty(Name = nameof(Content))]
 public partial class DynamicTreeItem : ContentControl
 {
-    private const string ThumbnailPresenterPart = "PartThumbnailPresenter";
-    private const string ExpanderPart = "PartExpander";
-    private const string RootGridPart = "PartRootGrid";
-    private const string ContentGridPart = "PartContentGrid";
-    private const string ContentPresenterPart = "PartContentPresenter";
-    private const string InPlaceRenamePart = "PartInPlaceRename";
-    private const string ItemNamePart = "PartItemName";
-    private const string ItemNameEditPart = "PartItemNameEdit";
+    /// <summary>
+    /// The name of the thumbnail presenter part used to host thumbnails inside the item template.
+    /// </summary>
+    public const string ThumbnailPresenterPart = "PartThumbnailPresenter";
 
-    private const string NameValidationState = "NameValidationStates";
-    private const string NameIsValidVisualState = "NameIsValid";
-    private const string NameIsInvalidVisualState = "NameIsInvalid";
+    /// <summary>
+    /// The name of the expander control part inside the tree item template.
+    /// </summary>
+    public const string ExpanderPart = "PartExpander";
 
-    private const string ExpansionVisualStates = "ExpansionStates";
-    private const string ExpandedVisualState = "Expanded";
-    private const string CollapsedVisualState = "Collapsed";
+    /// <summary>
+    /// The name of the root grid part in the tree item template.
+    /// </summary>
+    public const string RootGridPart = "PartRootGrid";
 
-    private const string HasChildrenVisualStates = "HasChildrenStates";
-    private const string WithChildrenVisualState = "WithChildren";
-    private const string NoChildrenVisualState = "NoChildren";
+    /// <summary>
+    /// The name of the content grid that wraps content inside a tree item template.
+    /// </summary>
+    public const string ContentGridPart = "PartContentGrid";
 
-    private const string CommonVisualStates = "CommonStates";
-    private const string NormalVisualState = "Normal";
-    private const string PointerOverVisualState = "PointerOver";
-    private const string PointerOverSelectedVisualState = "PointerOverSelected";
-    private const string SelectedVisualState = "Selected";
+    /// <summary>
+    /// The name of the content presenter part inside the tree item template.
+    /// </summary>
+    public const string ContentPresenterPart = "PartContentPresenter";
+
+    /// <summary>
+    /// The name of the popup that hosts in-place rename UI inside the tree item template.
+    /// </summary>
+    public const string InPlaceRenamePart = "PartInPlaceRename";
+
+    /// <summary>
+    /// The name of the text block that displays the item name inside the tree item template.
+    /// </summary>
+    public const string ItemNamePart = "PartItemName";
+
+    /// <summary>
+    /// The name of the text box used for editing the item's name in the template.
+    /// </summary>
+    public const string ItemNameEditPart = "PartItemNameEdit";
+
+    /// <summary>
+    /// The name of the VisualStateGroup used for name validation states.
+    /// </summary>
+    public const string NameValidationState = "NameValidationStates";
+
+    /// <summary>
+    /// Visual state name used when the item's name is valid.
+    /// </summary>
+    public const string NameIsValidVisualState = "NameIsValid";
+
+    /// <summary>
+    /// Visual state name used when the item's name is invalid.
+    /// </summary>
+    public const string NameIsInvalidVisualState = "NameIsInvalid";
+
+    /// <summary>
+    /// The name of the VisualStateGroup controlling expand/collapse states.
+    /// </summary>
+    public const string ExpansionVisualStates = "ExpansionStates";
+
+    /// <summary>
+    /// Visual state name used when the item is expanded.
+    /// </summary>
+    public const string ExpandedVisualState = "Expanded";
+
+    /// <summary>
+    /// Visual state name used when the item is collapsed.
+    /// </summary>
+    public const string CollapsedVisualState = "Collapsed";
+
+    /// <summary>
+    /// The name of the VisualStateGroup that indicates whether the item has children.
+    /// </summary>
+    public const string HasChildrenVisualStates = "HasChildrenStates";
+
+    /// <summary>
+    /// Visual state name used when the item has children.
+    /// </summary>
+    public const string WithChildrenVisualState = "WithChildren";
+
+    /// <summary>
+    /// Visual state name used when the item does not have children.
+    /// </summary>
+    public const string NoChildrenVisualState = "NoChildren";
+
+    /// <summary>
+    /// The canonical name of the VisualStateGroup that contains common selection states.
+    /// </summary>
+    public const string CommonVisualStates = "CommonStates";
+
+    /// <summary>
+    /// Visual state name used for a normal (unselected) item.
+    /// </summary>
+    public const string NormalVisualState = "Normal";
+
+    /// <summary>
+    /// Visual state name used for pointer over state when item is not selected.
+    /// </summary>
+    public const string PointerOverVisualState = "PointerOver";
+
+    /// <summary>
+    /// Visual state name used for pointer over state when item is already selected.
+    /// </summary>
+    public const string PointerOverSelectedVisualState = "PointerOverSelected";
+
+    /// <summary>
+    /// Visual state name used for a selected item.
+    /// </summary>
+    public const string SelectedVisualState = "Selected";
 
     /// <summary>
     ///     Default indent increment value.
@@ -182,6 +266,8 @@ public partial class DynamicTreeItem : ContentControl
     private const double DefaultIndentIncrement = 34.0;
 
     private readonly double indentIncrement;
+
+    private ILogger? logger;
 
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
     private Expander? expander;
@@ -228,6 +314,7 @@ public partial class DynamicTreeItem : ContentControl
         var extraLeftMargin = this.ItemAdapter.Depth * this.indentIncrement;
         Debug.Assert(extraLeftMargin >= 0, "negative margin means bad depth, i.e. bug");
         rootGrid.Margin = new Thickness(extraLeftMargin, 0, 0, 0);
+        this.LogItemMarginUpdated(extraLeftMargin);
     }
 
     /// <summary>
