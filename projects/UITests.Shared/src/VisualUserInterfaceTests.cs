@@ -119,6 +119,9 @@ public class VisualUserInterfaceTests
         // Give a chance to derived test classes to run their own cleanup code.
         await EnqueueAsync(this.TestCleanup).ConfigureAwait(true);
         await EnqueueAsync(this.TestCleanupAsync).ConfigureAwait(true);
+
+        // Ensure the LoggerFactory created for this test is disposed to free resources
+        this.LoggerFactory.Dispose();
     }
 
     /// <summary>
@@ -287,6 +290,18 @@ public class VisualUserInterfaceTests
     protected static async Task WaitForRenderAsync()
         => _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
 
+    /// <summary>
+    /// Waits until the specified visual state is recorded for the given control using the provided
+    /// <see cref="TestVisualStateManager"/>, or throws a <see cref="TimeoutException"/> if the state
+    /// is not reached within the specified timeout.
+    /// </summary>
+    /// <param name="vsm">The <see cref="TestVisualStateManager"/> instance to query for current states.</param>
+    /// <param name="control">The <see cref="FrameworkElement"/> control whose state is being monitored.</param>
+    /// <param name="stateName">The name of the visual state to wait for.</param>
+    /// <param name="timeout">The maximum duration to wait for the state to be reached.</param>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="vsm"/> or <paramref name="control"/> is <see langword="null"/>.</exception>
+    /// <exception cref="TimeoutException">Thrown if the specified state is not reached within the timeout period.</exception>
     protected static async Task WaitForStateAsync(TestVisualStateManager vsm, FrameworkElement control, string stateName, TimeSpan timeout)
     {
         ArgumentNullException.ThrowIfNull(vsm);
