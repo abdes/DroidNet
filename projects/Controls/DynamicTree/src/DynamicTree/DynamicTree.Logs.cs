@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI.Xaml;
 using Windows.System;
 
 namespace DroidNet.Controls;
@@ -41,5 +42,53 @@ public partial class DynamicTree
         {
             LogDoubleTapped(logger, source.ToString() ?? "<null>");
         }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Element prepared: {elementType} ItemLabel='{itemLabel}'")]
+    private static partial void LogElementPrepared(ILogger logger, string elementType, string? itemLabel);
+
+    [Conditional("DEBUG")]
+    private void LogElementPrepared(FrameworkElement? element)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        var elementType = element?.GetType().Name ?? "<unknown>";
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        LogElementPrepared(logger, elementType, itemLabel);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "Element clearing: {elementType} ItemLabel='{itemLabel}'")]
+    private static partial void LogElementClearing(ILogger logger, string elementType, string? itemLabel);
+
+    [Conditional("DEBUG")]
+    private void LogElementClearing(FrameworkElement? element)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        var elementType = element?.GetType().Name ?? "<unknown>";
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        LogElementClearing(logger, elementType, itemLabel);
     }
 }
