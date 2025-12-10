@@ -73,7 +73,7 @@ public class ViewModelBasicTests : ViewModelTestBase
 
         // Assert
         _ = viewModel.ShownItems.Should().HaveCount(2);
-        _ = viewModel.ShownItems[0].Should().Be(rootItem);
-        _ = viewModel.ShownItems[1].Should().Be(childItem);
+        _ = viewModel.ShownItems.Should().HaveElementAt(0, rootItem);
+        _ = viewModel.ShownItems.Should().HaveElementAt(1, childItem);
     }
 }

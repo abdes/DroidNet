@@ -28,6 +28,8 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         ((INotifyCollectionChanged)this.Selection.SelectedIndices).CollectionChanged += this.collectionChangedHandlerMock.Object;
     }
 
+    public TestContext TestContext { get; set; }
+
     private MultipleSelectionModel<ITreeItem> Selection => (this.viewModel.GetSelectionModel()! as MultipleSelectionModel<ITreeItem>)!;
 
     [TestMethod]
@@ -90,7 +92,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         // Assert
         _ = this.Selection.SelectedItem.Should().Be(item);
         _ = this.Selection.SelectedIndex.Should().Be(1);
-        _ = this.Selection.SelectedItems.Should().HaveCount(1).And.Contain([item]);
+        _ = this.Selection.SelectedItems.Should().ContainSingle().And.Contain([item]);
     }
 
     [TestMethod]
@@ -434,7 +436,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var item2 = new TestTreeItemAdapter() { Label = "Item2" };
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait();
+        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
 
         // Act
         this.viewModel.SelectAllCommand.Execute(parameter: null);
@@ -475,7 +477,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var item3 = new TestTreeItemAdapter() { Label = "Item3" };
         var rootItem = new TestTreeItemAdapter([item1, item2, item3], isRoot: true) { Label = "Root", IsExpanded = true };
 
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait();
+        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
         this.viewModel.SelectItem(item2);
 
         // Act

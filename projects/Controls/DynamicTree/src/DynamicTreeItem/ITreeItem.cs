@@ -74,6 +74,11 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     public int ChildrenCount { get; }
 
     /// <summary>
+    ///     Gets a value indicating whether the tree item can accept child items.
+    /// </summary>
+    public bool CanAcceptChildren { get; }
+
+    /// <summary>
     ///     Validates the given <paramref name="name" />.
     /// </summary>
     /// <param name="name">The proposed name to be validated.</param>
@@ -86,11 +91,6 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     /// <param name="child">The child tree item to add.</param>
     /// <returns>A task that represents the asynchronous operation.</returns>
     public Task AddChildAsync(ITreeItem child);
-
-    /// <summary>
-    ///     Gets a value indicating whether the tree item can accept child items.
-    /// </summary>
-    public bool CanAcceptChildren { get; }
 
     /// <summary>
     ///     Inserts a child tree item at the specified index asynchronously.

@@ -10,93 +10,29 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Event callbacks used by <see cref="TreeDisplayHelper" /> to surface existing ViewModel events without direct
-///     coupling.
-/// </summary>
-internal readonly record struct TreeDisplayEventCallbacks(
-    Func<TreeItemBeingAddedEventArgs, bool>? ItemBeingAdded,
-    Action<TreeItemAddedEventArgs>? ItemAdded,
-    Func<TreeItemBeingRemovedEventArgs, bool>? ItemBeingRemoved,
-    Action<TreeItemRemovedEventArgs>? ItemRemoved,
-    Func<TreeItemBeingMovedEventArgs, bool>? ItemBeingMoved,
-    Action<TreeItemsMovedEventArgs>? ItemMoved);
-
-/// <summary>
 ///     Aggregates all manipulations that affect the visible items collection of the dynamic tree, keeping selection,
 ///     events, and visibility rules consistent across insert/remove/move operations.
 /// </summary>
-internal sealed class TreeDisplayHelper
+internal sealed class TreeDisplayHelper(
+    ObservableCollection<ITreeItem> shownItems,
+    Func<SelectionModel<ITreeItem>?> selectionModelProvider,
+    Func<ITreeItem, Task> expandItemAsync,
+    TreeDisplayHelper.TreeDisplayEventCallbacks events,
+    ILogger logger,
+    int maxDepth = TreeDisplayHelper.DefaultMaxDepth)
 {
+    /// <summary>
+    ///     The default maximum depth allowed for the tree.
+    /// </summary>
     public const int DefaultMaxDepth = 32;
 
-    private static int ClampIndex(int index, int max) => Math.Clamp(index, 0, max);
+    private readonly ILogger logger = logger;
 
-    private static List<ITreeItem> FlattenMoveSet(IReadOnlyList<ITreeItem> items)
-    {
-        var unique = new HashSet<ITreeItem>(items);
-        if (unique.Count != items.Count)
-        {
-            throw new ArgumentException("items contains duplicates", nameof(items));
-        }
-
-        var set = new HashSet<ITreeItem>(items);
-        return items.Where(item => !HasAncestorInSet(item, set)).ToList();
-    }
-
-    private static bool HasAncestorInSet(ITreeItem item, HashSet<ITreeItem> set)
-    {
-        var current = item.Parent;
-        while (current is not null)
-        {
-            if (set.Contains(current))
-            {
-                return true;
-            }
-
-            current = current.Parent;
-        }
-
-        return false;
-    }
-
-    private static bool IsDescendantOf(ITreeItem candidate, ITreeItem ancestor)
-    {
-        var current = candidate.Parent;
-        while (current is not null)
-        {
-            if (ReferenceEquals(current, ancestor))
-            {
-                return true;
-            }
-
-            current = current.Parent;
-        }
-
-        return false;
-    }
-
-    private readonly ObservableCollection<ITreeItem> shownItems;
-    private readonly Func<SelectionModel<ITreeItem>?> selectionModelProvider;
-    private readonly Func<ITreeItem, Task> expandItemAsync;
-    private readonly TreeDisplayEventCallbacks events;
-    private readonly ILogger logger;
-    private readonly int maxDepth;
-
-    public TreeDisplayHelper(
-        ObservableCollection<ITreeItem> shownItems,
-        Func<SelectionModel<ITreeItem>?> selectionModelProvider,
-        Func<ITreeItem, Task> expandItemAsync,
-        TreeDisplayEventCallbacks events,
-        ILogger logger,
-        int maxDepth = DefaultMaxDepth)
-    {
-        this.shownItems = shownItems;
-        this.selectionModelProvider = selectionModelProvider;
-        this.expandItemAsync = expandItemAsync;
-        this.events = events;
-        this.logger = logger;
-        this.maxDepth = maxDepth;
-    }
+    private readonly ObservableCollection<ITreeItem> shownItems = shownItems;
+    private readonly Func<SelectionModel<ITreeItem>?> selectionModelProvider = selectionModelProvider;
+    private readonly Func<ITreeItem, Task> expandItemAsync = expandItemAsync;
+    private readonly TreeDisplayEventCallbacks events = events;
+    private readonly int maxDepth = maxDepth;
 
     private SelectionModel<ITreeItem>? SelectionModel => this.selectionModelProvider();
 
@@ -171,10 +107,14 @@ internal sealed class TreeDisplayHelper
             new TreeItemRemovedEventArgs { Parent = parent, RelativeIndex = relativeIndex, TreeItem = item });
     }
 
+    /// <summary>
+    ///     Removes all selected items from the tree, updating the selection and visible collection accordingly.
+    /// </summary>
+    /// <returns>A task that completes when all selected items have been removed.</returns>
     public async Task RemoveSelectedItemsAsync()
     {
         var selection = this.SelectionModel;
-        if (selection is null || selection.IsEmpty)
+        if (selection?.IsEmpty != false)
         {
             return;
         }
@@ -183,7 +123,7 @@ internal sealed class TreeDisplayHelper
         {
             case SingleSelectionModel<ITreeItem>:
                 var selectedItem = selection.SelectedItem;
-                if (selectedItem is null || selectedItem.IsLocked)
+                if (selectedItem?.IsLocked != false)
                 {
                     return;
                 }
@@ -222,9 +162,7 @@ internal sealed class TreeDisplayHelper
     /// <param name="newIndex">The desired index under the target parent.</param>
     /// <returns>A task that completes when the move operation finishes.</returns>
     public async Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
-    {
-        await this.MoveItemsAsync([item], newParent, newIndex).ConfigureAwait(true);
-    }
+        => await this.MoveItemsAsync([item], newParent, newIndex).ConfigureAwait(true);
 
     /// <summary>
     ///     Moves multiple items to a new parent preserving their relative order and applying batch selection updates.
@@ -237,19 +175,19 @@ internal sealed class TreeDisplayHelper
     {
         var plan = this.ValidateMoveRequest(items, newParent, startIndex);
 
-        var originalIndices = await this.CaptureOriginalIndicesAsync(plan.Items).ConfigureAwait(true);
+        var originalIndices = await CaptureOriginalIndicesAsync(plan.Items).ConfigureAwait(true);
         var adjustedStartIndex = AdjustStartIndexForSameParent(originalIndices, plan.TargetParent, plan.StartIndex);
         plan = new MovePlan(plan.Items, plan.TargetParent, adjustedStartIndex);
 
         await this.EnsureParentExpandedAsync(plan.TargetParent).ConfigureAwait(true);
 
-        var selectionSnapshot = CaptureSelection(plan.Items);
+        var selectionSnapshot = this.CaptureSelection(plan.Items);
         this.SelectionModel?.ClearSelection();
 
         var moveBlocks = await this.DetachBlocksAsync(plan.Items, originalIndices).ConfigureAwait(true);
         var moves = await this.InsertBlocksAsync(plan, moveBlocks).ConfigureAwait(true);
 
-        this.RestoreSelectionAfterMove(selectionSnapshot, plan.Items);
+        this.RestoreSelectionAfterMove(selectionSnapshot);
         this.events.ItemMoved?.Invoke(new TreeItemsMovedEventArgs { Moves = moves });
     }
 
@@ -287,6 +225,94 @@ internal sealed class TreeDisplayHelper
         await this.MoveItemsAsync(items, parent, startIndex).ConfigureAwait(true);
     }
 
+    private static int ClampIndex(int index, int max) => Math.Clamp(index, 0, max);
+
+    private static List<ITreeItem> FlattenMoveSet(IReadOnlyList<ITreeItem> items)
+    {
+        var unique = new HashSet<ITreeItem>(items);
+        if (unique.Count != items.Count)
+        {
+            throw new ArgumentException("items contains duplicates", nameof(items));
+        }
+
+        var set = new HashSet<ITreeItem>(items);
+        return [.. items.Where(item => !HasAncestorInSet(item, set))];
+    }
+
+    private static bool HasAncestorInSet(ITreeItem item, HashSet<ITreeItem> set)
+    {
+        var current = item.Parent;
+        while (current is not null)
+        {
+            if (set.Contains(current))
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
+    }
+
+    private static bool IsDescendantOf(ITreeItem candidate, ITreeItem ancestor)
+    {
+        var current = candidate.Parent;
+        while (current is not null)
+        {
+            if (ReferenceEquals(current, ancestor))
+            {
+                return true;
+            }
+
+            current = current.Parent;
+        }
+
+        return false;
+    }
+
+    private static void ValidateRemovalPreconditions(ITreeItem item)
+    {
+        if (item.IsLocked)
+        {
+            throw new InvalidOperationException($"attempt to remove locked item `{item.Label}`");
+        }
+
+        if (!item.IsRoot && item.Parent is null)
+        {
+            throw new InvalidOperationException($"attempt to remove orphan item `{item.Label}`");
+        }
+    }
+
+    private static async Task<Dictionary<ITreeItem, int>> CaptureOriginalIndicesAsync(IReadOnlyList<ITreeItem> items)
+    {
+        var indices = new Dictionary<ITreeItem, int>(items.Count);
+        foreach (var item in items)
+        {
+            var parent = item.Parent ?? throw new InvalidOperationException("item must have a parent to be moved");
+            var children = await parent.Children.ConfigureAwait(true);
+            var index = children.IndexOf(item);
+            if (index == -1)
+            {
+                throw new InvalidOperationException("item was not found in its parent's children");
+            }
+
+            indices[item] = index;
+        }
+
+        return indices;
+    }
+
+    private static int AdjustStartIndexForSameParent(
+        IReadOnlyDictionary<ITreeItem, int> originalIndices,
+        ITreeItem targetParent,
+        int startIndex)
+    {
+        var adjustment = originalIndices.Count(kvp => ReferenceEquals(kvp.Key.Parent, targetParent) && kvp.Value < startIndex);
+        var adjusted = startIndex - adjustment;
+        return adjusted < 0 ? 0 : adjusted;
+    }
+
     private async Task EnsureParentExpandedAsync(ITreeItem parent)
     {
         if (parent.IsExpanded)
@@ -300,14 +326,14 @@ internal sealed class TreeDisplayHelper
     private bool ApproveItemBeingAdded(ITreeItem parent, ITreeItem item)
     {
         var eventArgs = new TreeItemBeingAddedEventArgs { Parent = parent, TreeItem = item };
-        this.events.ItemBeingAdded?.Invoke(eventArgs);
+        _ = this.events.ItemBeingAdded?.Invoke(eventArgs);
         return eventArgs.Proceed;
     }
 
     private bool ApproveItemBeingRemoved(ITreeItem item)
     {
         var eventArgs = new TreeItemBeingRemovedEventArgs { TreeItem = item };
-        this.events.ItemBeingRemoved?.Invoke(eventArgs);
+        _ = this.events.ItemBeingRemoved?.Invoke(eventArgs);
         return eventArgs.Proceed;
     }
 
@@ -368,12 +394,53 @@ internal sealed class TreeDisplayHelper
         return new MovePlan(flattened, resolvedParent!, resolvedIndex);
     }
 
-    private static SelectionSnapshot CaptureSelection(IReadOnlyList<ITreeItem> items)
+    private SelectionSnapshot CaptureSelection(IReadOnlyList<ITreeItem> movedItems)
     {
-        var firstItemSelected = items.Count > 0 && items[0].IsSelected;
-        return new SelectionSnapshot(firstItemSelected);
+        var selection = this.SelectionModel;
+        if (selection?.IsEmpty != false || movedItems.Count == 0)
+        {
+            return SelectionSnapshot.Empty;
+        }
+
+        List<ITreeItem> selectedItems;
+        switch (selection)
+        {
+            case MultipleSelectionModel<ITreeItem> multipleSelection:
+                selectedItems = new List<ITreeItem>(multipleSelection.SelectedIndices.Count);
+                foreach (var index in multipleSelection.SelectedIndices)
+                {
+                    var item = this.GetShownItemAt(index);
+                    if (item is not null)
+                    {
+                        selectedItems.Add(item);
+                    }
+                }
+
+                break;
+            default:
+                var selectedItem = selection.SelectedItem;
+                if (selectedItem is null)
+                {
+                    return SelectionSnapshot.Empty;
+                }
+
+                selectedItems = [selectedItem];
+                break;
+        }
+
+        var firstMoved = movedItems[0];
+        var firstMovedIndex = this.shownItems.IndexOf(firstMoved);
+        var firstMovedSelected = firstMovedIndex >= 0 && selection.IsSelected(firstMovedIndex);
+
+        return new SelectionSnapshot(selectedItems, firstMoved, firstMovedSelected);
     }
 
+    private ITreeItem? GetShownItemAt(int index)
+        => index < 0 || index >= this.shownItems.Count
+            ? null
+            : this.shownItems[index];
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "IReadOnly is stronger than using concrete types that are not provided by every collection")]
     private async Task<Dictionary<ITreeItem, MoveBlock>> DetachBlocksAsync(
         IReadOnlyList<ITreeItem> items,
         IReadOnlyDictionary<ITreeItem, int> originalIndices)
@@ -384,18 +451,18 @@ internal sealed class TreeDisplayHelper
             var block = this.ExtractShownBlock(item);
             var previousParent = item.Parent!;
             var previousIndex = originalIndices[item];
-            await previousParent.RemoveChildAsync(item).ConfigureAwait(true);
+            _ = await previousParent.RemoveChildAsync(item).ConfigureAwait(true);
             blocks[item] = new MoveBlock(block, previousParent, previousIndex);
         }
 
         return blocks;
     }
 
-    private async Task<IReadOnlyList<TreeItemsMovedEventArgs.MovedItemInfo>> InsertBlocksAsync(
+    private async Task<IReadOnlyList<MovedItemInfo>> InsertBlocksAsync(
         MovePlan plan,
         IReadOnlyDictionary<ITreeItem, MoveBlock> blocks)
     {
-        var moves = new List<TreeItemsMovedEventArgs.MovedItemInfo>(plan.Items.Count);
+        var moves = new List<MovedItemInfo>(plan.Items.Count);
         var insertOffset = 0;
 
         foreach (var item in plan.Items)
@@ -412,7 +479,7 @@ internal sealed class TreeDisplayHelper
             }
 
             moves.Add(
-                new TreeItemsMovedEventArgs.MovedItemInfo(
+                new MovedItemInfo(
                     item,
                     blocks[item].PreviousParent,
                     plan.TargetParent,
@@ -425,31 +492,57 @@ internal sealed class TreeDisplayHelper
         return moves;
     }
 
-    private void RestoreSelectionAfterMove(SelectionSnapshot selectionSnapshot, IReadOnlyList<ITreeItem> movedItems)
+    private void RestoreSelectionAfterMove(SelectionSnapshot selectionSnapshot)
     {
-        if (!selectionSnapshot.FirstItemSelected)
+        var selection = this.SelectionModel;
+        if (selection is null || selectionSnapshot.IsEmpty)
         {
             return;
         }
 
-        var first = movedItems[0];
-        var newIndex = this.shownItems.IndexOf(first);
-        if (newIndex >= 0)
+        if (!selectionSnapshot.FirstMovedItemSelected)
         {
-            this.SelectionModel?.SelectItemAt(newIndex);
-        }
-    }
-
-    private static void ValidateRemovalPreconditions(ITreeItem item)
-    {
-        if (item.IsLocked)
-        {
-            throw new InvalidOperationException($"attempt to remove locked item `{item.Label}`");
+            selection.ClearSelection();
+            return;
         }
 
-        if (!item.IsRoot && item.Parent is null)
+        var selectedIndices = new List<int>(selectionSnapshot.SelectedItems.Count);
+        var firstMovedIndex = -1;
+
+        foreach (var item in selectionSnapshot.SelectedItems)
         {
-            throw new InvalidOperationException($"attempt to remove orphan item `{item.Label}`");
+            var newIndex = this.shownItems.IndexOf(item);
+            if (newIndex < 0)
+            {
+                continue;
+            }
+
+            if (ReferenceEquals(item, selectionSnapshot.FirstMovedItem))
+            {
+                firstMovedIndex = newIndex;
+            }
+            else
+            {
+                selectedIndices.Add(newIndex);
+            }
+        }
+
+        if (firstMovedIndex == -1)
+        {
+            selection.ClearSelection();
+            return;
+        }
+
+        switch (selection)
+        {
+            case MultipleSelectionModel<ITreeItem> multipleSelection:
+                // Ensure the first moved item becomes the SelectedItem by passing it last.
+                selectedIndices.Add(firstMovedIndex);
+                multipleSelection.SelectItemsAt([.. selectedIndices]);
+                break;
+            default:
+                selection.SelectItemAt(firstMovedIndex);
+                break;
         }
     }
 
@@ -540,12 +633,6 @@ internal sealed class TreeDisplayHelper
         selection.SelectItemAt(newSelectedIndex);
     }
 
-    private void ValidateMovePreconditions(ITreeItem item, ITreeItem newParent)
-    {
-        this.ValidateItemBasics(item);
-        this.ValidateTargetConstraints(item, newParent);
-    }
-
     private List<ITreeItem> ExtractShownBlock(ITreeItem item)
     {
         var startIndex = this.shownItems.IndexOf(item);
@@ -556,11 +643,11 @@ internal sealed class TreeDisplayHelper
 
         var block = new List<ITreeItem> { item };
         var parentDepth = item.Depth;
-        var currentIndex = startIndex + 1;
-        while (currentIndex < this.shownItems.Count && this.shownItems[currentIndex].Depth > parentDepth)
+        for (var currentIndex = startIndex + 1;
+            currentIndex < this.shownItems.Count && this.shownItems[currentIndex].Depth > parentDepth;
+            currentIndex++)
         {
             block.Add(this.shownItems[currentIndex]);
-            currentIndex++;
         }
 
         for (var i = 0; i < block.Count; i++)
@@ -569,35 +656,6 @@ internal sealed class TreeDisplayHelper
         }
 
         return block;
-    }
-
-    private async Task<Dictionary<ITreeItem, int>> CaptureOriginalIndicesAsync(IReadOnlyList<ITreeItem> items)
-    {
-        var indices = new Dictionary<ITreeItem, int>(items.Count);
-        foreach (var item in items)
-        {
-            var parent = item.Parent ?? throw new InvalidOperationException("item must have a parent to be moved");
-            var children = await parent.Children.ConfigureAwait(true);
-            var index = children.IndexOf(item);
-            if (index == -1)
-            {
-                throw new InvalidOperationException("item was not found in its parent's children");
-            }
-
-            indices[item] = index;
-        }
-
-        return indices;
-    }
-
-    private static int AdjustStartIndexForSameParent(
-        IReadOnlyDictionary<ITreeItem, int> originalIndices,
-        ITreeItem targetParent,
-        int startIndex)
-    {
-        var adjustment = originalIndices.Count(kvp => ReferenceEquals(kvp.Key.Parent, targetParent) && kvp.Value < startIndex);
-        var adjusted = startIndex - adjustment;
-        return adjusted < 0 ? 0 : adjusted;
     }
 
     private void ValidateItemBasics(ITreeItem item)
@@ -646,6 +704,18 @@ internal sealed class TreeDisplayHelper
         }
     }
 
+    /// <summary>
+    ///     Event callbacks used by <see cref="TreeDisplayHelper" /> to surface existing ViewModel events without direct
+    ///     coupling.
+    /// </summary>
+    internal readonly record struct TreeDisplayEventCallbacks(
+        Func<TreeItemBeingAddedEventArgs, bool>? ItemBeingAdded,
+        Action<TreeItemAddedEventArgs>? ItemAdded,
+        Func<TreeItemBeingRemovedEventArgs, bool>? ItemBeingRemoved,
+        Action<TreeItemRemovedEventArgs>? ItemRemoved,
+        Func<TreeItemBeingMovedEventArgs, bool>? ItemBeingMoved,
+        Action<TreeItemsMovedEventArgs>? ItemMoved);
+
     private readonly record struct MovePlan(IReadOnlyList<ITreeItem> Items, ITreeItem TargetParent, int StartIndex);
 
     private readonly record struct MoveBlock(
@@ -653,5 +723,10 @@ internal sealed class TreeDisplayHelper
         ITreeItem PreviousParent,
         int PreviousIndex);
 
-    private readonly record struct SelectionSnapshot(bool FirstItemSelected);
+    private readonly record struct SelectionSnapshot(IReadOnlyList<ITreeItem> SelectedItems, ITreeItem? FirstMovedItem, bool FirstMovedItemSelected)
+    {
+        public static SelectionSnapshot Empty { get; } = new([], FirstMovedItem: null, FirstMovedItemSelected: false);
+
+        public bool IsEmpty => this.SelectedItems.Count == 0 || this.FirstMovedItem is null;
+    }
 }

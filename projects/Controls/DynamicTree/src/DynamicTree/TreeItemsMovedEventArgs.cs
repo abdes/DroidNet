@@ -27,20 +27,21 @@ public class TreeItemsMovedEventArgs : EventArgs
     ///     Gets the primary move information (first item in <see cref="Moves" />).
     /// </summary>
     public MovedItemInfo PrimaryMove => this.Moves[0];
+}
 
+/// <summary>
+///     Represents the details of a single moved item.
+/// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "keep together with event args type")]
+public sealed record MovedItemInfo(
+    ITreeItem Item,
+    ITreeItem PreviousParent,
+    ITreeItem NewParent,
+    int PreviousIndex,
+    int NewIndex)
+{
     /// <summary>
-    ///     Represents the details of a single moved item.
+    ///     Gets a value indicating whether the move changed the parent.
     /// </summary>
-    public sealed record MovedItemInfo(
-        ITreeItem Item,
-        ITreeItem PreviousParent,
-        ITreeItem NewParent,
-        int PreviousIndex,
-        int NewIndex)
-    {
-        /// <summary>
-        ///     Gets a value indicating whether the move changed the parent.
-        /// </summary>
-        public bool IsReparenting => !ReferenceEquals(this.PreviousParent, this.NewParent);
-    }
+    public bool IsReparenting => !ReferenceEquals(this.PreviousParent, this.NewParent);
 }

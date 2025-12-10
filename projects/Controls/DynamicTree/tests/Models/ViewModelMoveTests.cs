@@ -3,15 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using AwesomeAssertions;
-using DroidNet.Controls.Selection;
 
 namespace DroidNet.Controls.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelMoveTests : ViewModelTestBase
+public partial class ViewModelMoveTests : ViewModelTestBase
 {
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
@@ -61,8 +61,10 @@ public class ViewModelMoveTests : ViewModelTestBase
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 1).ConfigureAwait(false);
 
         // Assert
-        _ = viewModel.GetSelectionModel()?.SelectedItem.Should().Be(item1);
-        _ = viewModel.GetSelectionModel()?.SelectedIndex.Should().Be(4);
+        var sm = viewModel.GetSelectionModel();
+        _ = sm.Should().NotBeNull();
+        _ = sm.SelectedItem.Should().Be(item1);
+        _ = sm.SelectedIndex.Should().Be(4);
         var targetChildren = await targetParent.Children.ConfigureAwait(false);
         _ = targetChildren.Should().ContainInOrder(targetExisting, item1, item2);
         _ = viewModel.ShownItems.Should().ContainInOrder(root, sourceParent, targetParent, targetExisting, item1, item2);
@@ -127,7 +129,11 @@ public class ViewModelMoveTests : ViewModelTestBase
         var head = deepest;
         for (var i = 31; i >= 1; i--)
         {
-            head = new TestTreeItemAdapter([head]) { Label = $"Node{i}", IsExpanded = true };
+            head = new TestTreeItemAdapter([head])
+            {
+                Label = string.Create(CultureInfo.InvariantCulture, $"Node{i}"),
+                IsExpanded = true,
+            };
         }
 
         var root = new TestTreeItemAdapter([head], isRoot: true) { Label = "Root", IsExpanded = true };
@@ -145,11 +151,6 @@ public class ViewModelMoveTests : ViewModelTestBase
 
         // Assert
         _ = await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*maximum depth*").ConfigureAwait(false);
-    }
-
-    private sealed class NonAcceptingTreeItemAdapter : TestTreeItemAdapter
-    {
-        public override bool CanAcceptChildren => false;
     }
 
     [TestMethod]
@@ -191,8 +192,10 @@ public class ViewModelMoveTests : ViewModelTestBase
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
 
         // Assert
-        _ = viewModel.GetSelectionModel()?.SelectedItem.Should().Be(item1);
-        _ = viewModel.GetSelectionModel()?.SelectedIndex.Should().Be(3);
+        var sm = viewModel.GetSelectionModel();
+        _ = sm.Should().NotBeNull();
+        _ = sm.SelectedItem.Should().Be(item1);
+        _ = sm.SelectedIndex.Should().Be(3);
     }
 
     [TestMethod]
@@ -214,8 +217,15 @@ public class ViewModelMoveTests : ViewModelTestBase
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
 
         // Assert
-        _ = viewModel.GetSelectionModel()?.IsEmpty.Should().BeTrue();
-        _ = viewModel.GetSelectionModel()?.SelectedIndex.Should().Be(-1);
-        _ = viewModel.GetSelectionModel()?.SelectedItem.Should().BeNull();
+        var sm = viewModel.GetSelectionModel();
+        _ = sm.Should().NotBeNull();
+        _ = sm.IsEmpty.Should().BeTrue();
+        _ = sm.SelectedIndex.Should().Be(-1);
+        _ = sm.SelectedItem.Should().BeNull();
+    }
+
+    private sealed partial class NonAcceptingTreeItemAdapter : TestTreeItemAdapter
+    {
+        public override bool CanAcceptChildren => false;
     }
 }
