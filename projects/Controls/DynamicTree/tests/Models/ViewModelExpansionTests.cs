@@ -11,24 +11,12 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelExpansionTests
+public class ViewModelExpansionTests : ViewModelTestBase
 {
-    private readonly ILoggerFactory loggerFactory;
-    private readonly TestViewModel viewModel;
+    private TestViewModel viewModel = null!;
 
-    public ViewModelExpansionTests()
-    {
-        this.loggerFactory = LoggerFactory.Create(builder =>
-        {
-            _ = builder.AddDebug();
-            _ = builder.SetMinimumLevel(LogLevel.Trace);
-        });
-
-        this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.loggerFactory);
-    }
-
-    [TestCleanup]
-    public void Cleanup() => this.loggerFactory.Dispose();
+    [TestInitialize]
+    public void Initialize() => this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.LoggerFactoryInstance);
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Expand")]
