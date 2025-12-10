@@ -56,6 +56,9 @@ public partial class ProjectLayoutViewModel(
     {
         this.activeRoute = route;
 
+        // Default selection mode for Project Explorer.
+        this.SelectionMode = SelectionMode.Multiple;
+
         // Subscribe to ContentBrowserState changes
         contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 

@@ -7,6 +7,8 @@ using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DroidNet.Controls;
 
@@ -14,6 +16,10 @@ namespace DroidNet.Controls;
 ///     Represents the ViewModel for a dynamic tree control, providing functionality for managing
 ///     hierarchical data structures, including selection, expansion, and manipulation of tree items.
 /// </summary>
+/// <param name="loggerFactory">
+///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
+/// </param>
 /// <remarks>
 ///     This class provides the foundational implementation for a dynamic tree view model. It includes
 ///     methods for expanding and collapsing tree items, initializing the root item, inserting and
@@ -117,8 +123,10 @@ namespace DroidNet.Controls;
 /// </Window>
 /// ]]></code>
 /// </example>
-public abstract partial class DynamicTreeViewModel : ObservableObject
+public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject
 {
+    private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
+
     /* TODO: need to make this private and expose a read only collection*/
 
     /// <summary>
@@ -130,6 +138,11 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
     ///     modifications.
     /// </remarks>
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
+
+    /// <summary>
+    ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory { get; } = loggerFactory;
 
     /// <summary>
     ///     Expands the specified tree item (which must be visible in the tree) asynchronously.
@@ -146,9 +159,12 @@ public abstract partial class DynamicTreeViewModel : ObservableObject
 
         if (!itemAdapter.IsRoot && itemAdapter.Parent?.IsExpanded != true)
         {
-            throw new InvalidOperationException("item not yet visible in the tree, cannot expand it");
+            // The item's parent has never loaded its children, or is collapsed.
+            this.LogExpandItemNotVisible(itemAdapter);
+            throw new InvalidOperationException("cannot expand item; its parent is not expanded");
         }
 
+        this.LogExpandItem(itemAdapter);
         await this.RestoreExpandedChildrenAsync(itemAdapter).ConfigureAwait(true);
         itemAdapter.IsExpanded = true;
     }

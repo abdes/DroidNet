@@ -12,12 +12,14 @@ using DroidNet.Controls.Selection;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectLayoutView"/> view.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public for source generated MVVM")]
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
@@ -25,10 +27,14 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
     /// </summary>
-    /// <param name="logger">The logger to use for logging.</param>
-    public ProjectLayoutViewModel(ILogger<ProjectLayoutViewModel> logger)
+    /// <param name="loggerFactory">
+    ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
+    ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
+    /// </param>
+    public ProjectLayoutViewModel(ILoggerFactory? loggerFactory = null)
+        : base(loggerFactory)
     {
-        this.logger = logger;
+        this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLogger<ProjectLayoutViewModel>.Instance;
 
         this.UndoStack = UndoRedo.Default[this].UndoStack;
         this.RedoStack = UndoRedo.Default[this].RedoStack;
@@ -38,6 +44,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemAdded += this.OnItemAdded;
+
+        // Default the selection mode for the demo app to allow multiple selection.
+        this.SelectionMode = SelectionMode.Multiple;
     }
 
     /// <summary>
@@ -118,7 +127,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (!string.Equals(args.PropertyName, nameof(SelectionModel<ITreeItem>.IsEmpty), StringComparison.Ordinal))
+        if (!string.Equals(args.PropertyName, nameof(SelectionModel<>.IsEmpty), StringComparison.Ordinal))
         {
             return;
         }

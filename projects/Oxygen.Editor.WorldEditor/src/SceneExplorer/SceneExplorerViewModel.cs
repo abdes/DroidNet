@@ -120,6 +120,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
 
+        // Default selection mode for Scene Explorer is multiple selection.
+        this.SelectionMode = SelectionMode.Multiple;
+
         // Subscribe to document events to load scene when a scene document is opened
         documentService.DocumentOpened += this.OnDocumentOpened;
     }

@@ -10,7 +10,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Moq" />
+            <PackageReference Include="Moq" />
+            <PackageReference Include="Microsoft.Extensions.Logging.Debug" />
     </ItemGroup>
 
     <ItemGroup>

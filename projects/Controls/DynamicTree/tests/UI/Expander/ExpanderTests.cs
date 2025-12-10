@@ -118,7 +118,7 @@ public class ExpanderTests : VisualUserInterfaceTests
         this.expander!.IsExpanded = true;
 
         // Assert
-        _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain("Expanded");
+        _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain(Controls.Expander.ExpandedVisualState);
     });
 
     [TestMethod]
@@ -132,7 +132,7 @@ public class ExpanderTests : VisualUserInterfaceTests
         this.expander.IsExpanded = false;
 
         // Assert
-        _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain("Collapsed");
+        _ = this.vsm!.GetCurrentStates(this.expander).Should().Contain(Controls.Expander.CollapsedVisualState);
     });
 
     protected override async Task TestSetupAsync()
@@ -148,7 +148,7 @@ public class ExpanderTests : VisualUserInterfaceTests
 
                 this.vsm = new TestVisualStateManager();
                 var vsmTarget = this.expander.FindDescendant<Grid>(
-                    e => string.Equals(e.Name, "PART_ActiveElement", StringComparison.Ordinal));
+                    e => string.Equals(e.Name, Controls.Expander.ActiveElement, StringComparison.Ordinal));
                 _ = vsmTarget.Should().NotBeNull();
                 VisualStateManager.SetCustomVisualStateManager(vsmTarget, this.vsm);
 

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls.Selection;
+using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls.Tests;
 
@@ -11,7 +12,9 @@ namespace DroidNet.Controls.Tests;
 /// A derived class from DynamicTreeViewModel to expose the InitializeRootAsync method for testing.
 /// </summary>
 [ExcludeFromCodeCoverage]
-internal partial class TestViewModel(bool skipRoot) : DynamicTreeViewModel
+internal partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactory = null) :
+    DynamicTreeViewModel(
+        loggerFactory ?? Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory.Instance)
 {
     /// <inheritdoc cref="DynamicTreeViewModel.InitializeRootAsync"/>
     public async Task InitializeRootAsyncPublic(ITreeItem root) => await this.InitializeRootAsync(root, skipRoot).ConfigureAwait(false);

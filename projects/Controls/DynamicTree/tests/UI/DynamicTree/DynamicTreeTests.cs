@@ -26,8 +26,8 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
         () =>
         {
             // Assert
-            _ = this.tree!.FindDescendant<Grid>(e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = this.tree!.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, "PartItemsRepeater", StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.tree!.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTree.RootGridPart, StringComparison.Ordinal)).Should().NotBeNull();
+            _ = this.tree!.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal)).Should().NotBeNull();
         });
 
     [TestMethod]
@@ -68,7 +68,7 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
             }
 
             // Assert
-            var itemsRepeater = this.tree!.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, "PartItemsRepeater", StringComparison.Ordinal));
+            var itemsRepeater = this.tree!.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal));
             _ = itemsRepeater.Should().NotBeNull();
 
             var itemsSourceView = itemsRepeater!.ItemsSourceView;
@@ -92,10 +92,11 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
             {
                 this.viewModel = new TestViewModel();
                 await this.viewModel.LoadTreeStructureAsync().ConfigureAwait(true);
-                this.tree = new Controls.DynamicTree() { ViewModel = this.viewModel, SelectionMode = SelectionMode.Multiple, };
+                this.viewModel.SelectionMode = SelectionMode.Multiple;
+                this.tree = new Controls.DynamicTree() { ViewModel = this.viewModel };
                 await LoadTestContentAsync(this.tree).ConfigureAwait(true);
 
-                var vsmTarget = this.tree.FindDescendant<Grid>(e => string.Equals(e.Name, "PartRootGrid", StringComparison.Ordinal));
+                var vsmTarget = this.tree.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTree.RootGridPart, StringComparison.Ordinal));
                 _ = vsmTarget.Should().NotBeNull();
                 this.vsm = new TestVisualStateManager();
                 VisualStateManager.SetCustomVisualStateManager(vsmTarget, this.vsm);
@@ -112,7 +113,7 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
     /// <returns>The count of children of the specified type.</returns>
     private static int CountItemsShownInTree(Controls.DynamicTree tree)
     {
-        var itemsRepeater = tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, "PartItemsRepeater", StringComparison.Ordinal));
+        var itemsRepeater = tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal));
         _ = itemsRepeater.Should().NotBeNull();
 
         return itemsRepeater!.ItemsSourceView.Count;
