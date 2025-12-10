@@ -88,6 +88,11 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     public Task AddChildAsync(ITreeItem child);
 
     /// <summary>
+    ///     Gets a value indicating whether the tree item can accept child items.
+    /// </summary>
+    public bool CanAcceptChildren { get; }
+
+    /// <summary>
     ///     Inserts a child tree item at the specified index asynchronously.
     /// </summary>
     /// <param name="index">The zero-based index at which the child tree item should be inserted.</param>

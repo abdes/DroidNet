@@ -92,6 +92,9 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     public abstract string Label { get; set; }
 
     /// <inheritdoc />
+    public virtual bool CanAcceptChildren => true;
+
+    /// <inheritdoc />
     public bool IsRoot
     {
         get => this.isRoot;
