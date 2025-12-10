@@ -171,6 +171,9 @@ public partial class DynamicTree : Control
             return;
         }
 
+        // Log element clearing
+        this.LogElementClearing(element);
+
         element.PointerPressed -= this.TreeItem_PointerPressed;
 
         if (element.FindName(TreeItemPart) is not DynamicTreeItem treeItem)
@@ -189,6 +192,9 @@ public partial class DynamicTree : Control
         {
             return;
         }
+
+        // Log element prepared
+        this.LogElementPrepared(element);
 
         element.OnElementPrepared();
 
