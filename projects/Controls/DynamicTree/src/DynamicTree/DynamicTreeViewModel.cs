@@ -25,104 +25,10 @@ namespace DroidNet.Controls;
 ///     methods for expanding and collapsing tree items, initializing the root item, inserting and
 ///     removing items, and managing selection within the tree.
 ///     <para>
-///         To create a concrete implementation of this view model, derive from <see cref="DynamicTreeViewModel" />
-///         and implement the necessary logic for your specific tree structure. Below is an example of how
-///         to derive from this class and create a concrete view model and item adapter.
-///     </para>
+///     To create a concrete implementation of this view model, derive from <see cref="DynamicTreeViewModel" />
+///     and implement the necessary logic for your specific tree structure. Below is an example of how
+///     to derive from this class and create a concrete view model and item adapter.</para>
 /// </remarks>
-/// <example>
-///     <para>
-///         <strong>Example Usage:</strong>
-///     </para>
-///     <code><![CDATA[
-/// using System.Collections.ObjectModel;
-/// using System.Threading.Tasks;
-/// using CommunityToolkit.Mvvm.ComponentModel;
-/// using CommunityToolkit.Mvvm.Input;
-/// namespace DroidNet.Controls
-/// {
-///     /// <summary>
-///     /// Represents a concrete implementation of the DynamicTreeViewModel for a specific tree structure.
-///     /// </summary>
-///     public class MyDynamicTreeViewModel : DynamicTreeViewModel
-///     {
-///         /// <summary>
-///         /// Initializes a new instance of the <see cref="MyDynamicTreeViewModel"/> class.
-///         /// </summary>
-///         public MyDynamicTreeViewModel()
-///         {
-///             // Initialize the root item and load the tree structure
-///             var rootItem = new MyTreeItemAdapter("Root");
-///             _ = this.InitializeRootAsync(rootItem);
-///         }
-///         /// <summary>
-///         /// Loads the tree structure asynchronously.
-///         /// </summary>
-///         /// <returns>A task representing the asynchronous operation.</returns>
-///         private async Task LoadTreeStructureAsync()
-///         {
-///             // Example of loading the tree structure
-///             var rootItem = new MyTreeItemAdapter("Root");
-///             var childItem1 = new MyTreeItemAdapter("Child 1");
-///             var childItem2 = new MyTreeItemAdapter("Child 2");
-///             await rootItem.AddChildAsync(childItem1);
-///             await rootItem.AddChildAsync(childItem2);
-///             await this.InitializeRootAsync(rootItem);
-///         }
-///     }
-///     /// <summary>
-///     /// Represents a concrete implementation of a tree item adapter.
-///     /// </summary>
-///     public class MyTreeItemAdapter : TreeItemAdapter
-///     {
-///         /// <summary>
-///         /// Initializes a new instance of the <see cref="MyTreeItemAdapter"/> class.
-///         /// </summary>
-///         /// <param name="label">The label of the tree item.</param>
-///         public MyTreeItemAdapter(string label)
-///         {
-///             this.Label = label;
-///         }
-///         /// <inheritdoc/>
-///         public override string Label { get; set; }
-///         /// <inheritdoc/>
-///         protected override int DoGetChildrenCount()
-///         {
-///             return this.children.Count;
-///         }
-///         /// <inheritdoc/>
-///         protected override async Task LoadChildren()
-///         {
-///             // Example of loading children
-///             await Task.Delay(100); // Simulate async operation
-///         }
-///     }
-/// }
-/// ]]></code>
-///     <para>
-///         <strong>XAML for the View:</strong>
-///     </para>
-///     <code language="xml"><![CDATA[
-/// <Window x:Class="MyApp.MainWindow"
-///         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-///         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-///         xmlns:local="clr-namespace:MyApp"
-///         Title="MainWindow" Height="450" Width="800">
-///     <Window.DataContext>
-///         <local:MyDynamicTreeViewModel />
-///     </Window.DataContext>
-///     <Grid>
-///         <TreeView ItemsSource="{Binding ShownItems}">
-///             <TreeView.ItemTemplate>
-///                 <HierarchicalDataTemplate ItemsSource="{Binding Children}">
-///                     <TextBlock Text="{Binding Label}" />
-///                 </HierarchicalDataTemplate>
-///             </TreeView.ItemTemplate>
-///         </TreeView>
-///     </Grid>
-/// </Window>
-/// ]]></code>
-/// </example>
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
@@ -236,35 +142,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     also fires the <see cref="ItemBeingAdded" /> event before making any changes to the tree,
     ///     allowing the operation to be aborted if necessary.
     /// </remarks>
-    /// <example>
-    ///     <para>
-    ///         <strong>Example Usage:</strong>
-    ///     </para>
-    ///     <code><![CDATA[
-    /// var viewModel = new MyDynamicTreeViewModel();
-    /// var parentItem = new MyTreeItemAdapter();
-    /// var childItem = new MyTreeItemAdapter();
-    /// // Subscribe to the ItemBeingAdded event
-    /// viewModel.ItemBeingAdded += (sender, args) =>
-    /// {
-    ///     if (args.TreeItem == childItem)
-    ///     {
-    ///         // Approve or disapprove the addition of the item
-    ///         args.Proceed = true; // or false to abort the addition
-    ///     }
-    /// };
-    /// // Subscribe to the ItemAdded event
-    /// viewModel.ItemAdded += (sender, args) =>
-    /// {
-    ///     if (args.TreeItem == childItem)
-    ///     {
-    ///         Console.WriteLine($"Item '{args.TreeItem.Label}' was added at index {args.RelativeIndex}.");
-    ///     }
-    /// };
-    /// // Insert the child item under the parent item
-    /// await viewModel.InsertItemAsync(0, parentItem, childItem);
-    /// ]]></code>
-    /// </example>
     protected async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
         relativeIndex = ValidateRelativeIndex();
@@ -437,34 +314,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     tree, allowing the operation to be aborted if necessary. It also removes the item's children
     ///     from the shown items collection in a single pass.
     /// </remarks>
-    /// <example>
-    ///     <para>
-    ///         <strong>Example Usage:</strong>
-    ///     </para>
-    ///     <code><![CDATA[
-    /// var viewModel = new MyDynamicTreeViewModel();
-    /// var itemToRemove = new MyTreeItemAdapter();
-    /// // Subscribe to the ItemBeingRemoved event
-    /// viewModel.ItemBeingRemoved += (sender, args) =>
-    /// {
-    ///     if (args.TreeItem == itemToRemove)
-    ///     {
-    ///         // Approve or disapprove the removal of the item
-    ///         args.Proceed = true; // or false to abort the removal
-    ///     }
-    /// };
-    /// // Subscribe to the ItemRemoved event
-    /// viewModel.ItemRemoved += (sender, args) =>
-    /// {
-    ///     if (args.TreeItem == itemToRemove)
-    ///     {
-    ///         Console.WriteLine($"Item '{args.TreeItem.Label}' was removed from index {args.RelativeIndex}.");
-    ///     }
-    /// };
-    /// // Remove the item from the tree
-    /// await viewModel.RemoveItemAsync(itemToRemove);
-    /// ]]></code>
-    /// </example>
     protected async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
     {
         if (item.IsLocked)
