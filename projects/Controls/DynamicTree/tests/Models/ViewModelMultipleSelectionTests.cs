@@ -14,7 +14,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection")]
-public class ViewModelMultipleSelectionTests
+public class ViewModelMultipleSelectionTests : ViewModelTestBase
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
     private readonly Mock<PropertyChangedEventHandler> propertyChangedHandlerMock;

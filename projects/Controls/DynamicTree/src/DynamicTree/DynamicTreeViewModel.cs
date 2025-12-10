@@ -4,7 +4,6 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -109,11 +108,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     protected async Task InitializeRootAsync(ITreeItem root, bool skipRoot = true)
     {
+        this.LogInitializeRoot(root, skipRoot);
         this.SelectionModel?.ClearSelection();
+        this.LogShownItemsClear();
         this.ShownItems.Clear();
 
         if (!skipRoot)
         {
+            this.LogShownItemsAdd(root);
             this.ShownItems.Add(root);
         }
         else
@@ -144,6 +146,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     protected async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
+        this.LogInsertItemRequested(parent, relativeIndex, item);
+
         relativeIndex = ValidateRelativeIndex();
 
         // Always expand the item before adding to force the children collection to be fully loaded.
@@ -165,6 +169,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         // Add the item to its parent first then to the shown items collection
         await parent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+        this.LogShownItemsInsert(newItemIndex, item);
         this.ShownItems.Insert(newItemIndex, item);
 
         // Select the new item
@@ -179,21 +184,9 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
          */
         int ValidateRelativeIndex()
         {
-            if (relativeIndex < 0)
-            {
-                Debug.WriteLine(
-                    $"Request to insert an item in the tree with negative index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}");
-                relativeIndex = 0;
-            }
-
-            if (relativeIndex > parent.ChildrenCount)
-            {
-                Debug.WriteLine(
-                    $"Request to insert an item in the tree at index: {relativeIndex.ToString(CultureInfo.InvariantCulture)}, " +
-                    $"which is out of range [0, {parent.ChildrenCount.ToString(CultureInfo.InvariantCulture)}]");
-                relativeIndex = parent.ChildrenCount;
-            }
-
+            var originalIndex = relativeIndex;
+            relativeIndex = Math.Clamp(relativeIndex, 0, parent.ChildrenCount);
+            this.LogRelativeIndexAdjusted(parent, originalIndex, relativeIndex);
             return relativeIndex;
         }
 
@@ -205,6 +198,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         {
             if (!parent.IsExpanded)
             {
+                this.LogParentAutoExpanded(parent);
                 await this.ExpandItemAsync(parent).ConfigureAwait(true);
             }
         }
@@ -217,6 +211,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         {
             var eventArgs = new TreeItemBeingAddedEventArgs { TreeItem = item, Parent = parent };
             this.ItemBeingAdded?.Invoke(this, eventArgs);
+            this.LogItemBeingAddedDecision(parent, item, eventArgs.Proceed);
             return eventArgs.Proceed;
         }
 
@@ -241,6 +236,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         async Task<int> FindNewItemIndexAsync()
         {
             int i;
+            var siblingRole = "none";
+            ITreeItem? sibling = null;
             if (relativeIndex == 0)
             {
                 i = this.ShownItems.IndexOf(parent) + 1;
@@ -250,12 +247,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                 // Find the previous sibling index in the shown items collection and use
                 // it to insert the item just after it.
                 var siblings = await parent.Children.ConfigureAwait(true);
-                var siblingBefore = siblings[relativeIndex - 1];
+                sibling = siblings[relativeIndex - 1];
+                siblingRole = "prev";
                 var siblingFound = false;
                 i = 0;
                 foreach (var shownItem in this.ShownItems)
                 {
-                    if (!siblingFound && shownItem != siblingBefore)
+                    if (!siblingFound && shownItem != sibling)
                     {
                         ++i;
                         continue;
@@ -263,7 +261,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
                     siblingFound = true;
 
-                    if (shownItem.Depth < siblingBefore.Depth)
+                    if (shownItem.Depth < sibling.Depth)
                     {
                         break;
                     }
@@ -278,11 +276,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                 // Find the next sibling index in the shown items collection and use
                 // it to insert the item just before it.
                 var siblings = await parent.Children.ConfigureAwait(true);
-                var nextSibling = siblings[relativeIndex];
-                i = this.ShownItems.IndexOf(nextSibling);
+                sibling = siblings[relativeIndex];
+                siblingRole = "next";
+                i = this.ShownItems.IndexOf(sibling);
                 Debug.Assert(i >= 0, "must be a valid index");
             }
 
+            this.LogFindNewItemIndexComputed(parent, relativeIndex, i, siblingRole, sibling);
             return i;
         }
 
@@ -316,28 +316,12 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     protected async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
     {
-        if (item.IsLocked)
-        {
-            throw new InvalidOperationException($"attempt to remove locked item `{item.Label}`");
-        }
+        // Capture how many items are shown so we can log how many visible items were removed
+        this.LogRemoveItemRequested(item);
 
-        var itemIsShown = true;
-        var removeAtIndex = this.ShownItems.IndexOf(item);
-        if (removeAtIndex == -1)
-        {
-            itemIsShown = false;
+        var (itemIsShown, removeAtIndex) = EnsureCanRemove();
 
-            // The item is not shown yet, which either means it's inside a collapsed branch or it's an invalid orphan item
-            if (item is { IsRoot: false, Parent: null })
-            {
-                throw new InvalidOperationException($"attempt to remove orphan item `{item.Label}`");
-            }
-        }
-
-        // Fire the ItemBeingRemoved event before any changes are made to the tree
-        var eventArgs = new TreeItemBeingRemovedEventArgs { TreeItem = item };
-        this.ItemBeingRemoved?.Invoke(this, eventArgs);
-        if (!eventArgs.Proceed)
+        if (!ApproveItemBeingRemoved())
         {
             return;
         }
@@ -346,6 +330,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         {
             this.SelectionModel?.ClearSelection();
         }
+
+        var shownItemsBeforeRemoval = this.ShownItems.Count;
 
         // Remove the item's children from their parent and from the ShownItems in a single pass
         await this.RemoveChildren(item, itemIsShown, removeAtIndex).ConfigureAwait(true);
@@ -359,6 +345,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         // Remove the item from the ShownItems if it was visible
         if (itemIsShown)
         {
+            this.LogShownItemsRemoveAt(removeAtIndex);
             this.ShownItems.RemoveAt(removeAtIndex);
         }
 
@@ -370,15 +357,60 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         this.ItemRemoved?.Invoke(
             this,
             new TreeItemRemovedEventArgs { RelativeIndex = itemIndex, TreeItem = item, Parent = itemParent });
+
+        var removedShownItemsCount = shownItemsBeforeRemoval - this.ShownItems.Count;
+        this.LogRemoveItemCompleted(item, removedShownItemsCount, itemIsShown);
+
+        /*
+         * Ensures the item can be removed; throws if it cannot be removed. Returns whether the
+         * item is currently shown and its index in the ShownItems list (or -1 if not shown).
+         */
+        (bool isShown, int atIndex) EnsureCanRemove()
+        {
+            if (item.IsLocked)
+            {
+                this.LogErrorRemoveLockedItem(item);
+                throw new InvalidOperationException($"attempt to remove locked item `{item.Label}`");
+            }
+
+            var shown = true;
+            var index = this.ShownItems.IndexOf(item);
+            if (index == -1)
+            {
+                shown = false;
+
+                // The item is not shown yet, which either means it's inside a collapsed branch or it's
+                // an invalid orphan item
+                if (item is { IsRoot: false, Parent: null })
+                {
+                    this.LogErrorRemoveOrphanItem(item);
+                    throw new InvalidOperationException($"attempt to remove orphan item `{item.Label}`");
+                }
+            }
+
+            return (shown, index);
+        }
+
+        bool ApproveItemBeingRemoved()
+        {
+            var eventArgs = new TreeItemBeingRemovedEventArgs { TreeItem = item };
+            this.ItemBeingRemoved?.Invoke(this, eventArgs);
+            this.LogItemBeingRemovedDecision(item, eventArgs.Proceed);
+            return eventArgs.Proceed;
+        }
     }
 
     /// <summary>
-    ///     Removes all selected items from the tree asynchronously.
+    ///     Removes the currently selected items from the tree asynchronously.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
-    ///     This method clears the current selection before removing the selected items to ensure that
-    ///     the indices remain valid during the removal process.
+    ///     This method supports both single- and multiple-selection models. If there is no
+    ///     selection, the method returns immediately. Selection is cleared before modification so
+    ///     that shown-item indices remain valid while items are removed. In single-selection mode,
+    ///     the single selected item is removed if it is not locked. In multiple-selection mode, all
+    ///     selected items that are not locked are removed; selection updates are deferred during
+    ///     batch removes to avoid a burst of selection change events.
     /// </remarks>
     protected virtual async Task RemoveSelectedItems()
     {
@@ -398,18 +430,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
     }
 
-    /// <summary>
-    ///     Removes the single selected item from the tree asynchronously.
-    /// </summary>
-    /// <remarks>
-    ///     This method is intended to be used only in single selection mode. It clears the current selection
-    ///     before removing the selected item to ensure that the indices remain valid during the removal process.
-    ///     If the selected item is locked, it will not be removed.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    ///     Thrown if the selection model is not in single selection mode.
-    /// </exception>
-    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task RemoveSingleSelectedItem()
     {
         var singleSelection = this.SelectionModel as SingleSelectionModel;
@@ -418,6 +438,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             $"{nameof(this.RemoveSingleSelectedItem)} should only be used in single selection mode");
 
         var selectedItem = singleSelection.SelectedItem;
+        this.LogRemoveSingleSelectedItem(selectedItem!);
+
         if (selectedItem?.IsLocked == false)
         {
             singleSelection.ClearSelection();
@@ -426,18 +448,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
     }
 
-    /// <summary>
-    ///     Removes all selected items from the tree asynchronously in multiple selection mode.
-    /// </summary>
-    /// <remarks>
-    ///     This method is intended to be used only in multiple selection mode. It clears the current
-    ///     selection before removing the selected items to ensure that the indices remain valid during
-    ///     the removal process. If any of the selected items are locked, they will not be removed.
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    ///     Thrown if the selection model is not in multiple selection mode.
-    /// </exception>
-    /// <returns>A task representing the asynchronous operation.</returns>
     private async Task RemoveMultipleSelectionItems()
     {
         var multipleSelection = this.SelectionModel as MultipleSelectionModel;
@@ -447,10 +457,10 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         // Save the selection in a list for processing the removal
         var selectedIndices = multipleSelection.SelectedIndices.OrderDescending().ToList();
+        this.LogRemoveMultipleSelectionItemsStarted(selectedIndices.Count);
 
-        // Clear the selection before we start modifying the shown items
-        // collection so that the indices are still valid while updating the
-        // items being deselected.
+        // Clear the selection before we start modifying the shown items collection so that the
+        // indices are still valid while updating the items being deselected.
         multipleSelection.ClearSelection();
 
         var originalShownItemsCount = this.ShownItems.Count;
@@ -470,6 +480,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         await Task.WhenAll(tasks).ConfigureAwait(true);
 
         var removedItemsCount = originalShownItemsCount - this.ShownItems.Count;
+        this.LogRemoveMultipleSelectionItemsCompleted(removedItemsCount);
 
         this.UpdateSelectionAfterRemoval(selectedIndices[0], removedItemsCount);
     }
@@ -484,11 +495,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns>A task representing the asynchronous operation.</returns>
     private async Task RemoveChildren(ITreeItem item, bool itemIsShown, int atIndex)
     {
+        this.LogRemoveChildrenStarted(item.ChildrenCount, itemIsShown, item.IsExpanded);
+
         foreach (var child in (await item.Children.ConfigureAwait(true)).Reverse())
         {
             var childIndex = await item.RemoveChildAsync(child).ConfigureAwait(true);
             if (itemIsShown && item.IsExpanded)
             {
+                this.LogShownItemsRemoveAt(atIndex + childIndex + 1);
                 this.ShownItems.RemoveAt(atIndex + childIndex + 1);
             }
 
@@ -550,6 +564,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             return;
         }
 
+        this.LogUpdateSelectionAfterRemoval(newSelectedIndex, lastSelectedIndex, removedItemsCount);
         this.SelectionModel.SelectItemAt(newSelectedIndex);
     }
 
@@ -586,6 +601,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
     {
+        this.LogRestoreExpandedChildrenStarted(itemAdapter);
         var insertIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
         _ = await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(true);
     }
@@ -608,6 +624,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
+            this.LogShownItemsInsert(insertIndex, child);
             this.ShownItems.Insert(insertIndex, (TreeItemAdapter)child);
             ++insertIndex;
 
@@ -631,6 +648,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
+        this.LogHideChildrenStarted(itemAdapter);
         var removeIndex = this.ShownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
@@ -652,6 +670,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
+            this.LogShownItemsRemoveAt(removeIndex);
             this.ShownItems.RemoveAt(removeIndex);
             if (child.IsExpanded)
             {

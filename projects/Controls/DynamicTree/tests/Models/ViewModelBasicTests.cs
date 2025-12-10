@@ -10,7 +10,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelBasicTests
+public class ViewModelBasicTests : ViewModelTestBase
 {
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Initialize")]

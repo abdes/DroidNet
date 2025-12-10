@@ -11,7 +11,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelSingleSelectionRemovalTests
+public class ViewModelSingleSelectionRemovalTests : ViewModelTestBase
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Single };
 
