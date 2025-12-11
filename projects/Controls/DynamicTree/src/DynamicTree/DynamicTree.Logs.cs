@@ -91,4 +91,94 @@ public partial class DynamicTree
 
         LogElementClearing(logger, elementType, itemLabel);
     }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tree got focus -> focusing selected item '{itemLabel}' (index {index})")]
+    private static partial void LogFocusSelected(ILogger logger, string? itemLabel, int index);
+
+    [Conditional("DEBUG")]
+    private void LogFocusSelected(TreeItemAdapter item, int index)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusSelected(logger, item.Label, index);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tree got focus -> focusing fallback item '{itemLabel}'")]
+    private static partial void LogFocusFallback(ILogger logger, string? itemLabel);
+
+    [Conditional("DEBUG")]
+    private void LogFocusFallback(ITreeItem item)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusFallback(logger, item.Label);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focus: item not found in shown items '{itemLabel}'")]
+    private static partial void LogFocusIndexMissing(ILogger logger, string? itemLabel);
+
+    [Conditional("DEBUG")]
+    private void LogFocusIndexMissing(ITreeItem item)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusIndexMissing(logger, item.Label);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focus: element missing for '{itemLabel}' at index {index}")]
+    private static partial void LogFocusElementMissing(ILogger logger, string? itemLabel, int index);
+
+    [Conditional("DEBUG")]
+    private void LogFocusElementMissing(ITreeItem item, int index)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusElementMissing(logger, item.Label, index);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focus: TryFocusAsync for '{itemLabel}' at index {index} target={targetType} succeeded={succeeded}")]
+    private static partial void LogFocusResult(ILogger logger, string? itemLabel, int index, string targetType, bool succeeded);
+
+    [Conditional("DEBUG")]
+    private void LogFocusResult(ITreeItem item, int index, string targetType, bool succeeded)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusResult(logger, item.Label, index, targetType, succeeded);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focus: Direct Focus() for '{itemLabel}' at index {index} target={targetType} succeeded={succeeded}")]
+    private static partial void LogFocusDirectResult(ILogger logger, string? itemLabel, int index, string targetType, bool succeeded);
+
+    [Conditional("DEBUG")]
+    private void LogFocusDirectResult(ITreeItem item, int index, string targetType, bool succeeded)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogFocusDirectResult(logger, item.Label, index, targetType, succeeded);
+        }
+    }
 }

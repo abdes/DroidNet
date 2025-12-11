@@ -22,6 +22,11 @@ public abstract partial class DynamicTreeViewModel
     public partial SelectionMode SelectionMode { get; set; } = SelectionMode.None;
 
     /// <summary>
+    ///     Gets the currently selected item, if any.
+    /// </summary>
+    public ITreeItem? SelectedItem => this.SelectionModel?.SelectedItem;
+
+    /// <summary>
     ///     Gets the current selection model for the tree view.
     /// </summary>
     protected SelectionModel<ITreeItem>? SelectionModel { get; private set; }

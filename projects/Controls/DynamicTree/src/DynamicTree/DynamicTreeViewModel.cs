@@ -33,6 +33,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
     private TreeDisplayHelper? displayHelper;
+    private ITreeItem? focusedItem;
 
     /* TODO: need to make this private and expose a read only collection*/
 
@@ -45,6 +46,25 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     modifications.
     /// </remarks>
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
+
+    /// <summary>
+    ///     Gets the item that currently holds logical keyboard focus within the tree.
+    /// </summary>
+    public ITreeItem? FocusedItem
+    {
+        get => this.focusedItem;
+        private set
+        {
+            if (ReferenceEquals(this.focusedItem, value))
+            {
+                return;
+            }
+
+            this.focusedItem = value;
+
+            this.OnPropertyChanged(nameof(this.FocusedItem));
+        }
+    }
 
     /// <summary>
     ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
@@ -134,6 +154,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         this.LogInitializeRoot(root, skipRoot);
         this.SelectionModel?.ClearSelection();
+        _ = this.FocusItem(item: null);
         this.LogShownItemsClear();
         this.ShownItems.Clear();
 
@@ -153,6 +174,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         this.SyncSelectionModelWithItems();
+        _ = this.EnsureFocus();
     }
 
     /// <summary>
@@ -163,9 +185,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="item">The child item to insert.</param>
     /// <returns>A task that completes when the insertion finishes.</returns>
     public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
-    {
-        await this.DisplayHelper.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(true);
-    }
+        => await this.DisplayHelper.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(true);
 
     /// <summary>
     ///     Removes the specified item and its children from the tree asynchronously.
@@ -174,9 +194,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="updateSelection">Whether selection should be updated after removal.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
-    {
-        await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
-    }
+        => await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
 
     /// <summary>
     ///     Removes the currently selected items from the tree asynchronously.
@@ -230,6 +248,266 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns>A task that completes once the block reorder finishes.</returns>
     public Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
         => this.DisplayHelper.ReorderItemsAsync(items, startIndex);
+
+    /// <summary>
+    ///     Ensures there is a focused item by preferring the current focus, then the selected item, and finally the first
+    ///     shown item.
+    /// </summary>
+    /// <returns><see langword="true" /> if a focusable item was found; otherwise, <see langword="false" />.</returns>
+    public bool EnsureFocus()
+    {
+        if (this.focusedItem is not null && this.ShownItems.Contains(this.focusedItem))
+        {
+            return true;
+        }
+
+        var selected = this.SelectionModel?.SelectedItem;
+        if (selected is not null && this.ShownItems.Contains(selected))
+        {
+            this.FocusedItem = selected;
+            return true;
+        }
+
+        if (this.ShownItems.Count > 0)
+        {
+            this.FocusedItem = this.ShownItems[0];
+            return true;
+        }
+
+        this.FocusedItem = null;
+        return false;
+    }
+
+    /// <summary>
+    ///     Sets focus to the specified item if it is visible; clears focus when <paramref name="item" /> is
+    ///     <see langword="null" />.
+    /// </summary>
+    /// <param name="item">The item to focus or <see langword="null" /> to clear focus.</param>
+    /// <returns><see langword="true" /> when focus changed successfully; otherwise, <see langword="false" />.</returns>
+    public bool FocusItem(ITreeItem? item)
+    {
+        if (item is null)
+        {
+            if (this.FocusedItem is null)
+            {
+                return false;
+            }
+
+            this.FocusedItem = null;
+            return true;
+        }
+
+        if (!this.ShownItems.Contains(item))
+        {
+            return false;
+        }
+
+        this.FocusedItem = item;
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the next visible item in the tree.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
+    public bool FocusNextVisibleItem()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem!);
+        if (currentIndex == -1 || currentIndex >= this.ShownItems.Count - 1)
+        {
+            return false;
+        }
+
+        this.FocusedItem = this.ShownItems[currentIndex + 1];
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the previous visible item in the tree.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
+    public bool FocusPreviousVisibleItem()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem!);
+        if (currentIndex <= 0)
+        {
+            return false;
+        }
+
+        this.FocusedItem = this.ShownItems[currentIndex - 1];
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the first visible item that shares the same parent as the currently focused item.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus changed; otherwise, <see langword="false" />.</returns>
+    public bool FocusFirstVisibleItemInParent()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var target = this.FindSibling(this.FocusedItem!.Parent, first: true);
+        if (target is null)
+        {
+            return false;
+        }
+
+        this.FocusedItem = target;
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the last visible item that shares the same parent as the currently focused item.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus changed; otherwise, <see langword="false" />.</returns>
+    public bool FocusLastVisibleItemInParent()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var target = this.FindSibling(this.FocusedItem!.Parent, first: false);
+        if (target is null)
+        {
+            return false;
+        }
+
+        this.FocusedItem = target;
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the first visible item in the tree.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
+    public bool FocusFirstVisibleItemInTree()
+    {
+        if (this.ShownItems.Count == 0)
+        {
+            this.FocusedItem = null;
+            return false;
+        }
+
+        this.FocusedItem = this.ShownItems[0];
+        return true;
+    }
+
+    /// <summary>
+    ///     Moves focus to the last visible item in the tree.
+    /// </summary>
+    /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
+    public bool FocusLastVisibleItemInTree()
+    {
+        if (this.ShownItems.Count == 0)
+        {
+            this.FocusedItem = null;
+            return false;
+        }
+
+        this.FocusedItem = this.ShownItems[^1];
+        return true;
+    }
+
+    /// <summary>
+    ///     Expands the currently focused item when it can accept children.
+    /// </summary>
+    /// <returns><see langword="true" /> when the item was expanded; otherwise, <see langword="false" />.</returns>
+    public async Task<bool> ExpandFocusedItemAsync()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var focused = this.FocusedItem!;
+        if (focused.IsExpanded || !focused.CanAcceptChildren)
+        {
+            return false;
+        }
+
+        await this.ExpandItemAsync(focused).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    ///     Collapses the currently focused item when it is expanded.
+    /// </summary>
+    /// <returns><see langword="true" /> when the item was collapsed; otherwise, <see langword="false" />.</returns>
+    public async Task<bool> CollapseFocusedItemAsync()
+    {
+        if (!this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var focused = this.FocusedItem!;
+        if (!focused.IsExpanded)
+        {
+            return false;
+        }
+
+        await this.CollapseItemAsync(focused).ConfigureAwait(true);
+        return true;
+    }
+
+    /// <summary>
+    ///     Toggles selection for the focused item using the provided modifier keys.
+    /// </summary>
+    /// <param name="isControlKeyDown">Indicates whether the Control key is pressed.</param>
+    /// <param name="isShiftKeyDown">Indicates whether the Shift key is pressed.</param>
+    /// <returns><see langword="true" /> if selection changed; otherwise, <see langword="false" />.</returns>
+    public bool ToggleSelectionForFocused(bool isControlKeyDown, bool isShiftKeyDown)
+    {
+        if (this.SelectionMode == SelectionMode.None || !this.EnsureFocus())
+        {
+            return false;
+        }
+
+        var focused = this.FocusedItem!;
+
+        if (this.SelectionMode == SelectionMode.Single)
+        {
+            this.ClearAndSelectItem(focused);
+            return true;
+        }
+
+        if (isShiftKeyDown)
+        {
+            this.ExtendSelectionTo(focused);
+            return true;
+        }
+
+        if (isControlKeyDown)
+        {
+            if (focused.IsSelected)
+            {
+                this.ClearSelection(focused);
+            }
+            else
+            {
+                this.SelectItem(focused);
+            }
+
+            return true;
+        }
+
+        this.ClearAndSelectItem(focused);
+        return true;
+    }
 
     /// <summary>
     ///     Toggles the expansion state of the specified tree item asynchronously.
@@ -333,6 +611,11 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
+            if (ReferenceEquals(this.FocusedItem, child))
+            {
+                this.FocusedItem = parent;
+            }
+
             this.LogShownItemsRemoveAt(removeIndex);
             this.ShownItems.RemoveAt(removeIndex);
             if (child.IsExpanded)
@@ -340,5 +623,27 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                 await this.HideChildrenRecursiveAsync(child, removeIndex).ConfigureAwait(true);
             }
         }
+    }
+
+    private ITreeItem? FindSibling(ITreeItem? parent, bool first)
+    {
+        ITreeItem? target = null;
+        for (var index = 0; index < this.ShownItems.Count; index++)
+        {
+            var item = this.ShownItems[index];
+            if (!ReferenceEquals(item.Parent, parent))
+            {
+                continue;
+            }
+
+            if (first)
+            {
+                return item;
+            }
+
+            target = item;
+        }
+
+        return target;
     }
 }
