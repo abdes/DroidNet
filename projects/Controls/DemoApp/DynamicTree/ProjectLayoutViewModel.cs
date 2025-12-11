@@ -2,10 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Controls.Demo.Services;
 using DroidNet.Controls.Selection;
@@ -43,16 +46,32 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.ItemRemoved += this.OnItemRemoved;
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
+        this.ItemBeingMoved += this.OnItemBeingMoved;
         this.ItemAdded += this.OnItemAdded;
 
         // Default the selection mode for the demo app to allow multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
+
+        // Watch clipboard state changes to update paste command state.
+        this.ClipboardContentChanged += this.OnClipboardContentChanged;
     }
 
     /// <summary>
     /// Gets the project adapter.
     /// </summary>
     public ProjectAdapter? Project { get; private set; }
+
+    [ObservableProperty]
+    private string? operationError;
+
+    [ObservableProperty]
+    private bool operationErrorVisible;
+
+    // Note: Do not expose UI-only types such as Visibility in the ViewModel; UI should convert string-based OperationError into visibility via a converter.
+    partial void OnOperationErrorChanged(string? value)
+    {
+        this.OperationErrorVisible = !string.IsNullOrEmpty(value);
+    }
 
     /// <summary>
     /// Gets the undo stack.
@@ -94,7 +113,55 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
     {
         _ = sender; // unused
+        this.OperationError = null;
+        // Update the underlying model now that the tree insertion succeeded.
+        switch (args.TreeItem)
+        {
+            case SceneAdapter sceneAdapter:
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    if (args.Parent is ProjectAdapter parentProject)
+                    {
+                        var project = parentProject.AttachedObject;
+                        var idx = Math.Clamp(args.RelativeIndex, 0, project.Scenes.Count);
+                        project.Scenes.Insert(idx, scene);
+                    }
 
+                    break;
+                }
+
+            case EntityAdapter entityAdapter:
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    switch (args.Parent)
+                    {
+                        case SceneAdapter parentScene:
+                            {
+                                var scene = parentScene.AttachedObject;
+                                var idx = Math.Clamp(args.RelativeIndex, 0, scene.Entities.Count);
+                                scene.Entities.Insert(idx, entity);
+                                break;
+                            }
+
+                        case EntityAdapter parentEntity:
+                            {
+                                var pe = parentEntity.AttachedObject;
+                                var idx = Math.Clamp(args.RelativeIndex, 0, pe.Entities.Count);
+                                pe.Entities.Insert(idx, entity);
+                                break;
+                            }
+
+                        default:
+                            Debug.Fail("Unsupported parent type for EntityAdapter in OnItemAdded");
+                            break;
+                    }
+
+                    break;
+                }
+            default:
+                // no model update required
+                break;
+        }
         UndoRedo.Default[this]
             .AddChange(
                 $"RemoveItemAsync({args.TreeItem.Label})",
@@ -103,10 +170,55 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.LogItemAdded(args.TreeItem.Label);
     }
 
+    private void OnClipboardContentChanged(object? sender, ClipboardContentChangedEventArgs args)
+    {
+        _ = sender; _ = args;
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
     private void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
+        this.OperationError = null;
 
+        // Update underlying domain model to reflect the removal from the tree.
+        switch (args.TreeItem)
+        {
+            case SceneAdapter sceneAdapter:
+                {
+                    var scene = sceneAdapter.AttachedObject;
+                    var parentAdapter = args.Parent as ProjectAdapter;
+                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
+                    var project = parentAdapter.AttachedObject;
+                    _ = project.Scenes.Remove(scene);
+                    break;
+                }
+
+            case EntityAdapter entityAdapter:
+                {
+                    var entity = entityAdapter.AttachedObject;
+                    switch (args.Parent)
+                    {
+                        case SceneAdapter parentScene:
+                            _ = parentScene.AttachedObject.Entities.Remove(entity);
+                            break;
+
+                        case EntityAdapter parentEntity:
+                            _ = parentEntity.AttachedObject.Entities.Remove(entity);
+                            break;
+
+                        default:
+                            Debug.Fail("Unsupported parent type for EntityAdapter");
+                            break;
+                    }
+
+                    break;
+                }
+
+            default:
+                // Do nothing
+                break;
+        }
         UndoRedo.Default[this]
             .AddChange(
                 $"Add Item({args.TreeItem.Label})",
@@ -124,6 +236,94 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     /// </summary>
     [RelayCommand]
     private void Redo() => UndoRedo.Default[this].Redo();
+
+    /// <summary>
+    /// Fired when the ViewModel requests a rename operation in the View.
+    /// </summary>
+    public event EventHandler<ITreeItem?>? RenameRequested;
+
+    private bool CanCopy() => this.SelectionModel is not null && this.SelectionModel.IsEmpty == false;
+
+    /// <summary>
+    /// Copies the selected items into the clipboard.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    private async Task Copy()
+    {
+        var items = this.GetSelectedItems();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await this.CopyItemsAsync(items).ConfigureAwait(true);
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanCut()
+    {
+        var items = this.GetSelectedItems();
+        return items.Count > 0 && items.Any(i => !i.IsLocked);
+    }
+
+    /// <summary>
+    /// Cuts the selected items into the clipboard.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCut))]
+    private async Task Cut()
+    {
+        var items = this.GetSelectedItems().Where(i => !i.IsLocked).ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await this.CutItemsAsync(items).ConfigureAwait(true);
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPaste() => this.CurrentClipboardState != ClipboardState.Empty && this.IsClipboardValid && this.FocusedItem is not null && (this.SelectionModel?.IsEmpty == false);
+
+    /// <summary>
+    /// Pastes clipboard items into the current target.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanPaste))]
+    private async Task Paste()
+    {
+        await this.PasteItemsAsync().ConfigureAwait(true);
+    }
+
+    private bool CanRename() => this.SelectionModel is not null && !this.SelectionModel.IsEmpty;
+
+    /// <summary>
+    /// Requests the view to start in-place rename on the currently selected item.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRename))]
+    private void Rename()
+    {
+        var item = this.SelectedItem;
+        this.RenameRequested?.Invoke(this, item);
+    }
+
+    private List<ITreeItem> GetSelectedItems()
+    {
+        if (this.SelectionModel is null)
+        {
+            return new List<ITreeItem>();
+        }
+
+        if (this.SelectionModel is MultipleSelectionModel multi2)
+        {
+            return multi2.SelectedIndices.Select(i => this.ShownItems[i]).Cast<ITreeItem>().ToList();
+        }
+
+        if (this.SelectionModel is SingleSelectionModel && this.SelectedItem is not null)
+        {
+            return new List<ITreeItem> { this.SelectedItem };
+        }
+
+        return new List<ITreeItem>();
+    }
 
     private void SelectionModel_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
@@ -163,32 +363,57 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         {
             this.HasUnlockedSelectedItems = hasUnlockedSelectedItems;
             this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
+            this.CopyCommand.NotifyCanExecuteChanged();
+            this.CutCommand.NotifyCanExecuteChanged();
+            this.RenameCommand.NotifyCanExecuteChanged();
+        }
+        else
+        {
+            // If the selection changed but unlocked state is the same, still update command availability.
+            this.CopyCommand.NotifyCanExecuteChanged();
+            this.CutCommand.NotifyCanExecuteChanged();
+            this.RenameCommand.NotifyCanExecuteChanged();
+            this.PasteCommand.NotifyCanExecuteChanged();
         }
     }
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
         _ = sender; // unused
+        this.OperationError = null;
 
         switch (args.TreeItem)
         {
             case SceneAdapter sceneAdapter:
                 {
-                    var scene = sceneAdapter.AttachedObject;
-                    var parentAdapter = args.Parent as ProjectAdapter;
-                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                    var project = parentAdapter.AttachedObject;
-                    project.Scenes.Add(scene);
+                    if (args.Parent is not ProjectAdapter)
+                    {
+                        args.Proceed = false;
+                        this.OperationError = "Scenes can only be added to a Project.";
+                        this.logger.LogWarning("Scene add rejected. Parent is not a ProjectAdapter: {ParentType}", args.Parent?.GetType());
+                        return;
+                    }
                     break;
                 }
 
             case EntityAdapter entityAdapter:
                 {
                     var entity = entityAdapter.AttachedObject;
-                    var parentAdapter = args.Parent as SceneAdapter;
-                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                    var scene = parentAdapter.AttachedObject;
-                    scene.Entities.Add(entity);
+                    if (args.Parent is not SceneAdapter && args.Parent is not EntityAdapter)
+                    {
+                        args.Proceed = false;
+                        this.OperationError = "Entities can only be added to a Scene or another Entity.";
+                        this.logger.LogWarning("Entity add rejected. Parent is not a SceneAdapter or EntityAdapter: {ParentType}", args.Parent?.GetType());
+                        return;
+                    }
+
+                    if (!args.Parent.CanAcceptChildren)
+                    {
+                        args.Proceed = false;
+                        this.OperationError = "Target parent does not accept children.";
+                        this.logger.LogWarning("Entity add rejected. Parent does not accept children.");
+                        return;
+                    }
                     break;
                 }
 
@@ -201,32 +426,95 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
     {
         _ = sender; // unused
+        this.OperationError = null; // Reset operation error
+
+        if (args.TreeItem.IsLocked)
+        {
+            args.Proceed = false;
+            this.OperationError = "Cannot remove a locked item.";
+            this.logger.LogWarning("Remove rejected: item is locked: {ItemLabel}", args.TreeItem.Label);
+            return;
+        }
+
+        if (args.TreeItem.Parent is null)
+        {
+            args.Proceed = false;
+            this.OperationError = "Cannot remove an orphan item.";
+            this.logger.LogWarning("Remove rejected: orphan item: {ItemLabel}", args.TreeItem.Label);
+            return;
+        }
 
         Debug.Assert(args.TreeItem.Parent is not null, "any item in the tree should have a parent");
+        // Only validation should occur here; model mutation must occur in OnItemRemoved after the tree actually removed the item.
         switch (args.TreeItem)
         {
-            case SceneAdapter sceneAdapter:
+            case SceneAdapter:
+                if (args.TreeItem.Parent is not ProjectAdapter)
                 {
-                    var scene = sceneAdapter.AttachedObject;
-                    var parentAdapter = sceneAdapter.Parent as ProjectAdapter;
-                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                    var project = parentAdapter.AttachedObject;
-                    _ = project.Scenes.Remove(scene);
+                    args.Proceed = false;
+                    this.OperationError = "Scene can only be removed from a Project.";
+                    this.logger.LogWarning("Remove rejected: Scene parent is not a ProjectAdapter: {ParentType}", args.TreeItem.Parent?.GetType());
+                    return;
+                }
+                break;
+
+            case EntityAdapter:
+                var parentEntity = args.TreeItem.Parent;
+                if (parentEntity is not SceneAdapter && parentEntity is not EntityAdapter)
+                {
+                    args.Proceed = false;
+                    this.OperationError = "Entity parent is invalid; cannot remove.";
+                    this.logger.LogWarning("Remove rejected: Entity parent is invalid: {ParentType}", args.TreeItem.Parent?.GetType());
+                    return;
+                }
+                break;
+        }
+    }
+
+    private void OnItemBeingMoved(object? sender, TreeItemBeingMovedEventArgs args)
+    {
+        _ = sender; // unused
+        this.OperationError = null;
+
+        switch (args.TreeItem)
+        {
+            case SceneAdapter:
+                {
+                    if (args.NewParent is not ProjectAdapter)
+                    {
+                        args.Proceed = false;
+                        args.VetoReason = "Scenes can only be moved under a Project.";
+                        this.OperationError = args.VetoReason;
+                        this.logger.LogWarning("Move rejected: {Reason}", args.VetoReason);
+                    }
+
                     break;
                 }
 
-            case EntityAdapter entityAdapter:
+            case EntityAdapter:
                 {
-                    var entity = entityAdapter.AttachedObject;
-                    var parentAdapter = entityAdapter.Parent as SceneAdapter;
-                    Debug.Assert(parentAdapter is not null, "the parent of a EntityAdapter must be a SceneAdapter");
-                    var scene = parentAdapter.AttachedObject;
-                    _ = scene.Entities.Remove(entity);
+                    if (args.NewParent is not SceneAdapter && args.NewParent is not EntityAdapter)
+                    {
+                        args.Proceed = false;
+                        args.VetoReason = "Entities can only be moved under a Scene or another Entity.";
+                        this.OperationError = args.VetoReason;
+                        this.logger.LogWarning("Move rejected: {Reason}", args.VetoReason);
+                        return;
+                    }
+
+                    if (!args.NewParent.CanAcceptChildren)
+                    {
+                        args.Proceed = false;
+                        args.VetoReason = "Target parent does not accept children.";
+                        this.OperationError = args.VetoReason;
+                        this.logger.LogWarning("Move rejected: {Reason}", args.VetoReason);
+                    }
+
                     break;
                 }
 
             default:
-                // Do nothing
+                // nothing special
                 break;
         }
     }
@@ -241,7 +529,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
 
         this.Project = new ProjectAdapter(project);
-        await this.InitializeRootAsync(this.Project).ConfigureAwait(false);
+        // Keep the project expanded by default so the tree displays its children at startup.
+        this.Project.IsExpanded = true;
+        await this.InitializeRootAsync(this.Project, skipRoot: false).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -281,23 +571,27 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        var scene = selectedItem switch
+        var parent = selectedItem switch
         {
-            SceneAdapter item => item,
-            EntityAdapter { Parent: SceneAdapter } entity => (SceneAdapter)entity.Parent,
-
-            // Anything else is not a valid item to which we can add an entity
+            SceneAdapter s => (ITreeItem)s,
+            EntityAdapter e => (ITreeItem)e,
             _ => null,
         };
 
-        if (scene is null)
+        if (parent is null)
         {
             return;
         }
 
-        var newEntity
-            = new EntityAdapter(new Entity($"New Entity {scene.AttachedObject.Entities.Count}"));
-        await this.InsertItemAsync(0, scene, newEntity).ConfigureAwait(false);
+        var count = parent switch
+        {
+            SceneAdapter s => s.AttachedObject.Entities.Count,
+            EntityAdapter e => e.AttachedObject.Entities.Count,
+            _ => 0,
+        };
+
+        var newEntity = new EntityAdapter(new Entity($"New Entity {count}"));
+        await this.InsertItemAsync(0, parent, newEntity).ConfigureAwait(false);
     }
 
     /// <summary>

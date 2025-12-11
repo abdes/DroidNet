@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:componentModel="using:System.ComponentModel"
+    xmlns:converters="using:DroidNet.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -11,6 +12,9 @@
     KeyboardAcceleratorPlacementMode="Hidden"
     Loaded="ProjectLayoutView_OnLoaded"
     mc:Ignorable="d">
+    <Page.Resources>
+        <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+    </Page.Resources>
 
     <Page.KeyboardAccelerators>
         <KeyboardAccelerator
@@ -32,6 +36,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <Border
             Padding="0,3"
@@ -45,44 +50,95 @@
                 <Style TargetType="AppBarButton">
                     <Setter Property="Width" Value="40" />
                 </Style>
+                <!--  Converter is now registered at Page.Resources so x:Bind converter lookup can find it  -->
             </Grid.Resources>
 
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <CommandBar
+            <dnc:ToolBar
+                Grid.Row="1"
                 Grid.Column="1"
                 DefaultLabelPosition="Collapsed"
+                IsCompact="False"
                 OverflowButtonVisibility="Collapsed">
-                <AppBarButton
-                    Icon="Rename"
-                    IsCompact="True"
-                    Label="Rename" />
-                <AppBarButton
-                    Icon="Repair"
-                    IsCompact="True"
-                    Label="Edit Properties" />
-                <AppBarButton
-                    Command="{x:Bind ViewModel.AddEntityCommand}"
-                    IsCompact="True"
-                    Label="Add Entity">
-                    <AppBarButton.Icon>
-                        <FontIcon Glyph="&#xECC8;" />
-                    </AppBarButton.Icon>
-                </AppBarButton>
-                <AppBarButton
-                    Command="{x:Bind ViewModel.AddSceneCommand}"
-                    Icon="Add"
-                    IsCompact="True"
-                    Label="Create New Scene" />
-                <AppBarButton
-                    Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
-                    Icon="Delete"
-                    IsCompact="True"
-                    Label="Delete"
-                    ToolTipService.ToolTip="Delete (Del)" />
-            </CommandBar>
+                <dnc:ToolBar.PrimaryItems>
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CutCommand}" Label="Cut">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Cut" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CopyCommand}" Label="Copy">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Copy" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.PasteCommand}" Label="Paste">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Paste" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.RenameCommand}" Label="Rename">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Rename" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.RemoveSelectedItemsCommand}"
+                        Label="Delete"
+                        ToolTipService.ToolTip="Delete (Del)">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Delete" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarSeparator />
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.AddSceneCommand}" Label="Add Scene">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Add" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.AddEntityCommand}" Label="Add Entity">
+                        <dnc:ToolBarButton.Icon>
+                            <FontIconSource Glyph="&#xECC8;" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarSeparator />
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.UndoCommand}" Label="Undo">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Undo" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.RedoCommand}" Label="Redo">
+                        <dnc:ToolBarButton.Icon>
+                            <SymbolIconSource Symbol="Redo" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+                </dnc:ToolBar.PrimaryItems>
+            </dnc:ToolBar>
+            <Border
+                Grid.Row="2"
+                Grid.Column="0"
+                Padding="8"
+                Background="#FFF8D7D5"
+                BorderBrush="#FFEEA0A0"
+                BorderThickness="1"
+                Visibility="{x:Bind ViewModel.OperationError, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
+                <TextBlock
+                    Foreground="Black"
+                    Text="{x:Bind ViewModel.OperationError}"
+                    TextWrapping="Wrap" />
+            </Border>
         </Grid>
         <StackPanel
             Grid.Row="0"

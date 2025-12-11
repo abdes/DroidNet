@@ -20,4 +20,8 @@
 
     <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" />
 
+    <DataTemplate x:Key="DefaultThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
+        <TextBlock Text="" />
+    </DataTemplate>
+
 </ResourceDictionary>
