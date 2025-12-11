@@ -41,6 +41,8 @@
 
     <Style x:Key="DefaultDynamicTreeItemStyle" TargetType="local:DynamicTreeItem">
         <Setter Property="Background" Value="{ThemeResource DynamicTreeItemBackground}" />
+        <Setter Property="IsTabStop" Value="True" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:DynamicTreeItem">

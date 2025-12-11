@@ -104,14 +104,16 @@ public partial class DynamicTreeItem
 
     private void ItemAdapter_OnPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (sender is null || !string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
+        if (sender is not TreeItemAdapter adapter)
         {
             return;
         }
 
-        var adapter = (TreeItemAdapter)sender;
-        Debug.WriteLine($"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
-        this.UpdateSelectionVisualState(adapter.IsSelected);
+        if (string.Equals(args.PropertyName, nameof(ITreeItem.IsSelected), StringComparison.Ordinal))
+        {
+            Debug.WriteLine($"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
+            this.UpdateSelectionVisualState(adapter.IsSelected);
+        }
     }
 
     // Initialize the logger for this NumberBox. Use the NumberBox type as the category.
