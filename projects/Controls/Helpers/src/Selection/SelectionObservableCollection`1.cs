@@ -153,9 +153,18 @@ internal sealed partial class SelectionObservableCollection<T>(IEnumerable<int> 
     {
         foreach (var index in this)
         {
-            if (this.GetItemAt(index) is ISelectable treeItem)
+            try
             {
-                treeItem.IsSelected = false;
+                if (this.GetItemAt(index) is ISelectable treeItem)
+                {
+                    treeItem.IsSelected = false;
+                }
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Defensive: clear should tolerate indices that are no longer valid
+                // (e.g., the underlying model has shrunk). Just continue.
+                continue;
             }
         }
 
@@ -170,9 +179,16 @@ internal sealed partial class SelectionObservableCollection<T>(IEnumerable<int> 
     protected override void RemoveItem(int index)
     {
         var item = this[index];
-        if (this.GetItemAt(item) is ISelectable treeItem)
+        try
         {
-            treeItem.IsSelected = false;
+            if (this.GetItemAt(item) is ISelectable treeItem)
+            {
+                treeItem.IsSelected = false;
+            }
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            // Defensive: item index is no longer valid (e.g., underlying model shrank), so ignore.
         }
 
         base.RemoveItem(index);

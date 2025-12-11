@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Controls.Selection;
 
 namespace DroidNet.Controls.Tests;
 
@@ -154,6 +155,70 @@ public class ViewModelExpansionTests : ViewModelTestBase
 
         // Assert
         _ = this.viewModel.ShownItems.Should().NotContain([childItem, grandChildItem]);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
+    public async Task CollapseItemAsync_WithSelectedChildren_ShouldNotCauseExceptionOnSelectionCleanup()
+    {
+        // Arrange
+        this.viewModel.SelectionMode = SelectionMode.Multiple;
+
+        var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
+        var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
+        var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
+
+        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+
+        // Select both the child and its grandchild
+        var iChild = this.viewModel.ShownItems.IndexOf(childItem);
+        var iGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+        var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
+        selection!.SelectItemsAt(iChild, iGrandChild);
+
+        // Act - collapse parent and then attempt to select parent
+        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
+
+        // Now simulates a tap to clear and select the root item (should not throw)
+        var act = async () => await Task.Run(() => this.viewModel.ClearAndSelectItem(rootItem));
+
+        // Assert - should not throw
+        _ = await act.Should().NotThrowAsync().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Collapse")]
+    public async Task CollapseAndReexpand_ShouldClearSelectionForChildren()
+    {
+        // Arrange
+        this.viewModel.SelectionMode = SelectionMode.Multiple;
+
+        var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
+        var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
+        var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
+
+        await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+
+        // Select both the child and its grandchild
+        var iChild = this.viewModel.ShownItems.IndexOf(childItem);
+        var iGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+        var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
+        selection!.SelectItemsAt(iChild, iGrandChild);
+
+        // Act - collapse then expand
+        await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
+        await this.viewModel.ExpandItemAsync(rootItem).ConfigureAwait(false);
+
+        // If child is re-shown, its selection should have been cleared
+        var newIChild = this.viewModel.ShownItems.IndexOf(childItem);
+        var newIGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+
+        _ = newIChild.Should().BeGreaterThan(-1);
+        _ = newIGrandChild.Should().BeGreaterThan(-1);
+        _ = selection.IsSelected(newIChild).Should().BeFalse();
+        _ = selection.IsSelected(newIGrandChild).Should().BeFalse();
+        _ = childItem.IsSelected.Should().BeFalse();
+        _ = grandChildItem.IsSelected.Should().BeFalse();
     }
 
     [TestMethod]
