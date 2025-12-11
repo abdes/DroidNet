@@ -1,10 +1,11 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <Page
     x:Class="DroidNet.Controls.Demo.DynamicTree.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:componentModel="using:System.ComponentModel"
     xmlns:converters="using:DroidNet.Converters"
+    xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -14,6 +15,7 @@
     mc:Ignorable="d">
     <Page.Resources>
         <converters:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+        <ctkConverters:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
     </Page.Resources>
 
     <Page.KeyboardAccelerators>
@@ -33,19 +35,57 @@
             <ColumnDefinition Width="400" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
+        <!--  Add Error row at the top, then the content and toolbar below  -->
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
+        <!--  Error border moved to top; spans both columns  -->
         <Border
-            Padding="0,3"
-            BorderBrush="Red"
+            Grid.Row="0"
+            Grid.ColumnSpan="2"
+            MinHeight="40"
+            Padding="8"
+            Background="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
+            BorderBrush="{ThemeResource SystemFillColorCriticalBackgroundBrush}"
             BorderThickness="1"
-            CornerRadius="3">
-            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
+            Canvas.ZIndex="100"
+            CornerRadius="2"
+            Visibility="{x:Bind ViewModel.OperationErrorVisible, Converter={StaticResource BoolToVisibilityConverter}, Mode=OneWay}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <!--  Combined error display with icon and text  -->
+                <Grid Grid.Column="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <!--  warning icon removed  -->
+                    <TextBlock
+                        x:Name="OperationErrorTextBlock"
+                        MaxWidth="1200"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="16"
+                        FontWeight="Normal"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        Text="{x:Bind ViewModel.OperationError, Mode=OneWay}"
+                        TextWrapping="Wrap" />
+                </Grid>
+                <dnc:ToolBarButton
+                    Grid.Column="1"
+                    Command="{x:Bind ViewModel.ClearOperationErrorCommand}"
+                    ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Cancel" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+            </Grid>
         </Border>
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="2">
             <Grid.Resources>
                 <Style TargetType="AppBarButton">
                     <Setter Property="Width" Value="40" />
@@ -53,12 +93,14 @@
                 <!--  Converter is now registered at Page.Resources so x:Bind converter lookup can find it  -->
             </Grid.Resources>
 
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
             <dnc:ToolBar
-                Grid.Row="1"
                 Grid.Column="1"
                 DefaultLabelPosition="Collapsed"
                 IsCompact="False"
@@ -126,26 +168,24 @@
                     </dnc:ToolBarButton>
                 </dnc:ToolBar.PrimaryItems>
             </dnc:ToolBar>
-            <Border
-                Grid.Row="2"
-                Grid.Column="0"
-                Padding="8"
-                Background="#FFF8D7D5"
-                BorderBrush="#FFEEA0A0"
-                BorderThickness="1"
-                Visibility="{x:Bind ViewModel.OperationError, Converter={StaticResource NullToVisibilityConverter}, Mode=OneWay}">
-                <TextBlock
-                    Foreground="Black"
-                    Text="{x:Bind ViewModel.OperationError}"
-                    TextWrapping="Wrap" />
-            </Border>
+            <!--  toolbar grid doesn't show the error; error is now at the top row  -->
         </Grid>
+        <!--  Main content: tree in left column  -->
+        <Border
+            Grid.Row="1"
+            Grid.Column="0"
+            Padding="0,3"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="1"
+            CornerRadius="3">
+            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
+        </Border>
         <StackPanel
-            Grid.Row="0"
+            Grid.Row="1"
             Grid.Column="1"
             Width="300"
             Padding="32,10"
-            BorderBrush="Gray"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             BorderThickness="1">
             <ItemsRepeater ItemsSource="{x:Bind ViewModel.UndoStack, Mode=OneWay}">
                 <DataTemplate x:DataType="tm:IChange">
@@ -154,7 +194,7 @@
             </ItemsRepeater>
             <ItemsRepeater ItemsSource="{x:Bind ViewModel.RedoStack, Mode=OneWay}">
                 <DataTemplate x:DataType="tm:IChange">
-                    <TextBlock Foreground="Gray" Text="{x:Bind Key}" />
+                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Key}" />
                 </DataTemplate>
             </ItemsRepeater>
         </StackPanel>

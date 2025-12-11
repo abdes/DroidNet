@@ -11,12 +11,12 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// A <see cref="DataTemplateSelector" /> that can map a <see cref="TreeItemAdapter" /> to a template that can be used to display a
 /// <see cref="Thumbnail" /> for it.
 /// </summary>
-public partial class ThumbnailTemplateSelector : DataTemplateSelector
+internal sealed partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
     /// <inheritdoc/>
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
     {
-        string key = item switch
+        var key = item switch
         {
             SceneAdapter => "SceneThumbnailTemplate",
             EntityAdapter => "EntityThumbnailTemplate",
@@ -24,7 +24,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
         };
 
         // Try to resolve the resource from the container's resource chain first; fall back to Application resources.
-        DataTemplate? found = TryFindResourceTemplate(container, key);
+        var found = TryFindResourceTemplate(container, key);
         if (found is not null)
         {
             return found;
@@ -32,12 +32,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
 
         // Try to return a default if present
         var defaultTemplate = TryFindResourceTemplate(container, "DefaultThumbnailTemplate");
-        if (defaultTemplate is not null)
-        {
-            return defaultTemplate;
-        }
-
-        return base.SelectTemplateCore(item, container);
+        return defaultTemplate ?? base.SelectTemplateCore(item, container);
     }
 
     private static DataTemplate? TryFindResourceTemplate(DependencyObject? container, string key)
@@ -48,7 +43,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
             var current = fe as global::Microsoft.UI.Xaml.FrameworkElement;
             while (current is not null)
             {
-                if (current.Resources is not null && current.Resources.ContainsKey(key))
+                if (current.Resources?.ContainsKey(key) == true)
                 {
                     return current.Resources[key] as DataTemplate;
                 }
@@ -58,11 +53,8 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
             }
         }
 
-        if (global::Microsoft.UI.Xaml.Application.Current?.Resources?.ContainsKey(key) == true)
-        {
-            return global::Microsoft.UI.Xaml.Application.Current.Resources[key] as DataTemplate;
-        }
-
-        return null;
+        return Application.Current?.Resources?.ContainsKey(key) == true
+            ? Application.Current.Resources[key] as DataTemplate
+            : null;
     }
 }

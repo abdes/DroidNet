@@ -4,10 +4,9 @@
 
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Mvvm.Generators;
-using DroidNet.Controls;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
@@ -17,6 +16,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// in representing hierarchical layouts of mixed types which can be loaded dynamically.
 /// </summary>
 [ViewModel(typeof(ProjectLayoutViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "Views must be public")]
 public sealed partial class ProjectLayoutView
 {
     /// <summary>
@@ -25,7 +25,7 @@ public sealed partial class ProjectLayoutView
     public ProjectLayoutView()
     {
         this.InitializeComponent();
-        this.Unloaded += ProjectLayoutView_Unloaded;
+        this.Unloaded += this.ProjectLayoutView_Unloaded;
     }
 
     private async void ProjectLayoutView_OnLoaded(object sender, RoutedEventArgs args)
@@ -48,9 +48,10 @@ public sealed partial class ProjectLayoutView
         }
     }
 
-    private async void ViewModel_RenameRequested(object? sender, ITreeItem? item)
+    private async void ViewModel_RenameRequested(object? sender, RenameRequestedEventArgs? args)
     {
         _ = sender; // unused
+        var item = args?.Item;
         if (item is null)
         {
             return;
@@ -60,11 +61,20 @@ public sealed partial class ProjectLayoutView
         {
             Title = "Rename",
             PrimaryButtonText = "OK",
-            CloseButtonText = "Cancel"
+            CloseButtonText = "Cancel",
         };
 
         var tb = new TextBox() { Text = item.Label };
         dialog.Content = tb;
+
+        // Ensure the dialog has a XamlRoot so ShowAsync() can display it.
+        // When a control raises the request from a non-visual context, the
+        // ContentDialog needs an explicit XamlRoot set to avoid
+        // "This element does not have a XamlRoot" exceptions.
+        if (this.XamlRoot is not null)
+        {
+            dialog.XamlRoot = this.XamlRoot;
+        }
 
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)

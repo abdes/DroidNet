@@ -58,6 +58,11 @@ public partial class DynamicTree : Control
     private ItemsRepeater? itemsRepeater;
     private Grid? rootGrid;
 
+    private FocusRequestOrigin lastFocusRequestOrigin = FocusRequestOrigin.None;
+
+    private bool isApplyingFocus;
+    private bool focusOperationPending;
+
     /// <summary>
     ///     Initializes a new instance of the <see cref="DynamicTree" /> class.
     /// </summary>
@@ -71,11 +76,191 @@ public partial class DynamicTree : Control
         this.Unloaded += this.OnUnloaded;
     }
 
+    private enum FocusRequestOrigin
+    {
+        None,
+        Keyboard,
+        Programmatic,
+    }
+
     private enum DropZone
     {
         Before,
         Inside,
         After,
+    }
+
+    /// <summary>
+    /// Overrideable hook for pointer-press handling on an item.
+    /// </summary>
+    /// <returns><see langword="true"/> if handled.</returns>
+    /// <param name="item">The item that was pressed.</param>
+    /// <param name="isControlDown">Whether the Control key is down.</param>
+    /// <param name="isShiftDown">Whether the Shift key is down.</param>
+    /// <param name="leftButtonPressed">Whether the left mouse button is pressed.</param>
+    protected internal virtual bool OnItemPointerPressed(TreeItemAdapter item, bool isControlDown, bool isShiftDown, bool leftButtonPressed)
+    {
+        if (!leftButtonPressed || this.ViewModel is null)
+        {
+            return false;
+        }
+
+        if (isControlDown)
+        {
+            if (item.IsSelected)
+            {
+                this.ViewModel.ClearSelection(item);
+            }
+            else
+            {
+                this.ViewModel.SelectItem(item);
+            }
+        }
+        else if (isShiftDown)
+        {
+            this.ViewModel.ExtendSelectionTo(item);
+        }
+        else if (!item.IsSelected)
+        {
+            this.ViewModel.ClearAndSelectItem(item);
+        }
+
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Programmatic;
+        return true;
+    }
+
+    /// <summary>
+    /// Overrideable hook for tap handling on an item.
+    /// </summary>
+    /// <returns><see langword="true"/> if handled.</returns>
+    /// <param name="item">The item that was tapped.</param>
+    /// <param name="isControlDown">Whether the Control key is down.</param>
+    /// <param name="isShiftDown">Whether the Shift key is down.</param>
+    protected internal virtual bool OnItemTapped(TreeItemAdapter item, bool isControlDown, bool isShiftDown)
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        // When control/shift is down, let pointer handlers handle multi-select behavior.
+        if (isControlDown || isShiftDown)
+        {
+            return false;
+        }
+
+        // Tap always makes the tapped item the single selection.
+        this.ViewModel.ClearAndSelectItem(item);
+
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Programmatic;
+        var forceRaise = ReferenceEquals(this.ViewModel.FocusedItem, item);
+        this.LogRequestModelFocusWrapper(item, this.lastFocusRequestOrigin, forceRaise);
+        _ = this.ViewModel.FocusItem(item, forceRaise: forceRaise);
+        return true;
+    }
+
+    /// <summary>
+    /// Overrideable hook for when an item receives platform focus.
+    /// </summary>
+    /// <returns><see langword="true"/> if handled.</returns>
+    /// <param name="item">The item that received focus.</param>
+    /// <param name="isApplyingFocus">True if the control is currently applying focus programmatically.</param>
+    protected internal virtual bool OnItemGotFocus(TreeItemAdapter item, bool isApplyingFocus)
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        if (isApplyingFocus)
+        {
+            // When we're applying focus programmatically ignore this GotFocus to avoid a feedback loop.
+            return false;
+        }
+
+        if (ReferenceEquals(this.ViewModel.FocusedItem, item))
+        {
+            return false;
+        }
+
+        if (this.lastFocusRequestOrigin == FocusRequestOrigin.None)
+        {
+            this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+        }
+
+        this.LogRequestModelFocusWrapper(item, this.lastFocusRequestOrigin, forceRaise: false);
+        _ = this.ViewModel.FocusItem(item);
+        return true;
+    }
+
+    /// <summary>
+    ///     Handles keyboard input for the tree control.
+    /// </summary>
+    /// <param name="key">The virtual key that was pressed.</param>
+    /// <param name="isControlDown">True when the Control key is held down during the key event.</param>
+    /// <param name="isShiftDown">True when the Shift key is held down during the key event.</param>
+    /// <returns>
+    ///     A task that completes with <see langword="true"/> when the key was handled by the control,
+    ///     otherwise <see langword="false"/>.
+    /// </returns>
+    /// <remarks>
+    ///     This method implements the control's keyboard command routing and is designed to be
+    ///     invoked both from platform key event handlers (which compute modifier state from the
+    ///     platform) and directly from tests. It delegates to various ViewModel operations for
+    ///     navigation, selection and clipboard shortcuts.
+    /// </remarks>
+    protected internal virtual async Task<bool> HandleKeyDownAsync(VirtualKey key, bool isControlDown, bool isShiftDown)
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        _ = this.ViewModel.EnsureFocus();
+
+        switch (key)
+        {
+            case VirtualKey.A when isControlDown:
+                this.ViewModel.ToggleSelectAll();
+                return true;
+
+            case VirtualKey.I when isControlDown && isShiftDown:
+                this.ViewModel.InvertSelectionCommand.Execute(parameter: null);
+                return true;
+
+            case VirtualKey.C when isControlDown:
+                return await this.HandleCopyShortcutAsync().ConfigureAwait(true);
+
+            case VirtualKey.X when isControlDown:
+                return await this.HandleCutShortcutAsync().ConfigureAwait(true);
+
+            case VirtualKey.V when isControlDown:
+                return await this.HandlePasteShortcutAsync().ConfigureAwait(true);
+
+            case VirtualKey.Up:
+                return await this.MoveFocusAsync(FocusNavigationDirection.Up).ConfigureAwait(true);
+
+            case VirtualKey.Down:
+                return await this.MoveFocusAsync(FocusNavigationDirection.Down).ConfigureAwait(true);
+
+            case VirtualKey.Left:
+                return await this.HandleCollapseAsync().ConfigureAwait(true);
+
+            case VirtualKey.Right:
+                return await this.HandleExpandAsync().ConfigureAwait(true);
+
+            case VirtualKey.Home:
+                return await this.HandleHomeAsync(isControlDown).ConfigureAwait(true);
+
+            case VirtualKey.End:
+                return await this.HandleEndAsync(isControlDown).ConfigureAwait(true);
+
+            case VirtualKey.Enter:
+            case VirtualKey.Space:
+                return this.ViewModel.ToggleSelectionForFocused(isControlDown, isShiftDown);
+        }
+
+        return false;
     }
 
     /// <inheritdoc />
@@ -111,8 +296,6 @@ public partial class DynamicTree : Control
             PointerPressedEvent,
             new PointerEventHandler(this.OnPointerPressed),
             handledEventsToo: true);
-
-        this.LostFocus += this.OnTreeLostFocus;
     }
 
     /// <summary>
@@ -142,7 +325,10 @@ public partial class DynamicTree : Control
             if (index >= 0)
             {
                 this.LogFocusSelected(selected, index);
-                _ = this.TryFocusItemAsync(selected);
+
+                // Request that the ViewModel assign focus (Keyboard origin) and let the View respond
+                this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+                _ = this.ViewModel.FocusItem(selected, forceRaise: true);
                 return;
             }
 
@@ -152,7 +338,10 @@ public partial class DynamicTree : Control
         if (this.ViewModel.EnsureFocus() && this.ViewModel.FocusedItem is not null)
         {
             this.LogFocusFallback(this.ViewModel.FocusedItem);
-            _ = this.TryFocusCurrentAsync();
+
+            // Ensure keyboard-origin focus is applied via the ViewModel
+            this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+            _ = this.ViewModel.FocusItem(this.ViewModel.FocusedItem, forceRaise: true);
             return;
         }
 
@@ -217,7 +406,9 @@ public partial class DynamicTree : Control
 
         this.ClearDragState();
 
-        this.LostFocus -= this.OnTreeLostFocus;
+        // Clear any pending focus operations to avoid executing them when unloaded
+        this.focusOperationPending = false;
+        this.isApplyingFocus = false;
     }
 
     private void OnPointerPressed(object sender, PointerRoutedEventArgs args)
@@ -226,6 +417,9 @@ public partial class DynamicTree : Control
         {
             return;
         }
+
+        // Log clicks inside/outside the items repeater for debugging
+        this.LogPointerPressed(this.rootGrid, args);
 
         // Get the point where the pointer was pressed
         var point = args.GetCurrentPoint(this.rootGrid).Position;
@@ -273,65 +467,25 @@ public partial class DynamicTree : Control
         }
 
         this.LogKeyDown(args.Key);
-        var handled = await this.HandleKeyDownAsync(args.Key).ConfigureAwait(true);
+        var handled = await this.HandleKeyDownAsync(args.Key, IsControlKeyDown(), IsShiftKeyDown()).ConfigureAwait(true);
         if (handled)
         {
             args.Handled = true;
         }
     }
 
-    private async Task<bool> HandleKeyDownAsync(VirtualKey key)
+    private async Task RunTryFocusCurrentAsync(FocusState focusState)
     {
-        if (this.ViewModel is null)
+        this.LogRunTryFocus(this.ViewModel?.FocusedItem, this.focusOperationPending, focusState);
+        try
         {
-            return false;
+            _ = await this.TryFocusCurrentAsync(focusState).ConfigureAwait(true);
         }
-
-        _ = this.ViewModel.EnsureFocus();
-
-        switch (key)
+        finally
         {
-            case VirtualKey.A when IsControlKeyDown():
-                this.ViewModel.ToggleSelectAll();
-                return true;
-
-            case VirtualKey.I when IsControlKeyDown() && IsShiftKeyDown():
-                this.ViewModel.InvertSelectionCommand.Execute(parameter: null);
-                return true;
-
-            case VirtualKey.C when IsControlKeyDown():
-                return await this.HandleCopyShortcutAsync().ConfigureAwait(true);
-
-            case VirtualKey.X when IsControlKeyDown():
-                return await this.HandleCutShortcutAsync().ConfigureAwait(true);
-
-            case VirtualKey.V when IsControlKeyDown():
-                return await this.HandlePasteShortcutAsync().ConfigureAwait(true);
-
-            case VirtualKey.Up:
-                return await this.MoveFocusAsync(FocusNavigationDirection.Up).ConfigureAwait(true);
-
-            case VirtualKey.Down:
-                return await this.MoveFocusAsync(FocusNavigationDirection.Down).ConfigureAwait(true);
-
-            case VirtualKey.Left:
-                return await this.HandleCollapseAsync().ConfigureAwait(true);
-
-            case VirtualKey.Right:
-                return await this.HandleExpandAsync().ConfigureAwait(true);
-
-            case VirtualKey.Home:
-                return await this.HandleHomeAsync().ConfigureAwait(true);
-
-            case VirtualKey.End:
-                return await this.HandleEndAsync().ConfigureAwait(true);
-
-            case VirtualKey.Enter:
-            case VirtualKey.Space:
-                return this.ViewModel.ToggleSelectionForFocused(IsControlKeyDown(), IsShiftKeyDown());
+            this.focusOperationPending = false;
+            this.lastFocusRequestOrigin = FocusRequestOrigin.None;
         }
-
-        return false;
     }
 
     private async Task<bool> HandleCopyShortcutAsync()
@@ -383,10 +537,8 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        if (this.ViewModel.FocusedItem is null)
-        {
-            return false;
-        }
+        // If there's no focused item, allow paste to the first selected item if there is a selection.
+        var targetParent = this.ViewModel.FocusedItem;
 
         var selectedItems = this.GetSelectedItems();
         if (selectedItems.Count == 0)
@@ -394,7 +546,16 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        await this.ViewModel.PasteItemsAsync().ConfigureAwait(true);
+        targetParent ??= selectedItems.FirstOrDefault();
+
+        if (targetParent is null)
+        {
+            return false;
+        }
+
+        // Record that this focus change should be a keyboard focus visual.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+        await this.ViewModel.PasteItemsAsync(targetParent).ConfigureAwait(true);
         return true;
     }
 
@@ -405,12 +566,14 @@ public partial class DynamicTree : Control
             return false;
         }
 
+        // Record this as a keyboard-origin focus change so the view uses keyboard focus visuals.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
         if (!await this.ViewModel.CollapseFocusedItemAsync().ConfigureAwait(true))
         {
             return false;
         }
 
-        _ = await this.TryFocusCurrentAsync().ConfigureAwait(true);
+        // ViewModel ensures FocusedItem is reasserted; view will perform the actual keyboard focus.
         return true;
     }
 
@@ -421,23 +584,28 @@ public partial class DynamicTree : Control
             return false;
         }
 
+        // Record this as a keyboard-origin focus change so the view uses keyboard focus visuals.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
         if (!await this.ViewModel.ExpandFocusedItemAsync().ConfigureAwait(true))
         {
             return false;
         }
 
-        _ = await this.TryFocusCurrentAsync().ConfigureAwait(true);
+        // ViewModel ensures FocusedItem is reasserted; view will perform the actual keyboard focus.
         return true;
     }
 
-    private async Task<bool> HandleHomeAsync()
+    private async Task<bool> HandleHomeAsync(bool isControlDown)
     {
         if (this.ViewModel is null)
         {
             return false;
         }
 
-        var moved = IsControlKeyDown()
+        // This is a keyboard-origin operation; indicate to the view to use keyboard focus visuals.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+
+        var moved = isControlDown
             ? this.ViewModel.FocusFirstVisibleItemInTree()
             : this.ViewModel.FocusFirstVisibleItemInParent();
 
@@ -446,18 +614,21 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        _ = await this.TryFocusCurrentAsync().ConfigureAwait(true);
+        // ViewModel changed FocusedItem; view will apply keyboard focus via observer.
         return true;
     }
 
-    private async Task<bool> HandleEndAsync()
+    private async Task<bool> HandleEndAsync(bool isControlDown)
     {
         if (this.ViewModel is null)
         {
             return false;
         }
 
-        var moved = IsControlKeyDown()
+        // This is a keyboard-origin operation; indicate to the view to use keyboard focus visuals.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
+
+        var moved = isControlDown
             ? this.ViewModel.FocusLastVisibleItemInTree()
             : this.ViewModel.FocusLastVisibleItemInParent();
 
@@ -466,16 +637,16 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        _ = await this.TryFocusCurrentAsync().ConfigureAwait(true);
+        // ViewModel changed FocusedItem; view will apply keyboard focus via observer.
         return true;
     }
 
-    private Task<bool> TryFocusCurrentAsync()
+    private Task<bool> TryFocusCurrentAsync(FocusState focusState = FocusState.Keyboard)
         => this.ViewModel?.FocusedItem is { } current
-            ? this.TryFocusItemAsync(current)
+            ? this.TryFocusItemAsync(current, focusState)
             : Task.FromResult(false);
 
-    private async Task<bool> TryFocusItemAsync(ITreeItem item)
+    private async Task<bool> TryFocusItemAsync(ITreeItem item, FocusState focusState = FocusState.Keyboard)
     {
         if (this.ViewModel is null || this.itemsRepeater is null)
         {
@@ -484,11 +655,11 @@ public partial class DynamicTree : Control
 
         _ = this.ViewModel.FocusItem(item);
 
-        await this.FocusRealizedItemAsync(item).ConfigureAwait(true);
+        await this.FocusRealizedItemAsync(item, focusState).ConfigureAwait(true);
         return true;
     }
 
-    private async Task FocusRealizedItemAsync(ITreeItem? item)
+    private async Task FocusRealizedItemAsync(ITreeItem? item, FocusState focusState = FocusState.Keyboard)
     {
         if (item is null || this.itemsRepeater is null || this.ViewModel is null)
         {
@@ -516,16 +687,26 @@ public partial class DynamicTree : Control
         if (focusTarget is Control control)
         {
             control.IsTabStop = true;
-            control.UseSystemFocusVisuals = true;
+            control.UseSystemFocusVisuals = focusState == FocusState.Keyboard;
         }
 
-        var result = await FocusManager.TryFocusAsync(focusTarget, FocusState.Keyboard);
-        this.LogFocusResult(item, index, focusTarget.GetType().Name, result.Succeeded);
-
-        if (!result.Succeeded && !ReferenceEquals(focusTarget, element))
+        var previousApplying = this.isApplyingFocus;
+        this.isApplyingFocus = true;
+        try
         {
-            var fallbackResult = await FocusManager.TryFocusAsync(element, FocusState.Keyboard);
-            this.LogFocusResult(item, index, element.GetType().Name, fallbackResult.Succeeded);
+            this.LogFocusApplyAttempt(item, index, focusState, previousApplying, this.focusOperationPending);
+            var result = await FocusManager.TryFocusAsync(focusTarget, focusState);
+            this.LogFocusResult(item, index, focusTarget.GetType().Name, result.Succeeded);
+
+            if (!result.Succeeded && !ReferenceEquals(focusTarget, element))
+            {
+                var fallbackResult = await FocusManager.TryFocusAsync(element, focusState);
+                this.LogFocusResult(item, index, element.GetType().Name, fallbackResult.Succeeded);
+            }
+        }
+        finally
+        {
+            this.isApplyingFocus = previousApplying;
         }
     }
 
@@ -536,6 +717,8 @@ public partial class DynamicTree : Control
             return false;
         }
 
+        // This is a keyboard-origin operation; ensure keyboard focus visuals are applied.
+        this.lastFocusRequestOrigin = FocusRequestOrigin.Keyboard;
         var moved = direction switch
         {
             FocusNavigationDirection.Down => this.ViewModel.FocusNextVisibleItem(),
@@ -543,7 +726,8 @@ public partial class DynamicTree : Control
             _ => false,
         };
 
-        return moved && await this.TryFocusCurrentAsync().ConfigureAwait(true);
+        // ViewModel changed FocusedItem via FocusNext/Previous; view will apply dotnet focus in property-changed handler.
+        return moved;
     }
 
     private void ItemsRepeater_OnElementClearing(ItemsRepeater sender, ItemsRepeaterElementClearingEventArgs args)
@@ -637,7 +821,64 @@ public partial class DynamicTree : Control
 
     private void ViewModel_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
     {
-        // No action needed for now; placeholder for future property change handling.
+        if (this.ViewModel is null)
+        {
+            return;
+        }
+
+        var prop = args?.PropertyName;
+        if (string.IsNullOrEmpty(prop) || string.Equals(prop, nameof(DynamicTreeViewModel.FocusedItem), System.StringComparison.Ordinal))
+        {
+            var focusState = this.lastFocusRequestOrigin == FocusRequestOrigin.Keyboard ? FocusState.Keyboard : FocusState.Programmatic;
+
+            // Always try to focus current view model selection when FocusedItem changes, using the last requested origin.
+            // If the currently focused element in the platform already matches the ViewModel's FocusedItem,
+            // there's no need to re-apply focus (this avoids duplicate focus operations when the platform
+            // has already moved focus due to user input).
+            var currentFocusedElement = FocusManager.GetFocusedElement() as DependencyObject;
+            var focusedItem = this.ViewModel.FocusedItem as ITreeItem;
+            if (focusedItem is not null && this.itemsRepeater is not null && currentFocusedElement is not null)
+            {
+                var index = this.ViewModel.ShownItems.IndexOf(focusedItem);
+                if (index >= 0)
+                {
+                    var targetElement = this.itemsRepeater.TryGetElement(index) as DependencyObject;
+                    var focusedMatchesTarget = false;
+                    if (targetElement is not null)
+                    {
+                        var parent = currentFocusedElement;
+                        while (parent is not null)
+                        {
+                            if (ReferenceEquals(parent, targetElement))
+                            {
+                                focusedMatchesTarget = true;
+                                break;
+                            }
+
+                            parent = VisualTreeHelper.GetParent(parent);
+                        }
+                    }
+
+                    if (focusedMatchesTarget)
+                    {
+                        // We already have platform focus on the target; do not enqueue a focus operation.
+                        this.LogViewModelPropertyChanged(prop, this.ViewModel.FocusedItem, this.lastFocusRequestOrigin, enqueue: false);
+                        this.lastFocusRequestOrigin = FocusRequestOrigin.None;
+                        return;
+                    }
+                }
+            }
+
+            // Ensure focus operations execute on the UI thread. Avoid enqueueing duplicate
+            // focus operations if one is already pending.
+            if (!this.focusOperationPending)
+            {
+                // Log that we are enqueueing a focus operation.
+                this.LogViewModelPropertyChanged(prop, this.ViewModel.FocusedItem, this.lastFocusRequestOrigin, enqueue: true);
+                this.focusOperationPending = true;
+                _ = this.DispatcherQueue?.TryEnqueue(() => _ = this.RunTryFocusCurrentAsync(focusState));
+            }
+        }
     }
 
     private void TreeItem_PointerPressed(object sender, PointerRoutedEventArgs args)
@@ -648,44 +889,17 @@ public partial class DynamicTree : Control
         }
 
         Debug.WriteLine($"Tree: TreeItem_PointerPressed - {item.Label}");
+        this.LogPointerPressed(element, args);
 
-        // Get the current state of the pointer
-        var pointerPoint = args.GetCurrentPoint(element);
-
-        // Check if the pointer device is a mouse
-        // Check if the left mouse button is pressed
-        if (args.Pointer.PointerDeviceType != PointerDeviceType.Mouse || !pointerPoint.Properties.IsLeftButtonPressed)
+        var leftPressed = false;
+        if (args.Pointer.PointerDeviceType == PointerDeviceType.Mouse)
         {
-            return;
+            var pointerPoint = args.GetCurrentPoint(element);
+            leftPressed = pointerPoint.Properties.IsLeftButtonPressed;
         }
 
-        if (IsControlKeyDown())
-        {
-            // Handle Ctrl+Click
-            if (item.IsSelected)
-            {
-                this.ViewModel!.ClearSelection(item);
-            }
-            else
-            {
-                this.ViewModel!.SelectItem(item);
-            }
-        }
-        else if (IsShiftKeyDown())
-        {
-            // Handle Shift+Click
-            this.ViewModel!.ExtendSelectionTo(item);
-        }
-        else if (!item.IsSelected)
-        {
-            // Press on an unselected item selects it exclusively
-            this.ViewModel!.ClearAndSelectItem(item);
-        }
-
-        _ = this.TryFocusItemAsync(item);
-
-        // Give focus to the clicked element
-        _ = element.Focus(FocusState.Programmatic);
+        var handled = this.OnItemPointerPressed(item, IsControlKeyDown(), IsShiftKeyDown(), leftPressed);
+        args.Handled = handled;
     }
 
     private void TreeItem_Tapped(object sender, TappedRoutedEventArgs args)
@@ -695,51 +909,20 @@ public partial class DynamicTree : Control
             return;
         }
 
-        // When modifier keys are pressed, defer to pointer logic (Ctrl/Shift multi-select)
-        if (IsControlKeyDown() || IsShiftKeyDown())
-        {
-            return;
-        }
-
-        // Tap always makes the tapped item the single selection
-        this.ViewModel?.ClearAndSelectItem(item);
-        _ = this.TryFocusItemAsync(item);
-        _ = element.Focus(FocusState.Programmatic);
+        this.LogTapped(element, args);
+        var handled = this.OnItemTapped(item, IsControlKeyDown(), IsShiftKeyDown());
+        args.Handled = handled;
     }
 
     private void TreeItem_GotFocus(object sender, RoutedEventArgs args)
     {
-        if (sender is not FrameworkElement { DataContext: TreeItemAdapter item })
+        if (sender is not FrameworkElement element || element.DataContext is not TreeItemAdapter item)
         {
             return;
         }
 
-        if (this.ViewModel is null)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(this.ViewModel.FocusedItem, item))
-        {
-            return;
-        }
-
-        _ = this.ViewModel.FocusItem(item);
-    }
-
-    private void OnTreeLostFocus(object sender, RoutedEventArgs args)
-    {
-        if (this.rootGrid is null)
-        {
-            return;
-        }
-
-        // If focus left the tree entirely, clear the focused item to avoid stale state.
-        var focusedElement = FocusManager.GetFocusedElement();
-        if (focusedElement is not DependencyObject dependency || !this.IsDescendantOfRoot(dependency))
-        {
-            _ = this.ViewModel?.FocusItem(item: null);
-        }
+        var handled = this.OnItemGotFocus(item, this.isApplyingFocus);
+        _ = handled;
     }
 
     private bool IsDescendantOfRoot(DependencyObject element)
@@ -855,6 +1038,8 @@ public partial class DynamicTree : Control
 
         try
         {
+            // Move: request programmatic focus and set focus to the first moved item on the model
+            this.lastFocusRequestOrigin = FocusRequestOrigin.Programmatic;
             await this.ProcessDropAsync(target, zone, isCopy).ConfigureAwait(true);
         }
         finally
@@ -996,12 +1181,15 @@ public partial class DynamicTree : Control
             }
 
             await this.ViewModel.PasteItemsAsync(parent, insertIndex).ConfigureAwait(true);
-            _ = await this.TryFocusItemAsync(target).ConfigureAwait(true);
+
+            // ViewModel.PasteItemsAsync will set FocusedItem to the new item; property change handler will focus programmatically.
             return;
         }
 
         await this.ViewModel!.MoveItemsAsync(this.draggedItems!, parent, insertIndex).ConfigureAwait(true);
-        _ = await this.TryFocusItemAsync(target).ConfigureAwait(true);
+
+        // For move, explicitly set the model FocusedItem to the first moved item; property change handler will focus programmatically.
+        _ = this.ViewModel!.FocusItem(this.draggedItems!.FirstOrDefault());
     }
 
     private void ScheduleHoverExpand(TreeItemAdapter target)

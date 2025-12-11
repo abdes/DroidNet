@@ -4,15 +4,21 @@
     x:Class="DroidNet.Controls.Tests.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:DroidNet.Controls.Tests.Tree"
     xmlns:tests="using:DroidNet.Tests">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!--  Other merged dictionaries here  -->
-                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Thumbnail/Thumbnail.xaml" />
+                <ResourceDictionary Source="ms-appx:///DroidNet.Controls.DynamicTree/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <!--  Other app resources here  -->
+            <!--
+                Forwarding styles for the testable controls, so that they pick up the same
+                styling and control template as the original controls.
+            -->
+            <Style BasedOn="{StaticResource DefaultDynamicTreeStyle}" TargetType="local:TestableDynamicTree" />
         </ResourceDictionary>
     </Application.Resources>
 </tests:VisualUserInterfaceTestsApp>

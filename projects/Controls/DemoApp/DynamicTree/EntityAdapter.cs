@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
@@ -11,7 +10,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.
 /// </summary>
 /// <param name="entity">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Entity>, ICanBeCloned
+internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Entity>, ICanBeCloned
 {
     private string label = entity.Name;
 
@@ -38,6 +37,15 @@ public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: fals
     public override bool ValidateItemName(string name) => name.Trim().Length != 0;
 
     /// <inheritdoc/>
+    public ITreeItem CloneSelf()
+    {
+        var cloneModel = new Entity(this.AttachedObject.Name);
+        var clone = new EntityAdapter(cloneModel);
+        this.CopyBasePropertiesTo(clone);
+        return clone;
+    }
+
+    /// <inheritdoc/>
     protected override int DoGetChildrenCount() => this.AttachedObject.Entities.Count;
 
     /// <inheritdoc/>
@@ -53,13 +61,5 @@ public partial class EntityAdapter(Entity entity) : TreeItemAdapter(isRoot: fals
         }
 
         await Task.CompletedTask.ConfigureAwait(true);
-    }
-
-    public ITreeItem CloneSelf()
-    {
-        var cloneModel = new Entity(this.AttachedObject.Name);
-        var clone = new EntityAdapter(cloneModel);
-        this.CopyBasePropertiesTo(clone);
-        return clone;
     }
 }

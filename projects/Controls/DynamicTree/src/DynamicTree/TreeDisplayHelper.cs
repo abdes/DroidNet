@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using DroidNet.Controls.Selection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DroidNet.Controls;
 
@@ -13,12 +14,12 @@ namespace DroidNet.Controls;
 ///     Aggregates all manipulations that affect the visible items collection of the dynamic tree, keeping selection,
 ///     events, and visibility rules consistent across insert/remove/move operations.
 /// </summary>
-internal sealed class TreeDisplayHelper(
+internal sealed partial class TreeDisplayHelper(
     ObservableCollection<ITreeItem> shownItems,
     Func<SelectionModel<ITreeItem>?> selectionModelProvider,
     Func<ITreeItem, Task> expandItemAsync,
     TreeDisplayHelper.TreeDisplayEventCallbacks events,
-    ILogger logger,
+    ILoggerFactory? loggerFactory = null,
     int maxDepth = TreeDisplayHelper.DefaultMaxDepth)
 {
     /// <summary>
@@ -26,8 +27,7 @@ internal sealed class TreeDisplayHelper(
     /// </summary>
     public const int DefaultMaxDepth = 32;
 
-    private readonly ILogger logger = logger;
-
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TreeDisplayHelper>() ?? NullLoggerFactory.Instance.CreateLogger<TreeDisplayHelper>();
     private readonly ObservableCollection<ITreeItem> shownItems = shownItems;
     private readonly Func<SelectionModel<ITreeItem>?> selectionModelProvider = selectionModelProvider;
     private readonly Func<ITreeItem, Task> expandItemAsync = expandItemAsync;
@@ -45,9 +45,16 @@ internal sealed class TreeDisplayHelper(
     /// <returns>A task that completes when the insertion is finished.</returns>
     public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
+        var originalIndex = relativeIndex;
         relativeIndex = ClampIndex(relativeIndex, parent.ChildrenCount);
+        if (originalIndex != relativeIndex)
+        {
+            this.LogRelativeIndexAdjusted(parent, originalIndex, relativeIndex);
+        }
+
         await this.EnsureParentExpandedAsync(parent).ConfigureAwait(true);
 
+        this.LogInsertItemRequested(parent, relativeIndex, item);
         if (!this.ApproveItemBeingAdded(parent, item))
         {
             return;
@@ -57,6 +64,7 @@ internal sealed class TreeDisplayHelper(
         var shownInsertIndex = await this.FindShownInsertIndexAsync(parent, relativeIndex).ConfigureAwait(true);
 
         await parent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+        this.LogShownItemsInsert(shownInsertIndex, item);
         this.shownItems.Insert(shownInsertIndex, item);
 
         this.SelectionModel?.SelectItemAt(shownInsertIndex);
@@ -78,6 +86,7 @@ internal sealed class TreeDisplayHelper(
         var shownIndex = this.shownItems.IndexOf(item);
         var isShown = shownIndex != -1;
 
+        this.LogRemoveItemRequested(item);
         if (!this.ApproveItemBeingRemoved(item))
         {
             return;
@@ -94,6 +103,7 @@ internal sealed class TreeDisplayHelper(
 
         if (isShown)
         {
+            this.LogShownItemsRemoveAt(shownIndex);
             this.shownItems.RemoveAt(shownIndex);
             removedShownCount++;
         }
@@ -105,6 +115,8 @@ internal sealed class TreeDisplayHelper(
 
         this.events.ItemRemoved?.Invoke(
             new TreeItemRemovedEventArgs { Parent = parent, RelativeIndex = relativeIndex, TreeItem = item });
+
+        this.LogRemoveItemCompleted(item, removedShownCount, isShown);
     }
 
     /// <summary>
@@ -123,7 +135,14 @@ internal sealed class TreeDisplayHelper(
         {
             case SingleSelectionModel<ITreeItem>:
                 var selectedItem = selection.SelectedItem;
-                if (selectedItem?.IsLocked != false)
+                if (selectedItem is null)
+                {
+                    return;
+                }
+
+                this.LogRemoveSingleSelectedItem(selectedItem);
+
+                if (selectedItem.IsLocked)
                 {
                     return;
                 }
@@ -134,22 +153,27 @@ internal sealed class TreeDisplayHelper(
 
             case MultipleSelectionModel<ITreeItem> multipleSelection:
                 var selectedIndices = multipleSelection.SelectedIndices.OrderDescending().ToList();
+
+                // notify start
+                this.LogRemoveMultipleSelectionItemsStarted(selectedIndices.Count);
+
                 multipleSelection.ClearSelection();
 
-                var originalShownItemsCount = this.shownItems.Count;
-
-                var tasks = selectedIndices
-                    .Select(index => this.shownItems[index])
-                    .Where(item => !item.IsLocked)
-                    .Select(item => this.RemoveItemAsync(item, updateSelection: false));
-
-                foreach (var task in tasks)
+                var removedCount = 0;
+                foreach (var index in selectedIndices)
                 {
-                    await task.ConfigureAwait(true);
+                    var item = this.shownItems[index];
+                    if (item.IsLocked)
+                    {
+                        continue;
+                    }
+
+                    await this.RemoveItemAsync(item, updateSelection: false).ConfigureAwait(true);
+                    removedCount++;
                 }
 
-                var removedItemsCount = originalShownItemsCount - this.shownItems.Count;
-                this.UpdateSelectionAfterRemoval(selectedIndices[0], removedItemsCount);
+                this.UpdateSelectionAfterRemoval(selectedIndices[0], removedCount);
+                this.LogRemoveMultipleSelectionItemsCompleted(removedCount);
                 break;
         }
     }
@@ -177,7 +201,7 @@ internal sealed class TreeDisplayHelper(
         if (planNullable is null)
         {
             // Move vetoed by handler; return gracefully without any mutation.
-            this.logger.LogDebug("Move request was vetoed by a handler; aborting move.");
+            this.LogMoveRequestVetoed();
             return;
         }
 
@@ -328,6 +352,9 @@ internal sealed class TreeDisplayHelper(
             return;
         }
 
+        // log and auto-expand parent to allow child operations
+        this.LogParentAutoExpanded(parent);
+
         await this.expandItemAsync(parent).ConfigureAwait(true);
     }
 
@@ -335,14 +362,18 @@ internal sealed class TreeDisplayHelper(
     {
         var eventArgs = new TreeItemBeingAddedEventArgs { Parent = parent, TreeItem = item };
         _ = this.events.ItemBeingAdded?.Invoke(eventArgs);
-        return eventArgs.Proceed;
+        var proceed = eventArgs.Proceed;
+        this.LogItemBeingAddedDecision(parent, item, proceed);
+        return proceed;
     }
 
     private bool ApproveItemBeingRemoved(ITreeItem item)
     {
         var eventArgs = new TreeItemBeingRemovedEventArgs { TreeItem = item };
         _ = this.events.ItemBeingRemoved?.Invoke(eventArgs);
-        return eventArgs.Proceed;
+        var proceed = eventArgs.Proceed;
+        this.LogItemBeingRemovedDecision(item, proceed);
+        return proceed;
     }
 
     private bool ApproveItemBeingMoved(TreeItemBeingMovedEventArgs args)
@@ -380,7 +411,7 @@ internal sealed class TreeDisplayHelper(
             {
                 // If a handler vetoes the move, we should return null to indicate the move was rejected
                 // and allow caller to gracefully bail out. Log for debugging and diagnostics.
-                this.logger.LogWarning("Move vetoed: {Reason}", args.VetoReason ?? "move vetoed");
+                this.LogMoveVetoed(args.VetoReason);
                 return null;
             }
 
@@ -486,6 +517,7 @@ internal sealed class TreeDisplayHelper(
             var block = blocks[item].ShownItems;
             for (var i = 0; i < block.Count; i++)
             {
+                this.LogShownItemsInsert(shownInsertIndex + i, block[i]);
                 this.shownItems.Insert(shownInsertIndex + i, block[i]);
             }
 
@@ -561,6 +593,7 @@ internal sealed class TreeDisplayHelper(
     {
         var removed = 0;
         var children = await item.Children.ConfigureAwait(true);
+        this.LogRemoveChildrenStarted(children.Count, itemIsShown, item.IsExpanded);
         foreach (var child in children.Reverse())
         {
             if (itemIsShown && item.IsExpanded)
@@ -581,7 +614,9 @@ internal sealed class TreeDisplayHelper(
     {
         if (relativeIndex == 0)
         {
-            return this.shownItems.IndexOf(parent) + 1;
+            var index = this.shownItems.IndexOf(parent) + 1;
+            this.LogFindNewItemIndexComputed(parent, relativeIndex, index, "none", null);
+            return index;
         }
 
         var siblings = await parent.Children.ConfigureAwait(true);
@@ -597,12 +632,14 @@ internal sealed class TreeDisplayHelper(
                 insertIndex++;
             }
 
+            this.LogFindNewItemIndexComputed(parent, relativeIndex, insertIndex, "sibling", sibling);
             return insertIndex;
         }
 
         var nextSibling = siblings[relativeIndex];
         var nextIndex = this.shownItems.IndexOf(nextSibling);
         Debug.Assert(nextIndex >= 0, "next sibling must be shown");
+        this.LogFindNewItemIndexComputed(parent, relativeIndex, nextIndex, "next", nextSibling);
         return nextIndex;
     }
 
@@ -663,6 +700,7 @@ internal sealed class TreeDisplayHelper(
 
         for (var i = 0; i < block.Count; i++)
         {
+            this.LogShownItemsRemoveAt(startIndex);
             this.shownItems.RemoveAt(startIndex);
         }
 

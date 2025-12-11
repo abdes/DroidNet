@@ -27,7 +27,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// <summary>
 /// Provides methods to generate thumbnails for entities in the dynamic tree.
 /// </summary>
-public static class ThumbnailGenerator
+internal static class ThumbnailGenerator
 {
     /// <summary>
     /// Generates a random image with the specified width and height.

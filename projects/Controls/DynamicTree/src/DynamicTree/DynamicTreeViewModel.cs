@@ -61,7 +61,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             }
 
             this.focusedItem = value;
-
             this.OnPropertyChanged(nameof(this.FocusedItem));
         }
     }
@@ -122,7 +121,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                     this.InvalidateClipboardDueToMutation();
                     this.ItemMoved?.Invoke(this, args);
                 }),
-            this.logger);
+            this.LoggerFactory);
 
     /// <summary>
     ///     Expands the specified tree item (which must be visible in the tree) asynchronously.
@@ -310,14 +309,26 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     <see langword="null" />.
     /// </summary>
     /// <param name="item">The item to focus or <see langword="null" /> to clear focus.</param>
+    /// <param name="forceRaise">If set to <see langword="true" />, forces a property-changed notification
+    /// for <see cref="FocusedItem" /> even if the focused item reference does not change. This is useful when
+    /// the view should reapply keyboard focus to the existing focused item after operations that did not change
+    /// the view model's FocusedItem reference.</param>
     /// <returns><see langword="true" /> when focus changed successfully; otherwise, <see langword="false" />.</returns>
-    public bool FocusItem(ITreeItem? item)
+    public bool FocusItem(ITreeItem? item, bool forceRaise = false)
     {
+        this.LogFocusItemCalled(item, forceRaise);
         if (item is null)
         {
             if (this.FocusedItem is null)
             {
-                return false;
+                if (!forceRaise)
+                {
+                    return false;
+                }
+
+                // Force re-raise even if already null
+                this.OnPropertyChanged(nameof(this.FocusedItem));
+                return true;
             }
 
             this.FocusedItem = null;
@@ -326,6 +337,17 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         if (!this.ShownItems.Contains(item))
         {
+            return false;
+        }
+
+        if (ReferenceEquals(this.focusedItem, item))
+        {
+            if (forceRaise)
+            {
+                this.OnPropertyChanged(nameof(this.FocusedItem));
+                return true;
+            }
+
             return false;
         }
 
@@ -467,6 +489,9 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         await this.ExpandItemAsync(focused).ConfigureAwait(true);
+
+        // Ensure the view reapplies focus for the currently focused item
+        _ = this.FocusItem(focused, forceRaise: true);
         return true;
     }
 
@@ -488,6 +513,9 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         await this.CollapseItemAsync(focused).ConfigureAwait(true);
+
+        // Ensure the view reapplies focus for the currently focused item
+        _ = this.FocusItem(focused, forceRaise: true);
         return true;
     }
 

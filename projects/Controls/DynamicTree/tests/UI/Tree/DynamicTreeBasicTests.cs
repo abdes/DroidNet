@@ -9,15 +9,15 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Controls.Tests.DynamicTree;
+namespace DroidNet.Controls.Tests.Tree;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DynamicTree")]
 [TestCategory("UITest")]
-public partial class DynamicTreeTests : VisualUserInterfaceTests
+public class DynamicTreeBasicTests : VisualUserInterfaceTests
 {
-    private Controls.DynamicTree? tree;
+    private DynamicTree? tree;
     private TestVisualStateManager? vsm;
     private TestViewModel? viewModel;
 
@@ -42,7 +42,7 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
 
             var rootItem = shownItems.FirstOrDefault();
             _ = rootItem.Should().NotBeNull();
-            _ = rootItem!.Label.Should().Be("Root");
+            _ = rootItem!.Label.Should().Be("R");
             _ = rootItem.IsExpanded.Should().BeFalse();
 
             // Verify the tree control only shows one DynamicTreeItem
@@ -118,7 +118,7 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
                 this.viewModel = new TestViewModel();
                 await this.viewModel.LoadTreeStructureAsync().ConfigureAwait(true);
                 this.viewModel.SelectionMode = SelectionMode.Multiple;
-                this.tree = new Controls.DynamicTree() { ViewModel = this.viewModel };
+                this.tree = new DynamicTree() { ViewModel = this.viewModel };
                 await LoadTestContentAsync(this.tree).ConfigureAwait(true);
 
                 var vsmTarget = this.tree.FindDescendant<Grid>(e => string.Equals(e.Name, Controls.DynamicTree.RootGridPart, StringComparison.Ordinal));
@@ -136,90 +136,11 @@ public partial class DynamicTreeTests : VisualUserInterfaceTests
     /// </summary>
     /// <param name="tree">The DynamicTree control.</param>
     /// <returns>The count of children of the specified type.</returns>
-    private static int CountItemsShownInTree(Controls.DynamicTree tree)
+    private static int CountItemsShownInTree(DynamicTree tree)
     {
         var itemsRepeater = tree.FindDescendant<ItemsRepeater>(e => string.Equals(e.Name, Controls.DynamicTree.ItemsRepeaterPart, StringComparison.Ordinal));
         _ = itemsRepeater.Should().NotBeNull();
 
         return itemsRepeater!.ItemsSourceView.Count;
-    }
-
-    private sealed class TestTreeItem
-    {
-        public string Label { get; set; } = string.Empty;
-
-        public IList<TestTreeItem> Children { get; init; } = [];
-    }
-
-    private sealed partial class TestViewModel : DynamicTreeViewModel
-    {
-        /// <summary>
-        /// Loads the tree structure asynchronously.
-        /// </summary>
-        /// <returns>A task representing the asynchronous operation.</returns>
-        public async Task LoadTreeStructureAsync()
-        {
-            // Example of loading the tree structure
-            var rootNode = new TestTreeItem
-            {
-                Label = "Root",
-                Children =
-                [
-                    new TestTreeItem { Label = "Child 1", Children = [] },
-                    new TestTreeItem
-                    {
-                        Label = "Child 2",
-                        Children =
-                        [
-                            new TestTreeItem { Label = "Sub - Child 1", Children = [] },
-                        ],
-                    },
-                ],
-            };
-
-            var rootItem = new TestItemAdapter(rootNode, isRoot: true, isHidden: false);
-            await this.InitializeRootAsync(rootItem, skipRoot: false).ConfigureAwait(false);
-        }
-    }
-
-    /// <summary>
-    /// A <see cref="DynamicTree" /> item adapter for testing purposes.
-    /// </summary>
-    private sealed partial class TestItemAdapter(TestTreeItem node, bool isRoot = false, bool isHidden = false)
-        : TreeItemAdapter(isRoot, isHidden)
-    {
-        /// <inheritdoc/>
-        public override string Label
-        {
-            get => node.Label;
-            set
-            {
-                if (string.Equals(value, node.Label, StringComparison.Ordinal))
-                {
-                    return;
-                }
-
-                node.Label = value;
-                this.OnPropertyChanged();
-            }
-        }
-
-        /// <inheritdoc/>
-        public override bool ValidateItemName(string name) => !string.IsNullOrWhiteSpace(name);
-
-        /// <inheritdoc/>
-        protected override int DoGetChildrenCount() => node.Children.Count;
-
-        /// <inheritdoc/>
-        protected override async Task LoadChildren()
-        {
-            foreach (var childNode in node.Children)
-            {
-                this.AddChildInternal(new TestItemAdapter(childNode));
-            }
-
-            // Simulate async operation
-            await Task.Delay(100).ConfigureAwait(false);
-        }
     }
 }
