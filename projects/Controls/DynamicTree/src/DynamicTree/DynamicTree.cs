@@ -50,6 +50,7 @@ public partial class DynamicTree : Control
 
     private DynamicTree? dragOwner;
     private List<TreeItemAdapter>? draggedItems;
+    private bool dragIsCopy;
     private DispatcherTimer? hoverExpandTimer;
     private TreeItemAdapter? hoverExpandTarget;
     private FrameworkElement? dropIndicatorElement;
@@ -298,6 +299,15 @@ public partial class DynamicTree : Control
                 this.ViewModel.InvertSelectionCommand.Execute(parameter: null);
                 return true;
 
+            case VirtualKey.C when IsControlKeyDown():
+                return await this.HandleCopyShortcutAsync().ConfigureAwait(true);
+
+            case VirtualKey.X when IsControlKeyDown():
+                return await this.HandleCutShortcutAsync().ConfigureAwait(true);
+
+            case VirtualKey.V when IsControlKeyDown():
+                return await this.HandlePasteShortcutAsync().ConfigureAwait(true);
+
             case VirtualKey.Up:
                 return await this.MoveFocusAsync(FocusNavigationDirection.Up).ConfigureAwait(true);
 
@@ -322,6 +332,70 @@ public partial class DynamicTree : Control
         }
 
         return false;
+    }
+
+    private async Task<bool> HandleCopyShortcutAsync()
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        var selectedItems = this.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return false;
+        }
+
+        await this.ViewModel.CopyItemsAsync(selectedItems).ConfigureAwait(true);
+        return true;
+    }
+
+    private async Task<bool> HandleCutShortcutAsync()
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        var selectedItems = this.GetSelectedItems()
+            .Where(item => !item.IsLocked)
+            .ToList();
+
+        if (selectedItems.Count == 0)
+        {
+            return false;
+        }
+
+        await this.ViewModel.CutItemsAsync(selectedItems).ConfigureAwait(true);
+        return true;
+    }
+
+    private async Task<bool> HandlePasteShortcutAsync()
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        if (this.ViewModel.CurrentClipboardState == ClipboardState.Empty || !this.ViewModel.IsClipboardValid)
+        {
+            return false;
+        }
+
+        if (this.ViewModel.FocusedItem is null)
+        {
+            return false;
+        }
+
+        var selectedItems = this.GetSelectedItems();
+        if (selectedItems.Count == 0)
+        {
+            return false;
+        }
+
+        await this.ViewModel.PasteItemsAsync().ConfigureAwait(true);
+        return true;
     }
 
     private async Task<bool> HandleCollapseAsync()
@@ -408,10 +482,7 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        if (!this.ViewModel.FocusItem(item))
-        {
-            return false;
-        }
+        _ = this.ViewModel.FocusItem(item);
 
         await this.FocusRealizedItemAsync(item).ConfigureAwait(true);
         return true;
@@ -611,7 +682,7 @@ public partial class DynamicTree : Control
             this.ViewModel!.ClearAndSelectItem(item);
         }
 
-        _ = this.ViewModel!.FocusItem(item);
+        _ = this.TryFocusItemAsync(item);
 
         // Give focus to the clicked element
         _ = element.Focus(FocusState.Programmatic);
@@ -632,7 +703,7 @@ public partial class DynamicTree : Control
 
         // Tap always makes the tapped item the single selection
         this.ViewModel?.ClearAndSelectItem(item);
-        _ = this.ViewModel?.FocusItem(item);
+        _ = this.TryFocusItemAsync(item);
         _ = element.Focus(FocusState.Programmatic);
     }
 
@@ -643,7 +714,17 @@ public partial class DynamicTree : Control
             return;
         }
 
-        _ = this.ViewModel?.FocusItem(item);
+        if (this.ViewModel is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(this.ViewModel.FocusedItem, item))
+        {
+            return;
+        }
+
+        _ = this.ViewModel.FocusItem(item);
     }
 
     private void OnTreeLostFocus(object sender, RoutedEventArgs args)
@@ -701,14 +782,18 @@ public partial class DynamicTree : Control
 
         this.dragOwner = this;
         this.draggedItems = items;
+        this.dragIsCopy = IsControlKeyDown();
 
-        args.Data.RequestedOperation = DataPackageOperation.Move;
-        args.Data.SetData("application/vnd.droidnet.dynamictree", "move");
+        args.Data.RequestedOperation = this.dragIsCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
+        args.Data.SetData("application/vnd.droidnet.dynamictree", this.dragIsCopy ? "copy" : "move");
     }
 
     private void TreeItem_DragOver(object sender, DragEventArgs args)
     {
-        if (!this.TryResolveDropTarget(sender, args, out var target, out var zone))
+        var isCopyIntent = this.IsCopyIntentCurrent();
+        var isCopyAllowed = isCopyIntent && this.CanCopyDraggedItems();
+
+        if (isCopyIntent && !isCopyAllowed)
         {
             args.AcceptedOperation = DataPackageOperation.None;
             this.CancelHoverExpand();
@@ -716,7 +801,16 @@ public partial class DynamicTree : Control
             return;
         }
 
-        args.AcceptedOperation = DataPackageOperation.Move;
+        if (!this.TryResolveDropTarget(sender, args, isCopyIntent, out var target, out var zone))
+        {
+            args.AcceptedOperation = DataPackageOperation.None;
+            this.CancelHoverExpand();
+            this.ClearDropIndicatorVisual();
+            return;
+        }
+
+        var isCopy = isCopyAllowed;
+        args.AcceptedOperation = isCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
         args.Handled = true;
 
         if (sender is FrameworkElement element && element.FindName(TreeItemPart) is DynamicTreeItem treeItem)
@@ -736,47 +830,32 @@ public partial class DynamicTree : Control
 
     private async void TreeItem_Drop(object sender, DragEventArgs args)
     {
-        if (!this.TryResolveDropTarget(sender, args, out var target, out var zone) || this.draggedItems is null)
+        var isCopyIntent = this.IsCopyIntentCurrent();
+        var isCopyAllowed = isCopyIntent && this.CanCopyDraggedItems();
+
+        if (isCopyIntent && !isCopyAllowed)
         {
             this.ClearDragState();
             args.AcceptedOperation = DataPackageOperation.None;
             return;
         }
 
-        args.AcceptedOperation = DataPackageOperation.Move;
+        if (!this.TryResolveDropTarget(sender, args, isCopyIntent, out var target, out var zone) || this.draggedItems is null)
+        {
+            this.ClearDragState();
+            args.AcceptedOperation = DataPackageOperation.None;
+            return;
+        }
+
+        var isCopy = isCopyAllowed;
+        args.AcceptedOperation = isCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
         args.Handled = true;
         this.CancelHoverExpand();
         this.ClearDropIndicatorVisual();
 
         try
         {
-            if (zone == DropZone.Inside)
-            {
-                await this.ViewModel!.MoveItemsAsync(this.draggedItems, target, target.ChildrenCount)
-                    .ConfigureAwait(true);
-            }
-            else
-            {
-                var parent = target.Parent;
-                if (parent is null)
-                {
-                    return;
-                }
-
-                var children = await parent.Children.ConfigureAwait(true);
-                var targetIndex = children.IndexOf(target);
-                if (targetIndex < 0)
-                {
-                    return;
-                }
-
-                if (zone == DropZone.After)
-                {
-                    targetIndex++;
-                }
-
-                await this.ViewModel!.MoveItemsAsync(this.draggedItems, parent, targetIndex).ConfigureAwait(true);
-            }
+            await this.ProcessDropAsync(target, zone, isCopy).ConfigureAwait(true);
         }
         finally
         {
@@ -799,6 +878,21 @@ public partial class DynamicTree : Control
     private async void OnCollapseTreeItem(object? sender, DynamicTreeEventArgs args)
         => await this.ViewModel!.CollapseItemAsync(args.TreeItem).ConfigureAwait(true);
 
+    [SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code readability")]
+    [SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "code readability")]
+    private List<TreeItemAdapter> GetSelectedItems()
+    {
+        if (this.ViewModel is null)
+        {
+            return [];
+        }
+
+        return this.ViewModel.ShownItems
+            .OfType<TreeItemAdapter>()
+            .Where(item => item.IsSelected)
+            .ToList();
+    }
+
     private List<TreeItemAdapter> GetDragItems(TreeItemAdapter primary)
     {
         if (this.ViewModel is null)
@@ -806,10 +900,7 @@ public partial class DynamicTree : Control
             return [];
         }
 
-        var selectedItems = this.ViewModel.ShownItems
-            .OfType<TreeItemAdapter>()
-            .Where(item => item.IsSelected)
-            .ToList();
+        var selectedItems = this.GetSelectedItems();
 
         return selectedItems.Count > 0 && selectedItems.Contains(primary)
             ? selectedItems
@@ -819,6 +910,7 @@ public partial class DynamicTree : Control
     private bool TryResolveDropTarget(
         object? sender,
         DragEventArgs args,
+        bool isCopyIntent,
         [NotNullWhen(true)] out TreeItemAdapter? target,
         out DropZone zone)
     {
@@ -847,7 +939,7 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        if (zone != DropZone.Inside)
+        if (zone != DropZone.Inside && !isCopyIntent)
         {
             var parent = item.Parent;
             if (parent is null || !this.draggedItems.TrueForAll(dragged => ReferenceEquals(dragged.Parent, parent)))
@@ -862,6 +954,54 @@ public partial class DynamicTree : Control
 
         target = item;
         return true;
+    }
+
+    private bool IsCopyIntentCurrent() => IsControlKeyDown() || this.dragIsCopy;
+
+    private bool CanCopyDraggedItems() => this.draggedItems is { Count: > 0 } && this.draggedItems.TrueForAll(item => item is ICanBeCloned);
+
+    private async Task ProcessDropAsync(TreeItemAdapter target, DropZone zone, bool isCopy)
+    {
+        ITreeItem? parent = target;
+        var insertIndex = target.ChildrenCount;
+
+        if (zone != DropZone.Inside)
+        {
+            parent = target.Parent;
+            if (parent is null)
+            {
+                return;
+            }
+
+            var children = await parent.Children.ConfigureAwait(true);
+            insertIndex = children.IndexOf(target);
+            if (insertIndex < 0)
+            {
+                return;
+            }
+
+            if (zone == DropZone.After)
+            {
+                insertIndex++;
+            }
+        }
+
+        if (isCopy)
+        {
+            await this.ViewModel!.CopyItemsAsync(this.draggedItems!).ConfigureAwait(true);
+
+            if (this.ViewModel.CurrentClipboardState == ClipboardState.Empty)
+            {
+                return;
+            }
+
+            await this.ViewModel.PasteItemsAsync(parent, insertIndex).ConfigureAwait(true);
+            _ = await this.TryFocusItemAsync(target).ConfigureAwait(true);
+            return;
+        }
+
+        await this.ViewModel!.MoveItemsAsync(this.draggedItems!, parent, insertIndex).ConfigureAwait(true);
+        _ = await this.TryFocusItemAsync(target).ConfigureAwait(true);
     }
 
     private void ScheduleHoverExpand(TreeItemAdapter target)

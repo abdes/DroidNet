@@ -245,6 +245,42 @@ public partial class DynamicTreeViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Copy ignored: no clonable items in selection (count={selectionCount})")]
+    private static partial void LogCopyIgnoredNoClonableItems(ILogger logger, int selectionCount);
+
+    private void LogCopyIgnoredNoClonableItems(int selectionCount)
+        => LogCopyIgnoredNoClonableItems(this.logger, selectionCount);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Copy skipped for item type {itemType}: does not implement {interfaceName}")]
+    private static partial void LogCopySkippedNonClonableItem(ILogger logger, string itemType, string interfaceName);
+
+    private void LogCopySkippedNonClonableItem(ITreeItem item)
+        => LogCopySkippedNonClonableItem(this.logger, item.GetType().FullName ?? item.GetType().Name, nameof(ICanBeCloned));
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Paste skipped: target '{target}' is the source cut item '{source}'")]
+    private static partial void LogPasteSkippedIntoSource(ILogger logger, string target, string source);
+
+    private void LogPasteSkippedIntoSource(ITreeItem item)
+        => LogPasteSkippedIntoSource(this.logger, item.Label, item.Label);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Paste skipped: target '{target}' is a descendant of cut item '{source}'")]
+    private static partial void LogPasteSkippedIntoDescendant(ILogger logger, string target, string source);
+
+    private void LogPasteSkippedIntoDescendant(ITreeItem source, ITreeItem target)
+        => LogPasteSkippedIntoDescendant(this.logger, target.Label, source.Label);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Trace,
         Message = "ShownItems.Add: item='{item}' (newCount={newCount})")]
     private static partial void LogShownItemsAdd(ILogger logger, string item, int newCount);

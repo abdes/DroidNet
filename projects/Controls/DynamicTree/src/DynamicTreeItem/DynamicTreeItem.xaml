@@ -144,6 +144,19 @@
                                 </VisualState>
                             </VisualStateGroup>
 
+                            <VisualStateGroup x:Name="CutStates">
+                                <VisualState x:Name="NotCut">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Opacity" Value="1" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Cut">
+                                    <VisualState.Setters>
+                                        <Setter Target="PartRootGrid.Opacity" Value="0.6" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+
                             <VisualStateGroup x:Name="ExpansionStates">
                                 <VisualState x:Name="Expanded" />
                                 <VisualState x:Name="Collapsed" />

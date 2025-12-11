@@ -133,6 +133,8 @@ namespace DroidNet.Controls;
 /// </example>
 [TemplateVisualState(Name = NormalVisualState, GroupName = CommonVisualStates)]
 [TemplateVisualState(Name = SelectedVisualState, GroupName = CommonVisualStates)]
+[TemplateVisualState(Name = CutVisualState, GroupName = CutVisualStates)]
+[TemplateVisualState(Name = NotCutVisualState, GroupName = CutVisualStates)]
 [TemplateVisualState(Name = ExpandedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = CollapsedVisualState, GroupName = ExpansionVisualStates)]
 [TemplateVisualState(Name = WithChildrenVisualState, GroupName = HasChildrenVisualStates)]
@@ -261,6 +263,21 @@ public partial class DynamicTreeItem : ContentControl
     public const string SelectedVisualState = "Selected";
 
     /// <summary>
+    /// The name of the VisualStateGroup that indicates cut status.
+    /// </summary>
+    public const string CutVisualStates = "CutStates";
+
+    /// <summary>
+    /// Visual state name used when the item is marked as cut.
+    /// </summary>
+    public const string CutVisualState = "Cut";
+
+    /// <summary>
+    /// Visual state name used when the item is not cut.
+    /// </summary>
+    public const string NotCutVisualState = "NotCut";
+
+    /// <summary>
     ///     Default indent increment value.
     /// </summary>
     private const double DefaultIndentIncrement = 34.0;
@@ -344,6 +361,7 @@ public partial class DynamicTreeItem : ContentControl
         this.UpdateExpansionVisualState();
         this.UpdateHasChildrenVisualState();
         this.UpdateSelectionVisualState(this.ItemAdapter?.IsSelected == true);
+        this.UpdateCutVisualState(this.ItemAdapter?.IsCut == true);
 
         base.OnApplyTemplate();
     }
@@ -438,6 +456,12 @@ public partial class DynamicTreeItem : ContentControl
         => VisualStateManager.GoToState(
             this,
             isSelected ? SelectedVisualState : NormalVisualState,
+            useTransitions: true);
+
+    private void UpdateCutVisualState(bool isCut)
+        => VisualStateManager.GoToState(
+            this,
+            isCut ? CutVisualState : NotCutVisualState,
             useTransitions: true);
 
     private void UpdateExpansionVisualState()

@@ -31,6 +31,16 @@ public interface ITreeItem : ISelectable, ICanBeLocked
     public bool IsExpanded { get; set; }
 
     /// <summary>
+    ///     Gets or sets a value indicating whether the tree item is currently marked as a cut source.
+    ///     <remarks>
+    ///         Used by the UI to render a dimmed appearance while the item is held in the clipboard as a cut
+    ///         source. The flag is managed by the view model and cleared after paste or when the clipboard is
+    ///         refreshed.
+    ///     </remarks>
+    /// </summary>
+    public bool IsCut { get; set; }
+
+    /// <summary>
     ///     Gets a value indicating whether the tree item is the root. Defaults to <see langword="false" />, unless otherwise
     ///     set at
     ///     creation.
