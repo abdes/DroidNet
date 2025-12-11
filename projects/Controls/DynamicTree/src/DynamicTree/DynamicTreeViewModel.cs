@@ -620,35 +620,63 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         var removeIndex = this.ShownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
-        await this.HideChildrenRecursiveAsync(itemAdapter, removeIndex).ConfigureAwait(true);
+        await this.HideChildrenRecursiveAsync(itemAdapter).ConfigureAwait(true);
     }
 
     /// <summary>
     ///     Recursively hides the children of the specified tree item.
     /// </summary>
     /// <param name="parent">The parent tree item whose children should be hidden.</param>
-    /// <param name="removeIndex">The index at which to start removing the hidden children from the ShownItems collection.</param>
+    /// <remarks>The method calculates child indices based on the current shown items.</remarks>
     /// <returns>A task representing the asynchronous operation.</returns>
     /// <remarks>
     ///     This method removes the children of the specified parent item from the ShownItems collection,
     ///     maintaining their collapsed state. If a child item is expanded, the method is called recursively
     ///     to hide its children as well.
     /// </remarks>
-    private async Task HideChildrenRecursiveAsync(ITreeItem parent, int removeIndex)
+    private async Task HideChildrenRecursiveAsync(ITreeItem parent)
     {
-        foreach (var child in await parent.Children.ConfigureAwait(true))
+        var children = (await parent.Children.ConfigureAwait(true)).ToList();
+
+        for (var i = children.Count - 1; i >= 0; i--)
         {
+            var child = children[i];
+
             if (ReferenceEquals(this.FocusedItem, child))
             {
                 this.FocusedItem = parent;
             }
 
-            this.LogShownItemsRemoveAt(removeIndex);
-            this.ShownItems.RemoveAt(removeIndex);
+            // Find the current index of the child in the shown list.
+            var childIndex = this.ShownItems.IndexOf(child);
+            if (childIndex == -1)
+            {
+                // Not shown; skip
+                continue;
+            }
+
+            // First hide descendants (if expanded) starting at the index after the child.
             if (child.IsExpanded)
             {
-                await this.HideChildrenRecursiveAsync(child, removeIndex).ConfigureAwait(true);
+                await this.HideChildrenRecursiveAsync(child).ConfigureAwait(true);
             }
+
+            // Try to clear selection for the child and any selection state.
+            var selection = this.SelectionModel;
+            if (selection is not null)
+            {
+                try
+                {
+                    selection.ClearSelection(child);
+                }
+                catch (ArgumentException)
+                {
+                    // Item not found in selection; ignore.
+                }
+            }
+
+            this.LogShownItemsRemoveAt(childIndex);
+            this.ShownItems.RemoveAt(childIndex);
         }
     }
 
