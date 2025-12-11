@@ -10,13 +10,18 @@ namespace DroidNet.Controls.Tests;
 /// A simple implementation of TreeItemAdapter for testing purposes.
 /// </summary>
 [ExcludeFromCodeCoverage]
-public partial class TestTreeItemAdapter : TreeItemAdapter
+public partial class TestTreeItemAdapter : TreeItemAdapter, ICanBeCloned
 {
     public const string InvalidName = "__INVALID__";
 
     private readonly List<TestTreeItemAdapter> internalChildren = [];
 
-    public TestTreeItemAdapter(bool isRoot = false)
+    public TestTreeItemAdapter()
+        : base(isRoot: false)
+    {
+    }
+
+    public TestTreeItemAdapter(bool isRoot)
         : base(isRoot)
     {
     }
@@ -36,6 +41,24 @@ public partial class TestTreeItemAdapter : TreeItemAdapter
     }
 
     public override bool ValidateItemName(string name) => !string.IsNullOrEmpty(name) && !string.Equals(name, InvalidName, StringComparison.Ordinal);
+
+    public ITreeItem Clone()
+    {
+        var clone = new TestTreeItemAdapter { Label = this.Label, IsExpanded = this.IsExpanded, IsLocked = this.IsLocked };
+
+        foreach (var child in this.internalChildren)
+        {
+            if (child is not ICanBeCloned clonableChild)
+            {
+                throw new InvalidOperationException($"type '{child.GetType()}' must implement {nameof(ICanBeCloned)} to support copy/paste");
+            }
+
+            var childClone = (TestTreeItemAdapter)clonableChild.Clone();
+            clone.AddChild(childClone);
+        }
+
+        return clone;
+    }
 
     protected override int DoGetChildrenCount() => this.internalChildren.Count;
 

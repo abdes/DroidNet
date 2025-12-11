@@ -61,4 +61,9 @@ public abstract partial class DynamicTreeViewModel
     ///     in <see cref="TreeItemsMovedEventArgs.Moves" />.
     /// </remarks>
     public event EventHandler<TreeItemsMovedEventArgs>? ItemMoved;
+
+    /// <summary>
+    ///     Fires whenever the clipboard content or validity changes.
+    /// </summary>
+    public event EventHandler<ClipboardContentChangedEventArgs>? ClipboardContentChanged;
 }

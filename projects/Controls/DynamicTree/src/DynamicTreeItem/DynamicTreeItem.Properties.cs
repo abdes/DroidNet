@@ -97,8 +97,13 @@ public partial class DynamicTreeItem
             this.UpdateExpansionVisualState();
             this.UpdateHasChildrenVisualState();
             this.UpdateSelectionVisualState(newItem.IsSelected);
+            this.UpdateCutVisualState(newItem.IsCut);
             newItem.ChildrenCollectionChanged += this.TreeItem_ChildrenCollectionChanged;
             ((INotifyPropertyChanged)newItem).PropertyChanged += this.ItemAdapter_OnPropertyChanged;
+        }
+        else
+        {
+            this.UpdateCutVisualState(isCut: false);
         }
     }
 
@@ -113,6 +118,10 @@ public partial class DynamicTreeItem
         {
             Debug.WriteLine($"ItemAdapter_OnPropertyChanged: Label = {adapter.Label}, IsSelected = {adapter.IsSelected}");
             this.UpdateSelectionVisualState(adapter.IsSelected);
+        }
+        else if (string.Equals(args.PropertyName, nameof(ITreeItem.IsCut), StringComparison.Ordinal))
+        {
+            this.UpdateCutVisualState(adapter.IsCut);
         }
     }
 

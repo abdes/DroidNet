@@ -80,21 +80,48 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
                 args =>
                 {
                     this.ItemBeingAdded?.Invoke(this, args);
+                    if (args.Proceed)
+                    {
+                        this.InvalidateClipboardDueToMutation();
+                    }
+
                     return args.Proceed;
                 },
-                args => this.ItemAdded?.Invoke(this, args),
+                args =>
+                {
+                    this.InvalidateClipboardDueToMutation();
+                    this.ItemAdded?.Invoke(this, args);
+                },
                 args =>
                 {
                     this.ItemBeingRemoved?.Invoke(this, args);
+                    if (args.Proceed)
+                    {
+                        this.InvalidateClipboardDueToMutation();
+                    }
+
                     return args.Proceed;
                 },
-                args => this.ItemRemoved?.Invoke(this, args),
+                args =>
+                {
+                    this.InvalidateClipboardDueToMutation();
+                    this.ItemRemoved?.Invoke(this, args);
+                },
                 args =>
                 {
                     this.ItemBeingMoved?.Invoke(this, args);
+                    if (args.Proceed)
+                    {
+                        this.InvalidateClipboardDueToMutation();
+                    }
+
                     return args.Proceed;
                 },
-                args => this.ItemMoved?.Invoke(this, args)),
+                args =>
+                {
+                    this.InvalidateClipboardDueToMutation();
+                    this.ItemMoved?.Invoke(this, args);
+                }),
             this.logger);
 
     /// <summary>

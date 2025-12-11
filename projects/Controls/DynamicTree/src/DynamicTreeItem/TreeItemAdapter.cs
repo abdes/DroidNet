@@ -58,6 +58,20 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     private bool suspendChildrenCollectionNotifications;
 
     /// <summary>
+    ///     Initializes a new instance of the <see cref="TreeItemAdapter" /> class with default
+    ///     settings.
+    /// </summary>
+    /// <remarks>
+    ///    Cloning and other operations that require instantiation of items via reflection may
+    ///    require a parameterless constructor. This constructor creates a non-root item, that is
+    ///    not hidden.
+    /// </remarks>
+    protected TreeItemAdapter()
+        : this(isRoot: false, isHidden: false)
+    {
+    }
+
+    /// <summary>
     ///     Initializes a new instance of the <see cref="TreeItemAdapter" /> class.
     /// </summary>
     /// <param name="isRoot">
@@ -87,6 +101,9 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
     [ObservableProperty]
     public partial bool IsExpanded { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsCut { get; set; }
 
     /// <inheritdoc />
     public abstract string Label { get; set; }
