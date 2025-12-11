@@ -42,21 +42,12 @@ public partial class TestTreeItemAdapter : TreeItemAdapter, ICanBeCloned
 
     public override bool ValidateItemName(string name) => !string.IsNullOrEmpty(name) && !string.Equals(name, InvalidName, StringComparison.Ordinal);
 
-    public ITreeItem Clone()
+    public ITreeItem CloneSelf()
     {
-        var clone = new TestTreeItemAdapter { Label = this.Label, IsExpanded = this.IsExpanded, IsLocked = this.IsLocked };
-
-        foreach (var child in this.internalChildren)
-        {
-            if (child is not ICanBeCloned clonableChild)
-            {
-                throw new InvalidOperationException($"type '{child.GetType()}' must implement {nameof(ICanBeCloned)} to support copy/paste");
-            }
-
-            var childClone = (TestTreeItemAdapter)clonableChild.Clone();
-            clone.AddChild(childClone);
-        }
-
+        // Follow the contract used by production adapters: clones must be orphaned and must not contain children.
+        // The clipboard/paste code is responsible for reparenting clones to reflect the original hierarchy.
+        var clone = new TestTreeItemAdapter { Label = this.Label };
+        this.CopyBasePropertiesTo(clone);
         return clone;
     }
 

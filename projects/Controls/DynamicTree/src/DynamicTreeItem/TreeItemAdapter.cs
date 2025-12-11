@@ -305,6 +305,25 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     protected abstract Task LoadChildren();
 
     /// <summary>
+    ///     Copy common base properties from this instance into the provided <paramref name="target"/> clone.
+    ///     This helper should be used by derived adapters which implement <see cref="ICanBeCloned"/>
+    ///     to ensure consistent base property copying. Implementations MUST NOT copy or attach
+    ///     <see cref="Parent"/> or children — clones must remain orphaned; the clipboard/paste
+    ///     logic is responsible for reparenting clones.
+    /// </summary>
+    /// <param name="target">The clone under which to copy the base properties.</param>
+    protected void CopyBasePropertiesTo(TreeItemAdapter target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+
+        // Copy public base properties expected to be kept when cloning a tree item. We intentionally
+        // do not copy parent/children references or the `IsCut` visual state.
+        target.Label = this.Label;
+        target.IsExpanded = this.IsExpanded;
+        target.IsLocked = this.IsLocked;
+    }
+
+    /// <summary>
     ///     Remove all child elements from the collection of children.
     /// </summary>
     protected void ClearChildren() => this.children.Clear();

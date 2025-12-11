@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
+
 namespace DroidNet.Controls;
 
 /// <summary>
@@ -10,6 +12,7 @@ namespace DroidNet.Controls;
 public abstract partial class DynamicTreeViewModel
 {
     private ITreeItem[] clipboardItems = [];
+    private ITreeItem[] cutMarkedItems = [];
     private ClipboardState clipboardState = ClipboardState.Empty;
     private ITreeItem? clipboardSourceParent;
     private bool clipboardIsValid = true;
@@ -34,7 +37,7 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     /// <param name="items">The items to copy.</param>
     /// <returns>A completed task.</returns>
-    public Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
+    public async Task CopyItemsAsync(IReadOnlyList<ITreeItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0)
@@ -43,11 +46,14 @@ public abstract partial class DynamicTreeViewModel
         }
 
         this.ValidateItemsAreShown(items);
-        var copyableItems = this.FilterClonableItems(items);
+
+        // Expand selection to include all descendants so copying a node copies its subtree.
+        var expanded = await ExpandSelectionWithDescendantsAsync(items).ConfigureAwait(true);
+        var copyableItems = this.FilterClonableItems(expanded);
         if (copyableItems.Count == 0)
         {
             this.LogCopyIgnoredNoClonableItems(items.Count);
-            return Task.CompletedTask;
+            return;
         }
 
         this.ClearCutMarks();
@@ -59,7 +65,7 @@ public abstract partial class DynamicTreeViewModel
         this.clipboardIsValid = true;
 
         this.RaiseClipboardChanged();
-        return Task.CompletedTask;
+        return;
     }
 
     /// <summary>
@@ -74,7 +80,7 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     /// <param name="items">The items to cut.</param>
     /// <returns>A completed task.</returns>
-    public Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
+    public async Task CutItemsAsync(IReadOnlyList<ITreeItem> items)
     {
         ArgumentNullException.ThrowIfNull(items);
         if (items.Count == 0)
@@ -83,7 +89,22 @@ public abstract partial class DynamicTreeViewModel
         }
 
         this.ValidateItemsAreShown(items);
-        var eligible = items.Where(item => !item.IsLocked).ToArray();
+        var eligibleInitial = items.Where(item => !item.IsLocked).ToArray();
+        if (eligibleInitial.Length == 0)
+        {
+            throw new InvalidOperationException("no cuttable items were provided");
+        }
+
+        // Determine top-level items to cut (skip descendants of already selected items), and mark all descendants for visual cut state.
+        var topLevel = ExtractTopLevelSelection(eligibleInitial).ToArray();
+        var markList = new List<ITreeItem>();
+        foreach (var item in topLevel)
+        {
+            markList.Add(item);
+            markList.AddRange(await CollectDescendantsAsync(item).ConfigureAwait(true));
+        }
+
+        var eligible = topLevel;
         if (eligible.Length == 0)
         {
             throw new InvalidOperationException("no cuttable items were provided");
@@ -91,18 +112,19 @@ public abstract partial class DynamicTreeViewModel
 
         this.ClearCutMarks();
 
-        foreach (var item in eligible)
+        foreach (var item in markList)
         {
             item.IsCut = true;
         }
 
         this.clipboardItems = eligible;
+        this.cutMarkedItems = [.. markList];
         this.clipboardState = ClipboardState.Cut;
         this.clipboardSourceParent = eligible[0].Parent;
         this.clipboardIsValid = true;
 
         this.RaiseClipboardChanged();
-        return Task.CompletedTask;
+        return;
     }
 
     /// <summary>
@@ -186,6 +208,73 @@ public abstract partial class DynamicTreeViewModel
         _ = this.FocusItem(pastedItems.FirstOrDefault());
     }
 
+    private static async Task<List<ITreeItem>> CollectDescendantsAsync(ITreeItem node)
+    {
+        var list = new List<ITreeItem>();
+        var children = await node.Children.ConfigureAwait(true);
+        foreach (var child in children)
+        {
+            list.Add(child);
+            list.AddRange(await CollectDescendantsAsync(child).ConfigureAwait(true));
+        }
+
+        return list;
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible for improved performance", Justification = "read-only is more important than this optimization")]
+    private static IReadOnlyList<ITreeItem> ExtractTopLevelSelection(IReadOnlyCollection<ITreeItem> items)
+    {
+        var set = new HashSet<ITreeItem>(items);
+        var result = new List<ITreeItem>(items.Count);
+
+        foreach (var item in items)
+        {
+            var isDescendant = false;
+            var p = item.Parent;
+            while (p is not null)
+            {
+                if (set.Contains(p))
+                {
+                    isDescendant = true;
+                    break;
+                }
+
+                p = p.Parent;
+            }
+
+            if (!isDescendant && !result.Contains(item))
+            {
+                result.Add(item);
+            }
+        }
+
+        return result;
+    }
+
+    private static async Task<IReadOnlyList<ITreeItem>> ExpandSelectionWithDescendantsAsync(IEnumerable<ITreeItem> items)
+    {
+        var unique = new List<ITreeItem>();
+        var seen = new HashSet<ITreeItem>();
+
+        foreach (var item in items)
+        {
+            if (seen.Add(item))
+            {
+                unique.Add(item);
+            }
+
+            foreach (var desc in await CollectDescendantsAsync(item).ConfigureAwait(true))
+            {
+                if (seen.Add(desc))
+                {
+                    unique.Add(desc);
+                }
+            }
+        }
+
+        return unique;
+    }
+
     private bool IsValidPasteTarget(ITreeItem targetParent)
     {
         foreach (var item in this.clipboardItems)
@@ -241,10 +330,28 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        foreach (var item in this.clipboardItems)
+        foreach (var item in this.cutMarkedItems)
         {
             item.IsCut = false;
         }
+
+        this.cutMarkedItems = [];
+    }
+
+    private ITreeItem[] EnsureDistinct(IReadOnlyCollection<ITreeItem> items)
+    {
+        _ = this.clipboardState;
+        var set = new HashSet<ITreeItem>();
+        var result = new List<ITreeItem>();
+        foreach (var item in items)
+        {
+            if (set.Add(item))
+            {
+                result.Add(item);
+            }
+        }
+
+        return [.. result];
     }
 
     private void ValidateItemsAreShown(IEnumerable<ITreeItem> items)
@@ -277,21 +384,6 @@ public abstract partial class DynamicTreeViewModel
         return copyable;
     }
 
-    private ITreeItem[] EnsureDistinct(IReadOnlyCollection<ITreeItem> items)
-    {
-        _ = this.clipboardState;
-        var set = new HashSet<ITreeItem>();
-        foreach (var item in items)
-        {
-            if (!set.Add(item))
-            {
-                throw new ArgumentException("items contains duplicates", nameof(items));
-            }
-        }
-
-        return [.. set];
-    }
-
     private async Task<List<ITreeItem>> PasteCopiedItemsAsync(ITreeItem targetParent, int insertIndex)
     {
         var clones = await this.CloneClipboardItemsAsync().ConfigureAwait(true);
@@ -319,8 +411,24 @@ public abstract partial class DynamicTreeViewModel
                 throw new InvalidOperationException($"type '{original.GetType()}' must implement {nameof(ICanBeCloned)} to support copy/paste");
             }
 
-            map[original] = customClone.Clone();
+            map[original] = customClone.CloneSelf();
         }
+
+#if DEBUG
+        // Sanity check: produced clones should not include children. If this assertion fires, a custom
+        // `ICanBeCloned.CloneSelf()` implementation created a deep clone; adapting clones to be orphaned is
+        // the responsibility of the `CloneSelf()` implementor, not the clipboard code.
+        foreach (var clone in map.Values)
+        {
+            if (clone is TreeItemAdapter adapter)
+            {
+                var children = await adapter.Children.ConfigureAwait(true);
+                Debug.Assert(
+                    children.Count == 0,
+                    "ICanBeCloned.Clone() returned a clone with pre-attached children; clones must not include children.");
+            }
+        }
+#endif // DEBUG
 
         foreach (var original in this.clipboardItems)
         {
@@ -345,10 +453,13 @@ public abstract partial class DynamicTreeViewModel
         this.EnsureNoCycles(targetParent);
         await this.MoveItemsAsync(this.clipboardItems, targetParent, insertIndex).ConfigureAwait(true);
 
-        foreach (var item in this.clipboardItems)
+        // Clear cut visual flags for all marked items (top-level parents + descendants)
+        foreach (var item in this.cutMarkedItems)
         {
             item.IsCut = false;
         }
+
+        this.cutMarkedItems = [];
 
         return [.. this.clipboardItems];
     }
