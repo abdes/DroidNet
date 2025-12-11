@@ -10,6 +10,7 @@ applyTo: '**/*.cs'
 - Use `var` for local variable declarations when the type is obvious from the right-hand side. Otherwise, use explicit types.
 - Use expression-bodied members for simple properties and methods where appropriate.
 - Always use `this.` to reference instance members to improve code readability.
+- DO NOT EVER attempt to reorder members in a class, even when the analyzer warns about that.
 
 ## Language Options
 
