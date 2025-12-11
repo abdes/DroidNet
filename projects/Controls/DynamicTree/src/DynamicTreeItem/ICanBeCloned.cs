@@ -15,5 +15,5 @@ public interface ICanBeCloned
     ///     Clones this item with all its properties but without any parent or children relationships.
     /// </summary>
     /// <returns>A cloned copy of this item ready for insertion under a new parent.</returns>
-    public ITreeItem Clone();
+    public ITreeItem CloneSelf();
 }

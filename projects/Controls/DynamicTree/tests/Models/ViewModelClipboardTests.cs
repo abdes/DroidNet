@@ -92,6 +92,57 @@ public class ViewModelClipboardTests : ViewModelTestBase
     }
 
     [TestMethod]
+    public async Task CopyParentOnly_CopiesWholeSubtree()
+    {
+        // Arrange
+        var child = new TestTreeItemAdapter { Label = "Child" };
+        var parent = new TestTreeItemAdapter([child]) { Label = "Parent", IsExpanded = true };
+        var target = new TestTreeItemAdapter { Label = "Target", IsExpanded = true };
+        var root = new TestTreeItemAdapter([parent, target], isRoot: true) { Label = "Root", IsExpanded = true };
+        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
+
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        viewModel.SelectItem(target);
+        _ = viewModel.FocusItem(target);
+
+        await viewModel.CopyItemsAsync([parent]).ConfigureAwait(false);
+
+        // Act
+        await viewModel.PasteItemsAsync(target, insertIndex: 0).ConfigureAwait(false);
+
+        // Assert
+        var targetChildren = await target.Children.ConfigureAwait(false);
+        var pastedParent = targetChildren[0];
+        _ = pastedParent.Should().NotBeSameAs(parent);
+        _ = pastedParent.Label.Should().Be(parent.Label);
+
+        var pastedChild = (await pastedParent.Children.ConfigureAwait(false))[0];
+        _ = pastedChild.Should().NotBeSameAs(child);
+        _ = pastedChild.Parent.Should().Be(pastedParent);
+    }
+
+    [TestMethod]
+    public async Task CutParent_MarksDescendantsAsCut()
+    {
+        // Arrange
+        var grandChild = new TestTreeItemAdapter { Label = "GChild" };
+        var child = new TestTreeItemAdapter([grandChild]) { Label = "Child", IsExpanded = true };
+        var parent = new TestTreeItemAdapter([child]) { Label = "Parent", IsExpanded = true };
+        var root = new TestTreeItemAdapter([parent], isRoot: true) { Label = "Root", IsExpanded = true };
+        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+
+        // Act
+        await viewModel.CutItemsAsync([parent]).ConfigureAwait(false);
+
+        // Assert: parent and children should be marked as cut
+        _ = parent.IsCut.Should().BeTrue();
+        _ = child.IsCut.Should().BeTrue();
+        _ = grandChild.IsCut.Should().BeTrue();
+    }
+
+    [TestMethod]
     public async Task Clipboard_AnyMutation_InvalidatesClipboard()
     {
         // Arrange
