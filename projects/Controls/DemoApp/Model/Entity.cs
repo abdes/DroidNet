@@ -8,4 +8,10 @@ namespace DroidNet.Controls.Demo.Model;
 /// Represents an entity with a name.
 /// </summary>
 /// <param name="name">The name of the entity.</param>
-public class Entity(string name) : NamedItem(name);
+public class Entity(string name) : NamedItem(name)
+{
+	/// <summary>
+	/// Gets the collection of child entities of this entity.
+	/// </summary>
+	public IList<Entity> Entities { get; init; } = [];
+}

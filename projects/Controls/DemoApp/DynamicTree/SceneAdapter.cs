@@ -4,6 +4,7 @@
 
 using System.Text.RegularExpressions;
 using DroidNet.Controls.Demo.Model;
+using DroidNet.Controls;
 using DroidNet.Controls.Demo.Services;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
@@ -12,7 +13,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
 /// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>
+public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>, ICanBeCloned
 {
     /// <summary>
     /// A regular expression pattern to validate a suggested scene name. It checks
@@ -38,6 +39,17 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
             this.label = value;
             this.OnPropertyChanged();
         }
+    }
+
+    public ITreeItem CloneSelf()
+    {
+        var sceneClone = new Scene(this.AttachedObject.Name);
+        var clone = new SceneAdapter(sceneClone);
+        this.CopyBasePropertiesTo(clone);
+
+        // IMPORTANT: Do not add children to the clone. The copy/paste logic expects clones with no parent or
+        // children so that the clipboard code can reparent child clones under cloned parents in the correct order.
+        return clone;
     }
 
     /// <inheritdoc/>

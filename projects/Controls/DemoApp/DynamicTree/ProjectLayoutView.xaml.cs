@@ -4,8 +4,10 @@
 
 using DroidNet.Controls.Demo.Model;
 using DroidNet.Mvvm.Generators;
+using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Controls;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
 
@@ -23,6 +25,7 @@ public sealed partial class ProjectLayoutView
     public ProjectLayoutView()
     {
         this.InitializeComponent();
+        this.Unloaded += ProjectLayoutView_Unloaded;
     }
 
     private async void ProjectLayoutView_OnLoaded(object sender, RoutedEventArgs args)
@@ -33,6 +36,59 @@ public sealed partial class ProjectLayoutView
         if (this.ViewModel is not null)
         {
             await this.ViewModel.LoadProjectCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+            this.ViewModel.RenameRequested += this.ViewModel_RenameRequested;
+        }
+    }
+
+    private void ProjectLayoutView_Unloaded(object? sender, RoutedEventArgs e)
+    {
+        if (this.ViewModel is not null)
+        {
+            this.ViewModel.RenameRequested -= this.ViewModel_RenameRequested;
+        }
+    }
+
+    private async void ViewModel_RenameRequested(object? sender, ITreeItem? item)
+    {
+        _ = sender; // unused
+        if (item is null)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog
+        {
+            Title = "Rename",
+            PrimaryButtonText = "OK",
+            CloseButtonText = "Cancel"
+        };
+
+        var tb = new TextBox() { Text = item.Label };
+        dialog.Content = tb;
+
+        var result = await dialog.ShowAsync();
+        if (result == ContentDialogResult.Primary)
+        {
+            var newName = tb.Text?.Trim() ?? string.Empty;
+            if (item.ValidateItemName(newName))
+            {
+                item.Label = newName;
+                switch (item)
+                {
+                    case SceneAdapter sceneAdapter:
+                        sceneAdapter.AttachedObject.Name = newName;
+                        break;
+                    case EntityAdapter entityAdapter:
+                        entityAdapter.AttachedObject.Name = newName;
+                        break;
+                    default:
+                        break;
+                }
+            }
+            else
+            {
+                // Optionally show a message, for demo we ignore invalid names.
+            }
         }
     }
 
