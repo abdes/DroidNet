@@ -4,7 +4,6 @@
 
 using System.Text.RegularExpressions;
 using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls;
 using DroidNet.Controls.Demo.Services;
 
 namespace DroidNet.Controls.Demo.DynamicTree;
@@ -13,7 +12,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.
 /// </summary>
 /// <param name="scene">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>, ICanBeCloned
+internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, isHidden: false), ITreeItem<Scene>, ICanBeCloned
 {
     /// <summary>
     /// A regular expression pattern to validate a suggested scene name. It checks
@@ -41,6 +40,10 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
         }
     }
 
+    /// <inheritdoc/>
+    public Scene AttachedObject => scene;
+
+    /// <inheritdoc/>
     public ITreeItem CloneSelf()
     {
         var sceneClone = new Scene(this.AttachedObject.Name);
@@ -51,9 +54,6 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot: false, 
         // children so that the clipboard code can reparent child clones under cloned parents in the correct order.
         return clone;
     }
-
-    /// <inheritdoc/>
-    public Scene AttachedObject => scene;
 
     /// <inheritdoc/>
     public override bool ValidateItemName(string name) => ValidNameMatcher().IsMatch(name);

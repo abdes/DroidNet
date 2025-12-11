@@ -167,9 +167,10 @@ public abstract partial class DynamicTreeViewModel
             throw new InvalidOperationException("Clipboard items were deleted from tree");
         }
 
-        if (this.FocusedItem is null || this.SelectionModel?.IsEmpty != false)
+        // If no explicit target parent was provided, require a focused item and a non-empty selection
+        if (targetParent is null && (this.FocusedItem is null || this.SelectionModel?.IsEmpty != false))
         {
-            throw new InvalidOperationException("paste requires a focused and selected item");
+            throw new InvalidOperationException("paste requires a focused or selected item when no target is specified");
         }
 
         var parent = targetParent ?? this.FocusedItem
@@ -205,7 +206,7 @@ public abstract partial class DynamicTreeViewModel
             this.SelectItem(item);
         }
 
-        _ = this.FocusItem(pastedItems.FirstOrDefault());
+        _ = this.FocusItem(pastedItems.FirstOrDefault(), forceRaise: true);
     }
 
     private static async Task<List<ITreeItem>> CollectDescendantsAsync(ITreeItem node)

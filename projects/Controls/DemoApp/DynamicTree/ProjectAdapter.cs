@@ -10,7 +10,7 @@ namespace DroidNet.Controls.Demo.DynamicTree;
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Project" /> model class.
 /// </summary>
 /// <param name="project">The <see cref="Entity" /> object to wrap as a <see cref="ITreeItem" />.</param>
-public partial class ProjectAdapter(Project project) : TreeItemAdapter(isRoot: true, isHidden: false), ITreeItem<Project>
+internal sealed partial class ProjectAdapter(Project project) : TreeItemAdapter(isRoot: true, isHidden: false), ITreeItem<Project>
 {
     private string label = project.Name;
 

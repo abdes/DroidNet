@@ -13,3 +13,4 @@ using System.Runtime.CompilerServices;
 */
 
 [assembly: InternalsVisibleTo("DroidNet.Controls.UI.Tests")]
+[assembly: InternalsVisibleTo("DroidNet.Controls.DynamicTree.UI.Tests")]

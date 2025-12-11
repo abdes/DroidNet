@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Input;
 using Windows.System;
 
 namespace DroidNet.Controls;
@@ -180,5 +181,151 @@ public partial class DynamicTree
         {
             LogFocusDirectResult(logger, item.Label, index, targetType, succeeded);
         }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Pointer pressed: Item='{itemLabel}' OriginalSource={sourceType} Device={deviceType} LeftPressed={leftPressed} Handled={handled}")]
+    private static partial void LogPointerPressed(ILogger logger, string? itemLabel, string? sourceType, string? deviceType, bool leftPressed, bool handled);
+
+    [Conditional("DEBUG")]
+    private void LogPointerPressed(FrameworkElement element, PointerRoutedEventArgs args)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        var sourceType = args.OriginalSource?.GetType().Name ?? "<unknown>";
+        var deviceType = args.Pointer?.PointerDeviceType.ToString() ?? "<unknown>";
+        var leftPressed = args.GetCurrentPoint(element).Properties.IsLeftButtonPressed;
+        var handled = args.Handled;
+
+        LogPointerPressed(logger, itemLabel, sourceType, deviceType, leftPressed, handled);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tapped: Item='{itemLabel}' Source={sourceType} Handled={handled}")]
+    private static partial void LogTapped(ILogger logger, string? itemLabel, string? sourceType, bool handled);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focus: Apply attempt for '{itemLabel}' at index {index} state={state} isApplying={isApplying} pending={pending}")]
+    private static partial void LogFocusApplyAttempt(ILogger logger, string? itemLabel, int index, string state, bool isApplying, bool pending);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Requesting model focus: Item='{itemLabel}' Origin={origin} ForceRaise={forceRaise}")]
+    private static partial void LogRequestModelFocus(ILogger logger, string? itemLabel, string origin, bool forceRaise);
+
+    [Conditional("DEBUG")]
+    private void LogRequestModelFocusWrapper(ITreeItem? item, FocusRequestOrigin origin, bool forceRaise)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        LogRequestModelFocus(logger, item?.Label, origin.ToString(), forceRaise);
+    }
+
+    [Conditional("DEBUG")]
+    private void LogFocusApplyAttempt(ITreeItem item, int index, FocusState state, bool isApplying, bool pending)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        LogFocusApplyAttempt(logger, item.Label, index, state.ToString(), isApplying, pending);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Run queued focus: Item='{itemLabel}' pending={pending} state={state}")]
+    private static partial void LogRunTryFocus(ILogger logger, string? itemLabel, bool pending, string state);
+
+    [Conditional("DEBUG")]
+    private void LogRunTryFocus(ITreeItem? item, bool pending, FocusState state)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        LogRunTryFocus(logger, item?.Label, pending, state.ToString());
+    }
+
+    [Conditional("DEBUG")]
+    private void LogTapped(FrameworkElement element, TappedRoutedEventArgs args)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        var sourceType = args.OriginalSource?.GetType().Name ?? "<unknown>";
+        var handled = args.Handled;
+        LogTapped(logger, itemLabel, sourceType, handled);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "GotFocus event: Item='{itemLabel}' Origin={origin} ApplyingFocus={applying} Handled={handled}")]
+    private static partial void LogGotFocusEvent(ILogger logger, string? itemLabel, string origin, bool applying, bool handled);
+
+    [Conditional("DEBUG")]
+    private void LogGotFocusEvent(FrameworkElement element, FocusRequestOrigin origin, bool applying, RoutedEventArgs args)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        // RoutedEventArgs in WinUI does not expose a 'Handled' property; use false for logging.
+        LogGotFocusEvent(logger, itemLabel, origin.ToString(), applying, handled: false);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Trace,
+        Message = "ViewModel.PropertyChanged: {property} -> FocusedItem = {focusedLabel} Origin={origin} EnqueueFocus={enqueue}")]
+    private static partial void LogViewModelPropertyChanged(ILogger logger, string? property, string? focusedLabel, string origin, bool enqueue);
+
+    [Conditional("DEBUG")]
+    private void LogViewModelPropertyChanged(string? property, ITreeItem? focusedItem, FocusRequestOrigin origin, bool enqueue)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        var label = focusedItem?.Label;
+        LogViewModelPropertyChanged(logger, property, label, origin.ToString(), enqueue);
     }
 }
