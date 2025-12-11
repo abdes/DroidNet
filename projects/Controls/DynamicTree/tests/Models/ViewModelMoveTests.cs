@@ -96,7 +96,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Move")]
-    public async Task MoveItem_WhenHandlerVetoesMove_ShouldThrow()
+    public async Task MoveItem_WhenHandlerVetoesMove_ShouldNotThrowAndNotMove()
     {
         // Arrange
         var item = new TestTreeItemAdapter { Label = "Item" };
@@ -116,8 +116,13 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         // Act
         var act = async () => await viewModel.MoveItemAsyncPublic(item, targetParent, 0).ConfigureAwait(false);
 
-        // Assert
-        _ = await act.Should().ThrowAsync<InvalidOperationException>().WithMessage("*blocked*").ConfigureAwait(false);
+        // Assert: should not throw
+        _ = await act.Should().NotThrowAsync().ConfigureAwait(false);
+
+        // and the item must still belong to the original source parent
+        _ = item.Parent.Should().Be(sourceParent);
+        var children = await sourceParent.Children.ConfigureAwait(false);
+        _ = children.Should().Contain(item);
     }
 
     [TestMethod]

@@ -173,7 +173,15 @@ internal sealed class TreeDisplayHelper(
     /// <returns>A task that completes when all items are moved.</returns>
     public async Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
     {
-        var plan = this.ValidateMoveRequest(items, newParent, startIndex);
+        var planNullable = this.ValidateMoveRequest(items, newParent, startIndex);
+        if (planNullable is null)
+        {
+            // Move vetoed by handler; return gracefully without any mutation.
+            this.logger.LogDebug("Move request was vetoed by a handler; aborting move.");
+            return;
+        }
+
+        var plan = planNullable.Value;
 
         var originalIndices = await CaptureOriginalIndicesAsync(plan.Items).ConfigureAwait(true);
         var adjustedStartIndex = AdjustStartIndexForSameParent(originalIndices, plan.TargetParent, plan.StartIndex);
@@ -343,7 +351,7 @@ internal sealed class TreeDisplayHelper(
         return handler is null || handler(args);
     }
 
-    private MovePlan ValidateMoveRequest(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
+    private MovePlan? ValidateMoveRequest(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
     {
         if (items.Count == 0)
         {
@@ -370,7 +378,10 @@ internal sealed class TreeDisplayHelper(
 
             if (!this.ApproveItemBeingMoved(args))
             {
-                throw new InvalidOperationException(args.VetoReason ?? "move vetoed");
+                // If a handler vetoes the move, we should return null to indicate the move was rejected
+                // and allow caller to gracefully bail out. Log for debugging and diagnostics.
+                this.logger.LogWarning("Move vetoed: {Reason}", args.VetoReason ?? "move vetoed");
+                return null;
             }
 
             this.ValidateTargetConstraints(item, args.NewParent);
