@@ -27,6 +27,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
     private bool isDisposed;
+    private ProjectAdapter? projectAdapter;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
@@ -88,7 +89,17 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
     /// <summary>
     /// Gets the project adapter.
     /// </summary>
-    internal ProjectAdapter? Project { get; private set; }
+    internal ProjectAdapter? Project
+    {
+        get => this.projectAdapter;
+        private set
+        {
+            if (this.SetProperty(ref this.projectAdapter, value))
+            {
+                this.AddSceneCommand.NotifyCanExecuteChanged();
+            }
+        }
+    }
 
     private HistoryKeeper History => UndoRedo.Default[this];
 
@@ -207,6 +218,14 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         base.OnSelectionModelChanged(oldValue);
         oldValue?.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
         this.SelectionModel?.PropertyChanged += this.SelectionModel_OnPropertyChanged;
+
+        // Re-evaluate any commands that depend on selection to ensure UI updates correctly.
+        this.AddEntityCommand.NotifyCanExecuteChanged();
+        this.RemoveSelectedItemsCommand.NotifyCanExecuteChanged();
+        this.CopyCommand.NotifyCanExecuteChanged();
+        this.CutCommand.NotifyCanExecuteChanged();
+        this.RenameCommand.NotifyCanExecuteChanged();
+        this.PasteCommand.NotifyCanExecuteChanged();
     }
 
     private static string GetNextAvailableSceneName(Project project, string baseName)
@@ -328,15 +347,191 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         return true;
     }
 
-    // Note: Do not expose UI-only types such as Visibility in the ViewModel; UI should convert string-based OperationError into visibility via a converter.
     partial void OnOperationErrorChanged(string? value)
-    {
-        this.OperationErrorVisible = !string.IsNullOrEmpty(value);
-        this.LogOperationErrorChanged(value);
-    }
+        => this.OperationErrorVisible = !string.IsNullOrEmpty(value);
 
     [RelayCommand]
     private void ClearOperationError() => this.OperationError = null;
+
+    /// <summary>
+    /// Undoes the last change.
+    /// </summary>
+    private bool CanUndo() => this.History.CanUndo;
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private async Task Undo()
+        => await this.History.UndoAsync().ConfigureAwait(false);
+
+    /// <summary>
+    /// Redoes the last undone change.
+    /// </summary>
+    private bool CanRedo() => this.History.CanRedo;
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private async Task Redo()
+        => await this.History.RedoAsync().ConfigureAwait(false);
+
+    private bool CanCopy() => this.SelectionModel?.IsEmpty == false;
+
+    /// <summary>
+    /// Copies the selected items into the clipboard.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    private async Task Copy()
+    {
+        var items = this.GetSelectedItems();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await this.CopyItemsAsync(items).ConfigureAwait(false);
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanCut()
+    {
+        var items = this.GetSelectedItems();
+        return items.Count > 0 && items.Exists(i => !i.IsLocked);
+    }
+
+    /// <summary>
+    /// Cuts the selected items into the clipboard.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCut))]
+    private async Task Cut()
+    {
+        var items = this.GetSelectedItems().Where(i => !i.IsLocked).ToList();
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        await this.CutItemsAsync(items).ConfigureAwait(false);
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanPaste() => this.CurrentClipboardState != ClipboardState.Empty
+        && this.IsClipboardValid
+        && ((this.FocusedItem is not null) || (this.SelectionModel?.IsEmpty == false));
+
+    /// <summary>
+    /// Pastes clipboard items into the current target.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanPaste))]
+    private async Task Paste()
+    {
+        // If we have a focused item, use it; otherwise, if there's a selection, use the first selected item.
+        var targetParent = this.FocusedItem;
+        if (targetParent is null && this.SelectionModel?.IsEmpty == false)
+        {
+            var selected = this.GetSelectedItems();
+            targetParent = selected.FirstOrDefault();
+        }
+
+        if (this.CurrentClipboardState == ClipboardState.Copied && this.ClipboardItems.Count > 1)
+        {
+            this.History.BeginChangeSet($"Paste {this.ClipboardItems.Count} item(s)");
+            try
+            {
+                await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
+            }
+            finally
+            {
+                this.History.EndChangeSet();
+            }
+
+            return;
+        }
+
+        await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
+    }
+
+    private bool CanRename() => this.SelectionModel?.IsEmpty == false;
+
+    /// <summary>
+    /// Requests the view to start in-place rename on the currently selected item.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanRename))]
+    private void Rename()
+    {
+        var item = this.SelectedItem;
+        this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(item));
+    }
+
+    /// <summary>
+    /// Loads the project asynchronously.
+    /// </summary>
+    [RelayCommand]
+    private async Task LoadProjectAsync()
+    {
+        this.History.Clear();
+
+        var project = new Project("Sample Project");
+        await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
+
+        // Keep the project expanded by default so the tree displays its children at startup.
+        this.Project = new ProjectAdapter(project)
+        {
+            IsExpanded = true,
+        };
+        await this.InitializeRootAsync(this.Project, skipRoot: false).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Adds a new scene to the project.
+    /// </summary>
+    private bool CanAddScene() => this.Project != null;
+
+    [RelayCommand(CanExecute = nameof(CanAddScene))]
+    private async Task AddScene()
+    {
+        if (this.Project is null)
+        {
+            return;
+        }
+
+        var name = GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
+        var newScene = new SceneAdapter(new Scene(name));
+        await this.InsertItemAsync(0, this.Project, newScene).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Determines whether an entity can be added.
+    /// </summary>
+    /// <returns><see langword="true"/> if an entity can be added; otherwise, <see langword="false"/>.</returns>
+    private bool CanAddEntity()
+        => (this.SelectionModel is SingleSelectionModel && this.SelectionModel.SelectedIndex != -1) ||
+           this.SelectionModel is MultipleSelectionModel { SelectedIndices.Count: 1 };
+
+    /// <summary>
+    /// Adds a new entity to the selected scene.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanAddEntity))]
+    private async Task AddEntity()
+    {
+        var selectedItem = this.SelectionModel?.SelectedItem;
+        if (selectedItem is null)
+        {
+            return;
+        }
+
+        var parent = selectedItem switch
+        {
+            SceneAdapter s => (ITreeItem)s,
+            EntityAdapter e => (ITreeItem)e,
+            _ => null,
+        };
+
+        if (parent is null)
+        {
+            return;
+        }
+
+        var name = GetNextAvailableEntityName(parent, "New Entity");
+        var newEntity = new EntityAdapter(new Entity(name));
+        await this.InsertItemAsync(0, parent, newEntity).ConfigureAwait(false);
+    }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
     {
@@ -452,112 +647,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         this.History.AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
             async () => await this.InsertItemWithVisibilityAsync(args.RelativeIndex, args.Parent, args.TreeItem).ConfigureAwait(false));
-    }
-
-    /// <summary>
-    /// Undoes the last change.
-    /// </summary>
-    private bool CanUndo() => this.History.CanUndo;
-
-    [RelayCommand(CanExecute = nameof(CanUndo))]
-    private async Task Undo()
-        => await this.History.UndoAsync().ConfigureAwait(false);
-
-    /// <summary>
-    /// Redoes the last undone change.
-    /// </summary>
-    private bool CanRedo() => this.History.CanRedo;
-
-    [RelayCommand(CanExecute = nameof(CanRedo))]
-    private async Task Redo()
-        => await this.History.RedoAsync().ConfigureAwait(false);
-
-    private bool CanCopy() => this.SelectionModel?.IsEmpty == false;
-
-    /// <summary>
-    /// Copies the selected items into the clipboard.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanCopy))]
-    private async Task Copy()
-    {
-        var items = this.GetSelectedItems();
-        if (items.Count == 0)
-        {
-            return;
-        }
-
-        await this.CopyItemsAsync(items).ConfigureAwait(false);
-        this.PasteCommand.NotifyCanExecuteChanged();
-    }
-
-    private bool CanCut()
-    {
-        var items = this.GetSelectedItems();
-        return items.Count > 0 && items.Exists(i => !i.IsLocked);
-    }
-
-    /// <summary>
-    /// Cuts the selected items into the clipboard.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanCut))]
-    private async Task Cut()
-    {
-        var items = this.GetSelectedItems().Where(i => !i.IsLocked).ToList();
-        if (items.Count == 0)
-        {
-            return;
-        }
-
-        await this.CutItemsAsync(items).ConfigureAwait(false);
-        this.PasteCommand.NotifyCanExecuteChanged();
-    }
-
-    private bool CanPaste() => this.CurrentClipboardState != ClipboardState.Empty
-        && this.IsClipboardValid
-        && ((this.FocusedItem is not null) || (this.SelectionModel?.IsEmpty == false));
-
-    /// <summary>
-    /// Pastes clipboard items into the current target.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanPaste))]
-    private async Task Paste()
-    {
-        // If we have a focused item, use it; otherwise, if there's a selection, use the first selected item.
-        var targetParent = this.FocusedItem;
-        if (targetParent is null && this.SelectionModel?.IsEmpty == false)
-        {
-            var selected = this.GetSelectedItems();
-            targetParent = selected.FirstOrDefault();
-        }
-
-        if (this.CurrentClipboardState == ClipboardState.Copied && this.ClipboardItems.Count > 1)
-        {
-            this.History.BeginChangeSet($"Paste {this.ClipboardItems.Count} item(s)");
-            try
-            {
-                await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
-            }
-            finally
-            {
-                this.History.EndChangeSet();
-            }
-
-            return;
-        }
-
-        await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
-    }
-
-    private bool CanRename() => this.SelectionModel?.IsEmpty == false;
-
-    /// <summary>
-    /// Requests the view to start in-place rename on the currently selected item.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanRename))]
-    private void Rename()
-    {
-        var item = this.SelectedItem;
-        this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(item));
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code is more readable like this")]
@@ -918,76 +1007,4 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
     private void OnRedoStackCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
         => this.OnUndoStackCollectionChanged(sender, e);
-
-    /// <summary>
-    /// Loads the project asynchronously.
-    /// </summary>
-    [RelayCommand]
-    private async Task LoadProjectAsync()
-    {
-        this.History.Clear();
-
-        var project = new Project("Sample Project");
-        await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
-
-        // Keep the project expanded by default so the tree displays its children at startup.
-        this.Project = new ProjectAdapter(project)
-        {
-            IsExpanded = true,
-        };
-        await this.InitializeRootAsync(this.Project, skipRoot: false).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Adds a new scene to the project.
-    /// </summary>
-    [RelayCommand]
-    private async Task AddScene()
-    {
-        if (this.Project is null)
-        {
-            return;
-        }
-
-        var name = GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
-        var newScene = new SceneAdapter(new Scene(name));
-        await this.InsertItemAsync(0, this.Project, newScene).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// Determines whether an entity can be added.
-    /// </summary>
-    /// <returns><see langword="true"/> if an entity can be added; otherwise, <see langword="false"/>.</returns>
-    private bool CanAddEntity()
-        => (this.SelectionModel is SingleSelectionModel && this.SelectionModel.SelectedIndex != -1) ||
-           this.SelectionModel is MultipleSelectionModel { SelectedIndices.Count: 1 };
-
-    /// <summary>
-    /// Adds a new entity to the selected scene.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(CanAddEntity))]
-    private async Task AddEntity()
-    {
-        var selectedItem = this.SelectionModel?.SelectedItem;
-        if (selectedItem is null)
-        {
-            return;
-        }
-
-        var parent = selectedItem switch
-        {
-            SceneAdapter s => (ITreeItem)s,
-            EntityAdapter e => (ITreeItem)e,
-            _ => null,
-        };
-
-        if (parent is null)
-        {
-            return;
-        }
-
-        var name = GetNextAvailableEntityName(parent, "New Entity");
-        var newEntity = new EntityAdapter(new Entity(name));
-        await this.InsertItemAsync(0, parent, newEntity).ConfigureAwait(false);
-    }
 }

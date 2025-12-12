@@ -14,15 +14,6 @@ public partial class ProjectLayoutViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "OperationError changed: {OperationError}")]
-    private static partial void LogOperationErrorChanged(ILogger logger, string operationError);
-
-    private void LogOperationErrorChanged(string? operationError)
-        => LogOperationErrorChanged(this.logger, string.IsNullOrEmpty(operationError) ? "(null)" : operationError);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
         Message = "Item added: `{ItemName}`")]
     private static partial void LogItemAdded(ILogger logger, string itemName);
 
