@@ -49,6 +49,6 @@ internal sealed partial class ProjectAdapter(Project project) : TreeItemAdapter(
                 });
         }
 
-        await Task.CompletedTask.ConfigureAwait(true);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 }

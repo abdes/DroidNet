@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -23,9 +24,10 @@ namespace DroidNet.Controls.Demo.Tree;
 /// The ViewModel for the <see cref="ProjectLayoutView"/> view.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public for source generated MVVM")]
-public partial class ProjectLayoutViewModel : DynamicTreeViewModel
+public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
+    private bool isDisposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
@@ -60,13 +62,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.ClipboardContentChanged += this.OnClipboardContentChanged;
 
         // If focus changes within the tree, re-evaluate paste availability
-        this.PropertyChanged += (sender, args) =>
-        {
-            if (args.PropertyName?.Equals(nameof(this.FocusedItem), StringComparison.Ordinal) == true)
-            {
-                this.PasteCommand.NotifyCanExecuteChanged();
-            }
-        };
+        this.PropertyChanged += this.ViewModel_PropertyChanged;
     }
 
     /// <summary>
@@ -98,6 +94,15 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private HistoryKeeper History => UndoRedo.Default[this];
 
     private bool HasUnlockedSelectedItems { get; set; }
+
+    /// <summary>
+    /// Dispose the view-model and unsubscribe from events.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
 
     /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
@@ -160,6 +165,41 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.History.AddChange(
             $"Rename({oldName} → {trimmed})",
             () => this.RenameItem(item, oldName));
+    }
+
+    /// <summary>
+    /// Dispose managed resources. Called by <see cref="Dispose()"/>.
+    /// </summary>
+    /// <param name="disposing">Indicator whether disposing is in progress.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.isDisposed || !disposing)
+        {
+            return;
+        }
+
+        if (this.UndoStack is INotifyCollectionChanged undo)
+        {
+            undo.CollectionChanged -= this.OnUndoStackCollectionChanged;
+        }
+
+        if (this.RedoStack is INotifyCollectionChanged redo)
+        {
+            redo.CollectionChanged -= this.OnRedoStackCollectionChanged;
+        }
+
+        this.ItemBeingAdded -= this.OnItemBeingAdded;
+        this.ItemBeingMoved -= this.OnItemBeingMoved;
+        this.ItemAdded -= this.OnItemAdded;
+        this.ItemBeingRemoved -= this.OnItemBeingRemoved;
+        this.ItemRemoved -= this.OnItemRemoved;
+        this.ItemMoved -= this.OnItemMoved;
+
+        this.ClipboardContentChanged -= this.OnClipboardContentChanged;
+        this.SelectionModel?.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
+        this.PropertyChanged -= this.ViewModel_PropertyChanged;
+
+        this.isDisposed = true;
     }
 
     /// <inheritdoc/>
@@ -441,7 +481,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        await this.CopyItemsAsync(items).ConfigureAwait(true);
+        await this.CopyItemsAsync(items).ConfigureAwait(false);
         this.PasteCommand.NotifyCanExecuteChanged();
     }
 
@@ -463,7 +503,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        await this.CutItemsAsync(items).ConfigureAwait(true);
+        await this.CutItemsAsync(items).ConfigureAwait(false);
         this.PasteCommand.NotifyCanExecuteChanged();
     }
 
@@ -490,7 +530,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             this.History.BeginChangeSet($"Paste {this.ClipboardItems.Count} item(s)");
             try
             {
-                await this.PasteItemsAsync(targetParent).ConfigureAwait(true);
+                await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
             }
             finally
             {
@@ -500,7 +540,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return;
         }
 
-        await this.PasteItemsAsync(targetParent).ConfigureAwait(true);
+        await this.PasteItemsAsync(targetParent).ConfigureAwait(false);
     }
 
     private bool CanRename() => this.SelectionModel?.IsEmpty == false;
@@ -584,6 +624,14 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             this.CopyCommand.NotifyCanExecuteChanged();
             this.CutCommand.NotifyCanExecuteChanged();
             this.RenameCommand.NotifyCanExecuteChanged();
+            this.PasteCommand.NotifyCanExecuteChanged();
+        }
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName?.Equals(nameof(this.FocusedItem), StringComparison.Ordinal) == true)
+        {
             this.PasteCommand.NotifyCanExecuteChanged();
         }
     }

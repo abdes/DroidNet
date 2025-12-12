@@ -58,6 +58,6 @@ internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isR
                 });
         }
 
-        await Task.CompletedTask.ConfigureAwait(true);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 }
