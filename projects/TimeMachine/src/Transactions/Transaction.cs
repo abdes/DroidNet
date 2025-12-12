@@ -113,6 +113,13 @@ public sealed class Transaction : ITransaction
     public void Apply() => this.changes.Apply();
 
     /// <summary>
+    /// Applies all changes in this transaction asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
+    /// <returns>A task-like object that represents the asynchronous operation.</returns>
+    public ValueTask ApplyAsync(CancellationToken cancellationToken = default) => this.changes.ApplyAsync(cancellationToken);
+
+    /// <summary>
     /// Returns a string representation of the transaction.
     /// </summary>
     /// <returns>

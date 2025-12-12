@@ -47,6 +47,16 @@ public class ChangeSet : Change
         }
     }
 
+    /// <inheritdoc />
+    public override async ValueTask ApplyAsync(CancellationToken cancellationToken = default)
+    {
+        foreach (var change in this.Changes)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            await change.ApplyAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     /// <summary>
     /// Adds a change to this <see cref="ChangeSet"/>.
     /// </summary>
