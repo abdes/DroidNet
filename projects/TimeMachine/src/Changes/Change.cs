@@ -35,6 +35,23 @@ public abstract class Change : IChange
     public abstract void Apply();
 
     /// <summary>
+    /// Applies the change asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
+    /// <returns>A task-like object that represents the asynchronous operation.</returns>
+    /// <remarks>
+    /// The default implementation delegates to <see cref="Apply"/>. It exists, although we have a default interface
+    /// method in IChange, so that derived classes can override async behavior cleanly and predictably.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0042:Do not use blocking calls in an async method", Justification = "this is the wrapper that invokes the non-async change")]
+    public virtual ValueTask ApplyAsync(CancellationToken cancellationToken = default)
+    {
+        _ = cancellationToken;
+        this.Apply();
+        return ValueTask.CompletedTask;
+    }
+
+    /// <summary>
     /// Returns a string representation of the change.
     /// </summary>
     /// <returns>

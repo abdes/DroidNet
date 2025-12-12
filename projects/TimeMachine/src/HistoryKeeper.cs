@@ -254,6 +254,30 @@ public class HistoryKeeper : ITransactionManager
     }
 
     /// <summary>
+    /// Undo the first available change asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
+    /// <returns>A task-like object that represents the asynchronous operation.</returns>
+    public async ValueTask UndoAsync(CancellationToken cancellationToken = default)
+    {
+        if (this.transactions.Count != 0)
+        {
+            this.CommitTransactions();
+        }
+
+        if (!this.TryPopUndoStack(out var lastChange))
+        {
+            return;
+        }
+
+        using (new StateTransition<States>(this, States.Undoing))
+        using (new ChangeSetUndoRedo(this, lastChange))
+        {
+            await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>
     /// Redo the first available change.
     /// </summary>
     public void Redo()
@@ -272,6 +296,30 @@ public class HistoryKeeper : ITransactionManager
         using (new ChangeSetUndoRedo(this, lastChange))
         {
             lastChange.Apply();
+        }
+    }
+
+    /// <summary>
+    /// Redo the first available change asynchronously.
+    /// </summary>
+    /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
+    /// <returns>A task-like object that represents the asynchronous operation.</returns>
+    public async ValueTask RedoAsync(CancellationToken cancellationToken = default)
+    {
+        if (this.transactions.Count != 0)
+        {
+            this.CommitTransactions();
+        }
+
+        if (!this.TryPopRedoStack(out var lastChange))
+        {
+            return;
+        }
+
+        using (new StateTransition<States>(this, States.Redoing))
+        using (new ChangeSetUndoRedo(this, lastChange))
+        {
+            await lastChange.ApplyAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 

@@ -43,6 +43,60 @@ public static class HistoryKeeperAddChangeExtensions
     }
 
     /// <summary>
+    /// Adds a change that involves executing an asynchronous lambda expression on a specified target.
+    /// </summary>
+    /// <typeparam name="TTarget">The type of the target on which the expression will be executed.</typeparam>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="target">The target object on which the expression will be executed.</param>
+    /// <param name="selector">The asynchronous lambda expression to execute on the target.</param>
+    public static void AddChange<TTarget>(
+        this HistoryKeeper undoManager,
+        string label,
+        TTarget target,
+        Expression<Func<TTarget, ValueTask>> selector)
+    {
+        var action = new AsyncLambdaExpressionOnTarget<TTarget>(target, selector) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
+    /// Adds a change that involves executing an asynchronous lambda expression on a specified target.
+    /// </summary>
+    /// <typeparam name="TTarget">The type of the target on which the expression will be executed.</typeparam>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="target">The target object on which the expression will be executed.</param>
+    /// <param name="selector">The asynchronous lambda expression to execute on the target.</param>
+    public static void AddChange<TTarget>(
+        this HistoryKeeper undoManager,
+        string label,
+        TTarget target,
+        Expression<Func<TTarget, Task>> selector)
+    {
+        var action = new AsyncLambdaExpressionOnTarget<TTarget>(target, selector) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
+    /// Adds a change that involves executing an asynchronous action on a specified target.
+    /// </summary>
+    /// <typeparam name="TTarget">The type of the target on which the action will be executed.</typeparam>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="target">The target object on which the action will be executed.</param>
+    /// <param name="selector">The asynchronous action to execute on the target.</param>
+    public static void AddChange<TTarget>(
+        this HistoryKeeper undoManager,
+        string label,
+        TTarget target,
+        Func<TTarget, CancellationToken, Task> selector)
+    {
+        var action = new AsyncLambdaExpressionOnTarget<TTarget>(target, (t, ct) => new ValueTask(selector(t, ct))) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
     /// Adds a change that involves executing an action with a specified argument.
     /// </summary>
     /// <typeparam name="TArgument">The type of the argument passed to the action.</typeparam>
@@ -68,6 +122,48 @@ public static class HistoryKeeperAddChangeExtensions
     }
 
     /// <summary>
+    /// Adds a change that involves executing an asynchronous action with a specified argument.
+    /// </summary>
+    /// <typeparam name="TArgument">The type of the argument passed to the action.</typeparam>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="selector">The asynchronous action to execute with the specified argument.</param>
+    /// <param name="argument">The argument to pass to the action.</param>
+    public static void AddChange<TArgument>(
+        this HistoryKeeper undoManager,
+        string label,
+        Func<TArgument?, Task> selector,
+        TArgument argument)
+    {
+        var action = new AsyncActionWithArgument<TArgument?>(a => new ValueTask(selector(a)), argument) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
+    /// Adds a change that involves executing an asynchronous action with a specified argument.
+    /// </summary>
+    /// <typeparam name="TArgument">The type of the argument passed to the action.</typeparam>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="selector">The asynchronous action to execute with the specified argument.</param>
+    /// <param name="argument">The argument to pass to the action.</param>
+    public static void AddChange<TArgument>(
+        this HistoryKeeper undoManager,
+        string label,
+        Func<TArgument?, CancellationToken, Task> selector,
+        TArgument argument)
+    {
+        var action = new AsyncActionWithArgument<TArgument?>(
+            (a, ct) => new ValueTask(selector(a, ct)),
+            argument)
+        {
+            Key = label,
+        };
+
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
     /// Adds a change that involves executing a simple action.
     /// </summary>
     /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
@@ -83,6 +179,30 @@ public static class HistoryKeeperAddChangeExtensions
     public static void AddChange(this HistoryKeeper undoManager, string label, Action selector)
     {
         var action = new SimpleAction(selector) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
+    /// Adds a change that involves executing an asynchronous action.
+    /// </summary>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="selector">The asynchronous action to execute.</param>
+    public static void AddChange(this HistoryKeeper undoManager, string label, Func<Task> selector)
+    {
+        var action = new AsyncSimpleAction(() => new ValueTask(selector())) { Key = label };
+        undoManager.AddChange(action);
+    }
+
+    /// <summary>
+    /// Adds a change that involves executing an asynchronous action.
+    /// </summary>
+    /// <param name="undoManager">The <see cref="HistoryKeeper"/> instance to which the change will be added.</param>
+    /// <param name="label">A label to identify the change.</param>
+    /// <param name="selector">The asynchronous action to execute.</param>
+    public static void AddChange(this HistoryKeeper undoManager, string label, Func<CancellationToken, Task> selector)
+    {
+        var action = new AsyncSimpleAction(ct => new ValueTask(selector(ct))) { Key = label };
         undoManager.AddChange(action);
     }
 }

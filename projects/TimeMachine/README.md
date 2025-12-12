@@ -1,81 +1,82 @@
 # TimeMachine
 
-A robust and flexible undo/redo system for managing changes in applications. TimeMachine is designed to handle complex scenarios, including nested transactions and change sets, making it suitable for a wide range of applications requiring comprehensive change history management.
+TimeMachine is a robust, composable undo/redo module for .NET applications. It is designed for complex scenarios including nested transactions, change sets, and (new) asynchronous change application.
 
-## Overview
+## Highlights
 
-TimeMachine provides a complete undo/redo framework that enables applications to track, manage, and replay changes. It supports nested transactions, change sets, and integrates seamlessly with dependency injection patterns common in .NET applications.
+- **Undo/Redo stacks per root** via `UndoRedo.Default[root]` (weak-keyed and GC-friendly)
+- **Transactions** to group multiple changes into a single undo/redo entry
+- **Change sets** to group changes produced during undo/redo of grouped operations
+- **Async support**: changes can be applied synchronously or asynchronously
 
-## Technology Stack
+## Technology
 
 - **Language:** C# 13 (preview)
-- **Target Frameworks:** .NET 9.0, .NET 9.0-windows10.0.26100.0
-- **Key Dependencies:** .NET Standard library
-- **Testing:** MSTest, AwesomeAssertions
-- **Code Style:** Following DroidNet C# coding standards with nullable reference types, implicit usings, and strict analysis enabled
+- **Target frameworks:** .NET 9.0, .NET 9.0-windows10.0.26100.0
+- **Testing:** MSTest + AwesomeAssertions (+ Moq)
 
-## Project Architecture
+## Concepts
 
-TimeMachine follows a modular architecture centered around three core concepts:
+### HistoryKeeper
 
-### Core Components
+`HistoryKeeper` manages the undo/redo history for one “root” object.
 
-1. **HistoryKeeper** - Manages the complete change history for a root object
-   - Maintains separate undo and redo stacks
-   - Handles transaction lifecycle management
-   - Supports nested transactions and change sets
+Key capabilities:
 
-2. **UndoRedo** - Singleton instance manager
-   - Provides centralized access to HistoryKeeper instances
-   - Uses `ConditionalWeakTable<TKey, TValue>` for automatic cleanup
-   - Allows independent undo/redo tracking for multiple root objects
+- Tracks `UndoStack` and `RedoStack`
+- Clears redo history when new (non-undo/redo) changes are added
+- Supports nested `ITransaction` blocks
+- Supports change sets for atomic undo/redo of grouped operations
 
-3. **Change Abstractions** - Multiple change type implementations
-   - `IChange`: Core interface for all changes
-   - `Change`: Base class for custom changes
-   - `ChangeSet`: Groups multiple changes into atomic units
-   - Specialized change types: `SimpleAction`, `ActionWithArgument<T>`, `TargetedChange<T>`, `LambdaExpressionOnTarget<T>`
+### Changes
 
-4. **Transaction System** - Manages grouped operations
-   - `ITransaction`: Core transaction interface
-   - `Transaction`: Standard transaction implementation
-   - `ITransactionFactory`: Creates transaction instances
-   - `ITransactionManager`: Orchestrates transaction lifecycle
+Changes implement `IChange` and are the unit of undo/redo.
+
+- `IChange.Apply()` is the synchronous execution path.
+- `IChange.ApplyAsync(CancellationToken)` is the asynchronous execution path.
+
+Async model:
+
+- By default, `ApplyAsync(...)` calls `Apply()`.
+- Async-only changes throw from `Apply()` to avoid accidental blocking/deadlocks.
+
+### Transactions
+
+Transactions (`ITransaction`) are also changes, allowing a transaction to be pushed as a single entry to the undo/redo stacks.
 
 ## Project Structure
 
 ```plaintext
 projects/TimeMachine/
 ├── src/
-│   ├── TimeMachine.csproj              # Main project file
-│   ├── HistoryKeeper.cs                # Change history manager
-│   ├── UndoRedo.cs                     # Singleton coordinator
-│   ├── HistoryKeeperAddChangeExtensions.cs  # Extension methods
-│   ├── StateTransition`1.cs            # State transition handling
-│   ├── Changes/                        # Change implementations
+│   ├── TimeMachine.csproj
+│   ├── HistoryKeeper.cs
+│   ├── UndoRedo.cs
+│   ├── HistoryKeeperAddChangeExtensions.cs
+│   ├── StateTransition`1.cs
+│   ├── Changes/
 │   │   ├── IChange.cs
 │   │   ├── Change.cs
 │   │   ├── ChangeSet.cs
 │   │   ├── SimpleAction.cs
 │   │   ├── ActionWithArgument`1.cs
 │   │   ├── TargetedChange`1.cs
-│   │   └── LambdaExpressionOnTarget`1.cs
-│   ├── Transactions/                   # Transaction implementations
+│   │   ├── LambdaExpressionOnTarget`1.cs
+│   │   ├── AsyncSimpleAction.cs
+│   │   ├── AsyncActionWithArgument`1.cs
+│   │   └── AsyncLambdaExpressionOnTarget`1.cs
+│   ├── Transactions/
 │   │   ├── ITransaction.cs
 │   │   ├── Transaction.cs
 │   │   ├── ITransactionFactory.cs
 │   │   └── ITransactionManager.cs
 │   └── Properties/
 ├── tests/
-│   ├── TimeMachine.Tests.csproj        # Test project
-│   ├── HistoryKeeperTests.*.cs         # Comprehensive test suites
-│   ├── HistoryKeeperChangeSetTests.cs
-│   ├── HistoryKeeperTransactionTests.cs
-│   ├── UndoRedoTests.cs
-│   ├── StateTransitionTests.cs
-│   ├── Changes/
-│   ├── Transactions/
-│   └── Properties/
+│   ├── TimeMachine.Tests.csproj
+│   ├── TimeMachine.Async.Tests/
+│   │   ├── TimeMachine.Async.Tests.csproj
+│   │   └── (async-only test suites)
+│   └── (sync test suites)
 └── README.md
 ```
 
@@ -83,319 +84,241 @@ projects/TimeMachine/
 
 ### Installation
 
-Add the TimeMachine package to your project:
-
 ```bash
 dotnet add package DroidNet.TimeMachine
 ```
 
-### Basic Usage
-
-#### 1. Create a HistoryKeeper
+### Create a HistoryKeeper
 
 ```csharp
 using DroidNet.TimeMachine;
 
-var rootObject = new object();
-var historyKeeper = new HistoryKeeper(rootObject);
+var root = new object();
+var historyKeeper = UndoRedo.Default[root];
 ```
 
-Or use the singleton coordinator:
+### Mental model (undo/redo in one minute)
 
-```csharp
-var historyKeeper = UndoRedo.Default[rootObject];
+TimeMachine can feel “backwards” at first, especially if you are new to undo/redo.
+
+The key idea:
+
+- When the user performs an operation, you **do the operation now**.
+- Immediately after that, you **queue the reverse operation** (the “undo”) using `AddChange(...)`.
+- When an undo runs, it can (and usually should) **queue the reverse of the undo** (the “redo”).
+
+So you are not telling TimeMachine “what I just did”. You are telling it “how to undo what I just did”.
+
+Mermaid flow (what happens and when):
+
+```mermaid
+flowchart TD
+    U[User action happens now<br/>e.g. SetTitle Hello] --> Q[Queue UNDO change<br/>AddChange: restore old value]
+    Q --> S[UndoStack has one entry]
+
+    S -->|"Undo() / UndoAsync()"| A[Apply UNDO change]
+    A --> RQ[UNDO queues REDO change<br/>AddChange inside undo]
+    RQ --> RS[RedoStack has one entry]
+
+    RS -->|"Redo() / RedoAsync()"| RA[Apply REDO change]
+    RA --> UQ[REDO queues UNDO change<br/>AddChange inside redo]
+    UQ --> S
 ```
 
-#### 2. Add Changes
-
-Add changes directly or within transactions:
+Example (sync):
 
 ```csharp
-// Direct change addition
-historyKeeper.AddChange("change1", targetObject, t => t.SomeMethod());
-historyKeeper.AddChange("change2", arg => Console.WriteLine(arg), "Hello, World!");
-historyKeeper.AddChange("change3", () => Console.WriteLine("Action executed"));
-```
+var value = 0;
 
-#### 3. Use Transactions
-
-Group related changes into transactions:
-
-```csharp
-using (var transaction = historyKeeper.BeginTransaction("myTransaction"))
+void Increment()
 {
-    historyKeeper.AddChange("change1", obj, o => o.Update());
-    historyKeeper.AddChange("change2", () => Console.WriteLine("Done"));
-    transaction.Commit();
+    value++;
+
+    // Queue the reverse operation.
+    historyKeeper.AddChange("decrement", () =>
+    {
+        value--;
+
+        // When undoing, register the redo operation.
+        historyKeeper.AddChange("increment", Increment);
+    });
 }
+
+Increment();
+
+historyKeeper.Undo(); // value goes back
+historyKeeper.Redo(); // value goes forward again
 ```
 
-#### 4. Undo and Redo
+### Add synchronous changes
 
 ```csharp
-// Undo the last transaction
+var oldTitle = document.Title;
+document.SetTitle("Hello");
+
+// Queue the undo (set title back to the previous value).
+historyKeeper.AddChange("set-title", document, d => d.SetTitle(oldTitle));
+
+// You can also queue simple actions.
+historyKeeper.AddChange("log", () => Console.WriteLine("Undo: restore previous state"));
+
+// And actions that take arguments.
+historyKeeper.AddChange("append", (string? s) => Console.WriteLine(s), "Undo message");
+```
+
+### Undo/Redo (synchronous)
+
+```csharp
 if (historyKeeper.CanUndo)
 {
     historyKeeper.Undo();
 }
 
-// Redo the undone transaction
 if (historyKeeper.CanRedo)
 {
     historyKeeper.Redo();
 }
 ```
 
-### Advanced Features
+## Async Support
 
-#### Nested Transactions
+TimeMachine supports asynchronous changes end-to-end:
 
-Support nested transactions for hierarchical change grouping:
+- `IChange.ApplyAsync(...)` exists on the core change contract.
+- `HistoryKeeper.UndoAsync(...)` and `HistoryKeeper.RedoAsync(...)` are the async execution entry points.
+
+### Add asynchronous changes (Task-based delegates)
+
+The extension methods accept Task-returning delegates so `async` lambdas are unambiguous.
 
 ```csharp
-using (var outerTransaction = historyKeeper.BeginTransaction("outer"))
+using System.Threading.Tasks;
+
+historyKeeper.AddChange("undo", async () =>
 {
-    historyKeeper.AddChange("outer-change1", obj, o => o.Method1());
+    await Task.Delay(50).ConfigureAwait(false);
 
-    using (var innerTransaction = historyKeeper.BeginTransaction("inner"))
+    // When undoing, register the redo action.
+    historyKeeper.AddChange("redo", async () =>
     {
-        historyKeeper.AddChange("inner-change1", obj, o => o.Method2());
-        innerTransaction.Commit();
-    }
+        await Task.Delay(50).ConfigureAwait(false);
+    });
+});
+```
 
-    outerTransaction.Commit();
+### Undo/Redo (asynchronous)
+
+```csharp
+if (historyKeeper.CanUndo)
+{
+    await historyKeeper.UndoAsync().ConfigureAwait(false);
+}
+
+if (historyKeeper.CanRedo)
+{
+    await historyKeeper.RedoAsync().ConfigureAwait(false);
 }
 ```
 
-#### Change Sets
+### Mixing synchronous and asynchronous changes
 
-Group multiple changes into an atomic unit:
+You can mix synchronous and asynchronous changes in the same history (including inside transactions and change sets).
+
+Guidelines:
+
+- **Mixing is allowed:** you can register sync and async changes together.
+- **Async execution is superset:** synchronous changes are compatible with the async pipeline because the default `ApplyAsync(...)` delegates to `Apply()`.
+- **Do not use `Undo()` / `Redo()` if async-only changes may exist:** async-only changes throw from `Apply()` to prevent accidental sync execution.
+
+Practical rule of thumb:
+
+- If a history may contain any async-only change, treat the whole history as async and always use `UndoAsync()` / `RedoAsync()`.
+
+Example (mixed history, executed asynchronously):
 
 ```csharp
-historyKeeper.BeginChangeSet("multipleChanges");
-historyKeeper.AddChange("change1", obj1, o => o.Update());
-historyKeeper.AddChange("change2", obj2, o => o.Refresh());
-historyKeeper.EndChangeSet();
+historyKeeper.AddChange("sync-log", () => Console.WriteLine("sync undo"));
 
-// Entire change set undoes/redoes as one unit
-historyKeeper.Undo();
+historyKeeper.AddChange("async-undo", async () =>
+{
+    await Task.Delay(10).ConfigureAwait(false);
+});
+
+await historyKeeper.UndoAsync().ConfigureAwait(false);
 ```
 
-## Key Classes and Interfaces
+## Transactions
 
-### HistoryKeeper
+Use transactions to group multiple changes into a single undo/redo entry.
 
-Manages the complete history of changes for a root object.
+```csharp
+using (var transaction = historyKeeper.BeginTransaction("edit-document"))
+{
+    historyKeeper.AddChange("set-title", document, d => d.SetTitle("New"));
+    historyKeeper.AddChange("set-author", document, d => d.SetAuthor("You"));
+    transaction.Commit();
+}
+```
 
-**Key Properties:**
+Nested transactions are supported.
 
-- `UndoStack`: Collection of undoable changes
-- `RedoStack`: Collection of redoable changes
-- `CanUndo`: Indicates if changes can be undone
-- `CanRedo`: Indicates if changes can be redone
-- `Root`: The root object being tracked
+## Change Sets
 
-**Key Methods:**
+Change sets group changes into an atomic unit until `EndChangeSet()`.
 
-- `BeginTransaction(object key)`: Creates a new transaction
-- `CommitTransaction(ITransaction transaction)`: Commits a transaction
-- `RollbackTransaction(ITransaction transaction)`: Rolls back a transaction
-- `AddChange(IChange change)`: Adds a change to history
-- `Undo()`: Undoes the last change
-- `Redo()`: Redoes the last undone change
-- `Clear()`: Clears all undo/redo history
-- `BeginChangeSet(object key)`: Starts a new change set
-- `EndChangeSet()`: Ends the current change set
+```csharp
+historyKeeper.BeginChangeSet("batch");
+historyKeeper.AddChange("op1", obj1, o => o.Update());
+historyKeeper.AddChange("op2", obj2, o => o.Refresh());
+historyKeeper.EndChangeSet();
+```
 
-### UndoRedo
+## Extending TimeMachine
 
-Provides singleton management of HistoryKeeper instances.
+### Custom change (sync)
 
-**Properties:**
+```csharp
+using DroidNet.TimeMachine.Changes;
 
-- `Default`: Gets the singleton instance
+public sealed class CustomChange : Change
+{
+    public required Action ApplyAction { get; init; }
 
-**Methods:**
+    public override void Apply() => this.ApplyAction();
+}
+```
 
-- `this[object root]`: Gets or creates a HistoryKeeper for the specified root
-- `Clear()`: Clears all cached histories
+### Custom change (async)
 
-### Change Implementations
+```csharp
+using System.Threading;
+using System.Threading.Tasks;
+using DroidNet.TimeMachine.Changes;
 
-- **Change**: Base class for custom change implementations
-- **ChangeSet**: Container for grouping multiple changes
-- **SimpleAction**: Wraps a parameterless action
-- **ActionWithArgument**: Wraps an action with a single argument
-- **TargetedChange**: Applies changes to a specific target object
-- **LambdaExpressionOnTarget**: Uses lambda expressions for changes
+public sealed class CustomAsyncChange : Change
+{
+    public required Func<CancellationToken, ValueTask> ApplyActionAsync { get; init; }
 
-## Best Practices
+    public override void Apply() => throw new InvalidOperationException("Use ApplyAsync for this change.");
 
-### Change Management
-
-- **Use Transactions**: Always group related changes into transactions for atomicity and consistency
-- **Meaningful Identifiers**: Use clear, descriptive keys to identify changes and transactions
-- **Nested Transactions**: Properly handle nested transactions; ensure all inner transactions are committed or rolled back before the outer transaction
-- **Clean Up History**: Call `Clear()` when appropriate to prevent memory accumulation
-
-### Performance Considerations
-
-- **WeakReference Usage**: HistoryKeeper uses WeakReferences for root objects, allowing garbage collection
-- **Memory Management**: The UndoRedo singleton uses `ConditionalWeakTable<TKey, TValue>` for automatic cleanup
-- **Large Change Sets**: Monitor the size of undo/redo stacks in long-running applications
-
-### Design Patterns
-
-- **Dependency Injection**: TimeMachine integrates with .NET dependency injection patterns
-- **Composition**: Prefer composing changes using the available change types rather than creating new custom types
-- **Transaction Factory**: Use `ITransactionFactory` when customizing transaction creation behavior
+    public override ValueTask ApplyAsync(CancellationToken cancellationToken = default) => this.ApplyActionAsync(cancellationToken);
+}
+```
 
 ## Testing
 
-TimeMachine includes comprehensive test coverage using **MSTest** with the **AwesomeAssertions** library.
-
-### Test Structure
-
-Test projects follow the AAA (Arrange-Act-Assert) pattern:
-
-```csharp
-[TestClass]
-public class HistoryKeeperTests
-{
-    [TestMethod]
-    public void Undo_WhenChangesExist_RemovesLastChange()
-    {
-        // Arrange
-        var keeper = new HistoryKeeper(new object());
-
-        // Act
-        keeper.Undo();
-
-        // Assert
-        keeper.CanUndo.Should().BeFalse();
-    }
-}
-```
-
-### Running Tests
+Run tests:
 
 ```bash
-# Run all tests
-dotnet test projects/TimeMachine/tests/TimeMachine.Tests/TimeMachine.Tests.csproj
-
-# Run with coverage
-dotnet test projects/TimeMachine/tests/TimeMachine.Tests/TimeMachine.Tests.csproj `
-  /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
+dotnet test -c Release --project projects/TimeMachine/tests/TimeMachine.Tests.csproj
 ```
 
-### Test Categories
-
-- **HistoryKeeperTests.cs**: Core undo/redo functionality
-- **HistoryKeeperChangeSetTests.cs**: Change set operations
-- **HistoryKeeperTransactionTests.cs**: Transaction management and nesting
-- **UndoRedoTests.cs**: Singleton coordinator behavior
-- **StateTransitionTests.cs**: State transition handling
-
-## Development Workflow
-
-### Building the Project
+## Build
 
 ```bash
-# Build the TimeMachine project
-dotnet build projects/TimeMachine/src/TimeMachine/TimeMachine.csproj
-
-# Build the complete solution
-cd projects
-.\open.cmd
-```
-
-### Code Style and Standards
-
-TimeMachine follows the DroidNet C# coding standards:
-
-- **Nullable Reference Types**: Enabled with strict null checking
-- **Implicit Usings**: Enabled for standard namespaces
-- **Access Modifiers**: Always explicit (`public`, `private`, `protected`, `internal`)
-- **Instance Members**: Use `this.` prefix for clarity
-- **Documentation**: XML comments on all public APIs
-- **Code Analysis**: Configured with StyleCop.Analyzers and Roslynator
-
-See `.github/instructions/csharp_coding_style.instructions.md` for detailed conventions.
-
-### Building and Testing Locally
-
-```bash
-# Navigate to TimeMachine project
-cd projects/TimeMachine
-
-# Build the project
-dotnet build
-
-# Run tests
-dotnet test
-
-# Generate and open the solution
-.\open.cmd
-```
-
-## Contributing
-
-When contributing to TimeMachine:
-
-1. Follow the C# coding standards defined in `.github/instructions/csharp_coding_style.instructions.md`
-2. Ensure all tests pass with `dotnet test`
-3. Add new tests following the AAA pattern for any new functionality
-4. Use meaningful commit messages and reference relevant issues
-5. Keep changes focused and well-justified
-6. Update documentation if APIs change
-
-### Adding New Change Types
-
-When creating custom changes, inherit from the `Change` base class:
-
-```csharp
-public class CustomChange : Change
-{
-    public required object Target { get; init; }
-
-    public override void Apply()
-    {
-        // Implement change logic
-    }
-}
-```
-
-### Adding New Transaction Types
-
-Implement `ITransaction` for custom transaction behavior:
-
-```csharp
-public class CustomTransaction : ITransaction
-{
-    public void AddChange(IChange change)
-    {
-        // Add change to transaction
-    }
-
-    public void Commit()
-    {
-        // Commit transaction
-    }
-
-    public void Rollback()
-    {
-        // Rollback transaction
-    }
-}
+dotnet build -c Release projects/TimeMachine/src/TimeMachine.csproj
 ```
 
 ## License
 
-TimeMachine is distributed under the **MIT License**. See the LICENSE file in the repository root for details.
-
-## Resources
-
-- **Main Project Structure:** `projects/README.md`
-- **C# Coding Standards:** `.github/instructions/csharp_coding_style.instructions.md`
-- **Testing Guidelines:** `.github/prompts/csharp-mstest.prompt.md`
-- **Build System:** `Directory.Packages.props`, `Directory.build.props`
+TimeMachine is distributed under the MIT License. See the repository root LICENSE file.
