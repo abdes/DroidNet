@@ -8,8 +8,15 @@ namespace DroidNet.Controls;
 ///     Provides data for the <see cref="DynamicTreeViewModel.ItemMoved" /> event.
 /// </summary>
 /// <remarks>
-///     For batch moves, <see cref="Moves" /> contains one entry per moved root item. A single event instance is
-///     raised after all items are relocated.
+///     For batch moves, <see cref="Moves" /> contains one entry per moved root item. A single event
+///     instance is raised after all items are relocated.
+///     <para>
+///     Indices reported by this event refer to positions within the underlying parent children
+///     collections (<see cref="ITreeItem.Children"/>), not to indices within the view model's
+///     <see cref="DynamicTreeViewModel.ShownItems"/>.</para>
+///     <para>
+///     For undo/redo, prefer the values in <see cref="Moves"/> over attempting to recompute indices
+///     from visual state.</para>
 /// </remarks>
 public class TreeItemsMovedEventArgs : EventArgs
 {
@@ -32,6 +39,17 @@ public class TreeItemsMovedEventArgs : EventArgs
 /// <summary>
 ///     Represents the details of a single moved item.
 /// </summary>
+/// <remarks>
+///     <para>
+///     The <paramref name="PreviousIndex"/> value is the item's index within <paramref name="PreviousParent"/>'s children
+///     collection immediately before the move.</para>
+///     <para>
+///     The <paramref name="NewIndex"/> value is the item's final index within <paramref name="NewParent"/>'s children
+///     collection after the move completes.</para>
+///     <para>
+///     Both indices are child indices (see <see cref="ITreeItem.Children"/>), not indices into
+///     <see cref="DynamicTreeViewModel.ShownItems"/>.</para>
+/// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.MaintainabilityRules", "SA1402:File may only contain a single type", Justification = "keep together with event args type")]
 public sealed record MovedItemInfo(
     ITreeItem Item,

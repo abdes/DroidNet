@@ -10,6 +10,14 @@ namespace DroidNet.Controls;
 /// <remarks>
 ///     Handlers can veto the move by setting <see cref="Proceed" /> to <see langword="false" /> or
 ///     adjust the proposed destination using <see cref="NewParent" /> and <see cref="NewIndex" />.
+///     <para>
+///     <see cref="NewIndex"/> is an insertion index in the coordinate system of <see cref="NewParent"/>'s current
+///     children list (<see cref="ITreeItem.Children"/>) at the time the move request is evaluated.
+///     It is <em>not</em> an index into the view model's <see cref="DynamicTreeViewModel.ShownItems"/>.</para>
+///     <para>
+///     For moves within the same parent, callers and handlers should treat <see cref="NewIndex"/> as an insertion
+///     point in the list while the moved item is still present. Computing a destination index after temporarily
+///     removing the item can produce off-by-one errors.</para>
 /// </remarks>
 public class TreeItemBeingMovedEventArgs : DynamicTreeEventArgs
 {
@@ -26,6 +34,9 @@ public class TreeItemBeingMovedEventArgs : DynamicTreeEventArgs
     /// <summary>
     ///     Gets or sets the proposed index within the new parent children collection.
     /// </summary>
+    /// <remarks>
+    ///     The index is expressed in <see cref="NewParent"/>'s children collection, not in <see cref="DynamicTreeViewModel.ShownItems"/>.
+    /// </remarks>
     public required int NewIndex { get; set; }
 
     /// <summary>

@@ -209,6 +209,15 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="relativeIndex">Zero-based index at which to insert under the parent.</param>
     /// <param name="parent">The parent that receives the child.</param>
     /// <param name="item">The child item to insert.</param>
+    /// <remarks>
+    ///     <paramref name="relativeIndex"/> is expressed in the coordinate system of <paramref name="parent"/>'s
+    ///     children collection (<see cref="ITreeItem.Children"/>). It is <em>not</em> an index into
+    ///     <see cref="ShownItems"/>, which depends on expansion state.
+    ///     <para>
+    ///     If <paramref name="parent"/> is not expanded, it will be auto-expanded to perform the insertion.
+    ///     Consumers implementing undo/redo should record <see cref="TreeItemAddedEventArgs.Parent"/> and
+    ///     <see cref="TreeItemAddedEventArgs.RelativeIndex"/> (child index), not the visual index.</para>
+    /// </remarks>
     /// <returns>A task that completes when the insertion finishes.</returns>
     public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
         => await this.DisplayHelper.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(true);
@@ -218,6 +227,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </summary>
     /// <param name="item">The item to remove.</param>
     /// <param name="updateSelection">Whether selection should be updated after removal.</param>
+    /// <remarks>
+    ///     Removal is reported via <see cref="ItemRemoved"/> with a <see cref="TreeItemRemovedEventArgs.RelativeIndex"/>
+    ///     that represents the removed item's position in its parent's children collection <em>before</em> removal.
+    ///     This is the correct index to use for undo via <see cref="InsertItemAsync"/>.
+    ///     <para>
+    ///     Do not attempt to use <see cref="ShownItems"/> indices for undo/redo; <see cref="ShownItems"/> varies
+    ///     with expansion/collapse and virtualization.</para>
+    /// </remarks>
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task RemoveItemAsync(ITreeItem item, bool updateSelection = true)
         => await this.DisplayHelper.RemoveItemAsync(item, updateSelection).ConfigureAwait(true);
@@ -242,7 +259,20 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </summary>
     /// <param name="item">The item to move.</param>
     /// <param name="newParent">The new parent under which the item is inserted.</param>
-    /// <param name="newIndex">The zero-based index at which the item is inserted beneath the new parent.</param>
+    /// <param name="newIndex">The zero-based insertion index beneath <paramref name="newParent"/>.</param>
+    /// <remarks>
+    ///     The index parameters for move operations are expressed in the coordinate system of the
+    ///     underlying children collections (<see cref="ITreeItem.Children"/>), not in <see cref="ShownItems"/>.
+    ///     <para>
+    ///     <paramref name="newIndex"/> is interpreted as an insertion point in <paramref name="newParent"/>'s current
+    ///     children list at the time the move request is evaluated (that is, before any moved items are detached).
+    ///     For moves within the same parent, this avoids off-by-one errors caused by index shifting when the item is
+    ///     removed and reinserted.</para>
+    ///     <para>
+    ///     The completed operation is reported via <see cref="ItemMoved"/>; consumers should prefer
+    ///     <see cref="MovedItemInfo.PreviousIndex"/> and <see cref="MovedItemInfo.NewIndex"/> from that event for
+    ///     undo/redo, because those reflect the actual indices used.</para>
+    /// </remarks>
     /// <returns>A task that completes once the move finishes.</returns>
     public Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
         => this.DisplayHelper.MoveItemAsync(item, newParent, newIndex);
@@ -253,6 +283,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="items">The list of items to move.</param>
     /// <param name="newParent">The parent that receives the moved items.</param>
     /// <param name="startIndex">The index within <paramref name="newParent" /> where the first item is inserted.</param>
+    /// <remarks>
+    ///     <paramref name="startIndex"/> uses the same semantics as <see cref="MoveItemAsync"/>: it is an insertion index in
+    ///     the target parent's current children list before detaching any of the moved items.
+    ///     <para>
+    ///     A single <see cref="ItemMoved"/> event is raised after all items are relocated.
+    ///     Use the <see cref="TreeItemsMovedEventArgs.Moves"/> entries for reliable undo/redo.</para>
+    /// </remarks>
     /// <returns>A task that completes once the batch move finishes.</returns>
     public Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
         => this.DisplayHelper.MoveItemsAsync(items, newParent, startIndex);

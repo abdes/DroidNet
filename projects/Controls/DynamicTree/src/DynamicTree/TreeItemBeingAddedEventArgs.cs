@@ -12,6 +12,10 @@ namespace DroidNet.Controls;
 ///     including its parent and a flag indicating whether the addition should
 ///     proceed. It extends the <see cref="DynamicTreeEventArgs" /> class to include
 ///     additional details specific to the item addition event.
+///     <para>
+///     This event is a veto/validation point. For reliable undo/redo recording, prefer the completed
+///     <see cref="DynamicTreeViewModel.ItemAdded"/> event and its <see cref="TreeItemAddedEventArgs.RelativeIndex"/>
+///     value (the actual child index used).</para>
 /// </remarks>
 public class TreeItemBeingAddedEventArgs : DynamicTreeEventArgs
 {

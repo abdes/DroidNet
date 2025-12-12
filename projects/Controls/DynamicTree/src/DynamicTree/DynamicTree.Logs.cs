@@ -230,7 +230,7 @@ public partial class DynamicTree
     private static partial void LogRequestModelFocus(ILogger logger, string? itemLabel, string origin, bool forceRaise);
 
     [Conditional("DEBUG")]
-    private void LogRequestModelFocusWrapper(ITreeItem? item, FocusRequestOrigin origin, bool forceRaise)
+    private void LogRequestModelFocusWrapper(TreeItemAdapter? item, FocusRequestOrigin origin, bool forceRaise)
     {
         if (this.logger is not ILogger logger)
         {

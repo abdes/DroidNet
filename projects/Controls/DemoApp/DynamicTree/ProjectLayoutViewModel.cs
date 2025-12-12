@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -38,14 +39,18 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     {
         this.logger = loggerFactory?.CreateLogger<ProjectLayoutViewModel>() ?? NullLogger<ProjectLayoutViewModel>.Instance;
 
-        this.UndoStack = UndoRedo.Default[this].UndoStack;
-        this.RedoStack = UndoRedo.Default[this].RedoStack;
+        this.UndoStack = this.History.UndoStack;
+        this.RedoStack = this.History.RedoStack;
+
+        ((INotifyCollectionChanged)this.UndoStack).CollectionChanged += this.OnUndoStackCollectionChanged;
+        ((INotifyCollectionChanged)this.RedoStack).CollectionChanged += this.OnRedoStackCollectionChanged;
 
         this.ItemBeingRemoved += this.OnItemBeingRemoved;
         this.ItemRemoved += this.OnItemRemoved;
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemBeingMoved += this.OnItemBeingMoved;
+        this.ItemMoved += this.OnItemMoved;
         this.ItemAdded += this.OnItemAdded;
 
         // Default the selection mode for the demo app to allow multiple selection.
@@ -90,15 +95,71 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     /// </summary>
     internal ProjectAdapter? Project { get; private set; }
 
+    private HistoryKeeper History => UndoRedo.Default[this];
+
     private bool HasUnlockedSelectedItems { get; set; }
 
     /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
     public override async Task RemoveSelectedItems()
     {
-        UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
-        await base.RemoveSelectedItems().ConfigureAwait(false);
-        UndoRedo.Default[this].EndChangeSet();
+        var eligibleCount = this.GetSelectedItems().Count(item => !item.IsLocked);
+        if (eligibleCount <= 1)
+        {
+            await base.RemoveSelectedItems().ConfigureAwait(false);
+            return;
+        }
+
+        this.History.BeginChangeSet(string.Create(CultureInfo.InvariantCulture, $"Remove {eligibleCount} item(s)"));
+        try
+        {
+            await base.RemoveSelectedItems().ConfigureAwait(false);
+        }
+        finally
+        {
+            this.History.EndChangeSet();
+        }
+    }
+
+    /// <summary>
+    /// Renames the specified <paramref name="item"/> to the given <paramref name="newName"/>.
+    /// </summary>
+    /// <param name="item">The tree item to rename.</param>
+    /// <param name="newName">The new name to assign to the item.</param>
+    public void RenameItem(ITreeItem item, string newName)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var trimmed = (newName ?? string.Empty).Trim();
+        if (!item.ValidateItemName(trimmed))
+        {
+            return;
+        }
+
+        var oldName = item.Label;
+        if (string.Equals(oldName, trimmed, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        item.Label = trimmed;
+        switch (item)
+        {
+            case SceneAdapter sceneAdapter:
+                sceneAdapter.AttachedObject.Name = trimmed;
+                break;
+
+            case EntityAdapter entityAdapter:
+                entityAdapter.AttachedObject.Name = trimmed;
+                break;
+
+            default:
+                break;
+        }
+
+        this.History.AddChange(
+            $"Rename({oldName} → {trimmed})",
+            () => this.RenameItem(item, oldName));
     }
 
     /// <inheritdoc/>
@@ -156,6 +217,80 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
 
         return string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}");
+    }
+
+    private static void RemoveFromModel(ITreeItem item, ITreeItem parent)
+    {
+        switch (item)
+        {
+            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
+                _ = projectAdapter.AttachedObject.Scenes.Remove(sceneAdapter.AttachedObject);
+                break;
+
+            case EntityAdapter entityAdapter:
+                switch (parent)
+                {
+                    case SceneAdapter parentScene:
+                        _ = parentScene.AttachedObject.Entities.Remove(entityAdapter.AttachedObject);
+                        break;
+
+                    case EntityAdapter parentEntity:
+                        _ = parentEntity.AttachedObject.Entities.Remove(entityAdapter.AttachedObject);
+                        break;
+
+                    default:
+                        Debug.Fail("Unsupported parent type for EntityAdapter move");
+                        break;
+                }
+
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static void InsertIntoModel(ITreeItem item, ITreeItem parent, int index)
+    {
+        switch (item)
+        {
+            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
+                {
+                    var scenes = projectAdapter.AttachedObject.Scenes;
+                    var idx = Math.Clamp(index, 0, scenes.Count);
+                    scenes.Insert(idx, sceneAdapter.AttachedObject);
+                    break;
+                }
+
+            case EntityAdapter entityAdapter:
+                switch (parent)
+                {
+                    case SceneAdapter parentScene:
+                        {
+                            var entities = parentScene.AttachedObject.Entities;
+                            var idx = Math.Clamp(index, 0, entities.Count);
+                            entities.Insert(idx, entityAdapter.AttachedObject);
+                            break;
+                        }
+
+                    case EntityAdapter parentEntity:
+                        {
+                            var entities = parentEntity.AttachedObject.Entities;
+                            var idx = Math.Clamp(index, 0, entities.Count);
+                            entities.Insert(idx, entityAdapter.AttachedObject);
+                            break;
+                        }
+
+                    default:
+                        Debug.Fail("Unsupported parent type for EntityAdapter move");
+                        break;
+                }
+
+                break;
+
+            default:
+                break;
+        }
     }
 
     // Note: Do not expose UI-only types such as Visibility in the ViewModel; UI should convert string-based OperationError into visibility via a converter.
@@ -223,10 +358,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
                 break;
         }
 
-        UndoRedo.Default[this]
-            .AddChange(
-                $"RemoveItemAsync({args.TreeItem.Label})",
-                () => this.RemoveItemAsync(args.TreeItem).GetAwaiter().GetResult());
+        this.History.AddChange(
+            $"RemoveItemAsync({args.TreeItem.Label})",
+            () => this.RemoveItemAsync(args.TreeItem).GetAwaiter().GetResult());
 
         this.LogItemAdded(args.TreeItem.Label);
     }
@@ -278,23 +412,26 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
                 break;
         }
 
-        UndoRedo.Default[this]
-            .AddChange(
-                $"Add Item({args.TreeItem.Label})",
-                () => this.InsertItemAsync(args.RelativeIndex, args.Parent, args.TreeItem).GetAwaiter().GetResult());
+        this.History.AddChange(
+            $"InsertItemAsync({args.TreeItem.Label})",
+            () => this.InsertItemWithVisibility(args.RelativeIndex, args.Parent, args.TreeItem));
     }
 
     /// <summary>
     /// Undoes the last change.
     /// </summary>
-    [RelayCommand]
-    private void Undo() => UndoRedo.Default[this].Undo();
+    private bool CanUndo() => this.History.CanUndo;
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    private void Undo() => this.History.Undo();
 
     /// <summary>
     /// Redoes the last undone change.
     /// </summary>
-    [RelayCommand]
-    private void Redo() => UndoRedo.Default[this].Redo();
+    private bool CanRedo() => this.History.CanRedo;
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    private void Redo() => this.History.Redo();
 
     private bool CanCopy() => this.SelectionModel?.IsEmpty == false;
 
@@ -352,6 +489,21 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         {
             var selected = this.GetSelectedItems();
             targetParent = selected.FirstOrDefault();
+        }
+
+        if (this.CurrentClipboardState == ClipboardState.Copied && this.ClipboardItems.Count > 1)
+        {
+            this.History.BeginChangeSet($"Paste {this.ClipboardItems.Count} item(s)");
+            try
+            {
+                await this.PasteItemsAsync(targetParent).ConfigureAwait(true);
+            }
+            finally
+            {
+                this.History.EndChangeSet();
+            }
+
+            return;
         }
 
         await this.PasteItemsAsync(targetParent).ConfigureAwait(true);
@@ -586,12 +738,133 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
+    private void OnItemMoved(object? sender, TreeItemsMovedEventArgs args)
+    {
+        _ = sender; // unused
+        this.OperationError = null;
+
+        if (args.Moves.Count == 0)
+        {
+            return;
+        }
+
+        if (args.IsBatch)
+        {
+            this.History.BeginChangeSet($"Move {args.Moves.Count} item(s)");
+        }
+
+        try
+        {
+            // Update underlying model first: remove all moved items from their previous parents.
+            foreach (var move in args.Moves)
+            {
+                RemoveFromModel(move.Item, move.PreviousParent);
+            }
+
+            // Then insert into new parents, in increasing index order per parent.
+            foreach (var group in args.Moves.GroupBy(m => m.NewParent))
+            {
+                foreach (var move in group.OrderBy(m => m.NewIndex))
+                {
+                    InsertIntoModel(move.Item, move.NewParent, move.NewIndex);
+                }
+            }
+
+            // Record the inverse operations for undo.
+            //
+            // Important: when restoring multiple items into the same previous parent, inserting an item
+            // at a lower index shifts the target indices of items that should end up after it.
+            // TimeMachine ChangeSet applies changes in reverse-add order, so we add in ascending
+            // PreviousIndex to ensure apply happens in descending PreviousIndex.
+            foreach (var group in args.Moves.GroupBy(m => m.PreviousParent))
+            {
+                foreach (var move in group.OrderBy(m => m.PreviousIndex))
+                {
+                    var item = move.Item;
+                    this.History.AddChange(
+                        $"MoveItemAsync({item.Label})",
+                        () => this.MoveItemWithVisibility(item, move.PreviousParent, move.PreviousIndex));
+                }
+            }
+        }
+        finally
+        {
+            if (args.IsBatch)
+            {
+                this.History.EndChangeSet();
+            }
+        }
+    }
+
+    private void InsertItemWithVisibility(int relativeIndex, ITreeItem parent, ITreeItem item)
+    {
+        this.EnsureAncestorsExpanded(parent);
+        this.InsertItemAsync(relativeIndex, parent, item).GetAwaiter().GetResult();
+    }
+
+    private void MoveItemWithVisibility(ITreeItem item, ITreeItem newParent, int newIndex)
+    {
+        // Move requires both the moved item and the target parent to be currently shown.
+        this.EnsureAncestorsExpanded(item);
+        this.EnsureAncestorsExpanded(newParent);
+
+        // When moving within the same parent, TreeDisplayHelper adjusts the requested index to account
+        // for detaching the item before insertion. To end up at the intended final index, we must
+        // compensate when moving "forward" (towards a higher index).
+        var effectiveIndex = newIndex;
+        if (ReferenceEquals(item.Parent, newParent))
+        {
+            var children = newParent.Children.GetAwaiter().GetResult();
+            var currentIndex = children.IndexOf(item);
+            if (currentIndex >= 0 && currentIndex < newIndex)
+            {
+                effectiveIndex = newIndex + 1;
+            }
+        }
+
+        this.MoveItemAsync(item, newParent, effectiveIndex).GetAwaiter().GetResult();
+    }
+
+    private void EnsureAncestorsExpanded(ITreeItem item)
+    {
+        var ancestors = new Stack<ITreeItem>();
+        var current = item.Parent;
+        while (current is not null)
+        {
+            ancestors.Push(current);
+            if (current.IsRoot)
+            {
+                break;
+            }
+
+            current = current.Parent;
+        }
+
+        while (ancestors.TryPop(out var toExpand))
+        {
+            this.ExpandItemAsync(toExpand).GetAwaiter().GetResult();
+        }
+    }
+
+    private void OnUndoStackCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        this.UndoCommand.NotifyCanExecuteChanged();
+        this.RedoCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnRedoStackCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => this.OnUndoStackCollectionChanged(sender, e);
+
     /// <summary>
     /// Loads the project asynchronously.
     /// </summary>
     [RelayCommand]
     private async Task LoadProjectAsync()
     {
+        this.History.Clear();
+
         var project = new Project("Sample Project");
         await ProjectLoaderService.LoadProjectAsync(project).ConfigureAwait(false);
 
