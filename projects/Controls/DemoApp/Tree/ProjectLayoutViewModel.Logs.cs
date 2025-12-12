@@ -100,4 +100,13 @@ public partial class ProjectLayoutViewModel
 
     private void LogMoveRejectedReason(string? reason)
         => LogMoveRejectedReason(this.logger, reason ?? "<null>");
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Unsupported parent type for EntityAdapter in {Location} for item {ItemLabel}: {ParentType}")]
+    private static partial void LogUnsupportedEntityAdapterParentType(ILogger logger, string location, string itemLabel, string parentType);
+
+    private void LogUnsupportedEntityAdapterParentType(string location, string itemLabel, object? parent)
+        => LogUnsupportedEntityAdapterParentType(this.logger, location, itemLabel ?? "<null>", parent?.ToString() ?? "<null>");
 }

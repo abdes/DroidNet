@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -251,7 +250,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         return string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}");
     }
 
-    private static void RemoveFromModel(ITreeItem item, ITreeItem parent)
+    private bool RemoveFromModel(ITreeItem item, ITreeItem parent)
     {
         switch (item)
         {
@@ -271,8 +270,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                         break;
 
                     default:
-                        Debug.Fail("Unsupported parent type for EntityAdapter move");
-                        break;
+                        this.LogUnsupportedEntityAdapterParentType(nameof(this.RemoveFromModel), item.Label, parent);
+                        return false;
                 }
 
                 break;
@@ -280,9 +279,11 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             default:
                 break;
         }
+
+        return true;
     }
 
-    private static void InsertIntoModel(ITreeItem item, ITreeItem parent, int index)
+    private bool InsertIntoModel(ITreeItem item, ITreeItem parent, int index)
     {
         switch (item)
         {
@@ -314,8 +315,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                         }
 
                     default:
-                        Debug.Fail("Unsupported parent type for EntityAdapter move");
-                        break;
+                        this.LogUnsupportedEntityAdapterParentType(nameof(this.InsertIntoModel), item.Label, parent);
+                        return false;
                 }
 
                 break;
@@ -323,6 +324,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             default:
                 break;
         }
+
+        return true;
     }
 
     // Note: Do not expose UI-only types such as Visibility in the ViewModel; UI should convert string-based OperationError into visibility via a converter.
@@ -378,7 +381,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                             }
 
                         default:
-                            Debug.Fail("Unsupported parent type for EntityAdapter in OnItemAdded");
+                            this.LogUnsupportedEntityAdapterParentType(nameof(this.OnItemAdded), args.TreeItem.Label, args.Parent);
+                            this.OperationError = "Internal error: Unsupported parent type for entity during add.";
                             break;
                     }
 
@@ -432,7 +436,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                             break;
 
                         default:
-                            Debug.Fail("Unsupported parent type for EntityAdapter");
+                            this.LogUnsupportedEntityAdapterParentType(nameof(this.OnItemRemoved), args.TreeItem.Label, args.Parent);
+                            this.OperationError = "Internal error: Unsupported parent type for entity during remove.";
                             break;
                     }
 
@@ -797,10 +802,27 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         try
         {
+            UpdateModel(args);
+            RecordUndoChanges(args);
+        }
+        finally
+        {
+            if (args.IsBatch)
+            {
+                this.History.EndChangeSet();
+            }
+        }
+
+        void UpdateModel(TreeItemsMovedEventArgs args)
+        {
             // Update underlying model first: remove all moved items from their previous parents.
             foreach (var move in args.Moves)
             {
-                RemoveFromModel(move.Item, move.PreviousParent);
+                if (!this.RemoveFromModel(move.Item, move.PreviousParent))
+                {
+                    this.OperationError = "Internal error: Unsupported parent type encountered while removing moved item(s).";
+                    continue;
+                }
             }
 
             // Then insert into new parents, in increasing index order per parent.
@@ -808,12 +830,17 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             {
                 foreach (var move in group.OrderBy(m => m.NewIndex))
                 {
-                    InsertIntoModel(move.Item, move.NewParent, move.NewIndex);
+                    if (!this.InsertIntoModel(move.Item, move.NewParent, move.NewIndex))
+                    {
+                        this.OperationError = "Internal error: Unsupported parent type encountered while inserting moved item(s).";
+                        continue;
+                    }
                 }
             }
+        }
 
-            // Record the inverse operations for undo.
-            //
+        void RecordUndoChanges(TreeItemsMovedEventArgs args)
+        {
             // Important: when restoring multiple items into the same previous parent, inserting an item
             // at a lower index shifts the target indices of items that should end up after it.
             // TimeMachine ChangeSet applies changes in reverse-add order, so we add in ascending
@@ -827,13 +854,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                         $"MoveItemAsync({item.Label})",
                         async () => await this.MoveItemWithVisibilityAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
                 }
-            }
-        }
-        finally
-        {
-            if (args.IsBatch)
-            {
-                this.History.EndChangeSet();
             }
         }
     }
