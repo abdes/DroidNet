@@ -26,6 +26,7 @@ namespace DroidNet.Controls.Demo.Tree;
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
+    private readonly DomainModelService domainModelService;
     private bool isDisposed;
     private ProjectAdapter? projectAdapter;
 
@@ -63,6 +64,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         // If focus changes within the tree, re-evaluate paste availability
         this.PropertyChanged += this.ViewModel_PropertyChanged;
+
+        this.domainModelService = new DomainModelService(loggerFactory);
     }
 
     /// <summary>
@@ -158,18 +161,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         }
 
         item.Label = trimmed;
-        switch (item)
+        if (!this.domainModelService.TryRename(item, trimmed, out var renameErr))
         {
-            case SceneAdapter sceneAdapter:
-                sceneAdapter.AttachedObject.Name = trimmed;
-                break;
-
-            case EntityAdapter entityAdapter:
-                entityAdapter.AttachedObject.Name = trimmed;
-                break;
-
-            default:
-                break;
+            this.OperationError = renameErr;
         }
 
         this.History.AddChange(
@@ -271,80 +265,24 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
     private bool RemoveFromModel(ITreeItem item, ITreeItem parent)
     {
-        switch (item)
+        var ok = this.domainModelService.TryRemove(item, parent, out var err);
+        if (!ok)
         {
-            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
-                _ = projectAdapter.AttachedObject.Scenes.Remove(sceneAdapter.AttachedObject);
-                break;
-
-            case EntityAdapter entityAdapter:
-                switch (parent)
-                {
-                    case SceneAdapter parentScene:
-                        _ = parentScene.AttachedObject.Entities.Remove(entityAdapter.AttachedObject);
-                        break;
-
-                    case EntityAdapter parentEntity:
-                        _ = parentEntity.AttachedObject.Entities.Remove(entityAdapter.AttachedObject);
-                        break;
-
-                    default:
-                        this.LogUnsupportedEntityAdapterParentType(nameof(this.RemoveFromModel), item.Label, parent);
-                        return false;
-                }
-
-                break;
-
-            default:
-                break;
+            this.OperationError = err;
         }
 
-        return true;
+        return ok;
     }
 
     private bool InsertIntoModel(ITreeItem item, ITreeItem parent, int index)
     {
-        switch (item)
+        var ok = this.domainModelService.TryInsert(item, parent, index, out var err);
+        if (!ok)
         {
-            case SceneAdapter sceneAdapter when parent is ProjectAdapter projectAdapter:
-                {
-                    var scenes = projectAdapter.AttachedObject.Scenes;
-                    var idx = Math.Clamp(index, 0, scenes.Count);
-                    scenes.Insert(idx, sceneAdapter.AttachedObject);
-                    break;
-                }
-
-            case EntityAdapter entityAdapter:
-                switch (parent)
-                {
-                    case SceneAdapter parentScene:
-                        {
-                            var entities = parentScene.AttachedObject.Entities;
-                            var idx = Math.Clamp(index, 0, entities.Count);
-                            entities.Insert(idx, entityAdapter.AttachedObject);
-                            break;
-                        }
-
-                    case EntityAdapter parentEntity:
-                        {
-                            var entities = parentEntity.AttachedObject.Entities;
-                            var idx = Math.Clamp(index, 0, entities.Count);
-                            entities.Insert(idx, entityAdapter.AttachedObject);
-                            break;
-                        }
-
-                    default:
-                        this.LogUnsupportedEntityAdapterParentType(nameof(this.InsertIntoModel), item.Label, parent);
-                        return false;
-                }
-
-                break;
-
-            default:
-                break;
+            this.OperationError = err;
         }
 
-        return true;
+        return ok;
     }
 
     partial void OnOperationErrorChanged(string? value)
@@ -539,54 +477,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         this.OperationError = null;
 
         // Update the underlying model now that the tree insertion succeeded.
-        switch (args.TreeItem)
+        if (!this.domainModelService.TryInsert(args.TreeItem, args.Parent, args.RelativeIndex, out var insertErr))
         {
-            case SceneAdapter sceneAdapter:
-                {
-                    var scene = sceneAdapter.AttachedObject;
-                    if (args.Parent is ProjectAdapter parentProject)
-                    {
-                        var project = parentProject.AttachedObject;
-                        var idx = Math.Clamp(args.RelativeIndex, 0, project.Scenes.Count);
-                        project.Scenes.Insert(idx, scene);
-                    }
-
-                    break;
-                }
-
-            case EntityAdapter entityAdapter:
-                {
-                    var entity = entityAdapter.AttachedObject;
-                    switch (args.Parent)
-                    {
-                        case SceneAdapter parentScene:
-                            {
-                                var scene = parentScene.AttachedObject;
-                                var idx = Math.Clamp(args.RelativeIndex, 0, scene.Entities.Count);
-                                scene.Entities.Insert(idx, entity);
-                                break;
-                            }
-
-                        case EntityAdapter parentEntity:
-                            {
-                                var pe = parentEntity.AttachedObject;
-                                var idx = Math.Clamp(args.RelativeIndex, 0, pe.Entities.Count);
-                                pe.Entities.Insert(idx, entity);
-                                break;
-                            }
-
-                        default:
-                            this.LogUnsupportedEntityAdapterParentType(nameof(this.OnItemAdded), args.TreeItem.Label, args.Parent);
-                            this.OperationError = "Internal error: Unsupported parent type for entity during add.";
-                            break;
-                    }
-
-                    break;
-                }
-
-            default:
-                // no model update required
-                break;
+            this.OperationError = insertErr;
         }
 
         this.History.AddChange(
@@ -605,43 +498,9 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         this.OperationError = null;
 
         // Update underlying domain model to reflect the removal from the tree.
-        switch (args.TreeItem)
+        if (!this.domainModelService.TryRemove(args.TreeItem, args.Parent, out var removeErr))
         {
-            case SceneAdapter sceneAdapter:
-                {
-                    var scene = sceneAdapter.AttachedObject;
-                    var parentAdapter = args.Parent as ProjectAdapter;
-                    Debug.Assert(parentAdapter is not null, "the parent of a SceneAdapter must be a ProjectAdapter");
-                    var project = parentAdapter.AttachedObject;
-                    _ = project.Scenes.Remove(scene);
-                    break;
-                }
-
-            case EntityAdapter entityAdapter:
-                {
-                    var entity = entityAdapter.AttachedObject;
-                    switch (args.Parent)
-                    {
-                        case SceneAdapter parentScene:
-                            _ = parentScene.AttachedObject.Entities.Remove(entity);
-                            break;
-
-                        case EntityAdapter parentEntity:
-                            _ = parentEntity.AttachedObject.Entities.Remove(entity);
-                            break;
-
-                        default:
-                            this.LogUnsupportedEntityAdapterParentType(nameof(this.OnItemRemoved), args.TreeItem.Label, args.Parent);
-                            this.OperationError = "Internal error: Unsupported parent type for entity during remove.";
-                            break;
-                    }
-
-                    break;
-                }
-
-            default:
-                // Do nothing
-                break;
+            this.OperationError = removeErr;
         }
 
         this.History.AddChange(
@@ -891,7 +750,11 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         try
         {
-            UpdateModel(args);
+            if (!this.domainModelService.TryUpdateMoved(args, out var moveErr))
+            {
+                this.OperationError = moveErr;
+            }
+
             RecordUndoChanges(args);
         }
         finally
@@ -899,32 +762,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             if (args.IsBatch)
             {
                 this.History.EndChangeSet();
-            }
-        }
-
-        void UpdateModel(TreeItemsMovedEventArgs args)
-        {
-            // Update underlying model first: remove all moved items from their previous parents.
-            foreach (var move in args.Moves)
-            {
-                if (!this.RemoveFromModel(move.Item, move.PreviousParent))
-                {
-                    this.OperationError = "Internal error: Unsupported parent type encountered while removing moved item(s).";
-                    continue;
-                }
-            }
-
-            // Then insert into new parents, in increasing index order per parent.
-            foreach (var group in args.Moves.GroupBy(m => m.NewParent))
-            {
-                foreach (var move in group.OrderBy(m => m.NewIndex))
-                {
-                    if (!this.InsertIntoModel(move.Item, move.NewParent, move.NewIndex))
-                    {
-                        this.OperationError = "Internal error: Unsupported parent type encountered while inserting moved item(s).";
-                        continue;
-                    }
-                }
             }
         }
 
