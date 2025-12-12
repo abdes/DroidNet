@@ -12,7 +12,7 @@
                 <ResourceDictionary Source="ms-appx:///DroidNet.Controls.Menus/Themes/Generic.xaml" />
 
                 <!--  Other internal merged dictionaries here  -->
-                <Styles xmlns="using:DroidNet.Controls.Demo.DynamicTree" />
+                <Styles xmlns="using:DroidNet.Controls.Demo.Tree" />
             </ResourceDictionary.MergedDictionaries>
             <!--  Other app resources here  -->
         </ResourceDictionary>

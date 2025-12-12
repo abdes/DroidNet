@@ -14,6 +14,7 @@ namespace DroidNet.Controls.Demo.OutputLog;
 /// ViewModel for demonstrating the output log.
 /// </summary>
 /// <param name="outputLogSink">The output log sink.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public partial class OutputLogDemoViewModel(DelegatingSink<RichTextBlockSink> outputLogSink) : ObservableObject
 {
     /// <summary>

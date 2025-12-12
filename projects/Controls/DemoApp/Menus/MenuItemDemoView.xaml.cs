@@ -12,6 +12,7 @@ namespace DroidNet.Controls.Demo.Menus;
 /// Demonstrates the MenuItem control with live property editing capabilities.
 /// </summary>
 [ViewModel(typeof(MenuItemDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class MenuItemDemoView : Page
 {
     /// <summary>
@@ -22,9 +23,7 @@ public sealed partial class MenuItemDemoView : Page
         this.InitializeComponent();
     }
 
+    // Delegate to ViewModel to handle the invoked event
     private void DemoMenuItem_OnInvoked(object sender, MenuItemInvokedEventArgs e)
-    {
-        // Delegate to ViewModel to handle the invoked event
-        this.ViewModel!.OnMenuItemInvoked(e);
-    }
+        => this.ViewModel!.OnMenuItemInvoked(e);
 }

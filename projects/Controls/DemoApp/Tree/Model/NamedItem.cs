@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.Model;
+namespace DroidNet.Controls.Demo.Tree.Model;
 
 /// <summary>
 /// Represents an item with a name.
 /// </summary>
-public class NamedItem
+internal class NamedItem
 {
     private string name;
 

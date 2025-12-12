@@ -2,13 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls.Demo.Model;
+using DroidNet.Controls.Demo.Tree.Model;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
 /// A View that shows a hierarchical layout of a <see cref="Project">project</see> that has <see cref="Scene">scenes</see>, which

@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.RegularExpressions;
-using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls.Demo.Services;
+using DroidNet.Controls.Demo.Tree.Services;
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree.Model;
 
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.

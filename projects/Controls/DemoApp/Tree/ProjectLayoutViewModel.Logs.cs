@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
 ///     Logging partial methods for <see cref="ProjectLayoutViewModel" />.

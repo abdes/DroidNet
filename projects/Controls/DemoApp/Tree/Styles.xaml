@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 
 <ResourceDictionary
-    x:Class="DroidNet.Controls.Demo.DynamicTree.Styles"
+    x:Class="DroidNet.Controls.Demo.Tree.Styles"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:dnc="using:DroidNet.Controls"
-    xmlns:local="using:DroidNet.Controls.Demo.DynamicTree">
+    xmlns:local="using:DroidNet.Controls.Demo.Tree">
 
     <DataTemplate x:Key="SceneThumbnailTemplate" x:DataType="dnc:TreeItemAdapter">
         <Image Source="{x:Bind local:ThumbnailGenerator.GenerateRandomImage(24, 24)}" />

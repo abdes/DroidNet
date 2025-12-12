@@ -9,15 +9,15 @@ using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Controls.Demo.Model;
-using DroidNet.Controls.Demo.Services;
+using DroidNet.Controls.Demo.Tree.Model;
+using DroidNet.Controls.Demo.Tree.Services;
 using DroidNet.Controls.Selection;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
 /// The ViewModel for the <see cref="ProjectLayoutView"/> view.
@@ -72,7 +72,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     /// <summary>
     /// Fired when the ViewModel requests a rename operation in the View.
     /// </summary>
-    public event EventHandler<RenameRequestedEventArgs?>? RenameRequested;
+    internal event EventHandler<RenameRequestedEventArgs?>? RenameRequested;
 
     [ObservableProperty]
     public partial string? OperationError { get; set; }

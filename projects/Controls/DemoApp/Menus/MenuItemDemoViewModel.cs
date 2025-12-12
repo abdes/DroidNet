@@ -15,6 +15,7 @@ namespace DroidNet.Controls.Demo.Menus;
 /// Demonstrates the MenuItem control with live property editing capabilities.
 /// Shows how to dynamically modify MenuItemData properties and see real-time updates.
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public partial class MenuItemDemoViewModel : ObservableObject
 {
     private readonly Dictionary<string, string> iconMapping = new(StringComparer.OrdinalIgnoreCase)

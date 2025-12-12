@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree;
 
 /// <summary>
 /// Event arguments for a rename request originating from the ViewModel.
 /// </summary>
-public sealed class RenameRequestedEventArgs : EventArgs
+internal sealed class RenameRequestedEventArgs : EventArgs
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="RenameRequestedEventArgs"/> class.

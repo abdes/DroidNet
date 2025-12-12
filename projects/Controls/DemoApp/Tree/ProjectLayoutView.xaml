@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <Page
-    x:Class="DroidNet.Controls.Demo.DynamicTree.ProjectLayoutView"
+    x:Class="DroidNet.Controls.Demo.Tree.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:componentModel="using:System.ComponentModel"

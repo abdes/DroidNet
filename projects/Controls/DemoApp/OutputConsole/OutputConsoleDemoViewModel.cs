@@ -13,19 +13,14 @@ namespace DroidNet.Controls.Demo.OutputConsole;
 /// <summary>
 ///     View model for the OutputConsole demo.
 /// </summary>
-public partial class OutputConsoleDemoViewModel : ObservableObject
+/// <param name="buffer">The <see cref="OutputLogBuffer"/> to use. The view model does not manage the buffer's lifetime.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
+public partial class OutputConsoleDemoViewModel(OutputLogBuffer buffer) : ObservableObject
 {
-    /// <summary>
-    ///     Initializes a new instance of the <see cref="OutputConsoleDemoViewModel"/> class.
-    /// </summary>
-    /// <param name="buffer">The <see cref="OutputLogBuffer"/> to use. The view model does not manage the buffer's lifetime.</param>
-    public OutputConsoleDemoViewModel(OutputLogBuffer buffer)
-        => this.Buffer = buffer;
-
     /// <summary>
     ///     Gets the output log buffer used by the demo UI.
     /// </summary>
-    public OutputLogBuffer Buffer { get; }
+    public OutputLogBuffer Buffer { get; } = buffer;
 
     /// <summary>
     ///     Gets or sets the level filter for the output console.

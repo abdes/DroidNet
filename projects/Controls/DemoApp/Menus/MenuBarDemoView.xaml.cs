@@ -13,6 +13,7 @@ namespace DroidNet.Controls.Demo.Menus;
 /// View for demonstrating both the standard <see cref="DroidNet.Controls.Menus.MenuBar"/> and the <see cref="DroidNet.Controls.Menus.ExpandableMenuBar"/>.
 /// </summary>
 [ViewModel(typeof(MenuBarDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class MenuBarDemoView : Page
 {
     private MenuInteractionController? controller;

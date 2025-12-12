@@ -13,6 +13,7 @@ namespace DroidNet.Controls.Demo.OutputLog;
 /// An empty page that can be used on its own or navigated to within a Frame.
 /// </summary>
 [ViewModel(typeof(OutputLogDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class OutputLogDemoView : Page
 {
     /// <summary>
@@ -25,6 +26,8 @@ public sealed partial class OutputLogDemoView : Page
 
     private void GridView_ItemClick(object sender, ItemClickEventArgs e)
     {
+        _ = sender; // unused
+
         if (e.ClickedItem is string logLevel)
         {
             this.ViewModel?.MakeLogCommand.Execute(logLevel);

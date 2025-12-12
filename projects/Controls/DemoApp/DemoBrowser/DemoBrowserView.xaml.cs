@@ -12,6 +12,7 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 
 /// <summary>The view for the application's main window shell.</summary>
 [ViewModel(typeof(DemoBrowserViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class DemoBrowserView
 {
     private const string IndexToNavigationItemConverterKey = "IndexToNavigationItemConverter";
@@ -26,7 +27,7 @@ public sealed partial class DemoBrowserView
         this.Resources[IndexToNavigationItemConverterKey]
             = new IndexToNavigationItemConverter(
                 this.NavigationView,
-                () => this.ViewModel!.AllItems.Cast<object>().ToList());
+                () => [.. this.ViewModel!.AllItems.Cast<object>()]);
 
         this.NavigationView.DisplayModeChanged += this.OnPaneDisplayModeChanged;
     }
