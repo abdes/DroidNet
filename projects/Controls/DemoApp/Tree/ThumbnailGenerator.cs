@@ -4,10 +4,11 @@
 
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Security.Cryptography;
+using DroidNet.Controls.Demo.Tree.Model;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree;
 
 /*
  Pathless casting

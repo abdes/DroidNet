@@ -5,13 +5,13 @@
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Controls.Demo.DynamicTree;
 using DroidNet.Controls.Demo.InPlaceEdit;
 using DroidNet.Controls.Demo.Menus;
 using DroidNet.Controls.Demo.OutputConsole;
 using DroidNet.Controls.Demo.OutputLog;
 using DroidNet.Controls.Demo.TabStrip;
 using DroidNet.Controls.Demo.ToolBar;
+using DroidNet.Controls.Demo.Tree;
 using DroidNet.Controls.OutputLog;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
@@ -24,6 +24,7 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
 /// <param name="outputLogSink">A <see cref="DelegatingSink{T}"/> sink to be used for logs targeting the output log view.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to soource generated ViewModel property")]
 public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTextBlockSink> outputLogSink)
     : ObservableObject, IOutletContainer, IRoutingAware
 {
@@ -50,12 +51,12 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     /// Gets the selected navigation item.
     /// </summary>
     /// <value>The selected navigation item, or <see langword="null"/> if no item is selected.</value>
-    public NavigationItem? SelectedItem => this.SelectedItemIndex == InvalidItemIndex ? default : this.AllItems[this.SelectedItemIndex];
+    internal NavigationItem? SelectedItem => this.SelectedItemIndex == InvalidItemIndex ? default : this.AllItems[this.SelectedItemIndex];
 
     /// <summary>
     /// Gets the list of navigation items.
     /// </summary>
-    public IList<NavigationItem> NavigationItems { get; } =
+    internal IList<NavigationItem> NavigationItems { get; } =
     [
         new("in-place", "In-Place Edit", typeof(InPlaceEditDemoViewModel)),
         new("numberbox", "Number Box", typeof(NumberBoxDemoViewModel)),
@@ -73,17 +74,17 @@ public partial class DemoBrowserViewModel(IRouter router, DelegatingSink<RichTex
     /// <summary>
     /// Gets the list of all navigation items.
     /// </summary>
-    public IList<NavigationItem> AllItems => [.. this.NavigationItems];
+    internal IList<NavigationItem> AllItems => [.. this.NavigationItems];
 
     /// <summary>
     /// Gets a value indicating whether the settings item is selected.
     /// </summary>
-    public bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
+    internal bool IsSettingsSelected => this.SelectedItemIndex == SettingsItemIndex;
 
     /// <summary>
     /// Gets the output log sink.
     /// </summary>
-    public DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
+    internal DelegatingSink<RichTextBlockSink> OutputLogSink => outputLogSink;
 
     /// <inheritdoc/>
     public void LoadContent(object viewModel, OutletName? outletName = null)

@@ -2,16 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace DroidNet.Controls.Demo.Model;
+namespace DroidNet.Controls.Demo.Tree.Model;
 
 /// <summary>
-/// Represents a scene with a name and a collection of entities.
+/// Represents an entity with a name.
 /// </summary>
-/// <param name="name">The name of the scene.</param>
-public class Scene(string name) : NamedItem(name)
+/// <param name="name">The name of the entity.</param>
+internal sealed class Entity(string name) : NamedItem(name)
 {
     /// <summary>
-    /// Gets the collection of entities in the scene.
+    /// Gets the collection of child entities of this entity.
     /// </summary>
     public IList<Entity> Entities { get; init; } = [];
 }

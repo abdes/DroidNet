@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls.Demo.Model;
+using DroidNet.Controls.Demo.Tree.Model;
 using DryIoc.ImTools;
 
-namespace DroidNet.Controls.Demo.Services;
+namespace DroidNet.Controls.Demo.Tree.Services;
 
 /// <summary>
 /// Provides methods to load project and scene data.

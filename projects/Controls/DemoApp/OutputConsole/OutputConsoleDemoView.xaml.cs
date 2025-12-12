@@ -11,7 +11,8 @@ namespace DroidNet.Controls.Demo.OutputConsole;
 ///     Page that hosts the OutputConsole demo UI.
 /// </summary>
 [ViewModel(typeof(OutputConsoleDemoViewModel))]
-public sealed partial class OutputConsoleDemoView : Page
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
+public sealed partial class OutputConsoleDemoView
 {
     /// <summary>
     ///     Initializes a new instance of the <see cref="OutputConsoleDemoView"/> class.
@@ -23,6 +24,8 @@ public sealed partial class OutputConsoleDemoView : Page
 
     private void GridView_ItemClick(object sender, ItemClickEventArgs e)
     {
+        _ = sender; // unused
+
         if (e.ClickedItem is string logLevel)
         {
             this.ViewModel?.MakeLogCommand.Execute(logLevel);

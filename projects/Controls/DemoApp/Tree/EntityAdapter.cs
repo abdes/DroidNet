@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Controls.Demo.Model;
-
-namespace DroidNet.Controls.Demo.DynamicTree;
+namespace DroidNet.Controls.Demo.Tree.Model;
 
 /// <summary>
 /// A <see cref="DynamicTree" /> item adapter for the <see cref="Entity" /> model class.

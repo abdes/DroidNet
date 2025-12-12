@@ -10,6 +10,7 @@ namespace DroidNet.Controls.Demo.DemoBrowser;
 /// <param name="path">The path associated with the navigation item.</param>
 /// <param name="text">The display text for the navigation item.</param>
 /// <param name="target">The target view model type for the navigation item.</param>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "used for source generated public commands")]
 public class NavigationItem(string path, string text, Type target)
 {
     /// <summary>

@@ -11,6 +11,7 @@ namespace DroidNet.Controls.Demo.InPlaceEdit;
 /// A simple demo page for the <see cref="InPlaceEditableLabel"/> control.
 /// </summary>
 [ViewModel(typeof(InPlaceEditDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class InPlaceEditDemoView
 {
     /// <summary>

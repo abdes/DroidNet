@@ -10,6 +10,7 @@ namespace DroidNet.Controls.Demo.Menus;
 /// View for MenuFlyout demonstration.
 /// </summary>
 [ViewModel(typeof(MenuFlyoutDemoViewModel))]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public due to source generated ViewModel property")]
 public sealed partial class MenuFlyoutDemoView
 {
     /// <summary>
