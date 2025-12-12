@@ -74,7 +74,7 @@ internal sealed partial class SceneAdapter(Scene scene) : TreeItemAdapter(isRoot
                 });
         }
 
-        await Task.CompletedTask.ConfigureAwait(true);
+        await Task.CompletedTask.ConfigureAwait(false);
     }
 
     [GeneratedRegex(ValidNamePattern, RegexOptions.ExplicitCapture, matchTimeoutMilliseconds: 1000)]
