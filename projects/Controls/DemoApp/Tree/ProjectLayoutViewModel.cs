@@ -166,16 +166,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     protected override void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
     {
         base.OnSelectionModelChanged(oldValue);
-
-        if (oldValue is not null)
-        {
-            oldValue.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
-        }
-
-        if (this.SelectionModel is not null)
-        {
-            this.SelectionModel.PropertyChanged += this.SelectionModel_OnPropertyChanged;
-        }
+        oldValue?.PropertyChanged -= this.SelectionModel_OnPropertyChanged;
+        this.SelectionModel?.PropertyChanged += this.SelectionModel_OnPropertyChanged;
     }
 
     private static string GetNextAvailableSceneName(Project project, string baseName)
@@ -360,7 +352,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         this.History.AddChange(
             $"RemoveItemAsync({args.TreeItem.Label})",
-            () => this.RemoveItemAsync(args.TreeItem).GetAwaiter().GetResult());
+            async () => await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(false));
 
         this.LogItemAdded(args.TreeItem.Label);
     }
@@ -414,7 +406,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         this.History.AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
-            () => this.InsertItemWithVisibility(args.RelativeIndex, args.Parent, args.TreeItem));
+            async () => await this.InsertItemWithVisibilityAsync(args.RelativeIndex, args.Parent, args.TreeItem).ConfigureAwait(false));
     }
 
     /// <summary>
@@ -423,7 +415,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private bool CanUndo() => this.History.CanUndo;
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
-    private void Undo() => this.History.Undo();
+    private async Task Undo()
+        => await this.History.UndoAsync().ConfigureAwait(false);
 
     /// <summary>
     /// Redoes the last undone change.
@@ -431,7 +424,8 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private bool CanRedo() => this.History.CanRedo;
 
     [RelayCommand(CanExecute = nameof(CanRedo))]
-    private void Redo() => this.History.Redo();
+    private async Task Redo()
+        => await this.History.RedoAsync().ConfigureAwait(false);
 
     private bool CanCopy() => this.SelectionModel?.IsEmpty == false;
 
@@ -783,7 +777,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
                     var item = move.Item;
                     this.History.AddChange(
                         $"MoveItemAsync({item.Label})",
-                        () => this.MoveItemWithVisibility(item, move.PreviousParent, move.PreviousIndex));
+                        async () => await this.MoveItemWithVisibilityAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
                 }
             }
         }
@@ -796,17 +790,17 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         }
     }
 
-    private void InsertItemWithVisibility(int relativeIndex, ITreeItem parent, ITreeItem item)
+    private async Task InsertItemWithVisibilityAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
     {
-        this.EnsureAncestorsExpanded(parent);
-        this.InsertItemAsync(relativeIndex, parent, item).GetAwaiter().GetResult();
+        await this.EnsureAncestorsExpandedAsync(parent).ConfigureAwait(false);
+        await this.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(false);
     }
 
-    private void MoveItemWithVisibility(ITreeItem item, ITreeItem newParent, int newIndex)
+    private async Task MoveItemWithVisibilityAsync(ITreeItem item, ITreeItem newParent, int newIndex)
     {
         // Move requires both the moved item and the target parent to be currently shown.
-        this.EnsureAncestorsExpanded(item);
-        this.EnsureAncestorsExpanded(newParent);
+        await this.EnsureAncestorsExpandedAsync(item).ConfigureAwait(false);
+        await this.EnsureAncestorsExpandedAsync(newParent).ConfigureAwait(false);
 
         // When moving within the same parent, TreeDisplayHelper adjusts the requested index to account
         // for detaching the item before insertion. To end up at the intended final index, we must
@@ -814,7 +808,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         var effectiveIndex = newIndex;
         if (ReferenceEquals(item.Parent, newParent))
         {
-            var children = newParent.Children.GetAwaiter().GetResult();
+            var children = await newParent.Children.ConfigureAwait(false);
             var currentIndex = children.IndexOf(item);
             if (currentIndex >= 0 && currentIndex < newIndex)
             {
@@ -822,10 +816,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             }
         }
 
-        this.MoveItemAsync(item, newParent, effectiveIndex).GetAwaiter().GetResult();
+        await this.MoveItemAsync(item, newParent, effectiveIndex).ConfigureAwait(false);
     }
 
-    private void EnsureAncestorsExpanded(ITreeItem item)
+    private async Task EnsureAncestorsExpandedAsync(ITreeItem item)
     {
         var ancestors = new Stack<ITreeItem>();
         var current = item.Parent;
@@ -842,7 +836,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 
         while (ancestors.TryPop(out var toExpand))
         {
-            this.ExpandItemAsync(toExpand).GetAwaiter().GetResult();
+            await this.ExpandItemAsync(toExpand).ConfigureAwait(false);
         }
     }
 
