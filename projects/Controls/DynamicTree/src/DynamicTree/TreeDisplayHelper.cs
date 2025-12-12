@@ -615,7 +615,7 @@ internal sealed partial class TreeDisplayHelper(
         if (relativeIndex == 0)
         {
             var index = this.shownItems.IndexOf(parent) + 1;
-            this.LogFindNewItemIndexComputed(parent, relativeIndex, index, "none", null);
+            this.LogFindNewItemIndexComputed(parent, relativeIndex, index, "none", sibling: null);
             return index;
         }
 

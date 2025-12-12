@@ -12,6 +12,12 @@ namespace DroidNet.Controls;
 ///     including its parent and the relative index at which it was located before
 ///     removal. It extends the <see cref="DynamicTreeEventArgs" /> class to include
 ///     additional details specific to the item removal event.
+///     <para>
+///     <see cref="RelativeIndex"/> is the removed item's <em>previous</em> index in <see cref="Parent"/>'s children
+///     collection (<see cref="ITreeItem.Children"/>) immediately before the removal.</para>
+///     <para>
+///     This is the correct index to use to undo the removal via <see cref="DynamicTreeViewModel.InsertItemAsync"/>.
+///     Do not confuse it with an index into <see cref="DynamicTreeViewModel.ShownItems"/>.</para>
 /// </remarks>
 public class TreeItemRemovedEventArgs : DynamicTreeEventArgs
 {
@@ -23,5 +29,8 @@ public class TreeItemRemovedEventArgs : DynamicTreeEventArgs
     /// <summary>
     ///     Gets the relative index of the removed item within its parent's children collection.
     /// </summary>
+    /// <remarks>
+    ///     This value reflects the child's position before it was removed.
+    /// </remarks>
     public required int RelativeIndex { get; init; }
 }

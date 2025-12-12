@@ -25,6 +25,11 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     ///     Fires when an item is removed from the dynamic tree.
     /// </summary>
+    /// <remarks>
+    ///     The <see cref="TreeItemRemovedEventArgs.RelativeIndex"/> value is a child index in the parent's children
+    ///     collection (<see cref="ITreeItem.Children"/>) immediately before removal.
+    ///     It is not an index into <see cref="DynamicTreeViewModel.ShownItems"/>.
+    /// </remarks>
     public event EventHandler<TreeItemRemovedEventArgs>? ItemRemoved;
 
     /// <summary>
@@ -42,6 +47,10 @@ public abstract partial class DynamicTreeViewModel
     /// <summary>
     ///     Fires when an item is added to the dynamic tree.
     /// </summary>
+    /// <remarks>
+    ///     The <see cref="TreeItemAddedEventArgs.RelativeIndex"/> value is a child index in the parent's children
+    ///     collection (<see cref="ITreeItem.Children"/>). It is not an index into <see cref="DynamicTreeViewModel.ShownItems"/>.
+    /// </remarks>
     public event EventHandler<TreeItemAddedEventArgs>? ItemAdded;
 
     /// <summary>
@@ -59,6 +68,10 @@ public abstract partial class DynamicTreeViewModel
     /// <remarks>
     ///     Even single-item moves are reported via <see cref="TreeItemsMovedEventArgs" /> with a single entry
     ///     in <see cref="TreeItemsMovedEventArgs.Moves" />.
+    ///     <para>
+    ///     Use <see cref="TreeItemsMovedEventArgs.Moves"/> for undo/redo recording. The reported indices are child indices
+    ///     (<see cref="ITreeItem.Children"/>) and reflect the actual indices used.
+    ///     </para>
     /// </remarks>
     public event EventHandler<TreeItemsMovedEventArgs>? ItemMoved;
 

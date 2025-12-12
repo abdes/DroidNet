@@ -396,10 +396,7 @@ public partial class DynamicTree : Control
         this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
 
         // Remove subscriptions to the ViewModel
-        if (this.ViewModel is not null)
-        {
-            this.ViewModel.PropertyChanged -= this.ViewModel_OnPropertyChanged;
-        }
+        this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
 
         // Stop listening to the ViewModelChanged event while unloaded
         this.ViewModelChanged -= this.OnViewModelChanged;
@@ -461,6 +458,8 @@ public partial class DynamicTree : Control
     [SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "we only handle some keys")]
     private async void OnKeyDown(object sender, KeyRoutedEventArgs args)
     {
+        _ = sender; // unused
+
         if (this.ViewModel is null)
         {
             return;
@@ -805,10 +804,7 @@ public partial class DynamicTree : Control
     private void OnViewModelChanged(object? sender, ViewModelChangedEventArgs<DynamicTreeViewModel> args)
     {
         // Detach any handlers from the previous ViewModel
-        if (args.OldValue is not null)
-        {
-            args.OldValue.PropertyChanged -= this.ViewModel_OnPropertyChanged;
-        }
+        args.OldValue?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
 
         // Attach handlers to the new ViewModel
         if (this.ViewModel is not null)

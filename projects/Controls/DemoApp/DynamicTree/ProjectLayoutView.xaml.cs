@@ -82,18 +82,7 @@ public sealed partial class ProjectLayoutView
             var newName = tb.Text?.Trim() ?? string.Empty;
             if (item.ValidateItemName(newName))
             {
-                item.Label = newName;
-                switch (item)
-                {
-                    case SceneAdapter sceneAdapter:
-                        sceneAdapter.AttachedObject.Name = newName;
-                        break;
-                    case EntityAdapter entityAdapter:
-                        entityAdapter.AttachedObject.Name = newName;
-                        break;
-                    default:
-                        break;
-                }
+                this.ViewModel!.RenameItem(item, newName);
             }
             else
             {
