@@ -91,20 +91,20 @@ public sealed partial class ProjectLayoutView
         }
     }
 
-    private void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        this.ViewModel!.UndoCommand.Execute(parameter: null);
+        await this.ViewModel!.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
     }
 
-    private void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        this.ViewModel!.RedoCommand.Execute(parameter: null);
+        await this.ViewModel!.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
     }
 
     private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
