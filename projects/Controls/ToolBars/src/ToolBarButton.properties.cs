@@ -134,7 +134,7 @@ public partial class ToolBarButton
     /// </summary>
     public bool IsCompact
     {
-        get => (bool)this.GetValue(IsCompactProperty);
+        get => (bool?)this.GetValue(IsCompactProperty) ?? false;
         set => this.SetValue(IsCompactProperty, value);
     }
 
