@@ -12,11 +12,13 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelSingleSelectionRemovalTests : ViewModelTestBase
+public sealed partial class ViewModelSingleSelectionRemovalTests : ViewModelTestBase, IDisposable
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Single };
 
     private SelectionModel<ITreeItem> Selection => this.viewModel.GetSelectionModel()!;
+
+    public void Dispose() => this.viewModel.Dispose();
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / Remove / SingleSelection")]

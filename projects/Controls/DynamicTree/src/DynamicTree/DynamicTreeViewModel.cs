@@ -29,13 +29,15 @@ namespace DroidNet.Controls;
 ///     and implement the necessary logic for your specific tree structure. Below is an example of how
 ///     to derive from this class and create a concrete view model and item adapter.</para>
 /// </remarks>
-public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject
+public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject, IDisposable
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
     private readonly ObservableCollection<ITreeItem> shownItems = [];
 
     private TreeDisplayHelper? displayHelper;
     private FocusedItemInfo? focusedItem;
+
+    private bool disposed;
 
     /// <summary>
     /// Indicates the origin of a focus or action request made against the tree.
@@ -554,6 +556,15 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     }
 
     /// <summary>
+    ///     Releases resources used by the view model related to filtering.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
     ///     Updates the currently focused item together with the origin of the request.
     /// </summary>
     /// <param name="item">The tree item to mark as focused.</param>
@@ -683,6 +694,40 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="item">The item to check.</param>
     /// <returns><see langword="true"/> if the item is currently shown; otherwise <see langword="false"/>.</returns>
     protected internal bool IsShown(ITreeItem item) => this.shownItems.Contains(item);
+
+    /// <summary>
+    ///     Releases the resources used by the view model related to filtering.
+    /// </summary>
+    /// <param name="disposing">If <see langword="true"/>, release managed resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            if (this.filteredItems is not null)
+            {
+                // We own a manual-refresh view; unsubscribe and dispose it.
+                this.shownItems.CollectionChanged -= this.OnShownItemsCollectionChangedForFiltering;
+                this.filteredItems.Dispose();
+                this.filteredItems = null;
+            }
+
+            // Unsubscribe observed item property changed handlers.
+            foreach (var notify in this.observedItems)
+            {
+                notify.PropertyChanged -= this.OnShownItemPropertyChangedForFiltering;
+            }
+
+            this.observedItems.Clear();
+            this.includedItems.Clear();
+        }
+
+        this.disposed = true;
+    }
 
     private static int GetTypeAheadScore(string label, string query, out int matchedCount)
     {

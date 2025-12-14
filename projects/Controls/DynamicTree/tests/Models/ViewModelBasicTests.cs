@@ -17,7 +17,7 @@ public class ViewModelBasicTests : ViewModelTestBase
     public async Task InitializeRootAsync_ShouldClearShownItems()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: true);
+        using var viewModel = new TestViewModel(skipRoot: true);
 
         // Pre-populate shown items through the public InitializeRoot API
         var existingChild = new TestTreeItemAdapter { Label = "Existing" };
@@ -38,7 +38,7 @@ public class ViewModelBasicTests : ViewModelTestBase
     public async Task InitializeRootAsync_ShouldAddRootItemIfSkipRootIsFalse()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var rootItem = new TestTreeItemAdapter(isRoot: true) { Label = "Root" };
 
         // Act
@@ -53,7 +53,7 @@ public class ViewModelBasicTests : ViewModelTestBase
     public async Task InitializeRootAsync_ShouldAddChildrenIfSkipRootIsTrue()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: true);
+        using var viewModel = new TestViewModel(skipRoot: true);
         var childItem = new TestTreeItemAdapter { Label = "Child" };
         var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root" };
 
@@ -69,7 +69,7 @@ public class ViewModelBasicTests : ViewModelTestBase
     public async Task InitializeRootAsync_ShouldRestoreExpandedChildrenIfRootIsExpanded()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var childItem = new TestTreeItemAdapter { Label = "Child" };
         var rootItem = new TestTreeItemAdapter([childItem], isRoot: true) { Label = "Root", IsExpanded = true };
 

@@ -13,12 +13,14 @@ namespace DroidNet.Controls.Tests.Tree;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DynamicTree / UI / Handlers")]
-public class DynamicTreeFocusTests : VisualUserInterfaceTests
+public sealed partial class DynamicTreeFocusTests : VisualUserInterfaceTests, IDisposable
 {
     private TestableDynamicTree? tree;
     private TestViewModel? viewModel;
 
     public TestContext TestContext { get; set; }
+
+    public void Dispose() => this.viewModel?.Dispose();
 
     [TestMethod]
     public Task OnItemPointerPressed_SelectsItem_Async() => EnqueueAsync(

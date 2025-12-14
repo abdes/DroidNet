@@ -18,9 +18,9 @@ internal static class ProjectLoaderService
         {
             Entities =
             [
-                new Entity("Scene 1 - Entity 1"),
-                new Entity("Scene 1 - Entity 2"),
-                new Entity("Scene 1 - Entity 3"),
+                new Entity("Scene 1 - Light") { Light = new LightComponent() },
+                new Entity("Scene 1 - Camera") { Camera = new CameraComponent() },
+                new Entity("Scene 1 - Geometry") { Geometry = new GeometryComponent() },
             ],
         },
         new("Scene 2"),
@@ -28,10 +28,10 @@ internal static class ProjectLoaderService
         {
             Entities =
             [
-                new Entity("Scene 3 - Entity 1"),
-                new Entity("Scene 3 - Entity 2"),
-                new Entity("Scene 3 - Entity 3"),
-                new Entity("Scene 3 - Entity 4"),
+                new Entity("Scene 3 - Light + Geometry") { Light = new LightComponent(), Geometry = new GeometryComponent() },
+                new Entity("Scene 3 - Camera + Geometry") { Camera = new CameraComponent(), Geometry = new GeometryComponent() },
+                new Entity("Scene 3 - Light") { Light = new LightComponent() },
+                new Entity("Scene 3 - Plain"),
             ],
         },
     ];
@@ -67,7 +67,7 @@ internal static class ProjectLoaderService
 
         foreach (var entity in sceneData.Entities)
         {
-            scene.Entities.Add(new Entity(entity.Name));
+            scene.Entities.Add(entity.CloneWithoutChildren());
         }
 
         await Task.CompletedTask.ConfigureAwait(false);

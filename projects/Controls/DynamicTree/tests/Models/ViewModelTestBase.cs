@@ -19,13 +19,11 @@ public abstract class ViewModelTestBase
 
     [TestInitialize]
     public void TestInitializeLogger()
-    {
-        this.LoggerFactoryInstance = LoggerFactory.Create(builder =>
+        => this.LoggerFactoryInstance = LoggerFactory.Create(builder =>
         {
             _ = builder.AddDebug();
             _ = builder.SetMinimumLevel(LogLevel.Trace);
         });
-    }
 
     [TestCleanup]
     public void TestCleanupLogger() => this.LoggerFactoryInstance?.Dispose();

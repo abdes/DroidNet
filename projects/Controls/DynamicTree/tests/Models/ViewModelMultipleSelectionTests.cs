@@ -15,7 +15,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection")]
-public class ViewModelMultipleSelectionTests : ViewModelTestBase
+public sealed partial class ViewModelMultipleSelectionTests : ViewModelTestBase, IDisposable
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
     private readonly Mock<PropertyChangedEventHandler> propertyChangedHandlerMock;
@@ -32,6 +32,8 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
     public TestContext TestContext { get; set; }
 
     private MultipleSelectionModel<ITreeItem> Selection => (this.viewModel.GetSelectionModel()! as MultipleSelectionModel<ITreeItem>)!;
+
+    public void Dispose() => this.viewModel.Dispose();
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / MultipleSelection / SelectItem")]

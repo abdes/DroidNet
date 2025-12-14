@@ -11,11 +11,13 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel")]
-public class ViewModelExpansionTests : ViewModelTestBase
+public sealed partial class ViewModelExpansionTests : ViewModelTestBase, IDisposable
 {
     private TestViewModel viewModel = null!;
 
     public TestContext TestContext { get; set; }
+
+    public void Dispose() => this.viewModel.Dispose();
 
     [TestInitialize]
     public void Initialize() => this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.LoggerFactoryInstance);

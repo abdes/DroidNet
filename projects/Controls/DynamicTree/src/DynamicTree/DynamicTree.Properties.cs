@@ -22,6 +22,24 @@ public partial class DynamicTree
         new PropertyMetadata(defaultValue: null));
 
     /// <summary>
+    ///     The backing <see cref="DependencyProperty"/> for the <see cref="IsFilteringEnabled"/> property.
+    /// </summary>
+    public static readonly DependencyProperty IsFilteringEnabledProperty = DependencyProperty.Register(
+        nameof(IsFilteringEnabled),
+        typeof(bool),
+        typeof(DynamicTree),
+        new PropertyMetadata(defaultValue: false, (d, _) => ((DynamicTree)d).UpdateDisplayedItems()));
+
+    /// <summary>
+    ///     The backing <see cref="DependencyProperty"/> for the <see cref="DisplayedItems"/> property.
+    /// </summary>
+    public static readonly DependencyProperty DisplayedItemsProperty = DependencyProperty.Register(
+        nameof(DisplayedItems),
+        typeof(object),
+        typeof(DynamicTree),
+        new PropertyMetadata(defaultValue: null));
+
+    /// <summary>
     /// Attached property storing the drop indicator position for an item container.
     /// </summary>
     public static readonly DependencyProperty DropIndicatorProperty = DependencyProperty.RegisterAttached(
@@ -58,6 +76,25 @@ public partial class DynamicTree
     {
         get => (DataTemplateSelector)this.GetValue(ThumbnailTemplateSelectorProperty);
         set => this.SetValue(ThumbnailTemplateSelectorProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the control renders <see cref="DynamicTreeViewModel.FilteredItems"/>
+    ///     instead of <see cref="DynamicTreeViewModel.ShownItems"/>.
+    /// </summary>
+    public bool IsFilteringEnabled
+    {
+        get => (bool)this.GetValue(IsFilteringEnabledProperty);
+        set => this.SetValue(IsFilteringEnabledProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets the items currently used as the ItemsRepeater source.
+    /// </summary>
+    public object? DisplayedItems
+    {
+        get => this.GetValue(DisplayedItemsProperty);
+        private set => this.SetValue(DisplayedItemsProperty, value);
     }
 
     /// <summary>

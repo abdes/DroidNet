@@ -3,6 +3,7 @@
     x:Class="DroidNet.Controls.Demo.Tree.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:cm="using:DroidNet.Controls.Menus"
     xmlns:componentModel="using:System.ComponentModel"
     xmlns:converters="using:DroidNet.Converters"
     xmlns:ctkConverters="using:CommunityToolkit.WinUI.Converters"
@@ -170,16 +171,68 @@
             </dnc:ToolBar>
             <!--  toolbar grid doesn't show the error; error is now at the top row  -->
         </Grid>
-        <!--  Main content: tree in left column  -->
-        <Border
-            Grid.Row="1"
-            Grid.Column="0"
-            Padding="0,3"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1"
-            CornerRadius="3">
-            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
-        </Border>
+        <!--  Main content: filter toolbar + tree in left column  -->
+        <Grid Grid.Row="1" Grid.Column="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!--  Filter row: menu button + text filter (stretch) + reset  -->
+            <Grid
+                Grid.Row="0"
+                Padding="4"
+                VerticalAlignment="Center"
+                ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <cm:MenuButton
+                    Grid.Column="0"
+                    Padding="6"
+                    Chrome="Transparent"
+                    CornerRadius="4"
+                    MenuSource="{x:Bind ViewModel.FilterMenu, Mode=OneWay}"
+                    ToolTipService.ToolTip="Filter">
+                    <FontIcon
+                        VerticalAlignment="Center"
+                        FontFamily="Segoe Fluent Icons"
+                        FontSize="16"
+                        Glyph="&#xE71C;" />
+                </cm:MenuButton>
+
+                <TextBox
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    PlaceholderText="Filter by label"
+                    Text="{x:Bind ViewModel.LabelFilterText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                <dnc:ToolBarButton
+                    Grid.Column="2"
+                    Command="{x:Bind ViewModel.ClearLabelFilterCommand}"
+                    ToolBarLabelPosition="Collapsed"
+                    ToolTipService.ToolTip="Reset filter">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Cancel" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+            </Grid>
+
+            <Border
+                Grid.Row="1"
+                Padding="0,3"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="3">
+                <dnc:DynamicTree
+                    IsFilteringEnabled="True"
+                    ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                    ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+            </Border>
+        </Grid>
         <StackPanel
             Grid.Row="1"
             Grid.Column="1"
