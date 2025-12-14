@@ -42,15 +42,6 @@ public partial class ProjectLayoutViewModel(
     private FolderTreeItemAdapter? projectRoot;
     private bool suppressTreeSelectionEvents;
 
-    /// <summary>
-    ///     Disposes the resources used by the ProjectLayoutViewModel.
-    /// </summary>
-    public void Dispose()
-    {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
@@ -113,6 +104,10 @@ public partial class ProjectLayoutViewModel(
             this.projectRoot =
                 new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true) { IsExpanded = true };
 
+            // Ensure the root children are loading to avoid assertion in DoGetChildrenCount
+            // when logging accesses ChildrenCount before the lazy loader is triggered.
+            _ = this.projectRoot.Children;
+
             // Reinitialize the tree UI
             await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
 
@@ -144,7 +139,7 @@ public partial class ProjectLayoutViewModel(
 
             if (target is not null)
             {
-                this.ClearAndSelectItem(target);
+                this.SelectionModel?.SelectItem(target);
             }
         }
         catch (Exception ex)
@@ -172,7 +167,7 @@ public partial class ProjectLayoutViewModel(
         {
             // Use the tree control's selection API to properly select the folder
             // The tree control will handle updating ContentBrowserState through FolderTreeItemAdapter
-            this.ClearAndSelectItem(folderAdapter);
+            this.SelectionModel?.SelectItem(folderAdapter);
         }
     }
 
@@ -180,8 +175,10 @@ public partial class ProjectLayoutViewModel(
     ///     Protected dispose pattern implementation.
     /// </summary>
     /// <param name="disposing">True if called from Dispose; false if called from finalizer.</param>
-    protected virtual void Dispose(bool disposing)
+    protected override void Dispose(bool disposing)
     {
+        base.Dispose(disposing);
+
         if (disposing)
         {
             contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
@@ -290,6 +287,10 @@ public partial class ProjectLayoutViewModel(
         Debug.Assert(this.projectRoot is not null, "project root node should be initialized");
         Debug.Assert(this.activeRoute is not null, "should have an active route");
 
+        // Ensure the root children are loading to avoid assertion in DoGetChildrenCount
+        // when logging accesses ChildrenCount before the lazy loader is triggered.
+        _ = this.projectRoot.Children;
+
         // We will expand the entire project tree
         await this.InitializeRootAsync(this.projectRoot, skipRoot: false).ConfigureAwait(true);
     }
@@ -384,7 +385,7 @@ public partial class ProjectLayoutViewModel(
 
         // Get currently selected folder adapters from ALL selected indices
         var selectedFolders = multipleSelection.SelectedIndices
-            .Select(index => this.ShownItems[index])
+            .Select(this.GetShownItemAt)
             .OfType<FolderTreeItemAdapter>()
             .Select(adapter => adapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath))
             .ToList();

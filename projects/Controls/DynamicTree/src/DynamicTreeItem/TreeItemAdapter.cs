@@ -342,6 +342,19 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
         item.Parent = this;
     }
 
+    /// <summary>
+    ///     Removes a child item from the children collection synchronously. Used internally, and by derived classes.
+    /// </summary>
+    /// <param name="item">The child item to remove.</param>
+    protected void RemoveChildInternal(TreeItemAdapter item)
+    {
+        _ = this.children.Remove(item);
+        if (ReferenceEquals(item.Parent, this))
+        {
+            item.Parent = null;
+        }
+    }
+
     private void CheckCanAddItem(ITreeItem child)
     {
         if (child.Parent is not null || child.IsRoot)

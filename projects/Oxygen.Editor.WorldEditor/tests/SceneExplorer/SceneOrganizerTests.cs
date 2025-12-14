@@ -300,7 +300,7 @@ public class SceneOrganizerTests
         _ = folder.Should().NotBeNull("Folder entry should be attached to the scene adapter");
         _ = folder!.Id.Should().Be(folderId);
 
-        _ = folder.ChildAdapters.OfType<LayoutNodeAdapter>().Should()
+        _ = folder.ChildAdapters.OfType<SceneNodeAdapter>().Should()
             .ContainSingle(lna => ReferenceEquals(lna.AttachedObject, node), "Node should move under the new folder");
 
         _ = layoutContext.RefreshCount.Should().Be(1);
@@ -344,7 +344,7 @@ public class SceneOrganizerTests
         var children = await sceneAdapter.Children.ConfigureAwait(false);
         var folder = children.OfType<FolderAdapter>().Single();
         var folderChildren = await folder.Children.ConfigureAwait(false);
-        _ = folderChildren.OfType<LayoutNodeAdapter>().Should().ContainSingle(lna => ReferenceEquals(lna.AttachedObject, node));
+        _ = folderChildren.OfType<SceneNodeAdapter>().Should().ContainSingle(lna => ReferenceEquals(lna.AttachedObject, node));
     }
 
     [TestMethod]
@@ -558,9 +558,9 @@ public class SceneOrganizerTests
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var initialChildren = await sceneAdapter.Children.ConfigureAwait(false);
 
-        var adapterA = initialChildren.OfType<LayoutNodeAdapter>().First(a => a.AttachedObject == nodeA);
+        var adapterA = initialChildren.OfType<SceneNodeAdapter>().First(a => a.AttachedObject == nodeA);
         var folder = initialChildren.OfType<FolderAdapter>().Single();
-        var adapterB = folder.ChildAdapters.OfType<LayoutNodeAdapter>().Single();
+        var adapterB = folder.ChildAdapters.OfType<SceneNodeAdapter>().Single();
 
         var newFolderId = Guid.NewGuid();
         var newLayout = new List<ExplorerEntryData>
