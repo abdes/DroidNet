@@ -608,6 +608,61 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     }
 
     /// <summary>
+    ///     Focuses the shown item that best matches the specified text.
+    /// </summary>
+    /// <param name="text">The text to match against item labels.</param>
+    /// <param name="origin">The origin of the focus request.</param>
+    /// <returns><see langword="true"/> if a matching item was found and focused; otherwise <see langword="false"/>.</returns>
+    protected internal bool FocusNextByPrefix(string text, RequestOrigin origin)
+    {
+        if (this.shownItems.Count == 0)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var startIndex = 0;
+        if (this.FocusedItem is { Item: { } focused })
+        {
+            var focusedIndex = this.shownItems.IndexOf(focused);
+            if (focusedIndex >= 0)
+            {
+                startIndex = (focusedIndex + 1) % this.shownItems.Count;
+            }
+        }
+
+        var bestScore = int.MinValue;
+        var bestOffset = int.MaxValue;
+        ITreeItem? bestItem = null;
+
+        for (var offset = 0; offset < this.shownItems.Count; offset++)
+        {
+            var index = (startIndex + offset) % this.shownItems.Count;
+            var item = this.shownItems[index];
+
+            var score = GetTypeAheadScore(item.Label, text, out var matchedCount);
+            if (matchedCount == 0)
+            {
+                continue;
+            }
+
+            // Higher score wins; ties prefer the next match after current focus (smallest offset).
+            if (score > bestScore || (score == bestScore && offset < bestOffset))
+            {
+                bestScore = score;
+                bestOffset = offset;
+                bestItem = item;
+            }
+        }
+
+        return bestItem is not null && this.FocusItem(bestItem, origin);
+    }
+
+    /// <summary>
     ///     Returns the index of the given item in the shown list, or -1 when not shown.
     /// </summary>
     /// <param name="item">The item to locate.</param>
@@ -628,6 +683,86 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <param name="item">The item to check.</param>
     /// <returns><see langword="true"/> if the item is currently shown; otherwise <see langword="false"/>.</returns>
     protected internal bool IsShown(ITreeItem item) => this.shownItems.Contains(item);
+
+    private static int GetTypeAheadScore(string label, string query, out int matchedCount)
+    {
+        if (string.IsNullOrEmpty(label) || string.IsNullOrEmpty(query))
+        {
+            matchedCount = 0;
+            return 0;
+        }
+
+        var score = ScoreSubsequenceMatches(label, query, out matchedCount);
+        if (matchedCount == 0)
+        {
+            return 0;
+        }
+
+        if (matchedCount == query.Length)
+        {
+            score += 100;
+        }
+
+        score -= Math.Min(label.Length, 50);
+        return score;
+    }
+
+    private static int ScoreSubsequenceMatches(string label, string query, out int matchedCount)
+    {
+        matchedCount = 0;
+        var score = 0;
+        var labelIndex = 0;
+        var lastMatchIndex = -2;
+
+        for (var queryIndex = 0; queryIndex < query.Length; queryIndex++)
+        {
+            var queryChar = char.ToUpperInvariant(query[queryIndex]);
+            var foundIndex = IndexOfCharIgnoreCase(label, queryChar, labelIndex);
+            if (foundIndex < 0)
+            {
+                break;
+            }
+
+            matchedCount++;
+            score += 10;
+
+            if (foundIndex == lastMatchIndex + 1)
+            {
+                score += 6;
+            }
+
+            if (foundIndex == 0)
+            {
+                score += 4;
+            }
+            else
+            {
+                var prev = label[foundIndex - 1];
+                if (char.IsWhiteSpace(prev) || prev is '_' or '-' or '.' or '/' or '\\')
+                {
+                    score += 3;
+                }
+            }
+
+            lastMatchIndex = foundIndex;
+            labelIndex = foundIndex + 1;
+        }
+
+        return score;
+    }
+
+    private static int IndexOfCharIgnoreCase(string text, char upperChar, int startIndex)
+    {
+        for (var i = startIndex; i < text.Length; i++)
+        {
+            if (char.ToUpperInvariant(text[i]) == upperChar)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
 
     /// <summary>
     ///     Toggles the expansion state of the specified tree item asynchronously.

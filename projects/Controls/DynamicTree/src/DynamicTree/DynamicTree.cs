@@ -46,6 +46,7 @@ public partial class DynamicTree : Control
 
     private const double DropReorderBand = 0.25;
     private static readonly TimeSpan HoverExpandDelay = TimeSpan.FromMilliseconds(600);
+    private static readonly TimeSpan TypeAheadResetDelay = TimeSpan.FromMilliseconds(1000);
 
     private ILogger? logger;
 
@@ -53,6 +54,7 @@ public partial class DynamicTree : Control
     private List<TreeItemAdapter>? draggedItems;
     private bool dragIsCopy;
     private DispatcherTimer? hoverExpandTimer;
+    private DispatcherTimer? typeAheadTimer;
     private TreeItemAdapter? hoverExpandTarget;
     private FrameworkElement? dropIndicatorElement;
 
@@ -63,6 +65,8 @@ public partial class DynamicTree : Control
     private bool focusOperationPending;
     private bool deferredSelection;
     private TreeItemAdapter? deferredSelectionItem;
+
+    private string typeAheadText = string.Empty;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DynamicTree" /> class.
@@ -234,7 +238,7 @@ public partial class DynamicTree : Control
                 return false;
         }
 
-        return false;
+        return !isControlDown && this.TryHandleTypeAhead(key);
     }
 
     /// <inheritdoc />
@@ -1206,5 +1210,94 @@ public partial class DynamicTree : Control
 
         SetDropIndicator(this.dropIndicatorElement, DropIndicatorPosition.None);
         this.dropIndicatorElement = null;
+    }
+
+    private bool TryHandleTypeAhead(VirtualKey key)
+    {
+        if (this.ViewModel is null)
+        {
+            return false;
+        }
+
+        if (key == VirtualKey.Escape)
+        {
+            if (!string.IsNullOrEmpty(this.typeAheadText))
+            {
+                this.typeAheadText = string.Empty;
+                this.typeAheadTimer?.Stop();
+                return true;
+            }
+
+            return false;
+        }
+
+        if (key == VirtualKey.Back)
+        {
+            if (this.typeAheadText.Length == 0)
+            {
+                return false;
+            }
+
+            this.typeAheadText = this.typeAheadText[..^1];
+            this.EnsureTypeAheadTimer();
+            return this.typeAheadText.Length == 0
+                || this.ViewModel.FocusNextByPrefix(this.typeAheadText, RequestOrigin.KeyboardInput);
+        }
+
+        if (!TryGetTypeAheadCharacter(key, out var character))
+        {
+            return false;
+        }
+
+        this.typeAheadText += character;
+        this.EnsureTypeAheadTimer();
+
+        return this.ViewModel.FocusNextByPrefix(this.typeAheadText, RequestOrigin.KeyboardInput);
+
+        static bool TryGetTypeAheadCharacter(VirtualKey key, out char character)
+        {
+            character = default;
+
+            if (key is >= VirtualKey.A and <= VirtualKey.Z)
+            {
+                character = (char)('A' + ((int)key - (int)VirtualKey.A));
+                return true;
+            }
+
+            if (key is >= VirtualKey.Number0 and <= VirtualKey.Number9)
+            {
+                character = (char)('0' + ((int)key - (int)VirtualKey.Number0));
+                return true;
+            }
+
+            if (key is >= VirtualKey.NumberPad0 and <= VirtualKey.NumberPad9)
+            {
+                character = (char)('0' + ((int)key - (int)VirtualKey.NumberPad0));
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    private void EnsureTypeAheadTimer()
+    {
+        if (this.typeAheadTimer is null)
+        {
+            this.typeAheadTimer = new DispatcherTimer
+            {
+                Interval = TypeAheadResetDelay,
+            };
+
+            this.typeAheadTimer.Tick += (_, _) =>
+            {
+                this.typeAheadTimer?.Stop();
+                this.typeAheadText = string.Empty;
+            };
+        }
+
+        this.typeAheadTimer.Stop();
+        this.typeAheadTimer.Interval = TypeAheadResetDelay;
+        this.typeAheadTimer.Start();
     }
 }
