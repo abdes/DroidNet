@@ -173,8 +173,8 @@ public class ViewModelExpansionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Select both the child and its grandchild
-        var iChild = this.viewModel.ShownItems.IndexOf(childItem);
-        var iGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+        var iChild = this.viewModel.ShownIndexOf(childItem);
+        var iGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
         var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
         selection!.SelectItemsAt(iChild, iGrandChild);
 
@@ -202,8 +202,8 @@ public class ViewModelExpansionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Select both the child and its grandchild
-        var iChild = this.viewModel.ShownItems.IndexOf(childItem);
-        var iGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+        var iChild = this.viewModel.ShownIndexOf(childItem);
+        var iGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
         var selection = (MultipleSelectionModel<ITreeItem>?)this.viewModel.GetSelectionModel();
         selection!.SelectItemsAt(iChild, iGrandChild);
 
@@ -212,8 +212,8 @@ public class ViewModelExpansionTests : ViewModelTestBase
         await this.viewModel.ExpandItemAsync(rootItem).ConfigureAwait(false);
 
         // If child is re-shown, its selection should have been cleared
-        var newIChild = this.viewModel.ShownItems.IndexOf(childItem);
-        var newIGrandChild = this.viewModel.ShownItems.IndexOf(grandChildItem);
+        var newIChild = this.viewModel.ShownIndexOf(childItem);
+        var newIGrandChild = this.viewModel.ShownIndexOf(grandChildItem);
 
         _ = newIChild.Should().BeGreaterThan(-1);
         _ = newIGrandChild.Should().BeGreaterThan(-1);

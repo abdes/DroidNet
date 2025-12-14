@@ -74,12 +74,12 @@ public class DynamicTreeBasicTests : VisualUserInterfaceTests
 
             var itemsSourceView = itemsRepeater!.ItemsSourceView;
             _ = itemsSourceView.Should().NotBeNull();
-            _ = itemsSourceView.Count.Should().Be(this.viewModel.ShownItems.Count);
+            _ = itemsSourceView.Count.Should().Be(this.viewModel.ShownItemsCount);
 
             for (var i = 0; i < itemsSourceView.Count; i++)
             {
                 var item = itemsSourceView.GetAt(i);
-                _ = item.Should().Be(this.viewModel.ShownItems[i]);
+                _ = item.Should().Be(this.viewModel.GetShownItemAt(i));
             }
         });
 
@@ -89,11 +89,11 @@ public class DynamicTreeBasicTests : VisualUserInterfaceTests
         {
             // Arrange
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
-            var secondChild = (TreeItemAdapter)vm.ShownItems[2];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
+            var secondChild = (TreeItemAdapter)vm.GetShownItemAt(2);
 
             vm.ClearAndSelectItem(firstChild);
             vm.SelectItem(secondChild, RequestOrigin.PointerInput);

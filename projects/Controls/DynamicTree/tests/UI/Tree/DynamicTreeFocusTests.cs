@@ -25,13 +25,13 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             _ = root.Should().NotBeNull();
 
             // Expand root so children are realized in ShownItems
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
 
             var testable = this.tree!;
             var handled = testable.InvokeItemPointerPressed(firstChild, isControlDown: false, isShiftDown: false, leftButtonPressed: true);
@@ -45,11 +45,11 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
-            var secondChild = (TreeItemAdapter)vm.ShownItems[2];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
+            var secondChild = (TreeItemAdapter)vm.GetShownItemAt(2);
 
             // Set initial focus with a known origin
             _ = vm.FocusItem(firstChild, RequestOrigin.KeyboardInput);
@@ -68,10 +68,10 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
 
             // Ensure no focused item exists
             vm.ClearFocus();
@@ -92,7 +92,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Ensure the tree items are realized
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
             // At initialization a focused item already exists (PointerInput origin). Invoking TreeGotFocus
@@ -113,7 +113,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Ensure the tree items are realized
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
             // Clear any existing focus so the tree's GotFocus handler must set it
@@ -126,7 +126,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
 
             // The ViewModel should have a focused item and it should be the first shown item
             _ = vm.FocusedItem.Should().NotBeNull();
-            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[0]);
+            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
             _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
         });
 
@@ -137,11 +137,11 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Ensure the tree items are realized
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
             // Select a non-first item (first child)
-            var selected = (TreeItemAdapter)vm.ShownItems[1];
+            var selected = (TreeItemAdapter)vm.GetShownItemAt(1);
             vm.ClearAndSelectItem(selected);
 
             // Focus already exists from initialization (root), so GotFocus should not override it
@@ -162,11 +162,11 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Ensure the tree items are realized
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
             // Select a non-first item (first child) and clear focus so GotFocus must set it
-            var selected = (TreeItemAdapter)vm.ShownItems[1];
+            var selected = (TreeItemAdapter)vm.GetShownItemAt(1);
             vm.ClearAndSelectItem(selected);
             vm.ClearFocus();
 
@@ -188,15 +188,15 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
             await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
 
             var testable = this.tree!;
 
             // Start focused on the first grandchild (index 2)
-            var start = (TreeItemAdapter)vm.ShownItems[2];
+            var start = (TreeItemAdapter)vm.GetShownItemAt(2);
             _ = vm.FocusItem(start, RequestOrigin.KeyboardInput);
 
             var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Up).ConfigureAwait(true);
@@ -205,7 +205,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[1]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(1));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
 
@@ -216,7 +216,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[0]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
 
@@ -227,7 +227,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[0]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
         });
@@ -239,15 +239,15 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
             await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
 
             var testable = this.tree!;
 
             // Start focused on the first child (index 1)
-            var start = (TreeItemAdapter)vm.ShownItems[1];
+            var start = (TreeItemAdapter)vm.GetShownItemAt(1);
             _ = vm.FocusItem(start, RequestOrigin.KeyboardInput);
 
             var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Down).ConfigureAwait(true);
@@ -255,7 +255,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[2]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(2));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
 
@@ -268,7 +268,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[^1]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
 
@@ -284,15 +284,15 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
             await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
 
             var testable = this.tree!;
 
             // Focus the second grandchild (R-C1-GC2)
-            var secondGrandChild = (TreeItemAdapter)vm.ShownItems[3];
+            var secondGrandChild = (TreeItemAdapter)vm.GetShownItemAt(3);
             _ = vm.FocusItem(secondGrandChild, RequestOrigin.KeyboardInput);
 
             var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.Home).ConfigureAwait(true);
@@ -301,7 +301,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[2]); // R-C1-GC1
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(2)); // R-C1-GC1
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
         });
@@ -313,15 +313,15 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize root and first child's children
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
             await vm.ExpandItemAsync(firstChild).ConfigureAwait(true);
 
             var testable = this.tree!;
 
             // Focus the first grandchild (R-C1-GC1)
-            var firstGrandChild = (TreeItemAdapter)vm.ShownItems[2];
+            var firstGrandChild = (TreeItemAdapter)vm.GetShownItemAt(2);
             _ = vm.FocusItem(firstGrandChild, RequestOrigin.KeyboardInput);
 
             var moved = await testable.InvokeHandleKeyDownAsync(VirtualKey.End).ConfigureAwait(true);
@@ -330,7 +330,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[3]); // R-C1-GC2
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(3)); // R-C1-GC2
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
         });
@@ -342,7 +342,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize the tree
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
             foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
             {
@@ -355,7 +355,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             // Move focus to last item first
             _ = vm.FocusLastVisibleItemInTree(RequestOrigin.KeyboardInput);
             _ = vm.FocusedItem.Should().NotBeNull();
-            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[^1]);
+            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
             _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
 
             var testable = this.tree!;
@@ -367,7 +367,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[0]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
         });
@@ -379,7 +379,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             var vm = this.viewModel!;
 
             // Realize the tree
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
             foreach (var item in vm.ShownItems.OfType<TreeItemAdapter>().ToList())
             {
@@ -392,7 +392,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             // Move focus to first item
             _ = vm.FocusFirstVisibleItemInTree(RequestOrigin.KeyboardInput);
             _ = vm.FocusedItem.Should().NotBeNull();
-            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[0]);
+            _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(0));
             _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
 
             var testable = this.tree!;
@@ -403,7 +403,7 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
             await EnqueueAsync(() =>
             {
                 _ = vm.FocusedItem.Should().NotBeNull();
-                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.ShownItems[^1]);
+                _ = vm.FocusedItem!.Item.Should().BeSameAs(vm.GetShownItemAt(vm.ShownItemsCount - 1));
                 _ = vm.FocusedItem!.Origin.Should().Be(RequestOrigin.KeyboardInput);
             }).ConfigureAwait(true);
         });
@@ -413,10 +413,10 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
             var testable = this.tree!;
 
             // Ensure nothing is selected
@@ -439,11 +439,11 @@ public class DynamicTreeFocusTests : VisualUserInterfaceTests
         async () =>
         {
             var vm = this.viewModel!;
-            var root = (TreeItemAdapter)vm.ShownItems[0];
+            var root = (TreeItemAdapter)vm.GetShownItemAt(0);
             await vm.ExpandItemAsync(root).ConfigureAwait(true);
 
-            var firstChild = (TreeItemAdapter)vm.ShownItems[1];
-            var secondChild = (TreeItemAdapter)vm.ShownItems[2];
+            var firstChild = (TreeItemAdapter)vm.GetShownItemAt(1);
+            var secondChild = (TreeItemAdapter)vm.GetShownItemAt(2);
             var testable = this.tree!;
 
             // Select first child

@@ -32,6 +32,8 @@ namespace DroidNet.Controls;
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
+    private readonly ObservableCollection<ITreeItem> shownItems = [];
+
     private TreeDisplayHelper? displayHelper;
     private FocusedItemInfo? focusedItem;
 
@@ -56,17 +58,15 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         Programmatic,
     }
 
-    /* TODO: need to make this private and expose a read only collection*/
-
     /// <summary>
-    ///     Gets the collection of items currently shown in the tree.
+    ///     Gets the items currently shown in the tree.
     /// </summary>
     /// <remarks>
-    ///     This collection is updated dynamically as items are expanded or collapsed. It is recommended
-    ///     to expose this collection as a read-only collection in derived classes to prevent unintended
-    ///     modifications.
+    ///     This collection is updated dynamically as items are expanded or collapsed. The returned
+    ///     object supports collection-change notifications, but the surface exposed by this property
+    ///     is intentionally query-only.
     /// </remarks>
-    public ObservableCollection<ITreeItem> ShownItems { get; } = [];
+    public IEnumerable<ITreeItem> ShownItems => this.shownItems;
 
     /// <summary>
     ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
@@ -100,9 +100,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
     }
 
+    /// <summary>
+    ///     Gets the number of items currently shown in the tree.
+    /// </summary>
+    protected internal int ShownItemsCount => this.shownItems.Count;
+
     private TreeDisplayHelper DisplayHelper => this.displayHelper ??=
         new TreeDisplayHelper(
-            this.ShownItems,
+            this.shownItems,
             () => this.SelectionModel,
             this.ExpandItemAsync,
             new TreeDisplayEventCallbacks(
@@ -211,12 +216,12 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         this.LogInitializeRoot(root, skipRoot);
         this.SelectionModel?.ClearSelection();
         this.LogShownItemsClear();
-        this.ShownItems.Clear();
+        this.shownItems.Clear();
 
         if (!skipRoot)
         {
             this.LogShownItemsAdd(root);
-            this.ShownItems.Add(root);
+            this.shownItems.Add(root);
         }
         else
         {
@@ -358,7 +363,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         this.LogFocusItemCalled(item, origin);
 
-        if (!this.ShownItems.Contains(item))
+        if (!this.shownItems.Contains(item))
         {
             return false;
         }
@@ -380,13 +385,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem.Item);
-        if (currentIndex == -1 || currentIndex >= this.ShownItems.Count - 1)
+        var currentIndex = this.shownItems.IndexOf(this.FocusedItem.Item);
+        if (currentIndex == -1 || currentIndex >= this.shownItems.Count - 1)
         {
             return false;
         }
 
-        this.FocusedItem = new(this.ShownItems[currentIndex + 1], origin);
+        this.FocusedItem = new(this.shownItems[currentIndex + 1], origin);
         return true;
     }
 
@@ -403,13 +408,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem.Item);
+        var currentIndex = this.shownItems.IndexOf(this.FocusedItem.Item);
         if (currentIndex <= 0)
         {
             return false;
         }
 
-        this.FocusedItem = new(this.ShownItems[currentIndex - 1], origin);
+        this.FocusedItem = new(this.shownItems[currentIndex - 1], origin);
         return true;
     }
 
@@ -466,14 +471,14 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusFirstVisibleItemInTree(RequestOrigin origin)
     {
-        if (this.ShownItems.Count == 0)
+        if (this.shownItems.Count == 0)
         {
             this.FocusedItem = null;
             return false;
         }
 
         Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
-        this.FocusedItem = new(this.ShownItems[0], origin);
+        this.FocusedItem = new(this.shownItems[0], origin);
         return true;
     }
 
@@ -484,13 +489,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
     public bool FocusLastVisibleItemInTree(RequestOrigin origin)
     {
-        if (this.ShownItems.Count == 0)
+        if (this.shownItems.Count == 0)
         {
             this.FocusedItem = null;
             return false;
         }
 
-        this.FocusedItem = new(this.ShownItems[^1], origin);
+        this.FocusedItem = new(this.shownItems[^1], origin);
         return true;
     }
 
@@ -576,24 +581,24 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> if a focusable item was found; otherwise, <see langword="false" />.</returns>
     protected internal bool EnsureFocus(RequestOrigin origin)
     {
-        if (this.focusedItem is not null && this.ShownItems.Contains(this.focusedItem.Item))
+        if (this.focusedItem is not null && this.shownItems.Contains(this.focusedItem.Item))
         {
             Debug.WriteLine("Focus already valid on item: " + this.focusedItem.Item.Label);
             return true;
         }
 
         var selected = this.SelectionModel?.SelectedItem;
-        if (selected is not null && this.ShownItems.Contains(selected))
+        if (selected is not null && this.shownItems.Contains(selected))
         {
             Debug.WriteLine("Focusing selected item: " + selected.Label);
             this.FocusedItem = new(selected, origin);
             return true;
         }
 
-        if (this.ShownItems.Count > 0)
+        if (this.shownItems.Count > 0)
         {
-            Debug.WriteLine("Focusing first shown item: " + this.ShownItems[0].Label);
-            this.FocusedItem = new(this.ShownItems[0], origin);
+            Debug.WriteLine("Focusing first shown item: " + this.shownItems[0].Label);
+            this.FocusedItem = new(this.shownItems[0], origin);
             return true;
         }
 
@@ -601,6 +606,28 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         this.FocusedItem = null;
         return false;
     }
+
+    /// <summary>
+    ///     Returns the index of the given item in the shown list, or -1 when not shown.
+    /// </summary>
+    /// <param name="item">The item to locate.</param>
+    /// <returns>The 0-based index of the item if it is shown; otherwise -1.</returns>
+    protected internal int ShownIndexOf(ITreeItem item) => this.shownItems.IndexOf(item);
+
+    /// <summary>
+    ///     Gets the shown item at the specified index.
+    /// </summary>
+    /// <param name="index">The 0-based index of the item.</param>
+    /// <returns>The shown item at <paramref name="index"/>.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="index"/> is outside the shown range.</exception>
+    protected internal ITreeItem GetShownItemAt(int index) => this.shownItems[index];
+
+    /// <summary>
+    ///     Returns whether the given item is currently shown.
+    /// </summary>
+    /// <param name="item">The item to check.</param>
+    /// <returns><see langword="true"/> if the item is currently shown; otherwise <see langword="false"/>.</returns>
+    protected internal bool IsShown(ITreeItem item) => this.shownItems.Contains(item);
 
     /// <summary>
     ///     Toggles the expansion state of the specified tree item asynchronously.
@@ -636,7 +663,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     private async Task RestoreExpandedChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogRestoreExpandedChildrenStarted(itemAdapter);
-        var insertIndex = this.ShownItems.IndexOf(itemAdapter) + 1;
+        var insertIndex = this.shownItems.IndexOf(itemAdapter) + 1;
         _ = await this.RestoreExpandedChildrenRecursive(itemAdapter, insertIndex).ConfigureAwait(true);
     }
 
@@ -659,7 +686,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         foreach (var child in await parent.Children.ConfigureAwait(true))
         {
             this.LogShownItemsInsert(insertIndex, child);
-            this.ShownItems.Insert(insertIndex, (TreeItemAdapter)child);
+            this.shownItems.Insert(insertIndex, (TreeItemAdapter)child);
             ++insertIndex;
 
             if (child.IsExpanded)
@@ -683,7 +710,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     private async Task HideChildrenAsync(ITreeItem itemAdapter)
     {
         this.LogHideChildrenStarted(itemAdapter);
-        var removeIndex = this.ShownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
+        var removeIndex = this.shownItems.IndexOf((TreeItemAdapter)itemAdapter) + 1;
         Debug.Assert(removeIndex != -1, $"expecting item {itemAdapter.Label} to be in the shown list");
 
         await this.HideChildrenRecursiveAsync(itemAdapter).ConfigureAwait(true);
@@ -714,7 +741,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             }
 
             // Find the current index of the child in the shown list.
-            var childIndex = this.ShownItems.IndexOf(child);
+            var childIndex = this.shownItems.IndexOf(child);
             if (childIndex == -1)
             {
                 // Not shown; skip
@@ -742,16 +769,16 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             }
 
             this.LogShownItemsRemoveAt(childIndex);
-            this.ShownItems.RemoveAt(childIndex);
+            this.shownItems.RemoveAt(childIndex);
         }
     }
 
     private ITreeItem? FindSibling(ITreeItem? parent, bool first)
     {
         ITreeItem? target = null;
-        for (var index = 0; index < this.ShownItems.Count; index++)
+        for (var index = 0; index < this.shownItems.Count; index++)
         {
-            var item = this.ShownItems[index];
+            var item = this.shownItems[index];
             if (!ReferenceEquals(item.Parent, parent))
             {
                 continue;
