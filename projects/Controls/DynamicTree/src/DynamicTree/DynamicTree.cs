@@ -456,7 +456,10 @@ public partial class DynamicTree : Control
             return;
         }
 
-        var index = this.ViewModel.ShownIndexOf(item);
+        // IMPORTANT: the ItemsRepeater may be bound either to ShownItems or to FilteredItems.
+        // Always resolve the index against the repeater's *current* source, otherwise focus
+        // will target the wrong element whenever filtering is enabled.
+        var index = this.itemsRepeater.ItemsSourceView?.IndexOf(item) ?? this.ViewModel.ShownIndexOf(item);
         if (index == -1)
         {
             this.LogFocusIndexMissing(item);
@@ -750,6 +753,21 @@ public partial class DynamicTree : Control
 
             this.ViewModel.PropertyChanged += this.ViewModel_OnPropertyChanged;
         }
+
+        this.UpdateDisplayedItems();
+    }
+
+    private void UpdateDisplayedItems()
+    {
+        if (this.ViewModel is null)
+        {
+            this.DisplayedItems = null;
+            return;
+        }
+
+        this.DisplayedItems = this.IsFilteringEnabled
+            ? this.ViewModel.FilteredItems
+            : this.ViewModel.ShownItems;
     }
 
     private void ViewModel_OnPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)

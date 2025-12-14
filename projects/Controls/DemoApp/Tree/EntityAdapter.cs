@@ -37,7 +37,7 @@ internal sealed partial class EntityAdapter(Entity entity) : TreeItemAdapter(isR
     /// <inheritdoc/>
     public ITreeItem CloneSelf()
     {
-        var cloneModel = new Entity(this.AttachedObject.Name);
+        var cloneModel = this.AttachedObject.CloneWithoutChildren();
         var clone = new EntityAdapter(cloneModel);
         this.CopyBasePropertiesTo(clone);
         return clone;

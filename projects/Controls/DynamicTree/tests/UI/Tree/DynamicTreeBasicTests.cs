@@ -16,11 +16,13 @@ namespace DroidNet.Controls.Tests.Tree;
 [ExcludeFromCodeCoverage]
 [TestCategory("DynamicTree")]
 [TestCategory("UITest")]
-public class DynamicTreeBasicTests : VisualUserInterfaceTests
+public sealed partial class DynamicTreeBasicTests : VisualUserInterfaceTests, IDisposable
 {
     private DynamicTree? tree;
     private TestVisualStateManager? vsm;
     private TestViewModel? viewModel;
+
+    public void Dispose() => this.viewModel?.Dispose();
 
     [TestMethod]
     public Task InitializesTemplateParts_Async() => EnqueueAsync(

@@ -21,7 +21,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var first = new TestTreeItemAdapter { Label = "First" };
         var second = new TestTreeItemAdapter { Label = "Second" };
         var root = new TestTreeItemAdapter([first, second], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
@@ -44,7 +44,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var middle = new TestTreeItemAdapter { Label = "Middle" };
         var last = new TestTreeItemAdapter { Label = "Last" };
         var root = new TestTreeItemAdapter([first, middle, last], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(last, RequestOrigin.KeyboardInput);
 
@@ -67,7 +67,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var middle = new TestTreeItemAdapter { Label = "Middle" };
         var last = new TestTreeItemAdapter { Label = "Last" };
         var root = new TestTreeItemAdapter([first, middle, last], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
@@ -89,7 +89,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var first = new TestTreeItemAdapter { Label = "First" };
         var second = new TestTreeItemAdapter { Label = "Second" };
         var root = new TestTreeItemAdapter([first, second], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(second, RequestOrigin.KeyboardInput);
 
@@ -112,7 +112,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var grandChild = new TestTreeItemAdapter { Label = "GrandChild" };
         child.AddChild(grandChild);
         var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
 
@@ -137,7 +137,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var grandChild = new TestTreeItemAdapter { Label = "GrandChild" };
         child.AddChild(grandChild);
         var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
 
@@ -162,7 +162,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var grandChild = new TestTreeItemAdapter { Label = "GrandChild" };
         child.AddChild(grandChild);
         var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
 
@@ -185,7 +185,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         // Arrange
         var first = new TestTreeItemAdapter { Label = "First" };
         var root = new TestTreeItemAdapter([first], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.ClearAndSelectItem(first);
         _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
@@ -207,7 +207,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var second = new TestTreeItemAdapter { Label = "Second" };
         var third = new TestTreeItemAdapter { Label = "Third" };
         var root = new TestTreeItemAdapter([first, second, third], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.ClearAndSelectItem(first);
         _ = viewModel.FocusItem(third, RequestOrigin.KeyboardInput);

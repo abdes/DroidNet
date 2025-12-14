@@ -25,7 +25,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var targetExisting = new TestTreeItemAdapter { Label = "TargetExisting" };
         var targetParent = new TestTreeItemAdapter([targetExisting]) { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -52,7 +52,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var targetExisting = new TestTreeItemAdapter { Label = "TargetExisting" };
         var targetParent = new TestTreeItemAdapter([targetExisting]) { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(item1, RequestOrigin.PointerInput);
@@ -82,7 +82,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var itemD = new TestTreeItemAdapter { Label = "D" };
         var parent = new TestTreeItemAdapter([itemA, itemB, itemC, itemD]) { Label = "Parent", IsExpanded = true };
         var root = new TestTreeItemAdapter([parent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -104,7 +104,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var sourceParent = new TestTreeItemAdapter([item]) { Label = "SourceParent", IsExpanded = true };
         var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
 
         viewModel.ItemBeingMoved += (_, args) =>
         {
@@ -149,7 +149,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         head.AddChild(movableParent);
         movableParent.AddChild(movable);
 
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
         // Act
@@ -168,7 +168,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var sourceParent = new TestTreeItemAdapter([item]) { Label = "SourceParent", IsExpanded = true };
         var targetParent = new NonAcceptingTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -189,7 +189,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var sourceParent = new TestTreeItemAdapter([item1, item2]) { Label = "SourceParent", IsExpanded = true };
         var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(item1, RequestOrigin.PointerInput);
@@ -214,7 +214,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var sourceParent = new TestTreeItemAdapter([item1, item2]) { Label = "SourceParent", IsExpanded = true };
         var targetParent = new TestTreeItemAdapter { Label = "TargetParent", IsExpanded = true };
         var root = new TestTreeItemAdapter([sourceParent, targetParent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(item2, RequestOrigin.PointerInput);

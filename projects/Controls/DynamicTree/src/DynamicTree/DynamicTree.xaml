@@ -19,7 +19,7 @@
                         BorderBrush="{Binding Path=BorderBrush, RelativeSource={RelativeSource Mode=TemplatedParent}}"
                         BorderThickness="{Binding Path=BorderThickness, RelativeSource={RelativeSource Mode=TemplatedParent}}">
                         <ScrollViewer>
-                            <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=ViewModel.ShownItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
+                            <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=DisplayedItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate>
                                         <Grid AllowDrop="True">

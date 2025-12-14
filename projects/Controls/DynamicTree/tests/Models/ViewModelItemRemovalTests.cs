@@ -18,7 +18,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsLocked_ThrowsInvalidOperation()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var item = new TestTreeItemAdapter { Label = "Item", IsLocked = true };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
@@ -36,7 +36,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsOrphan_ThrowsInvalidOperation()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
         var childItem = new TestTreeItemAdapter { Label = "Child" };
         var item = new TestTreeItemAdapter([childItem]) { Label = "Item", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
@@ -57,7 +57,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsNotShown_ShouldRemoveItemFromParent()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var item = new TestTreeItemAdapter { Label = "Item" };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
@@ -79,7 +79,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsNotShown_ShouldRemoveItemAndChildrenFromParent()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
         var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
         var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
         var item = new TestTreeItemAdapter([childItem]) { Label = "Item", IsExpanded = true };
@@ -104,7 +104,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsShown_ShouldRemoveItemFromShownItems()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var item = new TestTreeItemAdapter { Label = "Item" };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
@@ -124,7 +124,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_WhenItemIsShown_ShouldRemoveItemsAndChildrenFromShownItems()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
         var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild" };
         var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
         var item = new TestTreeItemAdapter([childItem]) { Label = "Item", IsExpanded = true };
@@ -149,7 +149,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_ShouldFireItemBeingRemovedEventAndProceedBasedOnEventArgs(bool hideItem)
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var item = new TestTreeItemAdapter { Label = "Item" };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
@@ -181,7 +181,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task RemoveItem_ShouldFireItemRemovedEventAfterRemoval(bool hideItem)
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var item = new TestTreeItemAdapter { Label = "Item" };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
@@ -208,7 +208,7 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
     public async Task Remove_WhenTreeIsLeftEmpty_ShouldWork(SelectionMode mode)
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: true) { SelectionMode = mode };
+        using var viewModel = new TestViewModel(skipRoot: true) { SelectionMode = mode };
         var item = new TestTreeItemAdapter() { Label = "Item1", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 

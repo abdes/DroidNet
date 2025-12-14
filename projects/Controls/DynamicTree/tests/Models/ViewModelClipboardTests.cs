@@ -18,7 +18,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var item1 = new TestTreeItemAdapter { Label = "Item1" };
         var item2 = new TestTreeItemAdapter { Label = "Item2" };
         var root = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -44,7 +44,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var locked = new TestTreeItemAdapter { Label = "Locked", IsLocked = true };
         var cuttable = new TestTreeItemAdapter { Label = "Cuttable" };
         var root = new TestTreeItemAdapter([locked, cuttable], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -67,7 +67,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var parent = new TestTreeItemAdapter([child]) { Label = "Parent", IsExpanded = true };
         var target = new TestTreeItemAdapter { Label = "Target", IsExpanded = true };
         var root = new TestTreeItemAdapter([parent, target], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(target, RequestOrigin.PointerInput);
@@ -100,7 +100,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var parent = new TestTreeItemAdapter([child]) { Label = "Parent", IsExpanded = true };
         var target = new TestTreeItemAdapter { Label = "Target", IsExpanded = true };
         var root = new TestTreeItemAdapter([parent, target], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(target, RequestOrigin.PointerInput);
@@ -130,7 +130,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var child = new TestTreeItemAdapter([grandChild]) { Label = "Child", IsExpanded = true };
         var parent = new TestTreeItemAdapter([child]) { Label = "Parent", IsExpanded = true };
         var root = new TestTreeItemAdapter([parent], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
@@ -149,7 +149,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         // Arrange
         var source = new TestTreeItemAdapter { Label = "Source" };
         var root = new TestTreeItemAdapter([source], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         await viewModel.CopyItemsAsync([source]).ConfigureAwait(false);
@@ -173,7 +173,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         // Arrange
         var cutItem = new TestTreeItemAdapter { Label = "Cut", IsExpanded = true };
         var root = new TestTreeItemAdapter([cutItem], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(cutItem, RequestOrigin.PointerInput);
@@ -198,7 +198,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
         // Arrange
         var item = new TestTreeItemAdapter { Label = "Item", IsExpanded = true };
         var root = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
-        var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.SelectItem(item, RequestOrigin.PointerInput);

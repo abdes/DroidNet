@@ -14,10 +14,12 @@ namespace DroidNet.Controls.Tests.Tree;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("DynamicTree / UI / TypeAhead")]
-public partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
+public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests, IDisposable
 {
     private TestableDynamicTree? tree;
     private TypeAheadViewModel? viewModel;
+
+    public void Dispose() => this.viewModel?.Dispose();
 
     [TestMethod]
     [TestCategory("DynamicTree / UI / TypeAhead / Focus")]

@@ -18,7 +18,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldValidateRelativeIndex()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -39,7 +39,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldExpandParentItemBeforeInsertion()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = false };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -60,7 +60,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldClearSelectionBeforeInsertionAndSelectNewItem()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
+        using var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Single };
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -84,7 +84,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldInsertItemAtCorrectIndexInShownItemsCollection()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -103,7 +103,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldHandleRelativeIndexGreaterThanChildrenCount()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -125,7 +125,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldHandleRelativeIndexEqualToChildrenCountMinusOne()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var childItem1 = new TestTreeItemAdapter { Label = "Child1", IsExpanded = true };
         var childItem2 = new TestTreeItemAdapter { Label = "Child2", IsExpanded = true };
         var parentItem = new TestTreeItemAdapter([childItem1, childItem2]) { Label = "Parent", IsExpanded = true };
@@ -149,7 +149,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldHandleRelativeIndexInBetweenChildren()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var childItem1 = new TestTreeItemAdapter { Label = "Child1", IsExpanded = true };
         var childItem2 = new TestTreeItemAdapter { Label = "Child2", IsExpanded = true };
         var childItem3 = new TestTreeItemAdapter { Label = "Child3", IsExpanded = true };
@@ -175,7 +175,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldHandleInsertingAsLastChildWithExpandedChildHavingChildren()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var grandChildItem = new TestTreeItemAdapter { Label = "GrandChild", IsExpanded = true };
         var childItem = new TestTreeItemAdapter([grandChildItem]) { Label = "Child", IsExpanded = true };
         var parentItem = new TestTreeItemAdapter([childItem]) { Label = "Parent", IsExpanded = true };
@@ -199,7 +199,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldFireItemBeingAddedEventAndProceedBasedOnEventArgs()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
@@ -227,7 +227,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
     public async Task InsertItem_ShouldFireItemAddedEventAfterInsertion()
     {
         // Arrange
-        var viewModel = new TestViewModel(skipRoot: false);
+        using var viewModel = new TestViewModel(skipRoot: false);
         var parentItem = new TestTreeItemAdapter { Label = "Parent", IsExpanded = true };
         var rootItem = new TestTreeItemAdapter([parentItem], isRoot: true) { Label = "Root", IsExpanded = true };
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };

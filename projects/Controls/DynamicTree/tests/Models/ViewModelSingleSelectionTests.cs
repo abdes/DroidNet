@@ -14,7 +14,7 @@ namespace DroidNet.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory($"{nameof(DynamicTree)} / ViewModel / SingleSelection")]
-public class ViewModelSingleSelectionTests : ViewModelTestBase
+public sealed partial class ViewModelSingleSelectionTests : ViewModelTestBase, IDisposable
 {
     private readonly TestViewModel viewModel = new(skipRoot: false) { SelectionMode = SelectionMode.Single };
     private readonly Mock<PropertyChangedEventHandler> propertyChangedHandlerMock;
@@ -28,6 +28,8 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
     public TestContext TestContext { get; set; }
 
     private SelectionModel<ITreeItem> Selection => this.viewModel.GetSelectionModel()!;
+
+    public void Dispose() => this.viewModel.Dispose();
 
     [TestMethod]
     [TestCategory($"{nameof(DynamicTree)} / ViewModel / SingleSelection / SelectItem")]

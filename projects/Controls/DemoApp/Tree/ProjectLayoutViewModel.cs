@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Demo.Tree.Model;
 using DroidNet.Controls.Demo.Tree.Services;
+using DroidNet.Controls.Menus;
 using DroidNet.Controls.Selection;
 using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
@@ -22,12 +23,17 @@ namespace DroidNet.Controls.Demo.Tree;
 /// The ViewModel for the <see cref="ProjectLayoutView"/> view.
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public for source generated MVVM")]
-public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
+public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
     private readonly ILogger<ProjectLayoutViewModel> logger;
     private readonly DomainModelService domainModelService;
+    private readonly MenuItemData filterLightItem;
+    private readonly MenuItemData filterCameraItem;
+    private readonly MenuItemData filterGeometryItem;
     private bool isDisposed;
+    private bool isUpdatingFilterInputs;
     private ProjectAdapter? projectAdapter;
+    private int nextEntityComponentIndex;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProjectLayoutViewModel"/> class.
@@ -65,6 +71,22 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         this.PropertyChanged += this.ViewModel_PropertyChanged;
 
         this.domainModelService = new DomainModelService(loggerFactory);
+
+        var menuBuilder = new MenuBuilder(loggerFactory);
+        this.filterLightItem = new MenuItemData { Text = "Light", IsCheckable = true };
+        this.filterCameraItem = new MenuItemData { Text = "Camera", IsCheckable = true };
+        this.filterGeometryItem = new MenuItemData { Text = "Geometry", IsCheckable = true };
+
+        _ = menuBuilder
+            .AddMenuItem(this.filterLightItem)
+            .AddMenuItem(this.filterCameraItem)
+            .AddMenuItem(this.filterGeometryItem);
+
+        this.FilterMenu = menuBuilder.Build();
+
+        this.filterLightItem.PropertyChanged += this.FilterMenuItem_PropertyChanged;
+        this.filterCameraItem.PropertyChanged += this.FilterMenuItem_PropertyChanged;
+        this.filterGeometryItem.PropertyChanged += this.FilterMenuItem_PropertyChanged;
     }
 
     /// <summary>
@@ -89,6 +111,14 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     /// <summary>
+    /// Gets the menu source for the demo filter menu.
+    /// </summary>
+    public IMenuSource FilterMenu { get; }
+
+    [ObservableProperty]
+    public partial string LabelFilterText { get; set; } = string.Empty;
+
+    /// <summary>
     /// Gets the project adapter.
     /// </summary>
     internal ProjectAdapter? Project
@@ -106,15 +136,6 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
     private HistoryKeeper History => UndoRedo.Default[this];
 
     private bool HasUnlockedSelectedItems { get; set; }
-
-    /// <summary>
-    /// Dispose the view-model and unsubscribe from events.
-    /// </summary>
-    public void Dispose()
-    {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
 
     /// <inheritdoc/>
     [RelayCommand(CanExecute = nameof(HasUnlockedSelectedItems))]
@@ -170,16 +191,19 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             () => this.RenameItem(item, oldName));
     }
 
-    /// <summary>
-    /// Dispose managed resources. Called by <see cref="Dispose()"/>.
-    /// </summary>
-    /// <param name="disposing">Indicator whether disposing is in progress.</param>
-    protected virtual void Dispose(bool disposing)
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
     {
+        base.Dispose(disposing);
+
         if (this.isDisposed || !disposing)
         {
             return;
         }
+
+        this.filterLightItem.PropertyChanged -= this.FilterMenuItem_PropertyChanged;
+        this.filterCameraItem.PropertyChanged -= this.FilterMenuItem_PropertyChanged;
+        this.filterGeometryItem.PropertyChanged -= this.FilterMenuItem_PropertyChanged;
 
         if (this.UndoStack is INotifyCollectionChanged undo)
         {
@@ -221,7 +245,102 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         this.PasteCommand.NotifyCanExecuteChanged();
     }
 
-    private static string GetNextAvailableSceneName(Project project, string baseName)
+    partial void OnLabelFilterTextChanged(string value)
+    {
+        _ = value; // unused
+
+        if (this.isUpdatingFilterInputs)
+        {
+            return;
+        }
+
+        this.UpdateFilterPredicateFromInputs();
+    }
+
+    [RelayCommand]
+    private void ClearLabelFilter()
+    {
+        this.isUpdatingFilterInputs = true;
+        try
+        {
+            this.filterLightItem.IsChecked = false;
+            this.filterCameraItem.IsChecked = false;
+            this.filterGeometryItem.IsChecked = false;
+            this.LabelFilterText = string.Empty;
+        }
+        finally
+        {
+            this.isUpdatingFilterInputs = false;
+        }
+
+        this.UpdateFilterPredicateFromInputs();
+    }
+
+    private void FilterMenuItem_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (!string.Equals(args.PropertyName, nameof(MenuItemData.IsChecked), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (this.isUpdatingFilterInputs)
+        {
+            return;
+        }
+
+        this.UpdateFilterPredicateFromInputs();
+    }
+
+    private void UpdateFilterPredicateFromInputs()
+    {
+        var text = (this.LabelFilterText ?? string.Empty).Trim();
+
+        var filterLight = this.filterLightItem.IsChecked;
+        var filterCamera = this.filterCameraItem.IsChecked;
+        var filterGeometry = this.filterGeometryItem.IsChecked;
+        var hasTypeFilter = filterLight || filterCamera || filterGeometry;
+        var hasTextFilter = text.Length != 0;
+
+        if (!hasTypeFilter && !hasTextFilter)
+        {
+            this.FilterPredicate = null;
+            return;
+        }
+
+        this.FilterPredicate = item => this.MatchesCombinedFilter(item, text);
+    }
+
+    private bool MatchesCombinedFilter(ITreeItem item, string text)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+
+        var hasTextFilter = text.Length != 0;
+        if (hasTextFilter && !item.Label.Contains(text, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (item is not EntityAdapter entityAdapter)
+        {
+            return hasTextFilter;
+        }
+
+        var filterLight = this.filterLightItem.IsChecked;
+        var filterCamera = this.filterCameraItem.IsChecked;
+        var filterGeometry = this.filterGeometryItem.IsChecked;
+        if (!filterLight && !filterCamera && !filterGeometry)
+        {
+            return true;
+        }
+
+        var entity = entityAdapter.AttachedObject;
+        return (filterLight && entity.HasLight)
+            || (filterCamera && entity.HasCamera)
+            || (filterGeometry && entity.HasGeometry);
+    }
+
+#pragma warning disable CA1822 // Member does not access instance data
+    private string GetNextAvailableSceneName(Project project, string baseName)
     {
         if (project is null)
         {
@@ -238,7 +357,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
         return string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}");
     }
 
-    private static string GetNextAvailableEntityName(ITreeItem parent, string baseName)
+    private string GetNextAvailableEntityName(ITreeItem parent, string baseName)
     {
         var names = Enumerable.Empty<string>();
 
@@ -261,6 +380,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         return string.Create(CultureInfo.InvariantCulture, $"{baseName} {index}");
     }
+#pragma warning restore CA1822
 
     private bool RemoveFromModel(ITreeItem item, ITreeItem parent)
     {
@@ -428,7 +548,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        var name = GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
+        var name = this.GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
         var newScene = new SceneAdapter(new Scene(name));
         await this.ApplyInsertAsync(newScene, this.Project, 0).ConfigureAwait(false);
     }
@@ -465,9 +585,21 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        var name = GetNextAvailableEntityName(parent, "New Entity");
-        var newEntity = new EntityAdapter(new Entity(name));
+        var name = this.GetNextAvailableEntityName(parent, "New Entity");
+        var newEntity = new EntityAdapter(this.CreateNewEntityModel(name));
         await this.ApplyInsertAsync(newEntity, parent, 0).ConfigureAwait(false);
+    }
+
+    private Entity CreateNewEntityModel(string name)
+    {
+        var selector = this.nextEntityComponentIndex++ % 4;
+        return selector switch
+        {
+            0 => new Entity(name) { Light = new LightComponent() },
+            1 => new Entity(name) { Camera = new CameraComponent() },
+            2 => new Entity(name) { Geometry = new GeometryComponent() },
+            _ => new Entity(name),
+        };
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -517,7 +649,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         if (this.SelectionModel is MultipleSelectionModel multi2)
         {
-            return [.. multi2.SelectedIndices.Select(i => this.GetShownItemAt(i)).Cast<ITreeItem>()];
+            return [.. multi2.SelectedIndices.Select(this.GetShownItemAt)];
         }
 
         if (this.SelectionModel is SingleSelectionModel && this.SelectedItem is not null)

@@ -28,7 +28,7 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
             IsExpanded = true,
         };
 
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
 
         // Precondition: EnsureFocus should focus the first shown item.
@@ -60,7 +60,7 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
             IsExpanded = true,
         };
 
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
@@ -87,7 +87,7 @@ public class ViewModelTypeAheadTests : ViewModelTestBase
             IsExpanded = true,
         };
 
-        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        using var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
