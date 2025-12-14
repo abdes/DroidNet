@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -65,7 +66,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         var newItem = new TestTreeItemAdapter { Label = "NewItem" };
 
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        viewModel.SelectItem(parentItem);
+        viewModel.SelectItem(parentItem, RequestOrigin.PointerInput);
         _ = viewModel.GetSelectionModel()?.SelectedItem.Should().Be(parentItem);
 
         // Act

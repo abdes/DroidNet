@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Selection;
@@ -27,33 +28,122 @@ public abstract partial class DynamicTreeViewModel
     public ITreeItem? SelectedItem => this.SelectionModel?.SelectedItem;
 
     /// <summary>
+    ///     Gets the number of currently selected items.
+    /// </summary>
+    public int SelectedItemsCount
+        => this.SelectionModel is MultipleSelectionModel<ITreeItem> multi
+            ? multi.SelectedIndices.Count
+            : this.SelectionModel?.SelectedIndex != -1 ? 1 : 0;
+
+    /// <summary>
     ///     Gets the current selection model for the tree view.
     /// </summary>
     protected SelectionModel<ITreeItem>? SelectionModel { get; private set; }
 
     /// <summary>
-    ///     Selects the specified item in the tree view.
+    ///     Called when the selection model changes. Sunchronized the selection
+    ///     model with the shown items and their selection state.
     /// </summary>
-    /// <param name="item">The item to select.</param>
-    public void SelectItem(ITreeItem item) => this.SelectionModel?.SelectItem(item);
+    /// <param name="oldValue">The old selection model.</param>
+    protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue) =>
+        this.SyncSelectionModelWithItems();
+
+    [RelayCommand]
+    private void SelectItem(ItemSelectionArgs args)
+    {
+        if (this.SelectionMode == SelectionMode.None)
+        {
+            return;
+        }
+
+        // Ignore selection attempts for items that are not currently shown in the tree
+        if (!this.ShownItems.Contains(args.Item))
+        {
+            return;
+        }
+
+        var sm = this.SelectionModel;
+        Debug.Assert(sm is not null, "SelectionModel should not be null when SelectionMode is not None.");
+
+        if (args.Origin != RequestOrigin.Programmatic)
+        {
+            if (this.FocusedItem is null || !ReferenceEquals(this.FocusedItem.Item, args.Item))
+            {
+                this.LogForgotToFocusItem(args.Item, args.Origin!);
+            }
+        }
+
+        if (this.SelectionMode == SelectionMode.Single)
+        {
+            sm.ClearAndSelectItem(args.Item);
+            return;
+        }
+
+        // When in multiple-selection mode and there is no existing selection, prefer
+        // adding the item (emit Add) rather than using ClearAndSelectItem which may
+        // batch into a Reset notification.
+        if (this.SelectionMode == SelectionMode.Multiple && !args.IsShiftKeyDown && !args.IsCtrlKeyDown && sm.IsEmpty)
+        {
+            sm.SelectItem(args.Item);
+            return;
+        }
+
+        if (args.IsShiftKeyDown)
+        {
+            this.ExtendSelectionTo(args.Item);
+            return;
+        }
+
+        if (args.IsCtrlKeyDown)
+        {
+            if (args.Item.IsSelected)
+            {
+                sm.ClearSelection(args.Item);
+            }
+            else
+            {
+                sm.SelectItem(args.Item);
+            }
+
+            return;
+        }
+
+        sm.ClearAndSelectItem(args.Item);
+    }
+
+    /// <summary>
+    ///     Toggles the selection of all items in the tree view.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleSelectAll()
+    {
+        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
+        {
+            return;
+        }
+
+        if (multipleSelection.SelectedIndices.Count == this.ShownItems.Count)
+        {
+            multipleSelection.ClearSelection();
+        }
+        else
+        {
+            multipleSelection.SelectAll();
+        }
+    }
 
     /// <summary>
     ///     Clears the selection of the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to clear selection for.</param>
-    public void ClearSelection(ITreeItem item) => this.SelectionModel?.ClearSelection(item);
-
-    /// <summary>
-    ///     Clears the current selection and selects the specified item in the tree view.
-    /// </summary>
-    /// <param name="item">The item to select.</param>
-    public void ClearAndSelectItem(ITreeItem item) => this.SelectionModel?.ClearAndSelectItem(item);
+    [RelayCommand]
+    private void ClearSelection(ITreeItem item) => this.SelectionModel?.ClearSelection(item);
 
     /// <summary>
     ///     Extends the selection to the specified item in the tree view.
     /// </summary>
     /// <param name="item">The item to extend selection to.</param>
-    public void ExtendSelectionTo(ITreeItem item)
+    private void ExtendSelectionTo(ITreeItem item)
     {
         if (this.SelectionMode == SelectionMode.Multiple && this.SelectionModel?.SelectedItem is not null)
         {
@@ -75,37 +165,19 @@ public abstract partial class DynamicTreeViewModel
     }
 
     /// <summary>
-    ///     Toggles the selection of all items in the tree view.
-    /// </summary>
-    public void ToggleSelectAll()
-    {
-        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelection)
-        {
-            return;
-        }
-
-        if (multipleSelection.SelectedIndices.Count == this.ShownItems.Count)
-        {
-            multipleSelection.ClearSelection();
-        }
-        else
-        {
-            multipleSelection.SelectAll();
-        }
-    }
-
-    /// <summary>
-    ///     Called when the selection model changes.
-    /// </summary>
-    /// <param name="oldValue">The old selection model.</param>
-    protected virtual void OnSelectionModelChanged(SelectionModel<ITreeItem>? oldValue)
-        => this.SyncSelectionModelWithItems();
-
-    /// <summary>
     ///     Clears the current selection in the tree view.
     /// </summary>
     [RelayCommand]
-    private void SelectNone() => this.SelectionModel?.ClearSelection();
+    private void SelectNone()
+    {
+        if (this.SelectionModel?.IsEmpty == true)
+        {
+            // Avoid side effects
+            return;
+        }
+
+        this.SelectionModel?.ClearSelection();
+    }
 
     /// <summary>
     ///     Selects all items in the tree view.

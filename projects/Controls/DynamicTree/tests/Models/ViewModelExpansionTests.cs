@@ -15,6 +15,8 @@ public class ViewModelExpansionTests : ViewModelTestBase
 {
     private TestViewModel viewModel = null!;
 
+    public TestContext TestContext { get; set; }
+
     [TestInitialize]
     public void Initialize() => this.viewModel = new TestViewModel(skipRoot: false, loggerFactory: this.LoggerFactoryInstance);
 
@@ -180,7 +182,7 @@ public class ViewModelExpansionTests : ViewModelTestBase
         await this.viewModel.CollapseItemAsync(rootItem).ConfigureAwait(false);
 
         // Now simulates a tap to clear and select the root item (should not throw)
-        var act = async () => await Task.Run(() => this.viewModel.ClearAndSelectItem(rootItem));
+        var act = async () => await Task.Run(() => this.viewModel.ClearAndSelectItem(rootItem), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert - should not throw
         _ = await act.Should().NotThrowAsync().ConfigureAwait(false);

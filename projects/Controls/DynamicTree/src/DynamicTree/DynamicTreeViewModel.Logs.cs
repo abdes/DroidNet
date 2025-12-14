@@ -43,11 +43,11 @@ public partial class DynamicTreeViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "ViewModel.FocusItem called with item='{item}' forceRaise={forceRaise}")]
-    private static partial void LogFocusItemCalled(ILogger logger, string? item, bool forceRaise);
+        Message = "FocusItem called with item='{Item}' origin={Origin}")]
+    private static partial void LogFocusItemCalled(ILogger logger, string? item, RequestOrigin origin);
 
-    private void LogFocusItemCalled(ITreeItem? item, bool forceRaise)
-        => LogFocusItemCalled(this.logger, item?.Label, forceRaise);
+    private void LogFocusItemCalled(ITreeItem? item, RequestOrigin origin)
+        => LogFocusItemCalled(this.logger, item?.Label, origin);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -215,4 +215,14 @@ public partial class DynamicTreeViewModel
     [Conditional("DEBUG")]
     private void LogShownItemsClear()
         => LogShownItemsClear(this.logger, this.ShownItems.Count);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did you forget to focus item '{Item}' before selecting it? (RequestOrigin={Origin})")]
+    private static partial void LogForgotToFocusItem(ILogger logger, string item, RequestOrigin origin);
+
+    [Conditional("DEBUG")]
+    private void LogForgotToFocusItem(ITreeItem item, RequestOrigin origin)
+        => LogForgotToFocusItem(this.logger, item.Label, origin);
 }

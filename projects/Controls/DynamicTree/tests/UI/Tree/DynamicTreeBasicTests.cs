@@ -8,6 +8,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests.Tree;
 
@@ -95,7 +96,7 @@ public class DynamicTreeBasicTests : VisualUserInterfaceTests
             var secondChild = (TreeItemAdapter)vm.ShownItems[2];
 
             vm.ClearAndSelectItem(firstChild);
-            vm.SelectItem(secondChild);
+            vm.SelectItem(secondChild, RequestOrigin.PointerInput);
 
             // Act
             await vm.MoveItemsAsync([firstChild, secondChild], root, 0).ConfigureAwait(true);

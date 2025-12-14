@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Controls.Selection;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -44,7 +45,7 @@ public class ViewModelSingleSelectionRemovalTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Act
         await this.viewModel.RemoveSelectedItemsAsyncPublic().ConfigureAwait(false);
@@ -64,7 +65,7 @@ public class ViewModelSingleSelectionRemovalTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Act
         await this.viewModel.RemoveSelectedItemsAsyncPublic().ConfigureAwait(false);

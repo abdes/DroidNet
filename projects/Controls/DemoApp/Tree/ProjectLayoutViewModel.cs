@@ -5,7 +5,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -360,7 +359,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
     private async Task Paste()
     {
         // If we have a focused item, use it; otherwise, if there's a selection, use the first selected item.
-        var targetParent = this.FocusedItem;
+        var targetParent = this.FocusedItem?.Item;
         if (targetParent is null && this.SelectionModel?.IsEmpty == false)
         {
             var selected = this.GetSelectedItems();
@@ -431,7 +430,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         var name = GetNextAvailableSceneName(this.Project.AttachedObject, "New Scene");
         var newScene = new SceneAdapter(new Scene(name));
-        await this.InsertItemAsync(0, this.Project, newScene).ConfigureAwait(false);
+        await this.ApplyInsertAsync(newScene, this.Project, 0).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -468,7 +467,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         var name = GetNextAvailableEntityName(parent, "New Entity");
         var newEntity = new EntityAdapter(new Entity(name));
-        await this.InsertItemAsync(0, parent, newEntity).ConfigureAwait(false);
+        await this.ApplyInsertAsync(newEntity, parent, 0).ConfigureAwait(false);
     }
 
     private void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -505,7 +504,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         this.History.AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
-            async () => await this.InsertItemWithVisibilityAsync(args.RelativeIndex, args.Parent, args.TreeItem).ConfigureAwait(false));
+            async () => await this.ApplyInsertAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code is more readable like this")]
@@ -778,27 +777,38 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
                     var item = move.Item;
                     this.History.AddChange(
                         $"MoveItemAsync({item.Label})",
-                        async () => await this.MoveItemWithVisibilityAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
+                        async () => await this.ApplyMoveAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
                 }
             }
         }
     }
 
-    private async Task InsertItemWithVisibilityAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
+    /// <summary>
+    /// Applies a visual-only insert of an item into the view at the given index.
+    /// </summary>
+    /// <param name="item">The item to insert.</param>
+    /// <param name="parent">The parent under which the item will be inserted.</param>
+    /// <param name="index">The child index within the parent.</param>
+    /// <returns>A <see cref="Task"/> that completes when the visual change finishes.</returns>
+    private async Task ApplyInsertAsync(ITreeItem item, ITreeItem parent, int index)
     {
         await this.EnsureAncestorsExpandedAsync(parent).ConfigureAwait(false);
-        await this.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(false);
+        await this.InsertItemAsync(index, parent, item).ConfigureAwait(false);
     }
 
-    private async Task MoveItemWithVisibilityAsync(ITreeItem item, ITreeItem newParent, int newIndex)
+    /// <summary>
+    /// Applies a visual-only move of an existing item to a new parent/index.
+    /// </summary>
+    /// <param name="item">The item to move.</param>
+    /// <param name="newParent">The new parent that will receive the item.</param>
+    /// <param name="newIndex">The insertion index within the new parent.</param>
+    /// <returns>A <see cref="Task"/> that completes when the visual change finishes.</returns>
+    private async Task ApplyMoveAsync(ITreeItem item, ITreeItem newParent, int newIndex)
     {
-        // Move requires both the moved item and the target parent to be currently shown.
+        // Ensure moved item and the target parent are visible.
         await this.EnsureAncestorsExpandedAsync(item).ConfigureAwait(false);
         await this.EnsureAncestorsExpandedAsync(newParent).ConfigureAwait(false);
 
-        // When moving within the same parent, TreeDisplayHelper adjusts the requested index to account
-        // for detaching the item before insertion. To end up at the intended final index, we must
-        // compensate when moving "forward" (towards a higher index).
         var effectiveIndex = newIndex;
         if (ReferenceEquals(item.Parent, newParent))
         {

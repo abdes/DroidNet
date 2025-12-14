@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using AwesomeAssertions;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -54,8 +55,8 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item1);
-        viewModel.SelectItem(item2);
+        viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        viewModel.SelectItem(item2, RequestOrigin.PointerInput);
 
         // Act
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 1).ConfigureAwait(false);
@@ -191,7 +192,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item1);
+        viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);
@@ -216,7 +217,7 @@ public partial class ViewModelMoveTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false) { SelectionMode = SelectionMode.Multiple };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item2);
+        viewModel.SelectItem(item2, RequestOrigin.PointerInput);
 
         // Act
         await viewModel.MoveItemsAsyncPublic([item1, item2], targetParent, 0).ConfigureAwait(false);

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -22,14 +23,16 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([first, second], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(first);
+        _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
         // Act
-        var moved = viewModel.FocusNextVisibleItem();
+        var moved = viewModel.FocusNextVisibleItem(RequestOrigin.KeyboardInput);
 
         // Assert
         _ = moved.Should().BeTrue();
-        _ = viewModel.FocusedItem.Should().Be(second);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem, out var origin).Should().BeTrue();
+        _ = focusedItem.Should().Be(second);
+        _ = origin.Should().Be(RequestOrigin.KeyboardInput);
     }
 
     [TestMethod]
@@ -43,14 +46,16 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([first, middle, last], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(last);
+        _ = viewModel.FocusItem(last, RequestOrigin.KeyboardInput);
 
         // Act
-        var moved = viewModel.FocusFirstVisibleItemInParent();
+        var moved = viewModel.FocusFirstVisibleItemInParent(RequestOrigin.KeyboardInput);
 
         // Assert
         _ = moved.Should().BeTrue();
-        _ = viewModel.FocusedItem.Should().Be(first);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem3, out var origin3).Should().BeTrue();
+        _ = focusedItem3.Should().Be(first);
+        _ = origin3.Should().Be(RequestOrigin.KeyboardInput);
     }
 
     [TestMethod]
@@ -64,14 +69,16 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([first, middle, last], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(first);
+        _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
         // Act
-        var moved = viewModel.FocusLastVisibleItemInParent();
+        var moved = viewModel.FocusLastVisibleItemInParent(RequestOrigin.KeyboardInput);
 
         // Assert
         _ = moved.Should().BeTrue();
-        _ = viewModel.FocusedItem.Should().Be(last);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem4, out var origin4).Should().BeTrue();
+        _ = focusedItem4.Should().Be(last);
+        _ = origin4.Should().Be(RequestOrigin.KeyboardInput);
     }
 
     [TestMethod]
@@ -84,14 +91,16 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([first, second], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(second);
+        _ = viewModel.FocusItem(second, RequestOrigin.KeyboardInput);
 
         // Act
-        var moved = viewModel.FocusFirstVisibleItemInTree();
+        var moved = viewModel.FocusFirstVisibleItemInTree(RequestOrigin.KeyboardInput);
 
         // Assert
         _ = moved.Should().BeTrue();
-        _ = viewModel.FocusedItem.Should().Be(first);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem5, out var origin5).Should().BeTrue();
+        _ = focusedItem5.Should().Be(first);
+        _ = origin5.Should().Be(RequestOrigin.KeyboardInput);
     }
 
     [TestMethod]
@@ -105,7 +114,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(child);
+        _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
 
         // Act
         var collapsed = await viewModel.CollapseFocusedItemAsync().ConfigureAwait(false);
@@ -113,8 +122,35 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         // Assert
         _ = collapsed.Should().BeTrue();
         _ = child.IsExpanded.Should().BeFalse();
-        _ = viewModel.FocusedItem.Should().Be(child);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem6, out var origin6).Should().BeTrue();
+        _ = focusedItem6.Should().Be(child);
+        _ = origin6.Should().Be(RequestOrigin.KeyboardInput);
         _ = viewModel.ShownItems.Should().Contain(child).And.NotContain(grandChild);
+    }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Keyboard / ExpandCollapse")]
+    public async Task ExpandFocusedItemAsync_PreservesOrigin_WhenFocusedByKeyboard()
+    {
+        // Arrange
+        var child = new TestTreeItemAdapter { Label = "Child" };
+        var grandChild = new TestTreeItemAdapter { Label = "GrandChild" };
+        child.AddChild(grandChild);
+        var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
+        var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
+        await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+        _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
+
+        // Act
+        var expanded = await viewModel.ExpandFocusedItemAsync().ConfigureAwait(false);
+
+        // Assert
+        _ = expanded.Should().BeTrue();
+        _ = child.IsExpanded.Should().BeTrue();
+        _ = viewModel.TryGetFocusedItem(out var focusedItem8, out var origin8).Should().BeTrue();
+        _ = focusedItem8.Should().Be(child);
+        _ = origin8.Should().Be(RequestOrigin.KeyboardInput);
+        _ = viewModel.ShownItems.Should().Contain(grandChild);
     }
 
     [TestMethod]
@@ -128,7 +164,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var root = new TestTreeItemAdapter([child], isRoot: true) { Label = "Root", IsExpanded = true };
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance);
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        _ = viewModel.FocusItem(child);
+        _ = viewModel.FocusItem(child, RequestOrigin.KeyboardInput);
 
         // Act
         var expanded = await viewModel.ExpandFocusedItemAsync().ConfigureAwait(false);
@@ -136,7 +172,9 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         // Assert
         _ = expanded.Should().BeTrue();
         _ = child.IsExpanded.Should().BeTrue();
-        _ = viewModel.FocusedItem.Should().Be(child);
+        _ = viewModel.TryGetFocusedItem(out var focusedItem7, out var origin7).Should().BeTrue();
+        _ = focusedItem7.Should().Be(child);
+        _ = origin7.Should().Be(RequestOrigin.KeyboardInput);
         _ = viewModel.ShownItems.Should().Contain(grandChild);
     }
 
@@ -150,7 +188,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.ClearAndSelectItem(first);
-        _ = viewModel.FocusItem(first);
+        _ = viewModel.FocusItem(first, RequestOrigin.KeyboardInput);
 
         // Act
         var toggled = viewModel.ToggleSelectionForFocused(isControlKeyDown: true, isShiftKeyDown: false);
@@ -172,7 +210,7 @@ public class ViewModelKeyboardNavigationTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: true, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Multiple };
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
         viewModel.ClearAndSelectItem(first);
-        _ = viewModel.FocusItem(third);
+        _ = viewModel.FocusItem(third, RequestOrigin.KeyboardInput);
 
         // Act
         var extended = viewModel.ToggleSelectionForFocused(isControlKeyDown: false, isShiftKeyDown: true);

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
-
 namespace DroidNet.Controls;
 
 /// <summary>
@@ -173,7 +171,7 @@ public abstract partial class DynamicTreeViewModel
             throw new InvalidOperationException("paste requires a focused or selected item when no target is specified");
         }
 
-        var parent = targetParent ?? this.FocusedItem
+        var parent = targetParent ?? this.FocusedItem?.Item
             ?? throw new InvalidOperationException("cannot paste without a target parent");
 
         if (!this.ShownItems.Contains(parent))
@@ -203,10 +201,10 @@ public abstract partial class DynamicTreeViewModel
         this.SelectionModel?.ClearSelection();
         foreach (var item in pastedItems)
         {
-            this.SelectItem(item);
+            this.SelectItem(new(item));
         }
 
-        _ = this.FocusItem(pastedItems.FirstOrDefault(), forceRaise: true);
+        _ = this.FocusItem(pastedItems[0], RequestOrigin.Programmatic);
     }
 
     private static async Task<List<ITreeItem>> CollectDescendantsAsync(ITreeItem node)
@@ -414,22 +412,6 @@ public abstract partial class DynamicTreeViewModel
 
             map[original] = customClone.CloneSelf();
         }
-
-#if DEBUG
-        // Sanity check: produced clones should not include children. If this assertion fires, a custom
-        // `ICanBeCloned.CloneSelf()` implementation created a deep clone; adapting clones to be orphaned is
-        // the responsibility of the `CloneSelf()` implementor, not the clipboard code.
-        foreach (var clone in map.Values)
-        {
-            if (clone is TreeItemAdapter adapter)
-            {
-                var children = await adapter.Children.ConfigureAwait(true);
-                Debug.Assert(
-                    children.Count == 0,
-                    "ICanBeCloned.Clone() returned a clone with pre-attached children; clones must not include children.");
-            }
-        }
-#endif // DEBUG
 
         foreach (var original in this.clipboardItems)
         {

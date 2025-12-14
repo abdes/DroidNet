@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Controls.Selection;
 using Moq;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -24,6 +25,8 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         this.Selection.PropertyChanged += this.propertyChangedHandlerMock.Object;
     }
 
+    public TestContext TestContext { get; set; }
+
     private SelectionModel<ITreeItem> Selection => this.viewModel.GetSelectionModel()!;
 
     [TestMethod]
@@ -37,7 +40,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().BeNull();
@@ -57,7 +60,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().Be(item);
@@ -75,7 +78,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().Be(item);
@@ -95,7 +98,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         this.VerifySelectedIndexPropertyChange(Times.Once);
@@ -190,7 +193,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ClearAndSelectItem(item2);
@@ -210,7 +213,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.propertyChangedHandlerMock.Reset();
@@ -231,7 +234,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ExtendSelectionTo(item2);
@@ -291,7 +294,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var item2 = new TestTreeItemAdapter() { Label = "Item2" };
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait();
+        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
 
         // Act
         this.viewModel.ToggleSelectAll();
@@ -313,7 +316,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.SelectNoneCommand.Execute(parameter: null);
@@ -332,7 +335,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Act
         this.propertyChangedHandlerMock.Reset();
@@ -352,7 +355,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var item2 = new TestTreeItemAdapter() { Label = "Item2" };
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait();
+        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
 
         // Act
         this.viewModel.SelectAllCommand.Execute(parameter: null);
@@ -373,7 +376,7 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         var item2 = new TestTreeItemAdapter() { Label = "Item2" };
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
-        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait();
+        this.viewModel.InitializeRootAsyncPublic(rootItem).Wait(this.TestContext.CancellationToken);
 
         // Act
         this.viewModel.InvertSelectionCommand.Execute(parameter: null);
@@ -396,6 +399,6 @@ public class ViewModelSingleSelectionTests : ViewModelTestBase
         this.propertyChangedHandlerMock.Verify(
             handler => handler(
                 It.IsAny<object>(),
-                It.Is<PropertyChangedEventArgs>(e => e.PropertyName == nameof(this.Selection.SelectedItem))),
+                It.Is<PropertyChangedEventArgs>(e => e.PropertyName == nameof(this.Selection.SelectedIndex))),
             times);
 }
