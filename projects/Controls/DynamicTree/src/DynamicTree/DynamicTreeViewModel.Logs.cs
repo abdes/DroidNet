@@ -95,7 +95,7 @@ public partial class DynamicTreeViewModel
 
     [Conditional("DEBUG")]
     private void LogRemoveMultipleSelectionItemsStarted(int selectedCount)
-        => LogRemoveMultipleSelectionItemsStarted(this.logger, selectedCount, this.ShownItems.Count);
+        => LogRemoveMultipleSelectionItemsStarted(this.logger, selectedCount, this.shownItems.Count);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -181,7 +181,7 @@ public partial class DynamicTreeViewModel
 
     [Conditional("DEBUG")]
     private void LogShownItemsAdd(ITreeItem item)
-        => LogShownItemsAdd(this.logger, item.Label, this.ShownItems.Count + 1);
+        => LogShownItemsAdd(this.logger, item.Label, this.shownItems.Count + 1);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -191,7 +191,7 @@ public partial class DynamicTreeViewModel
 
     [Conditional("DEBUG")]
     private void LogShownItemsInsert(int index, ITreeItem item)
-        => LogShownItemsInsert(this.logger, index, item.Label, this.ShownItems.Count + 1);
+        => LogShownItemsInsert(this.logger, index, item.Label, this.shownItems.Count + 1);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -202,8 +202,8 @@ public partial class DynamicTreeViewModel
     [Conditional("DEBUG")]
     private void LogShownItemsRemoveAt(int index)
     {
-        var item = this.ShownItems[index];
-        LogShownItemsRemoveAt(this.logger, index, item.Label, this.ShownItems.Count - 1);
+        var item = this.shownItems[index];
+        LogShownItemsRemoveAt(this.logger, index, item.Label, this.shownItems.Count - 1);
     }
 
     [LoggerMessage(
@@ -214,7 +214,7 @@ public partial class DynamicTreeViewModel
 
     [Conditional("DEBUG")]
     private void LogShownItemsClear()
-        => LogShownItemsClear(this.logger, this.ShownItems.Count);
+        => LogShownItemsClear(this.logger, this.shownItems.Count);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

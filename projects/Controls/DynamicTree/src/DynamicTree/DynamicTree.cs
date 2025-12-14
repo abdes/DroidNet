@@ -452,7 +452,7 @@ public partial class DynamicTree : Control
             return;
         }
 
-        var index = this.ViewModel.ShownItems.IndexOf(item);
+        var index = this.ViewModel.ShownIndexOf(item);
         if (index == -1)
         {
             this.LogFocusIndexMissing(item);

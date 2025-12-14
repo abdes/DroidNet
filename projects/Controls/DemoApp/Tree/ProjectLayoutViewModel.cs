@@ -517,7 +517,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
 
         if (this.SelectionModel is MultipleSelectionModel multi2)
         {
-            return [.. multi2.SelectedIndices.Select(i => this.ShownItems[i]).Cast<ITreeItem>()];
+            return [.. multi2.SelectedIndices.Select(i => this.GetShownItemAt(i)).Cast<ITreeItem>()];
         }
 
         if (this.SelectionModel is SingleSelectionModel && this.SelectedItem is not null)
@@ -547,7 +547,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel, IDisposable
             case MultipleSelectionModel multipleSelectionModel:
                 foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
                 {
-                    var item = this.ShownItems[selectedIndex];
+                    var item = this.GetShownItemAt(selectedIndex);
                     hasUnlockedSelectedItems = !item.IsLocked;
                     if (hasUnlockedSelectedItems)
                     {

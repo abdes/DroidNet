@@ -57,7 +57,7 @@ public abstract partial class DynamicTreeViewModel
         }
 
         // Ignore selection attempts for items that are not currently shown in the tree
-        if (!this.ShownItems.Contains(args.Item))
+        if (!this.shownItems.Contains(args.Item))
         {
             return;
         }
@@ -122,7 +122,7 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        if (multipleSelection.SelectedIndices.Count == this.ShownItems.Count)
+        if (multipleSelection.SelectedIndices.Count == this.shownItems.Count)
         {
             multipleSelection.ClearSelection();
         }
@@ -155,7 +155,7 @@ public abstract partial class DynamicTreeViewModel
         {
             // We diverge from the default behavior of SelectItem here to throw an exception if the
             // item is not shown in the tree
-            if (!this.ShownItems.Contains(item))
+            if (!this.shownItems.Contains(item))
             {
                 throw new ArgumentException("item not found", nameof(item));
             }
@@ -237,9 +237,9 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        for (var index = 0; index < this.ShownItems.Count; index++)
+        for (var index = 0; index < this.shownItems.Count; index++)
         {
-            if (this.ShownItems[index].IsSelected)
+            if (this.shownItems[index].IsSelected)
             {
                 this.SelectionModel.SelectItemAt(index);
             }
@@ -293,13 +293,13 @@ public abstract partial class DynamicTreeViewModel
         }
 
         /// <inheritdoc />
-        protected override ITreeItem GetItemAt(int index) => this.model.ShownItems[index];
+        protected override ITreeItem GetItemAt(int index) => this.model.GetShownItemAt(index);
 
         /// <inheritdoc />
-        protected override int GetItemCount() => this.model.ShownItems.Count;
+        protected override int GetItemCount() => this.model.ShownItemsCount;
 
         /// <inheritdoc />
-        protected override int IndexOf(ITreeItem item) => this.model.ShownItems.IndexOf((TreeItemAdapter)item);
+        protected override int IndexOf(ITreeItem item) => this.model.ShownIndexOf((TreeItemAdapter)item);
     }
 
     /// <summary>
@@ -314,12 +314,12 @@ public abstract partial class DynamicTreeViewModel
     protected partial class MultipleSelectionModel(DynamicTreeViewModel model) : MultipleSelectionModel<ITreeItem>
     {
         /// <inheritdoc />
-        protected override ITreeItem GetItemAt(int index) => model.ShownItems[index];
+        protected override ITreeItem GetItemAt(int index) => model.GetShownItemAt(index);
 
         /// <inheritdoc />
-        protected override int GetItemCount() => model.ShownItems.Count;
+        protected override int GetItemCount() => model.ShownItemsCount;
 
         /// <inheritdoc />
-        protected override int IndexOf(ITreeItem item) => model.ShownItems.IndexOf((TreeItemAdapter)item);
+        protected override int IndexOf(ITreeItem item) => model.ShownIndexOf((TreeItemAdapter)item);
     }
 }

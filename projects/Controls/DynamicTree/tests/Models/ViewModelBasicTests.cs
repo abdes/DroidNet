@@ -18,8 +18,13 @@ public class ViewModelBasicTests : ViewModelTestBase
     {
         // Arrange
         var viewModel = new TestViewModel(skipRoot: true);
+
+        // Pre-populate shown items through the public InitializeRoot API
+        var existingChild = new TestTreeItemAdapter { Label = "Existing" };
+        var initialRoot = new TestTreeItemAdapter([existingChild], isRoot: true) { Label = "InitialRoot", IsExpanded = true };
+        await viewModel.InitializeRootAsyncPublic(initialRoot).ConfigureAwait(false);
+
         var rootItem = new TestTreeItemAdapter(isRoot: true) { Label = "Root" };
-        viewModel.ShownItems.Add(rootItem);
 
         // Act
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);

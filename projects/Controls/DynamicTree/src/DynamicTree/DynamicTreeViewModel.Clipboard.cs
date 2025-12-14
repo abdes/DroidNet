@@ -174,7 +174,7 @@ public abstract partial class DynamicTreeViewModel
         var parent = targetParent ?? this.FocusedItem?.Item
             ?? throw new InvalidOperationException("cannot paste without a target parent");
 
-        if (!this.ShownItems.Contains(parent))
+        if (!this.IsShown(parent))
         {
             throw new InvalidOperationException("target parent must be shown");
         }
@@ -357,7 +357,7 @@ public abstract partial class DynamicTreeViewModel
     {
         foreach (var item in items)
         {
-            if (!this.ShownItems.Contains(item))
+            if (!this.IsShown(item))
             {
                 throw new InvalidOperationException("item must be shown to copy or cut");
             }
