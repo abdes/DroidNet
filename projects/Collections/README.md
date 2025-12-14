@@ -31,7 +31,17 @@ This module is part of the modular **DroidNet** mono-repository (see [DroidNet R
 
 1. **DynamicObservableCollection<TSource, TResult>:** A disposable collection that mirrors a source `ObservableCollection<TSource>` and applies a transformation function to each element. Automatically synchronizes with source collection changes.
 
-2. **FilteredObservableCollection&lt;T&gt;:** A read-only, filtered view over an `ObservableCollection<T>` that supports both collection-level and property-level change tracking. Maintains insertion order from the source collection.
+2. **FilteredObservableCollection&lt;T&gt;:** A read-only, filtered view over an `ObservableCollection<T>` that supports both collection-level and property-level change tracking and preserves source ordering.
+    - Options and defaults:
+    - The type is `sealed` to avoid derived-class complexity and make behavior explicit.
+    - The implementation uses an explicit, documented `NotificationSuspender` struct for deferral and provides richer XML documentation for public and explicit interface members.
+
+    | Option | Purpose | Default |
+    |---|---|---:|
+    | `IEnumerable<string>? relevantProperties` | When specified, only property changes with these names are considered relevant for re-evaluating an item; if omitted or empty, changes to any property are considered relevant. | `null` / empty |
+    | `bool observeSourceChanges` | When `true`, subscribe to the source collection's `CollectionChanged` events to keep the view in sync with adds/removes/moves/resets. | `true` |
+    | `bool observeItemChanges` | When `true`, subscribe to item `INotifyPropertyChanged.PropertyChanged` notifications so property changes can add/remove items from the view. | `true` |
+    | `IDisposable DeferNotifications()` | Temporarily suspends raising `CollectionChanged` events; disposing the returned object resumes notifications and raises a single `Reset` if any changes occurred while suspended. | N/A |
 
 3. **ObservableCollectionExtensions:** Extension methods for `ObservableCollection<T>` including:
    - `InsertInPlace<TItem, TOrderBy>()` – Insert items into sorted collections using key extraction and comparison
@@ -120,18 +130,32 @@ var source = new ObservableCollection<Item>
     new() { Count = 10 },
     new() { Count = 3 },
 };
-
+// Create a filtered view that only considers the Count property changes
 var filtered = new FilteredObservableCollection<Item>(
     source,
     item => item.Count > 4,
-    relevantProperties: new[] { nameof(Item.Count) }
+    relevantProperties: new[] { nameof(Item.Count) },
+    observeSourceChanges: true,     // subscribe to source collection changes (default)
+    observeItemChanges: true        // subscribe to item PropertyChanged (default)
 );
 
 // View shows items with Count > 4
 Console.WriteLine(filtered.Count); // Output: 2
 
+// You can opt out of item-level observation if you only want collection-level filtering
+var collOnly = new FilteredObservableCollection<Item>(source, item => item.Count > 4, observeItemChanges: false);
+
+// Batch multiple updates and only raise a single Reset when done
+using (filtered.DeferNotifications())
+{
+    source[0].Count = 1;  // will not immediately raise events
+    source.Add(new Item { Count = 20 });
+}
+// After the using block, a single Reset is raised if changes occurred
+
 // Dispose when done
 filtered.Dispose();
+collOnly.Dispose();
 ```
 
 ## Project Structure
@@ -139,7 +163,7 @@ filtered.Dispose();
 ```text
 Collections/
 ├── src/
-│   ├── Collections.csproj                          # Project file with NuGet metadata
+│   ├── Collections.csproj                         # Project file with NuGet metadata
 │   ├── DynamicObservableCollection`2.cs           # Transformation collection
 │   ├── FilteredObservableCollection`1.cs          # Filtered view collection
 │   └── ObservableCollectionExtensions.cs          # Extension methods
@@ -147,6 +171,7 @@ Collections/
 │   ├── Collections.Tests.csproj                   # Test project
 │   ├── DynamicObservableCollectionTests.cs        # DynamicObservableCollection tests
 │   ├── FilteredObservableCollectionTests.cs       # FilteredObservableCollection tests
+│   ├── FilteredObservableCollectionOptionsTests.cs# Tests covering constructor options and behaviors
 │   └── ObservableCollectionExtensionsTests.cs     # Extension method tests
 ├── Collections.sln                                # Project-level solution
 └── README.md                                      # This file
