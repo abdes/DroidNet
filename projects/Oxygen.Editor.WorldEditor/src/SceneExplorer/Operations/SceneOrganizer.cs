@@ -216,10 +216,10 @@ public sealed class SceneOrganizer : ISceneOrganizer
             ModifiedFolders: new List<ExplorerEntryData> { folderEntry });
     }
 
-    private static LayoutNodeAdapter? WrapAsLayoutNodeAdapter(TreeItemAdapter adapter)
+    private static SceneNodeAdapter? WrapAsSceneNodeAdapter(TreeItemAdapter adapter)
         => adapter switch
         {
-            LayoutNodeAdapter existing => existing,
+            SceneNodeAdapter existing => existing,
             _ => null,
         };
 
@@ -253,14 +253,14 @@ public sealed class SceneOrganizer : ISceneOrganizer
             _ = await parentAdapter.RemoveChildAsync(nodeAdapter).ConfigureAwait(true);
         }
 
-        var layoutNodeAdapter = WrapAsLayoutNodeAdapter(nodeAdapter);
-        if (layoutNodeAdapter is null)
+        var sceneNodeAdapter = WrapAsSceneNodeAdapter(nodeAdapter);
+        if (sceneNodeAdapter is null)
         {
             return;
         }
 
-        layoutNodeAdapter.IsExpanded = wasExpanded;
-        folderAdapter.AddChildAdapter(layoutNodeAdapter);
+        sceneNodeAdapter.IsExpanded = wasExpanded;
+        folderAdapter.AddChildAdapter(sceneNodeAdapter);
         await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
     }
 
@@ -313,7 +313,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
             var adapter = adapterIndex.NodeAdapters.TryGetValue(root.Id, out var existing)
                 ? existing
-                : new LayoutNodeAdapter(root);
+                : new SceneNodeAdapter(root);
 
             await AttachToParentAsync(sceneAdapter, adapter).ConfigureAwait(true);
             usedNodeIds.Add(root.Id);
@@ -619,7 +619,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
         var adapter = adapterIndex.NodeAdapters.TryGetValue(nodeId, out var existingAdapter)
             ? existingAdapter
-            : new LayoutNodeAdapter(payloadNode);
+            : new SceneNodeAdapter(payloadNode);
 
         if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
         {
@@ -639,14 +639,14 @@ public sealed class SceneOrganizer : ISceneOrganizer
                     .ConfigureAwait(true);
             }
         }
-        else if (adapter.LayoutChildren.Count == 0 && adapter.AttachedObject.Children.Count > 0)
+        else if (adapter.ChildrenCount == 0 && adapter.AttachedObject.Children.Count > 0)
         {
             // Layout fallback: mirror scene graph children so nodes remain visible even without layout entries.
             foreach (var child in adapter.AttachedObject.Children)
             {
                 var childAdapter = adapterIndex.NodeAdapters.TryGetValue(child.Id, out var existingChild)
                     ? existingChild
-                    : new LayoutNodeAdapter(child);
+                    : new SceneNodeAdapter(child);
 
                 await AttachToParentAsync(adapter, childAdapter).ConfigureAwait(true);
                 usedNodeIds.Add(child.Id);
@@ -673,8 +673,8 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 folderAdapter.AddChildAdapter(child);
                 break;
 
-            case LayoutNodeAdapter layoutNodeAdapter:
-                layoutNodeAdapter.AddLayoutChild(child);
+            case SceneNodeAdapter sceneNodeAdapter:
+                sceneNodeAdapter.AddLayoutChild(child);
                 break;
         }
     }
@@ -687,8 +687,8 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 _ = folder.RemoveChildAdapter(adapter);
                 break;
 
-            case LayoutNodeAdapter layoutNode:
-                _ = layoutNode.RemoveLayoutChild(adapter);
+            case SceneNodeAdapter sceneNode:
+                _ = sceneNode.RemoveLayoutChild(adapter);
                 break;
 
             case TreeItemAdapter parent:
@@ -708,11 +708,11 @@ public sealed class SceneOrganizer : ISceneOrganizer
         {
             var item = stack.Pop();
 
-            if (item is LayoutNodeAdapter lna)
+            if (item is SceneNodeAdapter sna)
             {
-                index.NodeAdapters[lna.AttachedObject.Id] = lna;
-                index.NodesById[lna.AttachedObject.Id] = lna.AttachedObject;
-                index.AllAdapters.Add(lna);
+                index.NodeAdapters[sna.AttachedObject.Id] = sna;
+                index.NodesById[sna.AttachedObject.Id] = sna.AttachedObject;
+                index.AllAdapters.Add(sna);
             }
             else if (item is FolderAdapter folder)
             {
@@ -751,7 +751,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
     private sealed class AdapterIndex
     {
-        public Dictionary<Guid, LayoutNodeAdapter> NodeAdapters { get; } = new();
+        public Dictionary<Guid, SceneNodeAdapter> NodeAdapters { get; } = new();
 
         public Dictionary<Guid, FolderAdapter> FolderAdapters { get; } = new();
 

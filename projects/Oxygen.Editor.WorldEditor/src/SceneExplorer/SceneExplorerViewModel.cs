@@ -42,10 +42,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private readonly ISceneMutator sceneMutator;
     private readonly ISceneOrganizer sceneOrganizer;
     private readonly ILayoutContext layoutContext;
-    private readonly Dictionary<LayoutNodeAdapter, SceneNodeChangeRecord> pendingSceneChanges = new();
-    private readonly Dictionary<LayoutNodeAdapter, LayoutChangeRecord> pendingLayoutChanges = new();
+    private readonly Dictionary<SceneNodeAdapter, SceneNodeChangeRecord> pendingSceneChanges = new();
+    private readonly Dictionary<SceneNodeAdapter, LayoutChangeRecord> pendingLayoutChanges = new();
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
-    private readonly Dictionary<Guid, LayoutNodeAdapter> nodeAdapterIndex = new();
+    private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = new();
     private int nextEntityIndex;
     private bool isPerformingLayoutMove;
     private bool isPerformingBatchDelete;
@@ -65,11 +65,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     // Transient capture of an adapter's old scene-node parent when it is removed
     // as part of a non-delete operation so the subsequent add can detect a
     // SceneNode -> SceneNode reparent and perform a single model mutation.
-    private readonly Dictionary<LayoutNodeAdapter, System.Guid> capturedOldParent = new();
+    private readonly Dictionary<SceneNodeAdapter, System.Guid> capturedOldParent = new();
 
     // Track adapters we've deleted so OnItemRemoved can broadcast a node-removed
     // message (we perform engine removal in OnItemBeingRemoved when deleting).
-    private readonly HashSet<LayoutNodeAdapter> deletedAdapters = new();
+    private readonly HashSet<SceneNodeAdapter> deletedAdapters = new();
 
     // No cached selection - capture selection at command time to avoid stale state.
 
@@ -151,17 +151,21 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     /// <inheritdoc />
-    public void Dispose()
+    protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
         {
             return;
         }
 
-        this.documentService.DocumentOpened -= this.OnDocumentOpened;
-        this.messenger.UnregisterAll(this);
+        if (disposing)
+        {
+            this.documentService.DocumentOpened -= this.OnDocumentOpened;
+            this.messenger.UnregisterAll(this);
+        }
 
         this.isDisposed = true;
+        base.Dispose(disposing);
     }
 
     /// <inheritdoc />
@@ -185,7 +189,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         {
             if (oldValue is MultipleSelectionModel<ITreeItem> oldSelectionModel)
             {
-                ((INotifyCollectionChanged)oldSelectionModel.SelectedItems).CollectionChanged -=
+                ((INotifyCollectionChanged)oldSelectionModel.SelectedIndices).CollectionChanged -=
                     this.OnMultipleSelectionChanged;
             }
 
@@ -217,18 +221,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             // Attempt batch removal from the engine first to optimize performance and ensure atomicity.
             // If successful, we set a flag to suppress individual engine syncs during the tree removal process.
             var selectedAdapters = new List<TreeItemAdapter>();
-            if (this.SelectionModel is MultipleSelectionModel<ITreeItem> multiple)
-            {
-                selectedAdapters.AddRange(multiple.SelectedItems.Select(AsLayoutNodeAdapter).Where(a => a is not null).Cast<TreeItemAdapter>());
-            }
-            else if (this.SelectionModel?.SelectedItem is TreeItemAdapter singleAdapter)
-            {
-                var lna = AsLayoutNodeAdapter(singleAdapter);
-                if (lna is not null)
-                {
-                    selectedAdapters.Add(lna);
-                }
-            }
+            var selectedItems = this.GetSelectedItems();
+            selectedAdapters.AddRange(selectedItems.Select(AsSceneNodeAdapter).Where(a => a is not null).Cast<TreeItemAdapter>());
 
             if (selectedAdapters.Count > 0)
             {
@@ -327,7 +321,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
         var relativeIndex = 0;
 
-        var selectedNode = AsLayoutNodeAdapter(selectedItem);
+        var selectedNode = AsSceneNodeAdapter(selectedItem);
         if (selectedNode is not null)
         {
             // Create as a child of the selected node
@@ -339,7 +333,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             Scene parentScene = parentAdapter.AttachedObject.Scene;
 
             var newNode = new SceneNode(parentScene) { Name = this.GetNextEntityName() };
-            var newEntity = new LayoutNodeAdapter(newNode);
+            var newEntity = new SceneNodeAdapter(newNode);
 
             await this.InsertItemAsync(relativeIndex, parentAdapter, newEntity).ConfigureAwait(false);
             return;
@@ -359,7 +353,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         relativeIndex = selectedItem is null ? parentChildren.Count : parentChildren.IndexOf(selectedItem) + 1;
 
         var newRootNode = new SceneNode(parent.AttachedObject) { Name = this.GetNextEntityName() };
-        var newRootEntity = new LayoutNodeAdapter(newRootNode);
+        var newRootEntity = new SceneNodeAdapter(newRootNode);
 
         await this.InsertItemAsync(relativeIndex, parent, newRootEntity).ConfigureAwait(false);
     }
@@ -430,7 +424,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        var addedAdapter = AsLayoutNodeAdapter(args.TreeItem);
+        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
 
         if (!this.suppressUndoRecording)
         {
@@ -520,8 +514,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     {
         _ = sender; // unused
 
-        this.RemoveVisibleSpan(args.TreeItem);
-
         await this.HandleItemRemovedAsync(args).ConfigureAwait(false);
     }
 
@@ -580,7 +572,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
         this.LogItemRemoved(args.TreeItem.Label);
 
-        var removedAdapter = AsLayoutNodeAdapter(args.TreeItem);
+        var removedAdapter = AsSceneNodeAdapter(args.TreeItem);
         if (removedAdapter is null)
         {
             return;
@@ -667,7 +659,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
     private void OnMultipleSelectionChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (this.SelectionModel is not MultipleSelectionModel<ITreeItem> multipleSelectionModel)
+        if (this.SelectionModel is not MultipleSelectionModel multipleSelectionModel)
         {
             return;
         }
@@ -675,9 +667,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.NotifySelectionDependentCommands();
 
         var unlockedSelectedItems = false;
-        foreach (var selectedIndex in multipleSelectionModel.SelectedIndices)
+        foreach (var index in multipleSelectionModel.SelectedIndices)
         {
-            var item = this.ShownItems[selectedIndex];
+            var item = this.GetShownItemAt(index);
             unlockedSelectedItems = !item.IsLocked;
             if (unlockedSelectedItems)
             {
@@ -687,7 +679,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
         this.HasUnlockedSelectedItems = unlockedSelectedItems;
 
-        var selection = multipleSelectionModel.SelectedItems
+        var selection = multipleSelectionModel.SelectedIndices
+            .Select(this.GetShownItemAt)
             .Select(AsSceneNode)
             .Where(node => node is not null)
             .Select(node => node!)
@@ -696,11 +689,31 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(selection));
     }
 
+    private List<ITreeItem> GetSelectedItems()
+    {
+        if (this.SelectionModel is null)
+        {
+            return [];
+        }
+
+        if (this.SelectionModel is MultipleSelectionModel multi2)
+        {
+            return [.. multi2.SelectedIndices.Select(this.GetShownItemAt)];
+        }
+
+        if (this.SelectionModel is SingleSelectionModel && this.SelectedItem is not null)
+        {
+            return [this.SelectedItem];
+        }
+
+        return [];
+    }
+
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
         _ = sender; // unused
 
-        var entityAdapter = AsLayoutNodeAdapter(args.TreeItem);
+        var entityAdapter = AsSceneNodeAdapter(args.TreeItem);
         if (entityAdapter is null)
         {
             return;
@@ -726,7 +739,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     /// <param name="entityAdapter">The node adapter being added.</param>
     /// <param name="parent">The parent tree item.</param>
     /// <param name="args">Original event args (used to set <see cref="TreeItemBeingAddedEventArgs.Proceed"/> when needed).</param>
-    protected internal virtual void HandleItemBeingAdded(Scene scene, LayoutNodeAdapter entityAdapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
+    protected internal virtual void HandleItemBeingAdded(Scene scene, SceneNodeAdapter entityAdapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
     {
         var entity = entityAdapter.AttachedObject;
 
@@ -738,7 +751,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        if (parent is LayoutNodeAdapter newNodeParent)
+        if (parent is SceneNodeAdapter newNodeParent)
         {
             var nodeExistsInScene = SceneContainsNode(scene, entity.Id);
 
@@ -795,7 +808,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     {
         _ = sender; // unused
 
-        var entityAdapter = AsLayoutNodeAdapter(args.TreeItem);
+        var entityAdapter = AsSceneNodeAdapter(args.TreeItem);
         if (entityAdapter is null)
         {
             return;
@@ -844,9 +857,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     /// </summary>
     /// <param name="entityAdapter">Adapter being moved.</param>
     /// <param name="currentParent">Current tree parent (may be <see langword="null" />).</param>
-    protected internal virtual void CaptureOldParentForMove(LayoutNodeAdapter entityAdapter, ITreeItem? currentParent)
+    protected internal virtual void CaptureOldParentForMove(SceneNodeAdapter entityAdapter, ITreeItem? currentParent)
     {
-        if (currentParent is LayoutNodeAdapter oldParentNode)
+        if (currentParent is SceneNodeAdapter oldParentNode)
         {
             this.capturedOldParent[entityAdapter] = oldParentNode.AttachedObject.Id;
         }
@@ -858,7 +871,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     /// <param name="scene">The scene owning the adapter.</param>
     /// <param name="entityAdapter">Adapter being removed.</param>
     /// <param name="args">Original removal event args.</param>
-    protected internal virtual void HandleItemBeingRemoved(Scene scene, LayoutNodeAdapter entityAdapter, TreeItemBeingRemovedEventArgs args)
+    protected internal virtual void HandleItemBeingRemoved(Scene scene, SceneNodeAdapter entityAdapter, TreeItemBeingRemovedEventArgs args)
     {
         _ = args; // currently unused
         var entity = entityAdapter.AttachedObject;
@@ -874,27 +887,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         _ = this.deletedAdapters.Add(entityAdapter);
     }
 
-    private void RemoveVisibleSpan(ITreeItem item)
-    {
-        if (this.layoutContext.TryGetVisibleSpan(item, out var start, out var count))
-        {
-            for (var i = 0; i < count; i++)
-            {
-                this.ShownItems.RemoveAt(start);
-            }
 
-            this.logger.LogDebug("RemoveVisibleSpan: removed {Count} items starting at {Start} for {Label}.", count, start, item.Label);
-            return;
-        }
-
-        // Fallback: if we cannot find the span (e.g., moved but not visible), refresh the tree to avoid orphans.
-        var sceneAdapter = this.Scene;
-        if (sceneAdapter is not null)
-        {
-            this.logger.LogDebug("RemoveVisibleSpan: span not found for {Label}, refreshing tree.", item.Label);
-            this.InitializeRootAsync(sceneAdapter, skipRoot: false).GetAwaiter().GetResult();
-        }
-    }
 
     protected internal readonly record struct SelectionCapture(HashSet<System.Guid> NodeIds, bool UsedShownItemsFallback);
 
@@ -906,7 +899,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     [RelayCommand(CanExecute = nameof(CanCreateFolderFromSelection))]
     private async Task CreateFolderFromSelection()
     {
-        this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItems.Count);
+        this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItemsCount);
 
         var selection = this.CaptureSelectionForFolderCreation();
         if (selection.NodeIds.Count == 0)
@@ -1087,7 +1080,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             await this.ExpandItemAsync(folderAdapter).ConfigureAwait(true);
         }
 
-        this.ClearAndSelectItem(folderAdapter);
+        if (this.SelectionModel is not null)
+        {
+            this.SelectionModel.SelectItem(folderAdapter);
+        }
     }
 
     /// <summary>
@@ -1176,96 +1172,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             this.owner = owner;
         }
 
-        public int? GetShownIndex(ITreeItem item)
-        {
-            var index = this.owner.ShownItems.IndexOf(item);
-            return index == -1 ? null : index;
-        }
-
-        public bool TryRemoveShownItem(ITreeItem item)
-        {
-            if (!this.TryGetVisibleSpan(item, out var index, out var count))
-            {
-                this.owner.logger.LogDebug("TryRemoveShownItem: item {Label} not visible; no removal performed.", item.Label);
-                return false;
-            }
-
-            for (var i = 0; i < count; i++)
-            {
-                this.owner.ShownItems.RemoveAt(index);
-            }
-
-            this.owner.logger.LogDebug("TryRemoveShownItem: removed span start={Start} count={Count} for {Label}.", index, count, item.Label);
-            return true;
-        }
-
-        public void InsertShownItem(int index, ITreeItem item)
-        {
-            this.owner.ShownItems.Insert(index, item);
-        }
-
         public Task RefreshTreeAsync(SceneAdapter sceneAdapter)
             => this.owner.InitializeRootAsync(sceneAdapter, skipRoot: false);
-
-        public bool TryGetVisibleSpan(ITreeItem root, out int startIndex, out int count)
-        {
-            startIndex = this.owner.ShownItems.IndexOf(root);
-            if (startIndex == -1)
-            {
-                this.owner.logger.LogDebug("TryGetVisibleSpan: item {Label} not in shown list.", root.Label);
-                count = 0;
-                return false;
-            }
-
-            count = 1;
-            var cursor = startIndex + 1;
-            while (cursor < this.owner.ShownItems.Count && IsDescendant(this.owner.ShownItems[cursor], root))
-            {
-                ++count;
-                ++cursor;
-            }
-
-            this.owner.logger.LogDebug("TryGetVisibleSpan: item {Label} span start={Start} count={Count}.", root.Label, startIndex, count);
-
-            return true;
-        }
-
-        public void ApplyShownDelta(ShownItemsDelta delta)
-        {
-            for (var i = 0; i < delta.RemoveCount; i++)
-            {
-                this.owner.ShownItems.RemoveAt(delta.RemoveStart);
-            }
-
-            var insertIndex = delta.InsertIndex;
-            foreach (var item in delta.InsertItems)
-            {
-                this.owner.ShownItems.Insert(insertIndex++, item);
-            }
-
-            this.owner.logger.LogDebug(
-                "ApplyShownDelta: removed start={Start} count={Count}, inserted={InsertedCount} at index={InsertIndex}.",
-                delta.RemoveStart,
-                delta.RemoveCount,
-                delta.InsertItems.Count,
-                delta.InsertIndex);
-        }
-
-        private static bool IsDescendant(ITreeItem item, ITreeItem ancestor)
-        {
-            var current = item.Parent;
-            while (current != null)
-            {
-                if (current == ancestor)
-                {
-                    return true;
-                }
-
-                current = current.Parent;
-            }
-
-            return false;
-        }
     }
 
 
@@ -1300,10 +1208,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         return $"New Entity {index}";
     }
 
-    private static LayoutNodeAdapter? AsLayoutNodeAdapter(ITreeItem? item)
+    private static SceneNodeAdapter? AsSceneNodeAdapter(ITreeItem? item)
         => item switch
         {
-            LayoutNodeAdapter lna => lna,
+            SceneNodeAdapter lna => lna,
             _ => null,
         };
 
@@ -1351,7 +1259,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         while (stack.Count > 0)
         {
             var item = stack.Pop();
-            if (item is LayoutNodeAdapter lna)
+            if (item is SceneNodeAdapter lna)
             {
                 this.nodeAdapterIndex[lna.AttachedObject.Id] = lna;
             }
@@ -1373,7 +1281,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private static SceneNode? AsSceneNode(ITreeItem? item)
         => item switch
         {
-            LayoutNodeAdapter lna => lna.AttachedObject,
+            SceneNodeAdapter lna => lna.AttachedObject,
             _ => null,
         };
 
@@ -1386,7 +1294,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             {
                 case SceneAdapter sceneAdapter:
                     return sceneAdapter.AttachedObject;
-                case LayoutNodeAdapter layoutAdapter:
+                case SceneNodeAdapter layoutAdapter:
                     return layoutAdapter.AttachedObject.Scene;
             }
 
@@ -1418,7 +1326,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
     }
 
-    private async Task TryApplyLayoutChangeAsync(LayoutNodeAdapter? adapter)
+    private async Task TryApplyLayoutChangeAsync(SceneNodeAdapter? adapter)
     {
         if (adapter is null)
         {

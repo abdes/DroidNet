@@ -15,7 +15,7 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 /// Folders only exist in the explorer UI and reference nodes by adapter objects — they
 /// do not correspond to SceneNode instances in the scene graph.
 /// </summary>
-public sealed class FolderAdapter : TreeItemAdapter
+public sealed class FolderAdapter : TreeItemAdapter, ICanBeCloned
 {
     private readonly ObservableCollection<ITreeItem> children = new();
     internal IEnumerable<ITreeItem> InternalChildren => this.children;
@@ -89,14 +89,29 @@ public sealed class FolderAdapter : TreeItemAdapter
             if (this.IsExpanded)
             {
                 // Ensure the underlying children collection is initialized before adding to it
-                var realizedChildren = this.Children.ConfigureAwait(false).GetAwaiter().GetResult();
-                if (!realizedChildren.Contains(adapter))
-                {
-                    this.AddChildInternal(adapter);
-                }
+                // We use fire-and-forget here because we can't block, but we want to ensure
+                // the child is added if the collection is realized.
+                _ = this.AddChildToInternalCollectionAsync(adapter);
             }
         }
     }
+
+    private async Task AddChildToInternalCollectionAsync(TreeItemAdapter adapter)
+    {
+        var realizedChildren = await this.Children.ConfigureAwait(false);
+        if (!realizedChildren.Contains(adapter))
+        {
+            this.AddChildInternal(adapter);
+        }
+    }
+
+    /// <inheritdoc />
+    public ITreeItem CloneSelf()
+    {
+        // Return a new folder with a new ID but same name.
+        return new FolderAdapter(Guid.NewGuid(), this.Name);
+    }
+
 
     public bool RemoveChildAdapter(ITreeItem child)
     {

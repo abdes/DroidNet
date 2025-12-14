@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using LayoutNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.LayoutNodeAdapter;
+using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 
 namespace Oxygen.Editor.WorldEditor.Utils;
 
@@ -50,7 +50,7 @@ public static class ThumbnailGenerator
     {
         var sceneNode = adapter switch
         {
-            LayoutNodeAdapter lna => lna.AttachedObject,
+            SceneNodeAdapter lna => lna.AttachedObject,
             _ => null
         };
 

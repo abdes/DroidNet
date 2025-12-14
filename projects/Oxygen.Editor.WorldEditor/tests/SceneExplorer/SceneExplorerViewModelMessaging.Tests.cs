@@ -23,7 +23,7 @@ public class SceneExplorerViewModelMessagingTests
 
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
         var node = new SceneNode(scene) { Name = "NewNode" };
-        var nodeAdapter = new LayoutNodeAdapter(node);
+        var nodeAdapter = new SceneNodeAdapter(node);
 
         var beingAddedArgs = new TreeItemBeingAddedEventArgs { Parent = sceneAdapter, TreeItem = nodeAdapter };
         vm.InvokeHandleItemBeingAdded(scene, nodeAdapter, sceneAdapter, beingAddedArgs);
@@ -49,8 +49,8 @@ public class SceneExplorerViewModelMessagingTests
         scene.RootNodes.Add(parentA);
         scene.RootNodes.Add(parentB);
 
-        var parentBAdapter = new LayoutNodeAdapter(parentB);
-        var childAdapter = new LayoutNodeAdapter(child);
+        var parentBAdapter = new SceneNodeAdapter(parentB);
+        var childAdapter = new SceneNodeAdapter(child);
 
         var beingAddedArgs = new TreeItemBeingAddedEventArgs { Parent = parentBAdapter, TreeItem = childAdapter };
         vm.InvokeHandleItemBeingAdded(scene, childAdapter, parentBAdapter, beingAddedArgs);
@@ -73,7 +73,7 @@ public class SceneExplorerViewModelMessagingTests
 
         var node = new SceneNode(scene) { Name = "Node" };
         scene.RootNodes.Add(node);
-        var nodeAdapter = new LayoutNodeAdapter(node);
+        var nodeAdapter = new SceneNodeAdapter(node);
         var sceneAdapter = SceneAdapter.BuildLayoutTree(scene);
 
         var beingRemovedArgs = new TreeItemBeingRemovedEventArgs { TreeItem = nodeAdapter };

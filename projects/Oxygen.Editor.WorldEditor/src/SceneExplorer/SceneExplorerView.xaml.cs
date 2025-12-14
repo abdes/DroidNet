@@ -25,28 +25,28 @@ public sealed partial class SceneExplorerView
         this.InitializeComponent();
     }
 
-    private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        await this.ViewModel!.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        this.ViewModel!.UndoCommand.Execute(parameter: null);
     }
 
-    private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        await this.ViewModel!.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        this.ViewModel!.RedoCommand.Execute(parameter: null);
     }
 
-    private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    private void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         _ = sender; // unused
         args.Handled = true;
 
-        await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        this.ViewModel!.RemoveSelectedItemsCommand.Execute(parameter: null);
     }
 
     // UI event handlers for toolbar buttons added in XAML. These will try to execute

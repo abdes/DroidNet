@@ -10,13 +10,13 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 
 /// <summary>
 /// Layout builder utilities for <see cref="SceneAdapter" />. Provides an adapter tree that
-/// separates layout nodes from scene nodes via <see cref="LayoutNodeAdapter" /> wrappers.
+/// separates layout nodes from scene nodes via <see cref="SceneNodeAdapter" /> wrappers.
 /// </summary>
 public partial class SceneAdapter
 {
     /// <summary>
     /// Builds a layout adapter tree rooted at a new <see cref="SceneAdapter" /> using the scene's
-    /// current <see cref="Scene.ExplorerLayout" />. Nodes are wrapped in <see cref="LayoutNodeAdapter" />
+    /// current <see cref="Scene.ExplorerLayout" />. Nodes are wrapped in <see cref="SceneNodeAdapter" />
     /// so layout operations remain scene-agnostic.
     /// </summary>
     /// <param name="scene">Scene backing the adapter tree.</param>

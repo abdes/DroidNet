@@ -94,7 +94,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     {
                         sceneParent.AddChildInternal(folder);
                     }
-                    else if (parent is LayoutNodeAdapter layoutParent)
+                    else if (parent is SceneNodeAdapter layoutParent)
                     {
                         layoutParent.AddLayoutChild(folder);
                     }
@@ -113,7 +113,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     return;
                 }
 
-                var layoutNode = new LayoutNodeAdapter(node);
+                var layoutNode = new SceneNodeAdapter(node);
 
                 if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
                 {
@@ -142,7 +142,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     sceneParentRoot.AddChildInternal(layoutNode);
                 }
 
-                if (parent is LayoutNodeAdapter layoutParentNode)
+                if (parent is SceneNodeAdapter layoutParentNode)
                 {
                     layoutParentNode.AddLayoutChild(layoutNode);
                 }
@@ -162,12 +162,12 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                 continue;
             }
 
-            var rootLayoutNode = new LayoutNodeAdapter(entity);
+            var rootLayoutNode = new SceneNodeAdapter(entity);
 
             // Populate layout children from the scene graph for explorer fallback.
             foreach (var child in entity.Children)
             {
-                var childLayout = new LayoutNodeAdapter(child);
+                var childLayout = new SceneNodeAdapter(child);
                 rootLayoutNode.AddLayoutChild(childLayout);
             }
 
@@ -213,7 +213,7 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
                     if (node is not null)
                     {
-                        var layoutNode = new LayoutNodeAdapter(node);
+                        var layoutNode = new SceneNodeAdapter(node);
 
                         if (entry.IsExpanded.HasValue)
                         {
@@ -245,12 +245,12 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         {
             if (!seenNodeIds.Contains(entity.Id))
             {
-                var layoutNode = new LayoutNodeAdapter(entity);
+                var layoutNode = new SceneNodeAdapter(entity);
 
                 // Populate layout children from scene graph for fallback
                 foreach (var child in entity.Children)
                 {
-                    var childLayout = new LayoutNodeAdapter(child);
+                    var childLayout = new SceneNodeAdapter(child);
                     layoutNode.AddLayoutChild(childLayout);
                 }
 
