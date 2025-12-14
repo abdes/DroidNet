@@ -33,7 +33,28 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<DynamicTreeViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<DynamicTreeViewModel>();
     private TreeDisplayHelper? displayHelper;
-    private ITreeItem? focusedItem;
+    private FocusedItemInfo? focusedItem;
+
+    /// <summary>
+    /// Indicates the origin of a focus or action request made against the tree.
+    /// </summary>
+    public enum RequestOrigin
+    {
+        /// <summary>
+        /// The request originated from a pointer device, such as a mouse or touch.
+        /// </summary>
+        PointerInput,
+
+        /// <summary>
+        /// The request originated from keyboard input (for example arrow keys or Tab).
+        /// </summary>
+        KeyboardInput,
+
+        /// <summary>
+        /// The request was initiated programmatically by code.
+        /// </summary>
+        Programmatic,
+    }
 
     /* TODO: need to make this private and expose a read only collection*/
 
@@ -48,14 +69,28 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     public ObservableCollection<ITreeItem> ShownItems { get; } = [];
 
     /// <summary>
+    ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
+    /// </summary>
+    internal ILoggerFactory? LoggerFactory { get; } = loggerFactory;
+
+    /// <summary>
     ///     Gets the item that currently holds logical keyboard focus within the tree.
     /// </summary>
-    public ITreeItem? FocusedItem
+    protected internal FocusedItemInfo? FocusedItem
     {
         get => this.focusedItem;
         private set
         {
-            if (ReferenceEquals(this.focusedItem, value))
+            // Avoid side effects if focused item and origin are unchanged.
+            var old = this.focusedItem;
+            if (old is null && value is null)
+            {
+                return;
+            }
+
+            if (old is not null && value is not null
+                && ReferenceEquals(old.Item, value.Item)
+                && old.Origin == value.Origin)
             {
                 return;
             }
@@ -64,11 +99,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             this.OnPropertyChanged(nameof(this.FocusedItem));
         }
     }
-
-    /// <summary>
-    ///     Gets the <see cref="ILoggerFactory"/> used to create loggers for this view model.
-    /// </summary>
-    public ILoggerFactory? LoggerFactory { get; } = loggerFactory;
 
     private TreeDisplayHelper DisplayHelper => this.displayHelper ??=
         new TreeDisplayHelper(
@@ -180,7 +210,6 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         this.LogInitializeRoot(root, skipRoot);
         this.SelectionModel?.ClearSelection();
-        _ = this.FocusItem(item: null);
         this.LogShownItemsClear();
         this.ShownItems.Clear();
 
@@ -200,7 +229,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         this.SyncSelectionModelWithItems();
-        _ = this.EnsureFocus();
+        _ = this.EnsureFocus(RequestOrigin.PointerInput);
     }
 
     /// <summary>
@@ -313,174 +342,129 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         => this.DisplayHelper.ReorderItemsAsync(items, startIndex);
 
     /// <summary>
-    ///     Ensures there is a focused item by preferring the current focus, then the selected item, and finally the first
-    ///     shown item.
+    ///     Clears the current focus from the tree, setting <see cref="FocusedItem"/> to <see langword="null"/>.
     /// </summary>
-    /// <returns><see langword="true" /> if a focusable item was found; otherwise, <see langword="false" />.</returns>
-    public bool EnsureFocus()
-    {
-        if (this.focusedItem is not null && this.ShownItems.Contains(this.focusedItem))
-        {
-            return true;
-        }
-
-        var selected = this.SelectionModel?.SelectedItem;
-        if (selected is not null && this.ShownItems.Contains(selected))
-        {
-            this.FocusedItem = selected;
-            return true;
-        }
-
-        if (this.ShownItems.Count > 0)
-        {
-            this.FocusedItem = this.ShownItems[0];
-            return true;
-        }
-
-        this.FocusedItem = null;
-        return false;
-    }
+    public void ClearFocus() => this.FocusedItem = null;
 
     /// <summary>
-    ///     Sets focus to the specified item if it is visible; clears focus when <paramref name="item" /> is
-    ///     <see langword="null" />.
+    ///     Sets focus to the specified item if it is visible.
     /// </summary>
-    /// <param name="item">The item to focus or <see langword="null" /> to clear focus.</param>
-    /// <param name="forceRaise">If set to <see langword="true" />, forces a property-changed notification
-    /// for <see cref="FocusedItem" /> even if the focused item reference does not change. This is useful when
-    /// the view should reapply keyboard focus to the existing focused item after operations that did not change
-    /// the view model's FocusedItem reference.</param>
+    /// <param name="item">The item to focus. This parameter must not be <see langword="null" />.</param>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> when focus changed successfully; otherwise, <see langword="false" />.</returns>
-    public bool FocusItem(ITreeItem? item, bool forceRaise = false)
+    public bool FocusItem(ITreeItem item, RequestOrigin origin)
     {
-        this.LogFocusItemCalled(item, forceRaise);
-        if (item is null)
-        {
-            if (this.FocusedItem is null)
-            {
-                if (!forceRaise)
-                {
-                    return false;
-                }
+        ArgumentNullException.ThrowIfNull(item);
 
-                // Force re-raise even if already null
-                this.OnPropertyChanged(nameof(this.FocusedItem));
-                return true;
-            }
-
-            this.FocusedItem = null;
-            return true;
-        }
+        this.LogFocusItemCalled(item, origin);
 
         if (!this.ShownItems.Contains(item))
         {
             return false;
         }
 
-        if (ReferenceEquals(this.focusedItem, item))
-        {
-            if (forceRaise)
-            {
-                this.OnPropertyChanged(nameof(this.FocusedItem));
-                return true;
-            }
-
-            return false;
-        }
-
-        this.FocusedItem = item;
+        this.FocusedItem = new(item, origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the next visible item in the tree.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
-    public bool FocusNextVisibleItem()
+    public bool FocusNextVisibleItem(RequestOrigin origin)
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(origin))
         {
             return false;
         }
 
-        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem!);
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem.Item);
         if (currentIndex == -1 || currentIndex >= this.ShownItems.Count - 1)
         {
             return false;
         }
 
-        this.FocusedItem = this.ShownItems[currentIndex + 1];
+        this.FocusedItem = new(this.ShownItems[currentIndex + 1], origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the previous visible item in the tree.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
-    public bool FocusPreviousVisibleItem()
+    public bool FocusPreviousVisibleItem(RequestOrigin origin)
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(origin))
         {
             return false;
         }
 
-        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem!);
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var currentIndex = this.ShownItems.IndexOf(this.FocusedItem.Item);
         if (currentIndex <= 0)
         {
             return false;
         }
 
-        this.FocusedItem = this.ShownItems[currentIndex - 1];
+        this.FocusedItem = new(this.ShownItems[currentIndex - 1], origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the first visible item that shares the same parent as the currently focused item.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus changed; otherwise, <see langword="false" />.</returns>
-    public bool FocusFirstVisibleItemInParent()
+    public bool FocusFirstVisibleItemInParent(RequestOrigin origin)
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(origin))
         {
             return false;
         }
 
-        var target = this.FindSibling(this.FocusedItem!.Parent, first: true);
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var target = this.FindSibling(this.FocusedItem.Item.Parent, first: true);
         if (target is null)
         {
             return false;
         }
 
-        this.FocusedItem = target;
+        this.FocusedItem = new(target, origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the last visible item that shares the same parent as the currently focused item.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus changed; otherwise, <see langword="false" />.</returns>
-    public bool FocusLastVisibleItemInParent()
+    public bool FocusLastVisibleItemInParent(RequestOrigin origin)
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(origin))
         {
             return false;
         }
 
-        var target = this.FindSibling(this.FocusedItem!.Parent, first: false);
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var target = this.FindSibling(this.FocusedItem.Item.Parent, first: false);
         if (target is null)
         {
             return false;
         }
 
-        this.FocusedItem = target;
+        this.FocusedItem = new(target, origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the first visible item in the tree.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
-    public bool FocusFirstVisibleItemInTree()
+    public bool FocusFirstVisibleItemInTree(RequestOrigin origin)
     {
         if (this.ShownItems.Count == 0)
         {
@@ -488,15 +472,17 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             return false;
         }
 
-        this.FocusedItem = this.ShownItems[0];
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        this.FocusedItem = new(this.ShownItems[0], origin);
         return true;
     }
 
     /// <summary>
     ///     Moves focus to the last visible item in the tree.
     /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
     /// <returns><see langword="true" /> if focus moved; otherwise, <see langword="false" />.</returns>
-    public bool FocusLastVisibleItemInTree()
+    public bool FocusLastVisibleItemInTree(RequestOrigin origin)
     {
         if (this.ShownItems.Count == 0)
         {
@@ -504,7 +490,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
             return false;
         }
 
-        this.FocusedItem = this.ShownItems[^1];
+        this.FocusedItem = new(this.ShownItems[^1], origin);
         return true;
     }
 
@@ -514,12 +500,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> when the item was expanded; otherwise, <see langword="false" />.</returns>
     public async Task<bool> ExpandFocusedItemAsync()
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(RequestOrigin.Programmatic))
         {
             return false;
         }
 
-        var focused = this.FocusedItem!;
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var focused = this.FocusedItem.Item;
         if (focused.IsExpanded || !focused.CanAcceptChildren)
         {
             return false;
@@ -527,8 +514,10 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         await this.ExpandItemAsync(focused).ConfigureAwait(true);
 
-        // Ensure the view reapplies focus for the currently focused item
-        _ = this.FocusItem(focused, forceRaise: true);
+        // Ensure the view reapplies focus for the currently focused item,
+        // preserving the original request origin when available.
+        var origin = this.FocusedItem?.Origin ?? RequestOrigin.Programmatic;
+        _ = this.FocusItem(focused, origin);
         return true;
     }
 
@@ -538,12 +527,13 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <returns><see langword="true" /> when the item was collapsed; otherwise, <see langword="false" />.</returns>
     public async Task<bool> CollapseFocusedItemAsync()
     {
-        if (!this.EnsureFocus())
+        if (!this.EnsureFocus(RequestOrigin.Programmatic))
         {
             return false;
         }
 
-        var focused = this.FocusedItem!;
+        Debug.Assert(this.FocusedItem is not null, "EnsureFocus should guarantee FocusedItem is not null");
+        var focused = this.FocusedItem.Item;
         if (!focused.IsExpanded)
         {
             return false;
@@ -551,54 +541,65 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         await this.CollapseItemAsync(focused).ConfigureAwait(true);
 
-        // Ensure the view reapplies focus for the currently focused item
-        _ = this.FocusItem(focused, forceRaise: true);
+        // Ensure the view reapplies focus for the currently focused item,
+        // preserving the original request origin when available.
+        var origin = this.FocusedItem?.Origin ?? RequestOrigin.Programmatic;
+        _ = this.FocusItem(focused, origin);
         return true;
     }
 
     /// <summary>
-    ///     Toggles selection for the focused item using the provided modifier keys.
+    ///     Updates the currently focused item together with the origin of the request.
     /// </summary>
-    /// <param name="isControlKeyDown">Indicates whether the Control key is pressed.</param>
-    /// <param name="isShiftKeyDown">Indicates whether the Shift key is pressed.</param>
-    /// <returns><see langword="true" /> if selection changed; otherwise, <see langword="false" />.</returns>
-    public bool ToggleSelectionForFocused(bool isControlKeyDown, bool isShiftKeyDown)
+    /// <param name="item">The tree item to mark as focused.</param>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
+    /// <remarks>
+    ///     This method sets the underlying focused item field directly to avoid raising property-changed
+    ///     notifications or other side effects that are associated with the <see cref="FocusedItem"/> property.
+    /// </remarks>
+    internal void UpdateFocusedItem(ITreeItem item, RequestOrigin origin)
     {
-        if (this.SelectionMode == SelectionMode.None || !this.EnsureFocus())
+        if (this.FocusedItem is not null && ReferenceEquals(this.FocusedItem.Item, item))
         {
-            return false;
+            return;
         }
 
-        var focused = this.FocusedItem!;
+        // We explicitly do not use the property here to avoid side effects.
+        this.focusedItem = new(item, origin);
+    }
 
-        if (this.SelectionMode == SelectionMode.Single)
+    /// <summary>
+    ///     Ensures there is a focused item by preferring the current focus, then the selected item,
+    ///     and finally the first shown item.
+    /// </summary>
+    /// <param name="origin">The origin of the focus request (pointer, keyboard, or programmatic).</param>
+    /// <returns><see langword="true" /> if a focusable item was found; otherwise, <see langword="false" />.</returns>
+    protected internal bool EnsureFocus(RequestOrigin origin)
+    {
+        if (this.focusedItem is not null && this.ShownItems.Contains(this.focusedItem.Item))
         {
-            this.ClearAndSelectItem(focused);
+            Debug.WriteLine("Focus already valid on item: " + this.focusedItem.Item.Label);
             return true;
         }
 
-        if (isShiftKeyDown)
+        var selected = this.SelectionModel?.SelectedItem;
+        if (selected is not null && this.ShownItems.Contains(selected))
         {
-            this.ExtendSelectionTo(focused);
+            Debug.WriteLine("Focusing selected item: " + selected.Label);
+            this.FocusedItem = new(selected, origin);
             return true;
         }
 
-        if (isControlKeyDown)
+        if (this.ShownItems.Count > 0)
         {
-            if (focused.IsSelected)
-            {
-                this.ClearSelection(focused);
-            }
-            else
-            {
-                this.SelectItem(focused);
-            }
-
+            Debug.WriteLine("Focusing first shown item: " + this.ShownItems[0].Label);
+            this.FocusedItem = new(this.ShownItems[0], origin);
             return true;
         }
 
-        this.ClearAndSelectItem(focused);
-        return true;
+        Debug.WriteLine("No focusable item found; clearing focus");
+        this.FocusedItem = null;
+        return false;
     }
 
     /// <summary>
@@ -709,7 +710,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
             if (ReferenceEquals(this.FocusedItem, child))
             {
-                this.FocusedItem = parent;
+                this.FocusedItem = new(parent, RequestOrigin.Programmatic);
             }
 
             // Find the current index of the child in the shown list.
@@ -765,5 +766,25 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         }
 
         return target;
+    }
+
+    /// <summary>
+    /// Represents the currently focused item together with the origin of the focus request.
+    /// </summary>
+    /// <param name="Item">The tree item that currently holds logical focus.</param>
+    /// <param name="Origin">The origin of the focus request <see cref="RequestOrigin"/>.</param>
+    /// <remarks>
+    /// Equality is based on the focused <see cref="ITreeItem"/> reference only; the
+    /// <see cref="Origin"/> is not considered for equality comparisons.
+    /// </remarks>
+    protected internal record FocusedItemInfo(ITreeItem Item, RequestOrigin Origin)
+    {
+        /// <inheritdoc/>
+        public virtual bool Equals(FocusedItemInfo? other)
+            => ReferenceEquals(this.Item, other?.Item);
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+            => this.Item?.GetHashCode() ?? 0;
     }
 }

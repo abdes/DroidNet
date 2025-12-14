@@ -49,4 +49,27 @@ internal sealed partial class TestViewModel(ILoggerFactory? loggerFactory = null
         var rootItem = new TestItemAdapter(rootNode, isRoot: true, isHidden: false);
         await this.InitializeRootAsync(rootItem, skipRoot: false).ConfigureAwait(false);
     }
+
+    // Compatibility helpers used by UI tests
+    public void SelectItem(ITreeItem item, RequestOrigin origin)
+    {
+        var isCtrl = this.SelectionMode == SelectionMode.Multiple && this.SelectionModel?.SelectedItem is not null;
+        this.SelectItemCommand.Execute(new ItemSelectionArgs(item, origin, IsCtrlKeyDown: isCtrl, IsShiftKeyDown: false));
+    }
+
+    public void ClearAndSelectItem(ITreeItem item) => this.SelectionModel?.ClearAndSelectItem(item);
+
+    public new bool FocusItem(ITreeItem item, RequestOrigin origin) => base.FocusItem(item, origin);
+
+    public new bool FocusNextVisibleItem(RequestOrigin origin) => base.FocusNextVisibleItem(origin);
+
+    public new bool FocusPreviousVisibleItem(RequestOrigin origin) => base.FocusPreviousVisibleItem(origin);
+
+    public new bool FocusFirstVisibleItemInParent(RequestOrigin origin) => base.FocusFirstVisibleItemInParent(origin);
+
+    public new bool FocusLastVisibleItemInParent(RequestOrigin origin) => base.FocusLastVisibleItemInParent(origin);
+
+    public new bool FocusFirstVisibleItemInTree(RequestOrigin origin) => base.FocusFirstVisibleItemInTree(origin);
+
+    public new bool FocusLastVisibleItemInTree(RequestOrigin origin) => base.FocusLastVisibleItemInTree(origin);
 }

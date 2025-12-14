@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -69,8 +70,8 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(target);
-        _ = viewModel.FocusItem(target);
+        viewModel.SelectItem(target, RequestOrigin.PointerInput);
+        _ = viewModel.FocusItem(target, RequestOrigin.PointerInput);
 
         await viewModel.CopyItemsAsync([parent, child]).ConfigureAwait(false);
 
@@ -102,8 +103,8 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(target);
-        _ = viewModel.FocusItem(target);
+        viewModel.SelectItem(target, RequestOrigin.PointerInput);
+        _ = viewModel.FocusItem(target, RequestOrigin.PointerInput);
 
         await viewModel.CopyItemsAsync([parent]).ConfigureAwait(false);
 
@@ -175,8 +176,8 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance);
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(cutItem);
-        _ = viewModel.FocusItem(cutItem);
+        viewModel.SelectItem(cutItem, RequestOrigin.PointerInput);
+        _ = viewModel.FocusItem(cutItem, RequestOrigin.PointerInput);
 
         await viewModel.CutItemsAsync([cutItem]).ConfigureAwait(false);
         _ = cutItem.IsCut.Should().BeTrue();
@@ -200,8 +201,8 @@ public class ViewModelClipboardTests : ViewModelTestBase
         var viewModel = new TestViewModel(skipRoot: false, this.LoggerFactoryInstance) { SelectionMode = SelectionMode.Single };
 
         await viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
-        viewModel.SelectItem(item);
-        _ = viewModel.FocusItem(item);
+        viewModel.SelectItem(item, RequestOrigin.PointerInput);
+        _ = viewModel.FocusItem(item, RequestOrigin.PointerInput);
 
         await viewModel.CutItemsAsync([item]).ConfigureAwait(false);
 

@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
+using static DroidNet.Controls.DynamicTreeViewModel;
 
 namespace DroidNet.Controls;
 
@@ -33,15 +34,30 @@ public partial class DynamicTree
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Double tapped: {source}")]
-    private static partial void LogDoubleTapped(ILogger logger, string source);
+        Message = "Tree Control got focus")]
+    private static partial void LogGotFocus(ILogger logger);
 
     [Conditional("DEBUG")]
-    private void LogDoubleTapped(object source)
+    private void LogGotFocus()
     {
         if (this.logger is ILogger logger)
         {
-            LogDoubleTapped(logger, source.ToString() ?? "<null>");
+            LogGotFocus(logger);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Tree Control double tapped")]
+    private static partial void LogDoubleTapped(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogDoubleTapped(object originalSource)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDoubleTapped(logger);
         }
     }
 
@@ -220,35 +236,35 @@ public partial class DynamicTree
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Focus: Apply attempt for '{itemLabel}' at index {index} state={state} isApplying={isApplying} pending={pending}")]
-    private static partial void LogFocusApplyAttempt(ILogger logger, string? itemLabel, int index, string state, bool isApplying, bool pending);
+        Message = "Focus: Apply attempt for '{itemLabel}' at index {index} state={state} pending={pending}")]
+    private static partial void LogFocusApplyAttempt(ILogger logger, string? itemLabel, int index, string state, bool pending);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Requesting model focus: Item='{itemLabel}' Origin={origin} ForceRaise={forceRaise}")]
-    private static partial void LogRequestModelFocus(ILogger logger, string? itemLabel, string origin, bool forceRaise);
+        Message = "Item='{itemLabel}' got focus (Last Origin={origin})")]
+    private static partial void LogItemGotFocus(ILogger logger, string? itemLabel, RequestOrigin origin);
 
     [Conditional("DEBUG")]
-    private void LogRequestModelFocusWrapper(TreeItemAdapter? item, FocusRequestOrigin origin, bool forceRaise)
+    private void LogItemGotFocus(TreeItemAdapter? item, RequestOrigin origin)
     {
         if (this.logger is not ILogger logger)
         {
             return;
         }
 
-        LogRequestModelFocus(logger, item?.Label, origin.ToString(), forceRaise);
+        LogItemGotFocus(logger, item?.Label, origin);
     }
 
     [Conditional("DEBUG")]
-    private void LogFocusApplyAttempt(ITreeItem item, int index, FocusState state, bool isApplying, bool pending)
+    private void LogFocusApplyAttempt(ITreeItem item, int index, FocusState state, bool pending)
     {
         if (this.logger is not ILogger logger)
         {
             return;
         }
 
-        LogFocusApplyAttempt(logger, item.Label, index, state.ToString(), isApplying, pending);
+        LogFocusApplyAttempt(logger, item.Label, index, state.ToString(), pending);
     }
 
     [LoggerMessage(
@@ -258,7 +274,7 @@ public partial class DynamicTree
     private static partial void LogRunTryFocus(ILogger logger, string? itemLabel, bool pending, string state);
 
     [Conditional("DEBUG")]
-    private void LogRunTryFocus(ITreeItem? item, bool pending, FocusState state)
+    private void LogApplyFocus(ITreeItem? item, bool pending, FocusState state)
     {
         if (this.logger is not ILogger logger)
         {
@@ -294,7 +310,7 @@ public partial class DynamicTree
     private static partial void LogGotFocusEvent(ILogger logger, string? itemLabel, string origin, bool applying, bool handled);
 
     [Conditional("DEBUG")]
-    private void LogGotFocusEvent(FrameworkElement element, FocusRequestOrigin origin, bool applying, RoutedEventArgs args)
+    private void LogGotFocusEvent(FrameworkElement element, RequestOrigin origin, bool applying, RoutedEventArgs args)
     {
         if (this.logger is not ILogger logger)
         {
@@ -318,7 +334,7 @@ public partial class DynamicTree
     private static partial void LogViewModelPropertyChanged(ILogger logger, string? property, string? focusedLabel, string origin, bool enqueue);
 
     [Conditional("DEBUG")]
-    private void LogViewModelPropertyChanged(string? property, ITreeItem? focusedItem, FocusRequestOrigin origin, bool enqueue)
+    private void LogViewModelPropertyChanged(string? property, ITreeItem? focusedItem, RequestOrigin origin, bool enqueue)
     {
         if (this.logger is not ILogger logger)
         {
@@ -327,5 +343,43 @@ public partial class DynamicTree
 
         var label = focusedItem?.Label;
         LogViewModelPropertyChanged(logger, property, label, origin.ToString(), enqueue);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Focused item reported by ViewModel is null")]
+    private static partial void LogFocusLost(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogFocusLost()
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        LogFocusLost(this.logger);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Enqueue focus application on UI dispatcher: item '{Item}', origin={Origin}")]
+    private static partial void LogEnqueueApplyFocus(ILogger logger, string item, RequestOrigin origin);
+
+    [Conditional("DEBUG")]
+    private void LogEnqueueApplyFocus()
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        var fi = this.ViewModel?.FocusedItem;
+        if (fi != null)
+        {
+            LogEnqueueApplyFocus(this.logger, fi.Item.Label, fi.Origin);
+        }
     }
 }

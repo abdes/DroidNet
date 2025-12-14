@@ -15,8 +15,8 @@ public sealed partial class TestableDynamicTree : DynamicTree
     public bool InvokeItemTapped(TreeItemAdapter item, bool isControlDown, bool isShiftDown)
         => this.OnItemTapped(item, isControlDown, isShiftDown);
 
-    public bool InvokeItemGotFocus(TreeItemAdapter item, bool isApplyingFocus)
-        => this.OnItemGotFocus(item, isApplyingFocus);
+    public bool InvokeItemGotFocus(TreeItemAdapter item)
+        => this.OnItemGotFocus(item);
 
     public void InvokeTreeGotFocus()
         => this.OnGotFocus(new RoutedEventArgs());

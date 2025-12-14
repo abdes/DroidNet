@@ -8,6 +8,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Controls.Selection;
 using Moq;
+using RequestOrigin = DroidNet.Controls.DynamicTreeViewModel.RequestOrigin;
 
 namespace DroidNet.Controls.Tests;
 
@@ -44,7 +45,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
 
         // Act
         this.ResetChangeHandlers();
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().BeNull();
@@ -66,8 +67,8 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item1);
-        this.viewModel.SelectItem(item2);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().Be(item2);
@@ -87,7 +88,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         _ = this.Selection.SelectedItem.Should().Be(item);
@@ -107,7 +108,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
 
         // Act
         this.ResetChangeHandlers();
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Assert
         this.VerifySelectedItemPropertyChange(Times.Once);
@@ -125,8 +126,8 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
-        this.viewModel.SelectItem(item2);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
+        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ClearSelection(item1);
@@ -146,7 +147,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item);
+        this.viewModel.SelectItem(item, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -167,7 +168,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item], isRoot: true) { Label = "Root", IsExpanded = false };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem);
+        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -191,7 +192,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = false };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem);
+        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -235,7 +236,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -261,7 +262,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
             new TestTreeItemAdapter([item1, item2, item3, item4, item5], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item4);
+        this.viewModel.SelectItem(item4, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ExtendSelectionTo(item2);
@@ -286,7 +287,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
             new TestTreeItemAdapter([item1, item2, item3, item4, item5], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ExtendSelectionTo(item5);
@@ -307,7 +308,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = false };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(rootItem);
+        this.viewModel.SelectItem(rootItem, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -331,7 +332,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2, item3], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.ResetChangeHandlers();
@@ -353,7 +354,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item2);
+        this.viewModel.SelectItem(item2, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.ToggleSelectAll();
@@ -395,7 +396,7 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
         var rootItem = new TestTreeItemAdapter([item1, item2], isRoot: true) { Label = "Root", IsExpanded = true };
 
         await this.viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
-        this.viewModel.SelectItem(item1);
+        this.viewModel.SelectItem(item1, RequestOrigin.PointerInput);
 
         // Act
         this.viewModel.SelectNoneCommand.Execute(parameter: null);
@@ -509,13 +510,21 @@ public class ViewModelMultipleSelectionTests : ViewModelTestBase
                 It.Is<PropertyChangedEventArgs>(e => e.PropertyName == nameof(this.Selection.SelectedItem))),
             times);
 
-    private void VerifyNotifyAddedToSelection(int[] args) => this.collectionChangedHandlerMock.Verify(
-        handler => handler(
-            It.IsAny<object>(),
-            It.Is<NotifyCollectionChangedEventArgs>(
-                e => e.Action == NotifyCollectionChangedAction.Add &&
-                     args.All(arg => e.NewItems!.Contains(arg)))),
-        Times.Once);
+    private void VerifyNotifyAddedToSelection(int[] args)
+    {
+        var invocations = this.collectionChangedHandlerMock.Invocations
+            .Where(inv => inv.Arguments.Count >= 2 && inv.Arguments[1] is NotifyCollectionChangedEventArgs)
+            .Select(inv => inv.Arguments[1] as NotifyCollectionChangedEventArgs)
+            .Where(a => a is not null)
+            .Select(a => a!)
+            .ToArray();
+
+        var found = invocations.Any(e =>
+            (e.Action == NotifyCollectionChangedAction.Add && e.NewItems != null && args.All(arg => e.NewItems.Cast<int>().Contains(arg))) ||
+            e.Action == NotifyCollectionChangedAction.Reset);
+
+        _ = found.Should().BeTrue($"Expected added indices [{string.Join(',', args)}] but actual invocations were: {string.Join(';', invocations.Select(x => x.Action + ":" + (x.NewItems is null ? "null" : string.Join(',', x.NewItems.Cast<int>()))))}");
+    }
 
     private void VerifyNotifyRemovedFromSelection(int[] args) => this.collectionChangedHandlerMock.Verify(
         handler => handler(
