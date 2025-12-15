@@ -15,26 +15,21 @@ namespace DroidNet.Controls;
 ///     <see cref="DataTemplateSelector" /> for maximum flexibility.
 /// </summary>
 /// <remarks>
-///     The <see cref="Thumbnail" /> control follows the behavior of <see cref="ContentControl" /> in giving precedence to
-///     <see cref="ContentControl.ContentTemplate" /> when it is set. If <see cref="ContentControl.ContentTemplate" /> is
-///     not set,
-///     but <see cref="ContentControl.ContentTemplateSelector" /> is set, the control will use the template selected by the
-///     <see cref="ContentControl.ContentTemplateSelector" />. If neither is set, after the control is fully initialized,
-///     it will use a
-///     default template defined in the application resources.
+///     The <see cref="Thumbnail" /> control follows the behavior of <see cref="ContentControl" />
+///     in giving precedence to <see cref="ContentControl.ContentTemplate" /> when it is set. If
+///     <see cref="ContentControl.ContentTemplate" /> is not set, but <see cref="ContentControl.ContentTemplateSelector" />
+///     is set, the control will use the template selected by the <see cref="ContentControl.ContentTemplateSelector" />.
+///     If neither is set, after the control is fully initialized, it will use a default template
+///     defined in the application resources.
 ///     <para>
-///         <strong>Important:</strong> Ensure that the default template is defined in the application resources with the
-///         key
-///         "DefaultThumbnailTemplate". This can be done by merging the resource dictionary containing the default template
-///         into the
-///         control library's <see langword="Themes/Generic.xaml" /> file.
-///     </para>
+///     <strong>Important:</strong> Ensure that the default template is defined in the application
+///     resources with the key "DefaultThumbnailTemplate". This can be done by merging the resource
+///     dictionary containing the default template into the control library's <see
+///     langword="Themes/Generic.xaml" /> file.</para>
 /// </remarks>
 /// <example>
-///     <para>
-///         <strong>Example: Using the default template</strong>
-///     </para>
-///     <![CDATA[
+/// <para><strong>Example: Using the default template</strong></para>
+/// <![CDATA[
 /// <local:Thumbnail Content="Sample Content" />
 /// ]]>
 /// </example>
@@ -59,16 +54,12 @@ namespace DroidNet.Controls;
 /// ]]>
 /// </example>
 /// <example>
-///     <para>
-///         <strong>Example: Using a custom template selector</strong>
-///     </para>
-///     <![CDATA[
+/// <para><strong>Example: Using a custom template selector</strong></para>
+/// <![CDATA[
 /// <local:Thumbnail Content="Sample Content" ContentTemplateSelector="{StaticResource CustomTemplateSelector}" />
 /// ]]>
-///     <para>
-///         <strong>Custom Template Selector Implementation:</strong>
-///     </para>
-///     <![CDATA[
+/// <para><strong>Custom Template Selector Implementation:</strong></para>
+/// <![CDATA[
 /// public class CustomTemplateSelector : DataTemplateSelector
 /// {
 ///     public DataTemplate CameraTemplate { get; set; }
@@ -83,10 +74,8 @@ namespace DroidNet.Controls;
 ///     }
 /// }
 /// ]]>
-///     <para>
-///         <strong>XAML Definition for CustomTemplateSelector:</strong>
-///     </para>
-///     <![CDATA[
+/// <para><strong>XAML Definition for CustomTemplateSelector:</strong></para>
+/// <![CDATA[
 /// <local:CustomTemplateSelector x:Key="CustomTemplateSelector">
 ///     <local:CustomTemplateSelector.CameraTemplate>
 ///         <DataTemplate>
@@ -113,6 +102,8 @@ namespace DroidNet.Controls;
 public partial class Thumbnail : ContentControl
 {
     private bool isInitialized;
+    private bool isTemplateSetInternally;
+    private bool isUpdatingTemplate;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="Thumbnail" /> class.
@@ -136,14 +127,28 @@ public partial class Thumbnail : ContentControl
     }
 
     /// <inheritdoc />
+    protected override void OnContentChanged(object oldContent, object newContent)
+    {
+        base.OnContentChanged(oldContent, newContent);
+        this.UpdateContentTemplate();
+    }
+
+    /// <inheritdoc />
     /// <remarks>
     ///     If the control is already loaded, when this property changes and neither the
-    ///     <see cref="ContentControl.ContentTemplate" /> nor
-    ///     the <see cref="ContentControl.ContentTemplateSelector" /> is set, the default template will be used.
+    ///     <see cref="ContentControl.ContentTemplate" /> nor the <see cref="ContentControl.ContentTemplateSelector" />
+    ///     is set, the default template will be used.
     /// </remarks>
     protected override void OnContentTemplateChanged(DataTemplate oldContentTemplate, DataTemplate newContentTemplate)
     {
         base.OnContentTemplateChanged(oldContentTemplate, newContentTemplate);
+
+        if (!this.isUpdatingTemplate)
+        {
+            // External change
+            this.isTemplateSetInternally = false;
+        }
+
         this.UpdateContentTemplate();
     }
 
@@ -167,10 +172,9 @@ public partial class Thumbnail : ContentControl
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
     /// <remarks>
-    ///     This method sets the <see cref="isInitialized" /> flag to <see langword="true" /> and calls
-    ///     <see cref="UpdateContentTemplate" />.
-    ///     If neither the <see cref="ContentControl.ContentTemplate" /> nor the
-    ///     <see cref="ContentControl.ContentTemplateSelector" />
+    ///     This method sets the <see cref="isInitialized" /> flag to <see langword="true" /> and
+    ///     calls <see cref="UpdateContentTemplate" />. If neither the <see
+    ///     cref="ContentControl.ContentTemplate" /> nor the <see cref="ContentControl.ContentTemplateSelector" />
     ///     is set, the control will use a default template defined in the application resources.
     /// </remarks>
     private void OnLoaded(object sender, RoutedEventArgs args)
@@ -183,15 +187,15 @@ public partial class Thumbnail : ContentControl
     ///     Updates the content template of the control based on the current properties.
     /// </summary>
     /// <remarks>
-    ///     This method ensures that the <see cref="ContentControl.ContentTemplate" /> property is set to the appropriate
-    ///     template
-    ///     based on the current properties of the control. If <see cref="ContentControl.ContentTemplate" /> is set, it takes
-    ///     precedence. If <see cref="ContentControl.ContentTemplate" /> is not set but
-    ///     <see cref="ContentControl.ContentTemplateSelector" />
-    ///     is set, the control will use the template selected by the <see cref="ContentControl.ContentTemplateSelector" />.
+    ///     This method ensures that the <see cref="ContentControl.ContentTemplate" /> property is
+    ///     set to the appropriate template based on the current properties of the control. If <see
+    ///     cref="ContentControl.ContentTemplate" /> is set, it takes precedence. If <see
+    ///     cref="ContentControl.ContentTemplate" /> is not set but <see
+    ///     cref="ContentControl.ContentTemplateSelector" /> is set, the control will use the
+    ///     template selected by the <see cref="ContentControl.ContentTemplateSelector" />.
     ///     <para>
-    ///         If neither is set, the control will use a default template defined in the application resources.
-    ///     </para>
+    ///     If neither is set, the control will use a default template defined in the application
+    ///     resources.</para>
     /// </remarks>
     private void UpdateContentTemplate()
     {
@@ -200,14 +204,29 @@ public partial class Thumbnail : ContentControl
             return;
         }
 
+        // If we previously set the template, clear it to allow re-evaluation
+        if (this.isTemplateSetInternally)
+        {
+            this.isUpdatingTemplate = true;
+            this.ContentTemplate = null;
+            this.isUpdatingTemplate = false;
+            this.isTemplateSetInternally = false;
+        }
+
         if (this.ContentTemplate is null)
         {
+            DataTemplate? selectedTemplate = null;
             if (this.ContentTemplateSelector is not null)
             {
-                this.ContentTemplate = this.ContentTemplateSelector.SelectTemplate(this.Content, this);
+                selectedTemplate = this.ContentTemplateSelector.SelectTemplate(this.Content, this);
             }
 
-            this.ContentTemplate ??= (DataTemplate)this.Resources["DefaultThumbnailTemplate"];
+            selectedTemplate ??= (DataTemplate)this.Resources["DefaultThumbnailTemplate"];
+
+            this.isUpdatingTemplate = true;
+            this.ContentTemplate = selectedTemplate;
+            this.isUpdatingTemplate = false;
+            this.isTemplateSetInternally = true;
         }
     }
 }
