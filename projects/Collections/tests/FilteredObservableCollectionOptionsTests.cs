@@ -28,7 +28,7 @@ public class FilteredObservableCollectionOptionsTests
         };
 
         // Act
-        using var view = new FilteredObservableCollection<PlainItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         // Assert
         _ = view.Should().ContainSingle();
@@ -40,12 +40,15 @@ public class FilteredObservableCollectionOptionsTests
     {
         // Arrange
         var source = new ObservableCollection<PlainItem> { new(1) };
-        using var view = new FilteredObservableCollection<PlainItem>(
+        using var view = FilteredObservableCollectionFactory.FromPredicate(
             source,
             i => i.Value % 2 == 0,
-            relevantProperties: null,
-            observeSourceChanges: false,
-            observeItemChanges: false);
+            new FilteredObservableCollectionOptions
+            {
+                ObserveSourceChanges = false,
+                ObserveItemChanges = false,
+                RelevantProperties = null,
+            });
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -73,12 +76,15 @@ public class FilteredObservableCollectionOptionsTests
         var item = new NotifyingItem(1);
         var source = new ObservableCollection<NotifyingItem> { item };
 
-        using var view = new FilteredObservableCollection<NotifyingItem>(
+        using var view = FilteredObservableCollectionFactory.FromPredicate(
             source,
             i => i.Value % 2 == 0,
-            relevantProperties: null,
-            observeSourceChanges: true,
-            observeItemChanges: false);
+            new FilteredObservableCollectionOptions
+            {
+                ObserveSourceChanges = true,
+                ObserveItemChanges = false,
+                RelevantProperties = null,
+            });
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);

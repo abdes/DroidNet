@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using AwesomeAssertions;
 
 namespace DroidNet.Collections.Tests;
@@ -78,7 +79,7 @@ public class ObservableCollectionExtensionsTests
         collection.InsertInPlace(itemToAdd, x => x, Comparer<int>.Default);
 
         // Assert
-        _ = collection.Count.Should().Be(1);
+        _ = collection.Should().ContainSingle();
         _ = collection.Should().Equal(4);
     }
 
@@ -93,7 +94,7 @@ public class ObservableCollectionExtensionsTests
         collection.InsertInPlace(itemToAdd, x => x, Comparer<int>.Default);
 
         // Assert
-        _ = collection.Count.Should().Be(5);
+        _ = collection.Should().HaveCount(5);
         _ = collection.Should().Equal(1, 3, 4, 5, 7);
     }
 
@@ -108,7 +109,7 @@ public class ObservableCollectionExtensionsTests
         collection.InsertInPlace(itemToAdd, x => x, Comparer<int>.Default);
 
         // Assert
-        _ = collection.Count.Should().Be(5);
+        _ = collection.Should().HaveCount(5);
         _ = collection.Should().Equal(1, 2, 3, 4, 5);
     }
 
@@ -123,7 +124,7 @@ public class ObservableCollectionExtensionsTests
         collection.InsertInPlace(itemToAdd, x => x, Comparer<int>.Default);
 
         // Assert
-        _ = collection.Count.Should().Be(5);
+        _ = collection.Should().HaveCount(5);
         _ = collection.Should().Equal(1, 2, 3, 4, 5);
     }
 
@@ -134,10 +135,10 @@ public class ObservableCollectionExtensionsTests
         var source = new ObservableCollection<int> { 1, 2, 3 };
 
         // Act
-        using var result = source.Transform(x => $"Item {x * 10}");
+        using var result = source.Transform(x => string.Create(CultureInfo.InvariantCulture, $"Item {x * 10}"));
 
         // Assert
-        _ = result.Count.Should().Be(3);
+        _ = result.Should().HaveCount(3);
         _ = result.Should().Equal("Item 10", "Item 20", "Item 30");
     }
 
@@ -148,11 +149,11 @@ public class ObservableCollectionExtensionsTests
         var source = new ObservableCollection<int>();
 
         // Act
-        using var result = source.Transform(x => $"Item {x * 10}");
+        using var result = source.Transform(x => string.Create(CultureInfo.InvariantCulture, $"Item {x * 10}"));
         source.Add(4);
 
         // Assert
-        _ = result.Count.Should().Be(1);
+        _ = result.Should().ContainSingle();
         _ = result.Should().Equal("Item 40");
     }
 
@@ -163,11 +164,11 @@ public class ObservableCollectionExtensionsTests
         var source = new ObservableCollection<int> { 1, 2 };
 
         // Act
-        using var result = source.Transform(x => $"Item {x * 10}");
+        using var result = source.Transform(x => string.Create(CultureInfo.InvariantCulture, $"Item {x * 10}"));
         _ = source.Remove(1);
 
         // Assert
-        _ = result.Count.Should().Be(1);
+        _ = result.Should().ContainSingle();
         _ = result.Should().Equal("Item 20");
     }
 
@@ -178,11 +179,11 @@ public class ObservableCollectionExtensionsTests
         var source = new ObservableCollection<int> { 1, 2 };
 
         // Act
-        using var result = source.Transform(x => $"Item {x * 10}");
+        using var result = source.Transform(x => string.Create(CultureInfo.InvariantCulture, $"Item {x * 10}"));
         source[0] = 3;
 
         // Assert
-        _ = result.Count.Should().Be(2);
+        _ = result.Should().HaveCount(2);
         _ = result.Should().Equal("Item 30", "Item 20");
     }
 
@@ -193,10 +194,10 @@ public class ObservableCollectionExtensionsTests
         var source = new ObservableCollection<int> { 1, 2 };
 
         // Act
-        using var result = source.Transform(x => $"Item {x * 10}");
+        using var result = source.Transform(x => string.Create(CultureInfo.InvariantCulture, $"Item {x * 10}"));
         source.Clear();
 
         // Assert
-        _ = result.Count.Should().Be(0);
+        _ = result.Should().BeEmpty();
     }
 }
