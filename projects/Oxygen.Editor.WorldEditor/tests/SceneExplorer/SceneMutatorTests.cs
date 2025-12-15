@@ -151,14 +151,14 @@ public class SceneMutatorTests
         scene.RootNodes.Add(child1);
         scene.RootNodes.Add(child2);
 
-        var changes = this.mutator.ReparentHierarchies(new[] { child1.Id, child2.Id }, parent.Id, scene);
+        var changes = this.mutator.ReparentHierarchies([child1.Id, child2.Id], parent.Id, scene);
 
         _ = changes.Should().HaveCount(2);
         _ = child1.Parent.Should().Be(parent);
         _ = child2.Parent.Should().Be(parent);
         _ = scene.RootNodes.Should().NotContain(child1);
         _ = scene.RootNodes.Should().NotContain(child2);
-        _ = changes.All(c => c.NewParentId == parent.Id).Should().BeTrue();
+        _ = changes.Should().OnlyContain(c => c.NewParentId == parent.Id);
     }
 
     [TestMethod]
@@ -172,9 +172,9 @@ public class SceneMutatorTests
         scene.RootNodes.Add(hierarchyRoot);
         scene.RootNodes.Add(newParent);
 
-        var changes = this.mutator.ReparentHierarchies(new[] { hierarchyRoot.Id }, newParent.Id, scene);
+        var changes = this.mutator.ReparentHierarchies([hierarchyRoot.Id], newParent.Id, scene);
 
-        _ = changes.Should().HaveCount(1);
+        _ = changes.Should().ContainSingle();
         var change = changes[0];
         _ = change.NewParentId.Should().Be(newParent.Id);
         _ = change.RemovedFromRootNodes.Should().BeTrue();

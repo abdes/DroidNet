@@ -134,17 +134,17 @@ public partial class SceneEditorViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Minimum allowed native logging verbosity value for the engine (e.g. -9).
+    /// Gets minimum allowed native logging verbosity value for the engine (e.g. -9).
     /// </summary>
     public int MinLoggingVerbosity => EngineConstants.MinLoggingVerbosity;
 
     /// <summary>
-    /// Maximum allowed native logging verbosity value for the engine (e.g. +9).
+    /// Gets maximum allowed native logging verbosity value for the engine (e.g. +9).
     /// </summary>
     public int MaxLoggingVerbosity => EngineConstants.MaxLoggingVerbosity;
 
     /// <summary>
-    /// Current native engine logging verbosity; sourced from the engine service.
+    /// Gets or sets current native engine logging verbosity; sourced from the engine service.
     /// Setting writes to the native runtime through the service and is clamped
     /// to Min/Max.
     /// </summary>

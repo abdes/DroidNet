@@ -247,7 +247,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnTrue_WhenSceneIsLoadedSuccessfully()
+    public async Task LoadSceneAsync_ShouldReturnScene_WhenSceneIsLoadedSuccessfully()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
@@ -282,13 +282,13 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeTrue();
-        _ = scene.RootNodes.Should().ContainSingle();
-        _ = scene.RootNodes.ElementAt(0).Name.Should().Be("node1");
+        _ = result.Should().NotBeNull();
+        _ = result!.RootNodes.Should().ContainSingle();
+        _ = result.RootNodes.ElementAt(0).Name.Should().Be("node1");
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnFalse_WhenSceneFileDoesNotExist()
+    public async Task LoadSceneAsync_ShouldReturnNull_WhenSceneFileDoesNotExist()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
@@ -312,7 +312,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeFalse();
+        _ = result.Should().BeNull();
         this.mockLogger.Verify(
             x => x.Log(
                 LogLevel.Error,
@@ -324,7 +324,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnFalse_WhenSceneFileContainsInvalidJson()
+    public async Task LoadSceneAsync_ShouldReturnNull_WhenSceneFileContainsInvalidJson()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
@@ -350,7 +350,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeFalse();
+        _ = result.Should().BeNull();
         this.mockLogger.Verify(
             x => x.Log(
                 LogLevel.Error,
@@ -362,7 +362,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnFalse_WhenProjectLocationIsNull()
+    public async Task LoadSceneAsync_ShouldReturnNull_WhenProjectLocationIsNull()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, location: null, "Media/Preview.png");
@@ -375,7 +375,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeFalse();
+        _ = result.Should().BeNull();
 
 #if DEBUG
         _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.StartsWith("Fail: "));
@@ -392,7 +392,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnFalse_WhenProjectLocationDoesNotExist()
+    public async Task LoadSceneAsync_ShouldReturnNull_WhenProjectLocationDoesNotExist()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "invalid/path", "Media/Preview.png");
@@ -408,7 +408,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeFalse();
+        _ = result.Should().BeNull();
         this.mockLogger.Verify(
             x => x.Log(
                 LogLevel.Error,
@@ -420,7 +420,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public async Task LoadSceneAsync_ShouldReturnFalse_WhenExceptionIsThrown()
+    public async Task LoadSceneAsync_ShouldReturnNull_WhenExceptionIsThrown()
     {
         // Arrange
         var projectInfo = new ProjectInfo("name", Category.Games, "path/with/error", "Media/Preview.png");
@@ -436,7 +436,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var result = await this.projectManagerService.LoadSceneAsync(scene).ConfigureAwait(false);
 
         // Assert
-        _ = result.Should().BeFalse();
+        _ = result.Should().BeNull();
         this.mockLogger.Verify(
             x => x.Log(
                 LogLevel.Error,

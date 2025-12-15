@@ -15,7 +15,7 @@ namespace Oxygen.Editor.WorldEditor.Services;
 ///     Default implementation of <see cref="ISceneEngineSync"/> that synchronizes scene data
 ///     with the native rendering engine through the <see cref="IEngineService"/>.
 /// </summary>
-public sealed class SceneEngineSync : ISceneEngineSync
+public sealed partial class SceneEngineSync : ISceneEngineSync
 {
     private readonly IEngineService engineService;
     private readonly ILogger<SceneEngineSync> logger;
@@ -33,14 +33,49 @@ public sealed class SceneEngineSync : ISceneEngineSync
     }
 
     /// <inheritdoc/>
+    public async Task SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        if (this.engineService.State != EngineServiceState.Running)
+        {
+            this.LogEngineNotRunningDeferringSceneSync(scene);
+        }
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            var state = this.engineService.State;
+            if (state == EngineServiceState.Running)
+            {
+                break;
+            }
+
+            if (state is EngineServiceState.NoEngine or EngineServiceState.Faulted)
+            {
+                this.LogEngineNotAvailableSkippingSceneSync(scene);
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken).ConfigureAwait(false);
+        }
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await this.SyncSceneAsync(scene).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc/>
     public async Task SyncSceneAsync(Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; skipping scene sync for '{SceneName}'", scene.Name);
+            this.LogOxygenWorldNotAvailableSkippingSceneSync(scene);
             return;
         }
 
@@ -50,7 +85,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
         {
             // Create (or recreate) the scene in the engine
             world.CreateScene(scene.Name);
-            this.logger.LogInformation("Created scene '{SceneName}' in engine", scene.Name);
+            this.LogCreatedSceneInEngine(scene);
 
             // Phase 1: Create all nodes without parenting
             await this.CreateAllNodesAsync(scene, world).ConfigureAwait(false);
@@ -63,7 +98,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to sync scene '{SceneName}' with engine", scene.Name);
+            this.LogFailedToSyncSceneWithEngine(ex, scene);
         }
     }
 
@@ -72,10 +107,10 @@ public sealed class SceneEngineSync : ISceneEngineSync
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot create node '{NodeName}'", node.Name);
+            this.LogCannotCreateNode(node);
             return;
         }
 
@@ -89,11 +124,11 @@ public sealed class SceneEngineSync : ISceneEngineSync
 
             this.ApplyTransform(world, node);
 
-            this.logger.LogDebug("Created and initialized node '{NodeName}' in engine", node.Name);
+            this.LogCreatedAndInitializedNode(node);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to create node '{NodeName}' in engine", node.Name);
+            this.LogFailedToCreateNode(ex, node);
             throw;
         }
     }
@@ -101,21 +136,21 @@ public sealed class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task RemoveNodeAsync(Guid nodeId)
     {
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot remove node '{NodeId}'", nodeId);
+            this.LogCannotRemoveNode(nodeId);
             return Task.CompletedTask;
         }
 
         try
         {
             world.RemoveSceneNode(nodeId);
-            this.logger.LogDebug("Removed node '{NodeId}' from engine", nodeId);
+            this.LogRemovedNode(nodeId);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to remove node '{NodeId}' from engine", nodeId);
+            this.LogFailedToRemoveNode(ex, nodeId);
         }
 
         return Task.CompletedTask;
@@ -124,10 +159,10 @@ public sealed class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task RemoveNodeHierarchyAsync(Guid rootNodeId)
     {
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot remove node hierarchy '{NodeId}'", rootNodeId);
+            this.LogCannotRemoveNodeHierarchy(rootNodeId);
             return Task.CompletedTask;
         }
 
@@ -144,10 +179,10 @@ public sealed class SceneEngineSync : ISceneEngineSync
             return Task.CompletedTask;
         }
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot remove node hierarchies");
+            this.LogCannotRemoveNodeHierarchies();
             return Task.CompletedTask;
         }
 
@@ -158,21 +193,21 @@ public sealed class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false)
     {
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot reparent node '{NodeId}'", nodeId);
+            this.LogCannotReparentNode(nodeId);
             return Task.CompletedTask;
         }
 
         try
         {
             world.ReparentSceneNode(nodeId, newParentGuid, preserveWorldTransform);
-            this.logger.LogDebug("Reparented node {NodeId} -> {ParentId}", nodeId, newParentGuid);
+            this.LogReparentedNode(nodeId, newParentGuid);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to reparent node '{NodeId}'", nodeId);
+            this.LogFailedToReparentNode(ex, nodeId);
         }
 
         return Task.CompletedTask;
@@ -186,10 +221,10 @@ public sealed class SceneEngineSync : ISceneEngineSync
             return Task.CompletedTask;
         }
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot reparent hierarchies");
+            this.LogCannotReparentHierarchies();
             return Task.CompletedTask;
         }
 
@@ -202,21 +237,21 @@ public sealed class SceneEngineSync : ISceneEngineSync
     {
         ArgumentNullException.ThrowIfNull(node);
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot update transform for '{NodeName}'", node.Name);
+            this.LogCannotUpdateTransform(node);
             return Task.CompletedTask;
         }
 
         try
         {
             this.ApplyTransform(world, node);
-            this.logger.LogDebug("Updated transform for node '{NodeName}'", node.Name);
+            this.LogUpdatedTransform(node);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to update transform for node '{NodeName}'", node.Name);
+            this.LogFailedToUpdateTransform(ex, node);
         }
 
         return Task.CompletedTask;
@@ -228,24 +263,36 @@ public sealed class SceneEngineSync : ISceneEngineSync
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(geometry);
 
-        var world = this.engineService.World;
+        var world = this.TryGetWorld();
         if (world is null)
         {
-            this.logger.LogWarning("OxygenWorld is not available; cannot attach geometry to '{NodeName}'", node.Name);
+            this.LogCannotAttachGeometry(node);
             return Task.CompletedTask;
         }
 
         try
         {
             this.ApplyGeometry(world, node, geometry);
-            this.logger.LogDebug("Attached geometry to node '{NodeName}'", node.Name);
+            this.LogAttachedGeometry(node);
         }
         catch (Exception ex)
         {
-            this.logger.LogError(ex, "Failed to attach geometry to node '{NodeName}'", node.Name);
+            this.LogFailedToAttachGeometry(ex, node);
         }
 
         return Task.CompletedTask;
+    }
+
+    private Oxygen.Interop.World.OxygenWorld? TryGetWorld()
+    {
+        try
+        {
+            return this.engineService.World;
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     /// <inheritdoc/>
@@ -418,7 +465,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
         {
             if (!node.IsActive)
             {
-                this.logger.LogError("Node '{NodeName}' creation was not successful", node.Name);
+                this.LogNodeCreationNotSuccessful(node);
                 scene.RootNodes.Remove(node);
                 return;
             }
@@ -430,7 +477,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to reparent node '{NodeName}'", node.Name);
+                this.LogFailedToReparentNode(ex, node);
             }
 
             // Apply transform if present
@@ -440,7 +487,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
             }
             catch (Exception ex)
             {
-                this.logger.LogError(ex, "Failed to set transform for node '{NodeName}'", node.Name);
+                this.LogFailedToSetTransform(ex, node);
             }
 
             // Attach geometry if present
@@ -453,7 +500,7 @@ public sealed class SceneEngineSync : ISceneEngineSync
                 }
                 catch (Exception ex)
                 {
-                    this.logger.LogError(ex, "Failed to attach geometry for node '{NodeName}'", node.Name);
+                    this.LogFailedToAttachGeometry(ex, node);
                 }
             }
 
@@ -489,12 +536,12 @@ public sealed class SceneEngineSync : ISceneEngineSync
 
             if (handles.Count > 0)
             {
-                world.UpdateTransformsForNodes(handles.ToArray());
+                world.UpdateTransformsForNodes([.. handles]);
             }
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning(ex, "Failed to request targeted transform propagation");
+            this.LogFailedToRequestTransformPropagation(ex);
         }
     }
 
@@ -511,36 +558,19 @@ public sealed class SceneEngineSync : ISceneEngineSync
                         var transform = node.Components.OfType<Transform>().FirstOrDefault();
                         if (transform is not null)
                         {
-                            var (pos, rot, scale) = TransformConverter.ToNative(transform);
-                            this.logger.LogInformation(
-                                "SceneTransform: node='{NodeName}' parent='{ParentId}' pos=({X:0.00},{Y:0.00},{Z:0.00}) " +
-                                "scale=({SX:0.00},{SY:0.00},{SZ:0.00}) rot=({RX:0.00},{RY:0.00},{RZ:0.00},{RW:0.00})",
-                                node.Name,
-                                parentGuid?.ToString() ?? "root",
-                                pos.X,
-                                pos.Y,
-                                pos.Z,
-                                scale.X,
-                                scale.Y,
-                                scale.Z,
-                                rot.X,
-                                rot.Y,
-                                rot.Z,
-                                rot.W);
+                            // Delegate logging of transform details to helper so it can extract values itself
+                            this.LogSceneTransform(node, parentGuid);
                         }
                         else
                         {
-                            this.logger.LogInformation(
-                                "SceneTransform: node='{NodeName}' parent='{ParentId}' has NO Transform component",
-                                node.Name,
-                                parentGuid?.ToString() ?? "root");
+                            this.LogSceneTransformHasNoComponent(node, parentGuid);
                         }
                     });
             }
         }
         catch (Exception ex)
         {
-            this.logger.LogWarning(ex, "Failed to dump scene transforms for debug");
+            this.LogFailedToDumpSceneTransformsForDebug(ex);
         }
     }
 }

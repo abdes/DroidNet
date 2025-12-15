@@ -13,7 +13,6 @@ namespace Oxygen.Editor.WorldEditor.Editors;
 /// </summary>
 public partial class DocumentManager
 {
-
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,

@@ -34,13 +34,13 @@ public record ExplorerEntryData
     /// Human friendly folder name (only for Type=="Folder").
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? Name { get; init; }
+    public string? Name { get; set; }
 
     /// <summary>
     /// Child entries for folder nodes.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<ExplorerEntryData>? Children { get; init; } = null;
+    public IList<ExplorerEntryData>? Children { get; set; } = null;
 
     /// <summary>
     /// Gets or initializes a value indicating whether the item is expanded in the explorer view.

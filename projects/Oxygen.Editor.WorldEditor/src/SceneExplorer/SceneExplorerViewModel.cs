@@ -17,12 +17,12 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.Messages;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+using Oxygen.Editor.WorldEditor.SceneExplorer.Services;
 using Oxygen.Editor.WorldEditor.Services;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer;
@@ -30,7 +30,7 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer;
 /// <summary>
 ///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.
 /// </summary>
-public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
+public partial class SceneExplorerViewModel : DynamicTreeViewModel
 {
     private readonly IProject currentProject;
     private readonly ILogger<SceneExplorerViewModel> logger;
@@ -38,38 +38,17 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
     private readonly IDocumentService documentService;
+    private readonly WindowId windowId;
     private readonly ISceneEngineSync sceneEngineSync;
-    private readonly ISceneMutator sceneMutator;
-    private readonly ISceneOrganizer sceneOrganizer;
-    private readonly ILayoutContext layoutContext;
-    private readonly Dictionary<SceneNodeAdapter, SceneNodeChangeRecord> pendingSceneChanges = new();
-    private readonly Dictionary<SceneNodeAdapter, LayoutChangeRecord> pendingLayoutChanges = new();
+    private readonly ISceneExplorerService sceneExplorerService;
+    private readonly List<ITreeItem> clipboard = [];
+
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
-    private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = new();
+    private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = [];
     private int nextEntityIndex;
-    private bool isPerformingLayoutMove;
-    private bool isPerformingBatchDelete;
-    private List<SceneNode>? batchRemovedNodes;
+    private CancellationTokenSource? loadSceneCts;
 
     private bool isDisposed;
-    // When true we are performing an explicit delete operation and the tree's
-    // ItemBeingRemoved handler should remove the corresponding scene nodes.
-    // This prevents accidental removal when moving items between folder/groupings.
-    private bool isPerformingDelete;
-
-    // When true, model-driven add/remove operations should not create undo entries.
-    // This is used to avoid duplicating undo entries when we perform programmatic
-    // adapter manipulations during folder create/undo/redo.
-    private bool suppressUndoRecording;
-
-    // Transient capture of an adapter's old scene-node parent when it is removed
-    // as part of a non-delete operation so the subsequent add can detect a
-    // SceneNode -> SceneNode reparent and perform a single model mutation.
-    private readonly Dictionary<SceneNodeAdapter, System.Guid> capturedOldParent = new();
-
-    // Track adapters we've deleted so OnItemRemoved can broadcast a node-removed
-    // message (we perform engine removal in OnItemBeingRemoved when deleting).
-    private readonly HashSet<SceneNodeAdapter> deletedAdapters = new();
 
     // No cached selection - capture selection at command time to avoid stale state.
 
@@ -80,7 +59,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="router">The router service used for navigation events.</param>
     /// <param name="documentService">The document service for handling document operations.</param>
+    /// <param name="windowId">The window identifier for the associated window.</param>
     /// <param name="sceneEngineSync">The scene-engine synchronization service.</param>
+    /// <param name="sceneExplorerService">The scene explorer service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -90,10 +71,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         IMessenger messenger,
         IRouter router,
         IDocumentService documentService,
+        WindowId windowId,
         ISceneEngineSync sceneEngineSync,
-        ISceneMutator sceneMutator,
-        ISceneOrganizer sceneOrganizer,
+        ISceneExplorerService sceneExplorerService,
         ILoggerFactory? loggerFactory = null)
+        : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
@@ -101,10 +83,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.messenger = messenger;
         this.router = router;
         this.documentService = documentService;
+        this.windowId = windowId;
         this.sceneEngineSync = sceneEngineSync;
-        this.sceneMutator = sceneMutator;
-        this.sceneOrganizer = sceneOrganizer;
-        this.layoutContext = new LayoutContext(this);
+        this.sceneExplorerService = sceneExplorerService;
 
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
@@ -117,6 +98,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
 
         this.ItemBeingAdded += this.OnItemBeingAdded;
         this.ItemAdded += this.OnItemAdded;
+        this.ItemMoved += this.OnItemMoved;
 
         messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
 
@@ -128,11 +110,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     }
 
     /// <summary>
+    /// Fired when the ViewModel requests a rename operation in the View.
+    /// </summary>
+    internal event EventHandler<RenameRequestedEventArgs?>? RenameRequested;
+
+    /// <summary>
     ///     Gets or sets a value indicating whether there are unlocked items in the current selection.
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.RemoveSelectedItemsCommand))]
-    [NotifyCanExecuteChangedFor(nameof(SceneExplorerViewModel.CreateFolderFromSelectionCommand))]
     public partial bool HasUnlockedSelectedItems { get; set; }
 
     /// <summary>
@@ -151,6 +137,149 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     public ReadOnlyObservableCollection<IChange> RedoStack { get; }
 
     /// <inheritdoc />
+    [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
+    public override async Task RemoveSelectedItems()
+    {
+        UndoRedo.Default[this].BeginChangeSet("Remove Selected Items");
+        try
+        {
+            // Delegate to base to update UI (this will trigger OnItemRemoved)
+            await base.RemoveSelectedItems().ConfigureAwait(false);
+        }
+        finally
+        {
+            UndoRedo.Default[this].EndChangeSet();
+        }
+    }
+
+    /// <summary>
+    ///     Renames the specified <paramref name="item"/> to <paramref name="newName"/> and
+    ///     records an undo change so the operation can be undone.
+    /// </summary>
+    /// <param name="item">The tree item to rename.</param>
+    /// <param name="newName">The new name for the item.</param>
+    /// <returns>A <see cref="Task"/> that completes when the rename has finished.</returns>
+    public async Task RenameItemAsync(ITreeItem item, string newName)
+    {
+        var oldName = item.Label;
+        if (string.Equals(oldName, newName, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
+
+        UndoRedo.Default[this].AddChange(
+            $"Rename({oldName} -> {newName})",
+            async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
+    }
+
+    /// <summary>
+    ///     Returns the <see cref="TreeItemAdapter"/> associated with the given scene node <paramref name="nodeId"/>,
+    ///     or <see langword="null"/> if no adapter is registered for that id.
+    /// </summary>
+    /// <param name="nodeId">The id of the scene node to look up.</param>
+    /// <returns>A <see cref="Task"/> that returns the adapter or <see langword="null"/>.</returns>
+    public Task<TreeItemAdapter?> FindAdapterByNodeIdAsync(Guid nodeId)
+        => Task.FromResult<TreeItemAdapter?>(this.nodeAdapterIndex.TryGetValue(nodeId, out var a) ? a : null);
+
+    /// <summary>
+    /// Handles document-open actions once the target scene has been resolved.
+    /// Kept protected for testability; does no UI-thread dispatching.
+    /// </summary>
+    /// <param name="scene">Scene to load.</param>
+    /// <returns>Task that completes after the scene has been loaded.</returns>
+    protected internal virtual async Task HandleDocumentOpenedAsync(Scene scene)
+        => await this.LoadSceneAsync(scene).ConfigureAwait(true);
+
+    /// <summary>
+    /// Core logic for handling an item added event. Separated for testability.
+    /// </summary>
+    /// <param name="args">Event arguments.</param>
+    /// <returns>A <see cref="Task"/> that completes when the item has been handled.</returns>
+    protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
+    {
+        // Add Undo
+        // NOTE: We add the undo change *before* any async operations to ensure that if this method
+        // is called within an Undo context (which sets the UndoRedo state to Undoing), the new change
+        // is correctly pushed to the Redo stack. If we await first, the Undo context might be disposed
+        // by the time we reach this line, causing the change to be pushed to the Undo stack instead.
+        UndoRedo.Default[this]
+            .AddChange(
+                $"RemoveItem({args.TreeItem.Label})",
+                async () =>
+                {
+                    try
+                    {
+                        await this.RemoveItemAsync(args.TreeItem).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.LogUndoRemoveFailed(ex, args.TreeItem.Label);
+                    }
+                });
+
+        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
+
+        // Sync with Backend
+        if (addedAdapter != null)
+        {
+            await this.sceneExplorerService.AddNodeAsync(args.Parent, addedAdapter.AttachedObject).ConfigureAwait(false);
+        }
+        else if (args.TreeItem is FolderAdapter folderAdapter)
+        {
+            await this.sceneExplorerService.CreateFolderAsync(args.Parent, folderAdapter.Label, folderAdapter.Id).ConfigureAwait(false);
+        }
+
+        this.LogItemAdded(args.TreeItem.Label);
+
+        if (addedAdapter is null)
+        {
+            return;
+        }
+
+        // Register adapter for quick lookup
+        try
+        {
+            this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
+        }
+        catch
+        {
+            // FIXME: ignore indexing errors
+        }
+    }
+
+    /// <summary>
+    /// Core logic for handling an item being added. Separated from the event handler for testability.
+    /// </summary>
+    /// <param name="scene">The scene owning the adapter.</param>
+    /// <param name="entityAdapter">The node adapter being added.</param>
+    /// <param name="parent">The parent tree item.</param>
+    /// <param name="args">Original event args (used to set <see cref="TreeItemBeingAddedEventArgs.Proceed"/> when needed).</param>
+    protected internal virtual void HandleItemBeingAdded(Scene scene, SceneNodeAdapter entityAdapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
+    {
+        // Validation logic only. The actual move/add is handled by the caller (DynamicTreeViewModel)
+        // and then synced in OnItemAdded/OnItemMoved.
+
+        // We can check if the move is valid here.
+        // For now, we assume it is valid if the types match (checked in OnItemBeingAdded event handler).
+    }
+
+    /// <summary>
+    ///     Called when an item is in the process of being removed from the tree.
+    ///     This implementation is a no-op because deletion is handled by
+    ///     <see cref="RemoveSelectedItems"/> and moves are handled by
+    ///     <see cref="OnItemBeingAdded"/> (which covers the add part of a move).
+    /// </summary>
+    /// <param name="sender">Event sender.</param>
+    /// <param name="args">The event arguments describing the removal.</param>
+    protected internal virtual void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
+    {
+        // No-op: Deletion is handled by RemoveSelectedItemsCommand.
+        // Moves are handled by OnItemBeingAdded (which covers the "Add" part of the move).
+    }
+
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (this.isDisposed)
@@ -162,6 +291,25 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         {
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
             this.messenger.UnregisterAll(this);
+
+            // Ensure any in-flight scene load is cancelled and the CTS is disposed.
+            try
+            {
+                if (this.loadSceneCts?.IsCancellationRequested == false)
+                {
+                    this.loadSceneCts?.Cancel();
+                }
+            }
+#pragma warning disable CA1031 // Do not catch general exception types
+            catch
+            {
+                // ignore cancellation errors during dispose
+            }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+            this.loadSceneCts?.Dispose();
+
+            this.loadSceneCts = null;
         }
 
         this.isDisposed = true;
@@ -203,62 +351,157 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.NotifySelectionDependentCommands();
     }
 
-    /// <inheritdoc />
-    [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
-    public override async Task RemoveSelectedItems()
-    {
-        // When users delete items, the tree triggers ItemBeingRemoved/ItemRemoved events.
-        // Those same events are also raised when items are moved in the tree (drag/drop).
-        // To avoid removing scene nodes from the underlying Scene.RootNodes during moves,
-        // guard deletion using a flag so OnItemBeingRemoved only removes nodes from the
-        // scene when a deliberate delete operation is in progress.
-        UndoRedo.Default[this].BeginChangeSet($"Remove {this.SelectionModel}");
-        try
+    private static SceneNodeAdapter? AsSceneNodeAdapter(ITreeItem? item)
+        => item switch
         {
-            this.isPerformingDelete = true;
-            this.batchRemovedNodes = new List<SceneNode>();
+            SceneNodeAdapter lna => lna,
+            _ => null,
+        };
 
-            // Attempt batch removal from the engine first to optimize performance and ensure atomicity.
-            // If successful, we set a flag to suppress individual engine syncs during the tree removal process.
-            var selectedAdapters = new List<TreeItemAdapter>();
-            var selectedItems = this.GetSelectedItems();
-            selectedAdapters.AddRange(selectedItems.Select(AsSceneNodeAdapter).Where(a => a is not null).Cast<TreeItemAdapter>());
+    private static async Task<FolderAdapter?> FindFolderAdapterAsync(SceneAdapter sceneAdapter, Guid folderId)
+    {
+        var children = await sceneAdapter.Children.ConfigureAwait(true);
+        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)children ?? []);
 
-            if (selectedAdapters.Count > 0)
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            if (item is FolderAdapter folder && folder.Id == folderId)
             {
-                var ids = selectedAdapters
-                    .Select(a => AsSceneNode(a as ITreeItem) is SceneNode node ? node.Id : Guid.Empty)
-                    .Where(g => g != Guid.Empty)
-                    .ToList();
+                return folder;
+            }
 
-                if (ids.Count > 0)
+            if (item is TreeItemAdapter adapter)
+            {
+                var nested = await adapter.Children.ConfigureAwait(true);
+                if (nested is not null)
                 {
-                    await this.sceneEngineSync.RemoveNodeHierarchiesAsync(ids).ConfigureAwait(false);
-                    this.isPerformingBatchDelete = true;
+                    foreach (var child in nested)
+                    {
+                        stack.Push(child);
+                    }
                 }
             }
+        }
 
-            await base.RemoveSelectedItems().ConfigureAwait(false);
+        return null;
+    }
 
-            if (this.batchRemovedNodes.Count > 0)
+    private static SceneNode? AsSceneNode(ITreeItem? item)
+        => item switch
+        {
+            SceneNodeAdapter lna => lna.AttachedObject,
+            _ => null,
+        };
+
+    private static Scene? ResolveSceneFromTree(ITreeItem? start)
+    {
+        var cursor = start;
+        while (cursor is not null)
+        {
+            switch (cursor)
             {
-                _ = this.messenger.Send(new SceneNodeRemovedMessage(this.batchRemovedNodes));
+                case SceneAdapter sceneAdapter:
+                    return sceneAdapter.AttachedObject;
+                case SceneNodeAdapter layoutAdapter:
+                    return layoutAdapter.AttachedObject.Scene;
+            }
+
+            cursor = cursor.Parent;
+        }
+
+        return null;
+    }
+
+    [RelayCommand(CanExecute = nameof(CanCut))]
+    private void Cut()
+    {
+        this.Copy();
+        _ = this.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null);
+    }
+
+    private bool CanCut() => this.HasUnlockedSelectedItems;
+
+    [RelayCommand(CanExecute = nameof(CanCopy))]
+    private void Copy()
+    {
+        this.clipboard.Clear();
+        var items = this.GetSelectedItems();
+        foreach (var item in items)
+        {
+            if (item is ICanBeCloned cloneable)
+            {
+                this.clipboard.Add(cloneable.CloneSelf());
             }
         }
-        finally
+
+        this.PasteCommand.NotifyCanExecuteChanged();
+    }
+
+    private bool CanCopy() => this.GetSelectedItems().Count > 0;
+
+    [RelayCommand(CanExecute = nameof(CanPaste))]
+    private async Task Paste()
+    {
+        if (this.clipboard.Count == 0)
         {
-            this.batchRemovedNodes = null;
-            this.isPerformingBatchDelete = false;
-            this.isPerformingDelete = false;
-            UndoRedo.Default[this].EndChangeSet();
+            return;
+        }
+
+        var parent = this.GetPasteTarget();
+        if (parent == null)
+        {
+            return;
+        }
+
+        foreach (var item in this.clipboard)
+        {
+            if (item is ICanBeCloned cloneable)
+            {
+                var clone = cloneable.CloneSelf();
+
+                // If pasting a node, ensure it has a unique name if needed?
+                // For now, just insert.
+                await this.InsertItemAsync(0, parent, clone).ConfigureAwait(false);
+            }
         }
     }
 
-    [RelayCommand]
-    private void Undo() => UndoRedo.Default[this].Undo();
+    private bool CanPaste() => this.clipboard.Count > 0;
+
+    private ITreeItem? GetPasteTarget()
+        => this.Scene is null
+            ? null
+            : this.SelectionModel switch
+            {
+                SingleSelectionModel { SelectedItem: var item } => item ?? this.Scene,
+                MultipleSelectionModel<ITreeItem> { SelectedItems.Count: 1 } multiple => multiple.SelectedItems[0],
+                _ => this.Scene,
+            };
+
+    [RelayCommand(CanExecute = nameof(CanRenameSelected))]
+    private void RenameSelected()
+    {
+        var item = this.SelectionModel?.SelectedItem;
+        if (item?.IsLocked == false)
+        {
+            this.RenameRequested?.Invoke(this, new RenameRequestedEventArgs(item));
+        }
+    }
+
+    private bool CanRenameSelected()
+        => this.SelectionModel is SingleSelectionModel { SelectedItem.IsLocked: false }
+            || (this.SelectionModel is MultipleSelectionModel<ITreeItem> m
+            && m.SelectedIndices.Count == 1
+            && !m.SelectedItems[0].IsLocked);
 
     [RelayCommand]
-    private void Redo() => UndoRedo.Default[this].Redo();
+    private async Task Undo()
+        => await UndoRedo.Default[this].UndoAsync().ConfigureAwait(false);
+
+    [RelayCommand]
+    private async Task Redo()
+        => await UndoRedo.Default[this].RedoAsync().ConfigureAwait(false);
 
     private bool CanAddEntity()
     {
@@ -314,52 +557,30 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 break;
         }
 
-        if (selectedItem is FolderAdapter)
+        var parent = selectedItem ?? sceneAdapter;
+        var name = this.GetNextEntityName();
+
+        // Create the model and adapter here to update UI immediately
+        var scene = this.Scene?.AttachedObject;
+        if (scene == null)
         {
-            selectedItem = null; // folders are layout-only; create at root instead
-        }
-
-        var relativeIndex = 0;
-
-        var selectedNode = AsSceneNodeAdapter(selectedItem);
-        if (selectedNode is not null)
-        {
-            // Create as a child of the selected node
-            var parentAdapter = selectedNode;
-            var childCount = await parentAdapter.Children.ConfigureAwait(false);
-            relativeIndex = childCount.Count;
-
-            // Determine the scene to create the node in
-            Scene parentScene = parentAdapter.AttachedObject.Scene;
-
-            var newNode = new SceneNode(parentScene) { Name = this.GetNextEntityName() };
-            var newEntity = new SceneNodeAdapter(newNode);
-
-            await this.InsertItemAsync(relativeIndex, parentAdapter, newEntity).ConfigureAwait(false);
             return;
         }
 
-        SceneAdapter parent = sceneAdapter;
-        if (selectedItem is SceneAdapter sa)
-        {
-            parent = sa;
-        }
-        else if (selectedItem is not null)
-        {
-            parent = selectedItem.Parent as SceneAdapter ?? sceneAdapter;
-        }
+        var newNode = new SceneNode(scene) { Name = name };
+        var newAdapter = new SceneNodeAdapter(newNode);
 
-        var parentChildren = await parent.Children.ConfigureAwait(false);
-        relativeIndex = selectedItem is null ? parentChildren.Count : parentChildren.IndexOf(selectedItem) + 1;
-
-        var newRootNode = new SceneNode(parent.AttachedObject) { Name = this.GetNextEntityName() };
-        var newRootEntity = new SceneNodeAdapter(newRootNode);
-
-        await this.InsertItemAsync(relativeIndex, parent, newRootEntity).ConfigureAwait(false);
+        // Update UI (this will trigger OnItemAdded)
+        await this.InsertItemAsync(0, parent, newAdapter).ConfigureAwait(false);
     }
 
     private async void OnDocumentOpened(object? sender, DroidNet.Documents.DocumentOpenedEventArgs e)
     {
+        if (e.WindowId.Value != this.windowId.Value)
+        {
+            return;
+        }
+
         // Only react to scene documents
         if (e.Metadata is not SceneDocumentMetadata sceneMetadata)
         {
@@ -380,31 +601,48 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
     }
 
-    /// <summary>
-    /// Handles document-open actions once the target scene has been resolved.
-    /// Kept protected for testability; does no UI-thread dispatching.
-    /// </summary>
-    /// <param name="scene">Scene to load.</param>
-    /// <returns>Task that completes after the scene has been loaded.</returns>
-    protected internal virtual async Task HandleDocumentOpenedAsync(Scene scene)
-    {
-        await this.LoadSceneAsync(scene).ConfigureAwait(true);
-    }
-
     private async Task LoadSceneAsync(Scene scene)
     {
-        if (!await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true))
+        // Cancel any previous loading operation
+        if (this.loadSceneCts is { IsCancellationRequested: false })
+        {
+            await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
+            this.loadSceneCts.Dispose();
+        }
+
+        this.loadSceneCts = new CancellationTokenSource();
+        var ct = this.loadSceneCts.Token;
+
+        var loadedScene = await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
+        if (loadedScene is null)
         {
             return;
         }
 
-        this.nextEntityIndex = scene.AllNodes.Count();
+        this.nextEntityIndex = loadedScene.AllNodes.Count();
 
-        this.Scene = SceneAdapter.BuildLayoutTree(scene);
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        // Build the scene layout from the loaded scene
+        this.Scene = new SceneAdapter(loadedScene)
+        {
+            IsExpanded = true,
+            IsLocked = true,
+            IsRoot = true,
+            UseLayoutAdapters = true,
+        };
         await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
 
-        // Delegate scene synchronization to the service
-        await this.sceneEngineSync.SyncSceneAsync(scene).ConfigureAwait(true);
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        // Delegate scene synchronization to the service (wait until engine is running).
+        await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
     }
 
     private async void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -413,198 +651,71 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         await this.HandleItemAddedAsync(args).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Core logic for handling an item added event. Separated for testability.
-    /// </summary>
-    /// <param name="args">Event arguments.</param>
-    protected internal virtual async Task HandleItemAddedAsync(TreeItemAddedEventArgs args)
-    {
-        if (this.isPerformingLayoutMove)
-        {
-            return;
-        }
-
-        var addedAdapter = AsSceneNodeAdapter(args.TreeItem);
-
-        if (!this.suppressUndoRecording)
-        {
-            // Check if this was a scene creation operation that requires explicit delete on undo
-            var requiresExplicitDelete = addedAdapter != null &&
-                                         this.pendingSceneChanges.TryGetValue(addedAdapter, out var change) &&
-                                         (change.OperationName == "CreateNodeAtRoot" || change.OperationName == "CreateNodeUnderParent");
-
-            // Add a safe undo action that only attempts removal if the item is still
-            // present in the tree. This avoids assert failures when multiple programmatic
-            // operations modify the tree before the undo is applied.
-            var item = args.TreeItem;
-            UndoRedo.Default[this]
-                .AddChange(
-                    $"RemoveItem({item.Label})",
-                    () =>
-                    {
-                        try
-                        {
-                            if (requiresExplicitDelete)
-                            {
-                                this.isPerformingDelete = true;
-                            }
-
-                            // If item has a parent, verify the parent currently contains the item
-                            if (item.Parent is TreeItemAdapter pa)
-                            {
-                                var children = pa.Children.ConfigureAwait(false).GetAwaiter().GetResult();
-                                if (!children.Contains(item))
-                                {
-                                    // Nothing to do
-                                    return;
-                                }
-                            }
-
-                            // If not shown and no parent we cannot remove
-                            if (item.Parent is null && !this.ShownItems.Contains(item))
-                            {
-                                return;
-                            }
-
-                            this.RemoveItemAsync(item).GetAwaiter().GetResult();
-                        }
-                        catch (Exception ex)
-                        {
-                            // Swallow exceptions during undo to keep undo system robust;
-                            // log for diagnostics.
-                            this.LogUndoRemoveFailed(ex, item.Label);
-                        }
-                        finally
-                        {
-                            if (requiresExplicitDelete)
-                            {
-                                this.isPerformingDelete = false;
-                            }
-                        }
-                    });
-        }
-
-        this.LogItemAdded(args.TreeItem.Label);
-
-        if (addedAdapter is null)
-        {
-            return;
-        }
-
-        // Register adapter for quick lookup
-        try
-        {
-            this.nodeAdapterIndex[addedAdapter.AttachedObject.Id] = addedAdapter;
-        }
-        catch
-        {
-            // ignore indexing errors
-        }
-
-        if (this.pendingSceneChanges.TryGetValue(addedAdapter, out var sceneChange))
-        {
-            _ = this.pendingSceneChanges.Remove(addedAdapter);
-            await this.ApplySceneAdditionAsync(sceneChange).ConfigureAwait(false);
-        }
-
-        await this.TryApplyLayoutChangeAsync(addedAdapter).ConfigureAwait(false);
-    }
-
-    private async void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
+    private void OnItemRemoved(object? sender, TreeItemRemovedEventArgs args)
     {
         _ = sender; // unused
 
-        await this.HandleItemRemovedAsync(args).ConfigureAwait(false);
-    }
+        // Sync with Backend
+        _ = this.RemoveItemFromBackendAsync(args.TreeItem);
 
-    /// <summary>
-    /// Core logic for handling an item removed event. Separated for testability.
-    /// </summary>
-    /// <param name="args">Event arguments.</param>
-    protected internal virtual async Task HandleItemRemovedAsync(TreeItemRemovedEventArgs args)
-    {
-        if (this.isPerformingLayoutMove)
-        {
-            return;
-        }
-
-        if (!this.suppressUndoRecording)
-        {
-            var item = args.TreeItem;
-            var parent = args.Parent;
-            UndoRedo.Default[this]
-                .AddChange(
-                    $"Add Item({item.Label})",
-                    () =>
-                    {
-                        try
-                        {
-                            if (parent is null)
-                            {
-                                this.LogCannotUndoAddOriginalParentNull(item.Label);
-                                return;
-                            }
-
-                            // If the parent already contains the item, nothing to do
-                            if (item.Parent == parent)
-                            {
-                                return;
-                            }
-
-                            // If parent is a TreeItemAdapter, ensure the child collection does not contain the item
-                            if (parent is TreeItemAdapter pa)
-                            {
-                                var children = pa.Children.ConfigureAwait(false).GetAwaiter().GetResult();
-                                if (children.Contains(item))
-                                {
-                                    return;
-                                }
-                            }
-
-                            this.InsertItemAsync(args.RelativeIndex, parent, item).GetAwaiter().GetResult();
-                        }
-                        catch (Exception ex)
-                        {
-                            this.LogUndoAddFailed(ex, item.Label);
-                        }
-                    });
-        }
+        UndoRedo.Default[this].AddChange(
+            $"InsertItemAsync({args.TreeItem.Label})",
+            async () => await this.InsertItemAsync(args.RelativeIndex, args.Parent, args.TreeItem).ConfigureAwait(false));
 
         this.LogItemRemoved(args.TreeItem.Label);
+    }
 
-        var removedAdapter = AsSceneNodeAdapter(args.TreeItem);
-        if (removedAdapter is null)
+    private async Task RemoveItemFromBackendAsync(ITreeItem item)
+    {
+        await this.sceneExplorerService.DeleteItemsAsync([item]).ConfigureAwait(false);
+
+        if (AsSceneNodeAdapter(item) is { } adapter)
+        {
+            _ = this.nodeAdapterIndex.Remove(adapter.AttachedObject.Id);
+        }
+    }
+
+    private void OnItemMoved(object? sender, TreeItemsMovedEventArgs args)
+    {
+        _ = sender; // unused
+
+        if (args.Moves.Count == 0)
         {
             return;
         }
 
-        // Unregister adapter
-        _ = this.nodeAdapterIndex.Remove(removedAdapter.AttachedObject.Id);
-
-        var wasDeletion = this.deletedAdapters.Remove(removedAdapter);
-
-        if (this.pendingSceneChanges.TryGetValue(removedAdapter, out var sceneChange))
+        if (args.IsBatch)
         {
-            _ = this.pendingSceneChanges.Remove(removedAdapter);
-            await this.ApplySceneRemovalAsync(sceneChange, wasDeletion).ConfigureAwait(false);
-        }
-        else if (wasDeletion)
-        {
-            if (this.batchRemovedNodes is not null)
-            {
-                this.batchRemovedNodes.Add(removedAdapter.AttachedObject);
-            }
-            else
-            {
-                _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { removedAdapter.AttachedObject }));
-            }
+            UndoRedo.Default[this].BeginChangeSet($"Move {args.Moves.Count} item(s)");
         }
 
-        await this.TryApplyLayoutChangeAsync(removedAdapter).ConfigureAwait(false);
-
-        if (wasDeletion)
+        try
         {
-            _ = this.capturedOldParent.Remove(removedAdapter);
+            // Sync with Backend
+            _ = this.sceneExplorerService.UpdateMovedItemsAsync(args);
+
+            this.RecordMoveUndo(args);
+        }
+        finally
+        {
+            if (args.IsBatch)
+            {
+                UndoRedo.Default[this].EndChangeSet();
+            }
+        }
+    }
+
+    private void RecordMoveUndo(TreeItemsMovedEventArgs args)
+    {
+        foreach (var group in args.Moves.GroupBy(m => m.PreviousParent))
+        {
+            foreach (var move in group.OrderBy(m => m.PreviousIndex))
+            {
+                var item = move.Item;
+                UndoRedo.Default[this].AddChange(
+                    $"MoveItemAsync({item.Label})",
+                    async () => await this.MoveItemAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
+            }
         }
     }
 
@@ -617,7 +728,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 var selectedNode = AsSceneNode(selectedItem);
                 message.Reply(selectedNode is null
                     ? Array.Empty<SceneNode>()
-                    : new[] { selectedNode });
+                    : [selectedNode]);
                 break;
 
             case MultipleSelectionModel<ITreeItem> multipleSelection:
@@ -652,7 +763,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         var selectedNode = AsSceneNode(this.SelectionModel?.SelectedItem as ITreeItem);
         var selected = selectedNode is null
             ? Array.Empty<SceneNode>()
-            : new[] { selectedNode };
+            : [selectedNode];
 
         _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(selected));
     }
@@ -690,24 +801,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
     }
 
     private List<ITreeItem> GetSelectedItems()
-    {
-        if (this.SelectionModel is null)
+        => this.SelectionModel switch
         {
-            return [];
-        }
-
-        if (this.SelectionModel is MultipleSelectionModel multi2)
-        {
-            return [.. multi2.SelectedIndices.Select(this.GetShownItemAt)];
-        }
-
-        if (this.SelectionModel is SingleSelectionModel && this.SelectedItem is not null)
-        {
-            return [this.SelectedItem];
-        }
-
-        return [];
-    }
+            null => [],
+            MultipleSelectionModel multi2 => [.. multi2.SelectedIndices.Select(this.GetShownItemAt)],
+            SingleSelectionModel when this.SelectedItem is not null => [this.SelectedItem],
+            _ => [],
+        };
 
     private void OnItemBeingAdded(object? sender, TreeItemBeingAddedEventArgs args)
     {
@@ -732,189 +832,10 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         this.HandleItemBeingAdded(scene, entityAdapter, args.Parent, args);
     }
 
-    /// <summary>
-    /// Core logic for handling an item being added. Separated from the event handler for testability.
-    /// </summary>
-    /// <param name="scene">The scene owning the adapter.</param>
-    /// <param name="entityAdapter">The node adapter being added.</param>
-    /// <param name="parent">The parent tree item.</param>
-    /// <param name="args">Original event args (used to set <see cref="TreeItemBeingAddedEventArgs.Proceed"/> when needed).</param>
-    protected internal virtual void HandleItemBeingAdded(Scene scene, SceneNodeAdapter entityAdapter, ITreeItem parent, TreeItemBeingAddedEventArgs args)
-    {
-        var entity = entityAdapter.AttachedObject;
-
-        this.pendingSceneChanges.Remove(entityAdapter);
-        this.pendingLayoutChanges.Remove(entityAdapter);
-
-        if (this.isPerformingLayoutMove)
-        {
-            return;
-        }
-
-        if (parent is SceneNodeAdapter newNodeParent)
-        {
-            var nodeExistsInScene = SceneContainsNode(scene, entity.Id);
-
-            if (!nodeExistsInScene)
-            {
-                var creationChange = this.sceneMutator.CreateNodeUnderParent(entity, newNodeParent.AttachedObject, scene);
-                this.pendingSceneChanges[entityAdapter] = creationChange;
-                return;
-            }
-
-            var oldParentId = this.capturedOldParent.TryGetValue(entityAdapter, out var captured)
-                ? captured
-                : entity.Parent?.Id;
-
-            var change = this.sceneMutator.ReparentNode(entity.Id, oldParentId, newNodeParent.AttachedObject.Id, scene);
-            _ = this.capturedOldParent.Remove(entityAdapter);
-            this.pendingSceneChanges[entityAdapter] = change;
-            return;
-        }
-
-        if (parent is SceneAdapter)
-        {
-            if (this.capturedOldParent.TryGetValue(entityAdapter, out var oldParentId))
-            {
-                var change = this.sceneMutator.ReparentNode(entity.Id, oldParentId, null, scene);
-                _ = this.capturedOldParent.Remove(entityAdapter);
-                this.pendingSceneChanges[entityAdapter] = change;
-            }
-            else
-            {
-                var change = this.sceneMutator.CreateNodeAtRoot(entity, scene);
-                this.pendingSceneChanges[entityAdapter] = change;
-            }
-
-            return;
-        }
-
-        if (parent is FolderAdapter folderAdapter)
-        {
-            try
-            {
-                var change = this.sceneOrganizer.MoveNodeToFolder(entity.Id, folderAdapter.Id, scene);
-                this.pendingLayoutChanges[entityAdapter] = change;
-            }
-            catch (InvalidOperationException ex)
-            {
-                args.Proceed = false;
-                this.LogMoveNodeToFolderRejected(ex, entity.Id, folderAdapter.Id);
-            }
-        }
-    }
-
-    protected internal virtual void OnItemBeingRemoved(object? sender, TreeItemBeingRemovedEventArgs args)
-    {
-        _ = sender; // unused
-
-        var entityAdapter = AsSceneNodeAdapter(args.TreeItem);
-        if (entityAdapter is null)
-        {
-            return;
-        }
-
-        var entity = entityAdapter.AttachedObject;
-
-        if (!this.isPerformingDelete)
-        {
-            this.CaptureOldParentForMove(entityAdapter, entityAdapter.Parent);
-
-            // If removing from a folder (and not deleting), update layout to reflect removal
-            if (args.TreeItem.Parent is FolderAdapter folderAdapter)
-            {
-                var folderScene = entity.Scene ?? ResolveSceneFromTree(folderAdapter);
-                if (folderScene != null)
-                {
-                    var change = this.sceneOrganizer.RemoveNodeFromFolder(entity.Id, folderAdapter.Id, folderScene);
-                    this.pendingLayoutChanges[entityAdapter] = change;
-                }
-            }
-
-            return;
-        }
-
-        if (this.isPerformingLayoutMove)
-        {
-            return;
-        }
-
-        // Prefer the adapter's owning scene first; fall back to walking the tree if needed.
-        var scene = entity.Scene ?? ResolveSceneFromTree(args.TreeItem.Parent ?? entityAdapter.Parent);
-
-        if (scene is null)
-        {
-            this.LogUnableResolveSceneForRemovedItem(entity.Name);
-            return;
-        }
-
-        this.HandleItemBeingRemoved(scene, entityAdapter, args);
-    }
-
-    /// <summary>
-    /// Captures the current scene parent id for a node adapter during move operations so that
-    /// subsequent add handlers can reparent using the recorded lineage instead of the live tree.
-    /// </summary>
-    /// <param name="entityAdapter">Adapter being moved.</param>
-    /// <param name="currentParent">Current tree parent (may be <see langword="null" />).</param>
-    protected internal virtual void CaptureOldParentForMove(SceneNodeAdapter entityAdapter, ITreeItem? currentParent)
-    {
-        if (currentParent is SceneNodeAdapter oldParentNode)
-        {
-            this.capturedOldParent[entityAdapter] = oldParentNode.AttachedObject.Id;
-        }
-    }
-
-    /// <summary>
-    /// Core logic for handling an item being removed during delete flows. Separated for testability.
-    /// </summary>
-    /// <param name="scene">The scene owning the adapter.</param>
-    /// <param name="entityAdapter">Adapter being removed.</param>
-    /// <param name="args">Original removal event args.</param>
-    protected internal virtual void HandleItemBeingRemoved(Scene scene, SceneNodeAdapter entityAdapter, TreeItemBeingRemovedEventArgs args)
-    {
-        _ = args; // currently unused
-        var entity = entityAdapter.AttachedObject;
-
-        var change = this.sceneMutator.RemoveNode(entity.Id, scene);
-
-        if (this.isPerformingBatchDelete)
-        {
-            change = change with { RequiresEngineSync = false };
-        }
-
-        this.pendingSceneChanges[entityAdapter] = change;
-        _ = this.deletedAdapters.Add(entityAdapter);
-    }
-
-
-
-    protected internal readonly record struct SelectionCapture(HashSet<System.Guid> NodeIds, bool UsedShownItemsFallback);
-
-    protected internal readonly record struct FolderCreationContext(
-        LayoutChangeRecord LayoutChange,
-        FolderAdapter FolderAdapter,
-        ExplorerEntryData FolderEntry);
-
-    [RelayCommand(CanExecute = nameof(CanCreateFolderFromSelection))]
-    private async Task CreateFolderFromSelection()
+    [RelayCommand(CanExecute = nameof(CanCreateFolder))]
+    private async Task CreateFolder()
     {
         this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItemsCount);
-
-        var selection = this.CaptureSelectionForFolderCreation();
-        if (selection.NodeIds.Count == 0)
-        {
-            if (selection.UsedShownItemsFallback)
-            {
-                this.LogCreateFolderUsingShownItems(selection.NodeIds.Count);
-            }
-
-            this.LogCreateFolderNoSelection();
-            return;
-        }
-
-        var idsCsv = string.Join(',', selection.NodeIds.Select(static g => g.ToString()));
-        this.LogCreateFolderCapturedSelection(idsCsv);
 
         var sceneAdapter = this.Scene;
         if (sceneAdapter is null)
@@ -922,329 +843,58 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
             return;
         }
 
-        var scene = sceneAdapter.AttachedObject;
-        var topLevelSelection = this.sceneOrganizer.FilterTopLevelSelectedNodeIds(selection.NodeIds, scene);
+        // Default to creating under the Scene Root
+        ITreeItem parent = sceneAdapter;
 
-        var creationContext = this.CreateFolderCreationContext(sceneAdapter, scene, topLevelSelection);
-        if (creationContext is null)
+        // If a single item is selected, try to use it as the parent
+        var selectedItems = this.GetSelectedItems();
+        if (selectedItems.Count == 1)
         {
-            return;
-        }
+            var selected = selectedItems[0];
 
-        await this.ApplyFolderCreationAsync(sceneAdapter, scene, creationContext.Value).ConfigureAwait(true);
-    }
-
-    /// <summary>
-    /// Captures the set of selected node ids for folder creation, including a fallback
-    /// pass over shown items when the selection model is empty.
-    /// </summary>
-    /// <returns>Selection capture describing node ids and whether shown-items fallback was used.</returns>
-    protected internal virtual SelectionCapture CaptureSelectionForFolderCreation()
-    {
-        var selectedIds = new HashSet<System.Guid>();
-        var usedShownItemsFallback = false;
-
-        void TryAddFromItem(ITreeItem? item)
-        {
-            var node = AsSceneNode(item);
-            if (node is not null)
+            // We can create folders under Scene, Folders, or Nodes.
+            if (selected is SceneAdapter or FolderAdapter or SceneNodeAdapter)
             {
-                _ = selectedIds.Add(node.Id);
+                parent = selected;
             }
         }
 
-        switch (this.SelectionModel)
-        {
-            case SingleSelectionModel { SelectedItem: var item }:
-                TryAddFromItem(item as ITreeItem);
-                break;
+        var newFolderId = Guid.NewGuid();
+        var newFolder = new FolderAdapter(newFolderId, "New Folder");
 
-            case MultipleSelectionModel<ITreeItem> multiple:
-                foreach (var item in multiple.SelectedItems)
-                {
-                    TryAddFromItem(item);
-                }
-
-                break;
-        }
-
-        if (selectedIds.Count == 0)
-        {
-            foreach (var shown in this.ShownItems)
-            {
-                if (!shown.IsSelected)
-                {
-                    continue;
-                }
-
-                TryAddFromItem(shown);
-                usedShownItemsFallback = true;
-            }
-        }
-
-        return new SelectionCapture(selectedIds, usedShownItemsFallback);
+        // Update UI (triggers OnItemAdded -> Service.CreateFolderAsync)
+        await this.InsertItemAsync(0, parent, newFolder).ConfigureAwait(false);
     }
 
-    /// <summary>
-    /// Creates folder layout changes and constructs the new folder adapter.
-    /// </summary>
-    /// <param name="sceneAdapter">Active scene adapter.</param>
-    /// <param name="scene">Scene backing the explorer.</param>
-    /// <param name="selectedIds">Top-level selected node ids.</param>
-    /// <returns>Creation context or <see langword="null" /> when organizer rejects creation.</returns>
-    protected internal virtual FolderCreationContext? CreateFolderCreationContext(
-        SceneAdapter sceneAdapter,
-        Scene scene,
-        HashSet<System.Guid> selectedIds)
+    private bool CanCreateFolder()
     {
-        // Only pre-materialize layout entries when a layout already exists; keep null untouched for tests that expect it.
-        if (scene.ExplorerLayout is not null)
+        // Allow creation if nothing is selected (root), or if a single item is selected.
+        // We don't check types strictly here to avoid disabling the button when the user expects it to work.
+        // The CreateFolder command will default to Root if the selection is invalid.
+        if (this.SelectionModel is null)
         {
-            this.sceneOrganizer.EnsureLayoutContainsNodes(scene, selectedIds);
+            return true;
         }
 
-        var layoutChange = this.sceneOrganizer.CreateFolderFromSelection(selectedIds, scene, sceneAdapter);
-        var folder = layoutChange.NewFolder;
-
-        if (folder?.FolderId is null)
+        if (this.SelectionModel is MultipleSelectionModel<ITreeItem> multiple)
         {
-            this.LogOrganizerReturnedNullFolder();
-            return null;
+            return multiple.SelectedIndices.Count <= 1;
         }
 
-        scene.ExplorerLayout = layoutChange.NewLayout;
-        var folderAdapter = new FolderAdapter(folder.FolderId.Value, folder.Name ?? "New Folder");
-
-        return new FolderCreationContext(layoutChange, folderAdapter, folder);
-    }
-
-    /// <summary>
-    /// Applies the organizer result to the adapter tree, including moving existing adapters,
-    /// expanding/selection, and undo registration.
-    /// </summary>
-    protected internal virtual async Task ApplyFolderCreationAsync(
-        SceneAdapter sceneAdapter,
-        Scene scene,
-        FolderCreationContext context)
-    {
-        this.suppressUndoRecording = true;
-        this.isPerformingLayoutMove = true;
-        try
-        {
-            await this.sceneOrganizer.ReconcileLayoutAsync(
-                    sceneAdapter,
-                    scene,
-                    context.LayoutChange.NewLayout,
-                    this.layoutContext,
-                    preserveNodeExpansion: true)
-                .ConfigureAwait(true);
-        }
-        finally
-        {
-            this.suppressUndoRecording = false;
-            this.isPerformingLayoutMove = false;
-        }
-
-        if (context.FolderEntry.FolderId is Guid folderId)
-        {
-            var folderAdapter = await SceneExplorerViewModel.FindFolderAdapterAsync(sceneAdapter, folderId).ConfigureAwait(true);
-            if (folderAdapter is not null)
-            {
-                await this.ExpandAndSelectFolderAsync(folderAdapter, context.FolderEntry).ConfigureAwait(true);
-
-                // Persist expansion state back into the layout entry so undo/redo can replay it.
-                context.FolderEntry.IsExpanded = folderAdapter.IsExpanded;
-                MarkFolderExpansion(scene.ExplorerLayout, folderId, folderAdapter.IsExpanded);
-            }
-            else
-            {
-                this.LogCreatedFolderAdapterNotFound(context.FolderEntry.Name);
-            }
-        }
-
-        this.LogCreateFolderCreated(context.FolderEntry.Name!, context.FolderEntry.Children?.Count ?? 0, scene.Id);
-
-        this.RegisterCreateFolderUndo(sceneAdapter, scene, context.LayoutChange, context.FolderEntry.Name ?? "Folder");
-    }
-
-
-    /// <summary>
-    /// Expands and selects the newly created folder, logging failures if the adapter cannot be found.
-    /// </summary>
-    protected internal virtual async Task ExpandAndSelectFolderAsync(
-        FolderAdapter folderAdapter,
-        ExplorerEntryData folderEntry)
-    {
-        if (!folderAdapter.IsExpanded)
-        {
-            await this.ExpandItemAsync(folderAdapter).ConfigureAwait(true);
-        }
-
-        if (this.SelectionModel is not null)
-        {
-            this.SelectionModel.SelectItem(folderAdapter);
-        }
-    }
-
-    /// <summary>
-    /// Registers undo/redo actions for folder creation using organizer-provided layouts.
-    /// </summary>
-    protected internal virtual void RegisterCreateFolderUndo(
-        SceneAdapter sceneAdapter,
-        Scene scene,
-        LayoutChangeRecord layoutChange,
-        string folderName)
-    {
-        UndoRedo.Default[this].BeginChangeSet($"Create Folder ({folderName})");
-        try
-        {
-            var previousLayout = this.sceneOrganizer.CloneLayout(layoutChange.PreviousLayout);
-
-            // Capture the latest layout (including expansion state) from the scene rather than the original change snapshot.
-            var currentLayout = scene.ExplorerLayout ?? layoutChange.NewLayout;
-            var newLayout = this.sceneOrganizer.CloneLayout(currentLayout);
-
-            this.LogLayoutState("RegisterCreateFolderUndo.previous", previousLayout);
-            this.LogLayoutState("RegisterCreateFolderUndo.new", newLayout);
-
-            UndoRedo.Default[this].AddChange(
-                new LayoutUndoRedoChange(
-                    this,
-                    sceneAdapter,
-                    scene,
-                    previousLayout,
-                    newLayout)
-                {
-                    Key = $"Create Folder ({folderName})",
-                });
-        }
-        finally
-        {
-            UndoRedo.Default[this].EndChangeSet();
-        }
-    }
-
-    private sealed class LayoutUndoRedoChange : Change
-    {
-        private readonly SceneExplorerViewModel owner;
-        private readonly SceneAdapter sceneAdapter;
-        private readonly Scene scene;
-        private readonly IList<ExplorerEntryData>? applyLayout;
-        private readonly IList<ExplorerEntryData>? oppositeLayout;
-
-        public LayoutUndoRedoChange(
-            SceneExplorerViewModel owner,
-            SceneAdapter sceneAdapter,
-            Scene scene,
-            IList<ExplorerEntryData>? applyLayout,
-            IList<ExplorerEntryData>? oppositeLayout)
-        {
-            this.owner = owner;
-            this.sceneAdapter = sceneAdapter;
-            this.scene = scene;
-            this.applyLayout = applyLayout;
-            this.oppositeLayout = oppositeLayout;
-        }
-
-        public override void Apply()
-        {
-            this.owner.ApplyLayoutRestore(this.sceneAdapter, this.scene, this.applyLayout);
-
-            UndoRedo.Default[this.owner].AddChange(
-                new LayoutUndoRedoChange(
-                    this.owner,
-                    this.sceneAdapter,
-                    this.scene,
-                    this.oppositeLayout,
-                    this.applyLayout)
-                {
-                    Key = this.Key,
-                });
-        }
-    }
-
-    private sealed class LayoutContext : ILayoutContext
-    {
-        private readonly SceneExplorerViewModel owner;
-
-        public LayoutContext(SceneExplorerViewModel owner)
-        {
-            this.owner = owner;
-        }
-
-        public Task RefreshTreeAsync(SceneAdapter sceneAdapter)
-            => this.owner.InitializeRootAsync(sceneAdapter, skipRoot: false);
-    }
-
-
-
-    private bool CanCreateFolderFromSelection()
-    {
-        if (!this.HasUnlockedSelectedItems)
-        {
-            return false;
-        }
-
-        // Disallow when any folder is selected; allow scene root or node selections.
-        return this.SelectionModel switch
-        {
-            null => true,
-            SingleSelectionModel { SelectedItem: var item } => item is null || item is SceneAdapter || AsSceneNode(item) is not null,
-            MultipleSelectionModel<ITreeItem> multiple when multiple.SelectedIndices.Count == 0 => true,
-            MultipleSelectionModel<ITreeItem> multiple => multiple.SelectedItems.All(i => AsSceneNode(i) is not null),
-            _ => false,
-        };
+        // SingleSelectionModel always has 0 or 1 item selected.
+        return true;
     }
 
     private void NotifySelectionDependentCommands()
     {
         this.AddEntityCommand.NotifyCanExecuteChanged();
-        this.CreateFolderFromSelectionCommand.NotifyCanExecuteChanged();
+        this.CreateFolderCommand.NotifyCanExecuteChanged();
     }
 
     private string GetNextEntityName()
     {
         var index = Interlocked.Increment(ref this.nextEntityIndex);
         return $"New Entity {index}";
-    }
-
-    private static SceneNodeAdapter? AsSceneNodeAdapter(ITreeItem? item)
-        => item switch
-        {
-            SceneNodeAdapter lna => lna,
-            _ => null,
-        };
-
-    public Task<TreeItemAdapter?> FindAdapterByNodeIdAsync(Guid nodeId)
-        => Task.FromResult<TreeItemAdapter?>(this.nodeAdapterIndex.TryGetValue(nodeId, out var a) ? a : null);
-
-    private static async Task<FolderAdapter?> FindFolderAdapterAsync(SceneAdapter sceneAdapter, Guid folderId)
-    {
-        var children = await sceneAdapter.Children.ConfigureAwait(true);
-        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)children ?? Array.Empty<ITreeItem>());
-
-        while (stack.Count > 0)
-        {
-            var item = stack.Pop();
-            if (item is FolderAdapter folder && folder.Id == folderId)
-            {
-                return folder;
-            }
-
-            if (item is TreeItemAdapter adapter)
-            {
-                var nested = await adapter.Children.ConfigureAwait(true);
-                if (nested is not null)
-                {
-                    foreach (var child in nested)
-                    {
-                        stack.Push(child);
-                    }
-                }
-            }
-        }
-
-        return null;
     }
 
     private async Task IndexAdaptersForSceneAsync(SceneAdapter sceneAdapter)
@@ -1255,7 +905,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
         }
 
         var roots = await sceneAdapter.Children.ConfigureAwait(true);
-        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)roots ?? Array.Empty<ITreeItem>());
+        var stack = new Stack<ITreeItem>((IEnumerable<ITreeItem>?)roots ?? []);
         while (stack.Count > 0)
         {
             var item = stack.Pop();
@@ -1276,238 +926,5 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel, IDisposable
                 }
             }
         }
-    }
-
-    private static SceneNode? AsSceneNode(ITreeItem? item)
-        => item switch
-        {
-            SceneNodeAdapter lna => lna.AttachedObject,
-            _ => null,
-        };
-
-    private static Scene? ResolveSceneFromTree(ITreeItem? start)
-    {
-        var cursor = start;
-        while (cursor is not null)
-        {
-            switch (cursor)
-            {
-                case SceneAdapter sceneAdapter:
-                    return sceneAdapter.AttachedObject;
-                case SceneNodeAdapter layoutAdapter:
-                    return layoutAdapter.AttachedObject.Scene;
-            }
-
-            cursor = cursor.Parent;
-        }
-
-        return null;
-    }
-
-    private static void MarkFolderExpansion(IList<ExplorerEntryData>? entries, Guid folderId, bool isExpanded)
-    {
-        if (entries is null)
-        {
-            return;
-        }
-
-        foreach (var entry in entries)
-        {
-            if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.FolderId == folderId)
-            {
-                entry.IsExpanded = isExpanded;
-                return;
-            }
-
-            if (entry.Children is not null)
-            {
-                MarkFolderExpansion(entry.Children, folderId, isExpanded);
-            }
-        }
-    }
-
-    private async Task TryApplyLayoutChangeAsync(SceneNodeAdapter? adapter)
-    {
-        if (adapter is null)
-        {
-            return;
-        }
-
-        if (!this.pendingLayoutChanges.TryGetValue(adapter, out var layoutChange))
-        {
-            return;
-        }
-
-        _ = this.pendingLayoutChanges.Remove(adapter);
-        await this.ApplyLayoutChangeAsync(layoutChange).ConfigureAwait(false);
-    }
-
-    private void ApplyLayoutRestore(SceneAdapter sceneAdapter, Scene scene, IList<ExplorerEntryData>? layout)
-    {
-        this.suppressUndoRecording = true;
-        try
-        {
-            this.Scene ??= sceneAdapter;
-
-            this.sceneOrganizer
-                .ReconcileLayoutAsync(sceneAdapter, scene, layout, this.layoutContext, preserveNodeExpansion: true)
-                .GetAwaiter()
-                .GetResult();
-            this.LogLayoutState("ApplyLayoutRestore", scene.ExplorerLayout);
-        }
-        finally
-        {
-            this.suppressUndoRecording = false;
-        }
-    }
-
-
-
-    private void LogLayoutState(string label, IList<ExplorerEntryData>? layout)
-    {
-        if (!this.logger.IsEnabled(LogLevel.Debug))
-        {
-            return;
-        }
-
-        var entries = layout is null
-            ? "<null>"
-            : string.Join(", ", layout.Select(e =>
-                e is null
-                    ? "<null-entry>"
-                    : $"{e.Type}:{e.NodeId?.ToString() ?? "-"}/F:{e.FolderId?.ToString() ?? "-"}/ChildCount:{e.Children?.Count ?? 0}"));
-
-        this.LogLayoutEntries(label, entries);
-    }
-
-    private static bool SceneContainsNode(Scene scene, System.Guid nodeId)
-    {
-        foreach (var root in scene.RootNodes)
-        {
-            if (root.Id == nodeId)
-            {
-                return true;
-            }
-
-            if (root.Descendants().Any(child => child.Id == nodeId))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private async Task ApplySceneAdditionAsync(SceneNodeChangeRecord change)
-    {
-        ArgumentNullException.ThrowIfNull(change);
-
-        if (!change.RequiresEngineSync)
-        {
-            return;
-        }
-
-        try
-        {
-            switch (change.OperationName)
-            {
-                case "CreateNodeAtRoot":
-                case "CreateNodeUnderParent":
-                    await this.sceneEngineSync.CreateNodeAsync(change.AffectedNode, change.NewParentId)
-                        .ConfigureAwait(false);
-                    change.AffectedNode.IsActive = true;
-                    _ = this.messenger.Send(new SceneNodeAddedMessage(new[] { change.AffectedNode }));
-                    break;
-
-                case "ReparentNode":
-                    if (!change.AffectedNode.IsActive)
-                    {
-                        this.LogCannotReparentNodeNotActive(change.AffectedNode.Name);
-                        _ = this.messenger.Send(
-                            new SceneNodeReparentedMessage(change.AffectedNode, change.OldParentId, change.NewParentId));
-                        break;
-                    }
-
-                    await this.sceneEngineSync.ReparentNodeAsync(change.AffectedNode.Id, change.NewParentId)
-                        .ConfigureAwait(false);
-                    _ = this.messenger.Send(
-                        new SceneNodeReparentedMessage(change.AffectedNode, change.OldParentId, change.NewParentId));
-                    break;
-
-                default:
-                    this.LogNoSceneAdditionAction(change.OperationName);
-                    break;
-            }
-        }
-        catch (Exception ex)
-        {
-            this.LogFailedApplySceneChange(ex, change.OperationName, change.AffectedNode.Name, change.AffectedNode.Id);
-        }
-    }
-
-    private async Task ApplySceneRemovalAsync(SceneNodeChangeRecord change, bool broadcastRemoval)
-    {
-        ArgumentNullException.ThrowIfNull(change);
-
-        if (!string.Equals(change.OperationName, "RemoveNode", StringComparison.Ordinal))
-        {
-            this.LogSkippingRemovalHandler(change.OperationName);
-            return;
-        }
-
-        try
-        {
-            if (change.RequiresEngineSync)
-            {
-                if (!change.AffectedNode.IsActive)
-                {
-                    this.LogCannotRemoveNodeNotActive(change.AffectedNode.Name);
-                }
-                else
-                {
-                    await this.sceneEngineSync.RemoveNodeAsync(change.AffectedNode.Id).ConfigureAwait(false);
-                    change.AffectedNode.IsActive = false;
-                }
-            }
-
-            if (broadcastRemoval)
-            {
-                if (this.batchRemovedNodes is not null)
-                {
-                    this.batchRemovedNodes.Add(change.AffectedNode);
-                }
-                else
-                {
-                    _ = this.messenger.Send(new SceneNodeRemovedMessage(new[] { change.AffectedNode }));
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            this.LogFailedFinalizeRemoval(ex, change.AffectedNode.Name, change.AffectedNode.Id);
-        }
-    }
-
-    // pendingRemovalSpans removed; span cleanup now handled directly in RemoveVisibleSpan.
-
-    private async Task ApplyLayoutChangeAsync(LayoutChangeRecord change)
-    {
-        ArgumentNullException.ThrowIfNull(change);
-
-        var scene = this.Scene?.AttachedObject;
-        if (scene is null)
-        {
-            this.LogCannotApplyLayoutNoActiveScene();
-            return;
-        }
-
-        var adapter = this.Scene;
-        if (adapter is null)
-        {
-            return;
-        }
-
-        await this.sceneOrganizer.ReconcileLayoutAsync(adapter, scene, change.NewLayout, this.layoutContext, preserveNodeExpansion: true)
-            .ConfigureAwait(false);
     }
 }

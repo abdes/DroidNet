@@ -2,98 +2,86 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Linq;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.SceneExplorer;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
 
 /// <summary>
-/// Default implementation of <see cref="ISceneOrganizer" /> that manages <see cref="Scene.ExplorerLayout" />
-/// and reconciles layout adapters without mutating the runtime scene graph.
+/// Default implementation of <see cref="ISceneOrganizer"/> that manages a scene's
+/// <see cref="Scene.ExplorerLayout"/> representation and reconciles the visual
+/// tree adapters used by the scene explorer. Methods in this class operate on
+/// the layout model and do not directly mutate the engine's runtime scene
+/// graph; higher-level services are responsible for performing engine-sync
+/// mutations when required.
 /// </summary>
-public sealed class SceneOrganizer : ISceneOrganizer
+/// <param name="logger">The logger used for diagnostic messages.</param>
+public sealed partial class SceneOrganizer(ILogger<SceneOrganizer> logger) : ISceneOrganizer
 {
-    private readonly ILogger<SceneOrganizer> logger;
-
-    public SceneOrganizer(ILogger<SceneOrganizer> logger)
-    {
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
     private static readonly StringComparer TypeComparer = StringComparer.OrdinalIgnoreCase;
 
-    public LayoutChangeRecord CreateFolderFromSelection(HashSet<Guid> selectedNodeIds, Scene scene, SceneAdapter sceneAdapter)
-    {
-        ArgumentNullException.ThrowIfNull(selectedNodeIds);
-        ArgumentNullException.ThrowIfNull(scene);
-        ArgumentNullException.ThrowIfNull(sceneAdapter);
-        _ = sceneAdapter; // reserved for future context needs
+    private readonly ILogger<SceneOrganizer> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        if (selectedNodeIds.Count == 0)
-        {
-            throw new InvalidOperationException("Cannot create folder with empty selection.");
-        }
-
-        var previousLayout = CloneLayout(scene.ExplorerLayout) ?? BuildLayoutFromRootNodes(scene);
-        var layout = scene.ExplorerLayout?.ToList() ?? BuildLayoutFromRootNodes(scene);
-
-        // Determine placement: highest common ancestor among selected nodes' layout lineage
-        var selectedIdsTopLevel = FilterTopLevelSelectedNodeIds(selectedNodeIds, scene);
-        var placementParent = FindHighestCommonAncestor(layout, selectedIdsTopLevel);
-
-        var movedEntries = new List<ExplorerEntryData>();
-        RemoveEntriesForNodeIds(placementParent ?? layout, selectedIdsTopLevel, movedEntries);
-
-        var folderId = Guid.NewGuid();
-        var folderEntry = new ExplorerEntryData
-        {
-            Type = "Folder",
-            FolderId = folderId,
-            Name = "New Folder",
-            Children = movedEntries.Count > 0 ? movedEntries : new List<ExplorerEntryData>(),
-        };
-
-        var targetList = placementParent ?? layout;
-        targetList.Insert(0, folderEntry);
-        scene.ExplorerLayout = layout;
-
-        return new LayoutChangeRecord(
-            OperationName: "CreateFolderFromSelection",
-            PreviousLayout: previousLayout,
-            NewLayout: layout,
-            NewFolder: folderEntry,
-            ModifiedFolders: new List<ExplorerEntryData> { folderEntry });
-    }
-
+    /// <summary>
+    /// Moves the layout entry representing <paramref name="nodeId"/> into the
+    /// folder identified by <paramref name="folderId"/>. The method operates
+    /// on the provided <paramref name="scene"/>'s <see cref="Scene.ExplorerLayout"/>.
+    /// </summary>
+    /// <param name="nodeId">Id of the node to move.</param>
+    /// <param name="folderId">Id of the target folder.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the folder cannot be found
+    /// or the move would violate folder-lineage constraints.</exception>
     public LayoutChangeRecord MoveNodeToFolder(Guid nodeId, Guid folderId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
+        this.LogSceneInfo("MoveNodeToFolder (Start)", scene);
 
-        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
         var layout = RequireLayout(scene);
 
         var (folderEntry, folderParentList) = FindFolderEntryWithParent(layout, folderId);
         if (folderEntry is null)
         {
+            var allFolders = new List<Guid>();
+            void CollectFolders(IList<ExplorerEntryData> entries)
+            {
+                foreach (var e in entries)
+                {
+                    if (e.FolderId.HasValue)
+                    {
+                        allFolders.Add(e.FolderId.Value);
+                    }
+
+                    if (e.Children != null)
+                    {
+                        CollectFolders(e.Children);
+                    }
+                }
+            }
+
+            CollectFolders(layout);
+            this.LogFolderNotFound(folderId, allFolders);
             throw new InvalidOperationException($"Folder '{folderId}' not found.");
         }
 
-        if (!IsNodeUnderFolderLineage(layout, nodeId, folderEntry))
+        if (!IsNodeUnderFolderLineage(layout, nodeId, folderEntry, scene))
         {
             throw new InvalidOperationException("Cannot move node to a folder outside its lineage.");
         }
 
         // Remove node from any existing location
         var removedEntries = new List<ExplorerEntryData>();
-        RemoveEntriesForNodeIds(layout, new HashSet<Guid> { nodeId }, removedEntries);
+        RemoveEntriesForNodeIds(layout, [nodeId], removedEntries);
+        this.LogMoveNodeRemoved(removedEntries.Count, nodeId);
 
         var nodeEntry = removedEntries.FirstOrDefault() ?? new ExplorerEntryData { Type = "Node", NodeId = nodeId };
 
         folderEntry.Children!.Add(nodeEntry);
+        this.LogMoveNodeToFolder(nodeId, folderEntry.FolderId!.Value);
 
         scene.ExplorerLayout = layout;
 
@@ -101,15 +89,24 @@ public sealed class SceneOrganizer : ISceneOrganizer
             OperationName: "MoveNodeToFolder",
             PreviousLayout: previousLayout,
             NewLayout: layout,
-            ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
+            ModifiedFolders: [folderEntry],
             ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
     }
 
+    /// <summary>
+    /// Removes the layout entry for <paramref name="nodeId"/> from the folder
+    /// identified by <paramref name="folderId"/> (if present).
+    /// </summary>
+    /// <param name="nodeId">Id of the node to remove from the folder.</param>
+    /// <param name="folderId">Id of the folder to remove from.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the folder cannot be found.</exception>
     public LayoutChangeRecord RemoveNodeFromFolder(Guid nodeId, Guid folderId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
         var layout = RequireLayout(scene);
 
         var (folderEntry, folderParentList) = FindFolderEntryWithParent(layout, folderId);
@@ -125,7 +122,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 OperationName: "RemoveNodeFromFolder",
                 PreviousLayout: previousLayout,
                 NewLayout: layout,
-                ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
+                ModifiedFolders: [folderEntry],
                 ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
         }
 
@@ -133,6 +130,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
         if (nodeEntry is not null)
         {
             _ = folderEntry.Children.Remove(nodeEntry);
+            this.LogRemoveNodeFromFolder(nodeId, folderId);
         }
 
         scene.ExplorerLayout = layout;
@@ -141,15 +139,183 @@ public sealed class SceneOrganizer : ISceneOrganizer
             OperationName: "RemoveNodeFromFolder",
             PreviousLayout: previousLayout,
             NewLayout: layout,
-            ModifiedFolders: new List<ExplorerEntryData> { folderEntry },
+            ModifiedFolders: [folderEntry],
             ParentLists: folderParentList is null ? null : new List<IList<ExplorerEntryData>> { folderParentList });
     }
 
+    /// <summary>
+    /// Removes all layout entries that reference <paramref name="nodeId"/> from
+    /// the scene layout. This is a model-only operation and does not change the
+    /// scene graph itself.
+    /// </summary>
+    /// <param name="nodeId">Id of the node to remove from the layout.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    public LayoutChangeRecord RemoveNodeFromLayout(Guid nodeId, Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
+        var layout = RequireLayout(scene);
+
+        var removedEntries = new List<ExplorerEntryData>();
+        RemoveEntriesForNodeIds(layout, [nodeId], removedEntries);
+        this.LogRemoveNodeFromLayout(removedEntries.Count, nodeId);
+
+        scene.ExplorerLayout = layout;
+
+        return new LayoutChangeRecord(
+            OperationName: "RemoveNodeFromLayout",
+            PreviousLayout: previousLayout,
+            NewLayout: layout,
+            NewFolder: null,
+            ModifiedFolders: []);
+    }
+
+    private void EnsureNodeInLayout(IList<ExplorerEntryData> layout, Guid nodeId, Scene scene)
+    {
+        // Check if already in layout
+        var (existing, _) = this.FindNodeEntryWithParent(layout, nodeId);
+        if (existing != null)
+        {
+            return;
+        }
+
+        // Find in Scene Graph
+        var node = FindNodeById(scene, nodeId) ?? throw new InvalidOperationException($"Node {nodeId} not found in scene.");
+
+        // Ensure parent is in layout
+        IList<ExplorerEntryData> targetList;
+        if (node.Parent == null)
+        {
+            // Root node
+            targetList = layout;
+        }
+        else
+        {
+            this.EnsureNodeInLayout(layout, node.Parent.Id, scene);
+            var (parentEntry, _) = this.FindNodeEntryWithParent(layout, node.Parent.Id);
+            if (parentEntry == null)
+            {
+                // Should not happen after EnsureNodeInLayout
+                throw new InvalidOperationException($"Failed to ensure parent node {node.Parent.Id} in layout.");
+            }
+
+            parentEntry.Children ??= [];
+            targetList = parentEntry.Children;
+        }
+
+        // Add to layout
+        targetList.Add(new ExplorerEntryData { Type = "Node", NodeId = nodeId });
+    }
+
+    /// <summary>
+    /// Creates a new folder entry in <paramref name="scene"/>'s layout.
+    /// The folder may be created at the root, under an existing folder
+    /// (<paramref name="parentFolderId"/>), or as a child of a node in the
+    /// layout (<paramref name="parentNodeId"/>).
+    /// </summary>
+    /// <param name="parentFolderId">Optional id of the parent folder.</param>
+    /// <param name="name">The display name of the new folder.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <param name="folderId">Optional id to assign to the new folder. If null a new id will be generated.</param>
+    /// <param name="parentNodeId">Optional node id to create the folder under.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change, including the created folder.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a specified parent folder or parent node cannot be found.</exception>
+    public LayoutChangeRecord CreateFolder(Guid? parentFolderId, string name, Scene scene, Guid? folderId = null, Guid? parentNodeId = null)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        this.LogSceneInfo("CreateFolder (Start)", scene);
+        this.LogCreateFolder(name, parentFolderId, parentNodeId, folderId);
+
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
+        var layout = RequireLayout(scene);
+
+        var newFolderId = folderId ?? Guid.NewGuid();
+        var folderEntry = new ExplorerEntryData
+        {
+            Type = "Folder",
+            FolderId = newFolderId,
+            Name = name,
+            Children = [],
+        };
+
+        if (parentFolderId.HasValue)
+        {
+            var (parentEntry, _) = FindFolderEntryWithParent(layout, parentFolderId.Value);
+            if (parentEntry == null)
+            {
+                throw new InvalidOperationException($"Parent folder {parentFolderId} not found.");
+            }
+
+            parentEntry.Children ??= [];
+            parentEntry.Children.Add(folderEntry);
+        }
+        else if (parentNodeId.HasValue)
+        {
+            this.EnsureNodeInLayout(layout, parentNodeId.Value, scene);
+            var (parentEntry, _) = this.FindNodeEntryWithParent(layout, parentNodeId.Value);
+            if (parentEntry == null)
+            {
+                throw new InvalidOperationException($"Parent node {parentNodeId} not found in layout.");
+            }
+
+            parentEntry.Children ??= [];
+            parentEntry.Children.Add(folderEntry);
+        }
+        else
+        {
+            layout.Add(folderEntry);
+        }
+
+        scene.ExplorerLayout = layout;
+        this.LogSceneInfo("CreateFolder (End)", scene);
+
+        return new LayoutChangeRecord(
+            OperationName: "CreateFolder",
+            PreviousLayout: previousLayout,
+            NewLayout: layout,
+            NewFolder: folderEntry,
+            ModifiedFolders: [folderEntry]);
+    }
+
+    private (ExplorerEntryData? Entry, IList<ExplorerEntryData>? ParentList) FindNodeEntryWithParent(IList<ExplorerEntryData> entries, Guid nodeId)
+    {
+        foreach (var entry in entries)
+        {
+            if (TypeComparer.Equals(entry.Type, "Node") && entry.NodeId == nodeId)
+            {
+                return (entry, entries);
+            }
+
+            if (entry.Children != null && entry.Children.Count > 0)
+            {
+                var (found, parent) = this.FindNodeEntryWithParent(entry.Children, nodeId);
+                if (found != null)
+                {
+                    return (found, parent);
+                }
+            }
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Moves the folder identified by <paramref name="folderId"/> to be a child
+    /// of <paramref name="newParentFolderId"/>. Passing <see langword="null"/>
+    /// for <paramref name="newParentFolderId"/> places the folder at the root level.
+    /// </summary>
+    /// <param name="folderId">Id of the folder being moved.</param>
+    /// <param name="newParentFolderId">Id of the new parent folder, or null for root.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the folder or target parent folder cannot be found.</exception>
     public LayoutChangeRecord MoveFolderToParent(Guid folderId, Guid? newParentFolderId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
         var layout = RequireLayout(scene);
 
         var (folderEntry, parentList) = FindFolderEntryWithParent(layout, folderId);
@@ -176,19 +342,30 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
 
         scene.ExplorerLayout = layout;
+        this.LogMoveFolderToParent(folderId, newParentFolderId);
 
         return new LayoutChangeRecord(
             OperationName: "MoveFolderToParent",
             PreviousLayout: previousLayout,
             NewLayout: layout,
-            ModifiedFolders: new List<ExplorerEntryData> { folderEntry });
+            ModifiedFolders: [folderEntry]);
     }
 
+    /// <summary>
+    /// Removes the folder with id <paramref name="folderId"/> from the layout.
+    /// If <paramref name="promoteChildrenToParent"/> is true any children of the
+    /// removed folder will be inserted into the folder's parent list.
+    /// </summary>
+    /// <param name="folderId">Id of the folder to remove.</param>
+    /// <param name="promoteChildrenToParent">Whether to move children to the folder's parent list.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the folder cannot be found.</exception>
     public LayoutChangeRecord RemoveFolder(Guid folderId, bool promoteChildrenToParent, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
 
-        var previousLayout = CloneLayout(scene.ExplorerLayout);
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
         var layout = RequireLayout(scene);
 
         var (folderEntry, parentList) = FindFolderEntryWithParent(layout, folderId);
@@ -208,12 +385,46 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
 
         scene.ExplorerLayout = layout;
+        this.LogRemoveFolder(folderId, promoteChildrenToParent);
 
         return new LayoutChangeRecord(
             OperationName: "RemoveFolder",
             PreviousLayout: previousLayout,
             NewLayout: layout,
-            ModifiedFolders: new List<ExplorerEntryData> { folderEntry });
+            ModifiedFolders: [folderEntry]);
+    }
+
+    /// <summary>
+    /// Renames the folder identified by <paramref name="folderId"/> to
+    /// <paramref name="newName"/> within the scene layout.
+    /// </summary>
+    /// <param name="folderId">Id of the folder to rename.</param>
+    /// <param name="newName">The new display name for the folder.</param>
+    /// <param name="scene">The scene whose layout will be modified.</param>
+    /// <returns>A <see cref="LayoutChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the folder cannot be found.</exception>
+    public LayoutChangeRecord RenameFolder(Guid folderId, string newName, Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+
+        var previousLayout = this.CloneLayout(scene.ExplorerLayout);
+        var layout = RequireLayout(scene);
+
+        var (folderEntry, _) = FindFolderEntryWithParent(layout, folderId);
+        if (folderEntry is null)
+        {
+            throw new InvalidOperationException($"Folder '{folderId}' not found.");
+        }
+
+        folderEntry.Name = newName;
+        scene.ExplorerLayout = layout;
+        this.LogRenameFolder(folderId, newName);
+
+        return new LayoutChangeRecord(
+            OperationName: "RenameFolder",
+            PreviousLayout: previousLayout,
+            NewLayout: layout,
+            ModifiedFolders: [folderEntry]);
     }
 
     private static SceneNodeAdapter? WrapAsSceneNodeAdapter(TreeItemAdapter adapter)
@@ -260,7 +471,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
 
         sceneNodeAdapter.IsExpanded = wasExpanded;
-        folderAdapter.AddChildAdapter(sceneNodeAdapter);
+        folderAdapter.AddContent(sceneNodeAdapter);
         await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
     }
 
@@ -270,16 +481,30 @@ public sealed class SceneOrganizer : ISceneOrganizer
         IList<ExplorerEntryData>? layout,
         ILayoutContext layoutContext,
         bool preserveNodeExpansion = false)
+    /// <summary>
+    /// Reconciles the provided layout (or builds one from the scene root nodes if
+    /// <paramref name="layout"/> is null) with the given <paramref name="sceneAdapter"/>.
+    /// This method attaches and detaches adapters to reflect the layout and ensures
+    /// that all visible nodes are represented in the visual tree.
+    /// </summary>
+    /// <param name="sceneAdapter">Root adapter for the scene's visual representation.</param>
+    /// <param name="scene">The scene whose layout is being reconciled.</param>
+    /// <param name="layout">Optional layout to apply; if null the layout will be built from root nodes.</param>
+    /// <param name="layoutContext">Context used to refresh the visual tree.</param>
+    /// <param name="preserveNodeExpansion">If true, preserves node expansion states where possible.</param>
+    /// <returns>A task representing the asynchronous reconcile operation.</returns>
     {
         ArgumentNullException.ThrowIfNull(sceneAdapter);
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(layoutContext);
 
         var targetLayout = layout ?? BuildLayoutFromRootNodes(scene);
-        var layoutClone = CloneLayout(targetLayout) ?? new List<ExplorerEntryData>();
+        var layoutClone = this.CloneLayout(targetLayout) ?? [];
+        this.LogReconcileStart(scene.GetHashCode(), layoutClone.Count);
         scene.ExplorerLayout = layoutClone;
 
         var adapterIndex = await BuildAdapterIndexAsync(sceneAdapter).ConfigureAwait(true);
+        this.LogAdapterIndexStats(adapterIndex.NodeAdapters.Count, adapterIndex.FolderAdapters.Count, adapterIndex.AllAdapters.Count);
 
         // Detach all existing adapters from their parents to avoid duplicates during reattach.
         foreach (var adapter in adapterIndex.AllAdapters)
@@ -311,15 +536,23 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 continue;
             }
 
-            var adapter = adapterIndex.NodeAdapters.TryGetValue(root.Id, out var existing)
-                ? existing
-                : new SceneNodeAdapter(root);
+            SceneNodeAdapter adapter;
+            if (adapterIndex.NodeAdapters.TryGetValue(root.Id, out var existing))
+            {
+                adapter = existing;
+            }
+            else
+            {
+                this.LogAttachingMissingRootNode(root.Id);
+                adapter = new SceneNodeAdapter(root);
+            }
 
             await AttachToParentAsync(sceneAdapter, adapter).ConfigureAwait(true);
             usedNodeIds.Add(root.Id);
         }
 
         await layoutContext.RefreshTreeAsync(sceneAdapter).ConfigureAwait(true);
+        this.LogReconcileEnd(usedNodeIds.Count, usedFolderIds.Count);
     }
 
     private static IList<ExplorerEntryData> RequireLayout(Scene scene)
@@ -333,6 +566,33 @@ public sealed class SceneOrganizer : ISceneOrganizer
         var normalized = NormalizeLayout(scene.ExplorerLayout);
         scene.ExplorerLayout = normalized;
         return normalized;
+    }
+
+    private void LogSceneInfo(string operation, Scene scene)
+    {
+        var folderCount = 0;
+        void CountFolders(IList<ExplorerEntryData> entries)
+        {
+            foreach (var e in entries)
+            {
+                if (e.FolderId.HasValue)
+                {
+                    folderCount++;
+                }
+
+                if (e.Children != null)
+                {
+                    CountFolders(e.Children);
+                }
+            }
+        }
+
+        if (scene.ExplorerLayout != null)
+        {
+            CountFolders(scene.ExplorerLayout);
+        }
+
+        this.LogSceneInfoEvent(operation, scene.GetHashCode(), scene.ExplorerLayout?.Count ?? 0, folderCount);
     }
 
     private static (ExplorerEntryData? entry, IList<ExplorerEntryData>? parent) FindFolderEntryWithParent(IList<ExplorerEntryData>? entries, Guid id, IList<ExplorerEntryData>? parent = null)
@@ -376,14 +636,21 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 RemoveEntriesForNodeIds(entry.Children, nodeIds, removed);
 
                 // Prune empty folders after removal
-                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.Children.Count == 0)
-                {
-                    entries.RemoveAt(i);
-                }
+                // if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase) && entry.Children.Count == 0)
+                // {
+                //    entries.RemoveAt(i);
+                // }
             }
         }
     }
 
+    /// <summary>
+    /// Creates a deep clone of the provided layout list, recursively copying
+    /// entries and their children. Returns <see langword="null"/> if
+    /// <paramref name="layout"/> is <see langword="null"/>.
+    /// </summary>
+    /// <param name="layout">Layout to clone (or null).</param>
+    /// <returns>A deep copy of <paramref name="layout"/>, or null.</returns>
     public IList<ExplorerEntryData>? CloneLayout(IList<ExplorerEntryData>? layout)
     {
         if (layout is null)
@@ -394,6 +661,13 @@ public sealed class SceneOrganizer : ISceneOrganizer
         return layout.Select(CloneEntry).ToList();
     }
 
+    /// <summary>
+    /// Returns the set of folder ids marked as expanded within the provided
+    /// <paramref name="layout"/>. The returned set will be empty if
+    /// <paramref name="layout"/> is null or no folders are expanded.
+    /// </summary>
+    /// <param name="layout">Layout to inspect for expanded folders.</param>
+    /// <returns>A set of expanded folder ids.</returns>
     public HashSet<Guid> GetExpandedFolderIds(IList<ExplorerEntryData>? layout)
     {
         var expandedIds = new HashSet<Guid>();
@@ -450,6 +724,13 @@ public sealed class SceneOrganizer : ISceneOrganizer
         return null;
     }
 
+    /// <summary>
+    /// Ensures that the provided <paramref name="scene"/>'s layout contains
+    /// entries for each id in <paramref name="nodeIds"/>. Missing node entries
+    /// will be appended to the layout if they are absent.
+    /// </summary>
+    /// <param name="scene">The scene whose layout will be modified (created if absent).</param>
+    /// <param name="nodeIds">A sequence of node ids that must be present in the layout.</param>
     public void EnsureLayoutContainsNodes(Scene scene, IEnumerable<Guid> nodeIds)
     {
         // Ensure layout exists
@@ -484,6 +765,14 @@ public sealed class SceneOrganizer : ISceneOrganizer
         }
     }
 
+    /// <summary>
+    /// Builds a layout that contains only the folder described by <paramref name="layoutChange"/>
+    /// (inserted at the same position it would appear in the new layout) plus any
+    /// original node entries necessary to keep undo semantics consistent.
+    /// This helper is useful to create a minimal layout for undo/redo operations.
+    /// </summary>
+    /// <param name="layoutChange">The layout change describing the new folder and layouts.</param>
+    /// <returns>A layout focused on the affected folder suitable for folder-only undo operations.</returns>
     public IList<ExplorerEntryData> BuildFolderOnlyLayout(LayoutChangeRecord layoutChange)
     {
         Console.WriteLine($"DEBUG: BuildFolderOnlyLayout. NewFolder is null? {layoutChange.NewFolder is null}");
@@ -494,7 +783,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
         // Start from previous layout (so nodes remain outside the folder for first undo)
         var baseLayout = layoutChange.PreviousLayout is null
-            ? new List<ExplorerEntryData>()
+            ? []
             : new List<ExplorerEntryData>(layoutChange.PreviousLayout);
 
         var folder = layoutChange.NewFolder ?? new ExplorerEntryData
@@ -670,11 +959,27 @@ public sealed class SceneOrganizer : ISceneOrganizer
                 break;
 
             case FolderAdapter folderAdapter:
-                folderAdapter.AddChildAdapter(child);
+                if (child is FolderAdapter f)
+                {
+                    folderAdapter.AddFolder(f);
+                }
+                else
+                {
+                    folderAdapter.AddContent(child);
+                }
+
                 break;
 
             case SceneNodeAdapter sceneNodeAdapter:
-                sceneNodeAdapter.AddLayoutChild(child);
+                if (child is FolderAdapter folder)
+                {
+                    sceneNodeAdapter.AddFolder(folder);
+                }
+                else
+                {
+                    sceneNodeAdapter.AddContent(child);
+                }
+
                 break;
         }
     }
@@ -684,11 +989,27 @@ public sealed class SceneOrganizer : ISceneOrganizer
         switch (adapter.Parent)
         {
             case FolderAdapter folder:
-                _ = folder.RemoveChildAdapter(adapter);
+                if (adapter is FolderAdapter f)
+                {
+                    _ = folder.RemoveFolder(f);
+                }
+                else
+                {
+                    _ = folder.RemoveContent(adapter);
+                }
+
                 break;
 
             case SceneNodeAdapter sceneNode:
-                _ = sceneNode.RemoveLayoutChild(adapter);
+                if (adapter is FolderAdapter folderChild)
+                {
+                    _ = sceneNode.RemoveFolder(folderChild);
+                }
+                else
+                {
+                    _ = sceneNode.RemoveContent(adapter);
+                }
+
                 break;
 
             case TreeItemAdapter parent:
@@ -751,13 +1072,13 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
     private sealed class AdapterIndex
     {
-        public Dictionary<Guid, SceneNodeAdapter> NodeAdapters { get; } = new();
+        public Dictionary<Guid, SceneNodeAdapter> NodeAdapters { get; } = [];
 
-        public Dictionary<Guid, FolderAdapter> FolderAdapters { get; } = new();
+        public Dictionary<Guid, FolderAdapter> FolderAdapters { get; } = [];
 
-        public Dictionary<Guid, SceneNode> NodesById { get; } = new();
+        public Dictionary<Guid, SceneNode> NodesById { get; } = [];
 
-        public List<TreeItemAdapter> AllAdapters { get; } = new();
+        public List<TreeItemAdapter> AllAdapters { get; } = [];
     }
 
     private static IList<ExplorerEntryData> NormalizeLayout(IList<ExplorerEntryData> layout)
@@ -766,46 +1087,101 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
         static ExplorerEntryData NormalizeEntry(ExplorerEntryData entry)
         {
-            if (!TypeComparer.Equals(entry.Type, "Folder"))
-            {
-                return entry with { Children = null };
-            }
-
+            // We allow children for both Folders and Nodes (since Nodes can now contain Folders in the layout)
             var normalizedChildren = entry.Children is null
-                ? new List<ExplorerEntryData>()
+                ? []
                 : entry.Children.Select(NormalizeEntry).ToList();
 
             return entry with { Children = normalizedChildren };
         }
     }
 
-    private static bool IsNodeUnderFolderLineage(IList<ExplorerEntryData> layout, Guid nodeId, ExplorerEntryData folder)
+    private static bool IsNodeUnderFolderLineage(IList<ExplorerEntryData> layout, Guid nodeId, ExplorerEntryData folder, Scene scene)
     {
-        // lineage constraint: folder must be within the ancestor chain of the node's parent.
-        // Root nodes (no parent) may move into any root-level folder.
-        var nodePath = FindNodePath(layout, nodeId);
-        if (nodePath.Count == 0)
+        // Lineage constraint: The folder must be visually located under the same Scene Node that is the
+        // actual parent of the node we are moving.
+        // This ensures that the "Overlay" layout respects the hard Scene Graph hierarchy.
+
+        // 1. Find the node in the scene to check its REAL parent.
+        var node = FindNodeById(scene, nodeId);
+        if (node is null)
         {
+            // If the node is not in the scene, we can't validate lineage.
+            // This might happen if we are adding a node that hasn't been synced yet?
+            // But SceneExplorerService calls Mutator (Sync) BEFORE Organizer.
             return false;
         }
 
-        // Remove the node itself to get its ancestor chain
-        nodePath.RemoveAt(nodePath.Count - 1);
-
-        if (nodePath.Count == 0)
+        // 2. Find the path to the folder in the layout
+        var folderPath = FindEntryPath(layout, folder);
+        if (folderPath.Count == 0)
         {
-            // Node is at root — allow any root-level folder
-            return layout.Any(e => ReferenceEquals(e, folder));
+            return false; // Folder not in layout
         }
 
-        // Folder must exist somewhere under the node's parent entry subtree
-        var parent = nodePath.Last();
-        return ContainsEntry(parent.Children, folder);
+        // 3. Find the nearest "Node" ancestor in the folder's path
+        // Iterate backwards from folder's parent (folder is at Last index)
+        Guid? expectedParentId = null;
+        for (int i = folderPath.Count - 2; i >= 0; i--)
+        {
+            var entry = folderPath[i];
+            if (TypeComparer.Equals(entry.Type, "Node") && entry.NodeId.HasValue)
+            {
+                expectedParentId = entry.NodeId.Value;
+                break;
+            }
+        }
+
+        // 4. Validate
+        if (expectedParentId.HasValue)
+        {
+            return node.Parent?.Id == expectedParentId.Value;
+        }
+        else
+        {
+            // Folder is at root level (or only under other folders at root)
+            // Node must be a root node
+            return node.Parent is null;
+        }
+    }
+
+    private static IList<ExplorerEntryData> FindEntryPath(IList<ExplorerEntryData>? entries, ExplorerEntryData target, IList<ExplorerEntryData>? current = null)
+    {
+        var path = current is null ? [] : new List<ExplorerEntryData>(current);
+        if (entries is null)
+        {
+            return path;
+        }
+
+        foreach (var entry in entries)
+        {
+            if (ReferenceEquals(entry, target))
+            {
+                path.Add(entry);
+                return path;
+            }
+
+            if (entry.Children is null || entry.Children.Count == 0)
+            {
+                continue;
+            }
+
+            path.Add(entry);
+            var found = FindEntryPath(entry.Children, target, path);
+            if (found.Count > 0 && ReferenceEquals(found[^1], target))
+            {
+                return found;
+            }
+
+            path.RemoveAt(path.Count - 1);
+        }
+
+        return current ?? [];
     }
 
     private static IList<ExplorerEntryData> FindNodePath(IList<ExplorerEntryData>? entries, Guid nodeId, IList<ExplorerEntryData>? current = null)
     {
-        var path = current is null ? new List<ExplorerEntryData>() : new List<ExplorerEntryData>(current);
+        var path = current is null ? [] : new List<ExplorerEntryData>(current);
         if (entries is null)
         {
             return path;
@@ -826,7 +1202,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
 
             path.Add(entry);
             var found = FindNodePath(entry.Children, nodeId, path);
-            if (found.Count > 0 && found.Last().NodeId == nodeId)
+            if (found.Count > 0 && found[^1].NodeId == nodeId)
             {
                 return found;
             }
@@ -834,7 +1210,7 @@ public sealed class SceneOrganizer : ISceneOrganizer
             path.RemoveAt(path.Count - 1);
         }
 
-        return current ?? new List<ExplorerEntryData>();
+        return current ?? [];
     }
 
     private static bool ContainsEntry(IList<ExplorerEntryData>? entries, ExplorerEntryData target)

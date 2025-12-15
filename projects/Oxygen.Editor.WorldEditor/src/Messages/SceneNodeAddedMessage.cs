@@ -13,7 +13,7 @@ namespace Oxygen.Editor.WorldEditor.Messages;
 internal sealed class SceneNodeAddedMessage(IList<SceneNode> nodes)
 {
     /// <summary>
-    /// The nodes that were added.
+    /// Gets the nodes that were added.
     /// </summary>
     public IList<SceneNode> Nodes { get; } = nodes;
 }

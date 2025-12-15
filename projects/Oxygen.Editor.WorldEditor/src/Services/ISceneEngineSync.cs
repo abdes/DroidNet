@@ -26,6 +26,16 @@ public interface ISceneEngineSync
     public Task SyncSceneAsync(Scene scene);
 
     /// <summary>
+    ///     Synchronizes an entire scene with the engine once the engine is running.
+    /// </summary>
+    /// <param name="scene">The scene to synchronize.</param>
+    /// <param name="cancellationToken">
+    ///     Cancellation token to abort waiting (e.g., when a newer scene load supersedes this one).
+    /// </param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public Task SyncSceneWhenReadyAsync(Scene scene, CancellationToken cancellationToken = default);
+
+    /// <summary>
     ///     Creates a new scene node in the engine.
     /// </summary>
     /// <param name="node">The scene node to create.</param>
@@ -58,7 +68,7 @@ public interface ISceneEngineSync
     ///     Reparents a node in the engine to the provided parent (null = root).
     /// </summary>
     /// <param name="nodeId">Node id to reparent.</param>
-    /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make a root node.</param>
+    /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make a root node.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
     public Task ReparentNodeAsync(Guid nodeId, Guid? newParentGuid, bool preserveWorldTransform = false);
 
@@ -66,7 +76,7 @@ public interface ISceneEngineSync
     ///     Reparents multiple node hierarchies to the same parent in the engine.
     /// </summary>
     /// <param name="nodeIds">Hierarchy roots to move.</param>
-    /// <param name="newParentGuid">Optional new parent id, or <c>null</c> to make roots.</param>
+    /// <param name="newParentGuid">Optional new parent id, or <see langword="null"/> to make roots.</param>
     /// <param name="preserveWorldTransform">If true, preserve world transform rather than local.</param>
     public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 

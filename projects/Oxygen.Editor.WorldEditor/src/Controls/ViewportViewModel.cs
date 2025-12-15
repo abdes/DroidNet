@@ -101,7 +101,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public Guid ViewportId { get; } = Guid.NewGuid();
 
     /// <summary>
-    /// If the UI requested an engine view for this viewport, the engine-assigned
+    /// Gets or sets if the UI requested an engine view for this viewport, the engine-assigned
     /// identifier will be stored here so the view can be destroyed later during
     /// teardown. Managed and owned by the UI layer — engine surface/lease code is
     /// unaffected by this property.

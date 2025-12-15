@@ -39,6 +39,9 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     /// <inheritdoc />
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
+    // Cache root items to avoid blocking .Result calls on the base Children task
+    private readonly List<ITreeItem> rootItemsCache = [];
+
     /// <inheritdoc />
     protected override int DoGetChildrenCount() => scene.RootNodes.Count;
 
@@ -46,263 +49,146 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
     protected override async Task LoadChildren()
     {
         this.ClearChildren();
+        this.rootItemsCache.Clear();
 
-        if (this.UseLayoutAdapters)
+        await this.RebuildTreeAsync().ConfigureAwait(false);
+    }
+
+    private async Task RebuildTreeAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    {
+        var layout = this.AttachedObject.ExplorerLayout;
+        var seenNodeIds = new HashSet<Guid>();
+
+        // 1. Build from Layout (The "Seating Chart")
+        if (this.UseLayoutAdapters && layout is { Count: > 0 })
         {
-            await this.LoadLayoutChildrenAsync().ConfigureAwait(false);
+            foreach (var entry in layout)
+            {
+                await this.ProcessLayoutEntryAsync(entry, this, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+            }
+        }
+
+        // 2. Fallback for Root Nodes not in Layout (The "Unassigned Guests")
+        foreach (var node in this.AttachedObject.RootNodes)
+        {
+            if (seenNodeIds.Add(node.Id))
+            {
+                var adapter = new SceneNodeAdapter(node);
+                this.PopulateMissingChildren(adapter);
+                this.AddChildSafe(adapter);
+            }
+        }
+    }
+
+    private async Task ProcessLayoutEntryAsync(
+        ExplorerEntryData entry,
+        ITreeItem parent,
+        HashSet<Guid> seenNodeIds,
+        HashSet<Guid>? expandedFolderIds,
+        bool preserveNodeExpansion)
+    {
+        // Case A: Folder
+        if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
+        {
+            var folder = new FolderAdapter(entry);
+
+            // Restore expansion state
+            if (expandedFolderIds?.Contains(entry.FolderId ?? Guid.Empty) == true || entry.IsExpanded == true)
+            {
+                folder.IsExpanded = true;
+            }
+
+            // Recurse
+            if (entry.Children != null)
+            {
+                foreach (var childEntry in entry.Children)
+                {
+                    await this.ProcessLayoutEntryAsync(childEntry, folder, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+                }
+            }
+
+            this.AddToParent(parent, folder);
             return;
         }
 
-        await this.LoadSceneChildrenAsync().ConfigureAwait(false);
+        // Case B: Scene Node
+        if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
+        {
+            var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
+            if (node == null) return;
+
+            var adapter = new SceneNodeAdapter(node);
+
+            if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
+            {
+                adapter.IsExpanded = entry.IsExpanded.Value;
+            }
+
+            _ = seenNodeIds.Add(node.Id);
+
+            // Recurse (Layout Children)
+            if (entry.Children != null)
+            {
+                foreach (var childEntry in entry.Children)
+                {
+                    await this.ProcessLayoutEntryAsync(childEntry, adapter, seenNodeIds, expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
+                }
+            }
+
+            this.AddToParent(parent, adapter);
+        }
     }
 
-    private async Task LoadLayoutChildrenAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
+    private void AddToParent(ITreeItem parent, LayoutItemAdapter child)
     {
-        // Build layout using LayoutNodeAdapter wrappers so layout operations stay scene-agnostic.
-        var layout = this.AttachedObject.ExplorerLayout;
-        var seenNodeIds = new HashSet<System.Guid>();
-
-        if (layout is not null && layout.Count > 0)
+        switch (parent)
         {
-            async Task BuildFromEntry(ExplorerEntryData entry, object parent)
-            {
-                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                {
-                    var folder = new FolderAdapter(entry);
-                    if (expandedFolderIds is not null && entry.FolderId.HasValue && expandedFolderIds.Contains(entry.FolderId.Value))
-                    {
-                        folder.IsExpanded = true;
-                    }
-                    else if (entry.IsExpanded == true)
-                    {
-                        folder.IsExpanded = true;
-                    }
-
-                    if (entry.Children is not null)
-                    {
-                        foreach (var childEntry in entry.Children)
-                        {
-                            await BuildFromEntry(childEntry, folder).ConfigureAwait(false);
-                        }
-                    }
-
-                    if (parent is FolderAdapter folderParent)
-                    {
-                        folderParent.AddChildAdapter(folder);
-                    }
-                    else if (parent is SceneAdapter sceneParent)
-                    {
-                        sceneParent.AddChildInternal(folder);
-                    }
-                    else if (parent is SceneNodeAdapter layoutParent)
-                    {
-                        layoutParent.AddLayoutChild(folder);
-                    }
-
-                    return;
-                }
-
-                if (!string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) || entry.NodeId is null)
-                {
-                    return;
-                }
-
-                var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
-                if (node is null)
-                {
-                    return;
-                }
-
-                var layoutNode = new SceneNodeAdapter(node);
-
-                if (!preserveNodeExpansion && entry.IsExpanded.HasValue)
-                {
-                    layoutNode.IsExpanded = entry.IsExpanded.Value;
-                }
-
-                _ = seenNodeIds.Add(node.Id);
-
-                // Recurse into declared layout children and add them to the layoutNode
-                if (entry.Children is not null)
-                {
-                    foreach (var childEntry in entry.Children)
-                    {
-                        await BuildFromEntry(childEntry, layoutNode).ConfigureAwait(false);
-                    }
-                }
-
-                if (parent is FolderAdapter folderContainer)
-                {
-                    folderContainer.AddChildAdapter(layoutNode);
-                    return;
-                }
-
-                if (parent is SceneAdapter sceneParentRoot)
-                {
-                    sceneParentRoot.AddChildInternal(layoutNode);
-                }
-
-                if (parent is SceneNodeAdapter layoutParentNode)
-                {
-                    layoutParentNode.AddLayoutChild(layoutNode);
-                }
-            }
-
-            foreach (var entry in layout)
-            {
-                await BuildFromEntry(entry, this).ConfigureAwait(false);
-            }
+            case LayoutItemAdapter layoutParent:
+                if (child is FolderAdapter f) layoutParent.AddFolder(f);
+                else layoutParent.AddContent(child);
+                break;
+            case SceneAdapter:
+                this.AddChildSafe(child);
+                break;
         }
-
-        // Add any root nodes that were not present in the layout (layout-first fallback)
-        foreach (var entity in this.AttachedObject.RootNodes)
-        {
-            if (seenNodeIds.Contains(entity.Id))
-            {
-                continue;
-            }
-
-            var rootLayoutNode = new SceneNodeAdapter(entity);
-
-            // Populate layout children from the scene graph for explorer fallback.
-            foreach (var child in entity.Children)
-            {
-                var childLayout = new SceneNodeAdapter(child);
-                rootLayoutNode.AddLayoutChild(childLayout);
-            }
-
-            this.AddChildInternal(rootLayoutNode);
-        }
-
-        await Task.CompletedTask.ConfigureAwait(false);
     }
 
-    private async Task LoadSceneChildrenAsync()
+    private void AddChildSafe(TreeItemAdapter item)
     {
-        // Original path: build tree using SceneNodeAdapter only (no layout separation)
-        var layout = this.AttachedObject.ExplorerLayout;
-        var seenNodeIds = new HashSet<System.Guid>();
-
-        if (layout is not null && layout.Count > 0)
-        {
-            async Task BuildFromEntry(ExplorerEntryData entry, TreeItemAdapter parent)
-            {
-                if (string.Equals(entry.Type, "Folder", StringComparison.OrdinalIgnoreCase))
-                {
-                    var folder = new FolderAdapter(entry);
-
-                    if (entry.Children is not null)
-                    {
-                        foreach (var childEntry in entry.Children)
-                        {
-                            await BuildFromEntry(childEntry, folder).ConfigureAwait(false);
-                        }
-                    }
-
-                    if (parent is FolderAdapter folderParent)
-                    {
-                        folderParent.AddChildAdapter(folder);
-                    }
-                    else
-                    {
-                        this.AddChildInternal(folder);
-                    }
-                }
-                else if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId is not null)
-                {
-                    var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
-                    if (node is not null)
-                    {
-                        var layoutNode = new SceneNodeAdapter(node);
-
-                        if (entry.IsExpanded.HasValue)
-                        {
-                            layoutNode.IsExpanded = entry.IsExpanded.Value;
-                        }
-                        _ = seenNodeIds.Add(node.Id);
-
-                        if (parent is FolderAdapter folderParent)
-                        {
-                            folderParent.AddChildAdapter(layoutNode);
-                        }
-                        else if (parent is SceneAdapter sceneParent)
-                        {
-                            // Only SceneAdapter can attach node adapters at the root level
-                            sceneParent.AddChildInternal(layoutNode);
-                        }
-                    }
-                }
-            }
-
-            foreach (var entry in layout)
-            {
-                await BuildFromEntry(entry, this).ConfigureAwait(false);
-            }
-        }
-
-        // Add any root nodes that were not present in the layout
-        foreach (var entity in this.AttachedObject.RootNodes)
-        {
-            if (!seenNodeIds.Contains(entity.Id))
-            {
-                var layoutNode = new SceneNodeAdapter(entity);
-
-                // Populate layout children from scene graph for fallback
-                foreach (var child in entity.Children)
-                {
-                    var childLayout = new SceneNodeAdapter(child);
-                    layoutNode.AddLayoutChild(childLayout);
-                }
-
-                this.AddChildInternal(layoutNode);
-            }
-        }
-
-        await Task.CompletedTask.ConfigureAwait(false);
+        this.AddChildInternal(item);
+        this.rootItemsCache.Add(item);
     }
 
-    /// <summary>
-    ///     Reloads the children collection from the current <see cref="AttachedObject.ExplorerLayout"/>
-    ///     or the scene root nodes. This forces a refresh of adapters in-place without creating a
-    ///     new SceneAdapter instance which would unnecessarily recreate parent links and view state.
-    /// </summary>
-    /// <param name="expandedFolderIds">Optional set of folder IDs that should be expanded.</param>
-    /// <param name="preserveNodeExpansion">If true, ignores layout expansion state for nodes and uses the current SceneNode state.</param>
+    private void PopulateMissingChildren(SceneNodeAdapter parentAdapter)
+    {
+        // If a node is created from fallback, it might have children that are also not in the layout.
+        // We need to show them.
+        foreach (var childNode in parentAdapter.AttachedObject.Children)
+        {
+            var childAdapter = new SceneNodeAdapter(childNode);
+            this.PopulateMissingChildren(childAdapter); // Recurse
+            parentAdapter.AddContent(childAdapter);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task ReloadChildrenAsync(HashSet<Guid>? expandedFolderIds = null, bool preserveNodeExpansion = false)
     {
-        // Clear the cached children then call the same loading path used by InitializeChildrenCollectionAsync
         this.ClearChildren();
-
-        if (this.UseLayoutAdapters)
-        {
-            await this.LoadLayoutChildrenAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
-            return;
-        }
-
-        await this.LoadSceneChildrenAsync().ConfigureAwait(false);
+        this.rootItemsCache.Clear();
+        await this.RebuildTreeAsync(expandedFolderIds, preserveNodeExpansion).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Retrieves the IDs of all currently expanded folders in the UI tree.
-    /// This is used to preserve expansion state during Undo/Redo operations.
+    /// Uses the internal cache to avoid deadlocks on the UI thread.
     /// </summary>
     public HashSet<Guid> GetExpandedFolderIds()
     {
         var expanded = new HashSet<Guid>();
 
-        // We assume children are loaded when this is called during Undo/Redo.
-        // If the Children task is not completed, we block, which is acceptable here
-        // as we are restoring state and need the current UI state.
-        var rootChildren = this.Children.IsCompleted
-            ? this.Children.Result
-            : this.Children.GetAwaiter().GetResult();
-
-        if (rootChildren is null)
-        {
-            return expanded;
-        }
-
-        var stack = new Stack<ITreeItem>(rootChildren);
+        // Use the cache! No more .Result deadlocks.
+        var stack = new Stack<ITreeItem>(this.rootItemsCache);
 
         while (stack.Count > 0)
         {
@@ -314,7 +200,16 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
                     expanded.Add(folder.Id);
                 }
 
-                foreach (var child in folder.InternalChildren)
+                // LayoutItemAdapter exposes CurrentChildren synchronously
+                foreach (var child in folder.CurrentChildren)
+                {
+                    stack.Push(child);
+                }
+            }
+            else if (item is SceneNodeAdapter node)
+            {
+                // Nodes can also contain folders now
+                foreach (var child in node.CurrentChildren)
                 {
                     stack.Push(child);
                 }
