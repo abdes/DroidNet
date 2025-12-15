@@ -25,6 +25,8 @@ namespace DroidNet.Controls.Demo.Tree;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "must be public for source generated MVVM")]
 public partial class ProjectLayoutViewModel : DynamicTreeViewModel
 {
+    private static readonly IReadOnlyList<string> FilteringRelevantProperties = [nameof(ITreeItem.Label)];
+
     private readonly ILogger<ProjectLayoutViewModel> logger;
     private readonly DomainModelService domainModelService;
     private readonly MenuItemData filterLightItem;
@@ -244,6 +246,10 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         this.RenameCommand.NotifyCanExecuteChanged();
         this.PasteCommand.NotifyCanExecuteChanged();
     }
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<string>? GetFilteringRelevantProperties()
+        => FilteringRelevantProperties;
 
     partial void OnLabelFilterTextChanged(string value)
     {
