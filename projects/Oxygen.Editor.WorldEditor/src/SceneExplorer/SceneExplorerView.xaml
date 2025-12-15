@@ -65,7 +65,7 @@
             BorderBrush="Red"
             BorderThickness="1"
             CornerRadius="3">
-            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
+            <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
         </Border>
         <Grid Grid.Row="1">
             <Grid.Resources>
@@ -93,10 +93,7 @@
                     </dnc:ToolBarButton>
 
                     <!--  New folder from selection  -->
-                    <dnc:ToolBarButton
-                        Command="{x:Bind ViewModel.CreateFolderFromSelectionCommand}"
-                        IsEnabled="{x:Bind ViewModel.HasUnlockedSelectedItems, Mode=OneWay}"
-                        Label="New Folder">
+                    <dnc:ToolBarButton Command="{x:Bind ViewModel.CreateFolderCommand}" Label="New Folder">
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Folder" />
                         </dnc:ToolBarButton.Icon>

@@ -119,24 +119,28 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     }
 
     /// <inheritdoc />
-    public async Task<bool> LoadSceneAsync(Scene scene)
+    public async Task<Scene?> LoadSceneAsync(Scene scene)
     {
         var loadedScene = await this.LoadSceneFromStorageAsync(scene.Name, scene.Project).ConfigureAwait(true);
         if (loadedScene is null)
         {
-            return false;
+            return null;
         }
 
-        scene.RootNodes.Clear();
-        foreach (var sceneNode in loadedScene.RootNodes)
+        // Replace the scene in the project's list
+        var index = scene.Project.Scenes.IndexOf(scene);
+        if (index != -1)
         {
-            scene.RootNodes.Add(sceneNode);
+            scene.Project.Scenes[index] = loadedScene;
         }
 
-        // Also copy any editor-only explorer layout so UI can show folders / grouping
-        scene.ExplorerLayout = loadedScene.ExplorerLayout;
+        // Update ActiveScene if it was pointing to the old scene
+        if (ReferenceEquals(scene.Project.ActiveScene, scene))
+        {
+            scene.Project.ActiveScene = loadedScene;
+        }
 
-        return true;
+        return loadedScene;
     }
 
     /// <inheritdoc />

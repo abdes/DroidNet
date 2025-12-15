@@ -16,15 +16,6 @@ namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
 public interface ISceneOrganizer
 {
     /// <summary>
-    /// Creates a folder containing the specified scene node ids, returning a new layout.
-    /// </summary>
-    /// <param name="selectedNodeIds">The node identifiers to group.</param>
-    /// <param name="scene">The owning scene.</param>
-    /// <param name="sceneAdapter">The scene adapter for contextual info (e.g., folder adapters).</param>
-    /// <returns>A layout change record with the new layout and folder info.</returns>
-    public LayoutChangeRecord CreateFolderFromSelection(HashSet<Guid> selectedNodeIds, Scene scene, SceneAdapter sceneAdapter);
-
-    /// <summary>
     /// Moves a scene node into the specified folder.
     /// </summary>
     /// <param name="nodeId">The node identifier to move.</param>
@@ -59,6 +50,25 @@ public interface ISceneOrganizer
     /// <param name="scene">The owning scene.</param>
     /// <returns>A layout change record with the updated layout.</returns>
     public LayoutChangeRecord RemoveFolder(Guid folderId, bool promoteChildrenToParent, Scene scene);
+
+    /// <summary>
+    /// Removes a scene node from the layout (effectively moving it to root or its natural scene parent).
+    /// </summary>
+    /// <param name="nodeId">The node identifier to remove.</param>
+    /// <param name="scene">The owning scene.</param>
+    /// <returns>A layout change record with the updated layout.</returns>
+    public LayoutChangeRecord RemoveNodeFromLayout(Guid nodeId, Scene scene);
+
+    /// <summary>
+    /// Creates a new empty folder.
+    /// </summary>
+    /// <param name="parentFolderId">The parent folder identifier, or null for root.</param>
+    /// <param name="name">The name of the new folder.</param>
+    /// <param name="scene">The owning scene.</param>
+    /// <param name="folderId">Optional folder identifier. If null, a new one is generated.</param>
+    /// <param name="parentNodeId">Optional parent node identifier. If provided, the folder is created under this node.</param>
+    /// <returns>A layout change record with the updated layout.</returns>
+    public LayoutChangeRecord CreateFolder(Guid? parentFolderId, string name, Scene scene, Guid? folderId = null, Guid? parentNodeId = null);
 
     /// <summary>
     /// Reconciles the adapter tree to the provided layout snapshot deterministically, reusing
@@ -113,6 +123,15 @@ public interface ISceneOrganizer
     /// <param name="scene">The scene to check hierarchy against.</param>
     /// <returns>A set of top-level selected node IDs.</returns>
     public HashSet<Guid> FilterTopLevelSelectedNodeIds(HashSet<Guid> selectedIds, Scene scene);
+
+    /// <summary>
+    /// Renames a folder in the layout.
+    /// </summary>
+    /// <param name="folderId">The folder identifier.</param>
+    /// <param name="newName">The new name.</param>
+    /// <param name="scene">The owning scene.</param>
+    /// <returns>A layout change record with the updated layout.</returns>
+    public LayoutChangeRecord RenameFolder(Guid folderId, string newName, Scene scene);
 }
 
 /// <summary>

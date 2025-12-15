@@ -47,78 +47,78 @@ public static class SceneLayoutHelpers
         {
             SceneViewLayout.OnePane => new[] { (0, 0, 1, 1) },
 
-            SceneViewLayout.FourQuad => new[]
-            {
+            SceneViewLayout.FourQuad =>
+            [
                 (0, 0, 1, 1),
                 (0, 1, 1, 1),
                 (1, 0, 1, 1),
                 (1, 1, 1, 1),
-            },
+            ],
 
             // Two panes: grid 1x2 or 2x1 - main is always first item
-            SceneViewLayout.TwoMainLeft => new[] { (0, 0, 1, 1), (0, 1, 1, 1) },
-            SceneViewLayout.TwoMainRight => new[] { (0, 1, 1, 1), (0, 0, 1, 1) },
-            SceneViewLayout.TwoMainTop => new[] { (0, 0, 1, 1), (1, 0, 1, 1) },
-            SceneViewLayout.TwoMainBottom => new[] { (1, 0, 1, 1), (0, 0, 1, 1) },
+            SceneViewLayout.TwoMainLeft => [(0, 0, 1, 1), (0, 1, 1, 1)],
+            SceneViewLayout.TwoMainRight => [(0, 1, 1, 1), (0, 0, 1, 1)],
+            SceneViewLayout.TwoMainTop => [(0, 0, 1, 1), (1, 0, 1, 1)],
+            SceneViewLayout.TwoMainBottom => [(1, 0, 1, 1), (0, 0, 1, 1)],
 
             // Three panes: use 2x2 grid: main occupies left full (2x1) or top full (1x2)
-            SceneViewLayout.ThreeMainLeft => new[]
-            {
+            SceneViewLayout.ThreeMainLeft =>
+            [
                 (0, 0, 2, 1), // main
                 (0, 1, 1, 1),
                 (1, 1, 1, 1),
-            },
-            SceneViewLayout.ThreeMainRight => new[]
-            {
+            ],
+            SceneViewLayout.ThreeMainRight =>
+            [
                 (0, 1, 2, 1), // main
                 (0, 0, 1, 1),
                 (1, 0, 1, 1),
-            },
-            SceneViewLayout.ThreeMainTop => new[]
-            {
+            ],
+            SceneViewLayout.ThreeMainTop =>
+            [
                 (0, 0, 1, 2), // main
                 (1, 0, 1, 1),
                 (1, 1, 1, 1),
-            },
-            SceneViewLayout.ThreeMainBottom => new[]
-            {
+            ],
+            SceneViewLayout.ThreeMainBottom =>
+            [
                 (1, 0, 1, 2), // main
                 (0, 0, 1, 1),
                 (0, 1, 1, 1),
-            },
+            ],
 
             // Four panes where main occupies two thirds and others split the remaining third.
             // Use a 3x3 grid and map spans so main takes 2x3 or 3x2 cells.
-            SceneViewLayout.FourMainLeft => new[]
-            {
+            SceneViewLayout.FourMainLeft =>
+            [
                 (0, 0, 3, 2), // main: left two columns (2/3)
                 (0, 2, 1, 1),
                 (1, 2, 1, 1),
                 (2, 2, 1, 1),
-            },
-            SceneViewLayout.FourMainRight => new[]
-            {
+            ],
+            SceneViewLayout.FourMainRight =>
+            [
                 (0, 1, 3, 2), // main: right two columns
                 (0, 0, 1, 1),
                 (1, 0, 1, 1),
                 (2, 0, 1, 1),
-            },
-            SceneViewLayout.FourMainTop => new[]
-            {
+            ],
+            SceneViewLayout.FourMainTop =>
+            [
                 (0, 0, 2, 3), // main: top two rows
                 (2, 0, 1, 1),
                 (2, 1, 1, 1),
                 (2, 2, 1, 1),
-            },
-            SceneViewLayout.FourMainBottom => new[]
-            {
+            ],
+            SceneViewLayout.FourMainBottom =>
+            [
                 (1, 0, 2, 3), // main: bottom two rows
                 (0, 0, 1, 1),
                 (0, 1, 1, 1),
                 (0, 2, 1, 1),
-            },
+            ],
 
-            _ => new[] { (0, 0, 1, 1) },
+            _ => [(0, 0, 1, 1)],
         };
     }
 }

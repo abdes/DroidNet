@@ -17,7 +17,7 @@ public partial class SceneExplorerViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "CreateFolderFromSelection invoked. SelectionModelType={Type}, ShownItemsCount={Count}")]
+        Message = "CreateFolder invoked. SelectionModelType={Type}, ShownItemsCount={Count}")]
     private static partial void LogCreateFolderInvoked(ILogger logger, string? type, int count);
 
     [Conditional("DEBUG")]

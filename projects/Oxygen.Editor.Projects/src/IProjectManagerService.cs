@@ -53,9 +53,9 @@ public interface IProjectManagerService
     /// </summary>
     /// <param name="scene">The scene whose entities are to be loaded.</param>
     /// <returns>
-    /// A task that represents the asynchronous operation. The task result is <see langword="true"/> if the entities are loaded successfully; otherwise, <see langword="false"/>.
+    /// A task that represents the asynchronous operation. The task result contains the loaded scene if successful; otherwise, <see langword="null"/>.
     /// </returns>
-    public Task<bool> LoadSceneAsync(Scene scene);
+    public Task<Scene?> LoadSceneAsync(Scene scene);
 
     /// <summary>
     /// Creates a new scene in the current project asynchronously.

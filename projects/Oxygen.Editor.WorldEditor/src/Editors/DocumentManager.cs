@@ -91,7 +91,6 @@ public sealed partial class DocumentManager : IDisposable
         var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
         if (openedId == Guid.Empty)
         {
-            // Opening can fail if the existing scene tab close was vetoed.
             this.LogSceneOpeningAborted(message.Scene);
             message.Reply(response: false);
             return;

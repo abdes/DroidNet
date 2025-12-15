@@ -8,17 +8,22 @@ using Oxygen.Editor.World;
 namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
 
 /// <summary>
-/// Default implementation of <see cref="ISceneMutator" /> that enforces scene-graph invariants.
+/// Default implementation of <see cref="ISceneMutator"/> that enforces
+/// scene-graph invariants and emits diagnostics for graph mutations.
 /// </summary>
-public sealed class SceneMutator : ISceneMutator
+/// <param name="logger">The logger used for diagnostic messages.</param>
+/// <exception cref="ArgumentNullException">Thrown when <paramref name="logger"/> is <see langword="null"/>.</exception>
+public sealed partial class SceneMutator(ILogger<SceneMutator> logger) : ISceneMutator
 {
-    private readonly ILogger<SceneMutator> logger;
+    private readonly ILogger<SceneMutator> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-    public SceneMutator(ILogger<SceneMutator> logger)
-    {
-        this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
-    }
-
+    /// <summary>
+    /// Creates <paramref name="newNode"/> at the root of <paramref name="scene"/>.
+    /// </summary>
+    /// <param name="newNode">The node to add to the scene.</param>
+    /// <param name="scene">The scene to modify.</param>
+    /// <returns>A <see cref="SceneNodeChangeRecord"/> describing the change.</returns>
+    /// <exception cref="ArgumentNullException">If <paramref name="newNode"/> or <paramref name="scene"/> is <see langword="null"/>.</exception>
     public SceneNodeChangeRecord CreateNodeAtRoot(SceneNode newNode, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(newNode);
@@ -28,7 +33,7 @@ public sealed class SceneMutator : ISceneMutator
         if (!wasInRootNodes)
         {
             scene.RootNodes.Add(newNode);
-            this.logger.LogDebug("Added node '{NodeName}' to RootNodes", newNode.Name);
+            this.LogAddedNodeToRootNodes(newNode);
         }
 
         var oldParentId = newNode.Parent?.Id;
@@ -44,6 +49,14 @@ public sealed class SceneMutator : ISceneMutator
             RemovedFromRootNodes: false);
     }
 
+    /// <summary>
+    /// Creates <paramref name="newNode"/> as a child of <paramref name="parentNode"/>.
+    /// </summary>
+    /// <param name="newNode">The node to insert.</param>
+    /// <param name="parentNode">The parent under which the node will be placed.</param>
+    /// <param name="scene">The scene containing the nodes.</param>
+    /// <returns>A <see cref="SceneNodeChangeRecord"/> describing the change.</returns>
+    /// <exception cref="ArgumentNullException">If any argument is <see langword="null"/>.</exception>
     public SceneNodeChangeRecord CreateNodeUnderParent(SceneNode newNode, SceneNode parentNode, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(newNode);
@@ -57,7 +70,7 @@ public sealed class SceneMutator : ISceneMutator
         if (wasInRootNodes)
         {
             _ = scene.RootNodes.Remove(newNode);
-            this.logger.LogDebug("Removed node '{NodeName}' from RootNodes after parenting", newNode.Name);
+            this.LogRemovedNodeFromRootNodesAfterParenting(newNode);
         }
 
         return new SceneNodeChangeRecord(
@@ -70,6 +83,13 @@ public sealed class SceneMutator : ISceneMutator
             RemovedFromRootNodes: wasInRootNodes);
     }
 
+    /// <summary>
+    /// Removes the node with the given <paramref name="nodeId"/> from <paramref name="scene"/>.
+    /// </summary>
+    /// <param name="nodeId">The id of the node to remove.</param>
+    /// <param name="scene">The scene to operate on.</param>
+    /// <returns>A <see cref="SceneNodeChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">If the node cannot be found.</exception>
     public SceneNodeChangeRecord RemoveNode(Guid nodeId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -82,7 +102,7 @@ public sealed class SceneMutator : ISceneMutator
         if (wasInRootNodes)
         {
             _ = scene.RootNodes.Remove(node);
-            this.logger.LogDebug("Removed node '{NodeName}' from RootNodes", node.Name);
+            this.LogRemovedNodeFromRootNodes(node);
         }
 
         node.SetParent(newParent: null);
@@ -97,6 +117,13 @@ public sealed class SceneMutator : ISceneMutator
             RemovedFromRootNodes: wasInRootNodes);
     }
 
+    /// <summary>
+    /// Removes an entire hierarchy (sub-tree) whose root has id <paramref name="rootNodeId"/>.
+    /// </summary>
+    /// <param name="rootNodeId">The id of the root node whose hierarchy will be removed.</param>
+    /// <param name="scene">The scene to operate on.</param>
+    /// <returns>A <see cref="SceneNodeChangeRecord"/> describing the change.</returns>
+    /// <exception cref="InvalidOperationException">If the root node cannot be found.</exception>
     public SceneNodeChangeRecord RemoveHierarchy(Guid rootNodeId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -109,7 +136,7 @@ public sealed class SceneMutator : ISceneMutator
         if (wasInRootNodes)
         {
             _ = scene.RootNodes.Remove(root);
-            this.logger.LogDebug("Removed hierarchy root '{NodeName}' from RootNodes", root.Name);
+            this.LogRemovedHierarchyRootFromRootNodes(root);
         }
 
         // Detach the entire subtree from any parent; children remain linked beneath root
@@ -125,6 +152,15 @@ public sealed class SceneMutator : ISceneMutator
             RemovedFromRootNodes: wasInRootNodes);
     }
 
+    /// <summary>
+    /// Reparents the node identified by <paramref name="nodeId"/> to <paramref name="newParentId"/>.
+    /// </summary>
+    /// <param name="nodeId">The id of the node to reparent.</param>
+    /// <param name="oldParentId">The expected old parent id (optional).</param>
+    /// <param name="newParentId">The new parent id, or <see langword="null"/> to move to root.</param>
+    /// <param name="scene">The scene containing the node.</param>
+    /// <returns>A <see cref="SceneNodeChangeRecord"/> describing the reparenting.</returns>
+    /// <exception cref="InvalidOperationException">If the node or target parent cannot be found.</exception>
     public SceneNodeChangeRecord ReparentNode(Guid nodeId, Guid? oldParentId, Guid? newParentId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -151,13 +187,13 @@ public sealed class SceneMutator : ISceneMutator
         {
             scene.RootNodes.Add(node);
             addedToRootNodes = true;
-            this.logger.LogDebug("Moved node '{NodeName}' to RootNodes", node.Name);
+            this.LogMovedNodeToRootNodes(node);
         }
         else if (newParent is not null && scene.RootNodes.Contains(node))
         {
             _ = scene.RootNodes.Remove(node);
             removedFromRootNodes = true;
-            this.logger.LogDebug("Removed node '{NodeName}' from RootNodes after reparenting", node.Name);
+            this.LogRemovedNodeFromRootNodesAfterReparenting(node);
         }
 
         return new SceneNodeChangeRecord(
@@ -170,6 +206,13 @@ public sealed class SceneMutator : ISceneMutator
             RemovedFromRootNodes: removedFromRootNodes);
     }
 
+    /// <summary>
+    /// Reparents multiple node hierarchies to a new parent.
+    /// </summary>
+    /// <param name="nodeIds">The ids of the nodes to reparent.</param>
+    /// <param name="newParentId">The new parent id to apply to each node hierarchy.</param>
+    /// <param name="scene">The scene containing the nodes.</param>
+    /// <returns>A list of resulting <see cref="SceneNodeChangeRecord"/> objects.</returns>
     public IReadOnlyList<SceneNodeChangeRecord> ReparentHierarchies(IEnumerable<Guid> nodeIds, Guid? newParentId, Scene scene)
     {
         ArgumentNullException.ThrowIfNull(scene);
