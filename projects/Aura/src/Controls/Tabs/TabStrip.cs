@@ -105,8 +105,14 @@ public partial class TabStrip : Control, ITabStrip
         this.SetValue(ItemsProperty, items);
 
         // Create filtered views over the Items source. Only IsPinned matters for re-evaluation.
-        var pinnedView = new FilteredObservableCollection<TabItem>(items, ti => ti.IsPinned, [nameof(TabItem.IsPinned)]);
-        var regularViewLocal = new FilteredObservableCollection<TabItem>(items, ti => !ti.IsPinned, [nameof(TabItem.IsPinned)]);
+        var pinnedView = FilteredObservableCollectionFactory.FromPredicate(
+            items,
+            ti => ti.IsPinned,
+            new FilteredObservableCollectionOptions { RelevantProperties = [nameof(TabItem.IsPinned)] });
+        var regularViewLocal = FilteredObservableCollectionFactory.FromPredicate(
+            items,
+            ti => !ti.IsPinned,
+            new FilteredObservableCollectionOptions { RelevantProperties = [nameof(TabItem.IsPinned)] });
 
         // Use a weak reference to the control for the enqueue delegate so we don't capture
         // the control instance strongly (which could cause a lifetime leak via the
