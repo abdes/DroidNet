@@ -32,7 +32,7 @@ public class DynamicObservableCollectionTests
         using var collection = new DynamicObservableCollection<int, string>(source, this.transform);
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 1", "Item 2", "Item 3");
     }
 
@@ -47,7 +47,7 @@ public class DynamicObservableCollectionTests
         source.Add(4);
 
         // Assert
-        _ = collection.Count.Should().Be(1);
+        _ = collection.Should().ContainSingle();
         _ = collection.Should().Equal("Item 4");
     }
 
@@ -66,7 +66,7 @@ public class DynamicObservableCollectionTests
         source.Insert(1, 10);
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 1", "Item 10", "Item 2");
     }
 
@@ -85,7 +85,7 @@ public class DynamicObservableCollectionTests
         _ = source.Remove(1);
 
         // Assert
-        _ = collection.Count.Should().Be(1);
+        _ = collection.Should().ContainSingle();
         _ = collection.Should().Equal("Item 2");
     }
 
@@ -104,7 +104,7 @@ public class DynamicObservableCollectionTests
         source[0] = 3;
 
         // Assert
-        _ = collection.Count.Should().Be(2);
+        _ = collection.Should().HaveCount(2);
         _ = collection.Should().Equal("Item 3", "Item 2");
     }
 
@@ -124,7 +124,7 @@ public class DynamicObservableCollectionTests
         source.Move(1, 0);
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 2", "Item 1", "Item 3");
     }
 
@@ -145,7 +145,7 @@ public class DynamicObservableCollectionTests
         source.Add(4);
 
         // Assert
-        _ = collection.Count.Should().Be(2);
+        _ = collection.Should().HaveCount(2);
         _ = collection.Should().Equal("Item 3", "Item 4");
     }
 
@@ -200,7 +200,7 @@ public class DynamicObservableCollectionTests
         source.Add(3);
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 1", "Item 2", "Item 3");
     }
 
@@ -216,7 +216,7 @@ public class DynamicObservableCollectionTests
         _ = source.Remove(2);
 
         // Assert
-        _ = collection.Count.Should().Be(1);
+        _ = collection.Should().ContainSingle();
         _ = collection.Should().Equal("Item 3");
     }
 
@@ -232,7 +232,7 @@ public class DynamicObservableCollectionTests
         source[1] = 5;
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 4", "Item 5", "Item 3");
     }
 
@@ -248,7 +248,7 @@ public class DynamicObservableCollectionTests
         source.Move(1, 2); // Moves 3 one step to the right, resulting in { 2, 4, 3, 1 }
 
         // Assert
-        _ = collection.Count.Should().Be(4);
+        _ = collection.Should().HaveCount(4);
         _ = collection.Should().Equal("Item 2", "Item 4", "Item 3", "Item 1");
     }
 
@@ -265,7 +265,7 @@ public class DynamicObservableCollectionTests
         source[0] = 5;
 
         // Assert
-        _ = collection.Count.Should().Be(3);
+        _ = collection.Should().HaveCount(3);
         _ = collection.Should().Equal("Item 5", "Item 3", "Item 4");
     }
 }

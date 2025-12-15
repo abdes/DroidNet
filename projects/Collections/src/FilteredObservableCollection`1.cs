@@ -20,9 +20,15 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
     where T : class
 {
     private readonly ObservableCollection<T> source;
-    private readonly Predicate<T> filter;
+    private readonly Predicate<T>? filter;
+    private readonly IFilteredViewBuilder<T>? viewBuilder;
+    private readonly bool useBuilder;
     private readonly HashSet<string> relevantProperties;
     private readonly List<T> filtered;
+    private readonly bool debounceEnabled;
+    private readonly TimeSpan propertyChangedDebounceInterval;
+    private readonly SynchronizationContext? synchronizationContext;
+    private readonly Lock debounceGate = new();
 
     private readonly bool observeSourceChanges;
     private readonly bool observeItemChanges;
@@ -31,45 +37,36 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
     private readonly HashSet<T> filteredSet; // Fast membership test for items currently in the filtered view
     private int suspendCount;
     private bool hadChangesWhileSuspended;
+    private Timer? debounceTimer;
+    private bool debouncePending;
     private bool disposed;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class.
+    /// Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class using a predicate filter.
     /// </summary>
-    /// <param name="source">
-    ///     The source <see cref="ObservableCollection{T}"/> to observe. Cannot be <see langword="null"/>.
-    /// </param>
-    /// <param name="filter">
-    ///     A predicate that determines whether an item should appear in the filtered view. Cannot
-    ///     be <see langword="null"/>.
-    /// </param>
-    /// <param name="relevantProperties">
-    ///     Optional collection of property names that affect the filter. If omitted or empty,
-    ///     changes to any property on an item are considered relevant for re-evaluating the filter
-    ///     for that item. When specified, only property change notifications whose
-    ///     <see cref="System.ComponentModel.PropertyChangedEventArgs.PropertyName"/> is contained
-    ///     in this collection will cause the item to be re-tested against the filter.
-    /// </param>
-    /// <param name="observeSourceChanges">If <see langword="true"/>, subscribe to collection changes on <paramref name="source"/>.</param>
-    /// <param name="observeItemChanges">If <see langword="true"/>, subscribe to <see cref="INotifyPropertyChanged.PropertyChanged"/> on items.</param>
-    /// <exception cref="ArgumentNullException">
-    ///     Thrown when <paramref name="source"/> or <paramref name="filter"/> is <see langword="null"/>.
-    /// </exception>
-    public FilteredObservableCollection(
+    /// <param name="source">The source <see cref="ObservableCollection{T}"/> to observe.</param>
+    /// <param name="filter">Predicate that determines whether an item should appear in the filtered view.</param>
+    /// <param name="options">Optional settings controlling relevant properties and observation behavior.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="filter"/> is <see langword="null"/>.</exception>
+    internal FilteredObservableCollection(
         ObservableCollection<T> source,
         Predicate<T> filter,
-        IEnumerable<string>? relevantProperties = null,
-        bool observeSourceChanges = true,
-        bool observeItemChanges = true)
+        FilteredObservableCollectionOptions? options = null)
     {
         this.source = source ?? throw new ArgumentNullException(nameof(source));
         this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
-        this.relevantProperties = relevantProperties != null
-            ? new HashSet<string>(relevantProperties, StringComparer.Ordinal)
+
+        var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
+        this.relevantProperties = resolvedOptions.RelevantProperties != null
+            ? new HashSet<string>(resolvedOptions.RelevantProperties, StringComparer.Ordinal)
             : new HashSet<string>(StringComparer.Ordinal); // empty = all properties matter
 
-        this.observeSourceChanges = observeSourceChanges;
-        this.observeItemChanges = observeItemChanges;
+        this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
+        this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
+        this.synchronizationContext = SynchronizationContext.Current;
+
+        this.observeSourceChanges = resolvedOptions.ObserveSourceChanges;
+        this.observeItemChanges = resolvedOptions.ObserveItemChanges;
 
         this.filtered = [];
         this.attachedItems = [];
@@ -82,6 +79,55 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         {
             this.Attach(item);
         }
+
+        if (this.observeSourceChanges)
+        {
+            this.source.CollectionChanged += this.OnSourceCollectionChanged;
+        }
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class using a builder.
+    /// </summary>
+    /// <param name="source">The source collection to observe.</param>
+    /// <param name="viewBuilder">Builder that materializes the filtered projection.</param>
+    /// <param name="options">Settings controlling relevant properties, observation, and debounce.</param>
+    internal FilteredObservableCollection(
+        ObservableCollection<T> source,
+        IFilteredViewBuilder<T> viewBuilder,
+        FilteredObservableCollectionOptions options)
+    {
+        this.source = source ?? throw new ArgumentNullException(nameof(source));
+        this.viewBuilder = viewBuilder ?? throw new ArgumentNullException(nameof(viewBuilder));
+        this.filter = null;
+        this.useBuilder = true;
+
+        var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
+
+        this.relevantProperties = resolvedOptions.RelevantProperties != null
+            ? new HashSet<string>(resolvedOptions.RelevantProperties, StringComparer.Ordinal)
+            : new HashSet<string>(StringComparer.Ordinal); // empty = all properties matter
+
+        this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
+        this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
+        this.synchronizationContext = SynchronizationContext.Current;
+
+        this.observeSourceChanges = resolvedOptions.ObserveSourceChanges;
+        this.observeItemChanges = resolvedOptions.ObserveItemChanges;
+
+        this.filtered = [];
+        this.attachedItems = [];
+        this.filteredSet = [];
+        this.suspendCount = 0;
+        this.hadChangesWhileSuspended = false;
+        this.disposed = false;
+
+        foreach (var item in this.source)
+        {
+            this.Attach(item);
+        }
+
+        this.RebuildWithBuilder(resetOnly: false);
 
         if (this.observeSourceChanges)
         {
@@ -274,18 +320,25 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
-        this.filtered.Clear();
-        this.filteredSet.Clear();
-        foreach (var item in this.source)
+        if (this.useBuilder)
         {
-            if (this.filter(item))
-            {
-                this.filtered.Add(item);
-                this.filteredSet.Add(item);
-            }
+            this.RebuildWithBuilder(resetOnly: true);
         }
+        else
+        {
+            this.filtered.Clear();
+            this.filteredSet.Clear();
+            foreach (var item in this.source)
+            {
+                if (this.filter!(item))
+                {
+                    this.filtered.Add(item);
+                    this.filteredSet.Add(item);
+                }
+            }
 
-        this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
     }
 
     /// <summary>
@@ -360,6 +413,9 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             this.filteredSet.Clear();
             this.filtered.Clear();
 
+            this.debounceTimer?.Dispose();
+            this.debounceTimer = null;
+
             // Drop subscribers to our event
             this.CollectionChanged = null;
         }
@@ -406,6 +462,25 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
+        if (this.useBuilder)
+        {
+            foreach (T item in e.NewItems)
+            {
+                this.Attach(item);
+            }
+
+            if (this.debounceEnabled)
+            {
+                this.ScheduleDebouncedRebuild();
+            }
+            else
+            {
+                this.RebuildWithBuilder(resetOnly: true);
+            }
+
+            return;
+        }
+
         foreach (T item in e.NewItems)
         {
             // Attach (subscribe) and let Attach add to filtered if it matches.
@@ -426,6 +501,25 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
+        if (this.useBuilder)
+        {
+            foreach (T item in e.OldItems)
+            {
+                this.Detach(item);
+            }
+
+            if (this.debounceEnabled)
+            {
+                this.ScheduleDebouncedRebuild();
+            }
+            else
+            {
+                this.RebuildWithBuilder(resetOnly: true);
+            }
+
+            return;
+        }
+
         foreach (T item in e.OldItems)
         {
             var index = this.filtered.IndexOf(item);
@@ -439,6 +533,12 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
 
     private void HandleMove(NotifyCollectionChangedEventArgs e)
     {
+        if (this.useBuilder)
+        {
+            this.ScheduleDebouncedRebuild();
+            return;
+        }
+
         if (e.OldItems == null)
         {
             return;
@@ -465,6 +565,36 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
 
     private void HandleReplace(NotifyCollectionChangedEventArgs e)
     {
+        if (this.useBuilder)
+        {
+            if (e.OldItems != null)
+            {
+                foreach (T oldItem in e.OldItems)
+                {
+                    this.Detach(oldItem);
+                }
+            }
+
+            if (e.NewItems != null)
+            {
+                foreach (T newItem in e.NewItems)
+                {
+                    this.Attach(newItem);
+                }
+            }
+
+            if (this.debounceEnabled)
+            {
+                this.ScheduleDebouncedRebuild();
+            }
+            else
+            {
+                this.RebuildWithBuilder(resetOnly: true);
+            }
+
+            return;
+        }
+
         if (e.OldItems != null)
         {
             foreach (T oldItem in e.OldItems)
@@ -506,7 +636,12 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             }
         }
 
-        if (this.filter(item))
+        if (this.useBuilder)
+        {
+            return;
+        }
+
+        if (this.filter is not null && this.filter(item))
         {
             var index = this.ComputeInsertIndex(item);
             this.filtered.Insert(index, item);
@@ -543,31 +678,107 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
-        // If no specific properties were registered, any property change is relevant.
-        // Treat null or empty PropertyName as "all properties" and therefore relevant.
-        if (this.relevantProperties.Count == 0 || string.IsNullOrEmpty(e.PropertyName) || this.relevantProperties.Contains(e.PropertyName))
+        var isRelevant = this.relevantProperties.Count == 0 || string.IsNullOrEmpty(e.PropertyName) || this.relevantProperties.Contains(e.PropertyName);
+        if (!isRelevant)
         {
-            var inFiltered = this.filteredSet.Contains(item);
-            var shouldBeIn = this.filter(item);
+            return;
+        }
 
-            if (inFiltered && !shouldBeIn)
+        if (this.debounceEnabled)
+        {
+            this.ScheduleDebouncedRebuild();
+            return;
+        }
+
+        if (this.useBuilder)
+        {
+            this.RebuildWithBuilder(resetOnly: true);
+            return;
+        }
+
+        var inFiltered = this.filteredSet.Contains(item);
+        var shouldBeIn = this.filter!(item);
+
+        if (inFiltered && !shouldBeIn)
+        {
+            var index = this.filtered.IndexOf(item);
+            if (index >= 0)
             {
-                var index = this.filtered.IndexOf(item);
-                if (index >= 0)
-                {
-                    this.filtered.RemoveAt(index);
-                    _ = this.filteredSet.Remove(item);
-                    this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
-                }
-            }
-            else if (!inFiltered && shouldBeIn)
-            {
-                var index = this.ComputeInsertIndex(item);
-                this.filtered.Insert(index, item);
-                this.filteredSet.Add(item);
-                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+                this.filtered.RemoveAt(index);
+                _ = this.filteredSet.Remove(item);
+                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
             }
         }
+        else if (!inFiltered && shouldBeIn)
+        {
+            var index = this.ComputeInsertIndex(item);
+            this.filtered.Insert(index, item);
+            this.filteredSet.Add(item);
+            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+        }
+    }
+
+    private void ScheduleDebouncedRebuild()
+    {
+        if (!this.debounceEnabled)
+        {
+            this.RebuildFilteredView(resetOnly: true);
+            return;
+        }
+
+        using (this.debounceGate.EnterScope())
+        {
+            this.debouncePending = true;
+
+            if (this.debounceTimer is null)
+            {
+                this.debounceTimer = new Timer(
+                    this.OnDebounceTimer,
+                    state: null,
+                    dueTime: this.propertyChangedDebounceInterval,
+                    period: Timeout.InfiniteTimeSpan);
+                return;
+            }
+
+            // Always push the due time so multiple rapid changes coalesce into a single rebuild after the last change.
+            _ = this.debounceTimer.Change(this.propertyChangedDebounceInterval, Timeout.InfiniteTimeSpan);
+        }
+    }
+
+    private void OnDebounceTimer(object? state)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        void Dispatch()
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            using (this.debounceGate.EnterScope())
+            {
+                if (!this.debouncePending)
+                {
+                    return;
+                }
+
+                this.debouncePending = false;
+            }
+
+            this.RebuildFilteredView(resetOnly: true);
+        }
+
+        if (this.synchronizationContext is not null)
+        {
+            this.synchronizationContext.Post(_ => Dispatch(), state: null);
+            return;
+        }
+
+        Dispatch();
     }
 
     private int ComputeInsertIndex(T item)
@@ -621,6 +832,37 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         this.CollectionChanged?.Invoke(this, args);
     }
 
+    private void RebuildFilteredView(bool resetOnly)
+    {
+        if (this.useBuilder)
+        {
+            this.RebuildWithBuilder(resetOnly);
+            return;
+        }
+
+        if (this.filter is null)
+        {
+            return;
+        }
+
+        this.filtered.Clear();
+        this.filteredSet.Clear();
+
+        foreach (var item in this.source)
+        {
+            if (this.filter(item))
+            {
+                this.filtered.Add(item);
+                this.filteredSet.Add(item);
+            }
+        }
+
+        if (resetOnly)
+        {
+            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
+    }
+
     /// <summary>
     /// Rebuilds all subscriptions and the filtered view from the current source contents
     /// and raises Reset. Used for Reset actions on the source collection.
@@ -648,7 +890,39 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             this.Attach(item);
         }
 
-        this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        if (this.useBuilder)
+        {
+            this.RebuildWithBuilder(resetOnly: true);
+        }
+        else
+        {
+            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
+    }
+
+    private void RebuildWithBuilder(bool resetOnly)
+    {
+        if (this.disposed || this.viewBuilder is null)
+        {
+            return;
+        }
+
+        // Compute outside notification scope to keep a single Reset emission.
+        var view = this.viewBuilder.Build(this.source);
+
+        this.filtered.Clear();
+        this.filteredSet.Clear();
+
+        foreach (var item in view)
+        {
+            this.filtered.Add(item);
+            this.filteredSet.Add(item);
+        }
+
+        if (resetOnly)
+        {
+            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+        }
     }
 
     /// <summary>

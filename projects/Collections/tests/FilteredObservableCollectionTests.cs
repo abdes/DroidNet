@@ -20,7 +20,7 @@ public class FilteredObservableCollectionTests
     public void Constructor_NullSource_Throws()
     {
         // Arrange / Act
-        var act = new Action(() => _ = new FilteredObservableCollection<ObservableItem>(null!, i => true));
+        var act = new Action(() => _ = FilteredObservableCollectionFactory.FromPredicate<ObservableItem>(null!, i => true));
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>();
@@ -33,7 +33,7 @@ public class FilteredObservableCollectionTests
         var source = new ObservableCollection<ObservableItem>();
 
         // Act
-        var act = new Action(() => _ = new FilteredObservableCollection<ObservableItem>(source, null!));
+        var act = new Action(() => _ = FilteredObservableCollectionFactory.FromPredicate<ObservableItem>(source, null!));
 
         // Assert
         _ = act.Should().Throw<ArgumentNullException>();
@@ -51,10 +51,10 @@ public class FilteredObservableCollectionTests
         };
 
         // filter: include even values only
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         // Assert
-        _ = view.Count.Should().Be(1);
+        _ = view.Should().ContainSingle();
         _ = view.Should().ContainSingle().Which.Value.Should().Be(2);
     }
 
@@ -69,7 +69,7 @@ public class FilteredObservableCollectionTests
             new(3),
         };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -79,11 +79,11 @@ public class FilteredObservableCollectionTests
         source.Insert(1, new ObservableItem(4));
 
         // Assert
-        _ = view.Count.Should().Be(2);
+        _ = view.Should().HaveCount(2);
         _ = view[0].Value.Should().Be(4);
         _ = view[1].Value.Should().Be(2);
 
-        _ = events.Should().HaveCount(1);
+        _ = events.Should().ContainSingle();
         _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Add);
         _ = events[0].NewItems![0].Should().Be(view[0]);
         _ = events[0].NewStartingIndex.Should().Be(0);
@@ -99,7 +99,7 @@ public class FilteredObservableCollectionTests
             new(2),
         };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var raised = false;
         view.CollectionChanged += (_, _) => raised = true;
@@ -109,7 +109,7 @@ public class FilteredObservableCollectionTests
 
         // Assert
         _ = raised.Should().BeFalse();
-        _ = view.Count.Should().Be(1);
+        _ = view.Should().ContainSingle();
     }
 
     [TestMethod]
@@ -120,7 +120,7 @@ public class FilteredObservableCollectionTests
         var b = new ObservableItem(4);
         var source = new ObservableCollection<ObservableItem> { a, b };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -129,9 +129,9 @@ public class FilteredObservableCollectionTests
         _ = source.Remove(a);
 
         // Assert
-        _ = view.Count.Should().Be(1);
-        _ = view[0].Should().Be(b);
-        _ = events.Should().HaveCount(1);
+        _ = view.Should().ContainSingle();
+        _ = view.Should().HaveElementAt(0, b);
+        _ = events.Should().ContainSingle();
         _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Remove);
         _ = events[0].OldItems![0].Should().Be(a);
         _ = events[0].OldStartingIndex.Should().Be(0);
@@ -146,7 +146,7 @@ public class FilteredObservableCollectionTests
         var c = new ObservableItem(4); // filtered
         var source = new ObservableCollection<ObservableItem> { a, b, c };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         // view initially: [a, c]
         var events = new List<NotifyCollectionChangedEventArgs>();
@@ -156,11 +156,11 @@ public class FilteredObservableCollectionTests
         source.Move(2, 0);
 
         // Assert
-        _ = view.Count.Should().Be(2);
-        _ = view[0].Should().Be(c);
-        _ = view[1].Should().Be(a);
+        _ = view.Should().HaveCount(2);
+        _ = view.Should().HaveElementAt(0, c);
+        _ = view.Should().HaveElementAt(1, a);
 
-        _ = events.Should().HaveCount(1);
+        _ = events.Should().ContainSingle();
         _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Move);
         _ = events[0].NewItems![0].Should().Be(c);
         _ = events[0].NewStartingIndex.Should().Be(0);
@@ -175,7 +175,7 @@ public class FilteredObservableCollectionTests
         var newItem = new ObservableItem(5);
         var source = new ObservableCollection<ObservableItem> { oldItem };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -184,8 +184,8 @@ public class FilteredObservableCollectionTests
         source[0] = newItem;
 
         // Assert
-        _ = view.Count.Should().Be(0);
-        _ = events.Should().HaveCount(1);
+        _ = view.Should().BeEmpty();
+        _ = events.Should().ContainSingle();
         _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Remove);
     }
 
@@ -197,7 +197,7 @@ public class FilteredObservableCollectionTests
         var newItem = new ObservableItem(2); // even - should be added
         var source = new ObservableCollection<ObservableItem> { oldItem };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
 
@@ -205,9 +205,9 @@ public class FilteredObservableCollectionTests
         source[0] = newItem;
 
         // Assert
-        _ = view.Count.Should().Be(1);
-        _ = view[0].Should().Be(newItem);
-        _ = events.Should().HaveCount(1);
+        _ = view.Should().ContainSingle();
+        _ = view.Should().HaveElementAt(0, newItem);
+        _ = events.Should().ContainSingle();
         _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Add);
         _ = events[0].NewStartingIndex.Should().Be(0);
     }
@@ -220,7 +220,7 @@ public class FilteredObservableCollectionTests
         var newItem = new ObservableItem(4);
         var source = new ObservableCollection<ObservableItem> { oldItem };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
 
@@ -234,8 +234,8 @@ public class FilteredObservableCollectionTests
         _ = events[1].Action.Should().Be(NotifyCollectionChangedAction.Add);
         _ = events[1].NewStartingIndex.Should().Be(0);
 
-        _ = view.Count.Should().Be(1);
-        _ = view[0].Should().Be(newItem);
+        _ = view.Should().ContainSingle();
+        _ = view.Should().HaveElementAt(0, newItem);
     }
 
     [TestMethod]
@@ -243,7 +243,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(1), new(2) };
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -253,7 +253,7 @@ public class FilteredObservableCollectionTests
         source.Add(new ObservableItem(4));
 
         // Assert
-        _ = view.Count.Should().Be(1);
+        _ = view.Should().ContainSingle();
         _ = events.Should().ContainSingle(e => e.Action == NotifyCollectionChangedAction.Reset);
     }
 
@@ -263,7 +263,7 @@ public class FilteredObservableCollectionTests
         // Arrange
         var item = new ObservableItem(1);
         var source = new ObservableCollection<ObservableItem> { item };
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -290,7 +290,10 @@ public class FilteredObservableCollectionTests
         var source = new ObservableCollection<ObservableItem> { item };
 
         // Only changes to "Other" should cause re-evaluation — since we change Value, no event expected
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0, ["Other"]);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(
+            source,
+            i => i.Value % 2 == 0,
+            new FilteredObservableCollectionOptions { RelevantProperties = ["Other"] });
 
         var raised = false;
         view.CollectionChanged += (_, _) => raised = true;
@@ -307,7 +310,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(1) };
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -335,7 +338,7 @@ public class FilteredObservableCollectionTests
             new(3),
         };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -345,7 +348,7 @@ public class FilteredObservableCollectionTests
 
         // Assert - Refresh always raises Reset even if nothing changed and view content remains correct
         _ = events.Should().ContainSingle(e => e.Action == NotifyCollectionChangedAction.Reset);
-        _ = view.Count.Should().Be(1);
+        _ = view.Should().ContainSingle();
         _ = view[0].Value.Should().Be(2);
     }
 
@@ -359,7 +362,7 @@ public class FilteredObservableCollectionTests
             new(2),
         };
 
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
 
@@ -381,7 +384,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(2) };
-        var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var raised = false;
         view.CollectionChanged += (_, _) => raised = true;
@@ -399,7 +402,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(1) };
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -426,7 +429,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(2) };
-        var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         // Act
         view.Dispose();
@@ -441,7 +444,7 @@ public class FilteredObservableCollectionTests
     {
         // Arrange
         var source = new ObservableCollection<ObservableItem> { new(2) };
-        using var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -459,7 +462,7 @@ public class FilteredObservableCollectionTests
         _ = actDefer.Should().Throw<ObjectDisposedException>();
 
         // Count should be zero (Dispose cleared the view)
-        _ = view.Count.Should().Be(0);
+        _ = view.Should().BeEmpty();
 
         // Enumerator should be empty
         _ = view.Should().BeEmpty();
@@ -479,7 +482,7 @@ public class FilteredObservableCollectionTests
         // Arrange
         var item = new ObservableItem(2);
         var source = new ObservableCollection<ObservableItem> { item };
-        var view = new FilteredObservableCollection<ObservableItem>(source, i => i.Value % 2 == 0);
+        var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
 
         // Ensure subscription exists
         var registered = EventHandlerTestHelper.FindAllRegisteredDelegates(source, "CollectionChanged");
