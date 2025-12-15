@@ -61,6 +61,8 @@ public sealed partial class TabStripDemoView : Page
 
     private void TabStripDemoView_Loaded(object? sender, RoutedEventArgs e)
     {
+        this.DemoTabStrip.WindowId = this.XamlRoot.ContentIslandEnvironment.AppWindowId;
+
         // Seed a few sample tabs (one pinned, a couple regular)
         this.DemoTabStrip.Items.Add(new TabItem { Header = "Home", IsPinned = true, IsClosable = false });
         this.DemoTabStrip.Items.Add(new TabItem { Header = "Editor", IsClosable = true });
