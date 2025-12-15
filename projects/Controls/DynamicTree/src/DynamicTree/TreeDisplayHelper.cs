@@ -211,9 +211,9 @@ internal sealed partial class TreeDisplayHelper(
         var adjustedStartIndex = AdjustStartIndexForSameParent(originalIndices, plan.TargetParent, plan.StartIndex);
         plan = new MovePlan(plan.Items, plan.TargetParent, adjustedStartIndex);
 
+        var selectionSnapshot = this.CaptureSelection(plan.Items);
         await this.EnsureParentExpandedAsync(plan.TargetParent).ConfigureAwait(true);
 
-        var selectionSnapshot = this.CaptureSelection(plan.Items);
         this.SelectionModel?.ClearSelection();
 
         var moveBlocks = await this.DetachBlocksAsync(plan.Items, originalIndices).ConfigureAwait(true);

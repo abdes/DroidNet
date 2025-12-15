@@ -594,26 +594,22 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     {
         if (this.focusedItem is not null && this.shownItems.Contains(this.focusedItem.Item))
         {
-            Debug.WriteLine("Focus already valid on item: " + this.focusedItem.Item.Label);
             return true;
         }
 
         var selected = this.SelectionModel?.SelectedItem;
         if (selected is not null && this.shownItems.Contains(selected))
         {
-            Debug.WriteLine("Focusing selected item: " + selected.Label);
             this.FocusedItem = new(selected, origin);
             return true;
         }
 
         if (this.shownItems.Count > 0)
         {
-            Debug.WriteLine("Focusing first shown item: " + this.shownItems[0].Label);
             this.FocusedItem = new(this.shownItems[0], origin);
             return true;
         }
 
-        Debug.WriteLine("No focusable item found; clearing focus");
         this.FocusedItem = null;
         return false;
     }
@@ -708,22 +704,8 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         if (disposing)
         {
-            if (this.filteredItems is not null)
-            {
-                // We own a manual-refresh view; unsubscribe and dispose it.
-                this.shownItems.CollectionChanged -= this.OnShownItemsCollectionChangedForFiltering;
-                this.filteredItems.Dispose();
-                this.filteredItems = null;
-            }
-
-            // Unsubscribe observed item property changed handlers.
-            foreach (var notify in this.observedItems)
-            {
-                notify.PropertyChanged -= this.OnShownItemPropertyChangedForFiltering;
-            }
-
-            this.observedItems.Clear();
-            this.includedItems.Clear();
+            this.filteredItems?.Dispose();
+            this.filteredItems = null;
         }
 
         this.disposed = true;
