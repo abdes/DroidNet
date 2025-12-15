@@ -53,11 +53,11 @@ public sealed partial class DocumentManager : IDisposable
 
     private async void OnOpenSceneRequested(object recipient, OpenSceneRequestMessage message)
     {
-        this.LogOnOpenSceneRequested(message.Scene.Name, message.Scene.Id);
+        this.LogOnOpenSceneRequested(message.Scene);
 
         if (this.windowId.Value == 0)
         {
-            this.LogCannotOpenSceneWindowIdInvalid();
+            this.LogCannotOpenSceneWindowIdInvalid(message.Scene);
             message.Reply(response: false);
             return;
         }
@@ -66,10 +66,17 @@ public sealed partial class DocumentManager : IDisposable
         var openDocs = this.documentService.GetOpenDocuments(this.windowId);
         if (openDocs.Any(d => d.DocumentId == message.Scene.Id))
         {
-            this.LogReactivatingExistingScene(message.Scene.Name, message.Scene.Id);
+            this.LogReactivatingExistingScene(message.Scene);
 
-            _ = await this.documentService.SelectDocumentAsync(this.windowId, message.Scene.Id).ConfigureAwait(true);
-            this.LogReactivatedExistingScene(message.Scene.Name, message.Scene.Id);
+            var selected = await this.documentService.SelectDocumentAsync(this.windowId, message.Scene.Id).ConfigureAwait(true);
+            if (!selected)
+            {
+                this.LogSceneReactivationError(message.Scene);
+                message.Reply(response: false);
+                return;
+            }
+
+            this.LogReactivatedExistingScene(message.Scene);
             message.Reply(response: true);
             return;
         }
@@ -81,9 +88,16 @@ public sealed partial class DocumentManager : IDisposable
             IsClosable = false,
         };
 
-        _ = await this.documentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
+        var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
+        if (openedId == Guid.Empty)
+        {
+            // Opening can fail if the existing scene tab close was vetoed.
+            this.LogSceneOpeningAborted(message.Scene);
+            message.Reply(response: false);
+            return;
+        }
 
-        this.LogOpenedNewScene(message.Scene.Name, message.Scene.Id);
+        this.LogOpenedNewScene(message.Scene);
 
         message.Reply(response: true);
     }
