@@ -482,7 +482,7 @@ public partial class DynamicTree : Control
         this.isApplyingFocus = true;
         try
         {
-            if (focusState != FocusState.Pointer)
+            if (focusState == FocusState.Programmatic)
             {
                 element.StartBringIntoView();
             }
@@ -805,7 +805,6 @@ public partial class DynamicTree : Control
             return;
         }
 
-        Debug.WriteLine($"Tree: TreeItem_PointerPressed - {item.Label}");
         this.LogPointerPressed(element, args);
 
         if (args.Pointer.PointerDeviceType == PointerDeviceType.Mouse)

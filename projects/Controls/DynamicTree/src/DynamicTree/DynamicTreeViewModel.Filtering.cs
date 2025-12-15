@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Specialized;
-using System.ComponentModel;
 using DroidNet.Collections;
 
 namespace DroidNet.Controls;
@@ -13,10 +11,13 @@ namespace DroidNet.Controls;
 /// </summary>
 public abstract partial class DynamicTreeViewModel
 {
-    private readonly HashSet<ITreeItem> includedItems = [];
-    private readonly HashSet<INotifyPropertyChanged> observedItems = [];
+    /// <summary>
+    ///     Minimum debounce interval for filtering-related property changes.
+    /// </summary>
+    public const int FilterDebounceMilliseconds = 250;
 
     private FilteredObservableCollection<ITreeItem>? filteredItems;
+    private HierarchicalFilterBuilder? filterBuilder;
     private Predicate<ITreeItem>? filterPredicate;
 
     /// <summary>
@@ -61,9 +62,16 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
-        this.RecomputeIncludedItems();
         view.Refresh();
     }
+
+    /// <summary>
+    ///     Returns the set of property names whose changes should cause the filtered view to refresh.
+    ///     Override in concrete view models to supply application-specific properties. Returning
+    ///     <see langword="null"/> means all properties are considered relevant.
+    /// </summary>
+    /// <returns>Property names relevant to filtering, or <see langword="null"/> to treat all as relevant.</returns>
+    protected virtual IReadOnlyList<string>? GetFilteringRelevantProperties() => null;
 
     private FilteredObservableCollection<ITreeItem> GetOrCreateFilteredItems()
     {
@@ -73,181 +81,114 @@ public abstract partial class DynamicTreeViewModel
         }
 
         // Manual-refresh view: the view model owns all updates (hierarchical closure is global).
-        this.filteredItems = new FilteredObservableCollection<ITreeItem>(
-            this.shownItems,
-            item => this.includedItems.Contains(item),
-            relevantProperties: null,
-            observeSourceChanges: false,
-            observeItemChanges: false);
+        this.filterBuilder ??= new HierarchicalFilterBuilder(this);
 
-        this.shownItems.CollectionChanged += this.OnShownItemsCollectionChangedForFiltering;
-        foreach (var item in this.shownItems)
+        var relevantProperties = this.GetFilteringRelevantProperties();
+
+        var options = new FilteredObservableCollectionOptions
         {
-            this.TryObserveItemForFiltering(item);
-        }
+            RelevantProperties = relevantProperties,
+            ObserveSourceChanges = true,
+            ObserveItemChanges = true,
+            PropertyChangedDebounceInterval = TimeSpan.FromMilliseconds(FilterDebounceMilliseconds),
+        };
 
-        this.RecomputeIncludedItems();
+        this.filteredItems = FilteredObservableCollectionFactory.FromBuilder(
+            this.shownItems,
+            this.filterBuilder,
+            options);
+
         this.filteredItems.Refresh();
 
         return this.filteredItems;
     }
 
-    private void OnShownItemsCollectionChangedForFiltering(object? sender, NotifyCollectionChangedEventArgs args)
+    private sealed class HierarchicalFilterBuilder(DynamicTreeViewModel owner) : IFilteredViewBuilder<ITreeItem>
     {
-        _ = sender; // unused
+        private readonly List<ITreeItem> buffer = [];
+        private readonly List<int> pathIndices = [];
 
-        switch (args.Action)
+        public IReadOnlyList<ITreeItem> Build(IReadOnlyList<ITreeItem> source)
         {
-            case NotifyCollectionChangedAction.Add:
-                if (args.NewItems is not null)
-                {
-                    foreach (var item in args.NewItems.OfType<ITreeItem>())
-                    {
-                        this.TryObserveItemForFiltering(item);
-                    }
-                }
+            this.buffer.Clear();
 
-                break;
-
-            case NotifyCollectionChangedAction.Remove:
-                if (args.OldItems is not null)
-                {
-                    foreach (var item in args.OldItems.OfType<ITreeItem>())
-                    {
-                        this.TryUnobserveItemForFiltering(item);
-                    }
-                }
-
-                break;
-
-            case NotifyCollectionChangedAction.Replace:
-                if (args.OldItems is not null)
-                {
-                    foreach (var item in args.OldItems.OfType<ITreeItem>())
-                    {
-                        this.TryUnobserveItemForFiltering(item);
-                    }
-                }
-
-                if (args.NewItems is not null)
-                {
-                    foreach (var item in args.NewItems.OfType<ITreeItem>())
-                    {
-                        this.TryObserveItemForFiltering(item);
-                    }
-                }
-
-                break;
-
-            case NotifyCollectionChangedAction.Reset:
-            case NotifyCollectionChangedAction.Move:
-            default:
-                // For Reset/Move we rebuild filtering state from scratch.
-                this.ResetObservedItemsForFiltering();
-                break;
-        }
-
-        this.RefreshFiltering();
-    }
-
-    private void OnShownItemPropertyChangedForFiltering(object? sender, PropertyChangedEventArgs args)
-    {
-        _ = sender; // unused
-        _ = args; // unused
-
-        // Any property may affect the match predicate and/or the inclusion closure.
-        this.RefreshFiltering();
-    }
-
-    private void TryObserveItemForFiltering(ITreeItem item)
-    {
-        if (item is INotifyPropertyChanged notify && this.observedItems.Add(notify))
-        {
-            notify.PropertyChanged += this.OnShownItemPropertyChangedForFiltering;
-        }
-    }
-
-    private void TryUnobserveItemForFiltering(ITreeItem item)
-    {
-        if (item is INotifyPropertyChanged notify && this.observedItems.Remove(notify))
-        {
-            notify.PropertyChanged -= this.OnShownItemPropertyChangedForFiltering;
-        }
-    }
-
-    private void ResetObservedItemsForFiltering()
-    {
-        foreach (var notify in this.observedItems)
-        {
-            notify.PropertyChanged -= this.OnShownItemPropertyChangedForFiltering;
-        }
-
-        this.observedItems.Clear();
-
-        foreach (var item in this.shownItems)
-        {
-            this.TryObserveItemForFiltering(item);
-        }
-    }
-
-    private void RecomputeIncludedItems()
-    {
-        this.includedItems.Clear();
-
-        if (this.filterPredicate is null)
-        {
-            foreach (var item in this.shownItems)
+            if (source.Count == 0)
             {
-                this.includedItems.Add(item);
+                return this.buffer;
             }
 
-            return;
+            var predicate = owner.filterPredicate;
+            if (predicate is null)
+            {
+                this.CopyAll(source);
+                return this.buffer;
+            }
+
+            var include = this.ComputeIncludeMask(source, predicate);
+            this.AppendIncluded(source, include);
+
+            return this.buffer;
         }
 
-        // Hierarchy closure: include each matching item and all its ancestors within the current
-        // expanded (shown) view. We compute this in one forward pass by tracking the current path
-        // (index per depth) as we traverse the pre-order list.
-        var include = new bool[this.shownItems.Count];
-        var pathIndices = new List<int>();
-
-        for (var index = 0; index < this.shownItems.Count; index++)
+        private void CopyAll(IReadOnlyList<ITreeItem> source)
         {
-            var item = this.shownItems[index];
-
-            // Depth is expected to be >= 0 for visible items. Be defensive for hidden roots.
-            var depth = item.Depth < 0 ? 0 : item.Depth;
-
-            // Ensure pathIndices has room for this depth.
-            while (pathIndices.Count > depth + 1)
+            for (var i = 0; i < source.Count; i++)
             {
-                pathIndices.RemoveAt(pathIndices.Count - 1);
+                this.buffer.Add(source[i]);
             }
+        }
 
-            while (pathIndices.Count < depth + 1)
+        private bool[] ComputeIncludeMask(IReadOnlyList<ITreeItem> source, Predicate<ITreeItem> predicate)
+        {
+            var include = new bool[source.Count];
+            this.pathIndices.Clear();
+
+            for (var index = 0; index < source.Count; index++)
             {
-                pathIndices.Add(-1);
-            }
+                var item = source[index];
 
-            pathIndices[depth] = index;
+                // Depth is expected to be >= 0 for visible items. Be defensive for hidden roots.
+                var depth = item.Depth < 0 ? 0 : item.Depth;
 
-            if (this.filterPredicate(item))
-            {
-                for (var d = 0; d <= depth; d++)
+                // Ensure pathIndices has room for this depth.
+                while (this.pathIndices.Count > depth + 1)
                 {
-                    var ancestorIndex = pathIndices[d];
+                    this.pathIndices.RemoveAt(this.pathIndices.Count - 1);
+                }
+
+                while (this.pathIndices.Count < depth + 1)
+                {
+                    this.pathIndices.Add(-1);
+                }
+
+                this.pathIndices[depth] = index;
+
+                if (!predicate(item))
+                {
+                    continue;
+                }
+
+                for (var ancestorDepth = 0; ancestorDepth <= depth; ancestorDepth++)
+                {
+                    var ancestorIndex = this.pathIndices[ancestorDepth];
                     if (ancestorIndex >= 0)
                     {
                         include[ancestorIndex] = true;
                     }
                 }
             }
+
+            return include;
         }
 
-        for (var index = 0; index < include.Length; index++)
+        private void AppendIncluded(IReadOnlyList<ITreeItem> source, bool[] include)
         {
-            if (include[index])
+            for (var index = 0; index < include.Length; index++)
             {
-                this.includedItems.Add(this.shownItems[index]);
+                if (include[index])
+                {
+                    this.buffer.Add(source[index]);
+                }
             }
         }
     }

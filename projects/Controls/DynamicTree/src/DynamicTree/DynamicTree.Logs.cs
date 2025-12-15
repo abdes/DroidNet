@@ -112,21 +112,6 @@ public partial class DynamicTree
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Tree got focus -> focusing selected item '{itemLabel}' (index {index})")]
-    private static partial void LogFocusSelected(ILogger logger, string? itemLabel, int index);
-
-    [Conditional("DEBUG")]
-    private void LogFocusSelected(TreeItemAdapter item, int index)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogFocusSelected(logger, item.Label, index);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
         Message = "Tree got focus -> focusing fallback item '{itemLabel}'")]
     private static partial void LogFocusFallback(ILogger logger, string? itemLabel);
 
@@ -187,21 +172,6 @@ public partial class DynamicTree
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Focus: Direct Focus() for '{itemLabel}' at index {index} target={targetType} succeeded={succeeded}")]
-    private static partial void LogFocusDirectResult(ILogger logger, string? itemLabel, int index, string targetType, bool succeeded);
-
-    [Conditional("DEBUG")]
-    private void LogFocusDirectResult(ITreeItem item, int index, string targetType, bool succeeded)
-    {
-        if (this.logger is ILogger logger)
-        {
-            LogFocusDirectResult(logger, item.Label, index, targetType, succeeded);
-        }
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
         Message = "Pointer pressed: Item='{itemLabel}' OriginalSource={sourceType} Device={deviceType} LeftPressed={leftPressed} Handled={handled}")]
     private static partial void LogPointerPressed(ILogger logger, string? itemLabel, string? sourceType, string? deviceType, bool leftPressed, bool handled);
 
@@ -232,6 +202,25 @@ public partial class DynamicTree
         Level = LogLevel.Debug,
         Message = "Tapped: Item='{itemLabel}' Source={sourceType} Handled={handled}")]
     private static partial void LogTapped(ILogger logger, string? itemLabel, string? sourceType, bool handled);
+
+    [Conditional("DEBUG")]
+    private void LogTapped(FrameworkElement element, TappedRoutedEventArgs args)
+    {
+        if (this.logger is not ILogger logger)
+        {
+            return;
+        }
+
+        string? itemLabel = null;
+        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
+        {
+            itemLabel = adapter.Label;
+        }
+
+        var sourceType = args.OriginalSource?.GetType().Name ?? "<unknown>";
+        var handled = args.Handled;
+        LogTapped(logger, itemLabel, sourceType, handled);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -271,7 +260,7 @@ public partial class DynamicTree
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Run queued focus: Item='{itemLabel}' pending={pending} state={state}")]
-    private static partial void LogRunTryFocus(ILogger logger, string? itemLabel, bool pending, string state);
+    private static partial void LogApplyFocus(ILogger logger, string? itemLabel, bool pending, string state);
 
     [Conditional("DEBUG")]
     private void LogApplyFocus(ITreeItem? item, bool pending, FocusState state)
@@ -281,68 +270,7 @@ public partial class DynamicTree
             return;
         }
 
-        LogRunTryFocus(logger, item?.Label, pending, state.ToString());
-    }
-
-    [Conditional("DEBUG")]
-    private void LogTapped(FrameworkElement element, TappedRoutedEventArgs args)
-    {
-        if (this.logger is not ILogger logger)
-        {
-            return;
-        }
-
-        string? itemLabel = null;
-        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
-        {
-            itemLabel = adapter.Label;
-        }
-
-        var sourceType = args.OriginalSource?.GetType().Name ?? "<unknown>";
-        var handled = args.Handled;
-        LogTapped(logger, itemLabel, sourceType, handled);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Trace,
-        Message = "GotFocus event: Item='{itemLabel}' Origin={origin} ApplyingFocus={applying} Handled={handled}")]
-    private static partial void LogGotFocusEvent(ILogger logger, string? itemLabel, string origin, bool applying, bool handled);
-
-    [Conditional("DEBUG")]
-    private void LogGotFocusEvent(FrameworkElement element, RequestOrigin origin, bool applying, RoutedEventArgs args)
-    {
-        if (this.logger is not ILogger logger)
-        {
-            return;
-        }
-
-        string? itemLabel = null;
-        if (element is DynamicTreeItem dtItem && dtItem.ItemAdapter is TreeItemAdapter adapter)
-        {
-            itemLabel = adapter.Label;
-        }
-
-        // RoutedEventArgs in WinUI does not expose a 'Handled' property; use false for logging.
-        LogGotFocusEvent(logger, itemLabel, origin.ToString(), applying, handled: false);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Trace,
-        Message = "ViewModel.PropertyChanged: {property} -> FocusedItem = {focusedLabel} Origin={origin} EnqueueFocus={enqueue}")]
-    private static partial void LogViewModelPropertyChanged(ILogger logger, string? property, string? focusedLabel, string origin, bool enqueue);
-
-    [Conditional("DEBUG")]
-    private void LogViewModelPropertyChanged(string? property, ITreeItem? focusedItem, RequestOrigin origin, bool enqueue)
-    {
-        if (this.logger is not ILogger logger)
-        {
-            return;
-        }
-
-        var label = focusedItem?.Label;
-        LogViewModelPropertyChanged(logger, property, label, origin.ToString(), enqueue);
+        LogApplyFocus(logger, item?.Label, pending, state.ToString());
     }
 
     [LoggerMessage(
@@ -359,7 +287,7 @@ public partial class DynamicTree
             return;
         }
 
-        LogFocusLost(this.logger);
+        LogFocusLost(logger);
     }
 
     [LoggerMessage(
@@ -379,7 +307,7 @@ public partial class DynamicTree
         var fi = this.ViewModel?.FocusedItem;
         if (fi != null)
         {
-            LogEnqueueApplyFocus(this.logger, fi.Item.Label, fi.Origin);
+            LogEnqueueApplyFocus(logger, fi.Item.Label, fi.Origin);
         }
     }
 }

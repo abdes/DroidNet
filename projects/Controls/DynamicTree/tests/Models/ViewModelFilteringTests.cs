@@ -15,6 +15,8 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
 {
     private TestViewModel viewModel = null!;
 
+    public TestContext TestContext { get; set; }
+
     public void Dispose() => this.viewModel.Dispose();
 
     [TestInitialize]
@@ -91,6 +93,7 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
 
         // Act
         grandChild.IsSelected = true;
+        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow time for async update.
 
         // Assert
         var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
@@ -115,6 +118,7 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
 
         // Act
         await this.viewModel.ExpandItemAsync(root).ConfigureAwait(false);
+        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true); // Allow time for async update.
 
         // Assert
         var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
