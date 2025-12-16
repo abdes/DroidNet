@@ -9,6 +9,7 @@ A lightweight .NET class library providing extension methods and custom collecti
 - **Dynamic transformations:** Create an observable collection that mirrors a source collection while automatically applying transformations to elements.
 - **Sorted insertion:** Insert items into a sorted `ObservableCollection<T>` at the correct index using custom key extraction and comparison logic.
 - **Filtered views:** Maintain a real-time, read-only filtered view over an observable collection that responds to both collection changes and individual property changes.
+- **Delta-based hierarchical filtering:** Support strict, builder-driven filtered views that can maintain structural closure (e.g., ancestors/lineage) while still emitting minimal, incremental deltas (no Reset spam).
 - **Order-statistic operations:** A balanced red-black tree supporting efficient rank and select operations in O(log n) time, enabling fast positional queries and element retrieval by index in sorted data.
 
 ## Technology Stack
@@ -33,14 +34,26 @@ This module is part of the modular **DroidNet** mono-repository (see [DroidNet R
 1. **DynamicObservableCollection<TSource, TResult>:** A disposable collection that mirrors a source `ObservableCollection<TSource>` and applies a transformation function to each element. Automatically synchronizes with source collection changes.
 
 2. **FilteredObservableCollection&lt;T&gt;:** A read-only, filtered view over an `ObservableCollection<T>` that supports both collection-level and property-level change tracking and preserves source ordering.
-    - Options and defaults:
+
+    **Robust delta change handling (strict mode):**
+    - Supports a **builder-driven** mode where a small “delta builder” provides the *additional* items to include/exclude when an item’s predicate result changes (for example, include ancestors when a descendant matches).
+    - Enforces **strict reference identity** for builder outputs: builders must return the **exact source instances**. Returning equal-but-distinct objects is treated as a contract violation.
+    - Applies changes as **minimal deltas** (adds/removes in contiguous runs) and avoids `Reset` spam during normal operation.
+    - Keeps predicate refresh incremental via `ReevaluatePredicate()` (re-checks all items and applies the resulting delta without rebuilding the source).
+    - Designed to keep UI controls stable by applying mutations *before* raising `CollectionChanged` events so indices and `Count` match the event stream.
+
+    See the detailed design notes in:
+    - `projects/Collections/DESIGN/FilteredObservableCollection.DeltaBuilder.md`
+
+    Options and defaults:
     - The type is `sealed` to avoid derived-class complexity and make behavior explicit.
     - The implementation uses an explicit, documented `NotificationSuspender` struct for deferral and provides richer XML documentation for public and explicit interface members.
 
     | Option | Purpose | Default |
     |---|---|---:|
-    | `IEnumerable<string> observedProperties` | An empty collection means do not observe item property changes; a collection with entries means only those properties are considered relevant for item change-driven updates. | `[]` (observe none) |
-    | `IDisposable DeferNotifications()` | Temporarily suspends raising `CollectionChanged` events; disposing the returned object resumes notifications and raises a single `Reset` if any changes occurred while suspended. | N/A |
+    | `ObservableCollection<string> ObservedProperties` | Empty means do not observe item property changes; otherwise only those properties trigger predicate re-checks for the changed item. | `[]` (observe none) |
+    | `TimeSpan PropertyChangedDebounceInterval` | Debounce window for coalescing property-change driven updates into a single batch. | `TimeSpan.Zero` |
+    | `IDisposable DeferNotifications()` | Temporarily suspends raising `CollectionChanged`; when disposed, rebuilds and raises a `Reset` if changes occurred while suspended. | N/A |
 
 3. **OrderStatisticTreeCollection&lt;T&gt;:** A balanced order-statistic binary search tree (red-black) that maintains elements in sorted order while supporting rank and select operations in O(log n) time. Implements `IReadOnlyCollection<T>` for enumeration and supports:
    - `Add(T item)` – Insert elements; duplicates are allowed
@@ -189,30 +202,13 @@ using (filtered.DeferNotifications())
 }
 // After the using block, a single Reset is raised if changes occurred
 
+// If you change the predicate inputs externally, you can trigger an incremental re-check
+// without rebuilding the view:
+filtered.ReevaluatePredicate();
+
 // Dispose when done
 filtered.Dispose();
 collOnly.Dispose();
-```
-
-## Project Structure
-
-```text
-Collections/
-├── src/
-│   ├── Collections.csproj                         # Project file with NuGet metadata
-│   ├── DynamicObservableCollection`2.cs           # Transformation collection
-│   ├── FilteredObservableCollection`1.cs          # Filtered view collection
-│   ├── OrderStatisticTreeCollection`1.cs          # Order-statistic red-black tree
-│   └── ObservableCollectionExtensions.cs          # Extension methods
-├── tests/
-│   ├── Collections.Tests.csproj                   # Test project
-│   ├── DynamicObservableCollectionTests.cs        # DynamicObservableCollection tests
-│   ├── FilteredObservableCollectionTests.cs       # FilteredObservableCollection tests
-│   ├── FilteredObservableCollectionOptionsTests.cs# Tests covering constructor options and behaviors
-│   ├── OrderStatisticTreeCollectionTests.cs       # OrderStatisticTreeCollection tests
-│   └── ObservableCollectionExtensionsTests.cs     # Extension method tests
-├── Collections.sln                                # Project-level solution
-└── README.md                                      # This file
 ```
 
 ## Development Workflow
