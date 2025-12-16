@@ -16,7 +16,7 @@ namespace DroidNet.Collections.Tests;
 [TestCategory("Builder")]
 public class FilteredObservableCollectionBuilderTests
 {
-    private static readonly string[] Options = ["Other"];
+    private static readonly string[] ObservedProperties = ["Other"];
 
     [TestMethod]
     public void Constructor_NullBuilder_Throws()
@@ -61,16 +61,12 @@ public class FilteredObservableCollectionBuilderTests
         var source = new ObservableCollection<ObservableItem> { item };
         var builder = new RecordingEvenBuilder();
 
+        var opts = new FilteredObservableCollectionOptions();
+        opts.ObservedProperties.Add(nameof(ObservableItem.Value));
         using var view = FilteredObservableCollectionFactory.FromBuilder(
             source,
             builder,
-            new FilteredObservableCollectionOptions
-            {
-                RelevantProperties = [nameof(ObservableItem.Value)],
-                ObserveSourceChanges = true,
-                ObserveItemChanges = true,
-                PropertyChangedDebounceInterval = TimeSpan.Zero,
-            });
+            opts);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -91,16 +87,16 @@ public class FilteredObservableCollectionBuilderTests
         var source = new ObservableCollection<ObservableItem> { item };
         var builder = new RecordingEvenBuilder();
 
+        var opts = new FilteredObservableCollectionOptions();
+        foreach (var s in ObservedProperties)
+        {
+            opts.ObservedProperties.Add(s);
+        }
+
         using var view = FilteredObservableCollectionFactory.FromBuilder(
             source,
             builder,
-            new FilteredObservableCollectionOptions
-            {
-                RelevantProperties = Options,
-                ObserveSourceChanges = true,
-                ObserveItemChanges = true,
-                PropertyChangedDebounceInterval = TimeSpan.Zero,
-            });
+            opts);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);

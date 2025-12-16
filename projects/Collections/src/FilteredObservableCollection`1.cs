@@ -24,17 +24,19 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
     private readonly IFilteredViewBuilder<T>? viewBuilder;
     private readonly bool useBuilder;
     private readonly HashSet<string> relevantProperties;
+
     private readonly List<T> filtered;
     private readonly bool debounceEnabled;
     private readonly TimeSpan propertyChangedDebounceInterval;
     private readonly SynchronizationContext? synchronizationContext;
     private readonly Lock debounceGate = new();
 
-    private readonly bool observeSourceChanges;
-    private readonly bool observeItemChanges;
+    private readonly FilteredObservableCollectionOptions options;
 
     private readonly HashSet<T> attachedItems; // Items we have subscribed to (all items from source that we've attached handlers for)
+    private readonly HashSet<T> propertySubscribedItems; // Items we have attached PropertyChanged handler for
     private readonly HashSet<T> filteredSet; // Fast membership test for items currently in the filtered view
+    private readonly HashSet<T> dirtyItems = []; // Items that changed during debounce window (predicate mode)
     private int suspendCount;
     private bool hadChangesWhileSuspended;
     private Timer? debounceTimer;
@@ -57,19 +59,23 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
 
         var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
-        this.relevantProperties = resolvedOptions.RelevantProperties != null
-            ? new HashSet<string>(resolvedOptions.RelevantProperties, StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal); // empty = all properties matter
+        this.options = resolvedOptions;
+
+        this.relevantProperties = new HashSet<string>(resolvedOptions.ObservedProperties, StringComparer.Ordinal);
 
         this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
         this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
         this.synchronizationContext = SynchronizationContext.Current;
 
-        this.observeSourceChanges = resolvedOptions.ObserveSourceChanges;
-        this.observeItemChanges = resolvedOptions.ObserveItemChanges;
+        // Always observe source collection changes — the filtered view must stay in sync.
+        this.source.CollectionChanged += this.OnSourceCollectionChanged;
+
+        // Listen for mutations of the ObservedProperties collection so the view can react to changes.
+        resolvedOptions.ObservedProperties.CollectionChanged += this.OnObservedPropertiesCollectionChanged;
 
         this.filtered = [];
         this.attachedItems = [];
+        this.propertySubscribedItems = [];
         this.filteredSet = [];
         this.suspendCount = 0;
         this.hadChangesWhileSuspended = false;
@@ -78,11 +84,6 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         foreach (var item in this.source)
         {
             this.Attach(item);
-        }
-
-        if (this.observeSourceChanges)
-        {
-            this.source.CollectionChanged += this.OnSourceCollectionChanged;
         }
     }
 
@@ -103,20 +104,21 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         this.useBuilder = true;
 
         var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
+        this.options = resolvedOptions;
 
-        this.relevantProperties = resolvedOptions.RelevantProperties != null
-            ? new HashSet<string>(resolvedOptions.RelevantProperties, StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal); // empty = all properties matter
+        this.relevantProperties = new HashSet<string>(resolvedOptions.ObservedProperties, StringComparer.Ordinal);
 
         this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
         this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
         this.synchronizationContext = SynchronizationContext.Current;
 
-        this.observeSourceChanges = resolvedOptions.ObserveSourceChanges;
-        this.observeItemChanges = resolvedOptions.ObserveItemChanges;
+        this.source.CollectionChanged += this.OnSourceCollectionChanged;
+
+        resolvedOptions.ObservedProperties.CollectionChanged += this.OnObservedPropertiesCollectionChanged;
 
         this.filtered = [];
         this.attachedItems = [];
+        this.propertySubscribedItems = [];
         this.filteredSet = [];
         this.suspendCount = 0;
         this.hadChangesWhileSuspended = false;
@@ -128,11 +130,6 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         }
 
         this.RebuildWithBuilder(resetOnly: false);
-
-        if (this.observeSourceChanges)
-        {
-            this.source.CollectionChanged += this.OnSourceCollectionChanged;
-        }
     }
 
     /// <summary>
@@ -393,22 +390,22 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
 
         if (disposing)
         {
-            if (this.observeSourceChanges)
-            {
-                this.source.CollectionChanged -= this.OnSourceCollectionChanged;
-            }
+            // Unsubscribe from source collection (we always observe source changes)
+            this.source.CollectionChanged -= this.OnSourceCollectionChanged;
 
-            if (this.observeItemChanges)
+            // Unsubscribe from ObservedProperties collection notifications
+            this.options.ObservedProperties.CollectionChanged -= this.OnObservedPropertiesCollectionChanged;
+
+            // Unsubscribe from any per-item property subscriptions
+            foreach (var item in this.propertySubscribedItems.ToList())
             {
-                foreach (var item in this.attachedItems.ToList())
+                if (item is INotifyPropertyChanged notify)
                 {
-                    if (item is INotifyPropertyChanged notify)
-                    {
-                        notify.PropertyChanged -= this.OnItemPropertyChanged;
-                    }
+                    notify.PropertyChanged -= this.OnItemPropertyChanged;
                 }
             }
 
+            this.propertySubscribedItems.Clear();
             this.attachedItems.Clear();
             this.filteredSet.Clear();
             this.filtered.Clear();
@@ -453,6 +450,51 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
                 this.HandleReset();
                 break;
         }
+    }
+
+    // We observe item changes only when there is at least one observed property configured.
+    private bool IsObservingItemChanges() => this.options.ObservedProperties.Count > 0;
+
+    private void OnObservedPropertiesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Recompute set of relevant properties
+        this.relevantProperties.Clear();
+        if (this.options?.ObservedProperties is { } obs)
+        {
+            foreach (var p in obs)
+            {
+                this.relevantProperties.Add(p);
+            }
+        }
+
+        var nowObserving = this.IsObservingItemChanges();
+
+        // If we should observe item changes now, attach handlers for currently attached items
+        if (nowObserving)
+        {
+            foreach (var item in this.attachedItems)
+            {
+                if (item is INotifyPropertyChanged notify && this.propertySubscribedItems.Add(item))
+                {
+                    notify.PropertyChanged += this.OnItemPropertyChanged;
+                }
+            }
+
+            // Enable immediate rebuild so the view immediately reflects current item properties.
+            this.RebuildFilteredView(resetOnly: true);
+            return;
+        }
+
+        // Otherwise ensure we unsubscribe from any existing subscriptions
+        foreach (var item in this.propertySubscribedItems.ToList())
+        {
+            if (item is INotifyPropertyChanged notify)
+            {
+                notify.PropertyChanged -= this.OnItemPropertyChanged;
+            }
+        }
+
+        this.propertySubscribedItems.Clear();
     }
 
     private void HandleAdd(NotifyCollectionChangedEventArgs e)
@@ -630,9 +672,15 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         // Only subscribe once per item
         if (this.attachedItems.Add(item))
         {
-            if (this.observeItemChanges && item is INotifyPropertyChanged notify)
+            if (this.IsObservingItemChanges())
             {
-                notify.PropertyChanged += this.OnItemPropertyChanged;
+                if (item is INotifyPropertyChanged notify)
+                {
+                    if (this.propertySubscribedItems.Add(item))
+                    {
+                        notify.PropertyChanged += this.OnItemPropertyChanged;
+                    }
+                }
             }
         }
 
@@ -653,9 +701,12 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
     {
         if (this.attachedItems.Remove(item))
         {
-            if (this.observeItemChanges && item is INotifyPropertyChanged notify)
+            if (this.propertySubscribedItems.Remove(item))
             {
-                notify.PropertyChanged -= this.OnItemPropertyChanged;
+                if (item is INotifyPropertyChanged notify)
+                {
+                    notify.PropertyChanged -= this.OnItemPropertyChanged;
+                }
             }
         }
 
@@ -678,7 +729,12 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
-        var isRelevant = this.relevantProperties.Count == 0 || string.IsNullOrEmpty(e.PropertyName) || this.relevantProperties.Contains(e.PropertyName);
+        if (!this.IsObservingItemChanges())
+        {
+            return;
+        }
+
+        var isRelevant = string.IsNullOrEmpty(e.PropertyName) || this.relevantProperties.Contains(e.PropertyName);
         if (!isRelevant)
         {
             return;
@@ -686,6 +742,8 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
 
         if (this.debounceEnabled)
         {
+            // Accumulate changed items while coalescing; the debounced handler will process them incrementally for predicate-based views.
+            this.dirtyItems.Add(item);
             this.ScheduleDebouncedRebuild();
             return;
         }
@@ -769,7 +827,41 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
                 this.debouncePending = false;
             }
 
-            this.RebuildFilteredView(resetOnly: true);
+            // If we're using a builder the safe default is to perform a reset rebuild; otherwise
+            // we can process the set of dirty items accumulated during the debounce window
+            // and apply incremental adds/removes to minimize Reset events.
+            if (this.useBuilder)
+            {
+                this.RebuildFilteredView(resetOnly: true);
+                return;
+            }
+
+            // Incrementally process each dirty item and apply per-item diffs
+            var itemsToProcess = this.dirtyItems.ToList();
+            this.dirtyItems.Clear();
+            foreach (var item in itemsToProcess)
+            {
+                var inFiltered = this.filteredSet.Contains(item);
+                var shouldBeIn = this.filter!(item);
+
+                if (inFiltered && !shouldBeIn)
+                {
+                    var index = this.filtered.IndexOf(item);
+                    if (index >= 0)
+                    {
+                        this.filtered.RemoveAt(index);
+                        _ = this.filteredSet.Remove(item);
+                        this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
+                    }
+                }
+                else if (!inFiltered && shouldBeIn)
+                {
+                    var index = this.ComputeInsertIndex(item);
+                    this.filtered.Insert(index, item);
+                    this.filteredSet.Add(item);
+                    this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+                }
+            }
         }
 
         if (this.synchronizationContext is not null)
@@ -869,18 +961,16 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
     /// </summary>
     private void RebuildAllFromSource()
     {
-        // Unsubscribe from all previously attached items
-        if (this.observeItemChanges)
+        // Unsubscribe from all previously attached item property handlers
+        foreach (var item in this.propertySubscribedItems.ToList())
         {
-            foreach (var item in this.attachedItems.ToList())
+            if (item is INotifyPropertyChanged notify)
             {
-                if (item is INotifyPropertyChanged notify)
-                {
-                    notify.PropertyChanged -= this.OnItemPropertyChanged;
-                }
+                notify.PropertyChanged -= this.OnItemPropertyChanged;
             }
         }
 
+        this.propertySubscribedItems.Clear();
         this.attachedItems.Clear();
         this.filtered.Clear();
         this.filteredSet.Clear();

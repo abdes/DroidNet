@@ -38,9 +38,7 @@ This module is part of the modular **DroidNet** mono-repository (see [DroidNet R
 
     | Option | Purpose | Default |
     |---|---|---:|
-    | `IEnumerable<string>? relevantProperties` | When specified, only property changes with these names are considered relevant for re-evaluating an item; if omitted or empty, changes to any property are considered relevant. | `null` / empty |
-    | `bool observeSourceChanges` | When `true`, subscribe to the source collection's `CollectionChanged` events to keep the view in sync with adds/removes/moves/resets. | `true` |
-    | `bool observeItemChanges` | When `true`, subscribe to item `INotifyPropertyChanged.PropertyChanged` notifications so property changes can add/remove items from the view. | `true` |
+    | `IEnumerable<string> observedProperties` | An empty collection means do not observe item property changes; a collection with entries means only those properties are considered relevant for item change-driven updates. | `[]` (observe none) |
     | `IDisposable DeferNotifications()` | Temporarily suspends raising `CollectionChanged` events; disposing the returned object resumes notifications and raises a single `Reset` if any changes occurred while suspended. | N/A |
 
 3. **ObservableCollectionExtensions:** Extension methods for `ObservableCollection<T>` including:
@@ -130,20 +128,20 @@ var source = new ObservableCollection<Item>
     new() { Count = 10 },
     new() { Count = 3 },
 };
-// Create a filtered view that only considers the Count property changes
-var filtered = new FilteredObservableCollection<Item>(
+// Create a filtered view that only observes the Count property changes
+var opts = new FilteredObservableCollectionOptions();
+opts.ObservedProperties.Add(nameof(Item.Count));
+var filtered = FilteredObservableCollectionFactory.FromPredicate(
     source,
     item => item.Count > 4,
-    relevantProperties: new[] { nameof(Item.Count) },
-    observeSourceChanges: true,     // subscribe to source collection changes (default)
-    observeItemChanges: true        // subscribe to item PropertyChanged (default)
-);
+    opts);
 
 // View shows items with Count > 4
 Console.WriteLine(filtered.Count); // Output: 2
 
-// You can opt out of item-level observation if you only want collection-level filtering
-var collOnly = new FilteredObservableCollection<Item>(source, item => item.Count > 4, observeItemChanges: false);
+// You can opt out of item-level observation by leaving ObservedProperties empty (default)
+var opts2 = new FilteredObservableCollectionOptions();
+using var collOnly = FilteredObservableCollectionFactory.FromPredicate(source, item => item.Count > 4, opts2);
 
 // Batch multiple updates and only raise a single Reset when done
 using (filtered.DeferNotifications())
