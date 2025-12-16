@@ -310,10 +310,16 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
         if (!hasTypeFilter && !hasTextFilter)
         {
             this.FilterPredicate = null;
+
+            // No active filters: ignore item property changes by supplying an empty ObservedProperties collection.
+            this.UpdateFilteringObservation(observedProperties: []);
             return;
         }
 
         this.FilterPredicate = item => this.MatchesCombinedFilter(item, text);
+
+        // Set observed properties to the view-model's relevant properties (always observe source changes).
+        this.UpdateFilteringObservation(observedProperties: FilteringRelevantProperties);
     }
 
     private bool MatchesCombinedFilter(ITreeItem item, string text)

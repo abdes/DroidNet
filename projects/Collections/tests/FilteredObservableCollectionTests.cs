@@ -263,7 +263,9 @@ public class FilteredObservableCollectionTests
         // Arrange
         var item = new ObservableItem(1);
         var source = new ObservableCollection<ObservableItem> { item };
-        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
+        var opts = new FilteredObservableCollectionOptions();
+        opts.ObservedProperties.Add(nameof(ObservableItem.Value));
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0, opts);
 
         var events = new List<NotifyCollectionChangedEventArgs>();
         view.CollectionChanged += (_, e) => events.Add(e);
@@ -290,10 +292,12 @@ public class FilteredObservableCollectionTests
         var source = new ObservableCollection<ObservableItem> { item };
 
         // Only changes to "Other" should cause re-evaluation — since we change Value, no event expected
+        var opts = new FilteredObservableCollectionOptions();
+        opts.ObservedProperties.Add("Other");
         using var view = FilteredObservableCollectionFactory.FromPredicate(
             source,
             i => i.Value % 2 == 0,
-            new FilteredObservableCollectionOptions { RelevantProperties = ["Other"] });
+            opts);
 
         var raised = false;
         view.CollectionChanged += (_, _) => raised = true;

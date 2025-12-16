@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.ObjectModel;
+
 namespace DroidNet.Collections;
 
 /// <summary>
@@ -15,19 +17,13 @@ public sealed class FilteredObservableCollectionOptions
     public static FilteredObservableCollectionOptions Default { get; } = new();
 
     /// <summary>
-    /// Gets the property names that are relevant to filtering. <see langword="null"/> or empty means all properties.
+    /// Gets an observable collection of property names that are observed for item property changes.
+    /// <para>
+    /// - An empty collection means do not observe item property changes.
+    /// - A collection with entries means only those properties are considered relevant.
+    /// </para>
     /// </summary>
-    public IEnumerable<string>? RelevantProperties { get; init; }
-
-    /// <summary>
-    /// Gets a value indicating whether the view observes source collection changes. Defaults to <see langword="true"/>.
-    /// </summary>
-    public bool ObserveSourceChanges { get; init; } = true;
-
-    /// <summary>
-    /// Gets a value indicating whether the view observes item property changes. Defaults to <see langword="true"/>.
-    /// </summary>
-    public bool ObserveItemChanges { get; init; } = true;
+    public ObservableCollection<string> ObservedProperties { get; } = [];
 
     /// <summary>
     /// Gets the debounce window for property-change driven rebuilds. Defaults to zero (immediate rebuilds).

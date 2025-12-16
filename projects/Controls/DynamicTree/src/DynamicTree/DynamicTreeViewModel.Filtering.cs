@@ -19,6 +19,7 @@ public abstract partial class DynamicTreeViewModel
     private FilteredObservableCollection<ITreeItem>? filteredItems;
     private HierarchicalFilterBuilder? filterBuilder;
     private Predicate<ITreeItem>? filterPredicate;
+    private FilteredObservableCollectionOptions? filterOptions;
 
     /// <summary>
     ///     Gets or sets the current filter predicate used by <see cref="FilteredItems"/>.
@@ -38,6 +39,31 @@ public abstract partial class DynamicTreeViewModel
 
             this.filterPredicate = value;
             this.OnPropertyChanged(nameof(this.FilterPredicate));
+
+            // Update runtime options so enabling/disabling the predicate will toggle
+            // whether the filtered view auto-refreshes.
+            if (this.filterOptions is not null)
+            {
+                var relevantProperties = this.GetFilteringRelevantProperties();
+
+                if (this.filterPredicate is null)
+                {
+                    // When no predicate is active, observe no item property changes (empty collection).
+                    this.filterOptions.ObservedProperties.Clear();
+                }
+                else
+                {
+                    this.filterOptions.ObservedProperties.Clear();
+                    if (relevantProperties is not null)
+                    {
+                        foreach (var p in relevantProperties)
+                        {
+                            this.filterOptions.ObservedProperties.Add(p);
+                        }
+                    }
+                }
+            }
+
             this.RefreshFiltering();
         }
     }
@@ -73,6 +99,27 @@ public abstract partial class DynamicTreeViewModel
     /// <returns>Property names relevant to filtering, or <see langword="null"/> to treat all as relevant.</returns>
     protected virtual IReadOnlyList<string>? GetFilteringRelevantProperties() => null;
 
+    /// <summary>
+    /// Update the filtering observation options at runtime.
+    /// </summary>
+    /// <param name="observedProperties">The set of item property names to observe; an empty collection means observe none.</param>
+    protected void UpdateFilteringObservation(IReadOnlyList<string>? observedProperties)
+    {
+        if (this.filterOptions is null)
+        {
+            return;
+        }
+
+        this.filterOptions.ObservedProperties.Clear();
+        if (observedProperties is not null)
+        {
+            foreach (var p in observedProperties)
+            {
+                this.filterOptions.ObservedProperties.Add(p);
+            }
+        }
+    }
+
     private FilteredObservableCollection<ITreeItem> GetOrCreateFilteredItems()
     {
         if (this.filteredItems is not null)
@@ -85,13 +132,21 @@ public abstract partial class DynamicTreeViewModel
 
         var relevantProperties = this.GetFilteringRelevantProperties();
 
-        var options = new FilteredObservableCollectionOptions
+        // If there's no current filter predicate, keep ObservedProperties empty so item property changes are ignored.
+        // We always observe source collection changes but only observe item property changes when the predicate requires it.
+        var options = new FilteredObservableCollectionOptions { PropertyChangedDebounceInterval = TimeSpan.FromMilliseconds(FilterDebounceMilliseconds) };
+
+        // Configure observed properties: empty => observe none; otherwise observe listed properties when predicate is active.
+        options.ObservedProperties.Clear();
+        if (this.filterPredicate is not null && relevantProperties is not null)
         {
-            RelevantProperties = relevantProperties,
-            ObserveSourceChanges = true,
-            ObserveItemChanges = true,
-            PropertyChangedDebounceInterval = TimeSpan.FromMilliseconds(FilterDebounceMilliseconds),
-        };
+            foreach (var p in relevantProperties)
+            {
+                options.ObservedProperties.Add(p);
+            }
+        }
+
+        this.filterOptions = options;
 
         this.filteredItems = FilteredObservableCollectionFactory.FromBuilder(
             this.shownItems,
