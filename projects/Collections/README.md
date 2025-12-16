@@ -1,6 +1,6 @@
 # DroidNet Collections
 
-A lightweight .NET class library providing extension methods and custom collections to fill gaps in .NET's standard collection utilities. This library simplifies common tasks when working with [`ObservableCollection<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.objectmodel.observablecollection-1?view=net-10.0) in reactive applications.
+A lightweight .NET class library providing extension methods and custom collections to fill gaps in .NET's standard collection utilities. This library offers specialized collections for reactive applications (including [`ObservableCollection<T>`](https://learn.microsoft.com/en-us/dotnet/api/system.collections.objectmodel.observablecollection-1?view=net-10.0)-based transformations and filtering), advanced data structures (such as order-statistic trees for efficient rank/select operations), and convenience extension methods for common collection patterns.
 
 ## Overview
 
@@ -9,6 +9,7 @@ A lightweight .NET class library providing extension methods and custom collecti
 - **Dynamic transformations:** Create an observable collection that mirrors a source collection while automatically applying transformations to elements.
 - **Sorted insertion:** Insert items into a sorted `ObservableCollection<T>` at the correct index using custom key extraction and comparison logic.
 - **Filtered views:** Maintain a real-time, read-only filtered view over an observable collection that responds to both collection changes and individual property changes.
+- **Order-statistic operations:** A balanced red-black tree supporting efficient rank and select operations in O(log n) time, enabling fast positional queries and element retrieval by index in sorted data.
 
 ## Technology Stack
 
@@ -41,7 +42,16 @@ This module is part of the modular **DroidNet** mono-repository (see [DroidNet R
     | `IEnumerable<string> observedProperties` | An empty collection means do not observe item property changes; a collection with entries means only those properties are considered relevant for item change-driven updates. | `[]` (observe none) |
     | `IDisposable DeferNotifications()` | Temporarily suspends raising `CollectionChanged` events; disposing the returned object resumes notifications and raises a single `Reset` if any changes occurred while suspended. | N/A |
 
-3. **ObservableCollectionExtensions:** Extension methods for `ObservableCollection<T>` including:
+3. **OrderStatisticTreeCollection&lt;T&gt;:** A balanced order-statistic binary search tree (red-black) that maintains elements in sorted order while supporting rank and select operations in O(log n) time. Implements `IReadOnlyCollection<T>` for enumeration and supports:
+   - `Add(T item)` – Insert elements; duplicates are allowed
+   - `Remove(T item)` – Remove element equal to the given item
+   - `Rank(T item)` – Count of elements strictly less than a given value
+   - `Select(int index)` – Retrieve the element at a given in-order index
+   - `Contains(T item)` – Check for element existence
+   - Enumeration in in-order (sorted) sequence
+   - Customizable comparison via `IComparer<T>`
+
+4. **ObservableCollectionExtensions:** Extension methods for `ObservableCollection<T>` including:
    - `InsertInPlace<TItem, TOrderBy>()` – Insert items into sorted collections using key extraction and comparison
    - `Transform<TSource, TResult>()` – Create a dynamic transformed view using a helper method
 
@@ -96,7 +106,35 @@ Console.WriteLine(string.Join(", ", collection));
 // Output: "1, 3, 4, 5, 7"
 ```
 
-#### Example 3: Create a Filtered View
+#### Example 3: Use Order-Statistic Tree for Rank/Select Operations
+
+```csharp
+using DroidNet.Collections;
+
+var tree = new OrderStatisticTreeCollection<int>();
+for (int i = 0; i < 10; i++)
+{
+    tree.Add(i * 2);  // Add: 0, 2, 4, 6, 8, 10, 12, 14, 16, 18
+}
+
+// Rank: count elements strictly less than the given value
+int rank = tree.Rank(5);  // Returns 3 (elements 0, 2, 4 are less than 5)
+
+// Select: retrieve element at a given in-order index
+int element = tree.Select(5);  // Returns 10 (6th element in sorted order)
+
+// Enumeration in sorted order
+foreach (var value in tree)
+{
+    Console.WriteLine(value);
+}
+
+// Contains and Remove
+bool found = tree.Contains(6);  // Returns true
+tree.Remove(6);
+```
+
+#### Example 4: Create a Filtered View
 
 ```csharp
 using System.Collections.ObjectModel;
@@ -164,12 +202,14 @@ Collections/
 │   ├── Collections.csproj                         # Project file with NuGet metadata
 │   ├── DynamicObservableCollection`2.cs           # Transformation collection
 │   ├── FilteredObservableCollection`1.cs          # Filtered view collection
+│   ├── OrderStatisticTreeCollection`1.cs          # Order-statistic red-black tree
 │   └── ObservableCollectionExtensions.cs          # Extension methods
 ├── tests/
 │   ├── Collections.Tests.csproj                   # Test project
 │   ├── DynamicObservableCollectionTests.cs        # DynamicObservableCollection tests
 │   ├── FilteredObservableCollectionTests.cs       # FilteredObservableCollection tests
 │   ├── FilteredObservableCollectionOptionsTests.cs# Tests covering constructor options and behaviors
+│   ├── OrderStatisticTreeCollectionTests.cs       # OrderStatisticTreeCollection tests
 │   └── ObservableCollectionExtensionsTests.cs     # Extension method tests
 ├── Collections.sln                                # Project-level solution
 └── README.md                                      # This file
