@@ -159,7 +159,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
 
         // Act
         var newItem = new TestTreeItemAdapter { Label = "New" };
-        await viewModel.InsertItemAsync(0, root, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsync(newItem, root, 0).ConfigureAwait(false);
 
         // Assert
         _ = viewModel.IsClipboardValid.Should().BeFalse();
@@ -184,7 +184,7 @@ public class ViewModelClipboardTests : ViewModelTestBase
 
         // Act: mutate tree to invalidate clipboard
         var newItem = new TestTreeItemAdapter { Label = "New" };
-        await viewModel.InsertItemAsync(0, root, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsync(newItem, root, 0).ConfigureAwait(false);
 
         // Assert: clipboard invalidated and cut visual cleared
         _ = viewModel.IsClipboardValid.Should().BeFalse();

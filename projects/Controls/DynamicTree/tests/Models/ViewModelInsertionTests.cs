@@ -26,7 +26,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        var act = async () => await viewModel.InsertItemAsyncPublic(-1, parentItem, newItem).ConfigureAwait(false);
+        var act = async () => await viewModel.InsertItemAsyncPublic(newItem, parentItem, -1).ConfigureAwait(false);
 
         // Assert
         _ = await act.Should().NotThrowAsync().ConfigureAwait(false);
@@ -47,7 +47,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 0).ConfigureAwait(false);
 
         // Assert
         _ = parentItem.IsExpanded.Should().BeTrue();
@@ -70,7 +70,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         _ = viewModel.SelectedItem.Should().Be(parentItem);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 0).ConfigureAwait(false);
 
         // Assert
         _ = viewModel.SelectedItem.Should().Be(newItem);
@@ -92,7 +92,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 0).ConfigureAwait(false);
 
         // Assert
         _ = viewModel.ShownItems.Should().ContainInOrder(rootItem, parentItem, newItem);
@@ -111,7 +111,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(10, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 10).ConfigureAwait(false);
 
         // Assert
         var children = await parentItem.Children.ConfigureAwait(false);
@@ -135,7 +135,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(1, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 1).ConfigureAwait(false);
 
         // Assert
         var children = await parentItem.Children.ConfigureAwait(false);
@@ -160,7 +160,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(1, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 1).ConfigureAwait(false);
 
         // Assert
         var children = await parentItem.Children.ConfigureAwait(false);
@@ -185,7 +185,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(1, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 1).ConfigureAwait(false);
 
         // Assert
         var children = await parentItem.Children.ConfigureAwait(false);
@@ -214,7 +214,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 0).ConfigureAwait(false);
 
         // Assert
         _ = eventArgs.Should().BeEquivalentTo(new { Parent = parentItem, TreeItem = newItem }, options => options.ExcludingMissingMembers());
@@ -238,7 +238,7 @@ public class ViewModelInsertionTests : ViewModelTestBase
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
 
         // Act
-        await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
+        await viewModel.InsertItemAsyncPublic(newItem, parentItem, 0).ConfigureAwait(false);
 
         // Assert
         _ = eventArgs.Should().BeEquivalentTo(new { Parent = parentItem, TreeItem = newItem, RelativeIndex = 0 });

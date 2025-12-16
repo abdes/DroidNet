@@ -462,7 +462,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
                 // If pasting a node, ensure it has a unique name if needed?
                 // For now, just insert.
-                await this.InsertItemAsync(0, parent, clone).ConfigureAwait(false);
+                await this.InsertItemAsync(clone, parent, 0).ConfigureAwait(false);
             }
         }
     }
@@ -571,7 +571,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var newAdapter = new SceneNodeAdapter(newNode);
 
         // Update UI (this will trigger OnItemAdded)
-        await this.InsertItemAsync(0, parent, newAdapter).ConfigureAwait(false);
+        await this.InsertItemAsync(newAdapter, parent, 0).ConfigureAwait(false);
     }
 
     private async void OnDocumentOpened(object? sender, DroidNet.Documents.DocumentOpenedEventArgs e)
@@ -660,7 +660,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         UndoRedo.Default[this].AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
-            async () => await this.InsertItemAsync(args.RelativeIndex, args.Parent, args.TreeItem).ConfigureAwait(false));
+            async () => await this.InsertItemAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
 
         this.LogItemRemoved(args.TreeItem.Label);
     }
@@ -863,7 +863,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var newFolder = new FolderAdapter(newFolderId, "New Folder");
 
         // Update UI (triggers OnItemAdded -> Service.CreateFolderAsync)
-        await this.InsertItemAsync(0, parent, newFolder).ConfigureAwait(false);
+        await this.InsertItemAsync(newFolder, parent, 0).ConfigureAwait(false);
     }
 
     private bool CanCreateFolder()

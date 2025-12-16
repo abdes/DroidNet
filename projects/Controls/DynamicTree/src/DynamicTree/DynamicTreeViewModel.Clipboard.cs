@@ -389,7 +389,7 @@ public abstract partial class DynamicTreeViewModel
         var nextIndex = insertIndex;
         foreach (var clone in clones)
         {
-            await this.InsertItemAsync(nextIndex, targetParent, clone).ConfigureAwait(true);
+            await this.InsertItemAsync(clone, targetParent, nextIndex).ConfigureAwait(true);
             nextIndex++;
             if (clone.IsExpanded)
             {
