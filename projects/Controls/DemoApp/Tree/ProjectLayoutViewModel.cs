@@ -931,7 +931,7 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
     private async Task ApplyInsertAsync(ITreeItem item, ITreeItem parent, int index)
     {
         await this.EnsureAncestorsExpandedAsync(parent).ConfigureAwait(false);
-        await this.InsertItemAsync(index, parent, item).ConfigureAwait(false);
+        await this.InsertItemAsync(item, parent, index).ConfigureAwait(false);
     }
 
     /// <summary>

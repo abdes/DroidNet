@@ -20,7 +20,7 @@ internal partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactor
     public async Task InitializeRootAsyncPublic(ITreeItem root) => await this.InitializeRootAsync(root, skipRoot).ConfigureAwait(false);
 
     /// <inheritdoc cref="DynamicTreeViewModel.InsertItemAsync"/>
-    public async Task InsertItemAsyncPublic(int relativeIndex, ITreeItem parent, ITreeItem item) => await this.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(false);
+    public async Task InsertItemAsyncPublic(ITreeItem item, ITreeItem parent, int relativeIndex) => await this.InsertItemAsync(item, parent, relativeIndex).ConfigureAwait(false);
 
     public async Task MoveItemAsyncPublic(ITreeItem item, ITreeItem newParent, int newIndex) => await this.MoveItemAsync(item, newParent, newIndex).ConfigureAwait(false);
 
@@ -81,7 +81,7 @@ internal partial class TestViewModel(bool skipRoot, ILoggerFactory? loggerFactor
         this.SelectionModel?.SelectItem(item);
     }
 
-    public void ToggleSelectAll() => this.ToggleSelectAllCommand.Execute(null);
+    public void ToggleSelectAll() => this.ToggleSelectAllCommand.Execute(parameter: null);
 
     public bool ToggleSelectionForFocused(bool isControlKeyDown, bool isShiftKeyDown)
     {

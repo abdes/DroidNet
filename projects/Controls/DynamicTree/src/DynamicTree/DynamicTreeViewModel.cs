@@ -242,9 +242,9 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// <summary>
     ///     Inserts a child item at the specified index under the given parent item asynchronously.
     /// </summary>
-    /// <param name="relativeIndex">Zero-based index at which to insert under the parent.</param>
-    /// <param name="parent">The parent that receives the child.</param>
     /// <param name="item">The child item to insert.</param>
+    /// <param name="parent">The parent that receives the child.</param>
+    /// <param name="relativeIndex">Zero-based index at which to insert under the parent.</param>
     /// <remarks>
     ///     <paramref name="relativeIndex"/> is expressed in the coordinate system of <paramref name="parent"/>'s
     ///     children collection (<see cref="ITreeItem.Children"/>). It is <em>not</em> an index into
@@ -255,7 +255,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     ///     <see cref="TreeItemAddedEventArgs.RelativeIndex"/> (child index), not the visual index.</para>
     /// </remarks>
     /// <returns>A task that completes when the insertion finishes.</returns>
-    public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
+    public async Task InsertItemAsync(ITreeItem item, ITreeItem parent, int relativeIndex)
         => await this.DisplayHelper.InsertItemAsync(item, parent, relativeIndex).ConfigureAwait(true);
 
     /// <summary>
