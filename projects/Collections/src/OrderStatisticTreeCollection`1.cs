@@ -13,7 +13,7 @@ namespace DroidNet.Collections;
 /// </summary>
 /// <typeparam name="T">Item type. Comparison is done using the provided comparer.</typeparam>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "multiple constructors")]
-public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
+public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     where T : notnull
 {
     private readonly IComparer<T> comparer;
@@ -44,17 +44,23 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     public int Count => this.root?.SubtreeSize ?? 0;
 
     /// <summary>
+    /// Gets the root node of the tree.
+    /// </summary>
+    protected Node? Root => this.root;
+
+    /// <summary>
     /// Adds <paramref name="item"/> to the tree.
     /// Duplicates are allowed and are inserted to the right.
     /// </summary>
     /// <param name="item">Item to add.</param>
     public void Add(T item)
     {
-        var inserted = new Node(item);
+        var inserted = this.CreateNode(item);
         if (this.root is null)
         {
             this.root = inserted;
             this.root.IsRed = false; // root is black
+            this.OnNodeUpdated(this.root);
 #if DEBUG
             this.AssertInvariants();
 #endif
@@ -67,7 +73,6 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
         while (x is not null)
         {
             parent = x;
-            parent.SubtreeSize++;
             parentCmp = this.comparer.Compare(item, x.Value);
             if (parentCmp < 0)
             {
@@ -89,6 +94,7 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
             parent!.Right = inserted;
         }
 
+        this.UpdateSizeUpwards(inserted);
         this.InsertFixup(inserted);
     }
 
@@ -210,13 +216,21 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     /// <returns>An <see cref="IEnumerator"/> that can be used to iterate through the collection.</returns>
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
-    private static void UpdateSizeUpwards(Node? x)
+    /// <summary>
+    /// Creates a new node for the tree. Override this to return a custom node type.
+    /// </summary>
+    /// <param name="value">The value to store in the node.</param>
+    /// <returns>A new <see cref="Node"/> instance.</returns>
+    protected virtual Node CreateNode(T value) => new(value);
+
+    /// <summary>
+    /// Called when a node's structure or children have changed.
+    /// Use this to update augmented data in the node.
+    /// The default implementation only needs to handle custom data, as SubtreeSize is managed by the base class.
+    /// </summary>
+    /// <param name="node">The node that was updated.</param>
+    protected virtual void OnNodeUpdated(Node node)
     {
-        while (x is not null)
-        {
-            x.SubtreeSize = 1 + (x.Left?.SubtreeSize ?? 0) + (x.Right?.SubtreeSize ?? 0);
-            x = x.Parent;
-        }
     }
 
     private static Node Minimum(Node x)
@@ -227,6 +241,25 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
         }
 
         return x;
+    }
+
+    private void UpdateSizeUpwards(Node? x)
+    {
+        var depth = 0;
+        while (x is not null)
+        {
+#if DEBUG
+            // Safety: Detect cycles in parent pointers (e.g. from bugs in rotation/delete logic).
+            // This prevents infinite hangs in production if the tree structure is corrupted.
+            if (depth++ > 1000)
+            {
+                throw new InvalidOperationException("Possible cycle detected in parent pointers during size update.");
+            }
+#endif // DEBUG
+            x.SubtreeSize = 1 + (x.Left?.SubtreeSize ?? 0) + (x.Right?.SubtreeSize ?? 0);
+            this.OnNodeUpdated(x);
+            x = x.Parent;
+        }
     }
 
     private Node? FindNode(T item)
@@ -278,7 +311,10 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
 
         // update subtree sizes (x then y)
         x.SubtreeSize = 1 + (x.Left?.SubtreeSize ?? 0) + (x.Right?.SubtreeSize ?? 0);
+        this.OnNodeUpdated(x);
+
         y.SubtreeSize = 1 + (y.Left?.SubtreeSize ?? 0) + (y.Right?.SubtreeSize ?? 0);
+        this.OnNodeUpdated(y);
     }
 
     private void RightRotate(Node y)
@@ -306,7 +342,10 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
 
         // update subtree sizes (y then x)
         y.SubtreeSize = 1 + (y.Left?.SubtreeSize ?? 0) + (y.Right?.SubtreeSize ?? 0);
+        this.OnNodeUpdated(y);
+
         x.SubtreeSize = 1 + (x.Left?.SubtreeSize ?? 0) + (x.Right?.SubtreeSize ?? 0);
+        this.OnNodeUpdated(x);
     }
 
     private void InsertFixup(Node z)
@@ -385,6 +424,7 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
         _ = v?.Parent = u.Parent;
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "keep the logic together for maintainability")]
     private void DeleteNode(Node z)
     {
         var y = z;
@@ -396,15 +436,21 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
         {
             x = z.Right;
             this.Transplant(z, z.Right);
-            OrderStatisticTreeCollection<T>.UpdateSizeUpwards(z.Parent);
+            this.UpdateSizeUpwards(z.Parent);
             xParent = z.Parent;
+
+            // FIX: Explicitly clear Parent pointer. In complex scenarios, 'z' is logically removed
+            // but might still be pointed to by other "ghost" nodes or during rotation artifacts.
+            // Failing to clear this can cause UpdateSizeUpwards to traverse back into 'z' and create an infinite loop.
+            z.Parent = null;
         }
         else if (z.Right is null)
         {
             x = z.Left;
             this.Transplant(z, z.Left);
-            OrderStatisticTreeCollection<T>.UpdateSizeUpwards(z.Parent);
+            this.UpdateSizeUpwards(z.Parent);
             xParent = z.Parent;
+            z.Parent = null;
         }
         else
         {
@@ -421,9 +467,10 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
             {
                 var yParentBeforeMove = y.Parent;
                 this.Transplant(y, y.Right);
+                y.Parent = null; // Detach y
                 y.Right = z.Right;
                 y.Right.Parent = y;
-                OrderStatisticTreeCollection<T>.UpdateSizeUpwards(yParentBeforeMove);
+                this.UpdateSizeUpwards(yParentBeforeMove);
 
                 xParent = yParentBeforeMove;
             }
@@ -433,9 +480,14 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
             y.Left.Parent = y;
             y.IsRed = z.IsRed;
 
+            z.Parent = null; // Detach z completely
+            z.Left = null;
+            z.Right = null;
+
             // recalc size for y and upwards
             y.SubtreeSize = 1 + (y.Left?.SubtreeSize ?? 0) + (y.Right?.SubtreeSize ?? 0);
-            OrderStatisticTreeCollection<T>.UpdateSizeUpwards(y.Parent);
+            this.OnNodeUpdated(y);
+            this.UpdateSizeUpwards(y.Parent);
         }
 
         if (!yOriginalRed)
@@ -680,25 +732,53 @@ public sealed class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     }
 #endif
 
-    private sealed class Node
+    /// <summary>
+    /// Represents a node in the red-black order-statistic tree.
+    /// </summary>
+    protected class Node
     {
-        internal Node(T value)
+        /// <summary>
+        /// Initializes a new instance of the <see cref="Node"/> class that holds the specified value.
+        /// New nodes are created red and with a subtree size of 1.
+        /// </summary>
+        /// <param name="value">The value to store in the node.</param>
+        public Node(T value)
         {
             this.Value = value;
             this.IsRed = true;
             this.SubtreeSize = 1;
         }
 
-        internal T Value { get; private set; }
+        /// <summary>
+        /// Gets the value stored in the node.
+        /// </summary>
+        public T Value { get; private set; }
 
-        internal Node? Left { get; set; }
+        /// <summary>
+        /// Gets or sets the left child of this node. Null indicates there is no left child.
+        /// </summary>
+        public Node? Left { get; set; }
 
-        internal Node? Right { get; set; }
+        /// <summary>
+        /// Gets or sets the right child of this node. Null indicates there is no right child.
+        /// </summary>
+        public Node? Right { get; set; }
 
-        internal Node? Parent { get; set; }
+        /// <summary>
+        /// Gets or sets the parent of this node, or null if this node is the root or detached.
+        /// </summary>
+        public Node? Parent { get; set; }
 
-        internal bool IsRed { get; set; }
+        /// <summary>
+        /// Gets or sets a value indicating whether this node is red.
+        /// <c>true</c> means the node is red; <c>false</c> means the node is black.
+        /// </summary>
+        public bool IsRed { get; set; }
 
-        internal int SubtreeSize { get; set; } // includes this node
+        /// <summary>
+        /// Gets or sets the size of the subtree rooted at this node, including the node itself.
+        /// This value is maintained by the tree to support rank/select (order-statistic) operations.
+        /// </summary>
+        public int SubtreeSize { get; set; } // includes this node
     }
 }
