@@ -67,13 +67,13 @@ public class ViewModelInsertionTests : ViewModelTestBase
 
         await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
         viewModel.SelectItem(parentItem, RequestOrigin.PointerInput);
-        _ = viewModel.GetSelectionModel()?.SelectedItem.Should().Be(parentItem);
+        _ = viewModel.SelectedItem.Should().Be(parentItem);
 
         // Act
         await viewModel.InsertItemAsyncPublic(0, parentItem, newItem).ConfigureAwait(false);
 
         // Assert
-        _ = viewModel.GetSelectionModel()?.SelectedItem.Should().Be(newItem);
+        _ = viewModel.SelectedItem.Should().Be(newItem);
         _ = parentItem.IsSelected.Should().BeFalse();
         _ = viewModel.ShownItems.Should().ContainInOrder(rootItem, parentItem, newItem);
         _ = newItem.Depth.Should().Be(parentItem.Depth + 1);
