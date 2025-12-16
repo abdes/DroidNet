@@ -80,31 +80,37 @@ internal sealed partial class TreeDisplayHelper(
     }
 
     /// <summary>
-    ///     Removes an item and its immediate children from the tree, updating selection if requested.
+    ///     Removes an item and its immediate children from the tree.
     /// </summary>
+    /// <remarks>
+    ///     This methods does not require the items being removed to be in the visual tree (shown),
+    ///     and will not visuall expand parent nodes to do its job. It will however eagerly load
+    ///     children as needed to completely remove the item and its descendants, recursively.
+    /// </remarks>
     /// <param name="item">The item to remove.</param>
     /// <param name="updateSelection">Whether selection should be updated after removal.</param>
     /// <returns>A task that completes when the removal is finished.</returns>
     public async Task RemoveItemAsync(ITreeItem item, bool updateSelection)
     {
+        this.LogRemoveItemRequested(item);
+
         ValidateRemovalPreconditions(item);
 
-        var shownIndex = this.shownItems.IndexOf(item);
-        var isShown = shownIndex != -1;
-
-        this.LogRemoveItemRequested(item);
         if (!this.ApproveItemBeingRemoved(item))
         {
             return;
         }
 
-        if (isShown && updateSelection)
+        var shownIndex = this.shownItems.IndexOf(item);
+        var isShown = shownIndex != -1;
+
+        if (isShown && updateSelection && item.IsSelected)
         {
-            this.SelectionModel?.ClearSelection();
+            this.SelectionModel?.ClearSelection(item);
         }
 
         var removedShownCount = await this.RemoveChildrenAsync(item, isShown).ConfigureAwait(true);
-        var parent = item.Parent!;
+        var parent = item.Parent!; // validated above
         var relativeIndex = await parent.RemoveChildAsync(item).ConfigureAwait(true);
 
         if (isShown)
@@ -119,8 +125,12 @@ internal sealed partial class TreeDisplayHelper(
             this.UpdateSelectionAfterRemoval(shownIndex, removedShownCount);
         }
 
-        this.events.ItemRemoved?.Invoke(
-            new TreeItemRemovedEventArgs { Parent = parent, RelativeIndex = relativeIndex, TreeItem = item });
+        this.events.ItemRemoved?.Invoke(new TreeItemRemovedEventArgs
+        {
+            Parent = parent,
+            RelativeIndex = relativeIndex,
+            TreeItem = item,
+        });
 
         this.LogRemoveItemCompleted(item, removedShownCount, isShown);
     }
@@ -139,8 +149,8 @@ internal sealed partial class TreeDisplayHelper(
 
         switch (selection)
         {
-            case SingleSelectionModel<ITreeItem>:
-                var selectedItem = selection.SelectedItem;
+            case SingleSelectionModel<ITreeItem> single:
+                var selectedItem = single.SelectedItem;
                 if (selectedItem is null)
                 {
                     return;
@@ -153,7 +163,6 @@ internal sealed partial class TreeDisplayHelper(
                     return;
                 }
 
-                selection.ClearSelection();
                 await this.RemoveItemAsync(selectedItem, updateSelection: true).ConfigureAwait(true);
                 break;
 
