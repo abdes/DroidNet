@@ -314,7 +314,12 @@ internal sealed partial class TreeDisplayHelper(
             throw new InvalidOperationException($"attempt to remove locked item `{item.Label}`");
         }
 
-        if (!item.IsRoot && item.Parent is null)
+        if (item.IsRoot)
+        {
+            throw new InvalidOperationException($"attempt to remove the root item `{item.Label}`");
+        }
+
+        if (item.Parent is null)
         {
             throw new InvalidOperationException($"attempt to remove orphan item `{item.Label}`");
         }

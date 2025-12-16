@@ -223,4 +223,21 @@ public class ViewModelItemRemovalTests : ViewModelTestBase
         _ = viewModel.GetSelectionModel()!.IsEmpty.Should().BeTrue();
         _ = viewModel.GetSelectionModel()!.SelectedIndex.Should().Be(-1);
     }
+
+    [TestMethod]
+    [TestCategory($"{nameof(DynamicTree)} / ViewModel / Remove")]
+    public async Task RemoveItem_WhenRemovingRoot_ThrowsInvalidOperation()
+    {
+        // Arrange
+        using var viewModel = new TestViewModel(skipRoot: false);
+        var rootItem = new TestTreeItemAdapter(isRoot: true) { Label = "Root", IsExpanded = true };
+
+        await viewModel.InitializeRootAsyncPublic(rootItem).ConfigureAwait(false);
+
+        // Act
+        var act = async () => await viewModel.RemoveItemAsyncPublic(rootItem).ConfigureAwait(false);
+
+        // Assert
+        _ = await act.Should().ThrowAsync<InvalidOperationException>().ConfigureAwait(false);
+    }
 }
