@@ -16,17 +16,21 @@ public static class FilteredObservableCollectionFactory
     /// </summary>
     /// <typeparam name="T">The item type.</typeparam>
     /// <param name="source">The source collection to observe.</param>
+    /// <param name="filter">Predicate that determines inclusion in the view.</param>
     /// <param name="viewBuilder">Builder that materializes the filtered projection.</param>
     /// <param name="options">Optional settings controlling relevant properties, observation, and debounce.</param>
     /// <returns>A new filtered view over <paramref name="source"/>.</returns>
     public static FilteredObservableCollection<T> FromBuilder<T>(
         ObservableCollection<T> source,
+        Predicate<T> filter,
         IFilteredViewBuilder<T> viewBuilder,
         FilteredObservableCollectionOptions? options = null)
-        where T : class
+        where T : class, IEquatable<T>
     {
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(filter);
         ArgumentNullException.ThrowIfNull(viewBuilder);
-        return new FilteredObservableCollection<T>(source, viewBuilder, options ?? FilteredObservableCollectionOptions.Default);
+        return new FilteredObservableCollection<T>(source, filter, viewBuilder, options ?? FilteredObservableCollectionOptions.Default);
     }
 
     /// <summary>
@@ -41,7 +45,7 @@ public static class FilteredObservableCollectionFactory
         ObservableCollection<T> source,
         Predicate<T> filter,
         FilteredObservableCollectionOptions? options = null)
-        where T : class
+        where T : class, IEquatable<T>
     {
         ArgumentNullException.ThrowIfNull(filter);
         return new FilteredObservableCollection<T>(source, filter, options ?? FilteredObservableCollectionOptions.Default);

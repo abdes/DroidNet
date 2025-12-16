@@ -12,7 +12,7 @@ namespace DroidNet.Controls;
 ///     Represents an item in a hierarchical tree structure, providing functionality for managing child items,
 ///     tracking selection state, and handling expansion and collapse states.
 /// </summary>
-public interface ITreeItem : ISelectable, ICanBeLocked
+public interface ITreeItem : ISelectable, ICanBeLocked, IEquatable<ITreeItem>
 {
     /// <summary>
     ///     Occurs when the collection of child items changes.

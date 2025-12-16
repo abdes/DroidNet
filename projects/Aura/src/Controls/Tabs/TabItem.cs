@@ -14,7 +14,7 @@ namespace DroidNet.Aura.Controls;
 ///     command, and state. A <see cref="TabItem"/> is a lightweight data model consumed by the
 ///     control to render and interact with tabs, rather than a visual element itself.
 /// </summary>
-public sealed partial class TabItem : ObservableObject, IDragPayload
+public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable<TabItem>
 {
     /// <summary>
     ///     Gets the stable identifier for the payload's content. Preserved across shallow clones,
@@ -97,6 +97,9 @@ public sealed partial class TabItem : ObservableObject, IDragPayload
 
     /// <inheritdoc/>
     public bool Equals(IDragPayload? other) => other is not null && other.ContentId == this.ContentId;
+
+    /// <inheritdoc/>
+    public bool Equals(TabItem? other) => other is not null && other.ContentId == this.ContentId;
 
     /// <inheritdoc/>
     public override bool Equals(object? obj) => obj is IDragPayload payload && this.Equals(payload);

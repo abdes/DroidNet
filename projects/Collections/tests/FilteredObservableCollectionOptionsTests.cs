@@ -217,14 +217,20 @@ public class FilteredObservableCollectionOptionsTests
         _ = view.Should().Contain(item).And.Contain(newItem);
     }
 
-    private sealed class PlainItem(int value)
+    private sealed class PlainItem(int value) : IEquatable<PlainItem>
     {
-        public int Value { get; } = value;
+        public int Value => value;
+
+        public bool Equals(PlainItem? other) => ReferenceEquals(this, other);
+
+        public override bool Equals(object? obj) => ReferenceEquals(this, obj);
+
+        public override int GetHashCode() => value;
 
         public override string ToString() => $"PlainItem({this.Value})";
     }
 
-    private sealed class NotifyingItem(int value) : INotifyPropertyChanged
+    private sealed class NotifyingItem(int value) : INotifyPropertyChanged, IEquatable<NotifyingItem>
     {
         private int value = value;
 
@@ -244,6 +250,12 @@ public class FilteredObservableCollectionOptionsTests
                 this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
             }
         }
+
+        public bool Equals(NotifyingItem? other) => ReferenceEquals(this, other);
+
+        public override bool Equals(object? obj) => ReferenceEquals(this, obj);
+
+        public override int GetHashCode() => this.value;
 
         public override string ToString() => $"NotifyingItem({this.value})";
     }

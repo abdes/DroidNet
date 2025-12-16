@@ -13,9 +13,18 @@ namespace DroidNet.Collections;
 public interface IFilteredViewBuilder<T>
 {
     /// <summary>
-    ///     Builds the filtered view for the provided <paramref name="source"/> collection.
+    /// Computes the set of consequential changes (inclusions or exclusions) resulting from a single item's
+    /// inclusion status change.
     /// </summary>
-    /// <param name="source">The source items to evaluate.</param>
-    /// <returns>A filtered projection preserving the order of <paramref name="source"/>.</returns>
-    public IReadOnlyList<T> Build(IReadOnlyList<T> source);
+    /// <param name="changedItem">The item that triggered the change.</param>
+    /// <param name="becameIncluded">
+    /// <see langword="true"/> if <paramref name="changedItem"/> is now included by the primary filter;
+    /// <see langword="false"/> if it is now excluded.
+    /// </param>
+    /// <param name="source">The full source collection, used for context if needed.</param>
+    /// <returns>
+    /// A set of items to include (if <paramref name="becameIncluded"/> is true) or exclude (if false).
+    /// The set must contain exact reference-equal instances from <paramref name="source"/> and no duplicates.
+    /// </returns>
+    public IReadOnlySet<T> BuildForChangedItem(T changedItem, bool becameIncluded, IReadOnlyList<T> source);
 }

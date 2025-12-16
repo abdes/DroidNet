@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -157,4 +158,32 @@ public partial class DynamicTreeViewModel
     [Conditional("DEBUG")]
     private void LogForgotToFocusItem(ITreeItem item, RequestOrigin origin)
         => LogForgotToFocusItem(this.logger, item.Label, origin);
+
+    [LoggerMessage(
+        Level = LogLevel.Trace,
+        Message = "FilteredItems changed: action={action}, newIndex={newStartingIndex}, oldIndex={oldStartingIndex}, newCount={newCount}, oldCount={oldCount}, newItems={newItems}, oldItems={oldItems}")]
+    private static partial void LogFilteredItemsChanged(
+        ILogger logger,
+        NotifyCollectionChangedAction action,
+        int newStartingIndex,
+        int oldStartingIndex,
+        int newCount,
+        int oldCount,
+        string? newItems,
+        string? oldItems);
+
+    [Conditional("DEBUG")]
+    private void LogFilteredItemsChanged(
+        NotifyCollectionChangedEventArgs e,
+        string? newItems,
+        string? oldItems)
+        => LogFilteredItemsChanged(
+            this.logger,
+            e.Action,
+            e.NewStartingIndex,
+            e.OldStartingIndex,
+            e.NewItems?.Count ?? 0,
+            e.OldItems?.Count ?? 0,
+            newItems,
+            oldItems);
 }

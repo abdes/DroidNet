@@ -183,6 +183,86 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     }
 
     /// <summary>
+    /// Removes the specified node from the tree.
+    /// </summary>
+    /// <param name="z">The node to remove.</param>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "keep the logic together for maintainability")]
+    public void DeleteNode(Node z)
+    {
+        var y = z;
+        var yOriginalRed = y.IsRed;
+        Node? x;
+        Node? xParent;
+
+        if (z.Left is null)
+        {
+            x = z.Right;
+            this.Transplant(z, z.Right);
+            this.UpdateSizeUpwards(z.Parent);
+            xParent = z.Parent;
+
+            // FIX: Explicitly clear Parent pointer. In complex scenarios, 'z' is logically removed
+            // but might still be pointed to by other "ghost" nodes or during rotation artifacts.
+            // Failing to clear this can cause UpdateSizeUpwards to traverse back into 'z' and create an infinite loop.
+            z.Parent = null;
+        }
+        else if (z.Right is null)
+        {
+            x = z.Left;
+            this.Transplant(z, z.Left);
+            this.UpdateSizeUpwards(z.Parent);
+            xParent = z.Parent;
+            z.Parent = null;
+        }
+        else
+        {
+            y = OrderStatisticTreeCollection<T>.Minimum(z.Right);
+            yOriginalRed = y.IsRed;
+            x = y.Right;
+            if (y.Parent == z)
+            {
+                x?.Parent = y;
+
+                xParent = y;
+            }
+            else
+            {
+                var yParentBeforeMove = y.Parent;
+                this.Transplant(y, y.Right);
+                y.Parent = null; // Detach y
+                y.Right = z.Right;
+                y.Right.Parent = y;
+                this.UpdateSizeUpwards(yParentBeforeMove);
+
+                xParent = yParentBeforeMove;
+            }
+
+            this.Transplant(z, y);
+            y.Left = z.Left;
+            y.Left.Parent = y;
+            y.IsRed = z.IsRed;
+
+            z.Parent = null; // Detach z completely
+            z.Left = null;
+            z.Right = null;
+
+            // recalc size for y and upwards
+            y.SubtreeSize = 1 + (y.Left?.SubtreeSize ?? 0) + (y.Right?.SubtreeSize ?? 0);
+            this.OnNodeUpdated(y);
+            this.UpdateSizeUpwards(y.Parent);
+        }
+
+        if (!yOriginalRed)
+        {
+            this.DeleteFixup(x, xParent);
+        }
+
+#if DEBUG
+        this.AssertInvariants();
+#endif
+    }
+
+    /// <summary>
     /// Returns an enumerator that iterates the tree in-order.
     /// </summary>
     /// <returns>An <see cref="IEnumerator{T}"/> that iterates the collection.</returns>
@@ -424,82 +504,6 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
         _ = v?.Parent = u.Parent;
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "keep the logic together for maintainability")]
-    private void DeleteNode(Node z)
-    {
-        var y = z;
-        var yOriginalRed = y.IsRed;
-        Node? x;
-        Node? xParent;
-
-        if (z.Left is null)
-        {
-            x = z.Right;
-            this.Transplant(z, z.Right);
-            this.UpdateSizeUpwards(z.Parent);
-            xParent = z.Parent;
-
-            // FIX: Explicitly clear Parent pointer. In complex scenarios, 'z' is logically removed
-            // but might still be pointed to by other "ghost" nodes or during rotation artifacts.
-            // Failing to clear this can cause UpdateSizeUpwards to traverse back into 'z' and create an infinite loop.
-            z.Parent = null;
-        }
-        else if (z.Right is null)
-        {
-            x = z.Left;
-            this.Transplant(z, z.Left);
-            this.UpdateSizeUpwards(z.Parent);
-            xParent = z.Parent;
-            z.Parent = null;
-        }
-        else
-        {
-            y = OrderStatisticTreeCollection<T>.Minimum(z.Right);
-            yOriginalRed = y.IsRed;
-            x = y.Right;
-            if (y.Parent == z)
-            {
-                x?.Parent = y;
-
-                xParent = y;
-            }
-            else
-            {
-                var yParentBeforeMove = y.Parent;
-                this.Transplant(y, y.Right);
-                y.Parent = null; // Detach y
-                y.Right = z.Right;
-                y.Right.Parent = y;
-                this.UpdateSizeUpwards(yParentBeforeMove);
-
-                xParent = yParentBeforeMove;
-            }
-
-            this.Transplant(z, y);
-            y.Left = z.Left;
-            y.Left.Parent = y;
-            y.IsRed = z.IsRed;
-
-            z.Parent = null; // Detach z completely
-            z.Left = null;
-            z.Right = null;
-
-            // recalc size for y and upwards
-            y.SubtreeSize = 1 + (y.Left?.SubtreeSize ?? 0) + (y.Right?.SubtreeSize ?? 0);
-            this.OnNodeUpdated(y);
-            this.UpdateSizeUpwards(y.Parent);
-        }
-
-        if (!yOriginalRed)
-        {
-            this.DeleteFixup(x, xParent);
-        }
-
-#if DEBUG
-        this.AssertInvariants();
-#endif
-    }
-
     // x is the node that moved into y's original position (may be null)
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "method is more maintainable the way it is")]
     private void DeleteFixup(Node? x, Node? parent)
@@ -735,7 +739,8 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
     /// <summary>
     /// Represents a node in the red-black order-statistic tree.
     /// </summary>
-    protected class Node
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "needs to be visible to classes that encapsulate a derived class from the OST")]
+    public class Node
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="Node"/> class that holds the specified value.
@@ -771,7 +776,7 @@ public class OrderStatisticTreeCollection<T> : IReadOnlyCollection<T>
 
         /// <summary>
         /// Gets or sets a value indicating whether this node is red.
-        /// <c>true</c> means the node is red; <c>false</c> means the node is black.
+        /// <see langword="true"/> means the node is red; <see langword="false"/> means the node is black.
         /// </summary>
         public bool IsRed { get; set; }
 
