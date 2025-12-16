@@ -37,40 +37,46 @@ internal sealed partial class TreeDisplayHelper(
     private SelectionModel<ITreeItem>? SelectionModel => this.selectionModelProvider();
 
     /// <summary>
-    ///     Inserts an item under a parent at a relative index and updates the visible collection and selection accordingly.
+    ///     Inserts an item under a targetParent at a relative index and updates the visible collection and selection accordingly.
     /// </summary>
-    /// <param name="relativeIndex">Zero-based position among the parent's children.</param>
-    /// <param name="parent">The parent that will receive the new child.</param>
     /// <param name="item">The item to insert.</param>
+    /// <param name="targetParent">The targetParent that will receive the new child.</param>
+    /// <param name="relativeIndex">Zero-based position among the targetParent's children.</param>
     /// <returns>A task that completes when the insertion is finished.</returns>
-    public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
+    public async Task InsertItemAsync(ITreeItem item, ITreeItem targetParent, int relativeIndex)
     {
-        var originalIndex = relativeIndex;
-        relativeIndex = ClampIndex(relativeIndex, parent.ChildrenCount);
-        if (originalIndex != relativeIndex)
-        {
-            this.LogRelativeIndexAdjusted(parent, originalIndex, relativeIndex);
-        }
+        this.LogInsertItemRequested(targetParent, relativeIndex, item);
 
-        await this.EnsureParentExpandedAsync(parent).ConfigureAwait(true);
-
-        this.LogInsertItemRequested(parent, relativeIndex, item);
-        if (!this.ApproveItemBeingAdded(parent, item))
+        if (!this.ApproveItemBeingAdded(targetParent, item))
         {
             return;
         }
 
+        // Clear selection first to avoid index invalidation during tree mutation
         this.SelectionModel?.ClearSelection();
-        var shownInsertIndex = await this.FindShownInsertIndexAsync(parent, relativeIndex).ConfigureAwait(true);
 
-        await parent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
-        this.LogShownItemsInsert(shownInsertIndex, item);
-        this.shownItems.Insert(shownInsertIndex, item);
+        // Ensure target parent is expanded, for two things: to ensure its children collection is
+        // loaded, and to make the new item visible
+        await this.EnsureParentExpandedAsync(targetParent).ConfigureAwait(true);
 
-        this.SelectionModel?.SelectItemAt(shownInsertIndex);
+        // Note 1: that indices must be calculated before insertion.
+        // Note 2: the tree control does not react to changes to the children collection, so we must explicitly update the shown items after insertion.
+        relativeIndex = this.ClampRelativeIndex(targetParent, relativeIndex);
+        var treeInsertIndex = await this.FindShownInsertIndexAsync(targetParent, relativeIndex).ConfigureAwait(true);
+        await targetParent.InsertChildAsync(relativeIndex, item).ConfigureAwait(true);
+        this.shownItems.Insert(treeInsertIndex, item);
 
-        this.events.ItemAdded?.Invoke(
-            new TreeItemAddedEventArgs { Parent = parent, TreeItem = item, RelativeIndex = relativeIndex });
+        this.LogShownItemsInsert(treeInsertIndex, item);
+
+        // Select the newly added item
+        this.SelectionModel?.SelectItemAt(treeInsertIndex);
+
+        this.events.ItemAdded?.Invoke(new TreeItemAddedEventArgs
+        {
+            Parent = targetParent,
+            TreeItem = item,
+            RelativeIndex = relativeIndex,
+        });
     }
 
     /// <summary>
@@ -179,20 +185,20 @@ internal sealed partial class TreeDisplayHelper(
     }
 
     /// <summary>
-    ///     Moves a single item to a new parent at the specified index.
+    ///     Moves a single item to a new targetParent at the specified index.
     /// </summary>
     /// <param name="item">The item to move.</param>
-    /// <param name="newParent">The target parent. Must be shown and accept children.</param>
-    /// <param name="newIndex">The desired index under the target parent.</param>
+    /// <param name="newParent">The target targetParent. Must be shown and accept children.</param>
+    /// <param name="newIndex">The desired index under the target targetParent.</param>
     /// <returns>A task that completes when the move operation finishes.</returns>
     public async Task MoveItemAsync(ITreeItem item, ITreeItem newParent, int newIndex)
         => await this.MoveItemsAsync([item], newParent, newIndex).ConfigureAwait(true);
 
     /// <summary>
-    ///     Moves multiple items to a new parent preserving their relative order and applying batch selection updates.
+    ///     Moves multiple items to a new targetParent preserving their relative order and applying batch selection updates.
     /// </summary>
     /// <param name="items">The items to move. Must be shown and not duplicates.</param>
-    /// <param name="newParent">The target parent for the move.</param>
+    /// <param name="newParent">The target targetParent for the move.</param>
     /// <param name="startIndex">The index at which the first item should be inserted.</param>
     /// <returns>A task that completes when all items are moved.</returns>
     public async Task MoveItemsAsync(IReadOnlyList<ITreeItem> items, ITreeItem newParent, int startIndex)
@@ -224,7 +230,7 @@ internal sealed partial class TreeDisplayHelper(
     }
 
     /// <summary>
-    ///     Reorders an item within its current parent.
+    ///     Reorders an item within its current targetParent.
     /// </summary>
     /// <param name="item">The item to reorder.</param>
     /// <param name="newIndex">The target sibling index.</param>
@@ -236,9 +242,9 @@ internal sealed partial class TreeDisplayHelper(
     }
 
     /// <summary>
-    ///     Reorders multiple items under their common parent.
+    ///     Reorders multiple items under their common targetParent.
     /// </summary>
-    /// <param name="items">The items to reorder; all must share the same parent.</param>
+    /// <param name="items">The items to reorder; all must share the same targetParent.</param>
     /// <param name="startIndex">The index of the first item after reorder.</param>
     /// <returns>A task that completes when the reorder is finished.</returns>
     public async Task ReorderItemsAsync(IReadOnlyList<ITreeItem> items, int startIndex)
@@ -256,8 +262,6 @@ internal sealed partial class TreeDisplayHelper(
 
         await this.MoveItemsAsync(items, parent, startIndex).ConfigureAwait(true);
     }
-
-    private static int ClampIndex(int index, int max) => Math.Clamp(index, 0, max);
 
     private static List<ITreeItem> FlattenMoveSet(IReadOnlyList<ITreeItem> items)
     {
@@ -352,7 +356,7 @@ internal sealed partial class TreeDisplayHelper(
             return;
         }
 
-        // log and auto-expand parent to allow child operations
+        // log and auto-expand targetParent to allow child operations
         this.LogParentAutoExpanded(parent);
 
         await this.expandItemAsync(parent).ConfigureAwait(true);
@@ -509,7 +513,7 @@ internal sealed partial class TreeDisplayHelper(
 
         foreach (var item in plan.Items)
         {
-            var targetIndex = ClampIndex(plan.StartIndex + insertOffset, plan.TargetParent.ChildrenCount);
+            var targetIndex = this.ClampRelativeIndex(plan.TargetParent, plan.StartIndex + insertOffset);
             var shownInsertIndex = await this.FindShownInsertIndexAsync(plan.TargetParent, targetIndex).ConfigureAwait(true);
 
             await plan.TargetParent.InsertChildAsync(targetIndex, item).ConfigureAwait(true);
@@ -751,6 +755,17 @@ internal sealed partial class TreeDisplayHelper(
         {
             throw new InvalidOperationException("move would exceed maximum depth");
         }
+    }
+
+    private int ClampRelativeIndex(ITreeItem parent, int relativeIndex)
+    {
+        var clamped = Math.Clamp(relativeIndex, 0, parent.ChildrenCount);
+        if (clamped != relativeIndex)
+        {
+            this.LogRelativeIndexAdjusted(parent, relativeIndex, clamped);
+        }
+
+        return clamped;
     }
 
     /// <summary>

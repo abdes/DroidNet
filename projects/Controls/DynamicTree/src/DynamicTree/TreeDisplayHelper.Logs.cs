@@ -59,8 +59,8 @@ internal sealed partial class TreeDisplayHelper
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Trace,
-        Message = "Request to insert an item in the tree at index: {originalIndex} for parent '{parent}' was out of range and adjusted to {clamped} (valid range [0, {childrenCount}])")]
+        Level = LogLevel.Warning,
+        Message = "Relative iundex {originalIndex} for parent '{parent}' was out of range and adjusted to {clamped} (valid range [0, {childrenCount}])")]
     private static partial void LogRelativeIndexAdjusted(ILogger logger, string parent, int originalIndex, int clamped, int childrenCount);
 
     private void LogRelativeIndexAdjusted(ITreeItem parent, int originalIndex, int clamped)
