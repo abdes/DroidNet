@@ -704,6 +704,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
         if (disposing)
         {
+            this.DisposeFilteringSubscriptions();
             this.filteredItems?.Dispose();
             this.filteredItems = null;
         }

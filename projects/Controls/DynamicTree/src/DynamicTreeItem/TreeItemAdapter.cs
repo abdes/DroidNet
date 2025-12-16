@@ -40,7 +40,7 @@ namespace DroidNet.Controls;
 ///         abstract method.
 ///     </para>
 /// </remarks>
-public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
+public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILoadedChildrenAccessor
 {
     /// <summary>
     ///     Represents the internal collection of child items in the tree. This collection is lazily initialized.
@@ -200,9 +200,28 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     public Task<ReadOnlyObservableCollection<ITreeItem>> Children => this.childrenLazy.Value;
 
     /// <inheritdoc />
+    public bool AreChildrenLoaded
+        => this.childrenLazy.IsValueCreated
+            && this.childrenLazy.Value.IsCompletedSuccessfully;
+
+    /// <inheritdoc />
     public int ChildrenCount => this.childrenLazy.IsValueCreated
         ? this.children.Count
         : this.DoGetChildrenCount();
+
+    /// <inheritdoc />
+    public bool TryGetLoadedChildren(out IReadOnlyList<ITreeItem> children)
+    {
+        if (!this.AreChildrenLoaded)
+        {
+            children = [];
+            return false;
+        }
+
+        // Return the already materialized in-memory collection. This must not trigger any load.
+        children = this.children;
+        return true;
+    }
 
     /// <inheritdoc />
     /// <remarks>
