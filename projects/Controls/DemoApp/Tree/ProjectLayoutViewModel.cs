@@ -332,15 +332,20 @@ public partial class ProjectLayoutViewModel : DynamicTreeViewModel
             return false;
         }
 
-        if (item is not EntityAdapter entityAdapter)
-        {
-            return hasTextFilter;
-        }
-
         var filterLight = this.filterLightItem.IsChecked;
         var filterCamera = this.filterCameraItem.IsChecked;
         var filterGeometry = this.filterGeometryItem.IsChecked;
-        if (!filterLight && !filterCamera && !filterGeometry)
+        var hasTypeFilter = filterLight || filterCamera || filterGeometry;
+
+        if (item is not EntityAdapter entityAdapter)
+        {
+            // Component type filters apply to entities only. When type filters are active,
+            // non-entity items must not match by text alone; they will still be included
+            // via the tree's ancestor/subtree closure when a matching entity exists.
+            return !hasTypeFilter && hasTextFilter;
+        }
+
+        if (!hasTypeFilter)
         {
             return true;
         }
