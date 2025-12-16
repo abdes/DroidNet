@@ -256,7 +256,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </remarks>
     /// <returns>A task that completes when the insertion finishes.</returns>
     public async Task InsertItemAsync(int relativeIndex, ITreeItem parent, ITreeItem item)
-        => await this.DisplayHelper.InsertItemAsync(relativeIndex, parent, item).ConfigureAwait(true);
+        => await this.DisplayHelper.InsertItemAsync(item, parent, relativeIndex).ConfigureAwait(true);
 
     /// <summary>
     ///     Removes the specified item and its children from the tree asynchronously.
