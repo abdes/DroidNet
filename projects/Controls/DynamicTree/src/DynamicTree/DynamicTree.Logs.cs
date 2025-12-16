@@ -112,6 +112,21 @@ public partial class DynamicTree
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
+        Message = "DisplayedItems source: isFilteringEnabled={isFilteringEnabled}, hasPredicate={hasPredicate} -> {displayedSource}")]
+    private static partial void LogDisplayedItemsSource(ILogger logger, bool isFilteringEnabled, bool hasPredicate, string displayedSource);
+
+    [Conditional("DEBUG")]
+    private void LogDisplayedItemsSource(bool isFilteringEnabled, bool hasPredicate, string displayedSource)
+    {
+        if (this.logger is ILogger logger)
+        {
+            LogDisplayedItemsSource(logger, isFilteringEnabled, hasPredicate, displayedSource);
+        }
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
         Message = "Tree got focus -> focusing fallback item '{itemLabel}'")]
     private static partial void LogFocusFallback(ILogger logger, string? itemLabel);
 

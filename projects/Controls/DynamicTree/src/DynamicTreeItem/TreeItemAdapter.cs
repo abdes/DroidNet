@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace DroidNet.Controls;
@@ -177,7 +178,7 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
 
         private set
         {
-            if (Equals(value, field))
+            if (ReferenceEquals(value, field))
             {
                 return;
             }
@@ -202,6 +203,19 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem
     public int ChildrenCount => this.childrenLazy.IsValueCreated
         ? this.children.Count
         : this.DoGetChildrenCount();
+
+    /// <inheritdoc />
+    /// <remarks>
+    ///     Default tree item equality is reference equality. Derived types may override to implement
+    ///     a stable identity-based equality.
+    /// </remarks>
+    public virtual bool Equals(ITreeItem? other) => ReferenceEquals(this, other);
+
+    /// <inheritdoc />
+    public override bool Equals(object? obj) => obj is ITreeItem other && this.Equals(other);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => RuntimeHelpers.GetHashCode(this);
 
     /// <inheritdoc />
     public abstract bool ValidateItemName(string name);

@@ -16,299 +16,151 @@ namespace DroidNet.Collections;
 ///     collection.
 /// </summary>
 /// <typeparam name="T">The item type.</typeparam>
-public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>, IList, INotifyCollectionChanged, IDisposable
-    where T : class
+public sealed partial class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>, IList, INotifyCollectionChanged, IDisposable
+    where T : class, IEquatable<T>
 {
     private readonly ObservableCollection<T> source;
-    private readonly Predicate<T>? filter;
+    private readonly Predicate<T> filter;
     private readonly IFilteredViewBuilder<T>? viewBuilder;
-    private readonly bool useBuilder;
-    private readonly HashSet<string> relevantProperties;
+    private readonly Dictionary<T, FilteredTree.FilteredNode> instanceMap;
 
-    private readonly List<T> filtered;
-    private readonly bool debounceEnabled;
     private readonly TimeSpan propertyChangedDebounceInterval;
     private readonly SynchronizationContext? synchronizationContext;
     private readonly Lock debounceGate = new();
 
     private readonly FilteredObservableCollectionOptions options;
+    private readonly HashSet<T> propertySubscribedItems;
 
-    private readonly HashSet<T> attachedItems; // Items we have subscribed to (all items from source that we've attached handlers for)
-    private readonly HashSet<T> propertySubscribedItems; // Items we have attached PropertyChanged handler for
-    private readonly HashSet<T> filteredSet; // Fast membership test for items currently in the filtered view
-    private readonly HashSet<T> dirtyItems = []; // Items that changed during debounce window (predicate mode)
+    private readonly HashSet<T> dirtyItems = new(ReferenceEqualityComparer.Instance);
+
+    private readonly bool debounceEnabled;
+
+    private FilteredTree tree;
+
     private int suspendCount;
-    private bool hadChangesWhileSuspended;
     private Timer? debounceTimer;
     private bool debouncePending;
     private bool disposed;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class using a predicate filter.
+    ///     Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class
+    ///     with the specified source collection, filter predicate, and options.
     /// </summary>
-    /// <param name="source">The source <see cref="ObservableCollection{T}"/> to observe.</param>
-    /// <param name="filter">Predicate that determines whether an item should appear in the filtered view.</param>
-    /// <param name="options">Optional settings controlling relevant properties and observation behavior.</param>
+    /// <param name="source">The source <see cref="ObservableCollection{T}"/> to create a filtered view over.</param>
+    /// <param name="filter">A predicate that determines which items from the source should be included in the filtered view.</param>
+    /// <param name="options">Optional configuration options for the filtered collection. If <see langword="null"/>, default options are used.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="filter"/> is <see langword="null"/>.</exception>
     internal FilteredObservableCollection(
         ObservableCollection<T> source,
         Predicate<T> filter,
         FilteredObservableCollectionOptions? options = null)
+        : this(source, filter, viewBuilder: null, options)
+    {
+    }
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class
+    ///     with the specified source collection, filter predicate, view builder, and options.
+    /// </summary>
+    /// <param name="source">The source <see cref="ObservableCollection{T}"/> to create a filtered view over.</param>
+    /// <param name="filter">A predicate that determines which items from the source should be included in the filtered view.</param>
+    /// <param name="viewBuilder">An optional view builder that can add additional dependent items to the filtered view based on trigger items.</param>
+    /// <param name="options">Optional configuration options for the filtered collection. If <see langword="null"/>, default options are used.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source"/> or <paramref name="filter"/> is <see langword="null"/>.</exception>
+    internal FilteredObservableCollection(
+        ObservableCollection<T> source,
+        Predicate<T> filter,
+        IFilteredViewBuilder<T>? viewBuilder,
+        FilteredObservableCollectionOptions? options)
     {
         this.source = source ?? throw new ArgumentNullException(nameof(source));
         this.filter = filter ?? throw new ArgumentNullException(nameof(filter));
+        this.viewBuilder = viewBuilder;
 
         var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
         this.options = resolvedOptions;
-
-        this.relevantProperties = new HashSet<string>(resolvedOptions.ObservedProperties, StringComparer.Ordinal);
 
         this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
         this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
         this.synchronizationContext = SynchronizationContext.Current;
 
-        // Always observe source collection changes — the filtered view must stay in sync.
+        this.instanceMap = new Dictionary<T, FilteredTree.FilteredNode>(ReferenceEqualityComparer.Instance);
+        this.tree = new FilteredTree(new SourceOrderComparer(source), this.GetNode);
+        this.propertySubscribedItems = new HashSet<T>(ReferenceEqualityComparer.Instance);
+
         this.source.CollectionChanged += this.OnSourceCollectionChanged;
+        this.options.ObservedProperties.CollectionChanged += this.OnObservedPropertiesCollectionChanged;
 
-        // Listen for mutations of the ObservedProperties collection so the view can react to changes.
-        resolvedOptions.ObservedProperties.CollectionChanged += this.OnObservedPropertiesCollectionChanged;
-
-        this.filtered = [];
-        this.attachedItems = [];
-        this.propertySubscribedItems = [];
-        this.filteredSet = [];
-        this.suspendCount = 0;
-        this.hadChangesWhileSuspended = false;
-        this.disposed = false;
-
-        foreach (var item in this.source)
-        {
-            this.Attach(item);
-        }
+        this.RebuildAllFromSource();
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="FilteredObservableCollection{T}"/> class using a builder.
-    /// </summary>
-    /// <param name="source">The source collection to observe.</param>
-    /// <param name="viewBuilder">Builder that materializes the filtered projection.</param>
-    /// <param name="options">Settings controlling relevant properties, observation, and debounce.</param>
-    internal FilteredObservableCollection(
-        ObservableCollection<T> source,
-        IFilteredViewBuilder<T> viewBuilder,
-        FilteredObservableCollectionOptions options)
-    {
-        this.source = source ?? throw new ArgumentNullException(nameof(source));
-        this.viewBuilder = viewBuilder ?? throw new ArgumentNullException(nameof(viewBuilder));
-        this.filter = null;
-        this.useBuilder = true;
-
-        var resolvedOptions = options ?? FilteredObservableCollectionOptions.Default;
-        this.options = resolvedOptions;
-
-        this.relevantProperties = new HashSet<string>(resolvedOptions.ObservedProperties, StringComparer.Ordinal);
-
-        this.propertyChangedDebounceInterval = resolvedOptions.PropertyChangedDebounceInterval;
-        this.debounceEnabled = this.propertyChangedDebounceInterval > TimeSpan.Zero;
-        this.synchronizationContext = SynchronizationContext.Current;
-
-        this.source.CollectionChanged += this.OnSourceCollectionChanged;
-
-        resolvedOptions.ObservedProperties.CollectionChanged += this.OnObservedPropertiesCollectionChanged;
-
-        this.filtered = [];
-        this.attachedItems = [];
-        this.propertySubscribedItems = [];
-        this.filteredSet = [];
-        this.suspendCount = 0;
-        this.hadChangesWhileSuspended = false;
-        this.disposed = false;
-
-        foreach (var item in this.source)
-        {
-            this.Attach(item);
-        }
-
-        this.RebuildWithBuilder(resetOnly: false);
-    }
-
-    /// <summary>
-    ///     Occurs when the contents of the filtered view change.
-    ///     <para>
-    ///     Handlers receive <see cref="NotifyCollectionChangedEventArgs"/> describing adds,
-    ///     removes, moves and resets.
-    ///     </para>
+    ///     Occurs when the collection changes, either by adding or removing items.
     /// </summary>
     public event NotifyCollectionChangedEventHandler? CollectionChanged;
 
     /// <summary>
+    ///     Occurs when a property value changes.
+    /// </summary>
+    public event EventHandler<PropertyChangedEventArgs>? PropertyChanged;
+
+    /// <summary>
     ///     Gets the number of items in the filtered view.
     /// </summary>
-    public int Count => this.filtered.Count;
+    public int Count => this.disposed ? 0 : this.tree.IncludedCount;
 
     /// <summary>
-    ///     Gets a value indicating whether this list is read-only.
+    ///     Gets the item at the specified index in the filtered view.
     /// </summary>
-    /// <remarks>
-    ///     This type is a read-only projection; mutation APIs are not supported.
-    ///     We still implement <see cref="IList{T}"/> to enable consumers like WinUI's
-    ///     <c>Microsoft.UI.Xaml.Controls.ItemsRepeater</c> to use indexed access.
-    /// </remarks>
-    public bool IsReadOnly => true;
-
-    /// <inheritdoc/>
-    bool IList.IsReadOnly => true;
-
-    /// <inheritdoc/>
-    bool IList.IsFixedSize => true;
-
-    /// <inheritdoc/>
-    int ICollection.Count => this.filtered.Count;
-
-    /// <inheritdoc/>
-    bool ICollection.IsSynchronized => false;
-
-    /// <inheritdoc/>
-    object ICollection.SyncRoot => this;
-
-    /// <summary>
-    ///     Gets the element at the specified index in the filtered view.
-    /// </summary>
-    /// <param name="index">The zero-based index of the element to get.</param>
-    /// <returns>The element at the specified index.</returns>
+    /// <param name="index">The zero-based index of the item to get.</param>
+    /// <returns>The item at the specified index.</returns>
     /// <exception cref="ArgumentOutOfRangeException">
-    ///     If <paramref name="index"/> is outside the bounds of the view.
+    ///     Thrown when <paramref name="index"/> is less than 0 or greater than or equal to <see cref="Count"/>.
     /// </exception>
-    public T this[int index] => this.filtered[index];
-
-    /// <inheritdoc/>
-    object? IList.this[int index]
-    {
-        get => this.filtered[index];
-        set => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-    }
+    public T this[int index] => this.tree.SelectIncluded(index);
 
     /// <summary>
-    ///     Gets or sets the element at the specified index (explicit <see cref="IList{T}"/> implementation).
-    /// </summary>
-    /// <param name="index">The zero-based index of the element to get or set.</param>
-    /// <returns>The element at the specified index when getting.</returns>
-    /// <exception cref="NotSupportedException">Always thrown when setting a value.</exception>
-    T IList<T>.this[int index]
-    {
-        get => this.filtered[index];
-        set => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-    }
-
-    /// <inheritdoc/>
-    int IList.Add(object? value) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <inheritdoc/>
-    void IList.Clear() => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <inheritdoc/>
-    bool IList.Contains(object? value) => value is T item && this.Contains(item);
-
-    /// <inheritdoc/>
-    int IList.IndexOf(object? value) => value is T item ? this.IndexOf(item) : -1;
-
-    /// <inheritdoc/>
-    void IList.Insert(int index, object? value) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <inheritdoc/>
-    void IList.Remove(object? value) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <inheritdoc/>
-    void IList.RemoveAt(int index) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <inheritdoc/>
-    void ICollection.CopyTo(Array array, int index)
-    {
-        ArgumentNullException.ThrowIfNull(array);
-
-        if (array is T[] typed)
-        {
-            this.CopyTo(typed, index);
-            return;
-        }
-
-        for (var i = 0; i < this.filtered.Count; i++)
-        {
-            array.SetValue(this.filtered[i], index + i);
-        }
-    }
-
-    /// <summary>
-    ///     Adds an item to the list (explicit <see cref="ICollection{T}"/> implementation).
-    /// </summary>
-    /// <param name="item">The item to add.</param>
-    /// <exception cref="NotSupportedException">Always thrown.</exception>
-    void ICollection<T>.Add(T item) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <summary>
-    ///     Removes all items from the list.
-    /// </summary>
-    /// <exception cref="NotSupportedException">Always thrown.</exception>
-    void ICollection<T>.Clear() => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <summary>
-    ///     Determines whether the list contains a specific value.
+    ///     Determines whether the filtered view contains a specific item.
     /// </summary>
     /// <param name="item">The item to locate in the filtered view.</param>
-    /// <returns>True if the item is present; otherwise, false.</returns>
-    public bool Contains(T item) => this.filteredSet.Contains(item);
+    /// <returns><see langword="true"/> if the item is found in the filtered view; otherwise, <see langword="false"/>.</returns>
+    public bool Contains(T item) => this.instanceMap.TryGetValue(item, out var node) && node.Included;
 
     /// <summary>
-    ///     Copies the elements of the list to an array.
+    ///     Determines the index of a specific item in the filtered view.
     /// </summary>
-    /// <param name="array">The destination array.</param>
-    /// <param name="arrayIndex">The zero-based index in <paramref name="array"/> at which copying begins.</param>
-    public void CopyTo(T[] array, int arrayIndex) => this.filtered.CopyTo(array, arrayIndex);
-
-    /// <summary>
-    ///     Removes the first occurrence of a specific object from the list (explicit <see cref="ICollection{T}"/> implementation).
-    /// </summary>
-    /// <param name="item">The item to remove.</param>
-    /// <returns>Always throws <see cref="NotSupportedException"/>.</returns>
-    bool ICollection<T>.Remove(T item) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <summary>
-    ///     Determines the index of a specific item in the list.
-    /// </summary>
-    /// <param name="item">The item to locate.</param>
-    /// <returns>The index of the item if found; otherwise, -1.</returns>
-    public int IndexOf(T item) => this.filtered.IndexOf(item);
-
-    /// <summary>
-    ///     Inserts an item to the list at the specified index (explicit <see cref="IList{T}"/> implementation).
-    /// </summary>
-    /// <param name="index">The zero-based index at which to insert the item.</param>
-    /// <param name="item">The item to insert.</param>
-    /// <exception cref="NotSupportedException">Always thrown.</exception>
-    void IList<T>.Insert(int index, T item) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
-
-    /// <summary>
-    ///     Removes the list item at the specified index (explicit <see cref="IList{T}"/> implementation).
-    /// </summary>
-    /// <param name="index">The zero-based index of the element to remove.</param>
-    /// <exception cref="NotSupportedException">Always thrown.</exception>
-    void IList<T>.RemoveAt(int index) => throw new NotSupportedException("FilteredObservableCollection is read-only.");
+    /// <param name="item">The item to locate in the filtered view.</param>
+    /// <returns>The index of the item if found in the filtered view; otherwise, -1.</returns>
+    public int IndexOf(T item)
+        => this.instanceMap.TryGetValue(item, out var node) && node.Included
+            ? FilteredObservableCollection<T>.FilteredTree.RankIncluded(node)
+            : -1;
 
     /// <summary>
     ///     Returns an enumerator that iterates through the filtered view.
     /// </summary>
-    /// <returns>An enumerator for the filtered view.</returns>
-    public IEnumerator<T> GetEnumerator() => this.filtered.GetEnumerator();
+    /// <returns>An enumerator that can be used to iterate through the filtered view.</returns>
+    public IEnumerator<T> GetEnumerator() => this.tree.GetIncludedEnumerator(this.instanceMap);
 
-    /// <summary>
-    ///     Returns an enumerator that iterates through the filtered view (non-generic).
-    /// </summary>
-    /// <returns>An enumerator for the filtered view.</returns>
+    /// <inheritdoc />
     IEnumerator IEnumerable.GetEnumerator() => this.GetEnumerator();
 
     /// <summary>
-    ///     Re-applies the filter to the entire source collection and updates the view.
-    ///     Any change results in a <see cref="NotifyCollectionChangedAction.Reset"/> being raised.
+    ///     Defers collection change notifications until the returned <see cref="IDisposable"/> is disposed.
+    ///     This allows multiple changes to be batched together, resulting in a single reset notification.
+    /// </summary>
+    /// <returns>An <see cref="IDisposable"/> that, when disposed, resumes notifications and triggers a collection reset.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the collection has been disposed.</exception>
+    public IDisposable DeferNotifications()
+    {
+        ObjectDisposedException.ThrowIf(this.disposed, nameof(FilteredObservableCollection<>));
+        this.suspendCount++;
+        return new DeferHelper(this);
+    }
+
+    /// <summary>
+    ///     Forces a complete rebuild of the filtered view from the source collection.
+    ///     If notifications are currently deferred, the rebuild is performed silently.
     /// </summary>
     public void Refresh()
     {
@@ -317,107 +169,205 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
-        if (this.useBuilder)
+        if (this.suspendCount > 0)
         {
-            this.RebuildWithBuilder(resetOnly: true);
+            this.RebuildAllFromSource(suppressEvents: true);
+            return;
         }
-        else
-        {
-            this.filtered.Clear();
-            this.filteredSet.Clear();
-            foreach (var item in this.source)
-            {
-                if (this.filter!(item))
-                {
-                    this.filtered.Add(item);
-                    this.filteredSet.Add(item);
-                }
-            }
 
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-        }
+        this.RebuildAllFromSource(suppressEvents: false);
     }
 
     /// <summary>
-    ///     Temporarily suspends raising <see cref="CollectionChanged"/> events.
+    ///     Re-evaluates the filter predicate for all source items and applies the resulting changes
+    ///     incrementally (without emitting a Reset).
     /// </summary>
     /// <remarks>
-    ///     Use in a using-block:
-    ///     <code><![CDATA[
-    ///     using(var d = view.DeferNotifications()) { /* multiple changes */ }
-    ///     ]]></code>
-    ///     <para>
-    ///     When the returned <see cref="IDisposable"/> is disposed the events are resumed and a
-    ///     <see cref="NotifyCollectionChangedAction.Reset"/> will be raised if any changes occurred
-    ///     while suspended.
-    ///     </para>
+    ///     This is intended for scenarios where the predicate logic changes (for example, the UI
+    ///     switches a filter mode). It computes the required delta across the whole source and then
+    ///     applies it using the same delta pipeline as property-change driven updates.
     /// </remarks>
-    /// <returns>An <see cref="IDisposable"/> which when disposed resumes notifications.</returns>
-    /// <exception cref="ObjectDisposedException">If the view has already been disposed.</exception>
-    public IDisposable DeferNotifications()
-    {
-        ObjectDisposedException.ThrowIf(this.disposed, nameof(FilteredObservableCollection<>));
-
-        this.suspendCount++;
-        return new NotificationSuspender(this);
-    }
-
-    /// <summary>
-    ///     Releases the resources used by the <see cref="FilteredObservableCollection{T}"/>. This
-    ///     unsubscribes from the source collection and from item property changed events and clears
-    ///     the view.
-    /// </summary>
-    public void Dispose()
-    {
-        this.Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
-
-    /// <summary>
-    ///     Releases the unmanaged resources used by the <see cref="FilteredObservableCollection{T}"/>
-    ///     and optionally releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">
-    ///     If <see langword="true"/>, release both managed and unmanaged resources.
-    ///     If <see langword="false"/>, release only unmanaged resources.
-    /// </param>
-    private void Dispose(bool disposing)
+    public void ReevaluatePredicate()
     {
         if (this.disposed)
         {
             return;
         }
 
-        if (disposing)
+        if (this.suspendCount > 0)
         {
-            // Unsubscribe from source collection (we always observe source changes)
-            this.source.CollectionChanged -= this.OnSourceCollectionChanged;
+            this.RebuildAllFromSource(suppressEvents: true);
+            return;
+        }
 
-            // Unsubscribe from ObservedProperties collection notifications
-            this.options.ObservedProperties.CollectionChanged -= this.OnObservedPropertiesCollectionChanged;
+        var delta = new Delta();
+        var pendingNodeState = new Dictionary<T, PendingNodeState>(ReferenceEqualityComparer.Instance);
+        var processedAnything = false;
 
-            // Unsubscribe from any per-item property subscriptions
-            foreach (var item in this.propertySubscribedItems.ToList())
+        foreach (var item in this.source)
+        {
+            if (!this.instanceMap.TryGetValue(item, out var node))
+            {
+                continue;
+            }
+
+            if (this.TryAccumulatePropertyChangeDelta(item, node, delta, pendingNodeState))
+            {
+                processedAnything = true;
+            }
+        }
+
+        if (!processedAnything)
+        {
+            return;
+        }
+
+        if (delta.Changes.Count > 0)
+        {
+            _ = this.ApplyDelta(delta, suppressEvents: false);
+        }
+
+        FilteredObservableCollection<T>.ApplyPendingNodeState(pendingNodeState);
+    }
+
+    /// <summary>
+    ///     Releases all resources used by the <see cref="FilteredObservableCollection{T}"/>.
+    ///     This includes unsubscribing from all event handlers and clearing internal state.
+    /// </summary>
+    public void Dispose()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        this.disposed = true;
+
+        this.source.CollectionChanged -= this.OnSourceCollectionChanged;
+        this.options.ObservedProperties.CollectionChanged -= this.OnObservedPropertiesCollectionChanged;
+
+        foreach (var item in this.propertySubscribedItems)
+        {
+            if (item is INotifyPropertyChanged notify)
+            {
+                notify.PropertyChanged -= this.OnItemPropertyChanged;
+            }
+        }
+
+        this.propertySubscribedItems.Clear();
+
+        this.debounceTimer?.Dispose();
+        this.instanceMap.Clear();
+
+        this.tree = null!;
+    }
+
+    private static int IndexOfReference(IReadOnlyList<T> list, T item)
+    {
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (ReferenceEquals(list[i], item))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static void ApplyPendingNodeState(Dictionary<T, PendingNodeState> pending)
+    {
+        foreach (var kvp in pending)
+        {
+            var state = kvp.Value;
+            if (state.HasPredicateMatchedUpdate)
+            {
+                state.Node.PredicateMatched = state.PredicateMatched;
+            }
+
+            if (state.HasCachedDependenciesUpdate)
+            {
+                state.Node.CachedDependencies = state.CachedDependencies;
+            }
+        }
+    }
+
+    private FilteredTree.FilteredNode GetNode(T item) => this.instanceMap[item];
+
+    private void RebuildAllFromSource(bool suppressEvents = false)
+    {
+        this.tree = new FilteredTree(new SourceOrderComparer(this.source), this.GetNode);
+
+        this.instanceMap.Clear();
+
+        foreach (var item in this.propertySubscribedItems)
+        {
+            if (item is INotifyPropertyChanged notify)
+            {
+                notify.PropertyChanged -= this.OnItemPropertyChanged;
+            }
+        }
+
+        this.propertySubscribedItems.Clear();
+
+        foreach (var item in this.source)
+        {
+            this.AttachItem(item);
+        }
+
+        this.CalculateInclusionForBatch(this.source, suppressEvents: true);
+
+        if (!suppressEvents)
+        {
+            this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.OnPropertyChanged(nameof(this.Count));
+            this.OnPropertyChanged("Item[]");
+        }
+    }
+
+    private void AttachItem(T item)
+    {
+        if (this.instanceMap.ContainsKey(item))
+        {
+            return;
+        }
+
+        var node = new FilteredTree.FilteredNode(item);
+        this.instanceMap[item] = node;
+
+        /* Do not add to tree here; CalculateInclusionForBatch/ApplyDelta will add if included.*/
+
+        if (item is INotifyPropertyChanged notify && this.ShouldObserveProperties())
+        {
+            notify.PropertyChanged += this.OnItemPropertyChanged;
+            this.propertySubscribedItems.Add(item);
+        }
+    }
+
+    private void DetachItem(T item)
+    {
+        if (this.instanceMap.TryGetValue(item, out var node))
+        {
+            // Nodes are only added to the tree when included (RefCount > 0).
+            // Source-removal processing may already have removed the node via ApplyDelta.
+            // Avoid double-removal and avoid removing nodes that were never added.
+            if (node.Included)
+            {
+                this.tree.RemoveNode(node);
+            }
+
+            _ = this.instanceMap.Remove(item);
+
+            if (this.propertySubscribedItems.Contains(item))
             {
                 if (item is INotifyPropertyChanged notify)
                 {
                     notify.PropertyChanged -= this.OnItemPropertyChanged;
                 }
+
+                _ = this.propertySubscribedItems.Remove(item);
             }
-
-            this.propertySubscribedItems.Clear();
-            this.attachedItems.Clear();
-            this.filteredSet.Clear();
-            this.filtered.Clear();
-
-            this.debounceTimer?.Dispose();
-            this.debounceTimer = null;
-
-            // Drop subscribers to our event
-            this.CollectionChanged = null;
         }
-
-        this.disposed = true;
     }
 
     private void OnSourceCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
@@ -427,542 +377,705 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
             return;
         }
 
-        switch (e.Action)
+        if (this.suspendCount > 0)
         {
-            case NotifyCollectionChangedAction.Add:
-                this.HandleAdd(e);
-                break;
-
-            case NotifyCollectionChangedAction.Remove:
-                this.HandleRemove(e);
-                break;
-
-            case NotifyCollectionChangedAction.Move:
-                this.HandleMove(e);
-                break;
-
-            case NotifyCollectionChangedAction.Replace:
-                this.HandleReplace(e);
-                break;
-
-            case NotifyCollectionChangedAction.Reset:
-            default:
-                this.HandleReset();
-                break;
-        }
-    }
-
-    // We observe item changes only when there is at least one observed property configured.
-    private bool IsObservingItemChanges() => this.options.ObservedProperties.Count > 0;
-
-    private void OnObservedPropertiesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        // Recompute set of relevant properties
-        this.relevantProperties.Clear();
-        if (this.options?.ObservedProperties is { } obs)
-        {
-            foreach (var p in obs)
-            {
-                this.relevantProperties.Add(p);
-            }
-        }
-
-        var nowObserving = this.IsObservingItemChanges();
-
-        // If we should observe item changes now, attach handlers for currently attached items
-        if (nowObserving)
-        {
-            foreach (var item in this.attachedItems)
-            {
-                if (item is INotifyPropertyChanged notify && this.propertySubscribedItems.Add(item))
-                {
-                    notify.PropertyChanged += this.OnItemPropertyChanged;
-                }
-            }
-
-            // Enable immediate rebuild so the view immediately reflects current item properties.
-            this.RebuildFilteredView(resetOnly: true);
+            this.RebuildAllFromSource(suppressEvents: true);
             return;
         }
 
-        // Otherwise ensure we unsubscribe from any existing subscriptions
-        foreach (var item in this.propertySubscribedItems.ToList())
+        // Local handlers keep the method compact while preserving original logic.
+        void HandleAdd()
         {
-            if (item is INotifyPropertyChanged notify)
+            if (e.NewItems == null)
             {
-                notify.PropertyChanged -= this.OnItemPropertyChanged;
-            }
-        }
-
-        this.propertySubscribedItems.Clear();
-    }
-
-    private void HandleAdd(NotifyCollectionChangedEventArgs e)
-    {
-        if (e.NewItems == null)
-        {
-            return;
-        }
-
-        if (this.useBuilder)
-        {
-            foreach (T item in e.NewItems)
-            {
-                this.Attach(item);
+                return;
             }
 
-            if (this.debounceEnabled)
+            var added = e.NewItems.Cast<T>().ToList();
+            foreach (var item in added)
             {
-                this.ScheduleDebouncedRebuild();
-            }
-            else
-            {
-                this.RebuildWithBuilder(resetOnly: true);
+                this.AttachItem(item);
             }
 
-            return;
+            this.CalculateInclusionForBatch(added, suppressEvents: false);
         }
 
-        foreach (T item in e.NewItems)
+        void HandleRemove()
         {
-            // Attach (subscribe) and let Attach add to filtered if it matches.
-            this.Attach(item);
-
-            if (this.filteredSet.Contains(item))
+            if (e.OldItems == null)
             {
-                var index = this.filtered.IndexOf(item);
-                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
-            }
-        }
-    }
-
-    private void HandleRemove(NotifyCollectionChangedEventArgs e)
-    {
-        if (e.OldItems == null)
-        {
-            return;
-        }
-
-        if (this.useBuilder)
-        {
-            foreach (T item in e.OldItems)
-            {
-                this.Detach(item);
+                return;
             }
 
-            if (this.debounceEnabled)
-            {
-                this.ScheduleDebouncedRebuild();
-            }
-            else
-            {
-                this.RebuildWithBuilder(resetOnly: true);
-            }
-
-            return;
+            var removed = e.OldItems.Cast<T>().ToList();
+            this.ProcessSourceRemovals(removed);
         }
 
-        foreach (T item in e.OldItems)
-        {
-            var index = this.filtered.IndexOf(item);
-            this.Detach(item);
-            if (index >= 0)
-            {
-                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
-            }
-        }
-    }
-
-    private void HandleMove(NotifyCollectionChangedEventArgs e)
-    {
-        if (this.useBuilder)
-        {
-            this.ScheduleDebouncedRebuild();
-            return;
-        }
-
-        if (e.OldItems == null)
-        {
-            return;
-        }
-
-        foreach (T item in e.OldItems)
-        {
-            var oldIndex = this.filtered.IndexOf(item);
-            if (oldIndex >= 0)
-            {
-                // remove from current position
-                this.filtered.RemoveAt(oldIndex);
-                _ = this.filteredSet.Remove(item);
-
-                // compute new index according to the new source order
-                var newIndex = this.ComputeInsertIndex(item);
-                this.filtered.Insert(newIndex, item);
-                this.filteredSet.Add(item);
-
-                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Move, item, newIndex, oldIndex));
-            }
-        }
-    }
-
-    private void HandleReplace(NotifyCollectionChangedEventArgs e)
-    {
-        if (this.useBuilder)
+        void HandleReplace()
         {
             if (e.OldItems != null)
             {
-                foreach (T oldItem in e.OldItems)
-                {
-                    this.Detach(oldItem);
-                }
+                this.ProcessSourceRemovals([.. e.OldItems.Cast<T>()]);
             }
 
-            if (e.NewItems != null)
+            if (e.NewItems == null)
             {
-                foreach (T newItem in e.NewItems)
-                {
-                    this.Attach(newItem);
-                }
+                return;
             }
 
-            if (this.debounceEnabled)
+            var added = e.NewItems.Cast<T>().ToList();
+            foreach (var item in added)
             {
-                this.ScheduleDebouncedRebuild();
-            }
-            else
-            {
-                this.RebuildWithBuilder(resetOnly: true);
+                this.AttachItem(item);
             }
 
-            return;
+            this.CalculateInclusionForBatch(added, suppressEvents: false);
         }
 
-        if (e.OldItems != null)
+        void HandleMove()
         {
-            foreach (T oldItem in e.OldItems)
+            if (e.OldItems?.Count == 1)
             {
-                var index = this.filtered.IndexOf(oldItem);
-                this.Detach(oldItem);
-                if (index >= 0)
+                var item = (T)e.OldItems[0]!;
+                if (this.instanceMap.TryGetValue(item, out var node) && node.Included)
                 {
-                    this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, oldItem, index));
+                    var oldIndex = FilteredTree.RankIncluded(node);
+                    this.tree.RemoveNode(node);
+                    this.tree.AddNode(node);
+                    var newIndex = FilteredTree.RankIncluded(node);
+                    this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Move, item, newIndex, oldIndex));
                 }
+            }
+            else if (e.OldItems != null)
+            {
+                var movedItems = e.OldItems.Cast<T>().ToList();
+                foreach (var item in movedItems)
+                {
+                    if (this.instanceMap.TryGetValue(item, out var node) && node.Included)
+                    {
+                        this.tree.RemoveNode(node);
+                        this.tree.AddNode(node);
+                    }
+                }
+
+                this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
             }
         }
 
-        if (e.NewItems != null)
+        void HandleReset() => this.RebuildAllFromSource(suppressEvents: false);
+
+        switch (e.Action)
         {
-            foreach (T newItem in e.NewItems)
-            {
-                this.Attach(newItem);
-                if (this.filteredSet.Contains(newItem))
-                {
-                    var index = this.filtered.IndexOf(newItem);
-                    this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, newItem, index));
-                }
-            }
+            case NotifyCollectionChangedAction.Add:
+                HandleAdd();
+                break;
+            case NotifyCollectionChangedAction.Remove:
+                HandleRemove();
+                break;
+            case NotifyCollectionChangedAction.Replace:
+                HandleReplace();
+                break;
+            case NotifyCollectionChangedAction.Move:
+                HandleMove();
+                break;
+            case NotifyCollectionChangedAction.Reset:
+                HandleReset();
+                break;
         }
     }
 
-    // Rebuild all subscriptions and the view
-    private void HandleReset() => this.RebuildAllFromSource();
-
-    private void Attach(T item)
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "no logical split is obvious")]
+    private void ProcessSourceRemovals(List<T> removedItems)
     {
-        // Only subscribe once per item
-        if (this.attachedItems.Add(item))
+        var delta = new Delta();
+        var pendingNodeState = new Dictionary<T, PendingNodeState>(ReferenceEqualityComparer.Instance);
+        var sawReferencedRemoval = false;
+
+        foreach (var item in removedItems)
         {
-            if (this.IsObservingItemChanges())
+            if (this.instanceMap.TryGetValue(item, out var node))
             {
-                if (item is INotifyPropertyChanged notify)
+                /* The source collection has already removed the item at this point.
+                   Do not call the builder here. Instead, remove the contributions that were previously applied.*/
+
+                if (!node.PredicateMatched && node.RefCount > 0)
                 {
-                    if (this.propertySubscribedItems.Add(item))
+                    // The item is included only because other triggers reference it, but it is no longer in the source.
+                    // Keep the view consistent with the source by forcing removal and reporting a contract violation.
+                    sawReferencedRemoval = true;
+                    delta.AddChange(item, -node.RefCount);
+                }
+
+                if (node.PredicateMatched)
+                {
+                    delta.AddChange(item, -1);
+                }
+
+                if (this.viewBuilder is not null && node.CachedDependencies is not null)
+                {
+                    foreach (var dep in node.CachedDependencies)
                     {
-                        notify.PropertyChanged += this.OnItemPropertyChanged;
+                        delta.AddChange(dep, -1);
+                    }
+
+                    PendingNodeState.For(pendingNodeState, item, node).SetCachedDependencies(value: null);
+                }
+
+                PendingNodeState.For(pendingNodeState, item, node).SetPredicateMatched(value: false);
+
+                if (this.viewBuilder is not null)
+                {
+                    // Cleanse cached dependency sets on remaining nodes to ensure future deltas do not reference
+                    // removed items.
+                    foreach (var entry in this.instanceMap)
+                    {
+                        var otherNode = entry.Value;
+                        var deps = otherNode.CachedDependencies;
+                        if (deps is null || deps.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        if (!deps.Contains(item))
+                        {
+                            continue;
+                        }
+
+                        var copy = new HashSet<T>(deps, ReferenceEqualityComparer.Instance);
+                        _ = copy.Remove(item);
+                        PendingNodeState.For(pendingNodeState, entry.Key, otherNode).SetCachedDependencies(copy);
                     }
                 }
             }
         }
 
-        if (this.useBuilder)
+        _ = this.ApplyDelta(delta, suppressEvents: sawReferencedRemoval);
+        FilteredObservableCollection<T>.ApplyPendingNodeState(pendingNodeState);
+
+        foreach (var item in removedItems)
         {
-            return;
+            this.DetachItem(item);
         }
 
-        if (this.filter is not null && this.filter(item))
+        if (sawReferencedRemoval)
         {
-            var index = this.ComputeInsertIndex(item);
-            this.filtered.Insert(index, item);
-            this.filteredSet.Add(item);
+            throw new InvalidOperationException("A source item was removed while still referenced by the filtered view. This violates the builder contract.");
         }
     }
 
-    private void Detach(T item)
+    private void CalculateInclusionForBatch(IEnumerable<T> items, bool suppressEvents)
     {
-        if (this.attachedItems.Remove(item))
+        var delta = new Delta();
+        var pendingNodeState = new Dictionary<T, PendingNodeState>(ReferenceEqualityComparer.Instance);
+        foreach (var item in items)
         {
-            if (this.propertySubscribedItems.Remove(item))
+            var predicateIncluded = this.filter(item);
+            if (this.instanceMap.TryGetValue(item, out var node))
             {
-                if (item is INotifyPropertyChanged notify)
-                {
-                    notify.PropertyChanged -= this.OnItemPropertyChanged;
-                }
+                PendingNodeState.For(pendingNodeState, item, node).SetPredicateMatched(predicateIncluded);
+            }
+
+            if (predicateIncluded)
+            {
+                this.AccumulateDelta(delta, pendingNodeState, item, triggerIncluded: true, sourceList: this.source, negate: false);
             }
         }
 
-        var removed = this.filtered.Remove(item);
-        if (removed)
+        if (delta.Changes.Count > 0)
         {
-            _ = this.filteredSet.Remove(item);
+            _ = this.ApplyDelta(delta, suppressEvents);
         }
+
+        FilteredObservableCollection<T>.ApplyPendingNodeState(pendingNodeState);
     }
 
     private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (this.disposed)
-        {
-            return;
-        }
-
-        if (sender is not T item)
-        {
-            return;
-        }
-
-        if (!this.IsObservingItemChanges())
-        {
-            return;
-        }
-
-        var isRelevant = string.IsNullOrEmpty(e.PropertyName) || this.relevantProperties.Contains(e.PropertyName);
-        if (!isRelevant)
+        if (this.disposed || sender is not T item)
         {
             return;
         }
 
         if (this.debounceEnabled)
         {
-            // Accumulate changed items while coalescing; the debounced handler will process them incrementally for predicate-based views.
-            this.dirtyItems.Add(item);
-            this.ScheduleDebouncedRebuild();
-            return;
-        }
-
-        if (this.useBuilder)
-        {
-            this.RebuildWithBuilder(resetOnly: true);
-            return;
-        }
-
-        var inFiltered = this.filteredSet.Contains(item);
-        var shouldBeIn = this.filter!(item);
-
-        if (inFiltered && !shouldBeIn)
-        {
-            var index = this.filtered.IndexOf(item);
-            if (index >= 0)
+            lock (this.debounceGate)
             {
-                this.filtered.RemoveAt(index);
-                _ = this.filteredSet.Remove(item);
-                this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
-            }
-        }
-        else if (!inFiltered && shouldBeIn)
-        {
-            var index = this.ComputeInsertIndex(item);
-            this.filtered.Insert(index, item);
-            this.filteredSet.Add(item);
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
-        }
-    }
-
-    private void ScheduleDebouncedRebuild()
-    {
-        if (!this.debounceEnabled)
-        {
-            this.RebuildFilteredView(resetOnly: true);
-            return;
-        }
-
-        using (this.debounceGate.EnterScope())
-        {
-            this.debouncePending = true;
-
-            if (this.debounceTimer is null)
-            {
-                this.debounceTimer = new Timer(
-                    this.OnDebounceTimer,
-                    state: null,
-                    dueTime: this.propertyChangedDebounceInterval,
-                    period: Timeout.InfiniteTimeSpan);
-                return;
+                this.dirtyItems.Add(item);
+                if (!this.debouncePending)
+                {
+                    this.debouncePending = true;
+                    _ = this.debounceTimer?.Change(this.propertyChangedDebounceInterval, Timeout.InfiniteTimeSpan);
+                    this.debounceTimer ??= new Timer(_ => this.ProcessDebounce(), state: null, this.propertyChangedDebounceInterval, Timeout.InfiniteTimeSpan);
+                }
             }
 
-            // Always push the due time so multiple rapid changes coalesce into a single rebuild after the last change.
-            _ = this.debounceTimer.Change(this.propertyChangedDebounceInterval, Timeout.InfiniteTimeSpan);
+            return;
         }
-    }
 
-    private void OnDebounceTimer(object? state)
-    {
-        if (this.disposed)
+        if (!this.ShouldObserveProperties() || string.IsNullOrEmpty(e.PropertyName))
         {
             return;
         }
 
-        void Dispatch()
+        if (!this.options.ObservedProperties.Contains(e.PropertyName, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        if (!this.instanceMap.TryGetValue(item, out var node))
+        {
+            return;
+        }
+
+        var delta = new Delta();
+
+        var pendingNodeState = new Dictionary<T, PendingNodeState>(ReferenceEqualityComparer.Instance);
+
+        if (!this.TryAccumulatePropertyChangeDelta(item, node, delta, pendingNodeState))
+        {
+            return;
+        }
+
+        if (delta.Changes.Count > 0)
+        {
+            _ = this.ApplyDelta(delta, suppressEvents: false);
+        }
+
+        FilteredObservableCollection<T>.ApplyPendingNodeState(pendingNodeState);
+    }
+
+    private void ProcessDebounce()
+    {
+        var callback = new SendOrPostCallback(_ =>
         {
             if (this.disposed)
             {
                 return;
             }
 
-            using (this.debounceGate.EnterScope())
+            List<T> batch;
+            lock (this.debounceGate)
             {
-                if (!this.debouncePending)
+                batch = [.. this.dirtyItems];
+                this.dirtyItems.Clear();
+                this.debouncePending = false;
+            }
+
+            var delta = new Delta();
+            var pendingNodeState = new Dictionary<T, PendingNodeState>(ReferenceEqualityComparer.Instance);
+            var processedAnything = false;
+
+            foreach (var item in batch)
+            {
+                if (!this.instanceMap.TryGetValue(item, out var node))
+                {
+                    continue;
+                }
+
+                if (this.TryAccumulatePropertyChangeDelta(item, node, delta, pendingNodeState))
+                {
+                    processedAnything = true;
+                }
+            }
+
+            if (!processedAnything)
+            {
+                return;
+            }
+
+            if (delta.Changes.Count > 0)
+            {
+                _ = this.ApplyDelta(delta, suppressEvents: false);
+            }
+
+            FilteredObservableCollection<T>.ApplyPendingNodeState(pendingNodeState);
+        });
+
+        if (this.synchronizationContext != null)
+        {
+            this.synchronizationContext.Post(callback, state: null);
+        }
+        else
+        {
+            callback(state: null);
+        }
+    }
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0051:Method is too long", Justification = "no logical split is obvious")]
+    private bool TryAccumulatePropertyChangeDelta(
+        T item,
+        FilteredTree.FilteredNode node,
+        Delta delta,
+        Dictionary<T, PendingNodeState> pendingNodeState)
+    {
+        var wasMatched = node.PredicateMatched;
+        var isMatched = this.filter(item);
+
+        if (this.viewBuilder is null)
+        {
+            if (wasMatched == isMatched)
+            {
+                return false;
+            }
+
+            delta.AddChange(item, isMatched ? 1 : -1);
+            PendingNodeState.For(pendingNodeState, item, node).SetPredicateMatched(isMatched);
+            return true;
+        }
+
+        // Builder path
+        if (!wasMatched && !isMatched)
+        {
+            // Nothing to do; avoid generating a spurious Reset.
+            return false;
+        }
+
+        var oldDependencies = node.CachedDependencies;
+
+        var nodeUpdate = PendingNodeState.For(pendingNodeState, item, node);
+
+        if (wasMatched && !isMatched)
+        {
+            if (oldDependencies is not null)
+            {
+                foreach (var dep in oldDependencies)
+                {
+                    delta.AddChange(dep, -1);
+                }
+            }
+
+            delta.AddChange(item, -1);
+            nodeUpdate.SetCachedDependencies(value: null);
+            nodeUpdate.SetPredicateMatched(value: false);
+            return true;
+        }
+
+        if (!wasMatched && isMatched)
+        {
+            delta.AddChange(item, 1);
+            var depsNew = this.viewBuilder.BuildForChangedItem(item, becameIncluded: true, this.source);
+            this.ValidateBuilderDependencies(depsNew, this.source);
+            nodeUpdate.SetCachedDependencies(depsNew);
+            foreach (var dep in depsNew)
+            {
+                delta.AddChange(dep, 1);
+            }
+
+            nodeUpdate.SetPredicateMatched(value: true);
+            return true;
+        }
+
+        // wasMatched && isMatched
+        var updatedDependencies = this.viewBuilder.BuildForChangedItem(item, becameIncluded: true, this.source);
+        this.ValidateBuilderDependencies(updatedDependencies, this.source);
+        nodeUpdate.SetCachedDependencies(updatedDependencies);
+
+        if (oldDependencies is null)
+        {
+            foreach (var dep in updatedDependencies)
+            {
+                delta.AddChange(dep, 1);
+            }
+        }
+        else
+        {
+            var updatedLookup = new HashSet<T>(updatedDependencies, ReferenceEqualityComparer.Instance);
+            foreach (var dep in oldDependencies)
+            {
+                if (!updatedLookup.Contains(dep))
+                {
+                    delta.AddChange(dep, -1);
+                }
+            }
+
+            var oldLookup = new HashSet<T>(oldDependencies, ReferenceEqualityComparer.Instance);
+            foreach (var dep in updatedDependencies)
+            {
+                if (!oldLookup.Contains(dep))
+                {
+                    delta.AddChange(dep, 1);
+                }
+            }
+        }
+
+        nodeUpdate.SetPredicateMatched(value: true);
+        return true;
+    }
+
+    private void AccumulateDelta(
+        Delta delta,
+        Dictionary<T, PendingNodeState> pendingNodeState,
+        T item,
+        bool triggerIncluded,
+        IReadOnlyList<T> sourceList,
+        bool negate = false)
+    {
+        var change = triggerIncluded ? 1 : -1;
+        if (negate)
+        {
+            change = -change;
+        }
+
+        delta.AddChange(item, change);
+
+        if (this.viewBuilder != null)
+        {
+            _ = this.instanceMap.TryGetValue(item, out var node);
+            IReadOnlySet<T> dependencies;
+            if (negate && triggerIncluded && node?.CachedDependencies != null)
+            {
+                dependencies = node.CachedDependencies;
+                PendingNodeState.For(pendingNodeState, item, node).SetCachedDependencies(value: null);
+            }
+            else
+            {
+                dependencies = this.viewBuilder.BuildForChangedItem(item, triggerIncluded, sourceList);
+                this.ValidateBuilderDependencies(dependencies, sourceList);
+                if (!negate && triggerIncluded && node != null)
+                {
+                    PendingNodeState.For(pendingNodeState, item, node).SetCachedDependencies(dependencies);
+                }
+            }
+
+            foreach (var dep in dependencies)
+            {
+                delta.AddChange(dep, change);
+            }
+        }
+    }
+
+    private bool ApplyDelta(Delta delta, bool suppressEvents)
+    {
+        var plans = BuildPlans(delta);
+
+        var removals = plans
+            .Where(p => p.WasIncluded && !p.IsIncluded)
+            .OrderByDescending(p => p.RemovalIndex)
+            .ThenByDescending(p => p.SourceIndex)
+            .ToList();
+
+        var additions = plans
+            .Where(p => !p.WasIncluded && p.IsIncluded)
+            .OrderBy(p => p.SourceIndex)
+            .ToList();
+
+        var updates = plans
+            .Where(p => p.WasIncluded == p.IsIncluded)
+            .ToList();
+
+        var anyStructuralChanges = removals.Count > 0 || additions.Count > 0;
+
+        if (suppressEvents)
+        {
+            ApplyWithoutEvents(removals, additions, updates);
+            return anyStructuralChanges;
+        }
+
+        ApplyRemovalsWithEvents(removals);
+        ApplyAdditionsWithEvents(additions);
+        ApplyUpdates(updates);
+
+        if (anyStructuralChanges)
+        {
+            this.OnPropertyChanged(nameof(this.Count));
+            this.OnPropertyChanged("Item[]");
+        }
+
+        return anyStructuralChanges;
+
+        List<DeltaPlanEntry> BuildPlans(Delta deltaToPlan)
+        {
+            var planned = new List<DeltaPlanEntry>();
+
+            foreach (var kvp in deltaToPlan.Changes)
+            {
+                var item = kvp.Key;
+                var change = kvp.Value;
+
+                if (!this.instanceMap.TryGetValue(item, out var node))
+                {
+                    throw new InvalidOperationException("Delta contains an item that is not present in the source instance map. This violates the builder contract.");
+                }
+
+                var oldRef = node.RefCount;
+                var newRef = oldRef + change;
+                if (newRef < 0)
+                {
+                    throw new InvalidOperationException("Delta would cause a negative reference count. This violates the builder contract.");
+                }
+
+                var wasIncluded = oldRef > 0;
+                var isIncluded = newRef > 0;
+
+                var sourceIndex = GetSourceIndexOrMax(item);
+
+                int? removalIndex = null;
+                if (wasIncluded && !isIncluded)
+                {
+                    // Capture the index from the pre-change tree state.
+                    removalIndex = FilteredObservableCollection<T>.FilteredTree.RankIncluded(node);
+                    removalIndex = FilteredTree.RankIncluded(node);
+                }
+
+                planned.Add(new DeltaPlanEntry(item, node, oldRef, newRef, wasIncluded, isIncluded, sourceIndex, removalIndex));
+            }
+
+            return planned;
+        }
+
+        int GetSourceIndexOrMax(T item)
+        {
+            var sourceIndex = IndexOfReference(this.source, item);
+            if (sourceIndex < 0)
+            {
+                // Deterministic fallback ordering for items that are no longer in source.
+                return int.MaxValue;
+            }
+
+            return sourceIndex;
+        }
+
+        void ApplyWithoutEvents(List<DeltaPlanEntry> removalPlans, List<DeltaPlanEntry> additionPlans, List<DeltaPlanEntry> updatePlans)
+        {
+            foreach (var removal in removalPlans)
+            {
+                this.tree.RemoveNode(removal.Node);
+                removal.Node.RefCount = removal.NewRef;
+            }
+
+            foreach (var addition in additionPlans)
+            {
+                addition.Node.RefCount = addition.NewRef;
+                this.tree.AddNode(addition.Node);
+            }
+
+            foreach (var update in updatePlans)
+            {
+                update.Node.RefCount = update.NewRef;
+            }
+        }
+
+        void ApplyRemovalsWithEvents(List<DeltaPlanEntry> removalPlans)
+        {
+            List<T>? runRemovedItemsDescending = null;
+            var runStartingIndex = -1;
+            var previousIndex = -1;
+
+            void FlushRemovalRun()
+            {
+                if (runRemovedItemsDescending is null || runRemovedItemsDescending.Count == 0)
                 {
                     return;
                 }
 
-                this.debouncePending = false;
+                runRemovedItemsDescending.Reverse();
+                this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, runRemovedItemsDescending, runStartingIndex));
+                runRemovedItemsDescending = null;
             }
 
-            // If we're using a builder the safe default is to perform a reset rebuild; otherwise
-            // we can process the set of dirty items accumulated during the debounce window
-            // and apply incremental adds/removes to minimize Reset events.
-            if (this.useBuilder)
+            foreach (var removal in removalPlans)
             {
-                this.RebuildFilteredView(resetOnly: true);
-                return;
-            }
+                var index = removal.RemovalIndex!.Value;
 
-            // Incrementally process each dirty item and apply per-item diffs
-            var itemsToProcess = this.dirtyItems.ToList();
-            this.dirtyItems.Clear();
-            foreach (var item in itemsToProcess)
-            {
-                var inFiltered = this.filteredSet.Contains(item);
-                var shouldBeIn = this.filter!(item);
-
-                if (inFiltered && !shouldBeIn)
+                if (runRemovedItemsDescending is not null && index != previousIndex - 1)
                 {
-                    var index = this.filtered.IndexOf(item);
-                    if (index >= 0)
-                    {
-                        this.filtered.RemoveAt(index);
-                        _ = this.filteredSet.Remove(item);
-                        this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index));
-                    }
+                    FlushRemovalRun();
                 }
-                else if (!inFiltered && shouldBeIn)
+
+                runRemovedItemsDescending ??= [];
+
+                // Start index for a contiguous descending run is the lowest index encountered.
+                runStartingIndex = index;
+                previousIndex = index;
+
+                // Apply the mutation before raising the event to keep Count consistent.
+                this.tree.RemoveNode(removal.Node);
+                removal.Node.RefCount = removal.NewRef;
+                runRemovedItemsDescending.Add(removal.Item);
+            }
+
+            FlushRemovalRun();
+        }
+
+        void ApplyAdditionsWithEvents(List<DeltaPlanEntry> additionPlans)
+        {
+            List<T>? runAddedItems = null;
+            var addRunStartingIndex = -1;
+
+            void FlushAdditionRun()
+            {
+                if (runAddedItems is null || runAddedItems.Count == 0)
                 {
-                    var index = this.ComputeInsertIndex(item);
-                    this.filtered.Insert(index, item);
-                    this.filteredSet.Add(item);
-                    this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index));
+                    return;
                 }
+
+                this.OnCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, runAddedItems, addRunStartingIndex));
+                runAddedItems = null;
+                addRunStartingIndex = -1;
             }
-        }
 
-        if (this.synchronizationContext is not null)
-        {
-            this.synchronizationContext.Post(_ => Dispatch(), state: null);
-            return;
-        }
-
-        Dispatch();
-    }
-
-    private int ComputeInsertIndex(T item)
-    {
-        // Maintain same ordering as source.
-        // Optimized: iterate the source up to the item's position and count how many of those
-        // are currently present in the filtered view. This avoids repeated IndexOf calls.
-        var count = 0;
-        var comparer = EqualityComparer<T>.Default;
-
-        for (var i = 0; i < this.source.Count; i++)
-        {
-            var s = this.source[i];
-            if (comparer.Equals(s, item))
+            foreach (var addition in additionPlans)
             {
-                break;
+                var insertionIndex = this.tree.Rank(addition.Item);
+
+                if (runAddedItems is not null && insertionIndex != addRunStartingIndex + runAddedItems.Count)
+                {
+                    FlushAdditionRun();
+                }
+
+                if (runAddedItems is null)
+                {
+                    runAddedItems = [];
+                    addRunStartingIndex = insertionIndex;
+                }
+
+                addition.Node.RefCount = addition.NewRef;
+                this.tree.AddNode(addition.Node);
+                runAddedItems.Add(addition.Item);
             }
 
-            if (this.filteredSet.Contains(s))
+            FlushAdditionRun();
+        }
+
+        void ApplyUpdates(List<DeltaPlanEntry> updatePlans)
+        {
+            foreach (var update in updatePlans)
             {
-                count++;
+                update.Node.RefCount = update.NewRef;
             }
         }
-
-        return count;
     }
 
-    private void ResumeNotifications()
+    private void ValidateBuilderDependencies(IReadOnlySet<T> dependencies, IReadOnlyList<T> sourceList)
     {
-        if (this.suspendCount <= 0)
+        foreach (var dep in dependencies)
         {
-            return;
-        }
-
-        this.suspendCount--;
-        if (this.suspendCount == 0 && this.hadChangesWhileSuspended)
-        {
-            this.hadChangesWhileSuspended = false;
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
-        }
-    }
-
-    private void RaiseCollectionChanged(NotifyCollectionChangedEventArgs args)
-    {
-        if (this.suspendCount > 0)
-        {
-            this.hadChangesWhileSuspended = true;
-            return;
-        }
-
-        this.CollectionChanged?.Invoke(this, args);
-    }
-
-    private void RebuildFilteredView(bool resetOnly)
-    {
-        if (this.useBuilder)
-        {
-            this.RebuildWithBuilder(resetOnly);
-            return;
-        }
-
-        if (this.filter is null)
-        {
-            return;
-        }
-
-        this.filtered.Clear();
-        this.filteredSet.Clear();
-
-        foreach (var item in this.source)
-        {
-            if (this.filter(item))
+            if (!this.instanceMap.ContainsKey(dep))
             {
-                this.filtered.Add(item);
-                this.filteredSet.Add(item);
+                throw new InvalidOperationException("Builder returned an item instance that is not tracked by the source instance map. Builders must return exact source instances.");
             }
-        }
 
-        if (resetOnly)
-        {
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            if (IndexOfReference(sourceList, dep) < 0)
+            {
+                throw new InvalidOperationException("Builder returned an item instance that is not present in the source collection.");
+            }
         }
     }
 
-    /// <summary>
-    /// Rebuilds all subscriptions and the filtered view from the current source contents
-    /// and raises Reset. Used for Reset actions on the source collection.
-    /// </summary>
-    private void RebuildAllFromSource()
+    private void OnObservedPropertiesCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // Unsubscribe from all previously attached item property handlers
-        foreach (var item in this.propertySubscribedItems.ToList())
+        this.UpdateSubscriptions();
+
+        // Changing observed properties should not require a full rebuild of the view.
+        // Subscriptions affect which future item changes we observe, not the current inclusion state.
+        // Re-evaluate the predicate incrementally to reconcile any changes that may have occurred
+        // while a property was not observed.
+        this.ReevaluatePredicate();
+    }
+
+    private void UpdateSubscriptions()
+    {
+        foreach (var item in this.propertySubscribedItems)
         {
             if (item is INotifyPropertyChanged notify)
             {
@@ -971,58 +1084,261 @@ public sealed class FilteredObservableCollection<T> : IReadOnlyList<T>, IList<T>
         }
 
         this.propertySubscribedItems.Clear();
-        this.attachedItems.Clear();
-        this.filtered.Clear();
-        this.filteredSet.Clear();
 
-        foreach (var item in this.source)
+        if (this.ShouldObserveProperties())
         {
-            this.Attach(item);
-        }
-
-        if (this.useBuilder)
-        {
-            this.RebuildWithBuilder(resetOnly: true);
-        }
-        else
-        {
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            // Using source to ensure we cover all items potentially needing observation
+            foreach (var item in this.source)
+            {
+                if (item is INotifyPropertyChanged notify)
+                {
+                    notify.PropertyChanged += this.OnItemPropertyChanged;
+                    this.propertySubscribedItems.Add(item);
+                }
+            }
         }
     }
 
-    private void RebuildWithBuilder(bool resetOnly)
+    private void OnCollectionChanged(NotifyCollectionChangedEventArgs e) => this.CollectionChanged?.Invoke(this, e);
+
+    private void OnPropertyChanged(string propertyName) => this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private bool ShouldObserveProperties() => this.options.ObservedProperties.Count > 0;
+
+    private sealed record DeltaPlanEntry(
+        T Item,
+        FilteredTree.FilteredNode Node,
+        int OldRef,
+        int NewRef,
+        bool WasIncluded,
+        bool IsIncluded,
+        int SourceIndex,
+        int? RemovalIndex);
+
+    private sealed class PendingNodeState
     {
-        if (this.disposed || this.viewBuilder is null)
+        private PendingNodeState(FilteredTree.FilteredNode node)
         {
-            return;
+            this.Node = node;
         }
 
-        // Compute outside notification scope to keep a single Reset emission.
-        var view = this.viewBuilder.Build(this.source);
+        public FilteredTree.FilteredNode Node { get; }
 
-        this.filtered.Clear();
-        this.filteredSet.Clear();
+        public bool HasPredicateMatchedUpdate { get; private set; }
 
-        foreach (var item in view)
+        public bool PredicateMatched { get; private set; }
+
+        public bool HasCachedDependenciesUpdate { get; private set; }
+
+        public IReadOnlySet<T>? CachedDependencies { get; private set; }
+
+        public static PendingNodeState For(Dictionary<T, PendingNodeState> pending, T item, FilteredTree.FilteredNode node)
         {
-            this.filtered.Add(item);
-            this.filteredSet.Add(item);
+            if (!pending.TryGetValue(item, out var state))
+            {
+                state = new PendingNodeState(node);
+                pending[item] = state;
+            }
+
+            return state;
         }
 
-        if (resetOnly)
+        public void SetPredicateMatched(bool value)
         {
-            this.RaiseCollectionChanged(new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset));
+            this.HasPredicateMatchedUpdate = true;
+            this.PredicateMatched = value;
+        }
+
+        public void SetCachedDependencies(IReadOnlySet<T>? value)
+        {
+            this.HasCachedDependenciesUpdate = true;
+            this.CachedDependencies = value;
         }
     }
 
-    /// <summary>
-    ///     A lightweight <see cref="IDisposable"/> used by <see cref="DeferNotifications"/>
-    ///     to defer and then resume collection change notifications.
-    /// </summary>
-    /// <param name="owner">The owning <see cref="FilteredObservableCollection{T}"/> instance.</param>
-    private readonly struct NotificationSuspender(FilteredObservableCollection<T> owner) : IDisposable
+    private sealed class DeferHelper(FilteredObservableCollection<T> owner) : IDisposable
     {
-        /// <inheritdoc/>
-        public void Dispose() => owner.ResumeNotifications();
+        public void Dispose()
+        {
+            owner.suspendCount--;
+            if (owner.suspendCount == 0)
+            {
+                owner.RebuildAllFromSource(suppressEvents: false);
+            }
+        }
+    }
+
+    private sealed class Delta
+    {
+        public Dictionary<T, int> Changes { get; } = new(ReferenceEqualityComparer.Instance);
+
+        public void AddChange(T item, int change)
+        {
+            if (!this.Changes.TryGetValue(item, out var value))
+            {
+                value = 0;
+            }
+
+            this.Changes[item] = value + change;
+        }
+    }
+
+    private sealed class FilteredTree : OrderStatisticTreeCollection<T>
+    {
+        private readonly Func<T, FilteredNode> nodeLookup;
+
+        internal FilteredTree(IComparer<T> comparer, Func<T, FilteredNode> nodeLookup)
+            : base(comparer)
+        {
+            this.nodeLookup = nodeLookup;
+        }
+
+        public int IncludedCount => this.Root?.SubtreeIncludedCount ?? 0;
+
+        internal new FilteredNode? Root => base.Root as FilteredNode;
+
+        public T SelectIncluded(int index)
+        {
+            if (index < 0 || index >= this.IncludedCount)
+            {
+                throw new ArgumentOutOfRangeException(nameof(index));
+            }
+
+            var x = this.Root;
+            while (x != null)
+            {
+                var left = x.Left as FilteredNode;
+                var leftCount = left?.SubtreeIncludedCount ?? 0;
+
+                if (index < leftCount)
+                {
+                    x = left;
+                }
+                else
+                {
+                    var currentWeight = x.Included ? 1 : 0;
+                    if (index < leftCount + currentWeight)
+                    {
+                        return x.Value;
+                    }
+
+                    index -= leftCount + currentWeight;
+                    x = x.Right as FilteredNode;
+                }
+            }
+
+            throw new InvalidOperationException("Filtered Select failed");
+        }
+
+        internal static int RankIncluded(FilteredNode node)
+        {
+            var rank = (node.Left as FilteredNode)?.SubtreeIncludedCount ?? 0;
+            var y = node;
+            while (y.Parent is FilteredNode parent)
+            {
+                if (y == parent.Right)
+                {
+                    rank += (parent.Included ? 1 : 0) + ((parent.Left as FilteredNode)?.SubtreeIncludedCount ?? 0);
+                }
+
+                y = parent;
+            }
+
+            return rank;
+        }
+
+        internal void AddNode(FilteredNode node)
+        {
+            node.Parent = null;
+            node.Left = null;
+            node.Right = null;
+            node.SubtreeSize = 1;
+            node.IsRed = true;
+            this.Add(node.Value);
+        }
+
+        internal void RemoveNode(FilteredNode node) => this.DeleteNode(node);
+
+        internal IEnumerator<T> GetIncludedEnumerator(Dictionary<T, FilteredNode> map)
+        {
+            foreach (var item in this)
+            {
+                if (map.TryGetValue(item, out var node) && node.Included)
+                {
+                    yield return item;
+                }
+            }
+        }
+
+        protected override Node CreateNode(T value) => this.nodeLookup(value);
+
+        protected override void OnNodeUpdated(Node node)
+        {
+            if (node is FilteredNode fn)
+            {
+                fn.UpdateAugmentedData();
+            }
+        }
+
+        internal sealed class FilteredNode(T value) : Node(value)
+        {
+            public int RefCount { get; set; }
+
+            public bool Included => this.RefCount > 0;
+
+            public bool PredicateMatched { get; set; }
+
+            public int SubtreeIncludedCount { get; set; }
+
+            public IReadOnlySet<T>? CachedDependencies { get; set; }
+
+            // Hide the base properties to allow typed access? No, just cast.
+            // But we need to use base.Left which is Node?. Cast it when needed.
+            public void UpdateAugmentedData()
+            {
+                var left = this.Left as FilteredNode;
+                var right = this.Right as FilteredNode;
+                this.SubtreeIncludedCount = (this.Included ? 1 : 0) + (left?.SubtreeIncludedCount ?? 0) + (right?.SubtreeIncludedCount ?? 0);
+            }
+        }
+    }
+
+    private sealed class SourceOrderComparer(ObservableCollection<T> source) : IComparer<T>
+    {
+        private readonly ObservableCollection<T> source = source;
+
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code readability")]
+        public int Compare(T? x, T? y)
+        {
+            if (ReferenceEquals(x, y))
+            {
+                return 0;
+            }
+
+            if (x is null)
+            {
+                return -1;
+            }
+
+            if (y is null)
+            {
+                return 1;
+            }
+
+            return this.IndexOfReference(x).CompareTo(this.IndexOfReference(y));
+        }
+
+        private int IndexOfReference(T value)
+        {
+            for (var i = 0; i < this.source.Count; i++)
+            {
+                if (ReferenceEquals(this.source[i], value))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
     }
 }

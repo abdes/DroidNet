@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using AwesomeAssertions;
 using DroidNet.TestHelpers;
 
@@ -402,6 +403,65 @@ public class FilteredObservableCollectionTests
     }
 
     [TestMethod]
+    public void ReevaluatePredicate_WhenPredicateLogicChanges_UpdatesIncrementallyWithoutReset()
+    {
+        // Arrange
+        var i1 = new ObservableItem(1);
+        var i2 = new ObservableItem(2);
+        var i3 = new ObservableItem(3);
+        var i4 = new ObservableItem(4);
+        var source = new ObservableCollection<ObservableItem> { i1, i2, i3, i4 };
+
+        var includeEvens = true;
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => includeEvens ? i.Value % 2 == 0 : i.Value % 2 != 0);
+
+        _ = view.Should().Equal([i2, i4]);
+
+        var events = new List<NotifyCollectionChangedEventArgs>();
+        view.CollectionChanged += (_, e) => events.Add(e);
+
+        // Act
+        includeEvens = false;
+        view.ReevaluatePredicate();
+
+        // Assert
+        _ = events.Should().OnlyContain(e => e.Action != NotifyCollectionChangedAction.Reset);
+        _ = view.Should().Equal([i1, i3]);
+
+        _ = events.Should().HaveCount(2);
+        _ = events[0].Action.Should().Be(NotifyCollectionChangedAction.Remove);
+        _ = events[0].OldStartingIndex.Should().Be(0);
+        _ = events[0].OldItems.Should().NotBeNull();
+        _ = events[0].OldItems!.Cast<ObservableItem>().Should().Equal([i2, i4]);
+
+        _ = events[1].Action.Should().Be(NotifyCollectionChangedAction.Add);
+        _ = events[1].NewStartingIndex.Should().Be(0);
+        _ = events[1].NewItems.Should().NotBeNull();
+        _ = events[1].NewItems!.Cast<ObservableItem>().Should().Equal([i1, i3]);
+    }
+
+    [TestMethod]
+    public void ReevaluatePredicate_WhenNoItemsChange_DoesNotRaiseEvents()
+    {
+        // Arrange
+        var i1 = new ObservableItem(1);
+        var i2 = new ObservableItem(2);
+        var source = new ObservableCollection<ObservableItem> { i1, i2 };
+
+        using var view = FilteredObservableCollectionFactory.FromPredicate(source, i => i.Value % 2 == 0);
+
+        var raised = false;
+        view.CollectionChanged += (_, _) => raised = true;
+
+        // Act
+        view.ReevaluatePredicate();
+
+        // Assert
+        _ = raised.Should().BeFalse();
+        _ = view.Should().Equal([i2]);
+    }
+
+    [TestMethod]
     public void DeferNotifications_DisposeCalledMultipleTimes_SecondDisposeNoEffect()
     {
         // Arrange
@@ -504,7 +564,7 @@ public class FilteredObservableCollectionTests
         _ = itemHandlers.Should().BeEmpty();
     }
 
-    private sealed class ObservableItem(int value) : INotifyPropertyChanged
+    private sealed class ObservableItem(int value) : INotifyPropertyChanged, IEquatable<ObservableItem>
     {
         private int value = value;
 
@@ -524,6 +584,12 @@ public class FilteredObservableCollectionTests
                 this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(this.Value)));
             }
         }
+
+        public bool Equals(ObservableItem? other) => ReferenceEquals(this, other);
+
+        public override bool Equals(object? obj) => ReferenceEquals(this, obj);
+
+        public override int GetHashCode() => this.value;
 
         public override string ToString() => $"Item({this.value})";
     }

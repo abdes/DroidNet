@@ -2,7 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
+using System.Text;
 using DroidNet.Collections;
+using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls;
 
@@ -37,29 +40,30 @@ public abstract partial class DynamicTreeViewModel
                 return;
             }
 
+            // If filtering is being disabled (pass-all), tear down the filtered view so we don't
+            // invoke predicate/builder while the control is rendering the source directly.
+            if (value is null && this.filteredItems is not null)
+            {
+                this.filteredItems.CollectionChanged -= this.OnFilteredItemsCollectionChanged;
+                this.filteredItems.Dispose();
+                this.filteredItems = null;
+                this.filterOptions = null;
+            }
+
             this.filterPredicate = value;
             this.OnPropertyChanged(nameof(this.FilterPredicate));
 
-            // Update runtime options so enabling/disabling the predicate will toggle
-            // whether the filtered view auto-refreshes.
-            if (this.filterOptions is not null)
+            // Update runtime options when a filtered view exists and filtering is active.
+            if (this.filterOptions is not null && this.filterPredicate is not null)
             {
                 var relevantProperties = this.GetFilteringRelevantProperties();
 
-                if (this.filterPredicate is null)
+                this.filterOptions.ObservedProperties.Clear();
+                if (relevantProperties is not null)
                 {
-                    // When no predicate is active, observe no item property changes (empty collection).
-                    this.filterOptions.ObservedProperties.Clear();
-                }
-                else
-                {
-                    this.filterOptions.ObservedProperties.Clear();
-                    if (relevantProperties is not null)
+                    foreach (var p in relevantProperties)
                     {
-                        foreach (var p in relevantProperties)
-                        {
-                            this.filterOptions.ObservedProperties.Add(p);
-                        }
+                        this.filterOptions.ObservedProperties.Add(p);
                     }
                 }
             }
@@ -75,20 +79,26 @@ public abstract partial class DynamicTreeViewModel
     ///     This is a rendering/visibility projection only. It never mutates the underlying
     ///     <see cref="ShownItems"/> collection and must not affect operation semantics.
     /// </remarks>
-    public IEnumerable<ITreeItem> FilteredItems => this.GetOrCreateFilteredItems();
+    public IEnumerable<ITreeItem> FilteredItems
+        => this.filterPredicate is null ? this.shownItems : this.GetOrCreateFilteredItems();
 
     /// <summary>
     ///     Recomputes the filter closure and refreshes <see cref="FilteredItems"/>.
     /// </summary>
     public void RefreshFiltering()
     {
+        if (this.filterPredicate is null)
+        {
+            return;
+        }
+
         var view = this.filteredItems;
         if (view is null)
         {
             return;
         }
 
-        view.Refresh();
+        view.ReevaluatePredicate();
     }
 
     /// <summary>
@@ -122,13 +132,18 @@ public abstract partial class DynamicTreeViewModel
 
     private FilteredObservableCollection<ITreeItem> GetOrCreateFilteredItems()
     {
+        if (this.filterPredicate is null)
+        {
+            throw new InvalidOperationException("FilteredItems was requested while FilterPredicate is null. The control should bind to ShownItems in the pass-all case.");
+        }
+
         if (this.filteredItems is not null)
         {
             return this.filteredItems;
         }
 
         // Manual-refresh view: the view model owns all updates (hierarchical closure is global).
-        this.filterBuilder ??= new HierarchicalFilterBuilder(this);
+        this.filterBuilder ??= new HierarchicalFilterBuilder();
 
         var relevantProperties = this.GetFilteringRelevantProperties();
 
@@ -150,101 +165,122 @@ public abstract partial class DynamicTreeViewModel
 
         this.filteredItems = FilteredObservableCollectionFactory.FromBuilder(
             this.shownItems,
+            item =>
+            {
+                var predicate = this.filterPredicate;
+                return predicate is null || predicate(item);
+            },
             this.filterBuilder,
             options);
+
+        this.filteredItems.CollectionChanged += this.OnFilteredItemsCollectionChanged;
 
         this.filteredItems.Refresh();
 
         return this.filteredItems;
     }
 
-    private sealed class HierarchicalFilterBuilder(DynamicTreeViewModel owner) : IFilteredViewBuilder<ITreeItem>
+    private void OnFilteredItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        private readonly List<ITreeItem> buffer = [];
-        private readonly List<int> pathIndices = [];
-
-        public IReadOnlyList<ITreeItem> Build(IReadOnlyList<ITreeItem> source)
+        if (!this.logger.IsEnabled(LogLevel.Trace))
         {
-            this.buffer.Clear();
+            return;
+        }
+
+        static string? FormatItems(System.Collections.IList? items)
+        {
+            if (items is null || items.Count == 0)
+            {
+                return null;
+            }
+
+            const int maxItemsToLog = 6;
+            var max = items.Count < maxItemsToLog ? items.Count : maxItemsToLog;
+
+            var sb = new StringBuilder();
+            _ = sb.Append('[');
+            for (var i = 0; i < max; i++)
+            {
+                if (i > 0)
+                {
+                    _ = sb.Append(", ");
+                }
+
+                if (items[i] is ITreeItem item)
+                {
+                    _ = sb.Append(item.Label);
+                }
+                else
+                {
+                    _ = sb.Append(items[i]?.ToString() ?? "<null>");
+                }
+            }
+
+            if (items.Count > max)
+            {
+                _ = sb.Append(", …+");
+                _ = sb.Append(items.Count - max);
+            }
+
+            _ = sb.Append(']');
+            return sb.ToString();
+        }
+
+        this.LogFilteredItemsChanged(e, FormatItems(e.NewItems), FormatItems(e.OldItems));
+    }
+
+    private sealed class HierarchicalFilterBuilder : IFilteredViewBuilder<ITreeItem>
+    {
+        private static readonly IReadOnlySet<ITreeItem> Empty = new HashSet<ITreeItem>(ReferenceEqualityComparer.Instance);
+
+        public IReadOnlySet<ITreeItem> BuildForChangedItem(ITreeItem changedItem, bool becameIncluded, IReadOnlyList<ITreeItem> source)
+        {
+            // The filtered collection applies the predicate result for changedItem itself.
+            // Here we return only its lineage (ancestors) so they stay visible when any descendant matches.
+            _ = becameIncluded;
 
             if (source.Count == 0)
             {
-                return this.buffer;
+                return Empty;
             }
 
-            var predicate = owner.filterPredicate;
-            if (predicate is null)
-            {
-                this.CopyAll(source);
-                return this.buffer;
-            }
-
-            var include = this.ComputeIncludeMask(source, predicate);
-            this.AppendIncluded(source, include);
-
-            return this.buffer;
-        }
-
-        private void CopyAll(IReadOnlyList<ITreeItem> source)
-        {
+            var changedIndex = -1;
             for (var i = 0; i < source.Count; i++)
             {
-                this.buffer.Add(source[i]);
+                if (ReferenceEquals(source[i], changedItem))
+                {
+                    changedIndex = i;
+                    break;
+                }
             }
-        }
 
-        private bool[] ComputeIncludeMask(IReadOnlyList<ITreeItem> source, Predicate<ITreeItem> predicate)
-        {
-            var include = new bool[source.Count];
-            this.pathIndices.Clear();
-
-            for (var index = 0; index < source.Count; index++)
+            if (changedIndex < 0)
             {
-                var item = source[index];
-
-                // Depth is expected to be >= 0 for visible items. Be defensive for hidden roots.
-                var depth = item.Depth < 0 ? 0 : item.Depth;
-
-                // Ensure pathIndices has room for this depth.
-                while (this.pathIndices.Count > depth + 1)
-                {
-                    this.pathIndices.RemoveAt(this.pathIndices.Count - 1);
-                }
-
-                while (this.pathIndices.Count < depth + 1)
-                {
-                    this.pathIndices.Add(-1);
-                }
-
-                this.pathIndices[depth] = index;
-
-                if (!predicate(item))
-                {
-                    continue;
-                }
-
-                for (var ancestorDepth = 0; ancestorDepth <= depth; ancestorDepth++)
-                {
-                    var ancestorIndex = this.pathIndices[ancestorDepth];
-                    if (ancestorIndex >= 0)
-                    {
-                        include[ancestorIndex] = true;
-                    }
-                }
+                return Empty;
             }
 
-            return include;
-        }
-
-        private void AppendIncluded(IReadOnlyList<ITreeItem> source, bool[] include)
-        {
-            for (var index = 0; index < include.Length; index++)
+            var depth = source[changedIndex].Depth;
+            depth = depth < 0 ? 0 : depth;
+            if (depth == 0)
             {
-                if (include[index])
+                return Empty;
+            }
+
+            var expectedAncestorDepth = depth - 1;
+            var lineage = new HashSet<ITreeItem>(ReferenceEqualityComparer.Instance);
+
+            for (var i = changedIndex - 1; i >= 0 && expectedAncestorDepth >= 0; i--)
+            {
+                var d = source[i].Depth;
+                d = d < 0 ? 0 : d;
+                if (d == expectedAncestorDepth)
                 {
-                    this.buffer.Add(source[index]);
+                    _ = lineage.Add(source[i]);
+                    expectedAncestorDepth--;
                 }
             }
+
+            return lineage.Count == 0 ? Empty : lineage;
         }
     }
 }

@@ -765,7 +765,15 @@ public partial class DynamicTree : Control
             return;
         }
 
-        this.DisplayedItems = this.IsFilteringEnabled
+        var hasPredicate = this.ViewModel.FilterPredicate is not null;
+        var useFiltered = this.IsFilteringEnabled && hasPredicate;
+
+        this.LogDisplayedItemsSource(
+            isFilteringEnabled: this.IsFilteringEnabled,
+            hasPredicate: hasPredicate,
+            displayedSource: useFiltered ? nameof(DynamicTreeViewModel.FilteredItems) : nameof(DynamicTreeViewModel.ShownItems));
+
+        this.DisplayedItems = useFiltered
             ? this.ViewModel.FilteredItems
             : this.ViewModel.ShownItems;
     }
@@ -774,6 +782,12 @@ public partial class DynamicTree : Control
     {
         if (this.ViewModel is null)
         {
+            return;
+        }
+
+        if (string.Equals(args.PropertyName, nameof(DynamicTreeViewModel.FilterPredicate), System.StringComparison.Ordinal))
+        {
+            this.UpdateDisplayedItems();
             return;
         }
 
@@ -832,7 +846,7 @@ public partial class DynamicTree : Control
 
             if (this.deferredSelection && this.deferredSelectionItem != null && this.ViewModel != null)
             {
-                if (sender is FrameworkElement { DataContext: TreeItemAdapter item } && item == this.deferredSelectionItem)
+                if (sender is FrameworkElement { DataContext: TreeItemAdapter item } && item.Equals(this.deferredSelectionItem))
                 {
                     this.ViewModel.SelectItemCommand.Execute(new(item, RequestOrigin.PointerInput, false, false));
                 }

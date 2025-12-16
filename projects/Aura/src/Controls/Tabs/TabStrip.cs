@@ -832,33 +832,21 @@ public partial class TabStrip : Control, ITabStrip
 
     private void InitializeRootGridPart()
     {
-        if (this.rootGrid is not null)
-        {
-            this.rootGrid.SizeChanged -= this.OnTabStripSizeChanged;
-        }
-
+        this.rootGrid?.SizeChanged -= this.OnTabStripSizeChanged;
         this.rootGrid = this.GetRequiredTemplatePart<Grid>(RootGridPartName);
         this.rootGrid.SizeChanged += this.OnTabStripSizeChanged;
     }
 
     private void InitializeOverflowLeftButtonPart()
     {
-        if (this.overflowLeftButton is not null)
-        {
-            this.overflowLeftButton.Click -= this.OnOverflowLeftButtonClick;
-        }
-
+        this.overflowLeftButton?.Click -= this.OnOverflowLeftButtonClick;
         this.overflowLeftButton = this.GetTemplatePart<RepeatButton>(PartOverflowLeftButtonName);
         this.overflowLeftButton?.Click += this.OnOverflowLeftButtonClick;
     }
 
     private void InitializeOverflowRightButtonPart()
     {
-        if (this.overflowRightButton is not null)
-        {
-            this.overflowRightButton.Click -= this.OnOverflowRightButtonClick;
-        }
-
+        this.overflowRightButton?.Click -= this.OnOverflowRightButtonClick;
         this.overflowRightButton = this.GetTemplatePart<RepeatButton>(PartOverflowRightButtonName);
         this.overflowRightButton?.Click += this.OnOverflowRightButtonClick;
     }
