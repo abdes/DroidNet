@@ -14,6 +14,28 @@ namespace DroidNet.Controls;
 public partial class DynamicTreeViewModel
 {
     [LoggerMessage(
+        Level = LogLevel.Trace,
+        Message = "Filtering cache invalidated: rev={Revision} reason={Reason}")]
+    private static partial void LogFilteringCacheInvalidated(ILogger logger, long revision, string reason);
+
+    private void LogFilteringCacheInvalidated(long revision, string reason)
+        => LogFilteringCacheInvalidated(this.logger, revision, reason);
+
+    [LoggerMessage(
+        Level = LogLevel.Trace,
+        Message = "Filtering cache recomputed: rev={Revision} reason={Reason} visitedNodes={VisitedNodes} visitedEdges={VisitedEdges} elapsedMs={ElapsedMs}")]
+    private static partial void LogFilteringCacheRecomputed(
+        ILogger logger,
+        long revision,
+        string reason,
+        int visitedNodes,
+        int visitedEdges,
+        long elapsedMs);
+
+    private void LogFilteringCacheRecomputed(long revision, string reason, int visitedNodes, int visitedEdges, long elapsedMs)
+        => LogFilteringCacheRecomputed(this.logger, revision, reason, visitedNodes, visitedEdges, elapsedMs);
+
+    [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Cannot expand item '{item}': item is not root, and its parent '{parent}' is not expanded")]

@@ -152,6 +152,62 @@ public sealed partial class ViewModelFilteringTests : ViewModelTestBase, IDispos
             "Scene 3");
     }
 
+    [TestMethod]
+    public async Task FilteredItems_CollapsingParentOfLoadedMatchingDescendant_KeepsParentVisible()
+    {
+        // Arrange
+        var match = new TestTreeItemAdapter { Label = "MATCH" };
+        var parent = new TestTreeItemAdapter([match]) { Label = "P", IsExpanded = true };
+        var root = new TestTreeItemAdapter([parent], isRoot: true) { Label = "R", IsExpanded = true };
+
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+
+        this.viewModel.FilterPredicate = item => item.Label.Contains("MATCH", StringComparison.Ordinal);
+
+        // Force view creation and initial cache compute.
+        _ = this.viewModel.FilteredItems.Count();
+
+        // Act: collapse the parent so the matching descendant is removed from ShownItems but remains loaded.
+        await this.viewModel.CollapseItemAsync(parent).ConfigureAwait(false);
+        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert: parent remains visible due to loaded-only subtree match.
+        var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
+        _ = labels.Should().Equal(
+            "R",
+            "P");
+    }
+
+    [TestMethod]
+    public async Task FilteredItems_UnloadedSubtree_DoesNotMatchUntilLoaded()
+    {
+        // Arrange: descendant exists but is not loaded (parent not expanded).
+        var match = new TestTreeItemAdapter { Label = "MATCH" };
+        var parent = new TestTreeItemAdapter([match]) { Label = "P", IsExpanded = false };
+        var root = new TestTreeItemAdapter([parent], isRoot: true) { Label = "R", IsExpanded = true };
+
+        await this.viewModel.InitializeRootAsyncPublic(root).ConfigureAwait(false);
+
+        this.viewModel.FilterPredicate = item => item.Label.Contains("MATCH", StringComparison.Ordinal);
+
+        // Force view creation and subscriptions.
+        _ = this.viewModel.FilteredItems.Count();
+
+        // Act / Assert (unloaded subtree treated as no-match)
+        _ = this.viewModel.FilteredItems.Should().BeEmpty();
+
+        // Act: expand parent, which loads the matching descendant.
+        await this.viewModel.ExpandItemAsync(parent).ConfigureAwait(false);
+        await Task.Delay(DynamicTreeViewModel.FilterDebounceMilliseconds + 100, this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        // Assert: now the match is loaded and the lineage becomes visible.
+        var labels = this.viewModel.FilteredItems.Select(i => i.Label).ToList();
+        _ = labels.Should().Equal(
+            "R",
+            "P",
+            "MATCH");
+    }
+
     private static TestTreeItemAdapter CreateExpandedTree()
     {
         var c1gc1 = new TestTreeItemAdapter { Label = "R-C1-GC1" };

@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Specialized;
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using DroidNet.Collections;
 using Microsoft.Extensions.Logging;
@@ -19,10 +21,20 @@ public abstract partial class DynamicTreeViewModel
     /// </summary>
     public const int FilterDebounceMilliseconds = 250;
 
+    // "Loaded-only" subtree filtering cache.
+    private readonly Dictionary<ITreeItem, bool> filterSelfMatch = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<ITreeItem, bool> filterSubtreeMatch = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<ITreeItem> filteringSubscribedNodes = new(ReferenceEqualityComparer.Instance);
+
     private FilteredObservableCollection<ITreeItem>? filteredItems;
     private HierarchicalFilterBuilder? filterBuilder;
     private Predicate<ITreeItem>? filterPredicate;
     private FilteredObservableCollectionOptions? filterOptions;
+    private long filterCacheRevision;
+    private long filterCacheComputedRevision;
+    private bool filterCacheDirty;
+    private CancellationTokenSource? filterCacheDebounceCts;
+    private IReadOnlyList<string>? filteringRelevantProperties;
 
     /// <summary>
     ///     Gets or sets the current filter predicate used by <see cref="FilteredItems"/>.
@@ -44,10 +56,12 @@ public abstract partial class DynamicTreeViewModel
             // invoke predicate/builder while the control is rendering the source directly.
             if (value is null && this.filteredItems is not null)
             {
+                this.DisposeFilteringSubscriptions();
                 this.filteredItems.CollectionChanged -= this.OnFilteredItemsCollectionChanged;
                 this.filteredItems.Dispose();
                 this.filteredItems = null;
                 this.filterOptions = null;
+                this.filteringRelevantProperties = null;
             }
 
             this.filterPredicate = value;
@@ -57,6 +71,7 @@ public abstract partial class DynamicTreeViewModel
             if (this.filterOptions is not null && this.filterPredicate is not null)
             {
                 var relevantProperties = this.GetFilteringRelevantProperties();
+                this.filteringRelevantProperties = relevantProperties;
 
                 this.filterOptions.ObservedProperties.Clear();
                 if (relevantProperties is not null)
@@ -66,6 +81,11 @@ public abstract partial class DynamicTreeViewModel
                         this.filterOptions.ObservedProperties.Add(p);
                     }
                 }
+            }
+
+            if (this.filterPredicate is not null)
+            {
+                this.InvalidateFilterCache("FilterPredicate changed");
             }
 
             this.RefreshFiltering();
@@ -98,6 +118,8 @@ public abstract partial class DynamicTreeViewModel
             return;
         }
 
+        // Refreshing should recompute the loaded-only closure, then reevaluate the view.
+        this.RecomputeFilterCacheNow(reason: "RefreshFiltering");
         view.ReevaluatePredicate();
     }
 
@@ -146,6 +168,7 @@ public abstract partial class DynamicTreeViewModel
         this.filterBuilder ??= new HierarchicalFilterBuilder();
 
         var relevantProperties = this.GetFilteringRelevantProperties();
+        this.filteringRelevantProperties = relevantProperties;
 
         // If there's no current filter predicate, keep ObservedProperties empty so item property changes are ignored.
         // We always observe source collection changes but only observe item property changes when the predicate requires it.
@@ -163,13 +186,12 @@ public abstract partial class DynamicTreeViewModel
 
         this.filterOptions = options;
 
+        // Ensure the cache is ready before the view starts evaluating the predicate.
+        this.RecomputeFilterCacheNow(reason: "CreateFilteredView");
+
         this.filteredItems = FilteredObservableCollectionFactory.FromBuilder(
             this.shownItems,
-            item =>
-            {
-                var predicate = this.filterPredicate;
-                return predicate is null || predicate(item);
-            },
+            this.EvaluateFilterIncludingLoadedSubtree,
             this.filterBuilder,
             options);
 
@@ -178,6 +200,324 @@ public abstract partial class DynamicTreeViewModel
         this.filteredItems.Refresh();
 
         return this.filteredItems;
+    }
+
+    private bool EvaluateFilterIncludingLoadedSubtree(ITreeItem item)
+    {
+        var predicate = this.filterPredicate;
+        if (predicate is null)
+        {
+            return true;
+        }
+
+        // Fast path: use the precomputed closure when available.
+        if (!this.filterCacheDirty && this.filterCacheComputedRevision == this.filterCacheRevision
+            && this.filterSubtreeMatch.TryGetValue(item, out var cached))
+        {
+            return cached;
+        }
+
+        // Fallback: never force-load. When cache is stale/missing, treat subtree as no-match.
+        // A scheduled recomputation will fill in the closure and then reevaluate the view.
+        return predicate(item);
+    }
+
+    private void InvalidateFilterCache(string reason)
+    {
+        if (this.filterPredicate is null)
+        {
+            return;
+        }
+
+        this.filterCacheDirty = true;
+        this.filterCacheRevision++;
+
+        this.LogFilteringCacheInvalidated(this.filterCacheRevision, reason);
+
+        this.ScheduleFilterCacheRecompute();
+    }
+
+    private void ScheduleFilterCacheRecompute()
+    {
+        if (this.filteredItems is null || this.filterPredicate is null)
+        {
+            return;
+        }
+
+        this.filterCacheDebounceCts?.Cancel();
+        this.filterCacheDebounceCts?.Dispose();
+
+        var cts = new CancellationTokenSource();
+        this.filterCacheDebounceCts = cts;
+
+        _ = this.DebouncedRecomputeAndRefreshAsync(cts.Token);
+    }
+
+    private async Task DebouncedRecomputeAndRefreshAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(FilterDebounceMilliseconds, token).ConfigureAwait(true);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (this.filteredItems is null || this.filterPredicate is null)
+        {
+            return;
+        }
+
+        this.RecomputeFilterCacheNow(reason: "Debounced");
+        this.filteredItems.ReevaluatePredicate();
+    }
+
+    private void RecomputeFilterCacheNow(string reason)
+    {
+        var predicate = this.filterPredicate;
+        if (predicate is null)
+        {
+            return;
+        }
+
+        // Avoid recomputing if nothing changed.
+        if (!this.filterCacheDirty && this.filterCacheComputedRevision == this.filterCacheRevision)
+        {
+            return;
+        }
+
+        var sw = Stopwatch.StartNew();
+
+        this.filterCacheDirty = false;
+        this.filterCacheComputedRevision = this.filterCacheRevision;
+        this.filterSelfMatch.Clear();
+        this.filterSubtreeMatch.Clear();
+
+        var visitedNodes = 0;
+        var visitedEdges = 0;
+
+        foreach (var root in this.shownItems)
+        {
+            if (root is not null)
+            {
+                ComputeForRoot(root);
+            }
+        }
+
+        sw.Stop();
+        this.LogFilteringCacheRecomputed(this.filterCacheComputedRevision, reason, visitedNodes, visitedEdges, sw.ElapsedMilliseconds);
+
+        void ComputeForRoot(ITreeItem root)
+        {
+            // Iterative post-order DFS over already-loaded edges only.
+            var stack = new Stack<(ITreeItem node, int nextIndex, IReadOnlyList<ITreeItem>? children)>();
+            stack.Push((root, 0, null));
+
+            while (stack.Count > 0)
+            {
+                var (node, nextIndex, children) = stack.Pop();
+
+                // If we already computed this subtree (node reachable from multiple shown roots), skip.
+                if (children is null && this.filterSubtreeMatch.ContainsKey(node))
+                {
+                    continue;
+                }
+
+                if (children is null)
+                {
+                    this.SubscribeForFiltering(node);
+                    var self = predicate(node);
+                    this.filterSelfMatch[node] = self;
+                    visitedNodes++;
+
+                    if (!TryGetLoadedChildrenNonLoading(node, out children))
+                    {
+                        // Unloaded subtree is treated as no-match.
+                        this.filterSubtreeMatch[node] = self;
+                        continue;
+                    }
+
+                    nextIndex = 0;
+                }
+
+                if (nextIndex >= children.Count)
+                {
+                    var subtree = this.filterSelfMatch[node];
+                    for (var i = 0; !subtree && i < children.Count; i++)
+                    {
+                        var child = children[i];
+                        subtree = child is not null
+                            && this.filterSubtreeMatch.TryGetValue(child, out var childSubtree)
+                            && childSubtree;
+                    }
+
+                    this.filterSubtreeMatch[node] = subtree;
+                    continue;
+                }
+
+                stack.Push((node, nextIndex + 1, children));
+
+                var nextChild = children[nextIndex];
+                visitedEdges++;
+                if (nextChild is not null && !this.filterSubtreeMatch.ContainsKey(nextChild))
+                {
+                    stack.Push((nextChild, 0, null));
+                }
+            }
+        }
+
+        static bool TryGetLoadedChildrenNonLoading(ITreeItem node, out IReadOnlyList<ITreeItem> loaded)
+        {
+            if (node is ILoadedChildrenAccessor accessor && accessor.TryGetLoadedChildren(out loaded))
+            {
+                return true;
+            }
+
+            loaded = [];
+            return false;
+        }
+    }
+
+    private void SubscribeForFiltering(ITreeItem node)
+    {
+        if (!this.filteringSubscribedNodes.Add(node))
+        {
+            return;
+        }
+
+        node.ChildrenCollectionChanged += this.OnFilteringChildrenCollectionChanged;
+
+        if (node is INotifyPropertyChanged npc)
+        {
+            npc.PropertyChanged += this.OnFilteringItemPropertyChanged;
+        }
+    }
+
+    private void OnFilteringItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (this.filterPredicate is null)
+        {
+            return;
+        }
+
+        // Expand/collapse is purely a ShownItems concern; it must not invalidate the loaded-subtree cache.
+        if (string.Equals(e.PropertyName, nameof(ITreeItem.IsExpanded), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        // Respect the existing "relevant properties" concept.
+        var relevant = this.filteringRelevantProperties;
+        if (relevant is null)
+        {
+            this.InvalidateFilterCache($"Item property changed: {e.PropertyName ?? "<any>"}");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(e.PropertyName))
+        {
+            this.InvalidateFilterCache("Item property changed: <any>");
+            return;
+        }
+
+        for (var i = 0; i < relevant.Count; i++)
+        {
+            if (string.Equals(relevant[i], e.PropertyName, StringComparison.Ordinal))
+            {
+                this.InvalidateFilterCache($"Item property changed: {e.PropertyName}");
+                return;
+            }
+        }
+    }
+
+    private void OnFilteringChildrenCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (this.filterPredicate is null)
+        {
+            return;
+        }
+
+        // Subscribe to newly loaded/added nodes.
+        if (e.NewItems is not null)
+        {
+            foreach (var obj in e.NewItems)
+            {
+                if (obj is ITreeItem item)
+                {
+                    this.SubscribeForFiltering(item);
+                }
+            }
+        }
+
+        // For Reset (common on first load), rescan loaded children.
+        if (e.Action == NotifyCollectionChangedAction.Reset && sender is ITreeItem node)
+        {
+            if (node is ILoadedChildrenAccessor accessor && accessor.TryGetLoadedChildren(out var children))
+            {
+                for (var i = 0; i < children.Count; i++)
+                {
+                    this.SubscribeForFiltering(children[i]);
+                }
+            }
+        }
+
+        // Unsubscribe removed nodes (tree items have a single parent).
+        if (e.OldItems is not null
+            && (e.Action == NotifyCollectionChangedAction.Remove || e.Action == NotifyCollectionChangedAction.Replace))
+        {
+            foreach (var obj in e.OldItems)
+            {
+                if (obj is ITreeItem item)
+                {
+                    this.UnsubscribeForFiltering(item);
+                }
+            }
+        }
+
+        this.InvalidateFilterCache($"Loaded children changed: {e.Action}");
+    }
+
+    private void UnsubscribeForFiltering(ITreeItem node)
+    {
+        if (!this.filteringSubscribedNodes.Remove(node))
+        {
+            return;
+        }
+
+        node.ChildrenCollectionChanged -= this.OnFilteringChildrenCollectionChanged;
+        if (node is INotifyPropertyChanged npc)
+        {
+            npc.PropertyChanged -= this.OnFilteringItemPropertyChanged;
+        }
+    }
+
+    private void DisposeFilteringSubscriptions()
+    {
+        this.filterCacheDebounceCts?.Cancel();
+        this.filterCacheDebounceCts?.Dispose();
+        this.filterCacheDebounceCts = null;
+
+        foreach (var node in this.filteringSubscribedNodes)
+        {
+            node.ChildrenCollectionChanged -= this.OnFilteringChildrenCollectionChanged;
+            if (node is INotifyPropertyChanged npc)
+            {
+                npc.PropertyChanged -= this.OnFilteringItemPropertyChanged;
+            }
+        }
+
+        this.filteringSubscribedNodes.Clear();
+        this.filterSelfMatch.Clear();
+        this.filterSubtreeMatch.Clear();
+        this.filterCacheDirty = false;
+        this.filterCacheRevision = 0;
+        this.filterCacheComputedRevision = 0;
     }
 
     private void OnFilteredItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
