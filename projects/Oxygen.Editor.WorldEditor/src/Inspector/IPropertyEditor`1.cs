@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     Defines a contract for editing properties of one or more <see cref="GameObject"/> instances in a properties editor UI.

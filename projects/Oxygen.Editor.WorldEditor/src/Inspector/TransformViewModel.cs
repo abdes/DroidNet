@@ -3,13 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using System.Numerics;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Editor.WorldEditor.Messages;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 /// ViewModel for editing the transform properties (position, rotation, scale) of selected SceneNode instances.
@@ -18,19 +19,15 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
-using CommunityToolkit.Mvvm.Messaging;
-using System.Numerics;
-using Oxygen.Editor.WorldEditor.Messages;
-
 public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IMessenger? messenger = null) : ComponentPropertyEditor
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<TransformViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<TransformViewModel>();
 
+    private readonly IMessenger? messengerSvc = messenger;
+
     // Keep track of the current selection so property-change handlers can apply edits back
     // to the selected SceneNode instances.
     private ICollection<SceneNode>? selectedItems;
-
-    private readonly IMessenger? messengerSvc = messenger;
 
     // Guard against re-entrant updates when applying changes from the view back to the model.
     private bool isApplyingEditorChanges;
@@ -174,12 +171,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 p.X = value;
                 transform.LocalPosition = p;
             }
+
             // notify message with new snapshots
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionX"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionX")));
         }
         catch (Exception ex)
         {
@@ -217,11 +215,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 p.Y = value;
                 transform.LocalPosition = p;
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionY"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionY")));
         }
         catch (Exception ex)
         {
@@ -259,11 +258,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 p.Z = value;
                 transform.LocalPosition = p;
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionZ"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "PositionZ")));
         }
         catch (Exception ex)
         {
@@ -300,11 +300,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 euler.X = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationX"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationX")));
         }
         catch (Exception ex)
         {
@@ -338,11 +339,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 euler.Y = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationY"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationY")));
         }
         catch (Exception ex)
         {
@@ -376,11 +378,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 euler.Z = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationZ"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "RotationZ")));
         }
         catch (Exception ex)
         {
@@ -409,15 +412,18 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+
                 // Apply the user-entered value directly — the control validates inputs.
                 s.X = value;
                 transform.LocalScale = s;
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleX"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleX")));
+
             // Reflect the raw user value back to the ViewModel — do not normalize here.
             this.ScaleX = value;
         }
@@ -448,15 +454,18 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+
                 // Apply the user-entered value directly — the control validates inputs.
                 s.Y = value;
                 transform.LocalScale = s;
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleY"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleY")));
+
             // Reflect the raw user value back to the ViewModel — do not normalize here.
             this.ScaleY = value;
         }
@@ -487,15 +496,18 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
+
                 // Apply the user-entered value directly — the control validates inputs.
                 s.Z = value;
                 transform.LocalScale = s;
             }
+
             var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
-            this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleZ"));
+            _ = (this.messengerSvc?.Send(new SceneNodeTransformAppliedMessage(nodes, oldSnapshots, newSnapshots, "ScaleZ")));
+
             // Reflect the raw user value back to the ViewModel — do not normalize here.
             this.ScaleZ = value;
         }
@@ -567,11 +579,12 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         }
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0019:Use pattern matching", Justification = "code clarity")]
     private void UpdateRotationValues(ICollection<SceneNode> items)
     {
-            var mixedRotX = MixedValues.GetMixedValue(items, e =>
+        var mixedRotX = MixedValues.GetMixedValue(items, static e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
+            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).X;
         });
 
@@ -587,9 +600,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
             this.RotationX = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).X;
         }
 
-            var mixedRotY = MixedValues.GetMixedValue(items, e =>
+        var mixedRotY = MixedValues.GetMixedValue(items, static e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
+            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Y;
         });
 
@@ -605,9 +618,9 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
             this.RotationY = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Y;
         }
 
-            var mixedRotZ = MixedValues.GetMixedValue(items, e =>
+        var mixedRotZ = MixedValues.GetMixedValue(items, static e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
+            var transform = e.Components.FirstOrDefault(static c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Z;
         });
 
@@ -626,106 +639,82 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
     private void UpdateScaleValues(ICollection<SceneNode> items)
     {
-        var mixedScaleX = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalScale.X ?? 0;
-        });
+        // Local helper: retrieve a (possibly mixed) scale component value for the collection.
+        static float? GetMixedScale(ICollection<SceneNode> nodes, Func<TransformComponent, float> selector)
+            => MixedValues.GetMixedValue(nodes, e => e.Components.FirstOrDefault(c => c is TransformComponent) is not TransformComponent transform ? 0 : selector(transform));
 
-        if (mixedScaleX.HasValue)
+        // Local helper: handle one axis (X/Y/Z) — use delegates to extract/replace the component within the scale Vector3,
+        // and to write back to the ViewModel properties.
+        static void ProcessAxis(
+            ICollection<SceneNode> nodes,
+            Func<System.Numerics.Vector3, float> extract,
+            Func<System.Numerics.Vector3, float, System.Numerics.Vector3> setComponent,
+            Action<float> setViewModelScale,
+            Action<bool> setIsIndeterminate)
         {
-            this.ScaleX = mixedScaleX.Value;
-            this.ScaleXIsIndeterminate = false;
-        }
-        else
-        {
-            this.ScaleXIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
+            var mixed = GetMixedScale(nodes, t => extract(t.LocalScale));
+            if (mixed.HasValue)
+            {
+                setViewModelScale(mixed.Value);
+                setIsIndeterminate(false);
+                return;
+            }
+
+            setIsIndeterminate(true);
+
+            var firstTransform = nodes.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             if (firstTransform is null)
             {
-                this.ScaleX = 0;
+                setViewModelScale(0);
+                return;
             }
-            else
+
+            var s = firstTransform.LocalScale;
+            var comp = extract(s);
+            var norm = TransformConverter.NormalizeScaleValue(comp);
+            if (norm != comp)
             {
-
-                var s = firstTransform.LocalScale;
-                var norm = TransformConverter.NormalizeScaleValue(s.X);
-                if (norm != s.X)
-                {
-                    s.X = norm;
-                    firstTransform.LocalScale = s; // update model to canonical non-zero value
-                }
-
-                this.ScaleX = s.X;
+                s = setComponent(s, norm);
+                firstTransform.LocalScale = s; // update model to canonical non-zero value
             }
+
+            setViewModelScale(extract(s));
         }
 
-        var mixedScaleY = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalScale.Y ?? 0;
-        });
-
-        if (mixedScaleY.HasValue)
-        {
-            this.ScaleY = mixedScaleY.Value;
-            this.ScaleYIsIndeterminate = false;
-        }
-        else
-        {
-            this.ScaleYIsIndeterminate = true;
-            var firstTransformY = items.FirstOrDefault() is { } firstY ? (firstY.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            if (firstTransformY is null)
+        // Process X axis
+        ProcessAxis(
+            items,
+            v => v.X,
+            (v, val) =>
             {
-                this.ScaleY = 0;
-            }
-            else
+                v.X = val;
+                return v;
+            },
+            value => this.ScaleX = value,
+            indet => this.ScaleXIsIndeterminate = indet);
+
+        // Process Y axis
+        ProcessAxis(
+            items,
+            v => v.Y,
+            (v, val) =>
             {
-                var s = firstTransformY.LocalScale;
-                var norm = TransformConverter.NormalizeScaleValue(s.Y);
-                if (norm != s.Y)
-                {
-                    s.Y = norm;
-                    firstTransformY.LocalScale = s;
-                }
+                v.Y = val;
+                return v;
+            },
+            value => this.ScaleY = value,
+            indet => this.ScaleYIsIndeterminate = indet);
 
-                this.ScaleY = s.Y;
-            }
-        }
-
-        var mixedScaleZ = MixedValues.GetMixedValue(items, e =>
-        {
-            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
-            return transform?.LocalScale.Z ?? 0;
-        });
-
-        if (mixedScaleZ.HasValue)
-        {
-            this.ScaleZ = mixedScaleZ.Value;
-            this.ScaleZIsIndeterminate = false;
-        }
-        else
-        {
-            this.ScaleZIsIndeterminate = true;
-            var firstTransformZ = items.FirstOrDefault() is { } firstZ ? (firstZ.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
-            if (firstTransformZ is null)
+        // Process Z axis
+        ProcessAxis(
+            items,
+            v => v.Z,
+            (v, val) =>
             {
-                this.ScaleZ = 0;
-            }
-            else
-            {
-                var s = firstTransformZ.LocalScale;
-                var norm = TransformConverter.NormalizeScaleValue(s.Z);
-                if (norm != s.Z)
-                {
-                    s.Z = norm;
-                    firstTransformZ.LocalScale = s;
-                }
-
-                this.ScaleZ = s.Z;
-            }
-        }
+                v.Z = val;
+                return v;
+            },
+            value => this.ScaleZ = value,
+            indet => this.ScaleZIsIndeterminate = indet);
     }
-
-
 }

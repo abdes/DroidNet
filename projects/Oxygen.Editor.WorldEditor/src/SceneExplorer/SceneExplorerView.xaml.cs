@@ -71,6 +71,7 @@ public sealed partial class SceneExplorerView
         if (result == ContentDialogResult.Primary)
         {
             var newName = tb.Text?.Trim() ?? string.Empty;
+
             // Basic validation could go here
             await this.ViewModel!.RenameItemAsync(item, newName).ConfigureAwait(false);
         }

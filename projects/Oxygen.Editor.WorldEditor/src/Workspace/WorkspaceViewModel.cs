@@ -10,7 +10,7 @@ using Oxygen.Editor.WorldEditor.ContentBrowser;
 using Oxygen.Editor.WorldEditor.Editors;
 using Oxygen.Editor.WorldEditor.Editors.Scene;
 using Oxygen.Editor.WorldEditor.Output;
-using Oxygen.Editor.WorldEditor.PropertiesEditor;
+using Oxygen.Editor.WorldEditor.Inspector;
 using Oxygen.Editor.WorldEditor.Routing;
 using Oxygen.Editor.WorldEditor.SceneExplorer;
 using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;

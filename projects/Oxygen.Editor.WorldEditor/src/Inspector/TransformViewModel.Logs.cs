@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///   Logging methods for <see cref="TransformViewModel"/>.

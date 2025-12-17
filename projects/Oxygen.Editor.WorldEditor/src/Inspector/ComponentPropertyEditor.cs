@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 /// Base class for property editors for component sections in the details panel.

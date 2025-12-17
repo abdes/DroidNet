@@ -5,7 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     Represents the view for editing a scene node in the properties editor.

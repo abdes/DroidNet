@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     A styled card control for displaying a property and its value in a property editor UI.
@@ -15,7 +15,7 @@ namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
 [TemplateVisualState(Name = NormalState, GroupName = CommonStates)]
 [TemplateVisualState(Name = PointerOverState, GroupName = CommonStates)]
 [TemplateVisualState(Name = DisabledState, GroupName = CommonStates)]
-public class PropertyCard : ContentControl
+public partial class PropertyCard : ContentControl
 {
     /// <summary>The name of the visual state group for common states.</summary>
     public const string CommonStates = "CommonStates";

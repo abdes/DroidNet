@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using Oxygen.Editor.Core;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 /// Represents the details of multiple selected items in the properties editor.

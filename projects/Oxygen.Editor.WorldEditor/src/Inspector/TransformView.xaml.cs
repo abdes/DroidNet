@@ -5,7 +5,7 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     Represents the view for editing transform properties in the World Editor.
@@ -35,7 +35,7 @@ public partial class TransformView
         // Enforce editor-expected range: rotation must be between -180 and 180 degrees (inclusive)
         const float min = -180f;
         const float max = 180f;
-        e.IsValid = v >= min && v <= max;
+        e.IsValid = v is >= min and <= max;
     }
 
     private void ScaleBox_Validate(object? sender, ValidationEventArgs<float> e)

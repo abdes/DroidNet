@@ -12,7 +12,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.WorldEditor.Messages;
 using Oxygen.Editor.WorldEditor.Services;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     ViewModel for editing properties of selected SceneNode entities in the World Editor.
@@ -27,6 +27,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private readonly ILogger logger;
 
+    private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
     private readonly IMessenger messenger;
     private readonly ISceneEngineSync sceneEngineSync;
     private bool isDisposed;
@@ -39,7 +40,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="messenger">The messenger for MVVM messaging.</param>
-    /// <param name="loggerFactory">Optional logger factory for diagnostics.</param>
+    /// <param name="sceneEngineSync">The scene engine synchronization service.</param>
+    /// <param name="loggerFactory">
+    ///     Optional factory for creating loggers. If provided, enables detailed logging of the
+    ///     recognition process. If <see langword="null" />, logging is disabled.
+    /// </param>
     public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ISceneEngineSync sceneEngineSync, ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
@@ -87,9 +92,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.isDisposed = true;
     }
 
-    /// <inheritdoc />
-    private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = new();
-
+    /// <inheritdoc/>
     protected override ICollection<IPropertyEditor<SceneNode>> FilterPropertyEditors()
     {
         var filteredEditors = new Dictionary<Type, IPropertyEditor<SceneNode>>();
@@ -130,6 +133,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         return filteredEditors.Values;
     }
+
     private void OnTransformApplied(Messages.SceneNodeTransformAppliedMessage message)
     {
         if (message is null || message.Nodes.Count == 0)
