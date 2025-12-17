@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 

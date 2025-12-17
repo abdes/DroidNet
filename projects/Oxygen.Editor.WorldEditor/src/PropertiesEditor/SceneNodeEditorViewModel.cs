@@ -23,7 +23,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     // Factories accept an IMessenger so editors can be created with the proper messenger instance
     // (we create per-SceneNodeEditorViewModel instances and cache them).
     private static readonly IDictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> AllPropertyEditorFactories =
-        new Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> { { typeof(Transform), messenger => new TransformViewModel(loggerFactory: null, messenger) } };
+        new Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> { { typeof(TransformComponent), messenger => new TransformViewModel(loggerFactory: null, messenger) } };
 
     private readonly ILogger logger;
 
@@ -61,9 +61,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.UpdateItemsCollection(this.items);
             }));
 
-            // Handle transform applied messages from property editors: create undo entries and sync engine
-            this.messenger.Register<Messages.SceneNodeTransformAppliedMessage>(this, (_, message) =>
-                hosting.Dispatcher.TryEnqueue(() => this.OnTransformApplied(message)));
+        // Handle transform applied messages from property editors: create undo entries and sync engine
+        this.messenger.Register<Messages.SceneNodeTransformAppliedMessage>(this, (_, message) =>
+            hosting.Dispatcher.TryEnqueue(() => this.OnTransformApplied(message)));
     }
 
     /// <summary>
@@ -154,7 +154,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                     $"Restore Transform ({node.Name})",
                     () =>
                     {
-                        var tr = node.Components.OfType<Transform>().FirstOrDefault();
+                        var tr = node.Components.OfType<TransformComponent>().FirstOrDefault();
                         if (tr is not null)
                         {
                             tr.LocalPosition = oldSnap.Position;
@@ -167,7 +167,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                             $"Reapply Transform ({node.Name})",
                             () =>
                             {
-                                var tr2 = node.Components.OfType<Transform>().FirstOrDefault();
+                                var tr2 = node.Components.OfType<TransformComponent>().FirstOrDefault();
                                 if (tr2 is not null)
                                 {
                                     tr2.LocalPosition = newSnap.Position;

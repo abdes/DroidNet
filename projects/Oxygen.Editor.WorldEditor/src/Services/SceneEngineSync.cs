@@ -402,7 +402,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// </summary>
     private void ApplyTransform(Oxygen.Interop.World.OxygenWorld world, SceneNode node)
     {
-        var transform = node.Components.OfType<Transform>().FirstOrDefault();
+        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
         if (transform is not null)
         {
             var (position, rotation, scale) = TransformConverter.ToNative(transform);
@@ -555,7 +555,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                     root,
                     (node, parentGuid) =>
                     {
-                        var transform = node.Components.OfType<Transform>().FirstOrDefault();
+                        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
                         if (transform is not null)
                         {
                             // Delegate logging of transform details to helper so it can extract values itself

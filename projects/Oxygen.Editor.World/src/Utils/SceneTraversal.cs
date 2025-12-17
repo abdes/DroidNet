@@ -56,7 +56,7 @@ public static class SceneTraversal
     /// </summary>
     /// <param name="root">The root node to start collection from.</param>
     /// <returns>List of all node GUIDs in the hierarchy.</returns>
-    public static List<Guid> CollectNodeIds(SceneNode root)
+    public static IReadOnlyCollection<Guid> CollectNodeIds(SceneNode root)
     {
         ArgumentNullException.ThrowIfNull(root);
 
@@ -70,7 +70,7 @@ public static class SceneTraversal
     /// </summary>
     /// <param name="root">The root node to start collection from.</param>
     /// <returns>List of all nodes in the hierarchy.</returns>
-    public static List<SceneNode> CollectNodes(SceneNode root)
+    public static IReadOnlyCollection<SceneNode> CollectNodes(SceneNode root)
     {
         ArgumentNullException.ThrowIfNull(root);
 

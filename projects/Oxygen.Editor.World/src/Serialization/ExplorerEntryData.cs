@@ -14,36 +14,36 @@ namespace Oxygen.Editor.World.Serialization;
 public record ExplorerEntryData
 {
     /// <summary>
-    /// One of: "Node" or "Folder". Kept as a string for forward-compatibility.
+    /// Gets one of: "Node" or "Folder". Kept as a string for forward-compatibility.
     /// </summary>
     public string Type { get; init; } = "Node";
 
     /// <summary>
-    /// When Type == "Node", the referenced SceneNode Id.
+    /// Gets when Type == "Node", the referenced SceneNode Id.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public System.Guid? NodeId { get; init; }
 
     /// <summary>
-    /// When Type == "Folder", optional folder id (useful for stable ids across edits).
+    /// Gets when Type == "Folder", optional folder id (useful for stable ids across edits).
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public System.Guid? FolderId { get; init; }
 
     /// <summary>
-    /// Human friendly folder name (only for Type=="Folder").
+    /// Gets or sets human friendly folder name (only for Type=="Folder").
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Name { get; set; }
 
     /// <summary>
-    /// Child entries for folder nodes.
+    /// Gets or sets child entries for folder nodes.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public IList<ExplorerEntryData>? Children { get; set; } = null;
 
     /// <summary>
-    /// Gets or initializes a value indicating whether the item is expanded in the explorer view.
+    /// Gets or sets or initializes a value indicating whether the item is expanded in the explorer view.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsExpanded { get; set; }

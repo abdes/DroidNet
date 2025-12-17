@@ -7,13 +7,13 @@ using System.Text.Json.Serialization;
 using Oxygen.Editor.Core;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// Represents a component of a scene node, such as transform, geometry, material, etc.
 /// Concrete components implement instance-level <c>Hydrate</c>/<c>Dehydrate</c>.
 /// </summary>
-[JsonDerivedType(typeof(Transform), "Transform")]
+[JsonDerivedType(typeof(TransformComponent), "Transform")]
 [JsonDerivedType(typeof(GameComponent), "Base")]
 public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
 {
@@ -44,12 +44,9 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     {
         ArgumentNullException.ThrowIfNull(data);
         var dtoType = data.GetType();
-        if (Factories.TryGetValue(dtoType, out var factory))
-        {
-            return factory(data);
-        }
-
-        throw new InvalidOperationException($"No component factory registered for DTO type '{dtoType.FullName}'.");
+        return Factories.TryGetValue(dtoType, out var factory)
+            ? factory(data)
+            : throw new InvalidOperationException($"No component factory registered for DTO type '{dtoType.FullName}'.");
     }
 
     /// <summary>

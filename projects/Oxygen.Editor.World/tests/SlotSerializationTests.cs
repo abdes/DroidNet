@@ -14,7 +14,7 @@ public class SlotSerializationTests
     [TestMethod]
     public void OverridableProperty_FromDto_ToDto_RoundTrip()
     {
-        var def = true;
+        const bool def = true;
         var p = OverridableProperty.FromDefault(def);
 
         // not overridden -> ToDto is null
@@ -69,8 +69,7 @@ public class SlotSerializationTests
     public void LevelOfDetailSlot_RoundTrips()
     {
         var s = new LevelOfDetailSlot();
-        var defaultPolicy = s.LodPolicy.DefaultValue; // FixedLodPolicy
-        var overridePolicy = new Oxygen.Editor.World.Policies.FixedLodPolicy { LodIndex = 2 };
+        var overridePolicy = new FixedLodPolicy { LodIndex = 2 };
         s.LodPolicy = s.LodPolicy.WithOverride(overridePolicy);
 
         var dto = s.Dehydrate();

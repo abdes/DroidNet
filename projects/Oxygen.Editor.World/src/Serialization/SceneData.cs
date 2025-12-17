@@ -15,7 +15,7 @@ public record SceneData : GameObjectData
     public IList<SceneNodeData> RootNodes { get; init; } = [];
 
     /// <summary>
-    /// Optional editor-only data representing the scene explorer layout (folders and node references).
+    /// Gets optional editor-only data representing the scene explorer layout (folders and node references).
     /// This field is ignored by runtime code but saved/loaded to preserve editor state.
     /// </summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]

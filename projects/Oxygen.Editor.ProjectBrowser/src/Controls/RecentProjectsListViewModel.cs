@@ -19,7 +19,7 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 /// <summary>
 /// ViewModel for the recent projects list control.
 /// Manages the transformation of source IProjectInfo collection into displayable ProjectItemWithThumbnail items
-/// using DynamicObservableCollection.Transform() to automatically track changes.
+/// using DynamicObservableCollection.TransformComponent() to automatically track changes.
 /// </summary>
 internal partial class RecentProjectsListViewModel : ObservableObject
 {
@@ -130,7 +130,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
 
     /// <summary>
     /// Sets the source collection of recent projects and transforms them for display.
-    /// The transformation uses DynamicObservableCollection.Transform() to automatically track changes.
+    /// The transformation uses DynamicObservableCollection.TransformComponent() to automatically track changes.
     /// AdvancedCollectionView automatically reflects these changes with sorting/filtering.
     /// </summary>
     /// <param name="sourceProjects">The source collection of recent projects to display.</param>
@@ -146,7 +146,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
         }
 
         // Create transformed collection that auto-tracks source changes.
-        // Transform() handles all collection change notifications automatically.
+        // TransformComponent() handles all collection change notifications automatically.
         this.transformedItems = sourceProjects.Transform(
             p => ProjectItemWithThumbnail.Create(p, this.DefaultThumbnailUri));
 

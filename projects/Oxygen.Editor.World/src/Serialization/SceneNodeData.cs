@@ -10,8 +10,8 @@ namespace Oxygen.Editor.World.Serialization;
 public record SceneNodeData : GameObjectData
 {
     /// <summary>
-    /// Gets or initializes the list of components (including Transform).
-    /// Transform is represented by a <see cref="TransformData"/> entry.
+    /// Gets or initializes the list of components (including TransformComponent).
+    /// TransformComponent is represented by a <see cref="TransformData"/> entry.
     /// </summary>
     public IList<ComponentData> Components { get; init; } = [];
 
@@ -52,7 +52,7 @@ public record SceneNodeData : GameObjectData
     public bool IsRayCastingSelectable { get; init; } = true;
 
     /// <summary>
-    /// Gets or initializes a value indicating whether the node is expanded in the scene explorer.
+    /// Gets a value indicating whether gets or initializes a value indicating whether the node is expanded in the scene explorer.
     /// </summary>
     public bool IsExpanded { get; init; }
 
