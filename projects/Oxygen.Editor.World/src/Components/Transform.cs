@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World;
@@ -11,21 +12,21 @@ namespace Oxygen.Editor.World;
 ///     Represents a transform component of a scene node, specifying its position, rotation, and scale in the scene.
 /// </summary>
 /// <remarks>
-///     The <see cref="Transform" /> class represents a transform component of a scene node. It includes properties for
+///     The <see cref="TransformComponent" /> class represents a transform component of a scene node. It includes properties for
 ///     the position, rotation, and scale of the scene node within the scene. The class provides methods for getting and
 ///     setting these properties.
 /// </remarks>
-public partial class Transform : GameComponent
+public partial class TransformComponent : GameComponent
 {
     private Vector3 localPosition;
     private Quaternion localRotation = Quaternion.Identity;
     private Vector3 localScale = Vector3.One;
 
-    static Transform()
+    static TransformComponent()
     {
         Register<TransformData>(d =>
         {
-            var t = new Transform { Name = "Transform" };
+            var t = new TransformComponent { Name = "Transform" };
             t.Hydrate(d);
             return t;
         });

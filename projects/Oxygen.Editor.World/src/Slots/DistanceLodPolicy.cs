@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Policies;
+namespace Oxygen.Editor.World.Slots;
 
 /// <summary>
 /// LOD policy that selects LOD based on distance from the camera.

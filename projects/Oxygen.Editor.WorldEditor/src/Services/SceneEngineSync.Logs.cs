@@ -192,7 +192,7 @@ public partial class SceneEngineSync
 
     private void LogSceneTransform(SceneNode node, Guid? parentGuid)
     {
-        var transform = node.Components.OfType<Transform>().FirstOrDefault();
+        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
         if (transform is null)
         {
             this.LogSceneTransformHasNoComponent(node, parentGuid);

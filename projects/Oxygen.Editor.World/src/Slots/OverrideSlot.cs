@@ -4,6 +4,7 @@
 
 using System.Collections.Concurrent;
 using Oxygen.Editor.Core;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Slots;

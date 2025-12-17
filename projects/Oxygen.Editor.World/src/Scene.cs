@@ -45,7 +45,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     public IEnumerable<SceneNode> AllNodes => this.RootNodes.SelectMany(r => new[] { r }.Concat(r.Descendants()));
 
     /// <summary>
-    /// Editor-only explorer layout persisted alongside the scene file.
+    /// Gets or sets editor-only explorer layout persisted alongside the scene file.
     /// This is ignored by the runtime scene graph but included in scene DTOs.
     /// </summary>
     [JsonIgnore]
@@ -88,13 +88,11 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene.</returns>
     public Serialization.SceneData Dehydrate()
-    {
-        return new Serialization.SceneData
+        => new()
         {
             Name = this.Name,
             Id = this.Id,
-            RootNodes = this.RootNodes.Select(n => n.Dehydrate()).ToList(),
+            RootNodes = [.. this.RootNodes.Select(n => n.Dehydrate())],
             ExplorerLayout = this.ExplorerLayout,
         };
-    }
 }

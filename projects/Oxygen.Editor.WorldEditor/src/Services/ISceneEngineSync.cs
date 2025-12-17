@@ -81,7 +81,7 @@ public interface ISceneEngineSync
     public Task ReparentHierarchiesAsync(IReadOnlyList<Guid> nodeIds, Guid? newParentGuid, bool preserveWorldTransform = false);
 
     // ============================================================================
-    // Transform Operations
+    // TransformComponent Operations
     // ============================================================================
 
     /// <summary>

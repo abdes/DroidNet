@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.World;
 
@@ -36,9 +37,9 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
         this.Scene = scene;
         this.Name = "New Node"; // Initialize required property
 
-        // Initialize the components collection with the always-present Transform.
+        // Initialize the components collection with the always-present TransformComponent.
         // Use a concrete mutable collection that preserves insertion order.
-        this.Components = [new Transform { Name = nameof(Transform), Node = this }];
+        this.Components = [new TransformComponent { Name = nameof(TransformComponent), Node = this }];
         this.Children = [];
     }
 
@@ -349,8 +350,8 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
                 this.Components.Add(component);
             }
 
-            // 2. Ensure exactly one Transform component exists after hydration.
-            var transforms = this.Components.OfType<Transform>().ToList();
+            // 2. Ensure exactly one TransformComponent component exists after hydration.
+            var transforms = this.Components.OfType<TransformComponent>().ToList();
             if (transforms.Count == 0)
             {
                 throw new System.Text.Json.JsonException("Missing required Transform component in SceneNode data.");
@@ -402,7 +403,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "With LINQ, /ToList() is more natural")]
     public Serialization.SceneNodeData Dehydrate()
     {
-        var transform = this.Components.OfType<Transform>().FirstOrDefault();
+        var transform = this.Components.OfType<TransformComponent>().FirstOrDefault();
         return new Serialization.SceneNodeData
         {
             Name = this.Name,

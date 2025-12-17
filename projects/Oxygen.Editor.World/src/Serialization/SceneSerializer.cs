@@ -50,6 +50,7 @@ public class SceneSerializer(IProject project)
 
         // Use the canonical factory to set required init-only properties then hydrate.
         var scene = Scene.CreateAndHydrate(project, data);
+
         // Preserve editor-only explorer layout on the returned Scene instance so UI can read it.
         scene.ExplorerLayout = data.ExplorerLayout;
         return scene;

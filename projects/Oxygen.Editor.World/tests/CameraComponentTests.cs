@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Tests;

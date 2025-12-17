@@ -4,7 +4,7 @@
 
 using System.Text.Json.Serialization;
 
-namespace Oxygen.Editor.World.Policies;
+namespace Oxygen.Editor.World.Slots;
 
 /// <summary>
 ///     Base class for Level of Detail (LOD) selection policies.

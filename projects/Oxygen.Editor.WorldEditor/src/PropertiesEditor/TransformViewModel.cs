@@ -158,13 +158,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
             // capture old snapshots for undo/redo
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null)
                 {
                     continue;
@@ -175,7 +175,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
                 transform.LocalPosition = p;
             }
             // notify message with new snapshots
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -205,19 +205,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var p = transform.LocalPosition;
                 p.Y = value;
                 transform.LocalPosition = p;
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -247,19 +247,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var p = transform.LocalPosition;
                 p.Z = value;
                 transform.LocalPosition = p;
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -287,20 +287,20 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var q = transform.LocalRotation;
                 var euler = TransformConverter.QuaternionToEulerDegrees(q);
                 euler.X = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -325,20 +325,20 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var q = transform.LocalRotation;
                 var euler = TransformConverter.QuaternionToEulerDegrees(q);
                 euler.Y = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -363,20 +363,20 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
 
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var q = transform.LocalRotation;
                 var euler = TransformConverter.QuaternionToEulerDegrees(q);
                 euler.Z = value;
                 transform.LocalRotation = TransformConverter.EulerDegreesToQuaternion(euler);
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -401,19 +401,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
                 // Apply the user-entered value directly — the control validates inputs.
                 s.X = value;
                 transform.LocalScale = s;
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -440,19 +440,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
                 // Apply the user-entered value directly — the control validates inputs.
                 s.Y = value;
                 transform.LocalScale = s;
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -479,19 +479,19 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.isApplyingEditorChanges = true;
             var nodes = this.selectedItems.ToList();
-            var oldSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var oldSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t.LocalPosition, t.LocalRotation, t.LocalScale))
                 .ToList();
             foreach (var item in nodes)
             {
-                var transform = item.Components.FirstOrDefault(c => c is Transform) as Transform;
+                var transform = item.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
                 if (transform is null) continue;
                 var s = transform.LocalScale;
                 // Apply the user-entered value directly — the control validates inputs.
                 s.Z = value;
                 transform.LocalScale = s;
             }
-            var newSnapshots = nodes.Select(n => n.Components.OfType<Transform>().FirstOrDefault())
+            var newSnapshots = nodes.Select(n => n.Components.OfType<TransformComponent>().FirstOrDefault())
                 .Select(t => t is null ? default(TransformSnapshot) : new TransformSnapshot(t!.LocalPosition, t!.LocalRotation, t!.LocalScale))
                 .ToList();
 
@@ -511,7 +511,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
     {
         var mixedPosX = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalPosition.X ?? 0;
         });
 
@@ -524,13 +524,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.PositionXIsIndeterminate = true;
             this.PositionX = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.X ?? 0
+                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.X ?? 0
                 : 0;
         }
 
         var mixedPosY = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalPosition.Y ?? 0;
         });
 
@@ -543,13 +543,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.PositionYIsIndeterminate = true;
             this.PositionY = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.Y ?? 0
+                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.Y ?? 0
                 : 0;
         }
 
         var mixedPosZ = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalPosition.Z ?? 0;
         });
 
@@ -562,7 +562,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         {
             this.PositionZIsIndeterminate = true;
             this.PositionZ = items.FirstOrDefault() is { } first
-                ? (first.Components.FirstOrDefault(c => c is Transform) as Transform)?.LocalPosition.Z ?? 0
+                ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent)?.LocalPosition.Z ?? 0
                 : 0;
         }
     }
@@ -571,7 +571,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
     {
             var mixedRotX = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).X;
         });
 
@@ -583,13 +583,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.RotationXIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             this.RotationX = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).X;
         }
 
             var mixedRotY = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Y;
         });
 
@@ -601,13 +601,13 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.RotationYIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             this.RotationY = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Y;
         }
 
             var mixedRotZ = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(transform.LocalRotation).Z;
         });
 
@@ -619,7 +619,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.RotationZIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             this.RotationZ = firstTransform is null ? 0 : TransformConverter.QuaternionToEulerDegrees(firstTransform.LocalRotation).Z;
         }
     }
@@ -628,7 +628,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
     {
         var mixedScaleX = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalScale.X ?? 0;
         });
 
@@ -640,7 +640,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleXIsIndeterminate = true;
-            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransform = items.FirstOrDefault() is { } first ? (first.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             if (firstTransform is null)
             {
                 this.ScaleX = 0;
@@ -662,7 +662,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
         var mixedScaleY = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalScale.Y ?? 0;
         });
 
@@ -674,7 +674,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleYIsIndeterminate = true;
-            var firstTransformY = items.FirstOrDefault() is { } firstY ? (firstY.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransformY = items.FirstOrDefault() is { } firstY ? (firstY.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             if (firstTransformY is null)
             {
                 this.ScaleY = 0;
@@ -695,7 +695,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
 
         var mixedScaleZ = MixedValues.GetMixedValue(items, e =>
         {
-            var transform = e.Components.FirstOrDefault(c => c is Transform) as Transform;
+            var transform = e.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent;
             return transform?.LocalScale.Z ?? 0;
         });
 
@@ -707,7 +707,7 @@ public partial class TransformViewModel(ILoggerFactory? loggerFactory = null, IM
         else
         {
             this.ScaleZIsIndeterminate = true;
-            var firstTransformZ = items.FirstOrDefault() is { } firstZ ? (firstZ.Components.FirstOrDefault(c => c is Transform) as Transform) : null;
+            var firstTransformZ = items.FirstOrDefault() is { } firstZ ? (firstZ.Components.FirstOrDefault(c => c is TransformComponent) as TransformComponent) : null;
             if (firstTransformZ is null)
             {
                 this.ScaleZ = 0;

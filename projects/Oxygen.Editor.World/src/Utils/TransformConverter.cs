@@ -7,16 +7,16 @@ using System.Numerics;
 namespace Oxygen.Editor.World.Utils;
 
 /// <summary>
-///     Provides conversion utilities for <see cref="Transform"/> components to native engine types.
+///     Provides conversion utilities for <see cref="TransformComponent"/> components to native engine types.
 /// </summary>
 public static class TransformConverter
 {
     /// <summary>
-    ///     Converts a managed <see cref="Transform"/> to native Vector3/Quaternion/Vector3 tuple.
+    ///     Converts a managed <see cref="TransformComponent"/> to native Vector3/Quaternion/Vector3 tuple.
     /// </summary>
     /// <param name="transform">The transform to convert.</param>
     /// <returns>A tuple containing position, rotation, and scale as native types.</returns>
-    public static (Vector3 position, Quaternion rotation, Vector3 scale) ToNative(Transform transform)
+    public static (Vector3 position, Quaternion rotation, Vector3 scale) ToNative(TransformComponent transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
 
@@ -35,7 +35,7 @@ public static class TransformConverter
     /// </summary>
     /// <param name="transform">The transform to extract from.</param>
     /// <returns>Position as Vector3.</returns>
-    public static Vector3 GetPosition(Transform transform)
+    public static Vector3 GetPosition(TransformComponent transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
         return new Vector3(transform.LocalPosition.X, transform.LocalPosition.Y, transform.LocalPosition.Z);
@@ -46,7 +46,7 @@ public static class TransformConverter
     /// </summary>
     /// <param name="transform">The transform to extract from.</param>
     /// <returns>Rotation as Quaternion.</returns>
-    public static Quaternion GetRotation(Transform transform)
+    public static Quaternion GetRotation(TransformComponent transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
         return new Quaternion(
@@ -61,7 +61,7 @@ public static class TransformConverter
     /// </summary>
     /// <param name="transform">The transform to extract from.</param>
     /// <returns>Scale as Vector3.</returns>
-    public static Vector3 GetScale(Transform transform)
+    public static Vector3 GetScale(TransformComponent transform)
     {
         ArgumentNullException.ThrowIfNull(transform);
         return new Vector3(transform.LocalScale.X, transform.LocalScale.Y, transform.LocalScale.Z);

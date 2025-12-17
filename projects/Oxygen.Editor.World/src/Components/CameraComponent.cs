@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World;
+namespace Oxygen.Editor.World.Components;
 
 /// <summary>
 /// Base class for camera components.
