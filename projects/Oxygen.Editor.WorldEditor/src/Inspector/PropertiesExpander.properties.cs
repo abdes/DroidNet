@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     Provides dependency properties and property change logic for the PropertiesExpander control.

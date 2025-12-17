@@ -52,7 +52,7 @@ public abstract class LayoutItemAdapter : TreeItemAdapter
 
     /// <summary>
     /// Adds a folder to the layout.
-    /// </summary
+    /// </summary>
     public void AddFolder(FolderAdapter folder)
     {
         if (!this.Folders.Contains(folder))

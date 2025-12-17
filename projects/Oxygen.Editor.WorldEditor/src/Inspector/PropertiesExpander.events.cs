@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 ///     Provides events for expanded and collapsed states in the properties expander.

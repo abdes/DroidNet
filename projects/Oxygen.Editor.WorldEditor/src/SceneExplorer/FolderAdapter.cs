@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Editor.Core;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.WorldEditor.SceneExplorer;

@@ -6,8 +6,8 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
-using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 using SceneAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneAdapter;
+using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
 
 namespace Oxygen.Editor.WorldEditor.Utils;
 

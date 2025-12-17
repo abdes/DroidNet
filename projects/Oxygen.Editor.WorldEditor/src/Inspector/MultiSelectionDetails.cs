@@ -8,8 +8,9 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.World;
+using Oxygen.Editor.WorldEditor.Inspector;
 
-namespace Oxygen.Editor.WorldEditor.PropertiesEditor;
+namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
 /// Represents the details of multiple selected items in the properties editor.
