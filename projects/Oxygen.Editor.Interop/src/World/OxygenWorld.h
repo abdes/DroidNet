@@ -7,8 +7,8 @@
 #pragma once
 #pragma managed(push, on)
 
-#include "EngineContext.h"
-#include "World/ICommandFactory.h"
+#include <EngineContext.h>
+#include <World/ICommandFactory.h>
 
 using namespace System;
 using namespace System::Numerics;
@@ -16,22 +16,31 @@ using namespace System::Numerics;
 namespace Oxygen::Interop::World {
 
   // Future Enhancements:
-  // - Implement Two-Way Synchronization (Engine -> Editor events for physics/scripts).
+  // - Implement Two-Way Synchronization (Engine -> Editor events for
+  // physics/scripts).
   // - Implement Read-Replica for thread-safe immediate property access.
 
-  public ref class OxygenWorld {
+  public
+  ref class OxygenWorld {
   public:
     OxygenWorld(EngineContext^ context);
     OxygenWorld(EngineContext^ context, ICommandFactory^ commandFactory);
 
     // Scene management
-    // Scenes are identified by name on the native engine side; keep CreateScene(String) as before.
+    // Scenes are identified by name on the native engine side; keep
+    // CreateScene(String) as before.
     void CreateScene(String^ name);
 
     // Node management (GUID-based): all node APIs accept node or parent GUIDs
-    // Creates a node and invokes the callback with the new node GUID on the engine thread.
-    void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated);
-    void CreateSceneNode(String^ name, System::Guid nodeId, Nullable<System::Guid> parentGuid, Action<System::Guid>^ onCreated, bool initializeWorldAsRoot);
+    // Creates a node and invokes the callback with the new node GUID on the
+    // engine thread.
+    void CreateSceneNode(String^ name, System::Guid nodeId,
+      Nullable<System::Guid> parentGuid,
+      Action<System::Guid>^ onCreated);
+    void CreateSceneNode(String^ name, System::Guid nodeId,
+      Nullable<System::Guid> parentGuid,
+      Action<System::Guid>^ onCreated,
+      bool initializeWorldAsRoot);
     void RemoveSceneNode(System::Guid nodeId);
     void RenameSceneNode(System::Guid nodeId, String^ newName);
 
@@ -43,6 +52,7 @@ namespace Oxygen::Interop::World {
 
     // Geometry management
     void CreateBasicMesh(System::Guid nodeId, String^ meshType);
+    void DetachGeometry(System::Guid nodeId);
     void SetVisibility(System::Guid nodeId, bool visible);
 
     // Selection (Editor-side state)
@@ -50,8 +60,11 @@ namespace Oxygen::Interop::World {
     void DeselectNode(System::Guid nodeId);
 
     // Reparent a node to a new parent (or make root when parent is null)
-    void ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent, bool preserveWorldTransform);
-    void ReparentSceneNodes(array<System::Guid>^ children, Nullable<System::Guid> parent, bool preserveWorldTransform);
+    void ReparentSceneNode(System::Guid child, Nullable<System::Guid> parent,
+      bool preserveWorldTransform);
+    void ReparentSceneNodes(array<System::Guid>^ children,
+      Nullable<System::Guid> parent,
+      bool preserveWorldTransform);
     void UpdateTransformsForNodes(array<System::Guid>^ nodes);
     void RemoveSceneNodes(array<System::Guid>^ nodes);
 

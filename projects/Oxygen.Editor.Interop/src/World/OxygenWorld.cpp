@@ -8,20 +8,21 @@
 
 #include "pch.h"
 
-#include "Commands/CreateBasicMeshCommand.h"
-#include "Commands/CreateSceneNodeCommand.h"
-#include "Commands/RemoveSceneNodeCommand.h"
-#include "Commands/RemoveSceneNodesCommand.h"
-#include "Commands/RenameSceneNodeCommand.h"
-#include "Commands/ReparentSceneNodeCommand.h"
-#include "Commands/ReparentSceneNodesCommand.h"
-#include "Commands/SetLocalTransformCommand.h"
-#include "Commands/SetVisibilityCommand.h"
-#include "Commands/UpdateTransformsForNodesCommand.h"
-#include "EditorModule/EditorModule.h"
-#include "EditorModule/NodeRegistry.h"
-#include "World/CommandFactory.h"
-#include "World/OxygenWorld.h"
+#include <Commands/CreateBasicMeshCommand.h>
+#include <Commands/CreateSceneNodeCommand.h>
+#include <Commands/DetachGeometryCommand.h>
+#include <Commands/RemoveSceneNodeCommand.h>
+#include <Commands/RemoveSceneNodesCommand.h>
+#include <Commands/RenameSceneNodeCommand.h>
+#include <Commands/ReparentSceneNodeCommand.h>
+#include <Commands/ReparentSceneNodesCommand.h>
+#include <Commands/SetLocalTransformCommand.h>
+#include <Commands/SetVisibilityCommand.h>
+#include <Commands/UpdateTransformsForNodesCommand.h>
+#include <EditorModule/EditorModule.h>
+#include <EditorModule/NodeRegistry.h>
+#include <World/CommandFactory.h>
+#include <World/OxygenWorld.h>
 
 using namespace oxygen::interop::module;
 using namespace oxygen::interop::module::commands;
@@ -280,6 +281,30 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
+  void OxygenWorld::DetachGeometry(System::Guid nodeId) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    auto b = nodeId.ToByteArray();
+    std::array<uint8_t, 16> key{};
+    for (int i = 0; i < 16; ++i)
+      key[i] = b[i];
+
+    auto opt = NodeRegistry::Lookup(key);
+    if (!opt.has_value())
+      return;
+
+    const auto& handle = opt.value();
+    auto cmd = std::unique_ptr<DetachGeometryCommand>(
+      commandFactory_->CreateDetachGeometry(handle));
+    editor_module->get().Enqueue(std::move(cmd));
+  }
+
   void OxygenWorld::SetVisibility(System::Guid nodeId, bool visible) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine)
@@ -383,8 +408,8 @@ namespace Oxygen::Interop::World {
     }
 
     auto cmd = std::unique_ptr<ReparentSceneNodesCommand>(
-      commandFactory_->CreateReparentSceneNodes(std::move(native_children), parentHandle,
-        preserveWorldTransform));
+      commandFactory_->CreateReparentSceneNodes(
+        std::move(native_children), parentHandle, preserveWorldTransform));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
