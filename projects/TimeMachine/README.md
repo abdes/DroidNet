@@ -134,14 +134,16 @@ void Increment()
 {
     value++;
 
-    // Queue the reverse operation.
-    historyKeeper.AddChange("decrement", () =>
-    {
-        value--;
+    // Queue the reverse operation (undo).
+    historyKeeper.AddChange("decrement", Decrement);
+}
 
-        // When undoing, register the redo operation.
-        historyKeeper.AddChange("increment", Increment);
-    });
+void Decrement()
+{
+    value--;
+
+    // When undoing (i.e., applying the undo change), register the redo operation.
+    historyKeeper.AddChange("increment", Increment);
 }
 
 Increment();
@@ -149,6 +151,109 @@ Increment();
 historyKeeper.Undo(); // value goes back
 historyKeeper.Redo(); // value goes forward again
 ```
+
+## Rules of Thumb (copy/paste into your brain)
+
+TimeMachine is simple when you follow one invariant:
+
+- Every operation has a single inverse.
+- When you perform an operation **now**, you register its inverse via `AddChange(...)`.
+- When an inverse runs (during **Undo**/**Redo**), it should register the inverse of itself.
+
+That’s it.
+
+### The three rules
+
+1. **Do the thing now.**
+2. **Queue only the inverse.** (Don’t queue both undo and redo “up front”.)
+3. **Never add two history entries for one user action.**
+
+### What not to do (common AI/codegen failure modes)
+
+- **Anti-pattern: queue undo and redo immediately**
+  - “I just added the component, so I’ll `AddChange(remove)` and also `AddChange(add)`.”
+  - Result: duplicate entries / broken stacks.
+
+- **Anti-pattern: make Undo call a method that also queues history**
+  - If your “business method” always calls `AddChange`, then calling it from inside an undo change will usually create extra history entries.
+  - Fix: separate “apply mutation” from “register inverse”, or use a dedicated `ApplyXxx(...)` method for undo/redo.
+
+- **Anti-pattern: use volatile UI indices for undo**
+  - UI indices often depend on expansion/virtualization/filtering.
+  - Fix: store stable model coordinates (parent + child-relative index, ids, snapshots, etc.).
+
+## Patterns that work well
+
+### Pattern 1: Two explicit operations (no ambiguity)
+
+Use two explicit functions: `DoX()` and `UndoX()`.
+Each one performs its work and queues only its inverse.
+
+You already saw this in the `Increment`/`Decrement` example above.
+
+### Pattern 2: Use `AddChange(Action<TArg>, arg)` to avoid nested lambdas
+
+If you want clean code without “double lambdas” or self-referencing delegates, use the overload that takes an action + argument.
+
+This is especially good when the inverse needs *captured data* (like a node reference + the component instance).
+
+```csharp
+public sealed record ComponentOp(SceneNode Node, GameComponent Component);
+
+void ApplyAdd(ComponentOp op)
+{
+        _ = op.Node.AddComponent(op.Component);
+        historyKeeper.AddChange($"remove ({op.Component.Name})", ApplyRemove, op);
+}
+
+void ApplyRemove(ComponentOp op)
+{
+        _ = op.Node.RemoveComponent(op.Component);
+        historyKeeper.AddChange($"add ({op.Component.Name})", ApplyAdd, op);
+}
+
+// User action:
+var op = new ComponentOp(node, component);
+ApplyAdd(op); // does it now + queues inverse
+```
+
+Key properties of this pattern:
+
+- One user action → one `AddChange(...)` entry (the inverse)
+- Undo/redo correctness doesn’t depend on “current selection” or UI state
+- The operation argument (`op`) contains exactly what’s needed to replay the inverse
+
+### Pattern 3: Snapshot + apply/restore for property edits
+
+For property edits, store “before” and “after” snapshots and implement explicit apply/restore methods.
+
+```csharp
+public sealed record TransformOp(SceneNode Node, TransformSnapshot Old, TransformSnapshot New);
+
+void RestoreTransform(TransformOp op)
+{
+        ApplySnapshot(op.Node, op.Old);
+        historyKeeper.AddChange("reapply transform", ReapplyTransform, op);
+}
+
+void ReapplyTransform(TransformOp op)
+{
+        ApplySnapshot(op.Node, op.New);
+        historyKeeper.AddChange("restore transform", RestoreTransform, op);
+}
+
+// User action already applied the New snapshot:
+historyKeeper.AddChange("restore transform", RestoreTransform, new TransformOp(node, oldSnap, newSnap));
+```
+
+## Guidance for AI Agents / Codegen
+
+If you are generating code that uses TimeMachine:
+
+- Prefer explicit `ApplyXxx(op)` methods + `AddChange(Action<TArg>, arg)`.
+- Never queue both undo and redo for the same user action.
+- Never assume the “current selection” at undo time.
+- Store stable operands (references, ids, snapshots, parent+index), not UI indices.
 
 ### Add synchronous changes
 
