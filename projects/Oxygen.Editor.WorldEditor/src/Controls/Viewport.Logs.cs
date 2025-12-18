@@ -81,8 +81,6 @@ public sealed partial class Viewport
         Message = "[Viewport] Attach requested. reason={Reason}")]
     private static partial void LogAttachRequested(ILogger logger, string reason);
 
-    // CompositionScaleChanged logging removed; transform is now static in XAML.
-
     [Conditional("DEBUG")]
     private void LogAttachRequested(string reason)
         => LogAttachRequested(this.logger, reason);

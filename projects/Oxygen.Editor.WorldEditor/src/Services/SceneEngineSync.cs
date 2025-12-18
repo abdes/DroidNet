@@ -283,6 +283,12 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    ///     Extracts mesh type from a geometry URI.
+    /// </summary>
+    private static string? ExtractMeshTypeFromUri(string? uri)
+        => string.IsNullOrEmpty(uri) ? null : uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+
     private Oxygen.Interop.World.OxygenWorld? TryGetWorld()
     {
         try
@@ -298,8 +304,25 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// <inheritdoc/>
     public Task DetachGeometryAsync(Guid nodeId)
     {
-        // TODO: Implement when engine API is available
-        throw new NotImplementedException("DetachGeometryAsync will be implemented when engine API supports it.");
+        var world = this.TryGetWorld();
+        if (world is null)
+        {
+            this.LogCannotDetachGeometry(nodeId);
+            return Task.CompletedTask;
+        }
+
+        try
+        {
+            // Request engine to detach geometry from the node
+            world.DetachGeometry(nodeId);
+            this.LogDetachedGeometry(nodeId);
+        }
+        catch (Exception ex)
+        {
+            this.LogFailedToDetachGeometry(ex, nodeId);
+        }
+
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -415,24 +438,17 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// </summary>
     private void ApplyGeometry(Oxygen.Interop.World.OxygenWorld world, SceneNode node, GeometryComponent geometry)
     {
+        // FIXME: if the asset reference is null, the geometry component should be removed from the node in the engine.
+        if (geometry.Geometry is null)
+        {
+            return;
+        }
+
         var meshType = ExtractMeshTypeFromUri(geometry.Geometry.Uri?.ToString());
         if (!string.IsNullOrEmpty(meshType))
         {
             world.CreateBasicMesh(node.Id, meshType);
         }
-    }
-
-    /// <summary>
-    ///     Extracts mesh type from a geometry URI.
-    /// </summary>
-    private static string? ExtractMeshTypeFromUri(string? uri)
-    {
-        if (string.IsNullOrEmpty(uri))
-        {
-            return null;
-        }
-
-        return uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
     }
 
     private async Task CreateAllNodesAsync(Scene scene, Oxygen.Interop.World.OxygenWorld world)

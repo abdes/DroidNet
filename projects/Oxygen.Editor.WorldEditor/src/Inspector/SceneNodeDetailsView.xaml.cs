@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
@@ -24,7 +23,7 @@ public sealed partial class SceneNodeDetailsView : UserControl
         nameof(Node),
         typeof(Oxygen.Editor.World.SceneNode),
         typeof(SceneNodeDetailsView),
-        new PropertyMetadata(null, OnNodeChanged));
+        new PropertyMetadata(defaultValue: null, OnNodeChanged));
 
     /// <summary>
     /// Identifies the <see cref="HistoryRoot"/> dependency property.
@@ -33,7 +32,7 @@ public sealed partial class SceneNodeDetailsView : UserControl
         nameof(HistoryRoot),
         typeof(object),
         typeof(SceneNodeDetailsView),
-        new PropertyMetadata(null, OnHistoryRootChanged));
+        new PropertyMetadata(defaultValue: null, OnHistoryRootChanged));
 
     /// <summary>
     /// Identifies the <see cref="LoggerFactory"/> dependency property.
@@ -42,7 +41,20 @@ public sealed partial class SceneNodeDetailsView : UserControl
         nameof(LoggerFactory),
         typeof(ILoggerFactory),
         typeof(SceneNodeDetailsView),
-        new PropertyMetadata(null, OnLoggerFactoryChanged));
+        new PropertyMetadata(defaultValue: null, OnLoggerFactoryChanged));
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneNodeDetailsView"/> class.
+    /// </summary>
+    public SceneNodeDetailsView()
+    {
+        this.ViewModel = new SceneNodeDetailsViewModel();
+        this.InitializeComponent();
+
+        this.ViewModel.Node = this.Node;
+        this.ViewModel.HistoryRoot = this.HistoryRoot;
+        this.ViewModel.LoggerFactory = this.LoggerFactory;
+    }
 
     /// <summary>
     /// Gets or sets the scene node to display. This control is intended to be used only when a single node is selected.
@@ -73,19 +85,6 @@ public sealed partial class SceneNodeDetailsView : UserControl
         set => this.SetValue(LoggerFactoryProperty, value);
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SceneNodeDetailsView"/> class.
-    /// </summary>
-    public SceneNodeDetailsView()
-    {
-        this.ViewModel = new SceneNodeDetailsViewModel();
-        this.InitializeComponent();
-
-        this.ViewModel.Node = this.Node;
-        this.ViewModel.HistoryRoot = this.HistoryRoot;
-        this.ViewModel.LoggerFactory = this.LoggerFactory;
-    }
-
     private static void OnLoggerFactoryChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not SceneNodeDetailsView view)
@@ -93,7 +92,7 @@ public sealed partial class SceneNodeDetailsView : UserControl
             return;
         }
 
-        view.ViewModel?.LoggerFactory = (ILoggerFactory?)e.NewValue;
+        _ = view.ViewModel?.LoggerFactory = (ILoggerFactory?)e.NewValue;
     }
 
     private static void OnNodeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)

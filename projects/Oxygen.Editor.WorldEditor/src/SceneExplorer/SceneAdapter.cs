@@ -115,7 +115,10 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         if (string.Equals(entry.Type, "Node", StringComparison.OrdinalIgnoreCase) && entry.NodeId.HasValue)
         {
             var node = this.AttachedObject.AllNodes.FirstOrDefault(n => n.Id == entry.NodeId);
-            if (node == null) return;
+            if (node == null)
+            {
+                return;
+            }
 
             var adapter = new SceneNodeAdapter(node);
 
@@ -144,8 +147,15 @@ public partial class SceneAdapter(Scene scene) : TreeItemAdapter, ITreeItem<Scen
         switch (parent)
         {
             case LayoutItemAdapter layoutParent:
-                if (child is FolderAdapter f) layoutParent.AddFolder(f);
-                else layoutParent.AddContent(child);
+                if (child is FolderAdapter f)
+                {
+                    layoutParent.AddFolder(f);
+                }
+                else
+                {
+                    layoutParent.AddContent(child);
+                }
+
                 break;
             case SceneAdapter:
                 this.AddChildSafe(child);

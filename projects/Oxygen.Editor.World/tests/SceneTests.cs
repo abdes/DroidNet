@@ -371,8 +371,12 @@ public class SceneTests
         var node = new SceneNode(scene) { Name = "MeshNode" };
         scene.RootNodes.Add(node);
 
-        var geo = new GeometryComponent { Name = "HeroGeometry", Node = node };
-        geo.Geometry.Uri = new("asset://Generated/BasicShapes/Cube");
+        var geo = new GeometryComponent
+        {
+            Name = "HeroGeometry",
+            Node = node,
+            Geometry = new("asset://Generated/BasicShapes/Cube"),
+        };
 
         // component-level override
         var compMat = new Slots.MaterialsSlot();
@@ -398,7 +402,8 @@ public class SceneTests
         var rnode = restored.RootNodes[0];
         var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
 
-        _ = rgeo.Geometry.Uri.Should().Be("asset://Generated/BasicShapes/Cube");
+        _ = rgeo.Should().NotBeNull();
+        _ = rgeo.Geometry!.Uri.Should().Be("asset://Generated/BasicShapes/Cube");
         _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
         _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset://Generated/Materials/Default");
 

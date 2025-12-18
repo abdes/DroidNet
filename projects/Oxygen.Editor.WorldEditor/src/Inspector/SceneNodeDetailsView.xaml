@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.Inspector.SceneNodeDetailsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -92,7 +92,7 @@
             Grid.Row="1"
             Grid.ColumnSpan="3"
             Margin="4,4,4,4"
-            ItemsSource="{x:Bind ViewModel.Components, Mode=OneWay}"
+            ItemsSource="{x:Bind ViewModel.Node.Components, Mode=OneWay}"
             PreviewKeyDown="OnComponentsListView_PreviewKeyDown"
             SelectionChanged="OnComponentsItemsView_SelectionChanged"
             SelectionMode="Single">

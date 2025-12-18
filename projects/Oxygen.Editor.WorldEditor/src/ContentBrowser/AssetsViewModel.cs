@@ -112,6 +112,7 @@ public partial class AssetsViewModel(
         {
             Debug.WriteLine(
                 $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
+
             // Asset indexing runs automatically in background - no manual refresh needed
             var assetCount = await assetsIndexingService.QueryAssetsAsync().ConfigureAwait(false);
             Debug.WriteLine($"[AssetsViewModel] Assets available: {assetCount.Count}");

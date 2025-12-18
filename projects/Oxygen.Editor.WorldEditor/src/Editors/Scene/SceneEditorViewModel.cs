@@ -198,7 +198,9 @@ public partial class SceneEditorViewModel : ObservableObject
                     {
                         var c = DefaultViewportClearColors[idx];
                         if (vm.ClearColor.R == c.R && vm.ClearColor.G == c.G && vm.ClearColor.B == c.B && vm.ClearColor.A == c.A)
+                        {
                             return idx;
+                        }
                     }
                     return -1;
                 })

@@ -2,12 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
-using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -17,46 +16,29 @@ using Oxygen.Editor.World.Components;
 namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
-/// ViewModel for <see cref="SceneNodeDetailsView"/>. This ViewModel assumes a single <see cref="SceneNode"/>.
+/// ViewModel for <see cref="SceneNodeDetailsView"/>. This ViewModel assumes a single
+/// <see cref="SceneNode"/> selection and exposes node-level properties and component
+/// operations such as adding or removing components.
 /// </summary>
+/// <remarks>
+/// The view model wires to the <c>SceneNode.PropertyChanged</c> events of the
+/// current <see cref="Node"/> to keep UI-bound properties (for example <see cref="Name"/>)
+/// in sync. Component add/remove requests are emitted via the weak-reference messenger so
+/// that the editor host can perform the actual mutations and maintain undo/redo history.
+/// </remarks>
 public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 {
-    private sealed record ComponentOperation(SceneNode Node, GameComponent Component);
-
-    private ILogger logger;
     private readonly DispatcherQueue? dispatcher;
 
-    private ILoggerFactory? loggerFactory;
+    private ILogger logger;
 
     private bool doNotPropagateName;
 
-    private SceneNode? node;
-
     /// <summary>
-    /// Gets or sets the object used as the undo/redo history root.
-    /// When set (typically to the parent inspector ViewModel), changes are recorded into that history.
+    /// Initializes a new instance of the <see cref="SceneNodeDetailsViewModel"/> class.
     /// </summary>
-    public object? HistoryRoot { get; set; }
-
-    /// <summary>
-    /// Gets or sets the <see cref="ILoggerFactory"/> used by this view-model.
-    /// Setting this updates the internal logger instance.
-    /// </summary>
-    public ILoggerFactory? LoggerFactory
-    {
-        get => this.loggerFactory;
-        set
-        {
-            if (ReferenceEquals(this.loggerFactory, value))
-            {
-                return;
-            }
-
-            this.loggerFactory = value;
-            this.logger = (value ?? NullLoggerFactory.Instance).CreateLogger<SceneNodeDetailsViewModel>();
-        }
-    }
-
+    /// <param name="loggerFactory">Optional logger factory used to create an <see cref="ILogger"/>.
+    /// If <see langword="null"/>, a <see cref="NullLoggerFactory"/> is used.</param>
     public SceneNodeDetailsViewModel(ILoggerFactory? loggerFactory = null)
     {
         this.dispatcher = DispatcherQueue.GetForCurrentThread();
@@ -66,37 +48,65 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Gets the node type for icon binding.
+    /// Gets or sets the object used as the undo/redo history root.
+    /// When set (typically to the parent inspector ViewModel), changes are recorded into that history.
     /// </summary>
-    public Type NodeType => typeof(SceneNode);
+    public object? HistoryRoot { get; set; }
 
     /// <summary>
-    /// Gets or sets the current node (single-selection only).
+    /// Gets or sets the <see cref="ILoggerFactory"/> used by this view-model.
+    /// Setting this updates the internal logger instance used for diagnostics.
     /// </summary>
-    public SceneNode? Node
+    public ILoggerFactory? LoggerFactory
     {
-        get => this.node;
+        get;
         set
         {
-            if (ReferenceEquals(this.node, value))
+            if (ReferenceEquals(field, value))
             {
                 return;
             }
 
-            var oldNodeName = this.node?.Name;
+            field = value;
+            this.logger = (value ?? NullLoggerFactory.Instance).CreateLogger<SceneNodeDetailsViewModel>();
+        }
+    }
+
+    /// <summary>
+    /// Gets the node type for icon binding. Returns the runtime type of the current
+    /// <see cref="Node"/>, or <see cref="SceneNode"/> when no node is selected.
+    /// </summary>
+    public Type NodeType => this.Node?.GetType() ?? typeof(SceneNode);
+
+    /// <summary>
+    /// Gets or sets the current <see cref="SceneNode"/>. This view model assumes a single selection.
+    /// When set, the view model subscribes to the node's <see cref="INotifyPropertyChanged"/>
+    /// events to keep view-model properties synchronized with changes originating from the model.
+    /// </summary>
+    public SceneNode? Node
+    {
+        get;
+        set
+        {
+            if (ReferenceEquals(field, value))
+            {
+                return;
+            }
+
+            var oldNodeName = field?.Name;
             var newNodeName = value?.Name;
             this.LogNodeChanged(oldNodeName, newNodeName);
 
-            if (this.node is not null)
+            if (field is not null)
             {
-                this.node.PropertyChanged -= OnNodePropertyChanged;
+                field.PropertyChanged -= OnNodePropertyChanged;
             }
 
-            this.node = value;
+            field = value;
 
-            if (this.node is not null)
+            if (field is not null)
             {
-                this.node.PropertyChanged += OnNodePropertyChanged;
+                field.PropertyChanged += OnNodePropertyChanged;
             }
 
             this.SyncFromNode();
@@ -111,12 +121,12 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
             void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
             {
-                if (e.PropertyName == nameof(SceneNode.Name))
+                if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
                 {
                     this.EnqueueUi(() =>
                     {
                         this.doNotPropagateName = true;
-                        this.Name = this.node?.Name;
+                        this.Name = field?.Name;
                         this.doNotPropagateName = false;
                     });
                 }
@@ -124,10 +134,29 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         }
     }
 
-    public ObservableCollection<GameComponent> Components { get; } = new();
+    // The UI now binds directly to SceneNode.Components (observable). We no longer keep a separate collection here.
 
+    /// <summary>
+    /// Gets or sets the node name shown in the UI. Changes are propagated back to the underlying
+    /// <see cref="Node"/> unless the synchronization flag is set (used to prevent feedback loops).
+    /// </summary>
     [ObservableProperty]
     public partial string? Name { get; set; }
+
+    /// <summary>
+    /// Gets a menu source used by the UI to expose available component types that can be added.
+    /// The menu items are bound to commands on this view-model.
+    /// </summary>
+    public IMenuSource AddComponentMenu => field ??= this.BuildAddComponentMenu();
+
+    private static GameComponent? CreateComponentFromId(string typeId)
+        => typeId switch
+        {
+            "Geometry" => new GeometryComponent { Name = "Geometry" },
+            "PerspectiveCamera" => new PerspectiveCamera { Name = "Perspective Camera" },
+            "OrthographicCamera" => new OrthographicCamera { Name = "Orthographic Camera" },
+            _ => null,
+        };
 
     partial void OnNameChanged(string? value)
     {
@@ -144,18 +173,12 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         this.Node.Name = value;
     }
 
-    private IMenuSource? addComponentMenu;
-
-    public IMenuSource AddComponentMenu => this.addComponentMenu ??= this.BuildAddComponentMenu();
-
     private IMenuSource BuildAddComponentMenu()
-    {
-        var builder = new MenuBuilder();
-        builder.AddMenuItem("Geometry", this.AddGeometryCommand);
-        builder.AddMenuItem("Perspective Camera", this.AddPerspectiveCameraCommand);
-        builder.AddMenuItem("Orthographic Camera", this.AddOrthographicCameraCommand);
-        return builder.Build();
-    }
+        => new MenuBuilder()
+            .AddMenuItem("Geometry", this.AddGeometryCommand)
+            .AddMenuItem("Perspective Camera", this.AddPerspectiveCameraCommand)
+            .AddMenuItem("Orthographic Camera", this.AddOrthographicCameraCommand)
+            .Build();
 
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
     private void AddGeometry() => this.AddComponent("Geometry");
@@ -175,15 +198,15 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanDeleteComponent))]
     private void DeleteComponent(GameComponent? comp)
     {
-        if (this.Node is null || comp is null || comp.IsLocked)
+        if (this.Node is null || comp?.IsLocked != false)
         {
             return;
         }
 
-        this.ApplyDeleteComponent(new ComponentOperation(this.Node, comp));
+        WeakReferenceMessenger.Default.Send(new Messages.ComponentRemoveRequestedMessage(this.Node, comp));
     }
 
-    private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && comp is not null && comp.IsLocked == false;
+    private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && comp?.IsLocked == false;
 
     private void AddComponent(string typeId)
     {
@@ -192,7 +215,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        this.LogAddComponentRequested(typeId, this.Node.Name, this.Components.Count, null);
+        this.LogAddComponentRequested(typeId, this.Node.Name, this.Node.Components?.Count ?? 0, selectedComponentName: null);
 
         var comp = CreateComponentFromId(typeId);
         if (comp is null)
@@ -201,104 +224,29 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        this.ApplyAddComponent(new ComponentOperation(this.Node, comp));
-    }
-
-    private void ApplyAddComponent(ComponentOperation? op)
-    {
-        ArgumentNullException.ThrowIfNull(op);
-        this.EnqueueUi(() =>
-        {
-            try
-            {
-                var nodeComponentsBefore = op.Node.Components.Count;
-                var vmCountBefore = this.Components.Count;
-                this.LogApplyAddComponent(op.Node.Name, op.Component.GetType().Name, op.Component.Name, nodeComponentsBefore, vmCountBefore);
-
-                var added = op.Node.AddComponent(op.Component);
-                if (added && !this.Components.Contains(op.Component))
-                {
-                    this.Components.Add(op.Component);
-                }
-
-                this.LogApplyAddComponentResult(added, op.Node.Components.Count, this.Components.Count);
-            }
-            catch (Exception ex)
-            {
-                this.LogUnexpectedException(nameof(ApplyAddComponent), ex);
-                throw;
-            }
-        });
-
-        var historyKeeper = UndoRedo.Default[this.HistoryRoot ?? this];
-        historyKeeper.AddChange($"Remove Component ({op.Component.Name})", this.ApplyDeleteComponent, op);
-    }
-
-    private void ApplyDeleteComponent(ComponentOperation? op)
-    {
-        ArgumentNullException.ThrowIfNull(op);
-        this.EnqueueUi(() =>
-        {
-            try
-            {
-                var nodeComponentsBefore = op.Node.Components.Count;
-                var vmCountBefore = this.Components.Count;
-                this.LogApplyDeleteComponent(op.Node.Name, op.Component.GetType().Name, op.Component.Name, nodeComponentsBefore, vmCountBefore, null);
-
-                var removed = op.Node.RemoveComponent(op.Component);
-                if (!removed)
-                {
-                    this.LogApplyDeleteComponentResult(false, op.Node.Components.Count, this.Components.Count, null);
-                    return;
-                }
-
-                _ = this.Components.Remove(op.Component);
-                this.LogApplyDeleteComponentResult(true, op.Node.Components.Count, this.Components.Count, null);
-            }
-            catch (Exception ex)
-            {
-                this.LogUnexpectedException(nameof(ApplyDeleteComponent), ex);
-                throw;
-            }
-        });
-
-        var historyKeeper = UndoRedo.Default[this.HistoryRoot ?? this];
-        historyKeeper.AddChange($"Restore Component ({op.Component.Name})", this.ApplyAddComponent, op);
+        // Request the editor (single mutator) to perform the add; decoupled via messenger.
+        WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, comp));
     }
 
     private void SyncFromNode()
-    {
-        this.EnqueueUi(() =>
+        => this.EnqueueUi(() =>
         {
             try
             {
-                this.Components.Clear();
-
                 this.doNotPropagateName = true;
                 this.Name = this.Node?.Name;
                 this.doNotPropagateName = false;
-
-                if (this.Node?.Components is null)
-                {
-                    return;
-                }
-
-                foreach (var component in this.Node.Components)
-                {
-                    this.Components.Add(component);
-                }
             }
             catch (Exception ex)
             {
-                this.LogUnexpectedException(nameof(SyncFromNode), ex);
+                this.LogUnexpectedException(nameof(this.SyncFromNode), ex);
                 throw;
             }
         });
-    }
 
     private void EnqueueUi(Action action)
     {
-        if (this.dispatcher is null || this.dispatcher.HasThreadAccess)
+        if (this.dispatcher?.HasThreadAccess != false)
         {
             action();
             return;
@@ -310,12 +258,5 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     private bool CanAddComponent(string typeId)
         => this.Node is not null && typeId is not null && !string.Equals(typeId, "Transform", StringComparison.OrdinalIgnoreCase);
 
-    private static GameComponent? CreateComponentFromId(string typeId)
-        => typeId switch
-        {
-            "Geometry" => new GeometryComponent { Name = "Geometry" },
-            "PerspectiveCamera" => new PerspectiveCamera { Name = "Perspective Camera" },
-            "OrthographicCamera" => new OrthographicCamera { Name = "Orthographic Camera" },
-            _ => null,
-        };
+    private sealed record ComponentOperation(SceneNode Node, GameComponent Component);
 }

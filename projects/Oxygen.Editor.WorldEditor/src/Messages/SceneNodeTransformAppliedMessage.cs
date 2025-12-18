@@ -30,22 +30,22 @@ public readonly record struct TransformSnapshot(Vector3 Position, Quaternion Rot
 internal sealed class SceneNodeTransformAppliedMessage(IList<SceneNode> nodes, IList<TransformSnapshot> oldValues, IList<TransformSnapshot> newValues, string property)
 {
     /// <summary>
-    /// The nodes that were modified by the editor.
+    /// Gets the nodes that were modified by the editor.
     /// </summary>
     public IList<SceneNode> Nodes { get; } = nodes;
 
     /// <summary>
-    /// Snapshots of the transform values before the change, aligned by index with <see cref="Nodes"/>.
+    /// Gets snapshots of the transform values before the change, aligned by index with <see cref="Nodes"/>.
     /// </summary>
     public IList<TransformSnapshot> OldValues { get; } = oldValues;
 
     /// <summary>
-    /// Snapshots of the transform values after the change, aligned by index with <see cref="Nodes"/>.
+    /// Gets snapshots of the transform values after the change, aligned by index with <see cref="Nodes"/>.
     /// </summary>
     public IList<TransformSnapshot> NewValues { get; } = newValues;
 
     /// <summary>
-    /// Optional name of the property edited (for example, "PositionX" or "RotationY"). Useful for logging.
+    /// Gets optional name of the property edited (for example, "PositionX" or "RotationY"). Useful for logging.
     /// </summary>
     public string Property { get; } = property;
 }
