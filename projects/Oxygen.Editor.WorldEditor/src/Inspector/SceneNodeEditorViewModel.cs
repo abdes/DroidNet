@@ -83,7 +83,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.dispatcher = hosting.Dispatcher;
 
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
-            hosting.Dispatcher.TryEnqueue(() =>
+            _ = hosting.Dispatcher.DispatchAsync(() =>
             {
                 this.items = message.SelectedEntities;
                 this.LogSelectionChanged(this.items.Count);
@@ -93,20 +93,20 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         // Listen for component add/remove requests coming from the details view (sent via global messenger)
         WeakReferenceMessenger.Default.Register<Messages.ComponentAddRequestedMessage>(this, (_, message) =>
-            hosting.Dispatcher.TryEnqueue(() => this.OnComponentAddRequested(message)));
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentAddRequested(message)));
 
         WeakReferenceMessenger.Default.Register<Messages.ComponentRemoveRequestedMessage>(this, (_, message) =>
-            hosting.Dispatcher.TryEnqueue(() => this.OnComponentRemoveRequested(message)));
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentRemoveRequested(message)));
 
         // Component collection changes are observed per-node via CollectionChanged subscriptions
 
         // Handle transform applied messages from property editors: create undo entries and sync engine
         this.messenger.Register<SceneNodeTransformAppliedMessage>(this, (_, message) =>
-            hosting.Dispatcher.TryEnqueue(() => this.OnTransformApplied(message)));
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnTransformApplied(message)));
 
         // Handle geometry applied messages from property editors: create undo entries and sync engine
         this.messenger.Register<SceneNodeGeometryAppliedMessage>(this, (_, message) =>
-            hosting.Dispatcher.TryEnqueue(() => this.OnGeometryApplied(message)));
+            _ = hosting.Dispatcher.DispatchAsync(() => this.OnGeometryApplied(message)));
     }
 
     /// <summary>
@@ -219,17 +219,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         return filteredEditors.Values;
     }
 
-    private void EnqueueUi(Action action)
-    {
-        if (this.dispatcher?.HasThreadAccess != false)
-        {
-            action();
-            return;
-        }
-
-        _ = this.dispatcher.TryEnqueue(() => action());
-    }
-
     private void OnTransformApplied(SceneNodeTransformAppliedMessage message)
     {
         if (message is null || message.Nodes.Count == 0)
@@ -323,7 +312,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         Debug.Assert(op is not null, "ComponentOperation is null");
 
-        this.EnqueueUi(() =>
+        _ = this.dispatcher?.DispatchAsync(() =>
         {
             try
             {
@@ -353,7 +342,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         Debug.Assert(op is not null, "ComponentOperation is null");
 
-        this.EnqueueUi(() =>
+        _ = this.dispatcher?.DispatchAsync(() =>
         {
             try
             {
@@ -430,7 +419,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return;
         }
 
-        this.EnqueueUi(() =>
+        _ = this.dispatcher?.DispatchAsync(() => // Replaced SafeEnqueue with DispatchAsync
         {
             this.LogComponentsUpdateEnqueued("ComponentCollectionChanged", node.Name, e.NewItems?.OfType<object>().FirstOrDefault()?.GetType().Name ?? string.Empty);
 

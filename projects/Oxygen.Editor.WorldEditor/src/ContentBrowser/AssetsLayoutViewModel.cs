@@ -98,7 +98,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                             if (!this.seenLocations.Contains(notification.Asset.Location))
                             {
                                 // Modify UI-bound collection on UI dispatcher
-                                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
+                                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                                 {
                                     this.Assets.Add(notification.Asset);
                                     this.seenLocations.Add(notification.Asset.Location);
@@ -112,7 +112,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                                 a.Location.Equals(notification.Asset.Location, StringComparison.OrdinalIgnoreCase));
                             if (toRemove != null)
                             {
-                                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
+                                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                                 {
                                     _ = this.Assets.Remove(toRemove);
                                     _ = this.seenLocations.Remove(notification.Asset.Location);
@@ -159,7 +159,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                     }
 
                     var a = asset;
-                    _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
+                    _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                     {
                         this.Assets.Add(a);
                         this.seenLocations.Add(a.Location);
@@ -190,7 +190,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
         {
             // Clear current view and rebuild from snapshot filtered by selected folders
             // Must clear on UI thread
-            _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
+            _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
             {
                 this.Assets.Clear();
                 this.seenLocations.Clear();
@@ -212,7 +212,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                 }
 
                 var a = asset;
-                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
+                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                 {
                     this.Assets.Add(a);
                     this.seenLocations.Add(a.Location);

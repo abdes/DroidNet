@@ -2,4 +2,4 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-[assembly: Parallelize]
+[assembly: DoNotParallelize]

@@ -606,7 +606,7 @@ public sealed partial class ContentBrowserViewModel(
         // Always enqueue to the UI dispatcher to avoid re-entrancy during input/layout handlers
         if (this.dispatcher is not null)
         {
-            _ = this.dispatcher.TryEnqueue(UpdateCore);
+            _ = this.dispatcher.DispatchAsync(UpdateCore);
         }
         else
         {
