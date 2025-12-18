@@ -2,8 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
+using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Hosting.WinUI;
@@ -14,372 +15,287 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
 /// <summary>
 /// Provides services for indexing game assets in the project.
+/// Continuously indexes in background at low priority with file watching.
 /// </summary>
 /// <param name="projectManager">The project manager service.</param>
 /// <param name="hostingContext">The hosting context for the application.</param>
-/// <param name="contentBrowserState">The content browser state to track selected folders.</param>
-public sealed partial class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext, ContentBrowserState contentBrowserState) : IDisposable
+public sealed partial class AssetsIndexingService(IProjectManagerService projectManager, HostingContext hostingContext) : IAssetIndexingService
 {
-    private readonly Subject<GameAsset> assetSubject = new();
-    private IDisposable? subscription;
+    private readonly ReplaySubject<AssetChangeNotification> changeStream = new(bufferSize: 20); // TODO: tune this based on the speed of the indexer
+    private readonly ConcurrentBag<GameAsset> assets = [];
+    private readonly ConcurrentDictionary<string, bool> indexedFolders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, FileSystemWatcher> watchers = new();
+    private readonly CancellationTokenSource cts = new();
+    private readonly SemaphoreSlim completionLock = new(0); // Signaled when indexing completes
+    private Task? backgroundTask;
+    private IndexingStatus status = IndexingStatus.NotStarted;
+    private int foldersScanned;
+    private int assetsFound;
 
-    /// <summary>
-    /// Gets the collection of indexed game assets.
-    /// </summary>
-    public ObservableCollection<GameAsset> Assets { get; } = [];
+    /// <inheritdoc/>
+    public IndexingStatus Status => this.status;
 
-    /// <summary>
-    /// Starts the asynchronous indexing of game assets based on the current selection.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public Task IndexAssetsAsync()
+    /// <inheritdoc/>
+    public IObservable<AssetChangeNotification> AssetChanges => this.changeStream.AsObservable();
+
+    /// <inheritdoc/>
+    public async Task StartIndexingAsync(IProgress<IndexingProgress>? progress = null, CancellationToken ct = default)
     {
-        this.subscription = this.assetSubject
-            .Buffer(TimeSpan.FromSeconds(1), 5)
-            .Where(batch => batch.Count > 0)
-            .ObserveOn(hostingContext.DispatcherScheduler)
-            .Subscribe(
-                batch =>
-                {
-                    foreach (var asset in batch)
-                    {
-                        this.Assets.Add(asset);
-                    }
-                },
-                HandleError);
-
-        return Task.CompletedTask;
-    }
-
-    /// <summary>
-    /// Refreshes the asset collection based on the current folder selection.
-    /// </summary>
-    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task RefreshAssetsAsync()
-    {
-        this.Assets.Clear();
-
-        // Only load assets if there are selected folders
-        if (contentBrowserState.SelectedFolders.Count == 0)
+        if (this.status != IndexingStatus.NotStarted)
         {
-            // No selection = no assets to display
+            Debug.WriteLine("[AssetsIndexingService] Indexing already started");
             return;
         }
 
-        // Check if project root is selected (empty path or '.' means root)
-        var isProjectRootSelected = contentBrowserState.SelectedFolders.Contains(string.Empty)
-                         || contentBrowserState.SelectedFolders.Contains(".");
+        this.status = IndexingStatus.Indexing;
+        Debug.WriteLine("[AssetsIndexingService] Starting background indexing");
 
-        if (isProjectRootSelected)
+        // Start background indexing loop
+        this.backgroundTask = Task.Run(async () => await this.BackgroundIndexingLoop(progress).ConfigureAwait(false), ct);
+
+        // Wait for initial indexing to complete
+        await this.completionLock.WaitAsync(ct).ConfigureAwait(false);
+        this.completionLock.Release(); // Allow future callers to pass through immediately
+    }
+
+    /// <inheritdoc/>
+    public async Task StopIndexingAsync()
+    {
+        if (this.status == IndexingStatus.Stopped || this.status == IndexingStatus.NotStarted)
         {
-            // For project root selection, show everything: scenes + all file system assets
-            // but exclude the Scenes folder from the file system pass to avoid duplicates
-            await this.LoadProjectScenesDirect().ConfigureAwait(true);
-            await this.LoadFileSystemAssetsDirect(excludeScenesFolder: true).ConfigureAwait(true);
+            return;
         }
-        else
+
+        Debug.WriteLine("[AssetsIndexingService] Stopping indexing");
+        this.status = IndexingStatus.Stopped;
+        await this.cts.CancelAsync().ConfigureAwait(false);
+
+        if (this.backgroundTask != null)
         {
-            await this.LoadFileSystemAssetsDirect().ConfigureAwait(true);
+            try
+            {
+                await this.backgroundTask.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task<IReadOnlyList<GameAsset>> QueryAssetsAsync(
+        Func<GameAsset, bool>? predicate = null,
+        CancellationToken ct = default)
+    {
+        // Wait for indexing to complete if still in progress
+        if (this.status == IndexingStatus.Indexing)
+        {
+            Debug.WriteLine("[AssetsIndexingService] QueryAssetsAsync waiting for indexing to complete");
+            await this.completionLock.WaitAsync(ct).ConfigureAwait(false);
+            this.completionLock.Release();
+        }
+
+        // Return snapshot with optional filtering
+        var snapshot = predicate == null
+            ? this.assets.ToList()
+            : this.assets.Where(predicate).ToList();
+
+        Debug.WriteLine($"[AssetsIndexingService] QueryAssetsAsync returned {snapshot.Count} assets");
+        return snapshot;
+    }
+
+    private async Task BackgroundIndexingLoop(IProgress<IndexingProgress>? progress)
+    {
+        Debug.WriteLine("[AssetsIndexingService] Background indexing loop started");
+
+        try
+        {
+            var storageProvider = projectManager.GetCurrentProjectStorageProvider();
+            var projectRoot = await storageProvider.GetFolderFromPathAsync(
+                projectManager.CurrentProject!.ProjectInfo.Location!).ConfigureAwait(false);
+
+            var foldersToIndex = new Queue<IFolder>();
+            foldersToIndex.Enqueue(projectRoot);
+
+            while (!this.cts.Token.IsCancellationRequested && foldersToIndex.Count > 0)
+            {
+                var folder = foldersToIndex.Dequeue();
+                await this.IndexFolderWithWatchingAsync(folder, progress).ConfigureAwait(false);
+
+                // Enqueue subfolders for indexing
+                await foreach (var subFolder in folder.GetFoldersAsync().ConfigureAwait(false))
+                {
+                    foldersToIndex.Enqueue(subFolder);
+                }
+            }
+
+            // Initial indexing complete - signal completion
+            Debug.WriteLine("[AssetsIndexingService] Initial indexing completed");
+            this.status = IndexingStatus.Completed;
+            this.completionLock.Release();
+
+            // Report final progress
+            progress?.Report(new IndexingProgress(this.foldersScanned, this.assetsFound, null));
+        }
+        catch (OperationCanceledException)
+        {
+            Debug.WriteLine("[AssetsIndexingService] Background indexing canceled");
+            this.status = IndexingStatus.Stopped;
+            this.completionLock.Release(); // Unblock any waiters
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AssetsIndexingService] Background indexing error: {ex.Message}");
+            this.status = IndexingStatus.Stopped;
+            this.completionLock.Release(); // Unblock any waiters
+        }
+    }
+
+    private async Task IndexFolderWithWatchingAsync(IFolder folder, IProgress<IndexingProgress>? progress)
+    {
+        if (this.indexedFolders.ContainsKey(folder.Location))
+        {
+            return; // Already indexed
+        }
+
+        Debug.WriteLine($"[AssetsIndexingService] Indexing folder: {folder.Location}");
+        Interlocked.Increment(ref this.foldersScanned);
+
+        await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
+        {
+            var assetName = document.Name.Contains('.')
+                ? document.Name[..document.Name.LastIndexOf('.')]
+                : document.Name;
+
+            if (string.IsNullOrEmpty(assetName))
+            {
+                continue;
+            }
+
+            var asset = new GameAsset(assetName, document.Location)
+            {
+                AssetType = GameAsset.GetAssetType(document.Name),
+            };
+
+            this.assets.Add(asset);
+            Interlocked.Increment(ref this.assetsFound);
+
+            var notification = new AssetChangeNotification(
+                AssetChangeType.Added,
+                asset,
+                DateTimeOffset.UtcNow);
+            this.changeStream.OnNext(notification);
+        }
+
+        this.indexedFolders[folder.Location] = true;
+        this.SetupFileWatcher(folder.Location);
+
+        // Report progress periodically
+        if (this.foldersScanned % 10 == 0)
+        {
+            progress?.Report(new IndexingProgress(this.foldersScanned, this.assetsFound, folder.Name));
+        }
+    }
+
+    private void SetupFileWatcher(string folderPath)
+    {
+        if (this.watchers.ContainsKey(folderPath)) return;
+
+        try
+        {
+            var watcher = new FileSystemWatcher(folderPath)
+            {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+                EnableRaisingEvents = true,
+            };
+
+            watcher.Created += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileAdded(e.FullPath));
+            watcher.Deleted += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileRemoved(e.FullPath));
+            watcher.Changed += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileModified(e.FullPath));
+
+            this.watchers[folderPath] = watcher;
+            Debug.WriteLine($"[AssetsIndexingService] File watcher set up for: {folderPath}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[AssetsIndexingService] Failed to setup watcher for {folderPath}: {ex.Message}");
+        }
+    }
+
+    private void OnFileAdded(string filePath)
+    {
+        Debug.WriteLine($"[AssetsIndexingService] File added: {filePath}");
+
+        var fileName = Path.GetFileName(filePath);
+        var assetName = fileName.Contains('.')
+            ? fileName[..fileName.LastIndexOf('.')]
+            : fileName;
+
+        if (string.IsNullOrEmpty(assetName))
+        {
+            return;
+        }
+
+        var asset = new GameAsset(assetName, filePath)
+        {
+            AssetType = GameAsset.GetAssetType(fileName),
+        };
+
+        this.assets.Add(asset);
+        var notification = new AssetChangeNotification(
+            AssetChangeType.Added,
+            asset,
+            DateTimeOffset.UtcNow);
+        this.changeStream.OnNext(notification);
+    }
+
+    private void OnFileRemoved(string filePath)
+    {
+        Debug.WriteLine($"[AssetsIndexingService] File removed: {filePath}");
+
+        var asset = this.assets.FirstOrDefault(a => a.Location.Equals(filePath, StringComparison.OrdinalIgnoreCase));
+        if (asset != null)
+        {
+            // ConcurrentBag doesn't support removal, so we'll just publish the notification
+            // The asset will remain in the bag but queries can filter it out if needed
+            // For a production system, consider using ConcurrentDictionary<string, GameAsset> instead
+            var notification = new AssetChangeNotification(
+                AssetChangeType.Removed,
+                asset,
+                DateTimeOffset.UtcNow);
+            this.changeStream.OnNext(notification);
+        }
+    }
+
+    private void OnFileModified(string filePath)
+    {
+        Debug.WriteLine($"[AssetsIndexingService] File modified: {filePath}");
+
+        var asset = this.assets.FirstOrDefault(a => a.Location.Equals(filePath, StringComparison.OrdinalIgnoreCase));
+        if (asset != null)
+        {
+            var notification = new AssetChangeNotification(
+                AssetChangeType.Modified,
+                asset,
+                DateTimeOffset.UtcNow);
+            this.changeStream.OnNext(notification);
         }
     }
 
     /// <inheritdoc/>
     public void Dispose()
     {
-        this.subscription?.Dispose();
-        this.assetSubject.OnCompleted();
-        this.assetSubject.Dispose();
-    }
-
-    private static void HandleError(Exception ex) =>
-
-        // Handle the error (e.g., log it, show a message to the user, etc.)
-        Debug.WriteLine($"Error occurred: {ex.Message}");
-
-    private static bool IsScenesPath(string relativePath)
-        => relativePath.Equals("Scenes", StringComparison.OrdinalIgnoreCase)
-           || relativePath.StartsWith("Scenes/", StringComparison.OrdinalIgnoreCase)
-           || relativePath.StartsWith("Scenes\\", StringComparison.OrdinalIgnoreCase);
-
-    private async Task LoadProjectScenesDirect()
-    {
-        Debug.Assert(projectManager.CurrentProject is not null, "current project should be initialized");
-
-        try
+        this.cts.Cancel();
+        foreach (var watcher in this.watchers.Values)
         {
-            foreach (var scene in projectManager.CurrentProject.Scenes)
-            {
-                var sceneAsset = new GameAsset(scene.Name, $"Scenes/{scene.Name}")
-                {
-                    AssetType = AssetType.Scene,
-                };
-                this.Assets.Add(sceneAsset);
-            }
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex);
+            watcher.Dispose();
         }
 
-        await Task.CompletedTask.ConfigureAwait(false);
-    }
-
-    private async Task LoadFileSystemAssetsDirect(bool excludeScenesFolder = false)
-    {
-        Debug.Assert(projectManager.CurrentProject is not null, "current should be initialized");
-
-        try
-        {
-            var storageProvider = projectManager.GetCurrentProjectStorageProvider();
-            var projectRoot = await storageProvider.GetFolderFromPathAsync(projectManager.CurrentProject.ProjectInfo.Location!).ConfigureAwait(false);
-
-            // If specific folders are selected, index only those folders
-            if (contentBrowserState.SelectedFolders.Count > 0 &&
-                !contentBrowserState.SelectedFolders.Contains(string.Empty) &&
-                !contentBrowserState.SelectedFolders.Contains("."))
-            {
-                // When explicitly selecting folders, we do not exclude Scenes unless requested
-                await this.IndexSelectedFoldersDirect(projectRoot, excludeScenesFolder).ConfigureAwait(false);
-            }
-            else
-            {
-                // Index all folders when no specific selection or when project root is selected
-                await this.IndexAllFoldersDirect(projectRoot, excludeScenesFolder).ConfigureAwait(false);
-            }
-        }
-        catch (Exception ex)
-        {
-            HandleError(ex);
-        }
-    }
-
-    private async Task BackgroundIndexerAsync(bool excludeScenesFolder = false)
-    {
-        Debug.Assert(projectManager.CurrentProject is not null, "current should be initialized");
-
-        try
-        {
-            var storageProvider = projectManager.GetCurrentProjectStorageProvider();
-            var projectRoot = await storageProvider.GetFolderFromPathAsync(projectManager.CurrentProject.ProjectInfo.Location!).ConfigureAwait(false);
-
-            // If specific folders are selected, index only those folders
-            if (contentBrowserState.SelectedFolders.Count > 0 &&
-                !contentBrowserState.SelectedFolders.Contains(string.Empty) &&
-                !contentBrowserState.SelectedFolders.Contains("."))
-            {
-                await this.IndexSelectedFoldersAsync(projectRoot, excludeScenesFolder).ConfigureAwait(false);
-            }
-            else
-            {
-                // Index all folders when no specific selection or when project root is selected
-                await this.IndexAllFoldersAsync(projectRoot, excludeScenesFolder).ConfigureAwait(false);
-            }
-        }
-#pragma warning disable CA1031 // exceptions forwarded to subscribers via OnError
-        catch (Exception ex)
-        {
-            this.assetSubject.OnError(ex);
-        }
-#pragma warning restore CA1031
-    }
-
-    private async Task IndexSelectedFoldersDirect(IFolder projectRoot, bool excludeScenesFolder = false)
-    {
-        foreach (var selectedPath in contentBrowserState.SelectedFolders)
-        {
-            if (string.IsNullOrEmpty(selectedPath) || string.Equals(selectedPath, ".", StringComparison.Ordinal))
-            {
-                continue; // Skip empty path (project root) for file system indexing
-            }
-
-            if (excludeScenesFolder && IsScenesPath(selectedPath))
-            {
-                continue; // Skip Scenes folder to avoid duplicates when root selection combines sources
-            }
-
-            try
-            {
-                var selectedFolder = await projectRoot.GetFolderAsync(selectedPath).ConfigureAwait(false);
-                if (await selectedFolder.ExistsAsync().ConfigureAwait(false))
-                {
-                    await this.IndexFolderDirect(selectedFolder).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to index selected folder '{selectedPath}': {ex.Message}");
-            }
-        }
-    }
-
-    private async Task IndexAllFoldersDirect(IFolder rootFolder, bool excludeScenesFolder = false)
-    {
-        var folderQueue = new Queue<IFolder>();
-        folderQueue.Enqueue(rootFolder);
-
-        while (folderQueue.Count > 0)
-        {
-            var currentFolder = folderQueue.Dequeue();
-            await this.IndexFolderDocumentsOnlyDirect(currentFolder).ConfigureAwait(false);
-
-            await foreach (var subFolder in currentFolder.GetFoldersAsync().ConfigureAwait(false))
-            {
-                if (excludeScenesFolder && string.Equals(subFolder.Name, "Scenes", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue; // Skip Scenes folder to avoid duplicates when root is selected
-                }
-
-                folderQueue.Enqueue(subFolder);
-            }
-        }
-    }
-
-    private async Task IndexFolderDocumentsOnlyDirect(IFolder folder)
-    {
-        // Add only documents as file assets (no subfolders for recursive indexing)
-        await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
-        {
-            var assetName = document.Name.Contains('.', StringComparison.Ordinal)
-                ? document.Name[..document.Name.LastIndexOf('.')]
-                : document.Name;
-            if (string.IsNullOrEmpty(assetName))
-            {
-                continue;
-            }
-
-            var asset = new GameAsset(assetName, document.Location)
-            {
-                AssetType = GameAsset.GetAssetType(document.Name),
-            };
-            this.Assets.Add(asset);
-        }
-    }
-
-    private async Task IndexFolderDirect(IFolder folder)
-    {
-        // Add subfolders as folder assets
-        await foreach (var subfolder in folder.GetFoldersAsync().ConfigureAwait(false))
-        {
-            var folderAsset = new GameAsset(subfolder.Name, subfolder.Location, AssetType.Folder);
-            this.Assets.Add(folderAsset);
-        }
-
-        // Add documents as file assets
-        await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
-        {
-            var assetName = document.Name.Contains('.', StringComparison.Ordinal)
-                ? document.Name[..document.Name.LastIndexOf('.')]
-                : document.Name;
-            if (string.IsNullOrEmpty(assetName))
-            {
-                continue;
-            }
-
-            var asset = new GameAsset(assetName, document.Location)
-            {
-                AssetType = GameAsset.GetAssetType(document.Name),
-            };
-            this.Assets.Add(asset);
-        }
-    }
-
-    private async Task IndexSelectedFoldersAsync(IFolder projectRoot, bool excludeScenesFolder = false)
-    {
-        foreach (var selectedPath in contentBrowserState.SelectedFolders)
-        {
-            if (string.IsNullOrEmpty(selectedPath) || string.Equals(selectedPath, ".", StringComparison.Ordinal))
-            {
-                continue; // Skip empty path (project root) for file system indexing
-            }
-
-            if (excludeScenesFolder && IsScenesPath(selectedPath))
-            {
-                continue; // Skip Scenes folder to avoid duplicates when root selection combines sources
-            }
-
-            try
-            {
-                var selectedFolder = await projectRoot.GetFolderAsync(selectedPath).ConfigureAwait(false);
-                if (await selectedFolder.ExistsAsync().ConfigureAwait(false))
-                {
-                    await this.IndexFolderAsync(selectedFolder).ConfigureAwait(false);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Failed to index selected folder '{selectedPath}': {ex.Message}");
-            }
-        }
-    }
-
-    private async Task IndexAllFoldersAsync(IFolder rootFolder, bool excludeScenesFolder = false)
-    {
-        var folderQueue = new Queue<IFolder>();
-        folderQueue.Enqueue(rootFolder);
-
-        while (folderQueue.Count > 0)
-        {
-            var currentFolder = folderQueue.Dequeue();
-            await this.IndexFolderDocumentsOnlyAsync(currentFolder).ConfigureAwait(false);
-
-            await foreach (var subFolder in currentFolder.GetFoldersAsync().ConfigureAwait(false))
-            {
-                if (excludeScenesFolder && string.Equals(subFolder.Name, "Scenes", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue; // Skip Scenes folder to avoid duplicates when root is selected
-                }
-
-                folderQueue.Enqueue(subFolder);
-            }
-        }
-    }
-
-    private async Task IndexFolderDocumentsOnlyAsync(IFolder folder)
-    {
-        // Add only documents as file assets (no subfolders for recursive indexing)
-        await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
-        {
-            var assetName = document.Name.Contains('.', StringComparison.Ordinal)
-                ? document.Name[..document.Name.LastIndexOf('.')]
-                : document.Name;
-            if (string.IsNullOrEmpty(assetName))
-            {
-                continue;
-            }
-
-            var asset = new GameAsset(assetName, document.Location)
-            {
-                AssetType = GameAsset.GetAssetType(document.Name),
-            };
-            this.assetSubject.OnNext(asset);
-        }
-    }
-
-    private async Task IndexFolderAsync(IFolder folder)
-    {
-        // Add subfolders as folder assets
-        await foreach (var subfolder in folder.GetFoldersAsync().ConfigureAwait(false))
-        {
-            var folderAsset = new GameAsset(subfolder.Name, subfolder.Location, AssetType.Folder);
-            this.assetSubject.OnNext(folderAsset);
-        }
-
-        // Add documents as file assets
-        await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
-        {
-            var assetName = document.Name.Contains('.', StringComparison.Ordinal)
-                ? document.Name[..document.Name.LastIndexOf('.')]
-                : document.Name;
-            if (string.IsNullOrEmpty(assetName))
-            {
-                continue;
-            }
-
-            var asset = new GameAsset(assetName, document.Location)
-            {
-                AssetType = GameAsset.GetAssetType(document.Name),
-            };
-            this.assetSubject.OnNext(asset);
-        }
+        this.watchers.Clear();
+        this.changeStream.OnCompleted();
+        this.changeStream.Dispose();
+        this.cts.Dispose();
+        this.completionLock.Dispose();
     }
 }

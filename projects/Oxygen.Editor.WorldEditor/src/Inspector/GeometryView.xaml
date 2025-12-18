@@ -1,0 +1,137 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.WorldEditor.Inspector.GeometryView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.WorldEditor.Inspector"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    x:Name="root"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+            <DataTemplate x:Key="GeometryAssetThumbnailTemplate">
+                <Border
+                    Width="24"
+                    Height="24"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                    <Viewbox HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="{Binding}" />
+                    </Viewbox>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <local:PropertiesExpander
+        Padding="2"
+        HorizontalAlignment="Stretch"
+        VerticalAlignment="Top"
+        HorizontalContentAlignment="Stretch"
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE7C3;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <local:PropertiesExpander.Items>
+            <local:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
+                <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <controls:Thumbnail
+                        Width="24"
+                        Height="24"
+                        VerticalAlignment="Center"
+                        Content="{x:Bind ViewModel.AssetThumbnailGlyph, Mode=OneWay}"
+                        ContentTemplate="{StaticResource GeometryAssetThumbnailTemplate}" />
+
+                    <muxc:SplitButton
+                        x:Name="AssetSplitButton"
+                        Grid.Column="1"
+                        HorizontalAlignment="Stretch"
+                        Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
+                        <muxc:SplitButton.Flyout>
+                            <Flyout x:Name="AssetPickerFlyout">
+                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.Groups, Mode=OneWay}">
+                                    <ItemsRepeater.Layout>
+                                        <StackLayout Spacing="0" />
+                                    </ItemsRepeater.Layout>
+                                    <ItemsRepeater.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <TextBlock
+                                                    Margin="8,8,8,4"
+                                                    Style="{ThemeResource CaptionTextBlockStyle}"
+                                                    Text="{Binding Key}" />
+                                                <ItemsRepeater ItemsSource="{Binding Items}">
+                                                    <ItemsRepeater.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button
+                                                                Padding="8,6"
+                                                                HorizontalAlignment="Stretch"
+                                                                HorizontalContentAlignment="Left"
+                                                                Background="Transparent"
+                                                                BorderThickness="0"
+                                                                Click="OnPickerItemClicked"
+                                                                IsEnabled="{Binding IsEnabled}"
+                                                                ToolTipService.ToolTip="{Binding DisplayPath}">
+                                                                <Grid>
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <Border
+                                                                        Width="32"
+                                                                        Height="32"
+                                                                        VerticalAlignment="Center"
+                                                                        BorderBrush="{ThemeResource PropertyCardBorderBrush}"
+                                                                        BorderThickness="1">
+                                                                        <controls:Thumbnail
+                                                                            Width="32"
+                                                                            Height="32"
+                                                                            Content="{Binding ThumbnailModel}"
+                                                                            ContentTemplate="{StaticResource GeometryAssetThumbnailTemplate}" />
+                                                                    </Border>
+
+                                                                    <StackPanel
+                                                                        Grid.Column="1"
+                                                                        Margin="8,0,0,0"
+                                                                        VerticalAlignment="Center">
+                                                                        <TextBlock
+                                                                            Style="{ThemeResource BodyTextBlockStyle}"
+                                                                            Text="{Binding Name}"
+                                                                            TextWrapping="NoWrap" />
+                                                                        <TextBlock
+                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                            Style="{ThemeResource CaptionTextBlockStyle}"
+                                                                            Text="{Binding DisplayType}"
+                                                                            TextWrapping="NoWrap" />
+                                                                    </StackPanel>
+                                                                </Grid>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsRepeater.ItemTemplate>
+                                                </ItemsRepeater>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsRepeater.ItemTemplate>
+                                </ItemsRepeater>
+                            </Flyout>
+                        </muxc:SplitButton.Flyout>
+                    </muxc:SplitButton>
+                </Grid>
+            </local:PropertyCard>
+        </local:PropertiesExpander.Items>
+    </local:PropertiesExpander>
+</UserControl>
