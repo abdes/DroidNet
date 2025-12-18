@@ -13,6 +13,7 @@ namespace Oxygen.Editor.World.Components;
 /// Represents a component of a scene node, such as transform, geometry, material, etc.
 /// Concrete components implement instance-level <c>Hydrate</c>/<c>Dehydrate</c>.
 /// </summary>
+[JsonDerivedType(typeof(GeometryComponent), "Geometry")]
 [JsonDerivedType(typeof(TransformComponent), "Transform")]
 [JsonDerivedType(typeof(GameComponent), "Base")]
 public abstract partial class GameComponent : ScopedObservableObject, INamed, IPersistent<ComponentData>
@@ -31,6 +32,14 @@ public abstract partial class GameComponent : ScopedObservableObject, INamed, IP
     /// </summary>
     [JsonIgnore]
     public SceneNode? Node { get; internal set; }
+
+    /// <summary>
+    /// Gets a value indicating whether this component is locked (read-only) in the editor.
+    /// Concrete component types can override this to report that they cannot be deleted.
+    /// Default is <c>false</c>.
+    /// </summary>
+    [JsonIgnore]
+    public virtual bool IsLocked => false;
 
     /// <summary>
     /// Create and hydrate a game component from a DTO.
