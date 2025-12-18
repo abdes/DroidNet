@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.WorldEditor.Inspector.SceneNodeDetailsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -108,7 +108,8 @@
                         </UIElement.Transitions>
 
                         <StackPanel
-                            Padding="4,2"
+                            Margin="4"
+                            Padding="4"
                             Orientation="Horizontal"
                             Spacing="8">
                             <Viewbox
