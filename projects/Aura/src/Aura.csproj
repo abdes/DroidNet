@@ -35,6 +35,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Coordinates\src\Coordinates.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Documents\src\Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />

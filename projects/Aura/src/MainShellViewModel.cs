@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Aura.Documents;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
@@ -15,6 +14,7 @@ using DroidNet.Config;
 using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Resources;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
@@ -23,8 +23,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Windows.ApplicationModel;
-using Windows.Storage;
 
 namespace DroidNet.Aura;
 
@@ -53,7 +51,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private readonly IWindowManagerService? windowManagerService;
     private readonly IDocumentService? documentService;
-    private readonly IPathFinder pathFinder;
+    private readonly AssetResolverService assets;
     private MenuItemData? themesMenuItem;
 
     private bool isDisposed;
@@ -66,7 +64,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     /// </summary>
     /// <param name="router">The router used for navigation.</param>
     /// <param name="hostingContext">The hosting context containing dispatcher and application information.</param>
-    /// <param name="pathFinder">The relativePath finder used to resolve file and directory paths.</param>
+    /// <param name="assets">The asset resolver service used to resolve asset URIs for icons and images.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
     /// <param name="documentService">Optional document service implemented by the host application.</param>
@@ -78,7 +76,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     public MainShellViewModel(
         IRouter router,
         HostingContext hostingContext,
-        IPathFinder pathFinder,
+        AssetResolverService assets,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
         IWindowManagerService? windowManagerService = null,
         IDocumentService? documentService = null,
@@ -91,7 +89,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
         this.logger = loggerFactory?.CreateLogger<MainShellViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<MainShellViewModel>();
         this.LoggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
         this.dispatcherQueue = hostingContext.Dispatcher;
-        this.pathFinder = pathFinder;
+        this.assets = assets;
 
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
@@ -273,80 +271,7 @@ public partial class MainShellViewModel : AbstractOutletContainer
     }
 
     private Uri? GetAssetUri(string relativePath)
-    {
-        Uri? uri;
-
-        if (IsPackaged())
-        {
-            _ = TryPackagedAssetAtPath($"Assets/{relativePath}", out uri)
-                    || TryPackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
-            this.LogIconAsset(isPackaged: true, relativePath, uri);
-            return uri;
-        }
-
-        _ = TryUnpackagedAssetAtPath($"Assets/{relativePath}", out uri)
-            || TryUnpackagedAssetAtPath($"{typeof(MainShellViewModel).Assembly.GetName().Name}/Assets/{relativePath}", out uri);
-        this.LogIconAsset(isPackaged: false, relativePath, uri);
-
-        return uri;
-
-        [DebuggerNonUserCode]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "just testing for packaged or not")]
-        static bool IsPackaged()
-        {
-            try
-            {
-                _ = Package.Current;
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        bool TryPackagedAssetAtPath(string relativePath, out Uri? uri)
-        {
-            var candidateUri = new Uri($"ms-appx:///{relativePath}");
-
-            // This would work for packaged apps
-            var root = Package.Current.InstalledLocation;
-
-            // WinRT's StorageFolder.TryGetItemAsync is so fucking stupid and needs the separator to be `\\`
-            relativePath = relativePath.Replace("/", "\\", StringComparison.OrdinalIgnoreCase);
-            var item = root.TryGetItemAsync(relativePath).GetAwaiter().GetResult();
-            uri = item is StorageFile ? candidateUri : null;
-            return uri is not null;
-        }
-
-        bool TryUnpackagedAssetAtPath(string relativePath, out Uri? uri)
-        {
-            try
-            {
-                var fullPath = Path.Combine(
-                    this.pathFinder.ProgramData,
-                    relativePath.Replace('/', Path.DirectorySeparatorChar));
-                if (Path.Exists(fullPath))
-                {
-                    uri = new Uri(fullPath);
-                }
-                else
-                {
-                    this.LogAssetFileNotFound(isPackaged: false, relativePath);
-                    uri = null;
-                }
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                this.LogAssetFileNotFound(isPackaged: false, relativePath, ex);
-                uri = null;
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
-
-            return uri is not null;
-        }
-    }
+        => this.assets.FromRelativePath(relativePath, typeof(MainShellViewModel).Assembly);
 
     /// <summary>
     /// Updates the MainMenu property from the ManagedWindow's MenuSource.
