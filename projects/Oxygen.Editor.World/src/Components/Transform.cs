@@ -45,6 +45,11 @@ public partial class TransformComponent : GameComponent
     }
 
     /// <summary>
+    /// Transform component is fundamental to a node and must not be deleted; report locked.
+    /// </summary>
+    public override bool IsLocked => true;
+
+    /// <summary>
     ///     Gets or sets the local rotation of the scene node (as a quaternion).
     /// </summary>
     /// <value>

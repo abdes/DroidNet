@@ -273,6 +273,42 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     }
 
     /// <summary>
+    /// Adds a component to this node and sets the component's <see cref="GameComponent.Node"/> property.
+    /// </summary>
+    /// <param name="component">The component to add.</param>
+    /// <returns>True if the component was added; otherwise false.</returns>
+    public bool AddComponent(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+
+        if (this.Components.Contains(component))
+        {
+            return false;
+        }
+
+        this.Components.Add(component);
+        component.Node = this;
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the component from this node and clears its owner.
+    /// </summary>
+    /// <param name="component">The component to remove.</param>
+    /// <returns>True if the component was removed; otherwise false.</returns>
+    public bool RemoveComponent(GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        var removed = this.Components.Remove(component);
+        if (removed)
+        {
+            component.Node = null;
+        }
+
+        return removed;
+    }
+
+    /// <summary>
     ///     Sets the parent of this node.
     /// </summary>
     /// <param name="newParent">The new parent node, or null to detach.</param>
