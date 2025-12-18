@@ -258,6 +258,74 @@ NOLINT_TEST_F(SceneTraversalTransformTest, UpdateTransformsFromSpecificRoot)
   EXPECT_TRUE(IsNodeTransformDirty(nodeB_));
 }
 
+NOLINT_TEST_F(SceneTraversalTransformTest,
+  ParentTransformChange_PropagatesToChildWithoutChildModification)
+{
+  // Arrange: create parent and child
+  auto parent = CreateNode("Parent");
+  auto child = CreateChildNode(parent, "Child");
+
+  // Set initial local transforms
+  const glm::vec3 child_local_pos { 1.0F, 0.0F, 0.0F };
+  EXPECT_TRUE(child.GetTransform().SetLocalPosition(child_local_pos));
+
+  // Ensure initial update produces expected world pos (parent at origin)
+  scene_->Update();
+  {
+    const auto world_pos_opt = child.GetTransform().GetWorldPosition();
+    ASSERT_TRUE(world_pos_opt.has_value());
+    const auto world_pos = *world_pos_opt;
+    EXPECT_FLOAT_EQ(world_pos.x, 1.0F);
+    EXPECT_FLOAT_EQ(world_pos.y, 0.0F);
+    EXPECT_FLOAT_EQ(world_pos.z, 0.0F);
+  }
+
+  // Act: move parent but do NOT touch child
+  const glm::vec3 parent_new_pos { 10.0F, 0.0F, 0.0F };
+  EXPECT_TRUE(parent.GetTransform().SetLocalPosition(parent_new_pos));
+
+  // Update scene transforms
+  scene_->Update();
+
+  // Assert: child's world position reflects parent movement
+  const auto updated_world_pos_opt = child.GetTransform().GetWorldPosition();
+  ASSERT_TRUE(updated_world_pos_opt.has_value());
+  const auto updated_world_pos = *updated_world_pos_opt;
+  EXPECT_FLOAT_EQ(updated_world_pos.x, 11.0F);
+  EXPECT_FLOAT_EQ(updated_world_pos.y, 0.0F);
+  EXPECT_FLOAT_EQ(updated_world_pos.z, 0.0F);
+}
+
+NOLINT_TEST_F(SceneTraversalTransformTest,
+  ParentTransformChange_PropagatesThroughChainToGrandchild)
+{
+  // Arrange: parent -> child -> grandchild
+  auto parent = CreateNode("Parent2");
+  auto child = CreateChildNode(parent, "Child2");
+  auto grandchild = CreateChildNode(child, "Grandchild");
+
+  // Set local positions
+  EXPECT_TRUE(child.GetTransform().SetLocalPosition({ 1.0F, 0.0F, 0.0F }));
+  EXPECT_TRUE(grandchild.GetTransform().SetLocalPosition({ 2.0F, 0.0F, 0.0F }));
+
+  // Initial update (parent at origin)
+  scene_->Update();
+  {
+    const auto gp = grandchild.GetTransform().GetWorldPosition();
+    ASSERT_TRUE(gp.has_value());
+    EXPECT_FLOAT_EQ(gp->x, 3.0F); // 0 + 1 + 2
+  }
+
+  // Move parent only
+  EXPECT_TRUE(parent.GetTransform().SetLocalPosition({ 10.0F, 0.0F, 0.0F }));
+  scene_->Update();
+
+  // Grandchild world pos should reflect parent's change through chain
+  const auto gp2 = grandchild.GetTransform().GetWorldPosition();
+  ASSERT_TRUE(gp2.has_value());
+  EXPECT_FLOAT_EQ(gp2->x, 13.0F); // 10 + 1 + 2
+}
+
 //=============================================================================
 // High-Performance Filter Tests
 //=============================================================================

@@ -181,11 +181,10 @@ auto SceneNodeImpl::IsTransformDirty() const noexcept -> bool
 */
 void SceneNodeImpl::UpdateTransforms(const Scene& scene)
 {
-  if (!GetComponent<TransformComponent>().IsDirty()) {
-    return;
-  }
-
-  // Update the transform component
+  // Update the transform component. Even if this node's transform wasn't
+  // explicitly marked dirty, its parent's transform may have changed. The
+  // traversal system visits children when a parent is accepted, so we must
+  // compute the child's world matrix here rather than early-returning.
   auto& transform = GetComponent<TransformComponent>();
   if (const auto& parent = GetComponent<GraphData>().GetParent();
     parent.IsValid() && !ShouldIgnoreParentTransform()) {
