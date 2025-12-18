@@ -18,7 +18,7 @@ public sealed class AssetReferenceTests
     public void Uri_WhenSet_ShouldNotifyPropertyChanged()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset>();
+        var reference = new AssetReference<GeometryAsset>("asset://OldUri");
         var propertyChangedFired = false;
         reference.PropertyChanged += (_, args) =>
         {
@@ -32,14 +32,14 @@ public sealed class AssetReferenceTests
         reference.Uri = new("asset://Generated/BasicShapes/Cube");
 
         // Assert
-        propertyChangedFired.Should().BeTrue();
+        _ = propertyChangedFired.Should().BeTrue();
     }
 
     [TestMethod]
     public void Uri_WhenSetToSameValue_ShouldNotNotify()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset> { Uri = new("asset://Test") };
+        var reference = new AssetReference<GeometryAsset>("asset://Test");
         var propertyChangedFireCount = 0;
         reference.PropertyChanged += (_, _) => propertyChangedFireCount++;
 
@@ -47,7 +47,7 @@ public sealed class AssetReferenceTests
         reference.Uri = new("asset://Test");
 
         // Assert
-        propertyChangedFireCount.Should().Be(0);
+        _ = propertyChangedFireCount.Should().Be(0);
     }
 
     [TestMethod]
@@ -59,17 +59,16 @@ public sealed class AssetReferenceTests
             Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
-        var reference = new AssetReference<GeometryAsset>
-        {
-            Uri = asset.Uri,
-            Asset = asset,
-        };
 
         // Act
-        reference.Uri = new("asset://Generated/BasicShapes/Sphere");
+        var reference = new AssetReference<GeometryAsset>(asset.Uri)
+        {
+            Asset = asset,
+            Uri = new("asset://Generated/BasicShapes/Sphere"),
+        };
 
         // Assert
-        reference.Asset.Should().BeNull("changing URI should invalidate the cached asset");
+        _ = reference.Asset.Should().BeNull("changing URI should invalidate the cached asset");
     }
 
     [TestMethod]
@@ -81,27 +80,23 @@ public sealed class AssetReferenceTests
             Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
-        var reference = new AssetReference<GeometryAsset>
-        {
-            Uri = new("asset://Generated/BasicShapes/Sphere"),
-            Asset = asset,
-        };
 
         // Act
-        reference.Uri = asset.Uri;
+        var reference = new AssetReference<GeometryAsset>("asset://Generated/BasicShapes/Sphere")
+        {
+            Asset = asset,
+            Uri = asset.Uri,
+        };
 
         // Assert
-        reference.Asset.Should().Be(asset, "URI matches the asset's URI");
+        _ = reference.Asset.Should().Be(asset, "URI matches the asset's URI");
     }
 
     [TestMethod]
     public void Asset_WhenSet_ShouldSyncUri()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset>
-        {
-            Uri = new("asset://OldUri"),
-        };
+        var reference = new AssetReference<GeometryAsset>("asset://OldUri");
         var asset = new GeometryAsset
         {
             Uri = new("asset://Generated/BasicShapes/Cube"),
@@ -112,7 +107,7 @@ public sealed class AssetReferenceTests
         reference.Asset = asset;
 
         // Assert
-        reference.Uri.Should().Be(asset.Uri, "setting Asset should synchronize Uri");
+        _ = reference.Uri.Should().Be(asset.Uri, "setting Asset should synchronize Uri");
     }
 
     [TestMethod]
@@ -124,17 +119,13 @@ public sealed class AssetReferenceTests
             Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
-        var reference = new AssetReference<GeometryAsset>
-        {
-            Uri = asset.Uri,
-            Asset = asset,
-        };
+        var reference = new AssetReference<GeometryAsset>(asset.Uri) { Asset = asset };
 
         // Act
         reference.Asset = null;
 
         // Assert
-        reference.Uri.Should().Be(asset.Uri, "clearing Asset should preserve Uri");
+        _ = reference.Uri.Should().Be(asset.Uri, "clearing Asset should preserve Uri");
     }
 
     [TestMethod]
@@ -146,10 +137,7 @@ public sealed class AssetReferenceTests
             Uri = new("asset://Generated/BasicShapes/Cube"),
             Lods = [],
         };
-        var reference = new AssetReference<GeometryAsset>
-        {
-            Uri = asset.Uri,
-        };
+        var reference = new AssetReference<GeometryAsset>(asset.Uri);
         var uriChangedCount = 0;
         reference.PropertyChanged += (_, args) =>
         {
@@ -163,6 +151,6 @@ public sealed class AssetReferenceTests
         reference.Asset = asset;
 
         // Assert
-        uriChangedCount.Should().Be(0, "Uri already matches, no sync needed");
+        _ = uriChangedCount.Should().Be(0, "Uri already matches, no sync needed");
     }
 }

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
@@ -149,6 +150,24 @@ public partial class SceneEngineSync
 
     private void LogAttachedGeometry(SceneNode node)
         => LogAttachedGeometry(this.logger, node.Name);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "OxygenWorld is not available; cannot detach geometry for node '{NodeId}'")]
+    private static partial void LogCannotDetachGeometry(ILogger logger, Guid nodeId);
+
+    private void LogCannotDetachGeometry(Guid nodeId)
+        => LogCannotDetachGeometry(this.logger, nodeId);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Detached geometry (hidden) for node '{NodeId}'")]
+    private static partial void LogDetachedGeometry(ILogger logger, Guid nodeId);
+
+    private void LogDetachedGeometry(Guid nodeId)
+        => LogDetachedGeometry(this.logger, nodeId);
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to detach geometry for node '{NodeId}'")]
+    private static partial void LogFailedToDetachGeometry(ILogger logger, Exception exception, Guid nodeId);
+
+    private void LogFailedToDetachGeometry(Exception ex, Guid nodeId)
+        => LogFailedToDetachGeometry(this.logger, ex, nodeId);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to attach geometry to node '{NodeName}'")]
     private static partial void LogFailedToAttachGeometry(ILogger logger, Exception exception, string nodeName);

@@ -26,10 +26,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
     private IViewportSurfaceLease? surfaceLease;
     private bool swapChainSizeHooked;
-    // NOTE: composition-scale handling was intentionally removed in favor of
-    // an explicit, static RenderTransform set in XAML. This keeps the control
-    // markup predictable and avoids dynamic flicker caused by composition-scale
-    // oscillation.
+
+    /* NOTE: composition-scale handling was intentionally removed in favor of
+       an explicit, static RenderTransform set in XAML.This keeps the control
+       markup predictable and avoids dynamic flicker caused by composition-scale
+       oscillation. */
+
     private int activeLoadCount;
     private CancellationTokenSource? attachCancellationSource;
     private ILogger logger = NullLoggerFactory.Instance.CreateLogger(LoggerCategoryName);
@@ -76,6 +78,32 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.DataContext = value;
         }
     }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        this.isDisposed = true;
+
+        this.Loaded -= this.OnLoaded;
+        this.Unloaded -= this.OnUnloaded;
+        this.DataContextChanged -= this.OnDataContextChanged;
+
+        this.UnregisterSwapChainPanelSizeChanged();
+
+        // No theme listeners to remove; view does not interfere with theme settings.
+        await this.DetachSurfaceAsync("Dispose").ConfigureAwait(true);
+        await this.CancelPendingAttachAsync().ConfigureAwait(true);
+
+        this.currentViewModel = null;
+        GC.SuppressFinalize(this);
+    }
+
+    private static string GetViewportId(ViewportViewModel? viewModel)
+        => viewModel?.ViewportId.ToString("D", CultureInfo.InvariantCulture) ?? "none";
 
     private void OnDataContextChanged(FrameworkElement sender, Microsoft.UI.Xaml.DataContextChangedEventArgs args)
     {
@@ -131,9 +159,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
-    private static string GetViewportId(ViewportViewModel? viewModel)
-        => viewModel?.ViewportId.ToString("D", CultureInfo.InvariantCulture) ?? "none";
-
     private void RefreshLogger(ViewportViewModel? viewModel)
     {
         var factory = viewModel?.LoggerFactory ?? NullLoggerFactory.Instance;
@@ -164,6 +189,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         if (!this.swapChainSizeHooked)
         {
             this.SwapChainPanel.SizeChanged += this.OnSwapChainPanelSizeChanged;
+
             // Also observe composition-scale changes (compositor-driven transform)
             // as recommended by the SwapChainPanel docs. This lets us detect when
             // the compositor applies additional scaling (e.g. transforms or dpi)
@@ -176,11 +202,13 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                 this.DispatcherQueue); // WinUI 3 dispatcher
 
             this.sizeChangedSubscription ??= this.sizeChangedSubject
+
                 // Use the dispatcher scheduler for throttle timing so debounce and callbacks
                 // are scheduled on the UI dispatcher. This avoids cross-thread timing races
                 // and ensures the factory passed to FromAsync runs on the dispatcher.
                 .Throttle(TimeSpan.FromMilliseconds(150), dispatcherScheduler)
                 .ObserveOn(dispatcherScheduler)
+
                 // Use Switch to cancel any previous in-flight resize when a new
                 // debounced event arrives. Each inner observable is created from
                 // the async resize method and receives the Rx cancellation token.
@@ -203,8 +231,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             return;
         }
+
         _ = sender;
         this.LogSwapChainSizeChanged(e.NewSize.Width, e.NewSize.Height);
+
         // Push event into the debounced pipeline; if Rx setup failed we still
         // have OnSwapChainPanelSizeChanged called and want to behave like before.
         if (this.sizeChangedSubject != null)
@@ -397,7 +427,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
                         CompositingTarget = lease.Key.ViewportId,
                         Width = pixelW,
                         Height = pixelH,
-                        ClearColor = viewModel.ClearColor
+                        ClearColor = viewModel.ClearColor,
                     };
 
                     var created = await viewModel.EngineService.CreateViewAsync(cfg).ConfigureAwait(true);
@@ -480,35 +510,13 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        if (this.isDisposed)
-        {
-            return;
-        }
-
-        this.isDisposed = true;
-
-        this.Loaded -= this.OnLoaded;
-        this.Unloaded -= this.OnUnloaded;
-        this.DataContextChanged -= this.OnDataContextChanged;
-
-        this.UnregisterSwapChainPanelSizeChanged();
-
-        // No theme listeners to remove; view does not interfere with theme settings.
-        await this.DetachSurfaceAsync("Dispose").ConfigureAwait(true);
-        await this.CancelPendingAttachAsync().ConfigureAwait(true);
-
-        this.currentViewModel = null;
-        GC.SuppressFinalize(this);
-    }
-
     private void UnregisterSwapChainPanelSizeChanged()
     {
         if (!this.swapChainSizeHooked)
         {
             return;
         }
+
         if (this.SwapChainPanel != null)
         {
             this.SwapChainPanel.SizeChanged -= this.OnSwapChainPanelSizeChanged;
@@ -520,7 +528,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         {
             this.sizeChangedSubscription?.Dispose();
         }
-        catch { }
+        catch
+        {
+        }
+
         this.sizeChangedSubscription = null;
 
         try
@@ -528,7 +539,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.sizeChangedSubject?.OnCompleted();
             this.sizeChangedSubject?.Dispose();
         }
-        catch { }
+        catch
+        {
+        }
+
         this.sizeChangedSubject = null;
 
         this.swapChainSizeHooked = false;

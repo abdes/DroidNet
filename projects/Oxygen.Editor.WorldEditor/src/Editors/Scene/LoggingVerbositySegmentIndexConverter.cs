@@ -9,7 +9,7 @@ namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 /// <summary>
 /// Converts between the engine logging verbosity integer and the Segmented control index.
 /// Index map used by the compact Segmented control:
-/// 0 => ERR (-2), 1 => WARN (-1), 2 => INF (0), 3 => VERBOSE (>0)
+/// 0 => ERR (-2), 1 => WARN (-1), 2 => INF (0), 3 => VERBOSE (>0).
 /// </summary>
 public sealed partial class LoggingVerbositySegmentIndexConverter : IValueConverter
 {

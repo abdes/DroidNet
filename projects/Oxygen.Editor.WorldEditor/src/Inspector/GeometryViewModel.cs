@@ -6,59 +6,38 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Editor.WorldEditor.Messages;
 using Oxygen.Editor.World;
+using Oxygen.Editor.WorldEditor.Messages;
 
 namespace Oxygen.Editor.WorldEditor.Inspector;
 
 /// <summary>
-/// ViewModel for editing the Geometry component of selected <see cref="SceneNode"/> instances.
+/// ViewModel that provides editing support for the <see cref="GeometryComponent"/> of one or
+/// more selected <see cref="SceneNode"/> instances.
 /// </summary>
+/// <remarks>
+/// The view model exposes a list of available geometry asset groups (engine-provided and
+/// content-provided) and tracks the currently selected geometry for the current selection
+/// of scene nodes. When an asset is applied, the view model updates the geometry on all
+/// selected nodes and sends a <see cref="SceneNodeGeometryAppliedMessage"/> via the
+/// provided <see cref="IMessenger"/> to allow undo/redo and engine synchronization.
+/// </remarks>
 public partial class GeometryViewModel : ComponentPropertyEditor
 {
-    private ICollection<SceneNode>? selectedItems;
     private readonly ContentBrowser.AssetsIndexingService? assetsIndexingService;
     private readonly IMessenger? messenger;
     private readonly List<GeometryAssetPickerItem> contentItems = [];
 
-    [ObservableProperty]
-    private IReadOnlyList<GeometryAssetGroup> groups = [];
+    private ICollection<SceneNode>? selectedItems;
 
-    /// <inheritdoc />
-    public override string Header => "Geometry";
-
-    /// <inheritdoc />
-    public override string Description => "Defines renderable geometry by referencing a geometry (mesh) asset.";
-
-    [ObservableProperty]
-    public partial bool IsMixed { get; set; }
-
-    [ObservableProperty]
-    public partial string? SelectedAssetUriString { get; set; }
-
-    [ObservableProperty]
-    public partial string SelectedAssetName { get; set; } = "None";
-
-    public string AssetButtonLabel => this.IsMixed ? "Mixed" : this.SelectedAssetName;
-
-    public string AssetThumbnailGlyph
-    {
-        get
-        {
-            if (this.IsMixed)
-            {
-                return "\uE9D9"; // Indeterminate / mixed
-            }
-
-            if (string.IsNullOrWhiteSpace(this.SelectedAssetUriString))
-            {
-                return string.Empty; // Empty placeholder
-            }
-
-            return "\uE7C3"; // Geometry
-        }
-    }
-
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GeometryViewModel"/> class.
+    /// </summary>
+    /// <param name="assetsIndexingService">Optional asset indexing service used to populate and
+    /// subscribe to mesh assets from the content database. May be <see langword="null"/> for scenarios where
+    /// asset content is not available.</param>
+    /// <param name="messenger">Optional messenger used to send notifications such as applied
+    /// geometry changes. May be <see langword="null"/>.</param>
     public GeometryViewModel(ContentBrowser.IAssetIndexingService? assetsIndexingService = null, IMessenger? messenger = null)
     {
         this.assetsIndexingService = assetsIndexingService as ContentBrowser.AssetsIndexingService;
@@ -90,7 +69,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                 var meshAssets = await assetsIndexingService.QueryAssetsAsync(
                     a => a.AssetType == ContentBrowser.AssetType.Mesh).ConfigureAwait(false);
 
-                var seenLocations = new HashSet<string>(meshAssets.Select(a => a.Location));
+                var seenLocations = new HashSet<string>(meshAssets.Select(a => a.Location), StringComparer.Ordinal);
 
                 // Populate initial items
                 foreach (var asset in meshAssets)
@@ -122,8 +101,74 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     }
 
     /// <summary>
-    /// Apply the specified asset to the currently selected scene nodes.
+    /// Gets the collection of geometry asset groups shown to the user. Each group contains
+    /// a list of <see cref="GeometryAssetPickerItem"/> instances.
     /// </summary>
+    [ObservableProperty]
+    public partial IReadOnlyList<GeometryAssetGroup> Groups { get; set; } = [];
+
+    /// <inheritdoc />
+    public override string Header => "Geometry";
+
+    /// <inheritdoc />
+    public override string Description => "Defines renderable geometry by referencing a geometry (mesh) asset.";
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the currently selected scene nodes have
+    /// differing geometry assets. When <c>true</c>, the UI should indicate a mixed state.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsMixed { get; set; }
+
+    /// <summary>
+    /// Gets or sets the URI string of the currently selected geometry asset. When multiple
+    /// nodes are selected and they reference different assets this value will be <c>null</c>.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? SelectedAssetUriString { get; set; }
+
+    /// <summary>
+    /// Gets or sets the display name of the currently selected geometry asset. When no asset
+    /// is selected the value will be "None" and when multiple different assets are selected
+    /// the value will be "Mixed".
+    /// </summary>
+    [ObservableProperty]
+    public partial string SelectedAssetName { get; set; } = "None";
+
+    /// <summary>
+    /// Gets the label to show on the asset button. Returns "Mixed" when <see cref="IsMixed"/>,
+    /// otherwise returns the <see cref="SelectedAssetName"/>.
+    /// </summary>
+    public string AssetButtonLabel => this.IsMixed ? "Mixed" : this.SelectedAssetName;
+
+    /// <summary>
+    /// Gets a glyph string to use as a thumbnail indicator for the currently selected asset.
+    /// Returns an indeterminate glyph when <see cref="IsMixed"/>, an empty string when no
+    /// asset is selected, or a geometry glyph for a valid selection.
+    /// </summary>
+    public string AssetThumbnailGlyph
+    {
+        get
+        {
+            if (this.IsMixed)
+            {
+                return "\uE9D9"; // Indeterminate / mixed
+            }
+
+            if (string.IsNullOrWhiteSpace(this.SelectedAssetUriString))
+            {
+                return string.Empty; // Empty placeholder
+            }
+
+            return "\uE7C3"; // Geometry
+        }
+    }
+
+    /// <summary>
+    /// Apply the specified geometry asset to all currently selected scene nodes.
+    /// </summary>
+    /// <param name="item">The asset picker item to apply. If <see langword="null"/> or not enabled the method returns immediately.</param>
+    /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
     public async Task ApplyAssetAsync(GeometryAssetPickerItem item)
     {
         if (item is null)
@@ -144,7 +189,8 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         // Capture old snapshots
         var nodes = this.selectedItems.ToList();
         var oldSnapshots = nodes
-            .Select(node => new GeometrySnapshot(node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry.Uri?.ToString()))
+            .Select(node => new GeometrySnapshot(node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri?.ToString()))
+            .Where(static snapshot => snapshot.UriString is not null)
             .ToList();
 
         // Apply new URI to each node's GeometryComponent
@@ -152,15 +198,13 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         foreach (var node in nodes)
         {
             var geo = node.Components.OfType<GeometryComponent>().FirstOrDefault();
-            if (geo is not null)
-            {
-                geo.Geometry.Uri = newUri;
-            }
+            _ = geo?.Geometry = new(newUri);
         }
 
         // Capture new snapshots
         var newSnapshots = nodes
-            .Select(node => new GeometrySnapshot(node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry.Uri?.ToString()))
+            .Select(node => new GeometrySnapshot(node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri?.ToString()))
+            .Where(static snapshot => snapshot.UriString is not null)
             .ToList();
 
         // Update viewmodel display
@@ -178,20 +222,23 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             Debug.WriteLine($"[GeometryViewModel] Error sending SceneNodeGeometryAppliedMessage: {ex.Message}");
         }
 
-        await Task.CompletedTask;
+        await Task.CompletedTask.ConfigureAwait(true);
     }
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Update the view model state from the given collection of selected scene nodes.
+    /// </summary>
+    /// <param name="items">The currently selected scene nodes.</param>
     public override void UpdateValues(ICollection<SceneNode> items)
     {
         this.selectedItems = items;
 
         var uriStrings = items
-            .Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry.Uri?.ToString())
+            .Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry?.Uri?.ToString())
             .ToList();
 
         var first = uriStrings.FirstOrDefault();
-        var isMixed = uriStrings.Any(u => !string.Equals(u, first, StringComparison.Ordinal));
+        var isMixed = uriStrings.Exists(u => !string.Equals(u, first, StringComparison.Ordinal));
 
         this.IsMixed = isMixed;
 
@@ -204,25 +251,6 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
         this.SelectedAssetUriString = first;
         this.SelectedAssetName = first is null ? "None" : ExtractNameFromUriString(first);
-    }
-
-    partial void OnIsMixedChanged(bool value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.AssetButtonLabel));
-        this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
-    }
-
-    partial void OnSelectedAssetNameChanged(string value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.AssetButtonLabel));
-    }
-
-    partial void OnSelectedAssetUriStringChanged(string? value)
-    {
-        _ = value;
-        this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
     }
 
     private static string ExtractNameFromUriString(string uriString)
@@ -264,5 +292,24 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             Group: GeometryAssetPickerGroup.Content,
             IsEnabled: false,
             ThumbnailModel: "\uE7C3");
+    }
+
+    partial void OnIsMixedChanged(bool value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.AssetButtonLabel));
+        this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
+    }
+
+    partial void OnSelectedAssetNameChanged(string value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.AssetButtonLabel));
+    }
+
+    partial void OnSelectedAssetUriStringChanged(string? value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.AssetThumbnailGlyph));
     }
 }

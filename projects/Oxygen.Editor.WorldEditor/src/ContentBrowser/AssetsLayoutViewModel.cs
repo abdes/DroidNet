@@ -5,10 +5,9 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
-using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
-using DroidNet.Routing;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Routing;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
@@ -18,12 +17,13 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexingService, ContentBrowserState contentBrowserState, HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly HashSet<string> seenLocations = [];
+    private readonly ContentBrowserState contentBrowserState = contentBrowserState;
+    private readonly HostingContext hostingContext = hostingContext;
+
     private IDisposable? subscription;
     private bool disposed;
     private bool initialized;
-    private readonly IAssetIndexingService assetsIndexingService = assetsIndexingService;
-    private readonly ContentBrowserState contentBrowserState = contentBrowserState;
-    private readonly HostingContext hostingContext = hostingContext;
+
     /// <summary>
     /// Occurs when an item in the assets view is invoked.
     /// </summary>
@@ -41,6 +41,30 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
         {
             await this.InitializeAsync().ConfigureAwait(false);
             this.initialized = true;
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the AssetsLayoutViewModel and optionally releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">true to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed)
+        {
+            if (disposing)
+            {
+                this.subscription?.Dispose();
+            }
+
+            this.disposed = true;
         }
     }
 
@@ -62,7 +86,10 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                 notification =>
                 {
                     // Only handle notifications that match the current selected folders
-                    if (!IsInSelectedFolders(notification.Asset)) return;
+                    if (!this.IsInSelectedFolders(notification.Asset))
+                    {
+                        return;
+                    }
 
                     switch (notification.ChangeType)
                     {
@@ -71,7 +98,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                             if (!this.seenLocations.Contains(notification.Asset.Location))
                             {
                                 // Modify UI-bound collection on UI dispatcher
-                                this.hostingContext.Dispatcher.TryEnqueue(() =>
+                                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
                                 {
                                     this.Assets.Add(notification.Asset);
                                     this.seenLocations.Add(notification.Asset.Location);
@@ -85,10 +112,10 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                                 a.Location.Equals(notification.Asset.Location, StringComparison.OrdinalIgnoreCase));
                             if (toRemove != null)
                             {
-                                this.hostingContext.Dispatcher.TryEnqueue(() =>
+                                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
                                 {
-                                    this.Assets.Remove(toRemove);
-                                    this.seenLocations.Remove(notification.Asset.Location);
+                                    _ = this.Assets.Remove(toRemove);
+                                    _ = this.seenLocations.Remove(notification.Asset.Location);
                                 });
                             }
 
@@ -110,9 +137,9 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                 // Build predicate based on current selected folders
                 Func<GameAsset, bool>? predicate = null;
                 var folders = this.contentBrowserState.SelectedFolders?.ToList();
-                if (folders != null && folders.Count > 0 && !folders.Contains("."))
+                if (folders?.Count > 0 && !folders.Contains(".", StringComparer.Ordinal))
                 {
-                    predicate = a => IsInSelectedFolders(a);
+                    predicate = a => this.IsInSelectedFolders(a);
                 }
 
                 var snapshot = await assetsIndexingService.QueryAssetsAsync(predicate).ConfigureAwait(false);
@@ -121,10 +148,18 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                 // Merge snapshot into collection with deduplication
                 foreach (var asset in snapshot)
                 {
-                    if (!IsInSelectedFolders(asset)) continue;
-                    if (this.seenLocations.Contains(asset.Location)) continue;
+                    if (!this.IsInSelectedFolders(asset))
+                    {
+                        continue;
+                    }
+
+                    if (this.seenLocations.Contains(asset.Location))
+                    {
+                        continue;
+                    }
+
                     var a = asset;
-                    this.hostingContext.Dispatcher.TryEnqueue(() =>
+                    _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
                     {
                         this.Assets.Add(a);
                         this.seenLocations.Add(a.Location);
@@ -138,14 +173,14 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
         });
 
         // Listen for folder selection changes
-        this.contentBrowserState.PropertyChanged += ContentBrowserState_PropertyChanged;
+        this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
     }
 
     private void ContentBrowserState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
-            _ = Task.Run(async () => await RefreshForSelectedFoldersAsync().ConfigureAwait(false));
+            _ = Task.Run(this.RefreshForSelectedFoldersAsync);
         }
     }
 
@@ -155,7 +190,7 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
         {
             // Clear current view and rebuild from snapshot filtered by selected folders
             // Must clear on UI thread
-            this.hostingContext.Dispatcher.TryEnqueue(() =>
+            _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
             {
                 this.Assets.Clear();
                 this.seenLocations.Clear();
@@ -163,17 +198,21 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
 
             Func<GameAsset, bool>? predicate = null;
             var folders = this.contentBrowserState.SelectedFolders?.ToList();
-            if (folders != null && folders.Count > 0 && !folders.Contains("."))
+            if (folders?.Count > 0 && !folders.Contains(".", StringComparer.Ordinal))
             {
-                predicate = a => IsInSelectedFolders(a);
+                predicate = this.IsInSelectedFolders;
             }
 
             var snapshot = await assetsIndexingService.QueryAssetsAsync(predicate).ConfigureAwait(false);
             foreach (var asset in snapshot)
             {
-                if (!IsInSelectedFolders(asset)) continue;
+                if (!this.IsInSelectedFolders(asset))
+                {
+                    continue;
+                }
+
                 var a = asset;
-                this.hostingContext.Dispatcher.TryEnqueue(() =>
+                _ = this.hostingContext.Dispatcher.TryEnqueue(() =>
                 {
                     this.Assets.Add(a);
                     this.seenLocations.Add(a.Location);
@@ -189,12 +228,22 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
     private bool IsInSelectedFolders(GameAsset asset)
     {
         var folders = this.contentBrowserState.SelectedFolders;
-        if (folders == null || folders.Count == 0) return true;
-        if (folders.Contains(".")) return true;
+        if (folders == null || folders.Count == 0)
+        {
+            return true;
+        }
+
+        if (folders.Contains("."))
+        {
+            return true;
+        }
 
         // Use project-root-relative, path-segment-aware matching instead of naive substring checks.
         var projectRoot = this.contentBrowserState.ProjectRootPath ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(projectRoot)) return true;
+        if (string.IsNullOrWhiteSpace(projectRoot))
+        {
+            return true;
+        }
 
         string relative;
         try
@@ -222,25 +271,24 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
 
         foreach (var sf in folders)
         {
-            if (string.IsNullOrWhiteSpace(sf)) continue;
+            if (string.IsNullOrWhiteSpace(sf))
+            {
+                continue;
+            }
+
             var sel = NormalizeForCompare(sf);
 
-            if (string.Equals(relNorm, sel, StringComparison.OrdinalIgnoreCase)) return true;
-            if (relNorm.StartsWith(sel + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) return true;
+            if (string.Equals(relNorm, sel, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (relNorm.StartsWith(sel + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
         }
 
         return false;
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        if (!this.disposed)
-        {
-            this.subscription?.Dispose();
-            this.disposed = true;
-        }
-
-        GC.SuppressFinalize(this);
     }
 }

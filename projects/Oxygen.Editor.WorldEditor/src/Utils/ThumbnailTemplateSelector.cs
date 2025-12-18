@@ -16,7 +16,7 @@ namespace Oxygen.Editor.WorldEditor.Utils;
 ///     display a
 ///     <see cref="Thumbnail" /> for it.
 /// </summary>
-public class ThumbnailTemplateSelector : DataTemplateSelector
+public partial class ThumbnailTemplateSelector : DataTemplateSelector
 {
     /// <summary>
     ///     Gets or sets the template used for scenes.
@@ -27,6 +27,7 @@ public class ThumbnailTemplateSelector : DataTemplateSelector
     ///     Gets or sets the template used for entities.
     /// </summary>
     public DataTemplate? EntityTemplate { get; set; }
+
     /// <summary>
     ///     Gets or sets the template used for folders.
     /// </summary>

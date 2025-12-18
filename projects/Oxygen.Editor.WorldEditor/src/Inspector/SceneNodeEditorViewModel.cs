@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
@@ -9,7 +10,9 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Dispatching;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.Messages;
 using Oxygen.Editor.WorldEditor.Services;
 
@@ -20,9 +23,6 @@ namespace Oxygen.Editor.WorldEditor.Inspector;
 /// </summary>
 public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, IDisposable
 {
-    private sealed record TransformOperation(SceneNode Node, TransformSnapshot Old, TransformSnapshot New);
-    private sealed record GeometryOperation(SceneNode Node, GeometrySnapshot Old, GeometrySnapshot New);
-
     // Map component type -> factory that creates an editor instance for a SceneNode.
     // Factories accept an IMessenger so editors can be created with the proper messenger instance
     // (we create per-SceneNodeEditorViewModel instances and cache them).
@@ -38,39 +38,11 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly IMessenger messenger;
     private readonly ISceneEngineSync sceneEngineSync;
     private readonly ContentBrowser.AssetsIndexingService? assetsIndexingService;
+    private readonly DispatcherQueue? dispatcher;
+    private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
+
     private bool isDisposed;
-
     private ICollection<SceneNode> items;
-
-    /// <summary>
-    /// Gets a value indicating whether exactly one item is selected.
-    /// </summary>
-    public bool IsSingleItemSelected => this.items.Count == 1;
-
-    /// <summary>
-    /// Gets the single selected node, or <see langword="null"/> when the selection is empty or contains multiple nodes.
-    /// Intended for binding into <see cref="SceneNodeDetailsView"/>.
-    /// </summary>
-    public SceneNode? SelectedNode => this.items.Count == 1 ? this.items.First() : null;
-
-    public ILoggerFactory? LoggerFactory { get; private set; }
-
-    /// <inheritdoc/>
-    protected override void RefreshOwnProperties()
-    {
-        try
-        {
-            base.RefreshOwnProperties();
-        }
-        catch (Exception ex)
-        {
-            this.LogUnexpectedException("RefreshOwnProperties", ex);
-            throw;
-        }
-
-        this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
-        this.OnPropertyChanged(nameof(this.SelectedNode));
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
@@ -106,7 +78,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.UpdateItemsCollection(this.items);
+        this.SubscribeToComponentCollections();
         this.LogConstructed(this.items.Count);
+        this.dispatcher = hosting.Dispatcher;
 
         this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
             hosting.Dispatcher.TryEnqueue(() =>
@@ -114,7 +88,17 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 this.items = message.SelectedEntities;
                 this.LogSelectionChanged(this.items.Count);
                 this.UpdateItemsCollection(this.items);
+                this.SubscribeToComponentCollections();
             }));
+
+        // Listen for component add/remove requests coming from the details view (sent via global messenger)
+        WeakReferenceMessenger.Default.Register<Messages.ComponentAddRequestedMessage>(this, (_, message) =>
+            hosting.Dispatcher.TryEnqueue(() => this.OnComponentAddRequested(message)));
+
+        WeakReferenceMessenger.Default.Register<Messages.ComponentRemoveRequestedMessage>(this, (_, message) =>
+            hosting.Dispatcher.TryEnqueue(() => this.OnComponentRemoveRequested(message)));
+
+        // Component collection changes are observed per-node via CollectionChanged subscriptions
 
         // Handle transform applied messages from property editors: create undo entries and sync engine
         this.messenger.Register<SceneNodeTransformAppliedMessage>(this, (_, message) =>
@@ -124,6 +108,24 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger.Register<SceneNodeGeometryAppliedMessage>(this, (_, message) =>
             hosting.Dispatcher.TryEnqueue(() => this.OnGeometryApplied(message)));
     }
+
+    /// <summary>
+    /// Gets a value indicating whether exactly one item is selected.
+    /// </summary>
+    public bool IsSingleItemSelected => this.items.Count == 1;
+
+    /// <summary>
+    /// Gets the single selected node, or <see langword="null"/> when the selection is empty or contains multiple nodes.
+    /// Intended for binding into <see cref="SceneNodeDetailsView"/>.
+    /// </summary>
+    public SceneNode? SelectedNode => this.items.Count == 1 ? this.items.First() : null;
+
+    /// <summary>
+    /// Gets the <see cref="ILoggerFactory"/> used by this view model for creating loggers.
+    /// The factory is provided via the constructor and may be <see langword="null"/>; when <see langword="null"/>
+    /// a <see cref="NullLoggerFactory"/> is used internally to disable logging.
+    /// </summary>
+    public ILoggerFactory? LoggerFactory { get; private set; }
 
     /// <summary>
     ///     Gets a viewmodel to view converter provided by the local Ioc container, which can resolve
@@ -141,9 +143,27 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.messenger.UnregisterAll(this);
+        this.UnsubscribeAllComponentCollections();
         this.LogDisposed();
 
         this.isDisposed = true;
+    }
+
+    /// <inheritdoc/>
+    protected override void RefreshOwnProperties()
+    {
+        try
+        {
+            base.RefreshOwnProperties();
+        }
+        catch (Exception ex)
+        {
+            this.LogUnexpectedException("RefreshOwnProperties", ex);
+            throw;
+        }
+
+        this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
+        this.OnPropertyChanged(nameof(this.SelectedNode));
     }
 
     /// <inheritdoc/>
@@ -157,6 +177,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         foreach (var entity in this.items)
         {
             Debug.WriteLine($"[SceneNodeEditorViewModel] Checking entity: {entity.Name}, Components: {string.Join(", ", entity.Components.Select(c => c.GetType().Name))}");
+
             // Filter out keys for which the entity does not have a component
             foreach (var key in keysToCheck.ToList()
                          .Where(key => entity.Components.All(component => component.GetType() != key)))
@@ -196,6 +217,17 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.LogFiltered(before, after);
 
         return filteredEditors.Values;
+    }
+
+    private void EnqueueUi(Action action)
+    {
+        if (this.dispatcher?.HasThreadAccess != false)
+        {
+            action();
+            return;
+        }
+
+        _ = this.dispatcher.TryEnqueue(() => action());
     }
 
     private void OnTransformApplied(SceneNodeTransformAppliedMessage message)
@@ -265,15 +297,154 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
     }
 
+    private void OnComponentAddRequested(Messages.ComponentAddRequestedMessage message)
+    {
+        if (message is null || message.Node is null || message.Component is null)
+        {
+            return;
+        }
+
+        var op = new ComponentOperation(message.Node, message.Component);
+        this.ApplyAddComponent(op);
+    }
+
+    private void OnComponentRemoveRequested(Messages.ComponentRemoveRequestedMessage message)
+    {
+        if (message is null || message.Node is null || message.Component is null)
+        {
+            return;
+        }
+
+        var op = new ComponentOperation(message.Node, message.Component);
+        this.ApplyRemoveComponent(op);
+    }
+
+    private void ApplyAddComponent(ComponentOperation? op)
+    {
+        Debug.Assert(op is not null, "ComponentOperation is null");
+
+        this.EnqueueUi(() =>
+        {
+            try
+            {
+                var nodeComponentsBefore = op.Node.Components.Count;
+                this.LogApplyAddComponent(op.Node.Name, op.Component.GetType().Name, op.Component.Name, nodeComponentsBefore);
+
+                var added = op.Node.AddComponent(op.Component);
+
+                if (added)
+                {
+                    // Record undo that removes this component
+                    UndoRedo.Default[this].AddChange($"Remove Component ({op.Component.Name})", this.ApplyRemoveComponent, op);
+                }
+
+                // Notify result
+                WeakReferenceMessenger.Default.Send(new Messages.ComponentAddedMessage(op.Node, op.Component, added));
+            }
+            catch (Exception ex)
+            {
+                this.LogUnexpectedException(nameof(this.ApplyAddComponent), ex);
+                throw;
+            }
+        });
+    }
+
+    private void ApplyRemoveComponent(ComponentOperation? op)
+    {
+        Debug.Assert(op is not null, "ComponentOperation is null");
+
+        this.EnqueueUi(() =>
+        {
+            try
+            {
+                var nodeComponentsBefore = op.Node.Components.Count;
+                this.LogApplyDeleteComponent(op.Node.Name, op.Component.GetType().Name, op.Component.Name, nodeComponentsBefore, selectedComponentName: null);
+
+                var removed = op.Node.RemoveComponent(op.Component);
+                if (!removed)
+                {
+                    WeakReferenceMessenger.Default.Send(new Messages.ComponentRemovedMessage(op.Node, op.Component, removed: false));
+                    return;
+                }
+
+                // Add undo to restore component
+                UndoRedo.Default[this].AddChange($"Restore Component ({op.Component.Name})", this.ApplyAddComponent, op);
+
+                // Engine sync: detach component-specific resources if necessary
+                if (op.Component is GeometryComponent)
+                {
+                    _ = this.sceneEngineSync.DetachGeometryAsync(op.Node.Id);
+                }
+
+                WeakReferenceMessenger.Default.Send(new Messages.ComponentRemovedMessage(op.Node, op.Component, removed: true));
+            }
+            catch (Exception ex)
+            {
+                this.LogUnexpectedException(nameof(this.ApplyRemoveComponent), ex);
+                throw;
+            }
+        });
+    }
+
+    private void SubscribeToComponentCollections()
+    {
+        // Unsubscribe previous
+        this.UnsubscribeAllComponentCollections();
+
+        foreach (var node in this.items)
+        {
+            if (node.Components is INotifyCollectionChanged notifier)
+            {
+                notifier.CollectionChanged += this.OnNodeComponentsChanged;
+                this.componentNotifiers[notifier] = node;
+            }
+        }
+    }
+
+    private void UnsubscribeAllComponentCollections()
+    {
+        foreach (var kvp in this.componentNotifiers.ToList())
+        {
+            try
+            {
+                kvp.Key.CollectionChanged -= this.OnNodeComponentsChanged;
+            }
+            catch
+            {
+                // ignore
+            }
+        }
+
+        this.componentNotifiers.Clear();
+    }
+
+    private void OnNodeComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (sender is not INotifyCollectionChanged notifier)
+        {
+            return;
+        }
+
+        if (!this.componentNotifiers.TryGetValue(notifier, out var node))
+        {
+            return;
+        }
+
+        this.EnqueueUi(() =>
+        {
+            this.LogComponentsUpdateEnqueued("ComponentCollectionChanged", node.Name, e.NewItems?.OfType<object>().FirstOrDefault()?.GetType().Name ?? string.Empty);
+
+            // Rebuild property editors for current selection
+            this.UpdateItemsCollection(this.items);
+        });
+    }
+
     private void ApplyRestoreGeometry(GeometryOperation? op)
     {
-        ArgumentNullException.ThrowIfNull(op);
+        Debug.Assert(op is not null, "GeometryOperation is null");
 
         var geo = op.Node.Components.OfType<GeometryComponent>().FirstOrDefault();
-        if (geo is not null)
-        {
-            geo.Geometry.Uri = op.Old.UriString is not null ? new Uri(op.Old.UriString) : null;
-        }
+        _ = geo?.Geometry = op.Old.UriString is not null ? new(op.Old.UriString) : null;
 
         if (geo is not null)
         {
@@ -285,13 +456,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void ApplyReapplyGeometry(GeometryOperation? op)
     {
-        ArgumentNullException.ThrowIfNull(op);
+        Debug.Assert(op is not null, "GeometryOperation is null");
 
         var geo = op.Node.Components.OfType<GeometryComponent>().FirstOrDefault();
-        if (geo is not null)
-        {
-            geo.Geometry.Uri = op.New.UriString is not null ? new Uri(op.New.UriString) : null;
-        }
+        _ = geo?.Geometry = op.New.UriString is not null ? new(op.New.UriString) : null;
 
         if (geo is not null)
         {
@@ -303,7 +471,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void ApplyRestoreTransform(TransformOperation? op)
     {
-        ArgumentNullException.ThrowIfNull(op);
+        Debug.Assert(op is not null, "GeometryOperation is null");
 
         var tr = op.Node.Components.OfType<TransformComponent>().FirstOrDefault();
         if (tr is not null)
@@ -319,7 +487,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void ApplyReapplyTransform(TransformOperation? op)
     {
-        ArgumentNullException.ThrowIfNull(op);
+        Debug.Assert(op is not null, "GeometryOperation is null");
 
         var tr = op.Node.Components.OfType<TransformComponent>().FirstOrDefault();
         if (tr is not null)
@@ -332,4 +500,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         _ = this.sceneEngineSync.UpdateNodeTransformAsync(op.Node);
         UndoRedo.Default[this].AddChange($"Restore Transform ({op.Node.Name})", this.ApplyRestoreTransform, op);
     }
+
+    private sealed record TransformOperation(SceneNode Node, TransformSnapshot Old, TransformSnapshot New);
+
+    private sealed record GeometryOperation(SceneNode Node, GeometrySnapshot Old, GeometrySnapshot New);
+
+    private sealed record ComponentOperation(SceneNode Node, GameComponent Component);
 }

@@ -51,7 +51,7 @@ public static class ThumbnailGenerator
         var sceneNode = adapter switch
         {
             SceneNodeAdapter lna => lna.AttachedObject,
-            _ => null
+            _ => null,
         };
 
         return sceneNode is not null && sceneNode.Name.EndsWith('1')

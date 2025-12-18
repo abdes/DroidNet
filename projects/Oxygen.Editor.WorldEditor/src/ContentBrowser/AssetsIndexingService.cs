@@ -4,7 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Hosting.WinUI;
@@ -24,7 +23,7 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
     private readonly ReplaySubject<AssetChangeNotification> changeStream = new(bufferSize: 20); // TODO: tune this based on the speed of the indexer
     private readonly ConcurrentBag<GameAsset> assets = [];
     private readonly ConcurrentDictionary<string, bool> indexedFolders = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ConcurrentDictionary<string, FileSystemWatcher> watchers = new();
+    private readonly ConcurrentDictionary<string, FileSystemWatcher> watchers = new(StringComparer.Ordinal);
     private readonly CancellationTokenSource cts = new();
     private readonly SemaphoreSlim completionLock = new(0); // Signaled when indexing completes
     private Task? backgroundTask;
@@ -37,6 +36,22 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
 
     /// <inheritdoc/>
     public IObservable<AssetChangeNotification> AssetChanges => this.changeStream.AsObservable();
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.cts.Cancel();
+        foreach (var watcher in this.watchers.Values)
+        {
+            watcher.Dispose();
+        }
+
+        this.watchers.Clear();
+        this.changeStream.OnCompleted();
+        this.changeStream.Dispose();
+        this.cts.Dispose();
+        this.completionLock.Dispose();
+    }
 
     /// <inheritdoc/>
     public async Task StartIndexingAsync(IProgress<IndexingProgress>? progress = null, CancellationToken ct = default)
@@ -61,7 +76,7 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
     /// <inheritdoc/>
     public async Task StopIndexingAsync()
     {
-        if (this.status == IndexingStatus.Stopped || this.status == IndexingStatus.NotStarted)
+        if (this.status is IndexingStatus.Stopped or IndexingStatus.NotStarted)
         {
             return;
         }
@@ -164,7 +179,7 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
 
         await foreach (var document in folder.GetDocumentsAsync().ConfigureAwait(false))
         {
-            var assetName = document.Name.Contains('.')
+            var assetName = document.Name.Contains('.', StringComparison.Ordinal)
                 ? document.Name[..document.Name.LastIndexOf('.')]
                 : document.Name;
 
@@ -200,7 +215,10 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
 
     private void SetupFileWatcher(string folderPath)
     {
-        if (this.watchers.ContainsKey(folderPath)) return;
+        if (this.watchers.ContainsKey(folderPath))
+        {
+            return;
+        }
 
         try
         {
@@ -228,7 +246,7 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
         Debug.WriteLine($"[AssetsIndexingService] File added: {filePath}");
 
         var fileName = Path.GetFileName(filePath);
-        var assetName = fileName.Contains('.')
+        var assetName = fileName.Contains('.', StringComparison.Ordinal)
             ? fileName[..fileName.LastIndexOf('.')]
             : fileName;
 
@@ -281,21 +299,5 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
                 DateTimeOffset.UtcNow);
             this.changeStream.OnNext(notification);
         }
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.cts.Cancel();
-        foreach (var watcher in this.watchers.Values)
-        {
-            watcher.Dispose();
-        }
-
-        this.watchers.Clear();
-        this.changeStream.OnCompleted();
-        this.changeStream.Dispose();
-        this.cts.Dispose();
-        this.completionLock.Dispose();
     }
 }
