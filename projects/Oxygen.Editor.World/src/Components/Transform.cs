@@ -45,7 +45,7 @@ public partial class TransformComponent : GameComponent
     }
 
     /// <summary>
-    /// Transform component is fundamental to a node and must not be deleted; report locked.
+    /// Gets a value indicating whether transform component is fundamental to a node and must not be deleted; report locked.
     /// </summary>
     public override bool IsLocked => true;
 
