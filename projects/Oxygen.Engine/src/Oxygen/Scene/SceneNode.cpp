@@ -9,11 +9,9 @@
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
-#include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneNode;

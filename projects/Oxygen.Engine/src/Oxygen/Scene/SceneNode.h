@@ -7,11 +7,11 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include <glm/glm.hpp>
 
@@ -19,7 +19,6 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
-#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
@@ -599,8 +598,7 @@ public:
   OXGN_SCN_API void SetGeometry(GeometryAssetPtr geometry);
 
   //! Gets attached geometry; returns empty shared_ptr if none.
-  OXGN_SCN_NDAPI auto GetGeometry() const noexcept
-    -> std::shared_ptr<const data::GeometryAsset>;
+  OXGN_SCN_NDAPI auto GetGeometry() const noexcept -> GeometryAssetPtr;
 
   //! Returns true if the node has a RenderableComponent.
   OXGN_SCN_NDAPI auto HasGeometry() const noexcept -> bool;
