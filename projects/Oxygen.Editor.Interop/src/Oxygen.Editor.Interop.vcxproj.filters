@@ -5,6 +5,7 @@
     <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -45,13 +46,14 @@
     <ClCompile Include="Utils\TokenHelpers.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
+    <ClCompile Include="Commands\HideViewCommand.cpp" />
+    <ClCompile Include="Commands\ShowViewCommand.cpp" />
+    <ClCompile Include="Commands\DestroyViewCommand.cpp" />
+    <ClCompile Include="Commands\CreateViewCommand.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h">
       <Filter>Base</Filter>
-    </ClInclude>
-    <ClInclude Include="Commands\SceneCommands.h">
-      <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\CreateSceneNodeCommand.h">
       <Filter>Commands</Filter>
@@ -132,6 +134,13 @@
     </ClInclude>
     <ClInclude Include="EditorModule\EditorView.h">
       <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\HideViewCommand.h" />
+    <ClInclude Include="Commands\ShowViewCommand.h" />
+    <ClInclude Include="Commands\DestroyViewCommand.h" />
+    <ClInclude Include="Commands\CreateViewCommand.h" />
+    <ClInclude Include="Commands\DetachGeometryCommand.h">
+      <Filter>Commands</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
