@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
+using DroidNet.TimeMachine;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 
 namespace Oxygen.Editor.WorldEditor.Inspector;
 
@@ -29,5 +31,45 @@ public sealed partial class SceneNodeEditorView : UserControl
 
             this.Resources["VmToViewConverter"] = this.ViewModel.VmToViewConverter;
         };
+    }
+
+    private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+
+        var vm = this.ViewModel;
+        if (vm is null)
+        {
+            return;
+        }
+
+        var historyKeeper = UndoRedo.Default[vm];
+        if (historyKeeper.UndoStack.Count == 0)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        await historyKeeper.UndoAsync().ConfigureAwait(false);
+    }
+
+    private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+
+        var vm = this.ViewModel;
+        if (vm is null)
+        {
+            return;
+        }
+
+        var historyKeeper = UndoRedo.Default[vm];
+        if (historyKeeper.RedoStack.Count == 0)
+        {
+            return;
+        }
+
+        args.Handled = true;
+        await historyKeeper.RedoAsync().ConfigureAwait(false);
     }
 }

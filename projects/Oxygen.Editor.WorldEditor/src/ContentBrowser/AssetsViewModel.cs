@@ -26,7 +26,7 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
 public partial class AssetsViewModel(
     IProject currentProject,
-    AssetsIndexingService assetsIndexingService,
+    IAssetIndexingService assetsIndexingService,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectManagerService projectManagerService,
@@ -59,8 +59,7 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            await assetsIndexingService.IndexAssetsAsync().ConfigureAwait(true);
-
+            // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
 
             // If the project has an active scene, navigate to Scenes folder and request it to be opened
@@ -74,8 +73,7 @@ public partial class AssetsViewModel(
             }
         }
 
-        // Actions that should happen on every navigation
-        await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
+        // Asset indexing runs automatically in background with file watching
     }
 
     /// <summary>
@@ -114,9 +112,9 @@ public partial class AssetsViewModel(
         {
             Debug.WriteLine(
                 $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
-            await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
-            Debug.WriteLine(
-                $"[AssetsViewModel] RefreshAssetsAsync completed. Assets count: {assetsIndexingService.Assets.Count}");
+            // Asset indexing runs automatically in background - no manual refresh needed
+            var assetCount = await assetsIndexingService.QueryAssetsAsync().ConfigureAwait(false);
+            Debug.WriteLine($"[AssetsViewModel] Assets available: {assetCount.Count}");
         }
     }
 
@@ -194,9 +192,7 @@ public partial class AssetsViewModel(
             var newScene = await projectManagerService.CreateSceneAsync(sceneName).ConfigureAwait(true);
             if (newScene is not null)
             {
-                // Refresh the assets view to show the new scene
-                await assetsIndexingService.RefreshAssetsAsync().ConfigureAwait(true);
-
+                // File watcher will automatically detect and index the new scene
                 // TODO: Could add success notification here
             }
 

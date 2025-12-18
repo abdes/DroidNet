@@ -159,6 +159,10 @@ public sealed partial class ContentBrowserViewModel(
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
+            // Start asset indexing in background now that project is loaded
+            var assetIndexer = this.childContainer.Resolve<IAssetIndexingService>();
+            _ = assetIndexer.StartIndexingAsync();
+
             var initialUrl = "/(left:project//right:" + this.currentAssetsViewPath + ")";
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
 
@@ -182,7 +186,6 @@ public sealed partial class ContentBrowserViewModel(
                     });
 
             this.childContainer.Register<ContentBrowserState>(Reuse.Singleton);
-            this.childContainer.Register<AssetsIndexingService>(Reuse.Singleton);
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
             this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
@@ -669,9 +672,9 @@ public sealed partial class ContentBrowserViewModel(
             var projectLayout = this.childContainer.Resolve<ProjectLayoutViewModel>();
             await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
 
-            // Then refresh asset indexing
-            var indexing = this.childContainer.Resolve<AssetsIndexingService>();
-            await indexing.RefreshAssetsAsync().ConfigureAwait(true);
+            // Asset indexing runs automatically in background with file watching
+            // No manual refresh needed - just wait a moment for UI update
+            await Task.Delay(100).ConfigureAwait(true);
         }
         finally
         {

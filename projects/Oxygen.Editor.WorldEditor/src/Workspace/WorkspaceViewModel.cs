@@ -100,6 +100,9 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<DocumentManager>(Reuse.Singleton);
         _ = childContainer.Resolve<DocumentManager>();
 
+        // Register shared services at workspace level
+        childContainer.Register<ContentBrowser.IAssetIndexingService, ContentBrowser.AssetsIndexingService>(Reuse.Singleton);
+
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);
         childContainer.Register<ISceneMutator, SceneMutator>(Reuse.Singleton);
@@ -118,6 +121,9 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<TransformViewModel>(Reuse.Transient);
         childContainer.Register<TransformView>(Reuse.Transient);
+
+        childContainer.Register<GeometryViewModel>(Reuse.Transient);
+        childContainer.Register<GeometryView>(Reuse.Transient);
     }
 
     /// <inheritdoc />

@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Hosting.WinUI;
 
 namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 
@@ -11,13 +11,8 @@ namespace Oxygen.Editor.WorldEditor.ContentBrowser;
 /// The ViewModel for the <see cref="ListLayoutView"/> view.
 /// </summary>
 /// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
-public partial class ListLayoutViewModel(AssetsIndexingService assetsIndexingService) : AssetsLayoutViewModel
+public partial class ListLayoutViewModel(IAssetIndexingService assetsIndexingService, ContentBrowserState contentBrowserState, HostingContext hostingContext) : AssetsLayoutViewModel(assetsIndexingService, contentBrowserState, hostingContext)
 {
-    /// <summary>
-    /// Gets the collection of game assets.
-    /// </summary>
-    public ObservableCollection<GameAsset> Assets { get; } = assetsIndexingService.Assets;
-
     /// <summary>
     /// Invokes the item.
     /// </summary>
