@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Reactive.Linq;
+using System.Runtime.ExceptionServices;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
@@ -103,6 +104,7 @@ public partial class App
 
         this.UnhandledException += OnAppUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
+        AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
 
         // We just want to exit if navigation fails for some reason
         _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
@@ -153,6 +155,146 @@ public partial class App
     private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
         => OnUnhandledException((Exception)e.ExceptionObject);
 
+    private static void OnFirstChanceException(object? sender, FirstChanceExceptionEventArgs e)
+    {
+        var parts = new List<string>(16);
+        try
+        {
+            var ex = e.Exception;
+            if (!IsRelevantFirstChance(ex))
+            {
+                return;
+            }
+
+            // If we reached here, log a diagnostic dump similar to the previous
+            // implementation for E_INVALIDARG but for a broader set of cases.
+            parts.Add("--------- FIRST-CHANCE (DIAGNOSTIC) ---------\n");
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Timestamp: {DateTimeOffset.UtcNow:O} (UTC)\n"));
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"ThreadId: {Environment.CurrentManagedThreadId}\n"));
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Type: {ex.GetType().FullName}\n"));
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"HRESULT: {ex.HResult}\n"));
+            parts.Add("--- MESSAGE ---\n");
+            parts.Add(ex.Message + "\n");
+
+            // stacktrace or full ToString() fallback
+            if (!string.IsNullOrWhiteSpace(ex.StackTrace))
+            {
+                parts.Add("--- STACKTRACE ---\n");
+                parts.Add(ex.StackTrace + "\n");
+            }
+
+            DumpInner(parts, ex.InnerException, 6, 1);
+            parts.Add("--------------------------------------------\n");
+
+            var message = CombineParts(parts);
+            Debug.WriteLine(message);
+        }
+#pragma warning disable CA1031 // Do not catch general exception types
+        catch (Exception logEx)
+        {
+            // never let logging of first-chance exceptions crash the process
+            Debug.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Failed to log first-chance exception: {logEx}\n"));
+        }
+#pragma warning restore CA1031 // Do not catch general exception types
+
+        // local function to append inner exception chain to parts
+        static void DumpInner(List<string> parts, Exception? inner, int remaining, int index)
+        {
+            if (inner is null || remaining <= 0)
+            {
+                return;
+            }
+
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"--- INNER ({index}) ---\n"));
+            parts.Add(string.Create(CultureInfo.InvariantCulture, $"Type: {inner.GetType().FullName}\n"));
+            parts.Add(inner.Message + "\n");
+            if (!string.IsNullOrWhiteSpace(inner.StackTrace))
+            {
+                parts.Add(inner.StackTrace + "\n");
+            }
+
+            DumpInner(parts, inner.InnerException, remaining - 1, index + 1);
+        }
+
+        static string CombineParts(List<string> parts)
+        {
+            // compute total length and assemble with single allocation
+            var total = 0;
+            foreach (var p in parts)
+            {
+                total += p?.Length ?? 0;
+            }
+
+            var message = string.Create(total, parts, (span, state) =>
+            {
+                var pos = 0;
+                foreach (var s in state)
+                {
+                    if (string.IsNullOrEmpty(s))
+                    {
+                        continue;
+                    }
+
+                    var src = s.AsSpan();
+                    src.CopyTo(span.Slice(pos, src.Length));
+                    pos += src.Length;
+                }
+            });
+            return message;
+        }
+    }
+
+    // Local predicate that decides whether this first-chance exception
+    // is one of the commonly-observed, usually harmless WinUI / WinAppSDK
+    // errors we want to log and inspect.
+    private static bool IsRelevantFirstChance(Exception ex)
+    {
+        if (ex is null)
+        {
+            return false;
+        }
+
+        // Common HRESULTs observed as first-chance in WinRT/WinUI interop
+        // and native calls. These are frequently thrown and caught internally
+        // but are useful to capture during development for diagnostics.
+        // Values expressed with unchecked cast for portability.
+        var knownHResults = new HashSet<int>
+        {
+            unchecked((int)0x80070057), // E_INVALIDARG
+            unchecked((int)0x80004003), // E_POINTER
+            unchecked((int)0x8000000B), // E_BOUNDS
+            unchecked((int)0x80070005), // E_ACCESSDENIED
+            unchecked((int)0x80004004), // E_ABORT
+            unchecked((int)0x8001010E), // RPC_E_WRONG_THREAD
+            unchecked((int)0x800401F0), // CO_E_NOTINITIALIZED
+        };
+
+        if (knownHResults.Contains(ex.HResult))
+        {
+            return true;
+        }
+
+        // Heuristics based on exception message for cases where HResult
+        // is not specific or not set. Match typical substrings seen in
+        // parameter/interop/bounds/pointer errors.
+        var msg = ex.Message;
+#pragma warning disable IDE0046 // Convert to conditional expression
+        if (string.IsNullOrEmpty(msg))
+        {
+            return false;
+        }
+#pragma warning restore IDE0046 // Convert to conditional expression
+
+        return msg.Contains("parameter", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("expected range", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("bounds", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("pointer", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("access is denied", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("class not registered", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("no such interface supported", StringComparison.OrdinalIgnoreCase)
+            || msg.Contains("wrong thread", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static void OnUnhandledException(Exception ex)
     {
         /*
@@ -167,7 +309,7 @@ public partial class App
                        --------- UNHANDLED EXCEPTION ---------
                        >>>> HRESULT: {ex.HResult.ToString(CultureInfo.InvariantCulture)}
                        --- MESSAGE ---
-                       {ex.Message}{stackTrace}{source}{innerException}
+                       {ex}{stackTrace}{source}{innerException}
                        ---------------------------------------
                        """;
         Debug.WriteLine(message);
