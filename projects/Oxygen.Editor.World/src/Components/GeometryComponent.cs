@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -26,13 +27,20 @@ namespace Oxygen.Editor.World;
 /// </remarks>
 public partial class GeometryComponent : GameComponent
 {
-    private AssetReference<GeometryAsset> geometry = new();
+    private AssetReference<GeometryAsset>? geometry = new("asset://__uninitialized__");
 
     static GeometryComponent()
     {
+        // Register factory for creating GeometryComponent from GeometryComponentData during hydration from serialized data.
         Register<GeometryComponentData>(d =>
         {
-            var g = new GeometryComponent { Name = d.Name };
+            // TODO: we will do schema validation later
+            Debug.Assert(!string.IsNullOrWhiteSpace(d.GeometryUri), "DTO should not be null");
+            var g = new GeometryComponent
+            {
+                Name = d.Name,
+                Geometry = new AssetReference<GeometryAsset>(d.GeometryUri),
+            };
             g.Hydrate(d);
             return g;
         });
@@ -45,7 +53,7 @@ public partial class GeometryComponent : GameComponent
     /// An asset reference to the geometry to render. The reference can be unresolved (URI only)
     /// or resolved (with Asset instance loaded).
     /// </value>
-    public AssetReference<GeometryAsset> Geometry
+    public AssetReference<GeometryAsset>? Geometry
     {
         get => this.geometry;
         set => this.SetProperty(ref this.geometry, value);
@@ -78,9 +86,6 @@ public partial class GeometryComponent : GameComponent
 
         using (this.SuppressNotifications())
         {
-            // geometry URI
-            this.Geometry.Uri = gd.GeometryUri is not null ? new(gd.GeometryUri) : null;
-
             // component-level override slots
             this.OverrideSlots.Clear();
             if (gd.OverrideSlots is not null)
@@ -117,10 +122,19 @@ public partial class GeometryComponent : GameComponent
     /// <inheritdoc/>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "I find .ToList() is clearer with LINQ")]
     public override ComponentData Dehydrate()
-        => new GeometryComponentData
+    {
+        if (this.Geometry is null)
+        {
+            // During dehydration, Geometry must be set to a valid reference.
+            // A geometry component without geometry should not be left for serialization by its owning SceneNode.
+            Debug.Assert(false, "Cannot dehydrate GeometryComponent with null Geometry reference.");
+            throw new InvalidOperationException("Cannot dehydrate GeometryComponent with null Geometry reference.");
+        }
+
+        return new GeometryComponentData
         {
             Name = this.Name,
-            GeometryUri = this.Geometry.Uri?.ToString(),
+            GeometryUri = this.Geometry.Uri.ToString(),
             OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             TargetedOverrides = this.TargetedOverrides.Select(t => new TargetedOverrideData
             {
@@ -129,4 +143,5 @@ public partial class GeometryComponent : GameComponent
                 OverrideSlots = t.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
             }).ToList(),
         };
+    }
 }

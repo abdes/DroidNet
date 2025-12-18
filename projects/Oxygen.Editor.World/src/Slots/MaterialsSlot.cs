@@ -17,13 +17,16 @@ namespace Oxygen.Editor.World.Slots;
 /// </remarks>
 public partial class MaterialsSlot : OverrideSlot
 {
-    private AssetReference<MaterialAsset> material = new();
+    private AssetReference<MaterialAsset> material = new("asset://__uninitialized__");
 
     static MaterialsSlot()
     {
         Register<MaterialsSlotData>(d =>
         {
-            var s = new MaterialsSlot();
+            var s = new MaterialsSlot()
+            {
+                Material = new AssetReference<MaterialAsset>(d.MaterialUri),
+            };
             s.Hydrate(d);
             return s;
         });
@@ -54,19 +57,13 @@ public partial class MaterialsSlot : OverrideSlot
 
         using (this.SuppressNotifications())
         {
-            if (!string.IsNullOrEmpty(md.MaterialUri))
-            {
-                this.Material.Uri = new(md.MaterialUri);
-            }
-            else
-            {
-                // Clear override if provided explicitly null/empty
-                this.Material.Uri = null;
-            }
+            // Nothing to do here since the material is set in the factory method.
+            // Leaving this code structure for future enhancements.
+            _ = md;
         }
     }
 
     /// <inheritdoc/>
     public override OverrideSlotData Dehydrate()
-        => new MaterialsSlotData { MaterialUri = this.Material.Uri?.ToString() };
+        => new MaterialsSlotData { MaterialUri = this.Material.Uri.ToString() };
 }

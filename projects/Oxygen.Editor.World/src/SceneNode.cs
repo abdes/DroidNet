@@ -196,7 +196,7 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     /// <summary>
     ///     Gets the list of components associated with the scene node.
     /// </summary>
-    public ICollection<GameComponent> Components { get; private init; }
+    public ObservableCollection<GameComponent> Components { get; private init; }
 
     /// <summary>
     ///     Gets the parent of the scene node.
