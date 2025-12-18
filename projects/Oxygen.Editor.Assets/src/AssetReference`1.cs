@@ -22,25 +22,47 @@ namespace Oxygen.Editor.Assets;
 /// and the ability to suppress notifications during batch operations.
 /// </para>
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "multiple constructors")]
 public sealed class AssetReference<T> : ScopedObservableObject
-    where T : Asset
+where T : Asset
 {
-    private Uri? uri;
+    private Uri uri;
     private T? asset;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AssetReference{T}"/> class with the specified asset URI.
+    /// </summary>
+    /// <param name="uri">The <see cref="Uri"/> of the referenced asset.</param>
+    public AssetReference(Uri uri)
+    {
+        this.uri = uri;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AssetReference{T}"/> class from the specified URI string.
+    /// </summary>
+    /// <param name="uriString">A string that represents the URI of the referenced asset.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="uriString"/> is null.</exception>
+    /// <exception cref="UriFormatException">Thrown when <paramref name="uriString"/> is not a valid URI.</exception>
+    public AssetReference(string uriString)
+        : this(new Uri(uriString))
+    {
+    }
 
     /// <summary>
     /// Gets or sets the URI of the referenced asset.
     /// </summary>
     /// <value>
     /// The asset URI in the format <c>asset://{MountPoint}/{Path}</c>.
-    /// Setting this property will invalidate <see cref="Asset"/> if the new URI does not match
-    /// the current asset's URI.
+    /// Setting this property will invalidate <see cref="Asset"/> if the new URI does not match the current asset's URI.
     /// </value>
-    public Uri? Uri
+    public Uri Uri
     {
         get => this.uri;
         set
         {
+            ArgumentException.ThrowIfNullOrEmpty(value.ToString(), nameof(value));
+
             // SetProperty already checks equality and returns true only if changed
             if (this.SetProperty(ref this.uri, value))
             {
