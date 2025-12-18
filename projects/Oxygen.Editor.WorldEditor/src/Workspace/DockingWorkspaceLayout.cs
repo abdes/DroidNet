@@ -5,7 +5,6 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.WinUI;
 using DroidNet.Docking;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Layouts.GridFlow;
@@ -95,7 +94,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
                                 async () =>
                                 {
                                     Debug.WriteLine($"Workspace layout changed because {layoutChangeEvent.EventArgs.Reason}");
-                                    await hostingContext.Dispatcher.EnqueueAsync(() => this.SyncWithRouterAsync(layoutChangeEvent.EventArgs.Reason)).ConfigureAwait(true);
+                                    await hostingContext.Dispatcher.DispatchAsync(() => this.SyncWithRouterAsync(layoutChangeEvent.EventArgs.Reason)).ConfigureAwait(true); // Replaced SafeEnqueue with DispatchAsync
                                 }))
                         .Concat()
                         .Subscribe();

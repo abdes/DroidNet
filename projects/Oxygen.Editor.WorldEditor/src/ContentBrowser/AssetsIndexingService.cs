@@ -228,9 +228,9 @@ public sealed partial class AssetsIndexingService(IProjectManagerService project
                 EnableRaisingEvents = true,
             };
 
-            watcher.Created += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileAdded(e.FullPath));
-            watcher.Deleted += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileRemoved(e.FullPath));
-            watcher.Changed += (s, e) => hostingContext.Dispatcher.TryEnqueue(() => this.OnFileModified(e.FullPath));
+            watcher.Created += (s, e) => _ = hostingContext.Dispatcher.DispatchAsync(() => this.OnFileAdded(e.FullPath));
+            watcher.Deleted += (s, e) => _ = hostingContext.Dispatcher.DispatchAsync(() => this.OnFileRemoved(e.FullPath));
+            watcher.Changed += (s, e) => _ = hostingContext.Dispatcher.DispatchAsync(() => this.OnFileModified(e.FullPath));
 
             this.watchers[folderPath] = watcher;
             Debug.WriteLine($"[AssetsIndexingService] File watcher set up for: {folderPath}");

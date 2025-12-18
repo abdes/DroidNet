@@ -37,8 +37,9 @@ The `samples/DemoApp` provides a recommended setup and example registrations.
 - Structured logging: Integrates with Serilog or any Microsoft.Extensions.Logging provider
 - Extensible DI registration: Register UI components (views, view models, services) via standard
     host DI patterns
-- Reactive dispatch scheduling: `DispatcherQueueScheduler` for scheduling work on the WinUI
+- **Reactive dispatch scheduling**: `DispatcherQueueScheduler` for scheduling work on the WinUI
     dispatcher using System.Reactive
+- **Robust UI thread marshaling**: Safe extension methods for `DispatcherQueue` to execute code on the UI thread with full support for `async/await`, exception propagation, and deadlock prevention.
 
 ## Project Architecture
 
@@ -74,6 +75,7 @@ Hosting/
 │       ├── UserInterfaceHostedService.cs  # IHostedService implementation
 │       ├── UserInterfaceThread.cs  # WinUI dispatcher thread wrapper
 │       ├── DispatcherQueueScheduler.cs    # Reactive scheduler for dispatcher
+│       ├── DispatcherQueueExtensions.cs   # Safe marshaling to UI thread
 │       └── WinUiHostingExtensions.cs     # Extension methods for host builder
 ├── samples/
 │   └── DemoApp/                    # Reference implementation
@@ -108,6 +110,31 @@ Hosting/
 │  + Other Hosted Services                    │
 │                                             │
 └─────────────────────────────────────────────┘
+```
+
+### UI Thread Marshaling
+
+The `DispatcherQueueExtensions` provides a set of high-performance extension methods for the WinUI `DispatcherQueue`. These methods are designed to safely marshal work from background services to the UI thread while avoiding common pitfalls like re-entrancy and deadlocks.
+
+#### Key Features
+
+- **Re-entrancy Aware**: Automatically detects if the current thread is already the UI thread. If so, it executes the action synchronously to avoid unnecessary context switches and potential deadlocks.
+- **Async/Await Friendly**: Provides `DispatchAsync` overloads that return `Task` or `Task<T>`, allowing you to seamlessly `await` UI operations from any thread.
+- **Robust Exception Handling**: Captures exceptions occurring on the UI thread and re-propagates them to the caller, ensuring that error handling remains consistent across thread boundaries.
+- **Allocation Optimized**: Uses cached tasks where possible to minimize heap allocations on common code paths.
+
+#### Usage Example
+
+```csharp
+// From a background service or task
+await dispatcherQueue.DispatchAsync(() =>
+{
+    // This code runs safely on the UI thread
+    this.ViewModel.Title = "Updated from Background";
+});
+
+// Or returning a value from the UI thread
+var userInput = await dispatcherQueue.DispatchAsync(() => this.InputBox.Text);
 ```
 
 ## Getting Started

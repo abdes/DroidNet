@@ -10,9 +10,6 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Hosting.csproj" />
-    </ItemGroup>
-
-    <ItemGroup>
         <PackageReference Include="Moq" />
     </ItemGroup>
 

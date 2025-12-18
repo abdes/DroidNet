@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
+using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
@@ -123,7 +124,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             {
                 if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
                 {
-                    this.EnqueueUi(() =>
+                    _ = this.dispatcher?.DispatchAsync(() =>
                     {
                         this.doNotPropagateName = true;
                         this.Name = field?.Name;
@@ -229,7 +230,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     }
 
     private void SyncFromNode()
-        => this.EnqueueUi(() =>
+        => _ = this.dispatcher?.DispatchAsync(() =>
         {
             try
             {
@@ -243,17 +244,6 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
                 throw;
             }
         });
-
-    private void EnqueueUi(Action action)
-    {
-        if (this.dispatcher?.HasThreadAccess != false)
-        {
-            action();
-            return;
-        }
-
-        _ = this.dispatcher.TryEnqueue(() => action());
-    }
 
     private bool CanAddComponent(string typeId)
         => this.Node is not null && typeId is not null && !string.Equals(typeId, "Transform", StringComparison.OrdinalIgnoreCase);
