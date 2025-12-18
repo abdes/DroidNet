@@ -8,6 +8,7 @@ using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
+using DroidNet.Resources;
 using DryIoc;
 
 namespace DroidNet.Aura;
@@ -120,6 +121,9 @@ public static class DependencyInjectionExtensions
 
     private static void RegisterMandatoryServices(IContainer container, AuraOptions options)
     {
+        // Register the Assets resolver service
+        container.Register<AssetResolverService>(Reuse.Singleton);
+
         // Register window factory (default or custom)
         if (options.CustomWindowFactoryType is not null)
         {
