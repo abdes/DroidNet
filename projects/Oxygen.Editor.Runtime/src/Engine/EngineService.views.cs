@@ -17,7 +17,7 @@ public sealed partial class EngineService
     {
         var runner = this.EnsureIsRunning();
         this.LogCreateView(config);
-        return await runner.CreateViewAsync(this.engineContext, config).ConfigureAwait(true);
+        return await runner.TryCreateViewAsync(this.engineContext, config).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -25,7 +25,7 @@ public sealed partial class EngineService
     {
         var runner = this.EnsureIsRunning();
         this.LogDestroyView(viewId);
-        return await runner.DestroyViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        return await runner.TryDestroyViewAsync(this.engineContext, viewId).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -33,7 +33,7 @@ public sealed partial class EngineService
     {
         var runner = this.EnsureIsRunning();
         this.LogShowView(viewId);
-        return await runner.ShowViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        return await runner.TryShowViewAsync(this.engineContext, viewId).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -41,6 +41,6 @@ public sealed partial class EngineService
     {
         var runner = this.EnsureIsRunning();
         this.LogHideView(viewId);
-        return await runner.HideViewAsync(this.engineContext, viewId).ConfigureAwait(true);
+        return await runner.TryHideViewAsync(this.engineContext, viewId).ConfigureAwait(true);
     }
 }

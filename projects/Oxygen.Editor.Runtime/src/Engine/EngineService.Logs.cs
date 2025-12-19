@@ -141,11 +141,20 @@ public sealed partial class EngineService
         Message = "Failed to release lease {LeaseKey} for document {DocumentId}. Active={TotalActive} DocumentActive={DocumentSurfaceCount}.")]
     private static partial void LogLeaseReleaseFailed(ILogger logger, string leaseKey, Guid documentId, int totalActive, int documentSurfaceCount);
 
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Failed to release lease {LeaseKey} for document {DocumentId}, ({DocumentSurfaceCount} surfaces, {TotalActive} active).")]
+    private static partial void LogLeaseReleaseFailed(ILogger logger, Exception exception, string leaseKey, Guid documentId, int totalActive, int documentSurfaceCount);
+
+    private void LogLeaseReleaseFailed(Exception exception, string leaseKey, Guid documentId)
+        => LogLeaseReleaseFailed(this.logger, exception, leaseKey, documentId, this.activeLeases.Count, this.documentSurfaceCounts.Count);
+
     private void LogLeaseReleased(string leaseKey, Guid documentId, bool result)
     {
         if (result)
         {
-            LogLeaseReleased(this.logger, leaseKey, documentId, this.activeLeases.Count, this.documentSurfaceCounts.Count, this.activeLeases.Count == 0);
+            LogLeaseReleased(this.logger, leaseKey, documentId, this.activeLeases.Count, this.documentSurfaceCounts.Count, this.activeLeases.IsEmpty);
         }
         else
         {
