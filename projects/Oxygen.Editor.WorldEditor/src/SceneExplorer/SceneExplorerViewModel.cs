@@ -43,10 +43,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly ISceneExplorerService sceneExplorerService;
     private readonly List<ITreeItem> clipboard = [];
 
+    private HistoryKeeper History => this.Scene != null ? UndoRedo.Default[this.Scene.AttachedObject.Id] : UndoRedo.Default[this];
+
     // Fast lookup of adapters by SceneNode.Id to avoid traversing/initializing the tree during reconciliation.
     private readonly Dictionary<Guid, SceneNodeAdapter> nodeAdapterIndex = [];
     private int nextEntityIndex;
     private CancellationTokenSource? loadSceneCts;
+    private Guid loadingDocumentId = Guid.Empty;
 
     private bool isDisposed;
 
@@ -90,8 +93,8 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         Debug.Assert(projectManager.CurrentProject is not null, "must have a current project");
         this.currentProject = projectManager.CurrentProject;
 
-        this.UndoStack = UndoRedo.Default[this].UndoStack;
-        this.RedoStack = UndoRedo.Default[this].RedoStack;
+        this.UndoStack = this.History.UndoStack;
+        this.RedoStack = this.History.RedoStack;
 
         this.ItemBeingRemoved += this.OnItemBeingRemoved;
         this.ItemRemoved += this.OnItemRemoved;
@@ -107,6 +110,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // Subscribe to document events to load scene when a scene document is opened
         documentService.DocumentOpened += this.OnDocumentOpened;
+        documentService.DocumentActivated += this.OnDocumentActivated;
     }
 
     /// <summary>
@@ -129,18 +133,20 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <summary>
     ///     Gets the undo stack.
     /// </summary>
-    public ReadOnlyObservableCollection<IChange> UndoStack { get; }
+    [ObservableProperty]
+    public partial ReadOnlyObservableCollection<IChange> UndoStack { get; set; }
 
     /// <summary>
     ///     Gets the redo stack.
     /// </summary>
-    public ReadOnlyObservableCollection<IChange> RedoStack { get; }
+    [ObservableProperty]
+    public partial ReadOnlyObservableCollection<IChange> RedoStack { get; set; }
 
     /// <inheritdoc />
     [RelayCommand(CanExecute = nameof(SceneExplorerViewModel.HasUnlockedSelectedItems))]
     public override async Task RemoveSelectedItems()
     {
-        UndoRedo.Default[this].BeginChangeSet("Remove Selected Items");
+        this.History.BeginChangeSet("Remove Selected Items");
         try
         {
             // Delegate to base to update UI (this will trigger OnItemRemoved)
@@ -148,7 +154,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         finally
         {
-            UndoRedo.Default[this].EndChangeSet();
+            this.History.EndChangeSet();
         }
     }
 
@@ -169,7 +175,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         await this.sceneExplorerService.RenameItemAsync(item, newName).ConfigureAwait(false);
 
-        UndoRedo.Default[this].AddChange(
+        this.History.AddChange(
             $"Rename({oldName} -> {newName})",
             async () => await this.RenameItemAsync(item, oldName).ConfigureAwait(false));
     }
@@ -204,7 +210,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // is called within an Undo context (which sets the UndoRedo state to Undoing), the new change
         // is correctly pushed to the Redo stack. If we await first, the Undo context might be disposed
         // by the time we reach this line, causing the change to be pushed to the Undo stack instead.
-        UndoRedo.Default[this]
+        this.History
             .AddChange(
                 $"RemoveItem({args.TreeItem.Label})",
                 async () =>
@@ -290,6 +296,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         if (disposing)
         {
             this.documentService.DocumentOpened -= this.OnDocumentOpened;
+            this.documentService.DocumentActivated -= this.OnDocumentActivated;
             this.messenger.UnregisterAll(this);
 
             // Ensure any in-flight scene load is cancelled and the CTS is disposed.
@@ -497,11 +504,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     [RelayCommand]
     private async Task Undo()
-        => await UndoRedo.Default[this].UndoAsync().ConfigureAwait(false);
+        => await this.History.UndoAsync().ConfigureAwait(false);
 
     [RelayCommand]
     private async Task Redo()
-        => await UndoRedo.Default[this].RedoAsync().ConfigureAwait(false);
+        => await this.History.RedoAsync().ConfigureAwait(false);
 
     private bool CanAddEntity()
     {
@@ -574,7 +581,43 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         await this.InsertItemAsync(newAdapter, parent, 0).ConfigureAwait(false);
     }
 
-    private async void OnDocumentOpened(object? sender, DroidNet.Documents.DocumentOpenedEventArgs e)
+    private async void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
+    {
+        if (e.WindowId.Value != this.windowId.Value)
+        {
+            return;
+        }
+
+        // Only react to scene documents
+        var document = this.documentService.GetOpenDocuments(this.windowId).FirstOrDefault(d => d.DocumentId == e.DocumentId);
+        if (document is not SceneDocumentMetadata sceneMetadata)
+        {
+            return;
+        }
+
+        // If we're already showing this scene, or already loading it, do nothing
+        if (this.Scene?.AttachedObject.Id == sceneMetadata.DocumentId || this.loadingDocumentId == sceneMetadata.DocumentId)
+        {
+            return;
+        }
+
+        // Find the scene in the current project
+        var scene = this.currentProject.Scenes.FirstOrDefault(s => s.Id == sceneMetadata.DocumentId);
+        if (scene is null)
+        {
+            return;
+        }
+
+        // Update the active scene on the project
+        this.currentProject.ActiveScene = scene;
+
+        this.LogDocumentActivated(e.DocumentId);
+
+        // Load/switch the scene
+        await this.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
+    }
+
+    private async void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
     {
         if (e.WindowId.Value != this.windowId.Value)
         {
@@ -583,6 +626,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // Only react to scene documents
         if (e.Metadata is not SceneDocumentMetadata sceneMetadata)
+        {
+            return;
+        }
+
+        // If we're already showing this scene, or already loading it, do nothing
+        if (this.Scene?.AttachedObject.Id == sceneMetadata.DocumentId || this.loadingDocumentId == sceneMetadata.DocumentId)
         {
             return;
         }
@@ -603,55 +652,71 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private async Task LoadSceneAsync(Scene scene)
     {
-        // Cancel any previous loading operation
-        if (this.loadSceneCts is { IsCancellationRequested: false })
+        this.loadingDocumentId = scene.Id;
+        try
         {
-            await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
-            this.loadSceneCts.Dispose();
+            // Cancel any previous loading operation
+            if (this.loadSceneCts is { IsCancellationRequested: false })
+            {
+                await this.loadSceneCts.CancelAsync().ConfigureAwait(false);
+                this.loadSceneCts.Dispose();
+            }
+
+            this.loadSceneCts = new CancellationTokenSource();
+            var ct = this.loadSceneCts.Token;
+
+            var loadedScene = await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
+            if (loadedScene is null)
+            {
+                return;
+            }
+
+            // Trace: scene data successfully loaded from project storage
+            this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
+
+            this.nextEntityIndex = loadedScene.AllNodes.Count();
+
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            // Build the scene layout from the loaded scene
+            this.Scene = new SceneAdapter(loadedScene)
+            {
+                IsExpanded = true,
+                IsLocked = true,
+                IsRoot = true,
+                UseLayoutAdapters = true,
+            };
+
+            // Update Undo/Redo stacks for the new scene
+            this.UndoStack = this.History.UndoStack;
+            this.RedoStack = this.History.RedoStack;
+
+            await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
+
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            // Delegate scene synchronization to the service (wait until engine is running).
+            await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
+
+            // Notify other components (e.g. viewport/view lifecycle) that the scene
+            // has been created/synchronized in the engine and is ready for rendering.
+            // This allows views to defer creating engine views until the scene exists.
+            this.LogSceneLoadedMessageSent(loadedScene.Id, System.DateTime.UtcNow);
+            _ = this.messenger.Send(new SceneLoadedMessage(loadedScene));
         }
-
-        this.loadSceneCts = new CancellationTokenSource();
-        var ct = this.loadSceneCts.Token;
-
-        var loadedScene = await this.projectManager.LoadSceneAsync(scene).ConfigureAwait(true);
-        if (loadedScene is null)
+        finally
         {
-            return;
+            if (this.loadingDocumentId == scene.Id)
+            {
+                this.loadingDocumentId = Guid.Empty;
+            }
         }
-
-        // Trace: scene data successfully loaded from project storage
-        this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
-
-        this.nextEntityIndex = loadedScene.AllNodes.Count();
-
-        if (ct.IsCancellationRequested)
-        {
-            return;
-        }
-
-        // Build the scene layout from the loaded scene
-        this.Scene = new SceneAdapter(loadedScene)
-        {
-            IsExpanded = true,
-            IsLocked = true,
-            IsRoot = true,
-            UseLayoutAdapters = true,
-        };
-        await this.InitializeRootAsync(this.Scene, skipRoot: false).ConfigureAwait(true);
-
-        if (ct.IsCancellationRequested)
-        {
-            return;
-        }
-
-        // Delegate scene synchronization to the service (wait until engine is running).
-        await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
-
-        // Notify other components (e.g. viewport/view lifecycle) that the scene
-        // has been created/synchronized in the engine and is ready for rendering.
-        // This allows views to defer creating engine views until the scene exists.
-        this.LogSceneLoadedMessageSent(loadedScene.Id, System.DateTime.UtcNow);
-        _ = this.messenger.Send(new SceneLoadedMessage(loadedScene));
     }
 
     private async void OnItemAdded(object? sender, TreeItemAddedEventArgs args)
@@ -667,7 +732,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Sync with Backend
         _ = this.RemoveItemFromBackendAsync(args.TreeItem);
 
-        UndoRedo.Default[this].AddChange(
+        this.History.AddChange(
             $"InsertItemAsync({args.TreeItem.Label})",
             async () => await this.InsertItemAsync(args.TreeItem, args.Parent, args.RelativeIndex).ConfigureAwait(false));
 
@@ -695,7 +760,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         if (args.IsBatch)
         {
-            UndoRedo.Default[this].BeginChangeSet($"Move {args.Moves.Count} item(s)");
+            this.History.BeginChangeSet($"Move {args.Moves.Count} item(s)");
         }
 
         try
@@ -709,7 +774,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         {
             if (args.IsBatch)
             {
-                UndoRedo.Default[this].EndChangeSet();
+                this.History.EndChangeSet();
             }
         }
     }
@@ -721,7 +786,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             foreach (var move in group.OrderBy(m => m.PreviousIndex))
             {
                 var item = move.Item;
-                UndoRedo.Default[this].AddChange(
+                this.History.AddChange(
                     $"MoveItemAsync({item.Label})",
                     async () => await this.MoveItemAsync(item, move.PreviousParent, move.PreviousIndex).ConfigureAwait(false));
             }

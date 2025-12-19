@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
 using DroidNet.Mvvm;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Editors.Scene;
@@ -23,7 +26,9 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IProjectManagerService projectManager;
     private readonly IContainer container;
+    private readonly WindowId windowId;
 
     private readonly IViewLocator viewLocator;
     private readonly Dictionary<Guid, object> activeEditors = [];
@@ -34,7 +39,9 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     /// <param name="documentService">The document service used to manage documents.</param>
     /// <param name="viewLocator">The view locator used to resolve views for editor view models.</param>
     /// <param name="engineService">Coordinates the shared engine lifecycle.</param>
+    /// <param name="projectManager">The project manager service.</param>
     /// <param name="container">The dependency injection container used to resolve services and manage editor lifetimes.</param>
+    /// <param name="windowId">The window identifier.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
     ///     process. If <see langword="null" />, logging is disabled.
@@ -43,7 +50,9 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         IDocumentService documentService,
         IViewLocator viewLocator,
         IEngineService engineService,
+        IProjectManagerService projectManager,
         IContainer container,
+        WindowId windowId,
         ILoggerFactory? loggerFactory = null)
     {
         this.loggerFactory = loggerFactory;
@@ -53,6 +62,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         this.DocumentService = documentService;
         this.viewLocator = viewLocator;
         this.engineService = engineService;
+        this.projectManager = projectManager;
+        this.windowId = windowId;
 
         this.DocumentService.DocumentOpened += this.OnDocumentOpened;
         this.DocumentService.DocumentClosed += this.OnDocumentClosed;
@@ -62,6 +73,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
     }
 
     [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveActiveDocumentCommand))]
     public partial object? ActiveEditor { get; set; }
 
     /// <summary>
@@ -108,7 +120,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
             var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
-            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.container, messenger, this.loggerFactory);
+            editor = new SceneEditorViewModel(sceneMeta, this.DocumentService, this.windowId, this.engineService, this.projectManager, this.container, messenger, this.loggerFactory);
         }
         else
         {
@@ -152,6 +164,17 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         }
     }
 
+    [RelayCommand(CanExecute = nameof(CanSaveActiveDocument))]
+    private async Task SaveActiveDocument()
+    {
+        if (this.ActiveEditor is IAsyncSaveable saveable)
+        {
+            await saveable.SaveAsync().ConfigureAwait(true);
+        }
+    }
+
+    private bool CanSaveActiveDocument() => this.ActiveEditor is IAsyncSaveable;
+
     private void OnDocumentActivated(object? sender, DocumentActivatedEventArgs e)
     {
         this.LogOnDocumentActivated(e.DocumentId);
@@ -160,6 +183,7 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         {
             // Log that ActiveEditor is being set due to activation
             this.ActiveEditor = editor;
+            this.SaveActiveDocumentCommand.NotifyCanExecuteChanged();
         }
         else
         {

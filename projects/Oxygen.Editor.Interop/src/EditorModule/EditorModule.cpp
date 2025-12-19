@@ -18,6 +18,7 @@
 #include <EditorModule/EditorCompositor.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/SurfaceRegistry.h>
+#include <EditorModule/NodeRegistry.h>
 
 namespace oxygen::interop::module {
 
@@ -426,6 +427,10 @@ namespace oxygen::interop::module {
     if (view_manager_) {
       view_manager_->DestroyAllViews();
     }
+
+    // Clear all node GUID to native handle mappings so they can be re-registered
+    // if the same scene (or another scene using the same node IDs) is reloaded.
+    NodeRegistry::ClearAll();
 
     // Reset scene after views have been released to avoid traversals seeing
     // an invalid scene during frame phases.

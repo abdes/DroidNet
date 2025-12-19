@@ -44,6 +44,19 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private bool isDisposed;
     private ICollection<SceneNode> items;
 
+    internal HistoryKeeper History
+    {
+        get
+        {
+            if (this.items.Count > 0)
+            {
+                return UndoRedo.Default[this.items.First().Scene.Id];
+            }
+
+            return UndoRedo.Default[this];
+        }
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
     /// </summary>
@@ -228,7 +241,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         // Batch changes together
         var label = $"Transform edit ({message.Property})";
-        UndoRedo.Default[this].BeginChangeSet(label);
+        this.History.BeginChangeSet(label);
 
         try
         {
@@ -239,7 +252,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 var newSnap = message.NewValues[i];
 
                 var op = new TransformOperation(node, oldSnap, newSnap);
-                UndoRedo.Default[this].AddChange($"Restore Transform ({node.Name})", this.ApplyRestoreTransform, op);
+                this.History.AddChange($"Restore Transform ({node.Name})", this.ApplyRestoreTransform, op);
 
                 // Immediate engine sync for the node (we already applied the new state in the editor)
                 _ = this.sceneEngineSync.UpdateNodeTransformAsync(node);
@@ -247,7 +260,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
         finally
         {
-            UndoRedo.Default[this].EndChangeSet();
+            this.History.EndChangeSet();
         }
     }
 
@@ -259,7 +272,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         var label = $"Geometry edit ({message.Property})";
-        UndoRedo.Default[this].BeginChangeSet(label);
+        this.History.BeginChangeSet(label);
 
         try
         {
@@ -270,7 +283,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 var newSnap = message.NewValues[i];
 
                 var op = new GeometryOperation(node, oldSnap, newSnap);
-                UndoRedo.Default[this].AddChange($"Restore Geometry ({node.Name})", this.ApplyRestoreGeometry, op);
+                this.History.AddChange($"Restore Geometry ({node.Name})", this.ApplyRestoreGeometry, op);
 
                 // Immediate engine sync for the node (we already applied the new state in the editor)
                 var geo = node.Components.OfType<GeometryComponent>().FirstOrDefault();
@@ -282,7 +295,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
         finally
         {
-            UndoRedo.Default[this].EndChangeSet();
+            this.History.EndChangeSet();
         }
     }
 
@@ -324,7 +337,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 if (added)
                 {
                     // Record undo that removes this component
-                    UndoRedo.Default[this].AddChange($"Remove Component ({op.Component.Name})", this.ApplyRemoveComponent, op);
+                    this.History.AddChange($"Remove Component ({op.Component.Name})", this.ApplyRemoveComponent, op);
                 }
 
                 // Notify result
@@ -357,7 +370,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
                 }
 
                 // Add undo to restore component
-                UndoRedo.Default[this].AddChange($"Restore Component ({op.Component.Name})", this.ApplyAddComponent, op);
+                this.History.AddChange($"Restore Component ({op.Component.Name})", this.ApplyAddComponent, op);
 
                 // Engine sync: detach component-specific resources if necessary
                 if (op.Component is GeometryComponent)
@@ -440,7 +453,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             _ = this.sceneEngineSync.AttachGeometryAsync(op.Node, geo);
         }
 
-        UndoRedo.Default[this].AddChange($"Reapply Geometry ({op.Node.Name})", this.ApplyReapplyGeometry, op);
+        this.History.AddChange($"Reapply Geometry ({op.Node.Name})", this.ApplyReapplyGeometry, op);
     }
 
     private void ApplyReapplyGeometry(GeometryOperation? op)
@@ -455,7 +468,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             _ = this.sceneEngineSync.AttachGeometryAsync(op.Node, geo);
         }
 
-        UndoRedo.Default[this].AddChange($"Restore Geometry ({op.Node.Name})", this.ApplyRestoreGeometry, op);
+        this.History.AddChange($"Restore Geometry ({op.Node.Name})", this.ApplyRestoreGeometry, op);
     }
 
     private void ApplyRestoreTransform(TransformOperation? op)
@@ -471,7 +484,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         _ = this.sceneEngineSync.UpdateNodeTransformAsync(op.Node);
-        UndoRedo.Default[this].AddChange($"Reapply Transform ({op.Node.Name})", this.ApplyReapplyTransform, op);
+        this.History.AddChange($"Reapply Transform ({op.Node.Name})", this.ApplyReapplyTransform, op);
     }
 
     private void ApplyReapplyTransform(TransformOperation? op)
@@ -487,7 +500,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         _ = this.sceneEngineSync.UpdateNodeTransformAsync(op.Node);
-        UndoRedo.Default[this].AddChange($"Restore Transform ({op.Node.Name})", this.ApplyRestoreTransform, op);
+        this.History.AddChange($"Restore Transform ({op.Node.Name})", this.ApplyRestoreTransform, op);
     }
 
     private sealed record TransformOperation(SceneNode Node, TransformSnapshot Old, TransformSnapshot New);
