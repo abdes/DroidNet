@@ -76,6 +76,12 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
     public partial bool IsSelected { get; set; }
 
     /// <summary>
+    ///     Gets or sets a value indicating whether the tab has unsaved changes.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDirty { get; set; }
+
+    /// <summary>
     ///     Produces a shallow clone with identical <see cref="ContentId"/> so the coordinator
     ///     can safely operate on a distinct reference while the application removes the original.
     /// </summary>
@@ -92,6 +98,7 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
             IsClosable = this.IsClosable,
             IsPinned = this.IsPinned,
             IsSelected = this.IsSelected,
+            IsDirty = this.IsDirty,
         };
     }
 

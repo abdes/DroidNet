@@ -31,6 +31,7 @@ internal static class TabItemExtensions
             Header = metadata?.Title ?? string.Empty,
             IsClosable = metadata?.IsClosable ?? true,
             IsPinned = metadata?.IsPinnedHint ?? false,
+            IsDirty = metadata?.IsDirty ?? false,
         };
 
         // Convert Metadata.IconUri to an IconSource if available
@@ -56,6 +57,7 @@ internal static class TabItemExtensions
         tab.Header = metadata?.Title ?? string.Empty;
         tab.IsPinned = metadata?.IsPinnedHint ?? false;
         tab.IsClosable = metadata?.IsClosable ?? tab.IsClosable;
+        tab.IsDirty = metadata?.IsDirty ?? false;
 
         if (metadata?.IconUri is { } parsedUri)
         {
