@@ -121,6 +121,9 @@ public partial class TabStripItem : ContentControl
     /// <summary>The name of the pinned indicator template part.</summary>
     public const string PinnedIndicatorPartName = "PartPinnedIndicator";
 
+    /// <summary>The name of the dirty indicator template part.</summary>
+    public const string DirtyIndicatorPartName = "PartDirtyIndicator";
+
     /// <summary>The name of the common visual states group.</summary>
     public const string CommonVisualStates = "CommonStates";
 
@@ -175,6 +178,7 @@ public partial class TabStripItem : ContentControl
 
     // Optional parts we manage in code behind
     private UIElement? pinnedIndicator;
+    private UIElement? dirtyIndicator;
     private IconSourceElement? iconPart;
     private TextBlock? headerPart;
     private ILogger? logger;
@@ -238,6 +242,7 @@ public partial class TabStripItem : ContentControl
         this.iconPart = GetTemplatePart<IconSourceElement>(IconPartName);
         this.headerPart = GetTemplatePart<TextBlock>(HeaderPartName);
         this.pinnedIndicator = GetTemplatePart<UIElement>(PinnedIndicatorPartName);
+        this.dirtyIndicator = GetTemplatePart<UIElement>(DirtyIndicatorPartName);
 
         // Work around template/data context initialization order: if we already have an Item,
         // manually update all critical visual elements that depend on bindings, since ItemsRepeater
@@ -370,6 +375,8 @@ public partial class TabStripItem : ContentControl
         _ = this.headerPart?.Text = this.Item.Header;
 
         _ = this.pinnedIndicator?.Visibility = this.Item.IsPinned ? Visibility.Visible : Visibility.Collapsed;
+
+        _ = this.dirtyIndicator?.Visibility = this.Item.IsDirty ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>
@@ -424,6 +431,14 @@ public partial class TabStripItem : ContentControl
         {
             this.LogItemPropertyChanged(e);
             this.UpdateVisualStates();
+        }
+        else if (string.Equals(e.PropertyName, nameof(TabItem.IsDirty), StringComparison.Ordinal))
+        {
+            this.LogItemPropertyChanged(e);
+            if (this.dirtyIndicator != null)
+            {
+                this.dirtyIndicator.Visibility = this.Item?.IsDirty == true ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
     }
 

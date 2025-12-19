@@ -89,14 +89,25 @@
                                 IconSource="{Binding Icon, Mode=OneWay}"
                                 Visibility="{Binding Icon, Mode=OneWay, Converter={StaticResource NullToVisibilityConverter}}" />
 
-                            <!--  Header  -->
-                            <TextBlock
-                                x:Name="PartHeader"
+                            <!--  Header and Dirty Indicator  -->
+                            <StackPanel
                                 Grid.Column="1"
-                                HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Text="{Binding Header, Mode=OneWay}"
-                                TextTrimming="CharacterEllipsis" />
+                                Orientation="Horizontal"
+                                Spacing="4">
+                                <TextBlock
+                                    x:Name="PartHeader"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Text="{Binding Header, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    x:Name="PartDirtyIndicator"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource SystemControlForegroundAccentBrush}"
+                                    Text="*"
+                                    Visibility="{Binding IsDirty, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                            </StackPanel>
 
                             <!--  Pinned indicator circle  -->
                             <Ellipse
