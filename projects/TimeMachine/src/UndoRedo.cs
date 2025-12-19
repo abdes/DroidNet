@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
 namespace DroidNet.TimeMachine;
@@ -38,6 +39,8 @@ public sealed class UndoRedo
 
     private static readonly Lazy<ConditionalWeakTable<object, HistoryKeeper>> Histories = new(() => []);
 
+    private static readonly Lazy<ConcurrentDictionary<Guid, HistoryKeeper>> GuidHistories = new(() => []);
+
     /// <summary>
     /// Initializes a new instance of the <see cref="UndoRedo"/> class.
     /// </summary>
@@ -61,7 +64,21 @@ public sealed class UndoRedo
     public HistoryKeeper this[object root] => Histories.Value.GetValue(root, r => new HistoryKeeper(r));
 
     /// <summary>
+    /// Gets (or creates) a <see cref="HistoryKeeper"/> for the specified identifier.
+    /// </summary>
+    /// <param name="id">
+    /// A <see cref="Guid"/> that uniquely identifies the document or entity for which this
+    /// <see cref="HistoryKeeper"/> will track Undo/Redo changes.
+    /// </param>
+    /// <returns>A <see cref="HistoryKeeper"/> instance.</returns>
+    public HistoryKeeper this[Guid id] => GuidHistories.Value.GetOrAdd(id, guid => new HistoryKeeper(guid));
+
+    /// <summary>
     /// Clears the cached undo roots.
     /// </summary>
-    public static void Clear() => Histories.Value.Clear();
+    public static void Clear()
+    {
+        Histories.Value.Clear();
+        GuidHistories.Value.Clear();
+    }
 }
