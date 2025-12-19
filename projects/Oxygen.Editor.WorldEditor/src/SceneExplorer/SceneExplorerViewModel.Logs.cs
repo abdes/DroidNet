@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
@@ -291,4 +292,22 @@ public partial class SceneExplorerViewModel
 
     private void LogBatchRemovalFailed(Exception ex)
         => LogBatchRemovalFailed(this.logger, ex);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "LoadSceneAsync: loaded scene {SceneId} (Name={SceneName})")]
+    private static partial void LogSceneLoaded(ILogger logger, System.Guid sceneId, string? sceneName);
+
+    private void LogSceneLoaded(System.Guid sceneId, string? sceneName)
+        => LogSceneLoaded(this.logger, sceneId, sceneName);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "LoadSceneAsync: sending SceneLoadedMessage for scene {SceneId} at {UtcNow}")]
+    private static partial void LogSceneLoadedMessageSent(ILogger logger, System.Guid sceneId, System.DateTime utcNow);
+
+    private void LogSceneLoadedMessageSent(System.Guid sceneId, System.DateTime utcNow)
+        => LogSceneLoadedMessageSent(this.logger, sceneId, utcNow);
 }

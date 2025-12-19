@@ -107,7 +107,8 @@ public partial class DocumentHostViewModel : ObservableObject, IDisposable // TO
         object? editor = null;
         if (e.Metadata is SceneDocumentMetadata sceneMeta)
         {
-            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.container, this.loggerFactory);
+            var messenger = this.container.Resolve<CommunityToolkit.Mvvm.Messaging.IMessenger>();
+            editor = new SceneEditorViewModel(sceneMeta, this.engineService, this.container, messenger, this.loggerFactory);
         }
         else
         {
