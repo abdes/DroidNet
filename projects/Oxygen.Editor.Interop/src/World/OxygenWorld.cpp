@@ -23,11 +23,30 @@
 #include <EditorModule/NodeRegistry.h>
 #include <World/CommandFactory.h>
 #include <World/OxygenWorld.h>
+#include <msclr/gcroot.h>
+using namespace System::Threading::Tasks;
 
 using namespace oxygen::interop::module;
 using namespace oxygen::interop::module::commands;
 
 namespace Oxygen::Interop::World {
+
+namespace {
+  // Helper to build a native completion callback that posts into a managed
+  // TaskCompletionSource. The pointer is owned by the callback and deleted
+  // after invocation to avoid leaks.
+  static std::function<void(bool)> MakeTcsCallback(msclr::gcroot<System::Threading::Tasks::TaskCompletionSource<bool>^>* ptr) {
+    return [ptr](bool ok) mutable {
+      try {
+        (*ptr)->SetResult(ok);
+      }
+      catch (...) {
+        // swallow
+      }
+      delete ptr;
+    };
+  }
+}
 
   // Managed helper that invokes the editor-provided GUID callback on the engine
   // thread.
@@ -81,7 +100,60 @@ namespace Oxygen::Interop::World {
 
     msclr::interop::marshal_context marshal;
     auto native_name = marshal.marshal_as<std::string>(name);
-    editor_module->get().CreateScene(native_name);
+    try {
+      // Synchronously wait for async creation to complete to preserve
+      // behavior of callers using the old synchronous API.
+      auto task = CreateSceneAsync(name);
+      try { task->GetAwaiter().GetResult(); } catch (...) { /* swallow */ }
+    }
+    catch (...) {
+      // swallow
+    }
+  }
+
+  void OxygenWorld::DestroyScene() {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+    try {
+      editor_module->get().DestroyScene();
+    }
+    catch (...) {
+      // swallow to avoid crashing managed caller when engine thread isn't available
+    }
+  }
+
+  System::Threading::Tasks::Task<bool>^ OxygenWorld::CreateSceneAsync(String^ name) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return Task<bool>::FromResult(false);
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return Task<bool>::FromResult(false);
+
+    msclr::interop::marshal_context marshal;
+    auto native_name = marshal.marshal_as<std::string>(name);
+
+    auto tcs = gcnew TaskCompletionSource<bool>();
+    // Allocate a gcroot on the heap so the native callback can own it.
+    auto* tcs_ptr = new msclr::gcroot<TaskCompletionSource<bool>^>(tcs);
+
+    try {
+      auto cb = MakeTcsCallback(tcs_ptr);
+      editor_module->get().CreateScene(native_name, std::move(cb));
+    }
+    catch (...) {
+      // Ensure we don't leak the allocated pointer on error
+      try { delete tcs_ptr; } catch (...) {}
+      tcs->SetResult(false);
+    }
+
+    return tcs->Task;
   }
 
   void OxygenWorld::CreateSceneNode(String^ name, System::Guid nodeId,

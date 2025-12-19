@@ -30,6 +30,12 @@ namespace Oxygen::Interop::World {
     // Scenes are identified by name on the native engine side; keep
     // CreateScene(String) as before.
     void CreateScene(String^ name);
+    // Create scene and return a Task that completes when native creation finishes
+    System::Threading::Tasks::Task<bool>^ CreateSceneAsync(String^ name);
+    // Destroy the currently active scene on the engine thread. This will
+    // enqueue a scene-destruction command so teardown happens safely on the
+    // engine thread and does not race with frame traversal.
+    void DestroyScene();
 
     // Node management (GUID-based): all node APIs accept node or parent GUIDs
     // Creates a node and invokes the callback with the new node GUID on the

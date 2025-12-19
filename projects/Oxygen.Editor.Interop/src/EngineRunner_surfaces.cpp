@@ -8,8 +8,8 @@
 
 #include "pch.h"
 
-#include "EngineRunner.h"
-#include "Utils/TokenHelpers.h"
+#include <EngineRunner.h>
+#include <Utils/TokenHelpers.h>
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325"))
@@ -59,7 +59,7 @@ namespace Oxygen::Interop {
     float composition_scale_;
   };
 
-  auto EngineRunner::UnregisterSurfaceAsync(System::Guid viewportId)
+  auto EngineRunner::TryUnregisterSurfaceAsync(System::Guid viewportId)
     -> Task<bool>^
   {
     EnsureSurfaceRegistry();
@@ -172,7 +172,7 @@ namespace Oxygen::Interop {
     return tcs->Task;
   }
 
-  auto EngineRunner::ResizeSurfaceAsync(System::Guid viewportId,
+  auto EngineRunner::TryResizeSurfaceAsync(System::Guid viewportId,
     System::UInt32 width,
     System::UInt32 height) -> Task<bool>^
   {
@@ -252,7 +252,7 @@ namespace Oxygen::Interop {
     return tcs->Task;
   }
 
-  auto EngineRunner::RegisterSurfaceAsync(
+  auto EngineRunner::TryRegisterSurfaceAsync(
     EngineContext^ ctx, System::Guid documentId, System::Guid viewportId,
     System::String^ displayName, System::IntPtr swapChainPanel,
     System::UInt32 initialWidth, System::UInt32 initialHeight,

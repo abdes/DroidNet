@@ -9,13 +9,13 @@
 
 #include <memory>
 
-#include "Config.h"
-#include "EditorModule/SurfaceRegistry.h"
-#include "EngineContext.h"
-#include "RenderThreadContext.h"
-#include "UiThreadDispatcher.h"
-#include "Views/ViewConfigManaged.h"
-#include "Views/ViewIdManaged.h"
+#include <Config.h>
+#include <EditorModule/SurfaceRegistry.h>
+#include <EngineContext.h>
+#include <RenderThreadContext.h>
+#include <UiThreadDispatcher.h>
+#include <Views/ViewConfigManaged.h>
+#include <Views/ViewIdManaged.h>
 
 namespace oxygen::graphics {
 
@@ -162,7 +162,7 @@ namespace Oxygen::Interop {
     // engine frame). These are non-blocking on the UI thread and complete
     // after the engine has applied the Resize or scheduled the Destroy.
 
-    auto RegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
+    auto TryRegisterSurfaceAsync(EngineContext^ ctx, System::Guid documentId,
       System::Guid viewportId,
       System::String^ displayName,
       System::IntPtr swapChainPanel,
@@ -171,10 +171,10 @@ namespace Oxygen::Interop {
       float compositionScale)
       -> System::Threading::Tasks::Task<bool>^
       ;
-    auto UnregisterSurfaceAsync(System::Guid viewportId)
+    auto TryUnregisterSurfaceAsync(System::Guid viewportId)
       -> System::Threading::Tasks::Task<bool>^
       ;
-    auto ResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
+    auto TryResizeSurfaceAsync(System::Guid viewportId, System::UInt32 width,
       System::UInt32 height)
       -> System::Threading::Tasks::Task<bool>^
       ;
@@ -185,7 +185,7 @@ namespace Oxygen::Interop {
     /// engine-assigned <c>ViewIdManaged</c> on success or an invalid
     /// <c>ViewIdManaged</c> on failure.
     /// </summary>
-    auto CreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
+    auto TryCreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
       -> System::Threading::Tasks::Task<ViewIdManaged>^;
 
     /// <summary>
@@ -193,7 +193,7 @@ namespace Oxygen::Interop {
     /// remove the view from the editor module and returns whether the
     /// request was accepted.
     /// </summary>
-    auto DestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    auto TryDestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
       -> System::Threading::Tasks::Task<bool>^;
 
       /// <summary>
@@ -204,7 +204,7 @@ namespace Oxygen::Interop {
     /// Returns a Task<bool> that completes immediately indicating whether the
     /// request was accepted (not whether the view has finished showing).
     /// </summary>
-    auto ShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    auto TryShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
       -> System::Threading::Tasks::Task<bool>^;
 
     /// <summary>
@@ -214,7 +214,7 @@ namespace Oxygen::Interop {
     /// to indicate the request was accepted; it does not imply the hide has
     /// already taken effect.
     /// </summary>
-    auto HideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+    auto TryHideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
       -> System::Threading::Tasks::Task<bool>^;
 
   private:

@@ -7,27 +7,29 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/View.h>
+#include <functional>
 
 #include <EditorModule/EditorCommand.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 
 namespace oxygen::interop::module {
 
-  class ViewManager;
+  class EditorModule;
 
-  class HideViewCommand : public EditorCommand {
+  class CreateSceneCommand final : public EditorCommand {
   public:
-    explicit HideViewCommand(ViewManager* manager, ViewId view_id)
-      : EditorCommand(oxygen::core::PhaseId::kSceneMutation), view_manager_(manager),
-      view_id_(view_id) {
+    using OnComplete = std::function<void(bool)>;
+
+    CreateSceneCommand(EditorModule* module, std::string name, OnComplete cb = nullptr)
+      : EditorCommand(oxygen::core::PhaseId::kFrameStart), module_(module), name_(std::move(name)), cb_(std::move(cb)) {
     }
 
-    void Execute(CommandContext& /*context*/) override;
+    void Execute(CommandContext& context) override;
 
   private:
-    ViewManager* view_manager_;
-    ViewId view_id_;
+    EditorModule* module_;
+    std::string name_;
+    OnComplete cb_;
   };
 
 } // namespace oxygen::interop::module

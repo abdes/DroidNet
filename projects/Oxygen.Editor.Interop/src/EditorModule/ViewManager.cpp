@@ -8,7 +8,7 @@
 
 #include "pch.h"
 
-#include "ViewManager.h"
+#include <EditorModule/ViewManager.h>
 
 namespace oxygen::interop::module {
 
@@ -81,6 +81,19 @@ namespace oxygen::interop::module {
     }
   }
 
+  void ViewManager::DestroyAllViews() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    // Release resources for all views and clear the container. This mirrors
+    // the behaviour of DestroyView but does it in-batch while holding the
+    // mutex to avoid re-entrancy.
+    for (auto& [id, entry] : views_) {
+      if (entry.view)
+        entry.view->ReleaseResources();
+    }
+    views_.clear();
+    LOG_F(INFO, "ViewManager: destroyed all views");
+  }
+
   bool ViewManager::RegisterView(ViewId engine_id) {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -105,8 +118,7 @@ namespace oxygen::interop::module {
     }
   }
 
-  void ViewManager::OnFrameStart(scene::Scene& scene,
-    engine::FrameContext& frame_ctx) {
+  void ViewManager::OnFrameStart(engine::FrameContext& frame_ctx) {
     active_frame_ctx_ = observer_ptr{ &frame_ctx };
   }
 
@@ -193,6 +205,13 @@ namespace oxygen::interop::module {
     // still valid. Use the transient pointer set in OnFrameStart.
     CHECK_NOTNULL_F(active_frame_ctx_.get());
 
+    if (!active_frame_ctx_->GetScene()) {
+      DLOG_F(WARNING, "FinalizeViews: active FrameContext has no scene; skipping UpdateView");
+      // Clear transient pointers to denote end of frame processing window.
+      active_frame_ctx_ = {};
+      return;
+    }
+
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& [id, entry] : views_) {
       if (entry.is_registered) {
@@ -229,8 +248,6 @@ namespace oxygen::interop::module {
 
     // Clear transient pointers to denote end of frame processing window.
     active_frame_ctx_ = {};
-    // previously cleared active_scene_ here; we do not cache the scene so
-    // there is nothing to clear.
   }
 
 } // namespace oxygen::interop::module

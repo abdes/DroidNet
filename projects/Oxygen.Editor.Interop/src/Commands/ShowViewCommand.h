@@ -10,7 +10,7 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/View.h>
 
-#include "EditorModule/EditorCommand.h"
+#include <EditorModule/EditorCommand.h>
 
 namespace oxygen::interop::module {
 

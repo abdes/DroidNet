@@ -8,6 +8,7 @@
 #pragma managed(push, off)
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -111,7 +112,13 @@ public:
   auto EnsureFramebuffers() -> bool;
 
   // Scene management API
-  auto CreateScene(std::string_view name) -> void;
+  // Create scene and invoke optional completion callback on the engine thread
+  auto CreateScene(std::string_view name, std::function<void(bool)> onComplete) -> void;
+  void ApplyCreateScene(std::string_view name);
+
+  // Request scene destruction (thread-safe; enqueued to engine thread)
+  void DestroyScene();
+  void ApplyDestroyScene();
 
   //! Enqueues a command to be executed during the SceneMutation phase.
   void Enqueue(std::unique_ptr<EditorCommand> cmd);
