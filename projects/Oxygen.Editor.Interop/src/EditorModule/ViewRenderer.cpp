@@ -8,8 +8,8 @@
 
 #include "pch.h"
 
-#include "EditorModule/RenderGraph.h"
-#include "EditorModule/ViewRenderer.h"
+#include <EditorModule/RenderGraph.h>
+#include <EditorModule/ViewRenderer.h>
 
 namespace oxygen::interop::module {
 

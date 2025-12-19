@@ -7,10 +7,10 @@
 
 #include "pch.h"
 
-#include "EditorModule/EditorModule.h"
-#include "EngineRunner.h"
-#include "Views/ViewConfigManaged.h"
-#include "Views/ViewIdManaged.h"
+#include <EditorModule/EditorModule.h>
+#include <EngineRunner.h>
+#include <Views/ViewConfigManaged.h>
+#include <Views/ViewIdManaged.h>
 
 using namespace System;
 using namespace System::Threading::Tasks;
@@ -48,7 +48,7 @@ namespace {
 
 namespace Oxygen::Interop {
 
-  auto EngineRunner::CreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
+  auto EngineRunner::TryCreateViewAsync(EngineContext^ ctx, ViewConfigManaged^ cfg)
     -> System::Threading::Tasks::Task<ViewIdManaged>^
   {
     if (ctx == nullptr) {
@@ -147,7 +147,7 @@ namespace Oxygen::Interop {
     return tcs->Task;
   }
 
-  auto EngineRunner::DestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+  auto EngineRunner::TryDestroyViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
     -> System::Threading::Tasks::Task<bool>^
   {
     if (ctx == nullptr) {
@@ -184,7 +184,7 @@ namespace Oxygen::Interop {
     }
   }
 
-  auto EngineRunner::ShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+  auto EngineRunner::TryShowViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
     -> System::Threading::Tasks::Task<bool>^
   {
     if (ctx == nullptr) {
@@ -220,7 +220,7 @@ namespace Oxygen::Interop {
     }
   }
 
-  auto EngineRunner::HideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
+  auto EngineRunner::TryHideViewAsync(EngineContext^ ctx, ViewIdManaged viewId)
     -> System::Threading::Tasks::Task<bool>^
   {
     if (ctx == nullptr) {

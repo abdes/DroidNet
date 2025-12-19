@@ -235,12 +235,15 @@ public sealed class EngineTests
     [TestMethod]
     public async Task RegisterSurfaceAsync_WithNullContext_ThrowsArgumentNullException()
     {
-        var act8 = async () => await this.runner.RegisterSurfaceAsync(
+        var act8 = async () => await this.runner.TryRegisterSurfaceAsync(
             null!,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new nint(1), 0u, 0u, 1.0f).ConfigureAwait(false);
+            new nint(1),
+            0u,
+            0u,
+            1.0f).ConfigureAwait(false);
 
         _ = await act8.Should().ThrowAsync<ArgumentNullException>().ConfigureAwait(false);
     }
@@ -250,12 +253,15 @@ public sealed class EngineTests
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
-        var act9 = async () => await this.runner.RegisterSurfaceAsync(
+        var act9 = async () => await this.runner.TryRegisterSurfaceAsync(
             ctx,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            nint.Zero, 0u, 0u, 1.0f).ConfigureAwait(false);
+            nint.Zero,
+            0u,
+            0u,
+            1.0f).ConfigureAwait(false);
 
         _ = await act9.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
     }
@@ -267,12 +273,15 @@ public sealed class EngineTests
 
         this.runner.Dispose();
 
-        var act10 = async () => await this.runner.RegisterSurfaceAsync(
+        var act10 = async () => await this.runner.TryRegisterSurfaceAsync(
             ctx,
             Guid.NewGuid(),
             Guid.NewGuid(),
             "Viewport",
-            new nint(1), 0u, 0u, 1.0f).ConfigureAwait(false);
+            new nint(1),
+            0u,
+            0u,
+            1.0f).ConfigureAwait(false);
 
         _ = await act10.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(false);
     }
@@ -289,12 +298,15 @@ public sealed class EngineTests
         {
             try
             {
-                _ = await this.runner.RegisterSurfaceAsync(
+                _ = await this.runner.TryRegisterSurfaceAsync(
                     ctx,
                     documentId,
                     viewportId,
                     "Viewport",
-                    new nint(1), 0u, 0u, 1.0f).ConfigureAwait(false);
+                    new nint(1),
+                    0u,
+                    0u,
+                    1.0f).ConfigureAwait(false);
                 return null as InvalidOperationException;
             }
             catch (InvalidOperationException ex)
@@ -319,7 +331,7 @@ public sealed class EngineTests
         var documentId = Guid.NewGuid();
         var viewportId = Guid.NewGuid();
 
-        var regTask = this.runner.RegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1), 0u, 0u, 1.0f);
+        var regTask = this.runner.TryRegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new IntPtr(1), 0u, 0u, 1.0f);
 
         var completed = await Task.WhenAny(regTask, Task.Delay(TimeSpan.FromSeconds(2), this.TestContext.CancellationToken)).ConfigureAwait(false);
 

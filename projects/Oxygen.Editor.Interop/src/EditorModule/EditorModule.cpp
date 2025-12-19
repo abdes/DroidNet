@@ -8,14 +8,16 @@
 
 #include "pch.h"
 
-#include "Commands/CreateViewCommand.h"
-#include "Commands/DestroyViewCommand.h"
-#include "Commands/HideViewCommand.h"
-#include "Commands/ShowViewCommand.h"
-#include "EditorModule/EditorCommand.h"
-#include "EditorModule/EditorCompositor.h"
-#include "EditorModule/EditorModule.h"
-#include "EditorModule/SurfaceRegistry.h"
+#include <Commands/CreateSceneCommand.h>
+#include <Commands/CreateViewCommand.h>
+#include <Commands/DestroySceneCommand.h>
+#include <Commands/DestroyViewCommand.h>
+#include <Commands/HideViewCommand.h>
+#include <Commands/ShowViewCommand.h>
+#include <EditorModule/EditorCommand.h>
+#include <EditorModule/EditorCompositor.h>
+#include <EditorModule/EditorModule.h>
+#include <EditorModule/SurfaceRegistry.h>
 
 namespace oxygen::interop::module {
 
@@ -50,15 +52,12 @@ namespace oxygen::interop::module {
   auto EditorModule::OnFrameStart(engine::FrameContext& context) -> void {
     LOG_SCOPE_F(1, "EditorModule::OnFrameStart");
     DCHECK_NOTNULL_F(registry_);
+    DCHECK_NOTNULL_F(view_manager_);
 
     // Begin frame for the ViewManager: make the transient FrameContext
     // available so FrameStart commands (executed later in this method)
     // can perform immediate registration via ViewManager::CreateViewAsync.
-    if (view_manager_ && scene_) {
-      view_manager_->OnFrameStart(*scene_, context);
-    }
-
-    // (ViewManager::OnFrameStart already invoked above.)
+    view_manager_->OnFrameStart(context);
 
     ProcessSurfaceRegistrations();
     ProcessSurfaceDestructions();
@@ -104,16 +103,8 @@ namespace oxygen::interop::module {
           cmd->Execute(cmd_ctx);
       });
 
-    // After scene creation/loading:
-    if (scene_) {
-      context.SetScene(observer_ptr{ scene_.get() });
-    }
-
-    // Finalize views after FrameStart command processing so per-view updates
-    // (UpdateView) can be applied and the transient frame context cleared.
-    if (view_manager_ && scene_) {
-      view_manager_->FinalizeViews();
-    }
+    context.SetScene(observer_ptr{ scene_.get() });
+    view_manager_->FinalizeViews();
   }
 
   void EditorModule::ProcessSurfaceRegistrations() {
@@ -342,8 +333,17 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::CreateScene(std::string_view name) -> void {
+  auto EditorModule::CreateScene(std::string_view name, std::function<void(bool)> onComplete) -> void {
     LOG_F(INFO, "EditorModule::CreateScene called: name='{}'", name);
+    // Marshal scene creation to the engine thread by enqueuing a command
+    // that will execute during FrameStart. Provide onComplete callback so
+    // callers can observe when the scene has been created.
+    auto cmd = std::make_unique<CreateSceneCommand>(this, std::string(name), std::move(onComplete));
+    Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::ApplyCreateScene(std::string_view name) {
+    LOG_F(INFO, "EditorModule::ApplyCreateScene: creating scene '{}'", name);
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name));
   }
 
@@ -373,6 +373,13 @@ namespace oxygen::interop::module {
       if (callback)
         callback(false, kInvalidViewId);
     }
+  }
+
+  void EditorModule::DestroyScene() {
+    // Enqueue a destruction command to ensure scene teardown happens on the
+    // engine thread during SceneMutation phase.
+    auto cmd = std::make_unique<DestroySceneCommand>(this);
+    Enqueue(std::move(cmd));
   }
 
   void EditorModule::DestroyView(ViewId view_id) {
@@ -411,6 +418,18 @@ namespace oxygen::interop::module {
 
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
     command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::ApplyDestroyScene() {
+    LOG_F(INFO, "EditorModule::ApplyDestroyScene: destroying current scene");
+    // Ensure all views are destroyed/cleaned up before releasing the scene.
+    if (view_manager_) {
+      view_manager_->DestroyAllViews();
+    }
+
+    // Reset scene after views have been released to avoid traversals seeing
+    // an invalid scene during frame phases.
+    scene_.reset();
   }
 
   auto EditorModule::SyncSurfacesWithFrameContext(

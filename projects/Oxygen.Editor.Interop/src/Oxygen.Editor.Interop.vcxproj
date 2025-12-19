@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="Commands\CreateSceneCommand.cpp" />
+    <ClCompile Include="Commands\DestroySceneCommand.cpp" />
     <ClCompile Include="Commands\HideViewCommand.cpp" />
     <ClCompile Include="Commands\ShowViewCommand.cpp" />
     <ClCompile Include="Commands\DestroyViewCommand.cpp" />
@@ -51,6 +53,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Commands\CreateSceneCommand.h" />
+    <ClInclude Include="Commands\DestroySceneCommand.h" />
     <ClInclude Include="Commands\DetachGeometryCommand.h" />
     <ClInclude Include="Commands\HideViewCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />

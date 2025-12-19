@@ -8,10 +8,10 @@
 
 #include "pch.h"
 
-#include "EditorModule/EditorModule.h"
-#include "EngineRunner.h"
-#include "LogHandler.h"
-#include "Utils/TokenHelpers.h"
+#include <EditorModule/EditorModule.h>
+#include <EngineRunner.h>
+#include <LogHandler.h>
+#include <Utils/TokenHelpers.h>
 
 // WinUI 3 ISwapChainPanelNative definition (desktop IID)
 struct __declspec(uuid("63AAD0B8-7C24-40FF-85A8-640D944CC325"))

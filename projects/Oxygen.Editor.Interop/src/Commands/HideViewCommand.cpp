@@ -8,10 +8,10 @@
 
 #include "pch.h"
 
-#include "Commands/HideViewCommand.h"
-#include "EditorModule/EditorCommand.h"
-#include "EditorModule/EditorView.h"
-#include "EditorModule/ViewManager.h"
+#include <Commands/HideViewCommand.h>
+#include <EditorModule/EditorCommand.h>
+#include <EditorModule/EditorView.h>
+#include <EditorModule/ViewManager.h>
 
 namespace oxygen::interop::module {
 

@@ -6,6 +6,7 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -46,10 +47,24 @@
     <ClCompile Include="Utils\TokenHelpers.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="Commands\HideViewCommand.cpp" />
-    <ClCompile Include="Commands\ShowViewCommand.cpp" />
-    <ClCompile Include="Commands\DestroyViewCommand.cpp" />
-    <ClCompile Include="Commands\CreateViewCommand.cpp" />
+    <ClCompile Include="Commands\CreateSceneCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\DestroySceneCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\CreateViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\DestroyViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\HideViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\ShowViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Base\LoguruWrapper.h">
@@ -135,11 +150,25 @@
     <ClInclude Include="EditorModule\EditorView.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
-    <ClInclude Include="Commands\HideViewCommand.h" />
-    <ClInclude Include="Commands\ShowViewCommand.h" />
-    <ClInclude Include="Commands\DestroyViewCommand.h" />
-    <ClInclude Include="Commands\CreateViewCommand.h" />
     <ClInclude Include="Commands\DetachGeometryCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\CreateSceneCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\DestroySceneCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\CreateViewCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\DestroyViewCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\HideViewCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ShowViewCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
   </ItemGroup>

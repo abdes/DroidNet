@@ -16,7 +16,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/View.h>
 
-#include "EditorModule/EditorView.h"
+#include <EditorModule/EditorView.h>
 
 namespace oxygen {
   namespace engine {
@@ -47,6 +47,9 @@ namespace oxygen::interop::module {
 
     // Sync: Fire-and-forget operations
     void DestroyView(ViewId engine_id); // Destroys completely
+    // Destroy all views immediately. Must be called on the engine thread
+    // while holding the frame-phase invariants (no concurrent frame updates).
+    void DestroyAllViews();
     bool RegisterView(
       ViewId engine_id); // Add to FrameContext (returns false if bad ID)
     void UnregisterView(
@@ -57,7 +60,7 @@ namespace oxygen::interop::module {
     // OnFrameStart - called at the start of the frame and provides the
     // ViewManager a transient FrameContext and Scene so FrameStart commands
     // executed by EditorModule can perform immediate registrations.
-    void OnFrameStart(scene::Scene& scene, engine::FrameContext& frame_ctx);
+    void OnFrameStart(engine::FrameContext& frame_ctx);
 
     // FinalizeViews - called by EditorModule after FrameStart command
     // processing completes. FinalizeViews performs per-view updates using the
@@ -72,6 +75,9 @@ namespace oxygen::interop::module {
     auto GetAllViews() -> std::vector<EditorView*>; // All views
     auto GetAllRegisteredViews()
       -> std::vector<EditorView*>; // Only views in FrameContext
+    // Returns true if a transient frame context is currently set (OnFrameStart
+    // has been called but FinalizeViews has not yet been called). Non-owning.
+    bool HasActiveFrameContext() const;
 
   private:
     struct ViewEntry {
@@ -83,9 +89,6 @@ namespace oxygen::interop::module {
     // by commands executed during FrameStart and performed immediately via
     // CreateViewNow.
 
-    // Returns true if a transient frame context is currently set (OnFrameStart
-    // has been called but FinalizeViews has not yet been called). Non-owning.
-    bool HasActiveFrameContext() const;
 
     mutable std::mutex mutex_;
     // pending_creates_ removed; EditorModule manages command queuing.
