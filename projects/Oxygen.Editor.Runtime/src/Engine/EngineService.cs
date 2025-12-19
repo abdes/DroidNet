@@ -27,8 +27,9 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();
     private readonly SemaphoreSlim initializationGate = new(1, 1);
     private readonly SemaphoreSlim leaseGate = new(1, 1);
-    private readonly Dictionary<Guid, int> documentSurfaceCounts = [];
-    private readonly Dictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, int> documentSurfaceCounts = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ViewportSurfaceKey, ViewportSurfaceLease> activeLeases = new();
+    private int reservedSurfaceCount;
 
 #pragma warning disable CA2213 // Disposable fields should be disposed
     private EngineRunner? engineRunner; // disposed in ShutDownAsync, called by DiosposeAsync
@@ -118,6 +119,8 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         get
         {
             _ = this.EnsureIsReadyOrRunning();
+
+            // Use the concurrent dictionary Count — represents reserved/known leases.
             return this.activeLeases.Count;
         }
     }
@@ -250,18 +253,22 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         await this.leaseGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            // Snapshot current leases. Do NOT clear here; let each lease's Dispose/Release
+            // perform native unregister and internal removal. Clearing here previously could
+            // leave native surfaces registered without a managed owner.
             leasesSnapshot = [.. this.activeLeases.Values];
-            this.activeLeases.Clear();
-            this.documentSurfaceCounts.Clear();
         }
         finally
         {
             _ = this.leaseGate.Release();
         }
 
+        // Dispose each lease which will attempt to unregister the native surface and
+        // remove itself from the collections in a safe, synchronized manner. DisposeAsync
+        // is implemented to never throw, so callers should not wrap it in try/catch.
         foreach (var lease in leasesSnapshot)
         {
-            lease.MarkDetached();
+            await lease.DisposeAsync().ConfigureAwait(false);
         }
 
         try

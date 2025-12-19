@@ -15,7 +15,7 @@ public static class EngineConstants
     /// <summary>The maximum allowed logging verbosity for the native engine.</summary>
     public const int MaxLoggingVerbosity = 9; // loguru's maximum verbosity
 
-    /// <summary>The maximum number of simultaneously active surfaces supported by the native engine</summary>
+    /// <summary>The maximum number of simultaneously active surfaces supported by the native engine.</summary>
     public const int MaxTotalSurfaces = 8;
 
     /// <summary>The maximum number of composition surfaces a single document may keep alive.</summary>

@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Runtime.InteropServices;
+using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -12,6 +14,9 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// </summary>
 public partial class EngineService
 {
+    // Blacklist of viewport ids that failed native cleanup — never reuse these ids.
+    private readonly ConcurrentDictionary<Guid, byte> orphanedViewportIds = new();
+
     /// <inheritdoc />
     public async ValueTask<IViewportSurfaceLease> AttachViewportAsync(ViewportSurfaceRequest request, SwapChainPanel panel, CancellationToken cancellationToken = default)
     {
@@ -29,16 +34,15 @@ public partial class EngineService
     {
         _ = this.EnsureIsRunning();
 
+        // Snapshot leases for this document without holding the lease gate while disposing
         List<ViewportSurfaceLease> targetLeases;
         await this.leaseGate.WaitAsync().ConfigureAwait(false);
         try
         {
-#pragma warning disable IDE0305 // Simplify collection initialization
             targetLeases = this.activeLeases
                 .Where(pair => pair.Key.DocumentId == documentId)
                 .Select(pair => pair.Value)
                 .ToList();
-#pragma warning restore IDE0305 // Simplify collection initialization
         }
         finally
         {
@@ -50,9 +54,6 @@ public partial class EngineService
             await lease.DisposeAsync().ConfigureAwait(false);
         }
     }
-
-    private int GetDocumentSurfaceCount(Guid documentId)
-        => this.documentSurfaceCounts.TryGetValue(documentId, out var count) ? count : 0;
 
     private async ValueTask AttachLeaseAsync(ViewportSurfaceLease lease, SwapChainPanel panel, CancellationToken cancellationToken)
     {
@@ -75,7 +76,7 @@ public partial class EngineService
             // Check cancellation again before issuing native call.
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (!await runner.RegisterSurfaceAsync(
+            var registered = await runner.TryRegisterSurfaceAsync(
                 this.engineContext,
                 lease.Key.DocumentId,
                 lease.Key.ViewportId,
@@ -83,14 +84,18 @@ public partial class EngineService
                 panelPtr,
                 initialPixelWidth,
                 initialPixelHeight,
-                raster).ConfigureAwait(true))
+                raster).ConfigureAwait(true);
+
+            if (!registered)
             {
+                // Remove the reservation we created earlier and signal failure to caller.
+                await this.RemoveLeaseReservationAsync(lease).ConfigureAwait(false);
                 throw new InvalidOperationException("Failed to register viewport surface with the native engine.");
             }
 
             if (cancellationToken.IsCancellationRequested)
             {
-                await TryRollBack(lease, runner).ConfigureAwait(false);
+                _ = await TryRollBack(lease, runner).ConfigureAwait(false);
                 throw new OperationCanceledException(cancellationToken);
             }
         }
@@ -102,6 +107,7 @@ public partial class EngineService
             }
         }
 
+        // Mark attached on UI thread (we are already on dispatcher) and log.
         lease.MarkAttached(panel);
         this.LogLeaseAttached(lease.Key.DisplayName, panel.GetHashCode(), this.state);
 
@@ -142,18 +148,16 @@ public partial class EngineService
             return (raster, initialPixelHeight, initialPixelWidth);
         }
 
-        static async Task TryRollBack(ViewportSurfaceLease lease, Interop.EngineRunner runner)
+        async Task<bool> TryRollBack(ViewportSurfaceLease lease, Interop.EngineRunner runner)
         {
-            try
+            var r = await runner.TryUnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(false);
+            if (!r)
             {
-                _ = await runner.UnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(false);
+                _ = this.orphanedViewportIds.TryAdd(lease.Key.ViewportId, 0);
+                lease.IsOrphaned = true;
             }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch
-            {
-                // Best-effort cleanup; swallow to allow throwing OperationCanceledException below.
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
+
+            return r;
         }
     }
 
@@ -171,7 +175,7 @@ public partial class EngineService
 
         try
         {
-            var result = await runner.ResizeSurfaceAsync(key.ViewportId, pixelWidth, pixelHeight).ConfigureAwait(true);
+            var result = await runner.TryResizeSurfaceAsync(key.ViewportId, pixelWidth, pixelHeight).ConfigureAwait(true);
             if (!result)
             {
                 this.LogResizeFailed(pixelWidth, pixelHeight);
@@ -191,35 +195,47 @@ public partial class EngineService
     {
         var runner = this.EnsureIsRunning();
 
+        // Attempt to unregister the native surface first, then remove the reservation
+        // and mark detached on the UI thread. This avoids leaving a native surface registered
+        // while the managed state says detached.
+        var result = await runner.TryUnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(true);
+
+        if (!result)
+        {
+            // Blacklist this viewport id so it will never be reused by GetOrCreateLeaseAsync.
+            _ = this.orphanedViewportIds.TryAdd(lease.Key.ViewportId, 0);
+            lease.IsOrphaned = true;
+        }
+
         await this.leaseGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            if (!this.activeLeases.Remove(lease.Key))
-            {
-                return;
-            }
+            _ = this.activeLeases.TryRemove(lease.Key, out _);
 
+            // decrement per-document reservation counts
             if (this.documentSurfaceCounts.TryGetValue(lease.Key.DocumentId, out var count))
             {
-                count--;
-                if (count <= 0)
+                var newCount = Math.Max(0, count - 1);
+                if (newCount == 0)
                 {
-                    _ = this.documentSurfaceCounts.Remove(lease.Key.DocumentId);
+                    _ = this.documentSurfaceCounts.TryRemove(lease.Key.DocumentId, out _);
                 }
                 else
                 {
-                    this.documentSurfaceCounts[lease.Key.DocumentId] = count;
+                    this.documentSurfaceCounts[lease.Key.DocumentId] = newCount;
                 }
             }
+
+            // Decrement global reservation count for the removed lease.
+            _ = Interlocked.Decrement(ref this.reservedSurfaceCount);
         }
         finally
         {
             _ = this.leaseGate.Release();
         }
 
-        // FIXME: Consider waiting for the unregister to complete before marking detached and updating the collections
-        lease.MarkDetached();
-        var result = await runner.UnregisterSurfaceAsync(lease.Key.ViewportId).ConfigureAwait(false);
+        await this.hostingContext.Dispatcher.DispatchAsync(lease.MarkDetached).ConfigureAwait(false);
+
         this.LogLeaseReleased(lease.Key.DisplayName, lease.Key.DocumentId, result);
     }
 
@@ -228,18 +244,41 @@ public partial class EngineService
         await this.leaseGate.WaitAsync().ConfigureAwait(false);
         try
         {
+            // Prevent creating or returning leases for blacklisted viewport ids.
+            if (this.orphanedViewportIds.ContainsKey(key.ViewportId))
+            {
+                throw new InvalidOperationException($"Viewport id {key.ViewportId} is blacklisted and cannot be reused.");
+            }
+
             if (this.activeLeases.TryGetValue(key, out var existing))
             {
+                // If an existing lease is marked orphaned, do not return it.
+                if (existing.IsOrphaned || this.orphanedViewportIds.ContainsKey(key.ViewportId))
+                {
+                    throw new InvalidOperationException($"Existing lease for viewport id {key.ViewportId} is blacklisted and cannot be reused.");
+                }
+
                 this.LogLeaseReused(key.DisplayName, key.DocumentId, this.activeLeases.Count, this.GetDocumentSurfaceCount(key.DocumentId));
                 return existing;
             }
 
+            // Check and reserve a slot for this document/global before creating the lease.
             this.ThrowIfSurfaceLimitExceeded(key.DocumentId);
+
             var lease = new ViewportSurfaceLease(this, key);
-            this.activeLeases.Add(key, lease);
-            var documentCount = this.IncrementDocumentSurfaceCount(key.DocumentId);
-            this.LogLeaseCreated(key.DisplayName, key.DocumentId, this.activeLeases.Count, documentCount);
-            return lease;
+            if (this.activeLeases.TryAdd(key, lease))
+            {
+                // increment per-document reservation count
+                _ = this.documentSurfaceCounts.AddOrUpdate(key.DocumentId, 1, (_, old) => old + 1);
+                _ = Interlocked.Increment(ref this.reservedSurfaceCount);
+                var documentCount = this.GetDocumentSurfaceCount(key.DocumentId);
+                this.LogLeaseCreated(key.DisplayName, key.DocumentId, this.activeLeases.Count, documentCount);
+                return lease;
+            }
+
+            // If another thread added in the meantime, return that one
+            _ = this.activeLeases.TryGetValue(key, out var raced);
+            return raced!;
         }
         finally
         {
@@ -249,7 +288,8 @@ public partial class EngineService
 
     private void ThrowIfSurfaceLimitExceeded(Guid documentId)
     {
-        if (this.activeLeases.Count >= EngineConstants.MaxTotalSurfaces)
+        // Use reservedSurfaceCount and documentSurfaceCounts which are updated under leaseGate
+        if (this.reservedSurfaceCount >= EngineConstants.MaxTotalSurfaces)
         {
             throw new InvalidOperationException($"Cannot attach viewport: reached the global limit of {EngineConstants.MaxTotalSurfaces} surfaces.");
         }
@@ -261,22 +301,42 @@ public partial class EngineService
         }
     }
 
-    private int IncrementDocumentSurfaceCount(Guid documentId)
-    {
-        if (this.documentSurfaceCounts.TryGetValue(documentId, out var count))
-        {
-            count++;
-            this.documentSurfaceCounts[documentId] = count;
-            return count;
-        }
+    private int GetDocumentSurfaceCount(Guid documentId)
+        => this.documentSurfaceCounts.TryGetValue(documentId, out var count) ? count : 0;
 
-        this.documentSurfaceCounts[documentId] = 1;
-        return 1;
+    private async ValueTask RemoveLeaseReservationAsync(ViewportSurfaceLease lease)
+    {
+        // Remove reservation created in GetOrCreateLeaseAsync when attach fails
+        await this.leaseGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            _ = this.activeLeases.TryRemove(lease.Key, out _);
+            if (this.documentSurfaceCounts.TryGetValue(lease.Key.DocumentId, out var count))
+            {
+                var newCount = Math.Max(0, count - 1);
+                if (newCount == 0)
+                {
+                    _ = this.documentSurfaceCounts.TryRemove(lease.Key.DocumentId, out _);
+                }
+                else
+                {
+                    this.documentSurfaceCounts[lease.Key.DocumentId] = newCount;
+                }
+            }
+
+            _ = Interlocked.Decrement(ref this.reservedSurfaceCount);
+        }
+        finally
+        {
+            _ = this.leaseGate.Release();
+        }
     }
 
     private sealed class ViewportSurfaceLease : IViewportSurfaceLease
     {
         private readonly EngineService owner;
+        private readonly SemaphoreSlim leaseLock = new(1, 1);
+
         private SwapChainPanel? panel;
         private bool disposed;
 
@@ -290,11 +350,28 @@ public partial class EngineService
 
         public bool IsAttached => this.panel != null;
 
+        // When true the lease's viewport id is known-bad and must never be reused.
+        internal bool IsOrphaned { get; set; }
+
         public async ValueTask AttachAsync(SwapChainPanel panel, CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(panel);
             this.ThrowIfDisposed();
-            await this.owner.AttachLeaseAsync(this, panel, cancellationToken).ConfigureAwait(true);
+            await this.leaseLock.WaitAsync(cancellationToken).ConfigureAwait(true);
+            try
+            {
+                // If already attached to the same panel, no-op
+                if (this.IsAttached)
+                {
+                    return;
+                }
+
+                await this.owner.AttachLeaseAsync(this, panel, cancellationToken).ConfigureAwait(true);
+            }
+            finally
+            {
+                _ = this.leaseLock.Release();
+            }
         }
 
         public async ValueTask ResizeAsync(uint pixelWidth, uint pixelHeight, CancellationToken cancellationToken = default)
@@ -316,7 +393,18 @@ public partial class EngineService
             }
 
             this.disposed = true;
-            await this.owner.ReleaseLeaseAsync(this).ConfigureAwait(false);
+            await this.leaseLock.WaitAsync().ConfigureAwait(true);
+            try
+            {
+                // Ensure Dispose never throws: ReleaseLeaseAsync may touch native code
+                // and can throw; swallow and log here to respect the Dispose contract.
+                await this.owner.ReleaseLeaseAsync(this).ConfigureAwait(false);
+            }
+            finally
+            {
+                _ = this.leaseLock.Release();
+                this.leaseLock.Dispose();
+            }
         }
 
         internal void MarkAttached(SwapChainPanel panel) => this.panel = panel;
