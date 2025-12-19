@@ -619,6 +619,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
+        // Trace: scene data successfully loaded from project storage
+        this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
+
         this.nextEntityIndex = loadedScene.AllNodes.Count();
 
         if (ct.IsCancellationRequested)
@@ -643,6 +646,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         // Delegate scene synchronization to the service (wait until engine is running).
         await this.sceneEngineSync.SyncSceneWhenReadyAsync(loadedScene, ct).ConfigureAwait(true);
+
+        // Notify other components (e.g. viewport/view lifecycle) that the scene
+        // has been created/synchronized in the engine and is ready for rendering.
+        // This allows views to defer creating engine views until the scene exists.
+        this.LogSceneLoadedMessageSent(loadedScene.Id, System.DateTime.UtcNow);
+        _ = this.messenger.Send(new SceneLoadedMessage(loadedScene));
     }
 
     private async void OnItemAdded(object? sender, TreeItemAddedEventArgs args)

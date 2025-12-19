@@ -83,8 +83,19 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
 
         try
         {
-            // Create (or recreate) the scene in the engine
-            world.CreateScene(scene.Name);
+            // Ensure any existing scene is torn down on the engine thread
+            // before creating a new one to avoid races during traversal.
+            world.DestroyScene();
+
+            // Create (or recreate) the scene in the engine and wait for
+            // the native command to complete so subsequent node creation
+            // occurs against the new scene.
+            var created = await world.CreateSceneAsync(scene.Name).ConfigureAwait(false);
+            if (!created)
+            {
+                this.LogFailedToSyncSceneWithEngine(new InvalidOperationException("CreateSceneAsync failed"), scene);
+                return;
+            }
             this.LogCreatedSceneInEngine(scene);
 
             // Phase 1: Create all nodes without parenting

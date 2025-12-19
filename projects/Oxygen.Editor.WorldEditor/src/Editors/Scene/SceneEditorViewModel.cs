@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Controls;
+using Oxygen.Editor.WorldEditor.Messages;
 using Oxygen.Interop;
 
 namespace Oxygen.Editor.WorldEditor.Editors.Scene;
@@ -23,23 +25,25 @@ namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 /// </summary>
 public partial class SceneEditorViewModel : ObservableObject
 {
-    private readonly ILogger logger;
-    private readonly ILoggerFactory? loggerFactory;
-    private readonly IEngineService engineService;
-    private readonly IContainer container;
-    private IMenuSource? quickAddMenu;
-    private SceneViewLayout? previousLayout;
     // A small palette of candidate clear colors shared by viewports. We wrap the
     // palette here so the Scene Editor decides the per-viewport colors.
-    private static readonly ColorManaged[] DefaultViewportClearColors = new[]
-    {
+    private static readonly ColorManaged[] DefaultViewportClearColors = [
         new ColorManaged(0.10f, 0.12f, 0.15f, 1.0f), // default blue-ish
         new ColorManaged(0.18f, 0.09f, 0.09f, 1.0f), // warm
         new ColorManaged(0.09f, 0.18f, 0.09f, 1.0f), // green
         new ColorManaged(0.09f, 0.12f, 0.18f, 1.0f), // deep blue
         new ColorManaged(0.18f, 0.12f, 0.08f, 1.0f), // orange
         new ColorManaged(0.14f, 0.09f, 0.18f, 1.0f), // purple
-    };
+    ];
+
+    private readonly IMessenger messenger;
+    private readonly ILogger logger;
+    private readonly ILoggerFactory? loggerFactory;
+    private readonly IEngineService engineService;
+    private readonly IContainer container;
+    private IMenuSource? quickAddMenu;
+    private SceneViewLayout? previousLayout;
+    private bool sceneReady;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
@@ -47,20 +51,27 @@ public partial class SceneEditorViewModel : ObservableObject
     /// <param name="metadata">The scene document metadata.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
+    /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public SceneEditorViewModel(SceneDocumentMetadata metadata, IEngineService engineService, IContainer container, ILoggerFactory? loggerFactory = null)
+    public SceneEditorViewModel(SceneDocumentMetadata metadata, IEngineService engineService, IContainer container, IMessenger messenger, ILoggerFactory? loggerFactory = null)
     {
         this.engineService = engineService;
         this.loggerFactory = loggerFactory;
         this.Viewports = new ObservableCollection<ViewportViewModel>();
         this.Metadata = metadata;
         this.container = container;
+        this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.WorldEditor.Editors.Scene.SceneEditorViewModel");
 
         // Try to restore layout from metadata if present
         this.CurrentLayout = SceneViewLayout.OnePane;
 
-        this.UpdateLayout(this.CurrentLayout);
+        // Initially defer creating viewports/layout until the scene has been
+        // synchronized into the engine. SceneLoadedMessage will trigger the
+        // actual layout restoration. This avoids creating engine views before
+        // the scene exists (prevents "frame context has no scene").
+        this.LogRegisteringForSceneLoaded();
+        this.messenger.Register<SceneLoadedMessage>(this, this.OnSceneLoadedMessage);
 
         // RunAtFps is sourced directly from the engine service at runtime
         // (see property implementation). No constructor seeding required.
@@ -128,7 +139,7 @@ public partial class SceneEditorViewModel : ObservableObject
             }
             catch (InvalidOperationException ex)
             {
-                this.logger?.LogWarning(ex, "Failed to set engine target FPS: {Message}", ex.Message);
+                this.LogFailedToSetEngineTargetFps(ex);
             }
         }
     }
@@ -155,6 +166,7 @@ public partial class SceneEditorViewModel : ObservableObject
             var raw = this.engineService.EngineLoggingVerbosity;
             return System.Math.Clamp(raw, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
         }
+
         set
         {
             var clamped = System.Math.Clamp(value, this.MinLoggingVerbosity, this.MaxLoggingVerbosity);
@@ -165,6 +177,14 @@ public partial class SceneEditorViewModel : ObservableObject
 
     partial void OnCurrentLayoutChanging(SceneViewLayout value)
     {
+        // If the scene is not yet synchronized into the engine, defer
+        // creating viewports/layout until `SceneLoadedMessage` arrives.
+        if (!this.sceneReady)
+        {
+            this.LogDeferringLayoutChange(value);
+            return;
+        }
+
         this.UpdateLayout(value);
     }
 
@@ -181,10 +201,9 @@ public partial class SceneEditorViewModel : ObservableObject
         {
             var settings = this.container.Resolve<ISettingsService<IAppearanceSettings>>();
             var viewport = new ViewportViewModel(metadata.DocumentId, this.engineService, settings, this.loggerFactory);
-            // Choose a color for this viewport deterministically using the
-            // viewport GUID. Start with a GUID-derived index, but prefer a
-            // palette entry that is not already used by existing viewports so
-            // simultaneous viewports tend to get unique clear colors.
+            var newIndex = this.Viewports.Count;
+
+            // FIXME: (Debugging) Choose a color for this viewport deterministically using the viewport GUID.
             var paletteLen = DefaultViewportClearColors.Length;
             var preferred = (int)(((uint)viewport.ViewportId.GetHashCode()) % (uint)paletteLen);
 
@@ -225,6 +244,7 @@ public partial class SceneEditorViewModel : ObservableObject
             viewport.ClearColor = DefaultViewportClearColors[chosen];
             viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
+            this.LogCreatingViewport(newIndex, viewport);
             this.Viewports.Add(viewport);
         }
 
@@ -283,14 +303,14 @@ public partial class SceneEditorViewModel : ObservableObject
     private void Save()
     {
         // TODO: Hook up actual save logic (wired to document service). For now just log.
-        this.logger?.LogInformation("Save requested for document {Document}", this.Metadata?.DocumentId);
+        this.LogSaveRequested();
     }
 
     [RelayCommand]
     private void LocateInContentBrowser()
     {
         // TODO: Implement locate in content browser (publish a message / call service). For now log.
-        this.logger?.LogInformation("Locate-in-content-browser requested for document {Document}", this.Metadata?.DocumentId);
+        this.LogLocateInContentBrowserRequested();
     }
 
     private IMenuSource BuildQuickAddMenu()
@@ -325,7 +345,7 @@ public partial class SceneEditorViewModel : ObservableObject
     [RelayCommand]
     private void AddPrimitive(string kind)
     {
-        this.logger?.LogInformation("Request to add primitive {Kind} to document {Document}", kind, this.Metadata?.DocumentId);
+        this.LogRequestToAddPrimitive(kind);
 
         // TODO: Implement real add logic via document/engine APIs.
     }
@@ -333,8 +353,30 @@ public partial class SceneEditorViewModel : ObservableObject
     [RelayCommand]
     private void AddLight(string kind)
     {
-        this.logger?.LogInformation("Request to add light {Kind} to document {Document}", kind, this.Metadata?.DocumentId);
+        this.LogRequestToAddLight(kind);
 
         // TODO: Implement real add logic via document/engine APIs.
+    }
+
+    private void OnSceneLoadedMessage(object? recipient, SceneLoadedMessage msg)
+    {
+        _ = recipient;
+
+        if (msg?.Scene is null)
+        {
+            return;
+        }
+
+        if (this.Metadata != null && msg.Scene.Id == this.Metadata.DocumentId)
+        {
+            this.sceneReady = true;
+            this.LogSceneLoadedReceived(this.CurrentLayout);
+
+            // Rebuild layout now that scene is ready.
+            this.UpdateLayout(this.CurrentLayout);
+
+            // We no longer need to receive SceneLoadedMessage for this VM.
+            this.messenger.Unregister<SceneLoadedMessage>(this);
+        }
     }
 }

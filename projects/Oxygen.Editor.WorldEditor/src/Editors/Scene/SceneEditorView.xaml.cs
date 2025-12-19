@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
@@ -71,6 +72,7 @@ public sealed partial class SceneEditorView : UserControl
         if (this.currentViewModel != null)
         {
             this.currentViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
+            this.currentViewModel.Viewports.CollectionChanged += this.OnViewportsChanged;
         }
     }
 
@@ -82,8 +84,12 @@ public sealed partial class SceneEditorView : UserControl
         }
 
         this.currentViewModel.PropertyChanged -= this.OnViewModelPropertyChanged;
+        this.currentViewModel.Viewports.CollectionChanged -= this.OnViewportsChanged;
         this.currentViewModel = null;
     }
+
+    private void OnViewportsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+        => _ = this.DispatcherQueue?.TryEnqueue(this.RebuildLayout);
 
     private void ClearViewportControls()
     {
