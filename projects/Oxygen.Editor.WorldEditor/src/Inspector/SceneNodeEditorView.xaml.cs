@@ -43,7 +43,7 @@ public sealed partial class SceneNodeEditorView : UserControl
             return;
         }
 
-        var historyKeeper = UndoRedo.Default[vm];
+        var historyKeeper = vm.History;
         if (historyKeeper.UndoStack.Count == 0)
         {
             return;
@@ -63,7 +63,7 @@ public sealed partial class SceneNodeEditorView : UserControl
             return;
         }
 
-        var historyKeeper = UndoRedo.Default[vm];
+        var historyKeeper = vm.History;
         if (historyKeeper.RedoStack.Count == 0)
         {
             return;

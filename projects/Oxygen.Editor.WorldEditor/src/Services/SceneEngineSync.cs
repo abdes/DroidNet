@@ -79,7 +79,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             return;
         }
 
-        this.LogSceneTransforms(scene);
+
 
         try
         {
@@ -97,14 +97,17 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
                 return;
             }
             this.LogCreatedSceneInEngine(scene);
+            this.LogSceneTransforms(scene);
 
             // Phase 1: Create all nodes without parenting
             await this.CreateAllNodesAsync(scene, world).ConfigureAwait(false);
 
             // Phase 2: Resolve parent-child links and apply transforms/geometry
+            this.logger.LogDebug("SyncSceneAsync: Applying hierarchy and components for {Count} root nodes", scene.RootNodes.Count);
             this.ApplyHierarchyAndComponents(scene, world);
 
             // Phase 3: Update world transforms
+            this.logger.LogDebug("SyncSceneAsync: Propagating transforms");
             this.PropagateTransforms(scene, world);
         }
         catch (Exception ex)
@@ -480,10 +483,12 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
 
         foreach (var root in scene.RootNodes)
         {
+            this.logger.LogDebug("CreateAllNodesAsync: Enqueueing creation for root node {NodeName} ({NodeId})", root.Name, root.Id);
             EnqueueCreateRecursive(root);
         }
 
         await Task.WhenAll(createTasks).ConfigureAwait(false);
+        this.logger.LogDebug("CreateAllNodesAsync: All {Count} creation tasks completed", createTasks.Count);
     }
 
     private void ApplyHierarchyAndComponents(Scene scene, Oxygen.Interop.World.OxygenWorld world)
@@ -539,6 +544,7 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
 
         foreach (var root in scene.RootNodes)
         {
+            this.logger.LogDebug("ApplyHierarchyAndComponents: Processing root node {NodeName} ({NodeId})", root.Name, root.Id);
             ResolveAndApply(root, parentGuid: null);
         }
     }

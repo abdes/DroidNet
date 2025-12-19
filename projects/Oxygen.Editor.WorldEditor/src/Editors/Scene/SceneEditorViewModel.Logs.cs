@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Documents;
 using Oxygen.Interop;
@@ -15,10 +16,19 @@ public partial class SceneEditorViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Registering for SceneLoadedMessage for document {DocumentId}")]
-    private static partial void LogRegisteringForSceneLoaded(ILogger logger, Guid? documentId);
+    private static partial void LogRegisteringForSceneLoaded(ILogger logger, Guid documentId);
 
-    private void LogRegisteringForSceneLoaded()
-        => LogRegisteringForSceneLoaded(this.logger, this.Metadata?.DocumentId);
+    private void LogRegisteringForSceneLoaded(Guid documentId)
+        => LogRegisteringForSceneLoaded(this.logger, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Unregistering from messages for document {DocumentId}")]
+    private static partial void LogUnregisteringFromMessages(ILogger logger, Guid documentId);
+
+    private void LogUnregisteringFromMessages(Guid documentId)
+        => LogUnregisteringFromMessages(this.logger, documentId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -58,6 +68,36 @@ public partial class SceneEditorViewModel
 
     private void LogSaveRequested()
         => LogSaveRequested(this.logger, this.Metadata?.DocumentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Save successful.")]
+    private static partial void LogSaveSuccessful(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogSaveSuccessful()
+        => LogSaveSuccessful(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Save failed.")]
+    private static partial void LogSaveFailed(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogSaveFailed()
+        => LogSaveFailed(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Save requested, but scene is not ready yet.")]
+    private static partial void LogSaveRequestedButSceneNotReady(ILogger logger);
+
+    [Conditional("DEBUG")]
+    private void LogSaveRequestedButSceneNotReady()
+        => LogSaveRequestedButSceneNotReady(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

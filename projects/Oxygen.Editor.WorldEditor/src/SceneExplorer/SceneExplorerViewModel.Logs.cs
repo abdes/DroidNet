@@ -310,4 +310,12 @@ public partial class SceneExplorerViewModel
 
     private void LogSceneLoadedMessageSent(System.Guid sceneId, System.DateTime utcNow)
         => LogSceneLoadedMessageSent(this.logger, sceneId, utcNow);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Scene explorer switching to active document {DocumentId}")]
+    private static partial void LogDocumentActivated(ILogger logger, System.Guid documentId);
+
+    private void LogDocumentActivated(System.Guid documentId)
+        => LogDocumentActivated(this.logger, documentId);
 }

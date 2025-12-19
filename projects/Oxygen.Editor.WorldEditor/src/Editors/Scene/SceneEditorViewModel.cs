@@ -3,16 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Controls.Menus;
+using DroidNet.Documents;
+using DroidNet.TimeMachine;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.WorldEditor.Controls;
 using Oxygen.Editor.WorldEditor.Messages;
@@ -23,7 +28,7 @@ namespace Oxygen.Editor.WorldEditor.Editors.Scene;
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDisposable
 {
     // A small palette of candidate clear colors shared by viewports. We wrap the
     // palette here so the Scene Editor decides the per-viewport colors.
@@ -40,22 +45,40 @@ public partial class SceneEditorViewModel : ObservableObject
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
+    private readonly IProjectManagerService projectManager;
+    private readonly IDocumentService documentService;
+    private readonly WindowId windowId;
     private readonly IContainer container;
     private IMenuSource? quickAddMenu;
     private SceneViewLayout? previousLayout;
+    private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
     /// </summary>
     /// <param name="metadata">The scene document metadata.</param>
+    /// <param name="documentService">The document service.</param>
+    /// <param name="windowId">The window identifier.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
+    /// <param name="projectManager">The project manager service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public SceneEditorViewModel(SceneDocumentMetadata metadata, IEngineService engineService, IContainer container, IMessenger messenger, ILoggerFactory? loggerFactory = null)
+    public SceneEditorViewModel(
+        SceneDocumentMetadata metadata,
+        IDocumentService documentService,
+        WindowId windowId,
+        IEngineService engineService,
+        IProjectManagerService projectManager,
+        IContainer container,
+        IMessenger messenger,
+        ILoggerFactory? loggerFactory = null)
     {
         this.engineService = engineService;
+        this.projectManager = projectManager;
+        this.documentService = documentService;
+        this.windowId = windowId;
         this.loggerFactory = loggerFactory;
         this.Viewports = new ObservableCollection<ViewportViewModel>();
         this.Metadata = metadata;
@@ -70,11 +93,47 @@ public partial class SceneEditorViewModel : ObservableObject
         // synchronized into the engine. SceneLoadedMessage will trigger the
         // actual layout restoration. This avoids creating engine views before
         // the scene exists (prevents "frame context has no scene").
-        this.LogRegisteringForSceneLoaded();
-        this.messenger.Register<SceneLoadedMessage>(this, this.OnSceneLoadedMessage);
+        this.RegisterMessages();
+
+        // Track mutations via the undo stack
+        ((INotifyCollectionChanged)UndoRedo.Default[metadata.DocumentId].UndoStack).CollectionChanged += this.OnUndoStackChanged;
 
         // RunAtFps is sourced directly from the engine service at runtime
         // (see property implementation). No constructor seeding required.
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        this.Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <summary>
+    /// Releases resources used by the <see cref="SceneEditorViewModel"/>.
+    /// </summary>
+    /// <param name="disposing">True if called from Dispose, false if called from finalizer.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            this.LogUnregisteringFromMessages(this.Metadata.DocumentId);
+
+            ((INotifyCollectionChanged)UndoRedo.Default[this.Metadata.DocumentId].UndoStack).CollectionChanged -= this.OnUndoStackChanged;
+            this.messenger.UnregisterAll(this);
+
+            foreach (var viewport in this.Viewports)
+            {
+                viewport.Dispose();
+            }
+            this.Viewports.Clear();
+        }
+    }
+
+    private void RegisterMessages()
+    {
+        this.LogRegisteringForSceneLoaded(this.Metadata.DocumentId);
+        this.messenger.Register<SceneLoadedMessage>(this, (r, m) => ((SceneEditorViewModel)r).OnSceneLoadedMessage(r, m));
     }
 
     /// <summary>
@@ -300,10 +359,41 @@ public partial class SceneEditorViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Save()
+    private async Task Save()
     {
-        // TODO: Hook up actual save logic (wired to document service). For now just log.
+        await this.SaveAsync().ConfigureAwait(true);
+    }
+
+    /// <inheritdoc/>
+    public async Task SaveAsync()
+    {
+        if (this.scene is null)
+        {
+            this.LogSaveRequestedButSceneNotReady();
+            return;
+        }
+
         this.LogSaveRequested();
+        var success = await this.projectManager.SaveSceneAsync(this.scene).ConfigureAwait(true);
+        if (success)
+        {
+            this.Metadata.IsDirty = false;
+            _ = await this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata).ConfigureAwait(true);
+            this.LogSaveSuccessful();
+        }
+        else
+        {
+            this.LogSaveFailed();
+        }
+    }
+
+    private void OnUndoStackChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Add && !this.Metadata.IsDirty)
+        {
+            this.Metadata.IsDirty = true;
+            _ = this.documentService.UpdateMetadataAsync(this.windowId, this.Metadata.DocumentId, this.Metadata);
+        }
     }
 
     [RelayCommand]
@@ -369,14 +459,12 @@ public partial class SceneEditorViewModel : ObservableObject
 
         if (this.Metadata != null && msg.Scene.Id == this.Metadata.DocumentId)
         {
+            this.scene = msg.Scene;
             this.sceneReady = true;
             this.LogSceneLoadedReceived(this.CurrentLayout);
 
             // Rebuild layout now that scene is ready.
             this.UpdateLayout(this.CurrentLayout);
-
-            // We no longer need to receive SceneLoadedMessage for this VM.
-            this.messenger.Unregister<SceneLoadedMessage>(this);
         }
     }
 }
