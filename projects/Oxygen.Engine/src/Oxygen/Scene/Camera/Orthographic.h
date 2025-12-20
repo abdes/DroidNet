@@ -12,8 +12,8 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Scene/Camera/ProjectionConvention.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/api_export.h>
 
@@ -53,11 +53,9 @@ class OrthographicCamera : public Component {
   OXYGEN_COMPONENT_REQUIRES(detail::TransformComponent)
 
 public:
-  //! Creates a OrthographicCamera using the given projection \p convention.
-  explicit OrthographicCamera(const camera::ProjectionConvention convention)
-    : convention_(convention)
-  {
-  }
+  //! Creates a default OrthographicCamera using the engine canonical
+  //! projection.
+  OrthographicCamera() = default;
 
   //! Virtual destructor
   ~OrthographicCamera() override = default;
@@ -111,49 +109,40 @@ public:
 
   //! Maps a screen-space point (in pixels) to a world-space position at the
   //! near plane.
-  OXGN_SCN_NDAPI auto ScreenToWorld(
-    const glm::vec2& p, const glm::vec4& viewport) const -> glm::vec2;
+  OXGN_SCN_NDAPI auto ScreenToWorld(const Vec2& p, const Vec4& viewport) const
+    -> Vec2;
 
   //! Projects a world-space position to screen-space (pixels).
-  OXGN_SCN_NDAPI auto WorldToScreen(
-    const glm::vec2& p, const glm::vec4& viewport) const -> glm::vec2;
+  OXGN_SCN_NDAPI auto WorldToScreen(const Vec2& p, const Vec4& viewport) const
+    -> Vec2;
 
   //! Returns the set viewport, or a default rectangle if unset.
   OXGN_SCN_NDAPI auto ActiveViewport() const -> ViewPort;
 
   //! Returns the extents of the camera's box at the near plane, in view space.
-  OXGN_SCN_NDAPI auto ClippingRectangle() const -> glm::vec4;
+  OXGN_SCN_NDAPI auto ClippingRectangle() const -> Vec4;
 
-  //! Computes the orthographic projection matrix for this camera.
-  OXGN_SCN_NDAPI auto ProjectionMatrix() const -> glm::mat4;
-
-  //! Gets the current projection convention.
-  /*! @return The current projection convention. */
-  [[nodiscard]] auto GetProjectionConvention() const
-    -> camera::ProjectionConvention
-  {
-    return convention_;
-  }
+  //! Computes the orthographic projection matrix for this camera (engine
+  //! canonical).
+  OXGN_SCN_NDAPI auto ProjectionMatrix() const -> Mat4;
 
 protected:
-  auto UpdateDependencies(
+  OXGN_SCN_API auto UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept
-    -> void override
-  {
-    transform_ = &static_cast<detail::TransformComponent&>(
-      get_component(detail::TransformComponent::ClassTypeId()));
-  }
+    -> void override;
 
 private:
-  float left_ = -1.0f;
-  float right_ = 1.0f;
-  float bottom_ = -1.0f;
-  float top_ = 1.0f;
-  float near_ = 0.1f;
-  float far_ = 1000.0f;
+  static constexpr float kDefaultNearPlane = 0.1F;
+  static constexpr float kDefaultFarPlane = 1000.0F;
+
+  float left_ = -1.0F;
+  float right_ = 1.0F;
+  float bottom_ = -1.0F;
+  float top_ = 1.0F;
+  float near_ = kDefaultNearPlane;
+  float far_ = kDefaultFarPlane;
   std::optional<ViewPort> viewport_;
   detail::TransformComponent* transform_ { nullptr };
-  camera::ProjectionConvention convention_;
 };
 
 } // namespace oxygen::scene

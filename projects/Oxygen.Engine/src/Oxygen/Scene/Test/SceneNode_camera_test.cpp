@@ -28,8 +28,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesPerspectiveCamera)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   EXPECT_FALSE(node.HasCamera());
 
   // Act: Attach camera
@@ -49,8 +48,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_AttachesOrthographicCamera)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<OrthographicCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<OrthographicCamera>();
   EXPECT_FALSE(node.HasCamera());
 
   // Act: Attach camera
@@ -71,10 +69,8 @@ NOLINT_TEST_F(SceneNodeCameraTest, AttachCamera_FailsIfCameraAlreadyExists)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera1 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  auto camera2 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera1 = std::make_unique<PerspectiveCamera>();
+  auto camera2 = std::make_unique<PerspectiveCamera>();
 
   EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
   EXPECT_TRUE(node.HasCamera());
@@ -91,8 +87,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, DetachCamera_RemovesCameraComponent)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   EXPECT_TRUE(node.AttachCamera(std::move(camera)));
   EXPECT_TRUE(node.HasCamera());
 
@@ -125,10 +120,8 @@ NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_ReplacesExistingCamera)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera1 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
-  auto camera2 = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera1 = std::make_unique<PerspectiveCamera>();
+  auto camera2 = std::make_unique<PerspectiveCamera>();
 
   EXPECT_TRUE(node.AttachCamera(std::move(camera1)));
   EXPECT_TRUE(node.HasCamera());
@@ -150,8 +143,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, ReplaceCamera_NoCamera_ActsLikeAttach)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   EXPECT_FALSE(node.HasCamera());
 
   // Act: Replace camera when none is attached
@@ -178,8 +170,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, HasCamera_ReturnsTrueIfCameraAttached)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   EXPECT_FALSE(node.HasCamera());
 
   // Act
@@ -205,8 +196,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Perspective)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   ASSERT_TRUE(node.AttachCamera(std::move(camera)));
 
   // Act: Get camera as PerspectiveCamera
@@ -222,8 +212,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsCorrectType_Orthographic)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<OrthographicCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<OrthographicCamera>();
   ASSERT_TRUE(node.AttachCamera(std::move(camera)));
 
   // Act: Get camera as OrthographicCamera
@@ -250,8 +239,7 @@ NOLINT_TEST_F(SceneNodeCameraTest, GetCameraAs_ReturnsNullOptOnTypeMismatch)
 {
   // Arrange
   auto node = scene_->CreateNode("CameraNode");
-  auto camera = std::make_unique<PerspectiveCamera>(
-    oxygen::scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<PerspectiveCamera>();
   ASSERT_TRUE(node.AttachCamera(std::move(camera)));
 
   // Act

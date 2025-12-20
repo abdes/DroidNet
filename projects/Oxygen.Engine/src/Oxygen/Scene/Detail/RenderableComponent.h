@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 
-#include <glm/glm.hpp>
+#include <Oxygen/Core/Constants.h>
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
@@ -55,9 +55,9 @@ public:
     return geometry_asset_;
   }
 
-  OXGN_SCN_NDAPI bool UsesFixedPolicy() const noexcept;
-  OXGN_SCN_NDAPI bool UsesDistancePolicy() const noexcept;
-  OXGN_SCN_NDAPI bool UsesScreenSpaceErrorPolicy() const noexcept;
+  OXGN_SCN_NDAPI auto UsesFixedPolicy() const noexcept -> bool;
+  OXGN_SCN_NDAPI auto UsesDistancePolicy() const noexcept -> bool;
+  OXGN_SCN_NDAPI auto UsesScreenSpaceErrorPolicy() const noexcept -> bool;
 
   OXGN_SCN_API void SetLodPolicy(FixedPolicy p);
   OXGN_SCN_API void SetLodPolicy(DistancePolicy p);
@@ -79,11 +79,11 @@ public:
   OXGN_SCN_NDAPI auto EffectiveLodCount() const noexcept -> std::size_t;
 
   // Bounds and transform hook
-  void OnWorldTransformUpdated(const glm::mat4& world);
+  void OnWorldTransformUpdated(const Mat4& world);
 
   // Aggregated world bounding sphere (center.xyz, radius.w). Returns (0,0,0,0)
   // if not available (e.g., no geometry or unresolved LOD).
-  [[nodiscard]] auto GetWorldBoundingSphere() const noexcept -> glm::vec4
+  [[nodiscard]] auto GetWorldBoundingSphere() const noexcept -> Vec4
   {
     return world_bounding_sphere_;
   }
@@ -92,13 +92,13 @@ public:
   // Returns nullopt if unavailable (no geometry, LOD unresolved, or index OOB).
   OXGN_SCN_NDAPI auto GetWorldSubMeshBoundingBox(
     std::size_t submesh_index) const noexcept
-    -> std::optional<std::pair<glm::vec3, glm::vec3>>;
+    -> std::optional<std::pair<Vec3, Vec3>>;
 
   //=== Submesh visibility and material overrides ========================//
 
   //! Returns whether the given submesh (by LOD and index) is visible.
-  OXGN_SCN_NDAPI bool IsSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index) const noexcept;
+  OXGN_SCN_NDAPI auto IsSubmeshVisible(
+    std::size_t lod, std::size_t submesh_index) const noexcept -> bool;
 
   //! Sets visibility for the given submesh (by LOD and index).
   OXGN_SCN_API void SetSubmeshVisible(
@@ -137,10 +137,11 @@ private:
   [[nodiscard]] auto ResolveEffectiveLod(std::size_t lod_count) const noexcept
     -> std::optional<std::size_t>;
   struct LodBounds {
-    glm::vec3 mesh_bbox_min { 0.0f, 0.0f, 0.0f };
-    glm::vec3 mesh_bbox_max { 0.0f, 0.0f, 0.0f };
-    glm::vec4 mesh_sphere { 0.0f, 0.0f, 0.0f, 0.0f };
-    std::vector<std::pair<glm::vec3, glm::vec3>> submesh_aabbs; // local
+    Vec3 mesh_bbox_min { 0.0F, 0.0F, 0.0F };
+    Vec3 mesh_bbox_max { 0.0F, 0.0F, 0.0F };
+    Vec4 mesh_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
+    std::vector<std::pair<Vec3, Vec3>>
+      submesh_aabbs; // local
   };
 
   void RebuildLocalBoundsCache() noexcept;
@@ -149,25 +150,25 @@ private:
   void RebuildSubmeshStateCache() noexcept;
 
   // Preferred data
-  std::shared_ptr<const data::GeometryAsset> geometry_asset_ {};
+  std::shared_ptr<const data::GeometryAsset> geometry_asset_;
 
   // LOD policy (runtime variant)
   LodPolicy policy_ { FixedPolicy {} };
 
   // Cached dynamic LOD result (updated during updates/submission)
-  mutable std::optional<std::size_t> current_lod_ {};
+  mutable std::optional<std::size_t> current_lod_;
 
   // Per-LOD and per-submesh local bounds cache (rebuilt on SetGeometry)
-  std::vector<LodBounds> lod_bounds_ {};
+  std::vector<LodBounds> lod_bounds_;
 
   // World transform state and derived bounds
-  glm::mat4 world_matrix_ { 1.0f };
-  mutable glm::vec4 world_bounding_sphere_ { 0.0f, 0.0f, 0.0f, 0.0f };
+  Mat4 world_matrix_ { 1.0F };
+  mutable Vec4 world_bounding_sphere_ { 0.0F, 0.0F, 0.0F, 0.0F };
 
   // On-demand world AABB cache for current LOD (invalidated on transform/LOD)
-  mutable std::optional<std::size_t> aabb_cache_lod_ {};
-  mutable std::vector<std::optional<std::pair<glm::vec3, glm::vec3>>>
-    submesh_world_aabb_cache_ {};
+  mutable std::optional<std::size_t> aabb_cache_lod_;
+  mutable std::vector<std::optional<std::pair<Vec3, Vec3>>>
+    submesh_world_aabb_cache_;
 
   // Policy parameters live inside the variant
 
@@ -176,7 +177,7 @@ private:
     std::shared_ptr<const data::MaterialAsset> override_material;
   };
   // Per-LOD submesh state (visibility + override). Rebuilt on SetGeometry.
-  std::vector<std::vector<SubmeshState>> submesh_state_ {};
+  std::vector<std::vector<SubmeshState>> submesh_state_;
 };
 
 } // namespace oxygen::scene::detail

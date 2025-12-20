@@ -51,20 +51,24 @@ auto oxygen::data::MakeSphereMeshAsset(
   }
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
+  constexpr float pi = std::numbers::pi_v<float>;
+
   for (unsigned int lat = 0; lat <= latitude_segments; ++lat) {
-    constexpr float pi = std::numbers::pi_v<float>;
     float theta
       = pi * static_cast<float>(lat) / static_cast<float>(latitude_segments);
     float sin_theta = std::sin(theta);
     float cos_theta = std::cos(theta);
+
     for (unsigned int lon = 0; lon <= longitude_segments; ++lon) {
       float phi = 2.0f * pi * static_cast<float>(lon)
         / static_cast<float>(longitude_segments);
       float sin_phi = std::sin(phi);
       float cos_phi = std::cos(phi);
+
       float x = sin_theta * cos_phi;
-      float y = cos_theta;
-      float z = sin_theta * sin_phi;
+      float y = sin_theta * sin_phi;
+      float z = cos_theta; // Z is UP
+
       Vertex v {
         .position = { x * 0.5f, y * 0.5f, z * 0.5f },
         .normal = { x, y, z },
@@ -72,19 +76,22 @@ auto oxygen::data::MakeSphereMeshAsset(
         = { static_cast<float>(lon) / static_cast<float>(longitude_segments),
           1.0f
             - static_cast<float>(lat) / static_cast<float>(latitude_segments) },
-        .tangent = { -sin_phi, 0.0f, cos_phi },
-        .bitangent = { -cos_theta * cos_phi, sin_theta, -cos_theta * sin_phi },
+        .tangent = { -sin_phi, cos_phi, 0.0f },
+        .bitangent = { -cos_theta * cos_phi, -cos_theta * sin_phi, sin_theta },
         .color = { 1, 1, 1, 1 },
       };
       vertices.push_back(v);
     }
   }
+
   for (unsigned int lat = 0; lat < latitude_segments; ++lat) {
     for (unsigned int lon = 0; lon < longitude_segments; ++lon) {
       uint32_t i0 = lat * (longitude_segments + 1) + lon;
-      uint32_t i1 = i0 + longitude_segments + 1;
+      uint32_t i1 = (lat + 1) * (longitude_segments + 1) + lon;
       uint32_t i2 = i0 + 1;
       uint32_t i3 = i1 + 1;
+
+      // CCW: (TL, BL, TR) and (TR, BL, BR)
       indices.push_back(i0);
       indices.push_back(i1);
       indices.push_back(i2);

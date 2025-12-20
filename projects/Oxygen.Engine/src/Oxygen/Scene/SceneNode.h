@@ -13,7 +13,7 @@
 #include <type_traits>
 #include <utility>
 
-#include <glm/glm.hpp>
+#include <Oxygen/Core/Constants.h>
 
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Composition/Object.h>
@@ -128,9 +128,10 @@ public:
 
   //=== NodeHandle Access ===-------------------------------------------------//
 
-  // ReSharper disable once CppHidingFunction - casts to NodeHandle
+  // NOLINTNEXTLINE(*-derived-method-shadowing-base-method)
   [[nodiscard]] auto GetHandle() const noexcept -> const NodeHandle&
   {
+    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
     return static_cast<const NodeHandle&>(Resource::GetHandle());
   }
 
@@ -235,7 +236,7 @@ private:
   // Logging for SafeCall errors
   auto LogSafeCallError(const char* reason) const noexcept -> void;
 
-  std::weak_ptr<const Scene> scene_weak_ {};
+  std::weak_ptr<const Scene> scene_weak_;
 
   //=== Validation Helpers ===------------------------------------------------//
 
@@ -260,8 +261,7 @@ private:
         return validator(state);
       },
       [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { func(state); });
-    return;
+        auto&& /*self_ref*/) mutable noexcept -> auto { func(state); });
   }
 
   // Non-void-return overload
@@ -278,7 +278,7 @@ private:
         return validator(state);
       },
       [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { return func(state); });
+        auto&& /*self_ref*/) mutable noexcept -> auto { return func(state); });
 
     if (result.has_value()) {
       return result.value();
@@ -310,7 +310,7 @@ private:
   [[nodiscard]] auto NodeIsValidAndInScene() -> NodeIsValidAndInSceneValidator;
 };
 
-auto OXGN_SCN_NDAPI to_string(const SceneNode& node) noexcept -> std::string;
+OXGN_SCN_NDAPI auto to_string(const SceneNode& node) noexcept -> std::string;
 
 //==============================================================================
 // Base class for SceneNode sub-interfaces
@@ -334,7 +334,7 @@ protected:
     -> void
   {
     using DerivedT = std::remove_pointer_t<Self>;
-    using State = typename DerivedT::SafeCallState;
+    using State = DerivedT::SafeCallState;
     State state {};
 
     (void)oxygen::SafeCall(
@@ -343,8 +343,7 @@ protected:
         return validator(state);
       },
       [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { func(state); });
-    return;
+        auto&& /*self_ref*/) mutable noexcept -> auto { func(state); });
   }
 
   // Non-void-return overload
@@ -356,7 +355,7 @@ protected:
       typename std::remove_pointer_t<Self>::SafeCallState&>
   {
     using DerivedT = std::remove_pointer_t<Self>;
-    using State = typename DerivedT::SafeCallState;
+    using State = DerivedT::SafeCallState;
     using ReturnT = std::invoke_result_t<Func, State&>;
     State state {};
 
@@ -366,7 +365,7 @@ protected:
         return validator(state);
       },
       [func = std::forward<Func>(func), &state](
-        auto&& /*self_ref*/) mutable noexcept { return func(state); });
+        auto&& /*self_ref*/) mutable noexcept -> auto { return func(state); });
 
     if (result.has_value()) {
       return result.value();
@@ -446,10 +445,7 @@ protected:
 class SceneNode::Transform : public SubInterfaceBase<SceneNode::Transform> {
 public:
   // Bring SafeCall from base into scope
-  using SubInterfaceBase<SceneNode::Transform>::SafeCall;
-  using Vec3 = glm::vec3;
-  using Quat = glm::quat;
-  using Mat4 = glm::mat4;
+  using SubInterfaceBase::SafeCall;
 
   //! Constructs a Transform interface for the given SceneNode.
   /*!
@@ -527,7 +523,7 @@ public:
 
   //! Orients the node to look at a target position.
   OXGN_SCN_API auto LookAt(const Vec3& target_position,
-    const Vec3& up_direction = Vec3(0, 1, 0)) noexcept -> bool;
+    const Vec3& up_direction = ::oxygen::space::look::Up) noexcept -> bool;
 
 private:
   //=== Validation Helpers ===------------------------------------------------//
@@ -581,8 +577,6 @@ public:
   using SubInterfaceBase<SceneNode::Renderable>::SafeCall;
   using GeometryAssetPtr = std::shared_ptr<const data::GeometryAsset>;
   using MaterialAssetPtr = std::shared_ptr<const data::MaterialAsset>;
-  using Vec3 = glm::vec3;
-  using Mat4 = glm::mat4;
 
   //! Constructs a Renderable interface for the given SceneNode.
   explicit Renderable(SceneNode& node) noexcept
@@ -627,7 +621,7 @@ public:
   //=== Bounds ===============================================================//
 
   //! Aggregated world bounding sphere (center.xyz, radius.w).
-  OXGN_SCN_NDAPI auto GetWorldBoundingSphere() const noexcept -> glm::vec4;
+  OXGN_SCN_NDAPI auto GetWorldBoundingSphere() const noexcept -> ::oxygen::Vec4;
 
   //! Hook to notify the component that world transform changed.
   OXGN_SCN_API void OnWorldTransformUpdated(const Mat4& world);
@@ -638,8 +632,8 @@ public:
 
   //=== Submesh visibility and materials ====================================//
 
-  OXGN_SCN_NDAPI bool IsSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index) const noexcept;
+  OXGN_SCN_NDAPI auto IsSubmeshVisible(
+    std::size_t lod, std::size_t submesh_index) const noexcept -> bool;
   OXGN_SCN_API void SetSubmeshVisible(
     std::size_t lod, std::size_t submesh_index, bool visible) noexcept;
   OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
@@ -651,7 +645,6 @@ public:
   OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(std::size_t lod,
     std::size_t submesh_index) const noexcept -> MaterialAssetPtr;
 
-public:
   struct SafeCallState {
     SceneNode* node = nullptr;
     SceneNodeImpl* node_impl = nullptr;
@@ -668,8 +661,6 @@ public:
 
   [[nodiscard]] auto NodeInScene() const -> NodeInSceneValidator;
   [[nodiscard]] auto RequiresRenderable() const -> RequiresRenderableValidator;
-
-private:
 };
 
 } // namespace oxygen::scene

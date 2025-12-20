@@ -42,48 +42,45 @@
  @see Mesh, MeshView, Vertex
 */
 auto oxygen::data::MakePlaneMeshAsset(
-  unsigned int x_segments, unsigned int z_segments, float size)
+  unsigned int x_segments, unsigned int y_segments, float size)
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
-  if (x_segments < 1 || z_segments < 1 || size <= 0.0f) {
+  if (x_segments < 1 || y_segments < 1 || size <= 0.0f) {
     return std::nullopt;
   }
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   float half_size = size * 0.5f;
-  for (unsigned int z = 0; z <= z_segments; ++z) {
-    float z_frac = static_cast<float>(z) / static_cast<float>(z_segments);
-    float z_pos = -half_size + z_frac * size;
+  for (unsigned int y = 0; y <= y_segments; ++y) {
+    float y_frac = static_cast<float>(y) / static_cast<float>(y_segments);
+    float y_pos = -half_size + y_frac * size;
     for (unsigned int x = 0; x <= x_segments; ++x) {
       float x_frac = static_cast<float>(x) / static_cast<float>(x_segments);
       float x_pos = -half_size + x_frac * size;
       Vertex v {
-        .position = { x_pos, 0.0f, z_pos },
-        .normal = { 0.0f, 1.0f, 0.0f },
-        .texcoord = { x_frac, 1.0f - z_frac },
+        .position = { x_pos, y_pos, 0.0f },
+        .normal = { 0.0f, 0.0f, 1.0f },
+        .texcoord = { x_frac, 1.0f - y_frac },
         .tangent = { 1.0f, 0.0f, 0.0f },
-        .bitangent = { 0.0f, 0.0f, 1.0f },
+        .bitangent = { 0.0f, 1.0f, 0.0f },
         .color = { 1, 1, 1, 1 },
       };
       vertices.push_back(v);
     }
   }
-  for (unsigned int z = 0; z < z_segments; ++z) {
+  for (unsigned int y = 0; y < y_segments; ++y) {
     for (unsigned int x = 0; x < x_segments; ++x) {
-      uint32_t i0 = z * (x_segments + 1) + x;
+      uint32_t i0 = y * (x_segments + 1) + x;
       uint32_t i1 = i0 + 1;
       uint32_t i2 = i0 + (x_segments + 1);
       uint32_t i3 = i2 + 1;
-      // Wind triangles CCW when viewed from +Y (up) so the normal {0,1,0}
-      // matches the vertex winding and back-face culling behaves correctly.
-      // First triangle: bottom-left, bottom-right, top-left
+      // CCW: (BL, BR, TL) and (TL, BR, TR)
       indices.push_back(i0);
       indices.push_back(i1);
       indices.push_back(i2);
-      // Second triangle: bottom-right, top-right, top-left
+      indices.push_back(i2);
       indices.push_back(i1);
       indices.push_back(i3);
-      indices.push_back(i2);
     }
   }
 

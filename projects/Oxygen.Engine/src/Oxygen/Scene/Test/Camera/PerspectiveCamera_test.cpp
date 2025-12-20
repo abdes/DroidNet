@@ -8,7 +8,7 @@
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Testing/GTest.h>
 
-using oxygen::scene::camera::ProjectionConvention;
+// ProjectionConvention removed; tests assume engine canonical projection
 
 using testing::FloatEq;
 using testing::Test;
@@ -17,25 +17,9 @@ namespace {
 
 //! Testable camera, using the D3D12 convention, and exposing UpdateDependencies
 //! for testing
-class D3d12PerspectiveCamera final : public oxygen::scene::PerspectiveCamera {
+class TestPerspectiveCamera final : public oxygen::scene::PerspectiveCamera {
 public:
-  D3d12PerspectiveCamera()
-    : PerspectiveCamera(ProjectionConvention::kD3D12)
-  {
-  }
-
-  using PerspectiveCamera::UpdateDependencies;
-};
-
-//! Testable camera, using the Vulkan convention, and exposing
-//! UpdateDependencies for testing
-class VulkanPerspectiveCamera final : public oxygen::scene::PerspectiveCamera {
-public:
-  VulkanPerspectiveCamera()
-    : PerspectiveCamera(ProjectionConvention::kVulkan)
-  {
-  }
-
+  TestPerspectiveCamera() = default;
   using PerspectiveCamera::UpdateDependencies;
 };
 
@@ -45,14 +29,14 @@ protected:
   auto SetUp() -> void override
   {
     // Arrange: create camera and dummy transform
-    camera_ = std::make_unique<D3d12PerspectiveCamera>();
+    camera_ = std::make_unique<TestPerspectiveCamera>();
     transform_ = std::make_unique<oxygen::scene::detail::TransformComponent>();
     // Simulate dependency injection
     camera_->UpdateDependencies(
       [this](oxygen::TypeId) -> oxygen::Component& { return *transform_; });
   }
 
-  std::unique_ptr<D3d12PerspectiveCamera> camera_;
+  std::unique_ptr<TestPerspectiveCamera> camera_;
   std::unique_ptr<oxygen::scene::detail::TransformComponent> transform_;
 };
 
@@ -62,14 +46,14 @@ protected:
   auto SetUp() -> void override
   {
     // Arrange: create camera and dummy transform
-    camera_ = std::make_unique<VulkanPerspectiveCamera>();
+    camera_ = std::make_unique<TestPerspectiveCamera>();
     transform_ = std::make_unique<oxygen::scene::detail::TransformComponent>();
     // Simulate dependency injection
     camera_->UpdateDependencies(
       [this](oxygen::TypeId) -> oxygen::Component& { return *transform_; });
   }
 
-  std::unique_ptr<VulkanPerspectiveCamera> camera_;
+  std::unique_ptr<TestPerspectiveCamera> camera_;
   std::unique_ptr<oxygen::scene::detail::TransformComponent> transform_;
 };
 
@@ -188,11 +172,9 @@ TEST_F(VulkanPerspectiveCameraTest, ProjectionMatrix_Convention_Vulkan)
   camera_->SetNearPlane(1.0f);
   camera_->SetFarPlane(100.0f);
 
-  // Vulkan convention (Y axis flipped)
-  EXPECT_EQ(camera_->GetProjectionConvention(), ProjectionConvention::kVulkan);
+  // Engine canonical projection: no Y-flip expected
   glm::mat4 proj_vk = camera_->ProjectionMatrix();
-  // For Vulkan, proj[1][1] should be -1.0 (Y flipped)
-  EXPECT_FLOAT_EQ(proj_vk[1][1], -1.0f);
+  EXPECT_FLOAT_EQ(proj_vk[1][1], 1.0f);
 }
 
 //! Test projection matrix calculation for D3D12 and Vulkan conventions
@@ -203,8 +185,6 @@ TEST_F(D3d12PerspectiveCameraTest, ProjectionMatrix_Convention_D3D12)
   camera_->SetNearPlane(1.0f);
   camera_->SetFarPlane(100.0f);
 
-  // D3D12 convention (default)
-  EXPECT_EQ(camera_->GetProjectionConvention(), ProjectionConvention::kD3D12);
   glm::mat4 proj_d3d12 = camera_->ProjectionMatrix();
   // For 90deg FOV, aspect 1, near 1, far 100, proj[1][1] should be 1.0
   EXPECT_FLOAT_EQ(proj_d3d12[1][1], 1.0f);

@@ -5,8 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <functional>
-#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Renderer/SceneCameraViewResolver.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
@@ -14,24 +15,22 @@
 
 namespace oxygen::renderer {
 
-auto FromNodeLookup::ResolveForNode(oxygen::scene::SceneNode& camera_node)
-  -> oxygen::ResolvedView
+auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
+  -> ResolvedView
 {
-  using namespace oxygen::scene::camera;
-
   // Validate camera node
   if (!camera_node.IsAlive() || !camera_node.HasCamera()) {
-    oxygen::ResolvedView::Params rp;
-    rp.view_config = oxygen::View {};
-    rp.view_matrix = glm::mat4(1.0f);
-    rp.proj_matrix = glm::mat4(1.0f);
-    rp.depth_range = oxygen::NdcDepthRange::ZeroToOne;
-    return oxygen::ResolvedView(rp);
+    ResolvedView::Params rp;
+    rp.view_config = View {};
+    rp.view_matrix = Mat4(1.0F);
+    rp.proj_matrix = Mat4(1.0F);
+    rp.depth_range = NdcDepthRange::ZeroToOne;
+    return ResolvedView(rp);
   }
 
   // Extract pose
-  glm::vec3 cam_pos { 0.0F, 0.0F, 0.0F };
-  glm::quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
+  Vec3 cam_pos { 0.0F, 0.0F, 0.0F };
+  Quat cam_rot { 1.0F, 0.0F, 0.0F, 0.0F };
   if (auto wp = camera_node.GetTransform().GetWorldPosition()) {
     cam_pos = *wp;
   } else if (auto lp = camera_node.GetTransform().GetLocalPosition()) {
@@ -43,68 +42,43 @@ auto FromNodeLookup::ResolveForNode(oxygen::scene::SceneNode& camera_node)
     cam_rot = *lr;
   }
 
-  const glm::mat4 view_m = [](const glm::vec3& pos, const glm::quat& rot) {
-    const glm::vec3 forward = rot * glm::vec3(0.0F, 0.0F, -1.0F);
-    const glm::vec3 up = rot * glm::vec3(0.0F, 1.0F, 0.0F);
-    return glm::lookAt(pos, pos + forward, up);
+  const auto view_m = [](const Vec3& pos, const Quat& rot) -> Mat4 {
+    const Vec3 forward = rot * space::look::Forward;
+    // Use World Up (Z+) to ensure the camera doesn't roll
+    return glm::lookAt(pos, pos + forward, space::move::Up);
   }(cam_pos, cam_rot);
 
   // Projection from camera component
-  glm::mat4 proj_m { 1.0F };
-  oxygen::NdcDepthRange src_range = oxygen::NdcDepthRange::MinusOneToOne;
-  if (auto cam = camera_node.GetCameraAs<oxygen::scene::PerspectiveCamera>()) {
+  Mat4 proj_m { 1.0F };
+  // Engine canonical NDC: Z range [0,1]
+  NdcDepthRange src_range = NdcDepthRange::ZeroToOne;
+  if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
     proj_m = cam->get().ProjectionMatrix();
-    // Derive NDC depth range from the camera's projection convention
-    switch (cam->get().GetProjectionConvention()) {
-    case ProjectionConvention::kD3D12:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    case ProjectionConvention::kVulkan:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    default:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    }
-  } else if (auto camo
-    = camera_node.GetCameraAs<oxygen::scene::OrthographicCamera>()) {
+  } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
     proj_m = camo->get().ProjectionMatrix();
-    switch (camo->get().GetProjectionConvention()) {
-    case ProjectionConvention::kD3D12:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    case ProjectionConvention::kVulkan:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    default:
-      src_range = oxygen::NdcDepthRange::ZeroToOne;
-      break;
-    }
   }
 
   // Build final view config: derive viewport from camera if present
-  oxygen::View cfg;
-  if (auto cam = camera_node.GetCameraAs<oxygen::scene::PerspectiveCamera>()) {
+  View cfg;
+  if (auto cam = camera_node.GetCameraAs<scene::PerspectiveCamera>()) {
     cfg.viewport = cam->get().ActiveViewport();
-  } else if (auto camo
-    = camera_node.GetCameraAs<oxygen::scene::OrthographicCamera>()) {
+  } else if (auto camo = camera_node.GetCameraAs<scene::OrthographicCamera>()) {
     cfg.viewport = camo->get().ActiveViewport();
   }
 
   // Apply pixel jitter (pixels -> NDC) and produce D3D12-targeted projection
+  proj_m = ApplyJitterToProjection(proj_m, cfg.pixel_jitter, cfg.viewport);
   proj_m
-    = oxygen::ApplyJitterToProjection(proj_m, cfg.pixel_jitter, cfg.viewport);
-  proj_m = oxygen::RemapProjectionDepthRange(
-    proj_m, src_range, oxygen::NdcDepthRange::ZeroToOne);
+    = RemapProjectionDepthRange(proj_m, src_range, NdcDepthRange::ZeroToOne);
 
-  oxygen::ResolvedView::Params rp;
+  ResolvedView::Params rp;
   rp.view_config = cfg;
   rp.view_matrix = view_m;
   rp.proj_matrix = proj_m;
-  rp.depth_range = oxygen::NdcDepthRange::ZeroToOne;
+  rp.depth_range = NdcDepthRange::ZeroToOne;
   rp.camera_position = cam_pos;
 
-  return oxygen::ResolvedView(rp);
+  return ResolvedView(rp);
 }
 
 } // namespace oxygen::renderer

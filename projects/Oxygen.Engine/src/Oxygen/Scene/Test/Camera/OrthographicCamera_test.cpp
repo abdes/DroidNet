@@ -8,31 +8,15 @@
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Testing/GTest.h>
 
-using oxygen::scene::camera::ProjectionConvention;
+// ProjectionConvention removed; tests assume engine canonical projection
 using testing::FloatEq;
 using testing::Test;
 
 namespace {
 
-//! Testable camera, using the D3D12 convention, and exposing UpdateDependencies
-class D3d12OrthographicCamera final : public oxygen::scene::OrthographicCamera {
+class TestOrthographicCamera final : public oxygen::scene::OrthographicCamera {
 public:
-  D3d12OrthographicCamera()
-    : OrthographicCamera(ProjectionConvention::kD3D12)
-  {
-  }
-  using OrthographicCamera::UpdateDependencies;
-};
-
-//! Testable camera, using the Vulkan convention, and exposing
-//! UpdateDependencies
-class VulkanOrthographicCamera final
-  : public oxygen::scene::OrthographicCamera {
-public:
-  VulkanOrthographicCamera()
-    : OrthographicCamera(ProjectionConvention::kVulkan)
-  {
-  }
+  TestOrthographicCamera() = default;
   using OrthographicCamera::UpdateDependencies;
 };
 
@@ -40,12 +24,12 @@ class D3d12OrthographicCameraTest : public Test {
 protected:
   auto SetUp() -> void override
   {
-    camera_ = std::make_unique<D3d12OrthographicCamera>();
+    camera_ = std::make_unique<TestOrthographicCamera>();
     transform_ = std::make_unique<oxygen::scene::detail::TransformComponent>();
     camera_->UpdateDependencies(
       [this](oxygen::TypeId) -> oxygen::Component& { return *transform_; });
   }
-  std::unique_ptr<D3d12OrthographicCamera> camera_;
+  std::unique_ptr<TestOrthographicCamera> camera_;
   std::unique_ptr<oxygen::scene::detail::TransformComponent> transform_;
 };
 
@@ -53,12 +37,12 @@ class VulkanOrthographicCameraTest : public Test {
 protected:
   auto SetUp() -> void override
   {
-    camera_ = std::make_unique<VulkanOrthographicCamera>();
+    camera_ = std::make_unique<TestOrthographicCamera>();
     transform_ = std::make_unique<oxygen::scene::detail::TransformComponent>();
     camera_->UpdateDependencies(
       [this](oxygen::TypeId) -> oxygen::Component& { return *transform_; });
   }
-  std::unique_ptr<VulkanOrthographicCamera> camera_;
+  std::unique_ptr<TestOrthographicCamera> camera_;
   std::unique_ptr<oxygen::scene::detail::TransformComponent> transform_;
 };
 
@@ -194,12 +178,11 @@ NOLINT_TEST_F(VulkanOrthographicCameraTest, ProjectionMatrix_Convention_Vulkan)
   camera_->SetExtents(-2, 2, -2, 2, 1.0f, 100.0f);
 
   // Act
-  EXPECT_EQ(camera_->GetProjectionConvention(), ProjectionConvention::kVulkan);
   glm::mat4 proj_vk = camera_->ProjectionMatrix();
 
-  // Assert
-  EXPECT_FLOAT_EQ(proj_vk[1][1], -0.5f)
-    << "Vulkan Y scale should be negative (Y-flip)";
+  // Assert: engine canonical projection => no Y-flip
+  EXPECT_FLOAT_EQ(proj_vk[1][1], 0.5f)
+    << "Engine canonical Y scale should be positive";
 }
 
 //! Projection matrix calculation for D3D12 convention
@@ -210,11 +193,11 @@ NOLINT_TEST_F(D3d12OrthographicCameraTest, ProjectionMatrix_Convention_D3D12)
   camera_->SetExtents(-2, 2, -2, 2, 1.0f, 100.0f);
 
   // Act
-  EXPECT_EQ(camera_->GetProjectionConvention(), ProjectionConvention::kD3D12);
   glm::mat4 proj_d3d12 = camera_->ProjectionMatrix();
 
   // Assert
-  EXPECT_FLOAT_EQ(proj_d3d12[1][1], 0.5f) << "D3D12 Y scale should be positive";
+  EXPECT_FLOAT_EQ(proj_d3d12[1][1], 0.5f)
+    << "Engine canonical Y scale should be positive";
 }
 
 } // namespace

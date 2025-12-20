@@ -197,14 +197,20 @@ VSOutput VS(uint vertexID : SV_VertexID) {
 [shader("pixel")]
 float4 PS(VSOutput input) : SV_Target0 {
     // Hardcoded directional light (POC)
-    const float3 light_dir_ws = normalize(float3(0.3, -1.0, 0.1)); // from above-right
+    // Light traveling towards +X (Right), +Y (Back), -Z (Down)
+    // This illuminates faces facing -X (Left), -Y (Forward), and +Z (Up).
+    // Given the engine is Z-UP and Forward is -Y, a camera at Y = -10 looking
+    // towards the origin is looking "Back" (+Y). This light travels with that
+    // view to illuminate the "Front" and "Top" of objects.
+    const float3 light_dir_ws = normalize(float3(0.4, 1.0, -0.7));
     const float3 light_color  = float3(1.0, 1.0, 1.0);
     const float  light_intensity = 1.0;
+    const float3 ambient_color = float3(0.2, 0.2, 0.2);
 
     // Half-Lambert term (softens the terminator, avoids harsh falloff)
     float ndotl = 0.5 * dot(normalize(input.world_normal), -light_dir_ws) + 0.5;
     ndotl = saturate(ndotl);
-    float3 lighting = ndotl * light_intensity;
+    float3 lighting = ambient_color + (ndotl * light_intensity);
 
     // Base color defaults
     float3 base_rgb = float3(1.0, 1.0, 1.0);

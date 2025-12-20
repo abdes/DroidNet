@@ -43,12 +43,12 @@ auto oxygen::data::MakeCubeMeshAsset()
   constexpr float h = 0.5f;
   std::vector<Vertex> vertices = {
     // clang-format off
-    // -Z face (back)
+    // -Z face (bottom)
     { { -h, -h, -h }, {  0,  0, -1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h, -h, -h }, {  0,  0, -1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h,  h, -h }, {  0,  0, -1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { { -h,  h, -h }, {  0,  0, -1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // +Z face (front)
+    // +Z face (top)
     { { -h, -h,  h }, {  0,  0,  1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h, -h,  h }, {  0,  0,  1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h,  h,  h }, {  0,  0,  1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
@@ -63,12 +63,12 @@ auto oxygen::data::MakeCubeMeshAsset()
     { {  h,  h, -h }, {  1,  0,  0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h,  h,  h }, {  1,  0,  0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h, -h,  h }, {  1,  0,  0 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // -Y face (bottom)
+    // -Y face (front)
     { { -h, -h, -h }, {  0, -1,  0 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h, -h, -h }, {  0, -1,  0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h, -h,  h }, {  0, -1,  0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { { -h, -h,  h }, {  0, -1,  0 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
-    // +Y face (top)
+    // +Y face (back)
     { { -h,  h, -h }, {  0,  1,  0 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h,  h, -h }, {  0,  1,  0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
     { {  h,  h,  h }, {  0,  1,  0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 0 }, { 1, 1, 1, 1 } },
@@ -77,18 +77,18 @@ auto oxygen::data::MakeCubeMeshAsset()
   };
   std::vector<uint32_t> indices = {
     // clang-format off
-    // -Z face (back) - triangle winding must produce outward normal = -Z
+    // -Z face (bottom) - triangle winding must produce outward normal = -Z
     0, 2, 1, 0, 3, 2,
-    // +Z face (front)
+    // +Z face (top)
     4, 5, 6, 4, 6, 7,
     // -X face (left) - triangle winding must produce outward normal = -X
-    8,10,9, 8,11,10,
+    8, 10, 9, 8, 11, 10,
     // +X face (right)
-    12,13,14,12,14,15,
-    // -Y face (bottom)
-    16,17,18,16,18,19,
-    // +Y face (top) - triangle winding must produce outward normal = +Y
-    20,22,21,20,23,22,
+    12, 13, 14, 12, 14, 15,
+    // -Y face (front)
+    16, 17, 18, 16, 18, 19,
+    // +Y face (back) - triangle winding must produce outward normal = +Y
+    20, 22, 21, 20, 23, 22,
     // clang-format off
   };
 

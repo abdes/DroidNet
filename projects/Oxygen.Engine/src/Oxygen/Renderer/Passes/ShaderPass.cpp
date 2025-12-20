@@ -345,7 +345,7 @@ auto ShaderPass::CreatePipelineStateDesc() -> graphics::GraphicsPipelineDesc
   }
 
   DepthStencilStateDesc ds_desc {
-    .depth_test_enable = has_depth,
+    .depth_test_enable = has_depth && (requested_fill != FillMode::kWireFrame),
     .depth_write_enable = false,
     .depth_func = CompareOp::kLessOrEqual,
     .stencil_enable = false,

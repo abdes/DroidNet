@@ -41,7 +41,6 @@ DemoView::~DemoView()
 void DemoView::EnsureCamera(scene::Scene& scene, std::string_view node_name)
 {
   using scene::PerspectiveCamera;
-  using scene::camera::ProjectionConvention;
 
   if (!camera_node_.IsAlive()) {
     camera_node_ = scene.CreateNode(std::string(node_name));
@@ -49,7 +48,7 @@ void DemoView::EnsureCamera(scene::Scene& scene, std::string_view node_name)
 
   if (!camera_node_.HasCamera()) {
     auto camera
-      = std::make_unique<PerspectiveCamera>(ProjectionConvention::kD3D12);
+      = std::make_unique<PerspectiveCamera>();
     const bool attached = camera_node_.AttachCamera(std::move(camera));
     CHECK_F(attached, "Failed to attach PerspectiveCamera to {}", node_name);
   }

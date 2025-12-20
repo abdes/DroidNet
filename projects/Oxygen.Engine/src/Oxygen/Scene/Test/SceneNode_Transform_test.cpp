@@ -8,6 +8,7 @@
 #include <string>
 
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Core/Constants.h>
 
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Scene/Scene.h>
@@ -31,7 +32,7 @@ protected:
 
   // Helper: Set transform values for testing
   static void SetTransformValues(
-    const SceneNode& node, const glm::vec3& position, const glm::vec3& scale)
+    const SceneNode& node, const ::oxygen::Vec3& position, const ::oxygen::Vec3& scale)
   {
     auto transform = node.GetTransform();
     EXPECT_TRUE(transform.SetLocalPosition(position));
@@ -40,7 +41,7 @@ protected:
 
   // Helper: Verify transform values match expected
   static void ExpectTransformValues(const SceneNode& node,
-    const glm::vec3& expected_pos, const glm::vec3& expected_scale)
+    const ::oxygen::Vec3& expected_pos, const ::oxygen::Vec3& expected_scale)
   {
     const auto transform = node.GetTransform();
     const auto position = transform.GetLocalPosition();
@@ -92,7 +93,7 @@ NOLINT_TEST_F(SceneNodeTransformTest, TransformBasicOperations_WorkOnValidNode)
 
   // Act: Set local position
   const auto set_position_result
-    = transform.SetLocalPosition({ 1.0F, 2.0F, 3.0F });
+    = transform.SetLocalPosition(::oxygen::Vec3{ 1.0F, 2.0F, 3.0F });
 
   // Assert: Position should be set successfully
   EXPECT_TRUE(set_position_result);
@@ -107,7 +108,7 @@ NOLINT_TEST_F(SceneNodeTransformTest, TransformBasicOperations_WorkOnValidNode)
   EXPECT_FLOAT_EQ(position->z, 3.0F);
 
   // Act: Set local scale
-  const auto set_scale_result = transform.SetLocalScale({ 2.0F, 2.0F, 2.0F });
+  const auto set_scale_result = transform.SetLocalScale(::oxygen::Vec3{ 2.0F, 2.0F, 2.0F });
 
   // Assert: Scale should be set successfully
   EXPECT_TRUE(set_scale_result);
@@ -131,9 +132,9 @@ NOLINT_TEST_F(
   scene_->DestroyNode(node);
 
   // Act & Assert: Operations should fail gracefully and return false/nullopt
-  EXPECT_FALSE(transform.SetLocalPosition({ 1.0F, 2.0F, 3.0F }));
+  EXPECT_FALSE(transform.SetLocalPosition(::oxygen::Vec3{ 1.0F, 2.0F, 3.0F }));
   EXPECT_FALSE(transform.GetLocalPosition().has_value());
-  EXPECT_FALSE(transform.SetLocalScale({ 2.0F, 2.0F, 2.0F }));
+  EXPECT_FALSE(transform.SetLocalScale(::oxygen::Vec3{ 2.0F, 2.0F, 2.0F }));
   EXPECT_FALSE(transform.GetLocalScale().has_value());
 }
 
@@ -142,8 +143,8 @@ NOLINT_TEST_F(
 {
   // Arrange: Create node and set initial transform
   const auto node = scene_->CreateNode("TestNode");
-  constexpr auto initial_pos = glm::vec3 { 1.0F, 2.0F, 3.0F };
-  constexpr auto initial_scale = glm::vec3 { 2.0F, 2.0F, 2.0F };
+  constexpr ::oxygen::Vec3 initial_pos { 1.0F, 2.0F, 3.0F };
+  constexpr ::oxygen::Vec3 initial_scale { 2.0F, 2.0F, 2.0F };
 
   SetTransformValues(node, initial_pos, initial_scale);
 
@@ -152,8 +153,8 @@ NOLINT_TEST_F(
     ExpectTransformValues(node, initial_pos, initial_scale), "initial");
 
   // Act: Modify transform values
-  constexpr auto new_pos = glm::vec3 { 10.0F, 20.0F, 30.0F };
-  constexpr auto new_scale = glm::vec3 { 3.0F, 3.0F, 3.0F };
+  constexpr ::oxygen::Vec3 new_pos { 10.0F, 20.0F, 30.0F };
+  constexpr ::oxygen::Vec3 new_scale { 3.0F, 3.0F, 3.0F };
   SetTransformValues(node, new_pos, new_scale);
 
   // Assert: New values should be preserved
