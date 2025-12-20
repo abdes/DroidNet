@@ -1194,7 +1194,6 @@ auto MainModule::EnsureExampleScene() -> void
 auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 {
   using scene::PerspectiveCamera;
-  using scene::camera::ProjectionConvention;
 
   if (!scene_) {
     return;
@@ -1206,7 +1205,7 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
 
   if (!main_camera_.HasCamera()) {
     auto camera
-      = std::make_unique<PerspectiveCamera>(ProjectionConvention::kD3D12);
+      = std::make_unique<PerspectiveCamera>();
     const bool attached = main_camera_.AttachCamera(std::move(camera));
     CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   }

@@ -63,6 +63,7 @@ set(
   "api_export.h"
   "AnyCache.h"
   "Bindless/Types.h"
+  "Constants.h"
   "Detail/FormatUtils.h"
   "EngineModule.h"
   "EngineTag.h"

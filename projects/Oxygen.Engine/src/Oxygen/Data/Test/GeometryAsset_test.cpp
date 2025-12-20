@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include <Oxygen/Core/Constants.h>
 // GTest
 #include <Oxygen/Testing/GTest.h>
 
@@ -27,31 +28,31 @@ namespace {
 //! Helper utilities for creating simple geometry assets used by tests.
 class GeometryAssetTestHelpers {
 public:
-  static auto MakeSimpleMesh(std::string name, glm::vec3 offset)
+  static auto MakeSimpleMesh(std::string name, ::oxygen::Vec3 offset)
     -> std::shared_ptr<Mesh>
   {
     std::vector<Vertex> vertices = {
       {
-        .position = offset + glm::vec3(0, 0, 0),
-        .normal = { 0, 1, 0 },
-        .texcoord = { 0, 0 },
-        .tangent = { 1, 0, 0 },
+        .position = offset + ::oxygen::Vec3(0, 0, 0),
+        .normal = ::oxygen::Vec3(0, 1, 0),
+        .texcoord = ::oxygen::Vec2(0, 0),
+        .tangent = ::oxygen::Vec3(1, 0, 0),
         .bitangent = {},
         .color = {},
       },
       {
-        .position = offset + glm::vec3(1, 0, 0),
-        .normal = { 0, 1, 0 },
-        .texcoord = { 1, 0 },
-        .tangent = { 1, 0, 0 },
+        .position = offset + ::oxygen::Vec3(1, 0, 0),
+        .normal = ::oxygen::Vec3(0, 1, 0),
+        .texcoord = ::oxygen::Vec2(1, 0),
+        .tangent = ::oxygen::Vec3(1, 0, 0),
         .bitangent = {},
         .color = {},
       },
       {
-        .position = offset + glm::vec3(0, 1, 0),
-        .normal = { 0, 1, 0 },
-        .texcoord = { 0, 1 },
-        .tangent = { 1, 0, 0 },
+        .position = offset + ::oxygen::Vec3(0, 1, 0),
+        .normal = ::oxygen::Vec3(0, 1, 0),
+        .texcoord = ::oxygen::Vec2(0, 1),
+        .tangent = ::oxygen::Vec3(1, 0, 0),
         .bitangent = {},
         .color = {},
       },
@@ -75,8 +76,8 @@ public:
 
   static auto MakeGeometryAssetWithTwoLods() -> std::unique_ptr<GeometryAsset>
   {
-    auto mesh0 = MakeSimpleMesh("lod0", glm::vec3(0, 0, 0));
-    auto mesh1 = MakeSimpleMesh("lod1", glm::vec3(10, 0, 0));
+    auto mesh0 = MakeSimpleMesh("lod0", ::oxygen::Vec3(0, 0, 0));
+    auto mesh1 = MakeSimpleMesh("lod1", ::oxygen::Vec3(10, 0, 0));
 
     oxygen::data::pak::GeometryAssetDesc desc {};
     // Minimal header setup (name left default). Lod count implied by vector
@@ -139,8 +140,8 @@ NOLINT_TEST(GeometryAssetBasicTest, BoundingBoxMatchesDescriptor)
   auto max = asset->BoundingBoxMax();
 
   // Assert
-  EXPECT_EQ(min, glm::vec3(0.0f, 0.0f, 0.0f));
-  EXPECT_EQ(max, glm::vec3(11.0f, 1.0f, 0.0f));
+  EXPECT_EQ(min, ::oxygen::Vec3(0.0f, 0.0f, 0.0f));
+  EXPECT_EQ(max, ::oxygen::Vec3(11.0f, 1.0f, 0.0f));
 }
 
 } // namespace

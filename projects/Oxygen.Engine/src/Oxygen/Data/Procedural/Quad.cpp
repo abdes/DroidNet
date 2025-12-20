@@ -48,15 +48,19 @@ auto oxygen::data::MakeQuadMeshAsset(const float width, const float height)
   float half_h = height * 0.5f;
   std::vector<Vertex> vertices = {
     // clang-format off
-    { { -half_w, 0.0f, -half_h }, { 0, 1, 0 }, { 0, 1 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 1, 1, 1 } },
-    { {  half_w, 0.0f, -half_h }, { 0, 1, 0 }, { 1, 1 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 1, 1, 1 } },
-    { {  half_w, 0.0f,  half_h }, { 0, 1, 0 }, { 1, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 1, 1, 1 } },
-    { { -half_w, 0.0f,  half_h }, { 0, 1, 0 }, { 0, 0 }, { 1, 0, 0 }, { 0, 0, 1 }, { 1, 1, 1, 1 } },
+    { { -half_w, -half_h, 0.0f }, { 0, 0, 1 }, { 0, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } },
+    { {  half_w, -half_h, 0.0f }, { 0, 0, 1 }, { 1, 1 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } },
+    { {  half_w,  half_h, 0.0f }, { 0, 0, 1 }, { 1, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } },
+    { { -half_w,  half_h, 0.0f }, { 0, 0, 1 }, { 0, 0 }, { 1, 0, 0 }, { 0, 1, 0 }, { 1, 1, 1, 1 } },
     // clang-format on
   };
   std::vector<uint32_t> indices = {
-    0, 1, 2, // triangle 1
-    2, 3, 0, // triangle 2
+    0,
+    1,
+    2, // triangle 1
+    0,
+    2,
+    3, // triangle 2
   };
 
   return { { std::move(vertices), std::move(indices) } };

@@ -315,12 +315,11 @@ void EditorView::CreateCamera(scene::Scene &scene) {
   // Create camera node in the scene
   camera_node_ = scene.CreateNode(config_.name + "_Camera");
 
-  auto camera = std::make_unique<scene::PerspectiveCamera>(
-      scene::camera::ProjectionConvention::kD3D12);
+  auto camera = std::make_unique<scene::PerspectiveCamera>();
   camera_node_.AttachCamera(std::move(camera));
 
   // Set initial position (orientation setup happens in OnPreRender)
-  camera_node_.GetTransform().SetLocalPosition(glm::vec3(0.0f, 0.0f, -10.0f));
+  camera_node_.GetTransform().SetLocalPosition(glm::vec3(10.0F, -10.0F, +7.0F));
 
   LOG_F(INFO, "EditorView '{}' created camera node", config_.name);
 }

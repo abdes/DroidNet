@@ -12,6 +12,7 @@
 #include <glm/gtx/matrix_decompose.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::scene {
@@ -28,19 +29,17 @@ namespace oxygen::scene {
  @see GetFieldOfView, GetAspectRatio, GetNearPlane, GetFarPlane
  @see https://en.wikipedia.org/wiki/3D_projection
 */
-auto PerspectiveCamera::ProjectionMatrix() const -> glm::mat4
+auto PerspectiveCamera::ProjectionMatrix() const -> Mat4
 {
-  glm::mat4 proj = glm::perspectiveRH_ZO(fov_y_, aspect_, near_, far_);
-  if (convention_ == camera::ProjectionConvention::kVulkan) {
-    // Flip Y axis for Vulkan (multiply [1][1] by -1)
-    proj[1][1] *= -1.0f;
-  }
+  // Engine canonical projection: right-handed, z in [0,1], no Y-flip.
+  const auto proj = glm::perspectiveRH_ZO(fov_y_, aspect_, near_, far_);
   return proj;
 }
 
 inline auto PerspectiveCamera::UpdateDependencies(
   const std::function<Component&(TypeId)>& get_component) noexcept -> void
 {
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   transform_ = &static_cast<detail::TransformComponent&>(
     get_component(detail::TransformComponent::ClassTypeId()));
 }
@@ -55,23 +54,23 @@ inline auto PerspectiveCamera::UpdateDependencies(
 
  @see WorldToScreen
 */
-auto PerspectiveCamera::ScreenToWorld(
-  const glm::vec2& p, const glm::vec4& viewport) const -> glm::vec2
+auto PerspectiveCamera::ScreenToWorld(const Vec2& p,
+  const Vec4& viewport) const -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
   // Convert screen coordinates to normalized device coordinates (NDC)
-  const float x = (2.0f * (p.x - viewport.x) / viewport.z) - 1.0f;
-  const float y = 1.0f - (2.0f * (p.y - viewport.y) / viewport.w);
-  const glm::vec4 ndc(x, y, 1.0f, 1.0f);
+  const float x = (2.0F * (p.x - viewport.x) / viewport.z) - 1.0F;
+  const float y = 1.0F - (2.0F * (p.y - viewport.y) / viewport.w);
+  const glm::vec4 ndc(x, y, 1.0F, 1.0F);
   // Compute inverse view-projection matrix
   const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
-  const glm::mat4 proj = ProjectionMatrix();
+  const Mat4 proj = ProjectionMatrix();
   const glm::mat4 inv_vp = glm::inverse(proj * view);
   glm::vec4 world = inv_vp * ndc;
-  if (world.w != 0.0f) {
+  if (world.w != 0.0F) {
     world /= world.w;
   }
-  return { world };
+  return { world.x, world.y };
 }
 
 /*!
@@ -84,19 +83,19 @@ auto PerspectiveCamera::ScreenToWorld(
 
  @see ScreenToWorld
 */
-auto PerspectiveCamera::WorldToScreen(
-  const glm::vec2& p, const glm::vec4& viewport) const -> glm::vec2
+auto PerspectiveCamera::WorldToScreen(const Vec2& p,
+  const Vec4& viewport) const -> Vec2
 {
   DCHECK_NOTNULL_F(transform_);
-  const glm::vec4 world(p, 0.0f, 1.0f);
+  const glm::vec4 world(p.x, p.y, 0.0F, 1.0F);
   const glm::mat4 view = glm::inverse(transform_->GetWorldMatrix());
-  const glm::mat4 proj = ProjectionMatrix();
+  const Mat4 proj = ProjectionMatrix();
   glm::vec4 clip = proj * view * world;
-  if (clip.w != 0.0f) {
+  if (clip.w != 0.0F) {
     clip /= clip.w;
   }
-  const float x = ((clip.x + 1.0f) * 0.5f) * viewport.z + viewport.x;
-  const float y = ((1.0f - clip.y) * 0.5f) * viewport.w + viewport.y;
+  const float x = (((clip.x + 1.0F) * 0.5F) * viewport.z) + viewport.x;
+  const float y = (((1.0F - clip.y) * 0.5F) * viewport.w) + viewport.y;
   return { x, y };
 }
 
@@ -122,10 +121,10 @@ auto PerspectiveCamera::ActiveViewport() const -> ViewPort
  @see https://en.wikipedia.org/wiki/3D_projection
  @see GetFieldOfView, GetAspectRatio, GetNearPlane
 */
-auto PerspectiveCamera::ClippingRectangle() const -> glm::vec4
+auto PerspectiveCamera::ClippingRectangle() const -> Vec4
 {
   // Return the horizontal/vertical FOV extents at the near plane in view space
-  const float tan_half_fov = std::tan(fov_y_ * 0.5f);
+  const float tan_half_fov = std::tan(fov_y_ * 0.5F);
   const float nh = near_ * tan_half_fov;
   const float nw = nh * aspect_;
   // (left, bottom, right, top) at near plane

@@ -6,6 +6,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -108,7 +109,7 @@ protected:
   }
 
 private:
-  std::optional<std::string> result_ {};
+  std::optional<std::string> result_;
   const Transform* transform_;
 };
 
@@ -123,6 +124,7 @@ public:
 
   auto operator()(SafeCallState& state) -> std::optional<std::string>
   {
+    // NOLINTNEXTLINE(*-pro-type-const-cast)
     state.node = const_cast<SceneNode*>(&GetNode());
     if (CheckNodeIsValid() && PopulateStateWithNodeImpl(state)) [[likely]] {
       return std::nullopt; // Success
@@ -425,7 +427,8 @@ auto SceneNode::Transform::GetWorldScale() const noexcept -> std::optional<Vec3>
  is deferred and handled by the Scene.
 
  @param target_position World-space position to look at.
- @param up_direction World-space up direction (default: Y-up).
+ @param up_direction World-space up direction (default:
+ ::oxygen::space::look::Up).
  @return True if the operation succeeded, false if the node is no longer valid.
  @note This computes rotation based on current cached world position. For
  accurate results, ensure scene transforms are up to date.
@@ -446,10 +449,12 @@ auto SceneNode::Transform::LookAt(
     const auto up = glm::cross(right, forward);
 
     // Create rotation matrix (note: -forward because we use -Z as forward)
+    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
     Mat4 look_matrix(1.0F);
     look_matrix[0] = glm::vec4(right, 0);
     look_matrix[1] = glm::vec4(up, 0);
     look_matrix[2] = glm::vec4(-forward, 0);
+    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 
     // Convert to quaternion and set as local rotation
     const auto look_rotation = glm::quat_cast(look_matrix);

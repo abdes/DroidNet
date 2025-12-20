@@ -24,7 +24,7 @@ auto SceneNode::Renderable::LogSafeCallError(const char* reason) const noexcept
 {
   try {
     // Suppress noisy logs for common soft-failure scenarios
-    if (reason
+    if ((reason != nullptr)
       && std::string_view(reason)
         == std::string_view("RenderableComponent missing")) {
       return;
@@ -98,7 +98,7 @@ protected:
   }
 
 private:
-  std::optional<std::string> result_ {};
+  std::optional<std::string> result_;
   const Renderable* r_;
 };
 
@@ -114,6 +114,7 @@ public:
 
   auto operator()(SafeCallState& state) -> std::optional<std::string>
   {
+    // NOLINTNEXTLINE(*-pro-type-const-cast)
     state.node = const_cast<SceneNode*>(&GetNode());
     if (!CheckNodeIsValid()) {
       return GetResult();
@@ -151,12 +152,13 @@ public:
 
   auto operator()(SafeCallState& state) -> std::optional<std::string>
   {
+    // NOLINTNEXTLINE(*-pro-type-const-cast)
     state.node = const_cast<SceneNode*>(&GetNode());
     if (CheckNodeIsValid() && PopulateStateWithRenderable(state)) [[likely]] {
       return std::nullopt;
     }
     // Ensure we report missing component as error to force failure
-    if (!state.renderable && state.node_impl) {
+    if ((state.renderable == nullptr) && (state.node_impl != nullptr)) {
       return std::optional<std::string> { "RenderableComponent missing" };
     }
     return GetResult();
@@ -186,7 +188,7 @@ auto SceneNode::Renderable::SetGeometry(GeometryAssetPtr geometry) -> void
     return;
   }
   // Needs node in scene; will attach component if missing.
-  SafeCall(NodeInScene(), [&](SafeCallState& state) noexcept {
+  SafeCall(NodeInScene(), [&](SafeCallState& state) noexcept -> void {
     DCHECK_EQ_F(state.node, node_);
     DCHECK_NOTNULL_F(state.node_impl);
     if (!state.renderable) {
@@ -206,179 +208,207 @@ auto SceneNode::Renderable::GetGeometry() const noexcept
   -> std::shared_ptr<const data::GeometryAsset>
 {
   // If component is missing, return empty; do not treat as error.
-  return SafeCall(NodeInScene(), [&](SafeCallState& state) noexcept {
-    return state.renderable ? state.renderable->GetGeometry()
-                            : GeometryAssetPtr {};
-  });
+  return SafeCall(NodeInScene(),
+    [&](const SafeCallState& state) noexcept
+      -> std::shared_ptr<const data::GeometryAsset> {
+      return state.renderable ? state.renderable->GetGeometry()
+                              : GeometryAssetPtr {};
+    });
 }
 
 auto SceneNode::Renderable::Detach() noexcept -> bool
 {
-  return SafeCall(NodeInScene(), [&](SafeCallState& state) noexcept {
-    DCHECK_EQ_F(state.node, node_);
-    DCHECK_NOTNULL_F(state.node_impl);
-    if (!state.renderable) {
-      return false;
-    }
-    state.node_impl->RemoveComponent<detail::RenderableComponent>();
-    return true;
-  });
+  return SafeCall(
+    NodeInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      DCHECK_EQ_F(state.node, node_);
+      DCHECK_NOTNULL_F(state.node_impl);
+      if (!state.renderable) {
+        return false;
+      }
+      state.node_impl->RemoveComponent<detail::RenderableComponent>();
+      return true;
+    });
 }
 
 auto SceneNode::Renderable::HasGeometry() const noexcept -> bool
 {
-  return SafeCall(NodeInScene(),
-    [&](SafeCallState& state) noexcept { return state.renderable != nullptr; });
+  return SafeCall(
+    NodeInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable != nullptr;
+    });
 }
 
 auto SceneNode::Renderable::UsesFixedPolicy() const noexcept -> bool
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->UsesFixedPolicy();
-  });
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->UsesFixedPolicy();
+    });
 }
 
 auto SceneNode::Renderable::UsesDistancePolicy() const noexcept -> bool
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->UsesDistancePolicy();
-  });
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->UsesDistancePolicy();
+    });
 }
 
 auto SceneNode::Renderable::UsesScreenSpaceErrorPolicy() const noexcept -> bool
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->UsesScreenSpaceErrorPolicy();
-  });
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->UsesScreenSpaceErrorPolicy();
+    });
 }
 
-auto SceneNode::Renderable::SetLodPolicy(FixedPolicy p) -> void
+auto SceneNode::Renderable::SetLodPolicy(const FixedPolicy p) -> void
 {
-  SafeCall(RequiresRenderable(),
-    [&](SafeCallState& state) noexcept { state.renderable->SetLodPolicy(p); });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetLodPolicy(p);
+    });
 }
 
 auto SceneNode::Renderable::SetLodPolicy(DistancePolicy p) -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SetLodPolicy(std::move(p));
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetLodPolicy(std::move(p));
+    });
 }
 
 auto SceneNode::Renderable::SetLodPolicy(ScreenSpaceErrorPolicy p) -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SetLodPolicy(std::move(p));
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetLodPolicy(std::move(p));
+    });
 }
 
 auto SceneNode::Renderable::SelectActiveMesh(
-  NormalizedDistance d) const noexcept -> void
+  const NormalizedDistance d) const noexcept -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SelectActiveMesh(d);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SelectActiveMesh(d);
+    });
 }
 
-auto SceneNode::Renderable::SelectActiveMesh(ScreenSpaceError e) const noexcept
-  -> void
+auto SceneNode::Renderable::SelectActiveMesh(
+  const ScreenSpaceError e) const noexcept -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SelectActiveMesh(e);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SelectActiveMesh(e);
+    });
 }
 
 auto SceneNode::Renderable::GetActiveMesh() const noexcept
   -> std::optional<ActiveMesh>
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->GetActiveMesh();
-  });
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept -> std::optional<ActiveMesh> {
+      return state.renderable->GetActiveMesh();
+    });
 }
 
 auto SceneNode::Renderable::GetActiveLodIndex() const noexcept
   -> std::optional<std::size_t>
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->GetActiveLodIndex();
-  });
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept -> std::optional<std::size_t> {
+      return state.renderable->GetActiveLodIndex();
+    });
 }
 
 auto SceneNode::Renderable::EffectiveLodCount() const noexcept -> std::size_t
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->EffectiveLodCount();
-  });
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept -> std::size_t {
+      return state.renderable->EffectiveLodCount();
+    });
 }
 
-auto SceneNode::Renderable::GetWorldBoundingSphere() const noexcept -> glm::vec4
+auto SceneNode::Renderable::GetWorldBoundingSphere() const noexcept -> Vec4
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->GetWorldBoundingSphere();
-  });
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> Vec4 {
+      return state.renderable->GetWorldBoundingSphere();
+    });
 }
 
 auto SceneNode::Renderable::OnWorldTransformUpdated(const Mat4& world) -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->OnWorldTransformUpdated(world);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->OnWorldTransformUpdated(world);
+    });
 }
 
 auto SceneNode::Renderable::GetWorldSubMeshBoundingBox(
-  std::size_t submesh_index) const noexcept
+  const std::size_t submesh_index) const noexcept
   -> std::optional<std::pair<Vec3, Vec3>>
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->GetWorldSubMeshBoundingBox(submesh_index);
-  });
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept
+      -> std::optional<std::pair<Vec3, Vec3>> {
+      return state.renderable->GetWorldSubMeshBoundingBox(submesh_index);
+    });
 }
 
 auto SceneNode::Renderable::IsSubmeshVisible(
-  std::size_t lod, std::size_t submesh_index) const noexcept -> bool
+  const std::size_t lod, const std::size_t submesh_index) const noexcept -> bool
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->IsSubmeshVisible(lod, submesh_index);
-  });
+  return SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
+      return state.renderable->IsSubmeshVisible(lod, submesh_index);
+    });
 }
 
-auto SceneNode::Renderable::SetSubmeshVisible(
-  std::size_t lod, std::size_t submesh_index, bool visible) noexcept -> void
+auto SceneNode::Renderable::SetSubmeshVisible(const std::size_t lod,
+  const std::size_t submesh_index, const bool visible) noexcept -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SetSubmeshVisible(lod, submesh_index, visible);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetSubmeshVisible(lod, submesh_index, visible);
+    });
 }
 
-auto SceneNode::Renderable::SetAllSubmeshesVisible(bool visible) noexcept
+auto SceneNode::Renderable::SetAllSubmeshesVisible(const bool visible) noexcept
   -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SetAllSubmeshesVisible(visible);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetAllSubmeshesVisible(visible);
+    });
 }
 
-auto SceneNode::Renderable::SetMaterialOverride(std::size_t lod,
-  std::size_t submesh_index, MaterialAssetPtr material) noexcept -> void
+auto SceneNode::Renderable::SetMaterialOverride(const std::size_t lod,
+  const std::size_t submesh_index, MaterialAssetPtr material) noexcept -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->SetMaterialOverride(
-      lod, submesh_index, std::move(material));
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->SetMaterialOverride(
+        lod, submesh_index, std::move(material));
+    });
 }
 
 auto SceneNode::Renderable::ClearMaterialOverride(
-  std::size_t lod, std::size_t submesh_index) noexcept -> void
+  const std::size_t lod, const std::size_t submesh_index) noexcept -> void
 {
-  SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    state.renderable->ClearMaterialOverride(lod, submesh_index);
-  });
+  SafeCall(
+    RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
+      state.renderable->ClearMaterialOverride(lod, submesh_index);
+    });
 }
 
-auto SceneNode::Renderable::ResolveSubmeshMaterial(
-  std::size_t lod, std::size_t submesh_index) const noexcept -> MaterialAssetPtr
+auto SceneNode::Renderable::ResolveSubmeshMaterial(const std::size_t lod,
+  const std::size_t submesh_index) const noexcept -> MaterialAssetPtr
 {
-  return SafeCall(RequiresRenderable(), [&](SafeCallState& state) noexcept {
-    return state.renderable->ResolveSubmeshMaterial(lod, submesh_index);
-  });
+  return SafeCall(RequiresRenderable(),
+    [&](const SafeCallState& state) noexcept
+      -> std::shared_ptr<const data::MaterialAsset> {
+      return state.renderable->ResolveSubmeshMaterial(lod, submesh_index);
+    });
 }

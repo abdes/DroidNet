@@ -70,7 +70,7 @@ set(
   "SceneTraversalBase.h"
   "Camera/Orthographic.h"
   "Camera/Perspective.h"
-  "Camera/ProjectionConvention.h"
+
   "Detail/GraphData.h"
   "Detail/NodeData.h"
   "Detail/PathMatcher.h"

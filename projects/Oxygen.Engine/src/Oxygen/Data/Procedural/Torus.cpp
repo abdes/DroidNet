@@ -54,37 +54,33 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
   constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
+
   for (unsigned int i = 0; i <= major_segments; ++i) {
     float major_theta
       = 2.0f * pi * static_cast<float>(i) / static_cast<float>(major_segments);
     float cos_major = std::cos(major_theta);
     float sin_major = std::sin(major_theta);
     glm::vec3 major_center
-      = { major_radius * cos_major, 0.0f, major_radius * sin_major };
+      = { major_radius * cos_major, major_radius * sin_major, 0.0f };
+
     for (unsigned int j = 0; j <= minor_segments; ++j) {
       float minor_theta = 2.0f * pi * static_cast<float>(j)
         / static_cast<float>(minor_segments);
       float cos_minor = std::cos(minor_theta);
       float sin_minor = std::sin(minor_theta);
-      glm::vec3 pos
-        = glm::vec3 { cos_major * (major_radius + minor_radius * cos_minor),
-            minor_radius * sin_minor,
-            sin_major * (major_radius + minor_radius * cos_minor) };
+
+      glm::vec3 pos = { cos_major * (major_radius + minor_radius * cos_minor),
+        sin_major * (major_radius + minor_radius * cos_minor),
+        minor_radius * sin_minor };
       glm::vec3 normal = glm::normalize(pos - major_center);
       glm::vec2 texcoord
         = { static_cast<float>(i) / static_cast<float>(major_segments),
             static_cast<float>(j) / static_cast<float>(minor_segments) };
-      // Tangent = dP/du (derivative w.r.t. major angle u)
-      glm::vec3 tangent
-        = glm::vec3 { -sin_major * (major_radius + minor_radius * cos_minor),
-            0.0f, cos_major * (major_radius + minor_radius * cos_minor) };
-      // Bitangent = dP/dv (derivative w.r.t. minor angle v)
-      glm::vec3 bitangent = glm::vec3 { -cos_major * minor_radius * sin_minor,
-        minor_radius * cos_minor, -sin_major * minor_radius * sin_minor };
-      // Orthonormalize tangent against normal (Gram-Schmidt) and normalize
-      tangent = glm::normalize(tangent - normal * glm::dot(normal, tangent));
-      // Recompute bitangent to ensure orthogonality and consistent handedness
-      bitangent = glm::normalize(glm::cross(normal, tangent));
+
+      glm::vec3 tangent = { -sin_major, cos_major, 0.0f };
+      glm::vec3 bitangent = glm::normalize(glm::cross(normal, tangent));
+      tangent = glm::normalize(glm::cross(bitangent, normal));
+
       vertices.push_back(Vertex {
         .position = pos,
         .normal = normal,
@@ -95,19 +91,21 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
       });
     }
   }
+
   for (unsigned int i = 0; i < major_segments; ++i) {
     for (unsigned int j = 0; j < minor_segments; ++j) {
       uint32_t i0 = i * (minor_segments + 1) + j;
-      uint32_t i1 = ((i + 1) % (major_segments + 1)) * (minor_segments + 1) + j;
+      uint32_t i1 = (i + 1) * (minor_segments + 1) + j;
       uint32_t i2 = i0 + 1;
       uint32_t i3 = i1 + 1;
-      // Ensure triangle winding matches the vertex normal direction
+
+      // CCW: (curr_maj, next_maj, curr_maj_next_min)
       indices.push_back(i0);
-      indices.push_back(i2);
       indices.push_back(i1);
       indices.push_back(i2);
+      indices.push_back(i2);
+      indices.push_back(i1);
       indices.push_back(i3);
-      indices.push_back(i1);
     }
   }
 

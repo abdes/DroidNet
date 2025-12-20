@@ -52,16 +52,19 @@ auto oxygen::data::MakeConeMeshAsset(
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
   float half_height = height * 0.5f;
-  glm::vec3 apex = { 0.0f, half_height, 0.0f };
+  glm::vec3 apex_pos = { 0.0f, 0.0f, half_height };
+
   // Side vertices (base ring)
   for (unsigned int i = 0; i <= segments; ++i) {
-    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
-    float z = std::sin(theta);
+    float y = std::sin(theta);
     float u = static_cast<float>(i) / static_cast<float>(segments);
-    glm::vec3 pos = { x * radius, -half_height, z * radius };
-    glm::vec3 dir = glm::normalize(glm::vec3(x, radius / height, z));
-    glm::vec3 tangent = { -z, 0.0f, x };
+    glm::vec3 pos = { x * radius, y * radius, -half_height };
+    // Normal points out and up
+    glm::vec3 dir = glm::normalize(glm::vec3(x, y, radius / height));
+    glm::vec3 tangent = { -y, x, 0.0f };
     glm::vec3 bitangent = glm::cross(dir, tangent);
     vertices.push_back(Vertex {
       .position = pos,
@@ -73,63 +76,60 @@ auto oxygen::data::MakeConeMeshAsset(
     });
   }
 
-  // --- Fix: Duplicate rim vertices for base cap with correct normals ---
-  // This ensures base cap triangles use only vertices with downward normals,
-  // so shading is correct and not interpolated with side normals.
+  // Apex vertex
+  vertices.push_back(Vertex {
+    .position = apex_pos,
+    .normal = { 0.0f, 0.0f, 1.0f },
+    .texcoord = { 0.5f, 0.0f },
+    .tangent = { 1, 0, 0 },
+    .bitangent = { 0, 1, 0 },
+    .color = { 1, 1, 1, 1 },
+  });
+  uint32_t apex_index = static_cast<uint32_t>(vertices.size() - 1);
+
+  // Side indices: CCW is (current, next, apex)
+  for (unsigned int i = 0; i < segments; ++i) {
+    indices.push_back(i);
+    indices.push_back(i + 1);
+    indices.push_back(apex_index);
+  }
+
+  // Base cap rim vertices
   std::vector<uint32_t> base_cap_rim_indices;
   for (unsigned int i = 0; i < segments; ++i) {
-    float theta = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+    float theta
+      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
-    float z = std::sin(theta);
+    float y = std::sin(theta);
     float u = (x + 1.0f) * 0.5f;
-    float v = (z + 1.0f) * 0.5f;
+    float v = (y + 1.0f) * 0.5f;
     vertices.push_back(Vertex {
-      .position = { x * radius, -half_height, z * radius },
-      .normal = { 0, -1, 0 }, // Downward normal for base cap
+      .position = { x * radius, y * radius, -half_height },
+      .normal = { 0, 0, -1 },
       .texcoord = { u, v },
       .tangent = { 1, 0, 0 },
-      .bitangent = { 0, 0, 1 },
+      .bitangent = { 0, 1, 0 },
       .color = { 1, 1, 1, 1 },
     });
     base_cap_rim_indices.push_back(static_cast<uint32_t>(vertices.size() - 1));
   }
-  // Apex vertex
-  vertices.push_back(Vertex {
-    .position = apex,
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.0f },
-    .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 0, 1 },
-    .color = { 1, 1, 1, 1 },
-  });
-  uint32_t apex_index = static_cast<uint32_t>(vertices.size() - 1);
-  // Side indices
-  // Ensure side triangles are wound CCW when viewed from outside so
-  // the computed normals point outward. Use (base_current, apex, base_next).
-  for (unsigned int i = 0; i < segments; ++i) {
-    indices.push_back(i);
-    indices.push_back(apex_index);
-    indices.push_back(i + 1);
-  }
+
   // Center vertex for base cap
   vertices.push_back(Vertex {
-    .position = { 0, -half_height, 0 },
-    .normal = { 0, -1, 0 },
+    .position = { 0, 0, -half_height },
+    .normal = { 0, 0, -1 },
     .texcoord = { 0.5f, 0.5f },
     .tangent = { 1, 0, 0 },
-    .bitangent = { 0, 0, 1 },
+    .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
   });
   uint32_t base_center = static_cast<uint32_t>(vertices.size() - 1);
 
-  // --- Fix: Use duplicated rim vertices for base cap ---
-  // This ensures all base cap triangles use only vertices with correct downward normals.
+  // Base cap indices: CCW is (center, next, current)
   for (unsigned int i = 0; i < segments; ++i) {
-    uint32_t v0 = base_cap_rim_indices[i];
-    uint32_t v1 = base_cap_rim_indices[(i + 1) % segments];
-    indices.push_back(v0);
-    indices.push_back(v1);
     indices.push_back(base_center);
+    indices.push_back(base_cap_rim_indices[(i + 1) % segments]);
+    indices.push_back(base_cap_rim_indices[i]);
   }
 
   return { { std::move(vertices), std::move(indices) } };
