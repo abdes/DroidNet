@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
 /// Adapter that wraps a <see cref="SceneNode" /> payload for the Scene Explorer.

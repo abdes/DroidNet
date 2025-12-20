@@ -5,9 +5,9 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using DroidNet.Routing;
-using Oxygen.Editor.WorldEditor.Routing;
+using Oxygen.Editor.World.Routing;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// Represents the router context for a local child router.

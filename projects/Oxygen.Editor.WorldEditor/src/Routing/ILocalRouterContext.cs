@@ -4,7 +4,7 @@
 
 using DroidNet.Routing;
 
-namespace Oxygen.Editor.WorldEditor.Routing;
+namespace Oxygen.Editor.World.Routing;
 
 /// <summary>
 /// Represents the local router context within the World Editor.

@@ -4,9 +4,8 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 /// <summary>
 ///     Logging helpers for <see cref="SceneMutator"/>.

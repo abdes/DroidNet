@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// The ViewModel for the tiles layout view.

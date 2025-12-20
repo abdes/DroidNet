@@ -100,13 +100,13 @@ The editor is built with a **modular architecture** featuring:
 3. **Build the WorldEditor project**:
 
    ```powershell
-   dotnet build projects/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj
+   dotnet build projects/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj
    ```
 
 4. **Run the editor**:
 
    ```powershell
-   dotnet run --project projects/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj
+   dotnet run --project projects/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj
    ```
 
 ### Development Commands
@@ -120,7 +120,7 @@ The editor is built with a **modular architecture** featuring:
 - **Run tests**:
 
   ```powershell
-  dotnet test projects/Oxygen.Editor.WorldEditor/tests/
+  dotnet test projects/Oxygen.Editor.World/tests/
   ```
 
 - **Generate solution file**:
@@ -133,9 +133,9 @@ The editor is built with a **modular architecture** featuring:
 ## Project Structure
 
 ```text
-projects/Oxygen.Editor.WorldEditor/src/
+projects/Oxygen.Editor.World/src/
 ├── Constants.cs                           # Application constants
-├── Oxygen.Editor.WorldEditor.csproj       # Project file
+├── Oxygen.Editor.World.csproj       # Project file
 ├── README.md                              # This file
 │
 ├── ContentBrowser/                        # Asset management and navigation

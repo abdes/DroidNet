@@ -7,9 +7,9 @@ using System.Security.Cryptography;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
-using SceneNodeAdapter = Oxygen.Editor.WorldEditor.SceneExplorer.SceneNodeAdapter;
+using SceneNodeAdapter = Oxygen.Editor.World.SceneExplorer.SceneNodeAdapter;
 
-namespace Oxygen.Editor.WorldEditor.Utils;
+namespace Oxygen.Editor.World.Utils;
 
 /// <summary>
 ///     Provides methods for generating thumbnails for entities in the project explorer.

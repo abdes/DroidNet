@@ -10,15 +10,15 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.Editors.Scene;
+using Oxygen.Editor.World.SceneEditor;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
-/// The ViewModel for the <see cref="Oxygen.Editor.WorldEditor.Editors.DocumentHostView"/> view.
+/// The ViewModel for the <see cref="Oxygen.Editor.World.Documents.DocumentHostView"/> view.
 /// Orchestrates the interaction between the <see cref="IDocumentService"/> and the editor content.
 /// </summary>
 public partial class DocumentHostViewModel : ObservableObject, IDisposable // TODO: refactor to use IAsyncDisposable

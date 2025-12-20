@@ -7,7 +7,7 @@ using System.Collections.Specialized;
 using DroidNet.Controls;
 using Oxygen.Editor.Core;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
 /// Base class for all items in the Scene Explorer layout.

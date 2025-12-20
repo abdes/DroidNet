@@ -6,9 +6,9 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
+using Oxygen.Editor.World.ContentBrowser;
 
-namespace Oxygen.Editor.WorldEditor.Routing;
+namespace Oxygen.Editor.World.Routing;
 
 /// <summary>
 /// The implementation of <see cref="IContextProvider{NavigationContext}"/> for the a local child router.

@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 /// Converts a <see cref="Oxygen.Editor.World.Components.GameComponent"/> instance (or its type)

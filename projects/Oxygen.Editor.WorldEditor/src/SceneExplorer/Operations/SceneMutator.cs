@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 /// <summary>
 /// Default implementation of <see cref="ISceneMutator"/> that enforces

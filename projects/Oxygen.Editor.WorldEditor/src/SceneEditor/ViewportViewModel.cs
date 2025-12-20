@@ -15,9 +15,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Interop;
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
 /// ViewModel for the Viewport control, managing camera, shading, and menus.
@@ -48,7 +49,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     public ViewportViewModel(Guid documentId, IEngineService engineService, ISettingsService<IAppearanceSettings> appearanceSettings, ILoggerFactory? loggerFactory = null)
     {
         this.LoggerFactory = loggerFactory;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.WorldEditor.Controls.ViewportViewModel");
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.LevelEditor.ViewportViewModel");
 
         this.DocumentId = documentId;
         this.EngineService = engineService;

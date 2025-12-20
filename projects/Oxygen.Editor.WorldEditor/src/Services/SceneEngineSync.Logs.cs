@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.WorldEditor.Services;
+namespace Oxygen.Editor.World.Services;
 
 /// <summary>
 ///     Logging helpers for <see cref="SceneEngineSync"/>.

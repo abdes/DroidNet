@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
-using DroidNet.TimeMachine;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 ///     Represents the view for editing a scene node in the properties editor.

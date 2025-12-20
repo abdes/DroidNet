@@ -10,7 +10,7 @@ using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Storage;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// Provides services for indexing game assets in the project.

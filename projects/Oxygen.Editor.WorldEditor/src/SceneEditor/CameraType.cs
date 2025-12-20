@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Defines the type of camera projection or orientation.

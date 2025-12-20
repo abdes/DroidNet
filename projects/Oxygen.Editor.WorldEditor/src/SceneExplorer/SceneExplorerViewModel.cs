@@ -20,12 +20,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Messages;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Services;
-using Oxygen.Editor.WorldEditor.Services;
+using Oxygen.Editor.World.Messages;
+using Oxygen.Editor.World.SceneExplorer.Services;
+using Oxygen.Editor.World.Services;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
 ///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.

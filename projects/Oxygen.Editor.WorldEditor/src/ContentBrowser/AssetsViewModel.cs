@@ -11,10 +11,9 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.World.Messages;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 ///     The ViewModel for the <see cref="AssetsView" /> view.

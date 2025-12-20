@@ -6,18 +6,18 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
-using Oxygen.Editor.WorldEditor.Editors;
-using Oxygen.Editor.WorldEditor.Editors.Scene;
-using Oxygen.Editor.WorldEditor.Output;
-using Oxygen.Editor.WorldEditor.Inspector;
-using Oxygen.Editor.WorldEditor.Routing;
-using Oxygen.Editor.WorldEditor.SceneExplorer;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Services;
-using Oxygen.Editor.WorldEditor.Services;
+using Oxygen.Editor.World.ContentBrowser;
+using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Output;
+using Oxygen.Editor.World.Routing;
+using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.SceneExplorer.Services;
+using Oxygen.Editor.World.Services;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 ///     The ViewModel of the world editor docking workspace.

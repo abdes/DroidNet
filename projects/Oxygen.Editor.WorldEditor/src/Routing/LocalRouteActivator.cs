@@ -8,7 +8,7 @@ using DroidNet.Routing.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
-namespace Oxygen.Editor.WorldEditor.Routing;
+namespace Oxygen.Editor.World.Routing;
 
 /// <summary>
 /// Implements the <see cref="IRouteActivator" /> interface for activating routes inside a local child router.

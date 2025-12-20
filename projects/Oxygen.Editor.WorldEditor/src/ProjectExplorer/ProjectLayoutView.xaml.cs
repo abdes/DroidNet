@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm.Generators;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
+using Oxygen.Editor.World.ContentBrowser;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.World.ProjectExplorer;
 
 /// <summary>
 ///     The View for the Project Layout pane in the <see cref="ContentBrowserView" />.

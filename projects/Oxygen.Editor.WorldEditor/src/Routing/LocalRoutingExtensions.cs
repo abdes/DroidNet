@@ -9,10 +9,10 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DryIoc;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
-using Oxygen.Editor.WorldEditor.Workspace;
+using Oxygen.Editor.World.ContentBrowser;
+using Oxygen.Editor.World.Workspace;
 
-namespace Oxygen.Editor.WorldEditor.Routing;
+namespace Oxygen.Editor.World.Routing;
 
 /// <summary>
 /// Provides extension methods for configuring local routing and MVVM support in a DryIoc container.

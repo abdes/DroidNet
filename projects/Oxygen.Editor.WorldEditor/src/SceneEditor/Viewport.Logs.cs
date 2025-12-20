@@ -6,7 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Interop;
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.LevelEditor;
 
 #pragma warning disable SA1204 // Static elements should appear before instance elements
 

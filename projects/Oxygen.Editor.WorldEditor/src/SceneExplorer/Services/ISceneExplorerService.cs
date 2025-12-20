@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Controls;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Services;
+namespace Oxygen.Editor.World.SceneExplorer.Services;
 
 /// <summary>
 /// Defines the service for managing the Scene Explorer's business logic,

@@ -6,10 +6,9 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.World.Messages;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 /// ViewModel that provides editing support for the <see cref="GeometryComponent"/> of one or

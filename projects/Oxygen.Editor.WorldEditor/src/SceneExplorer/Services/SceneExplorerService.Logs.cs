@@ -5,9 +5,8 @@
 using System.Diagnostics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Services;
+namespace Oxygen.Editor.World.SceneExplorer.Services;
 
 /// <summary>
 ///     Logging helpers for <see cref="SceneExplorerService"/>.

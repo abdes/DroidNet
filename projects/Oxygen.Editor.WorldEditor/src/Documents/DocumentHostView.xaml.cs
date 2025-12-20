@@ -5,7 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
 ///     Represents the host view for document editors in the World Editor.

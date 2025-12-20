@@ -17,11 +17,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.WorldEditor.ProjectExplorer;
-using Oxygen.Editor.WorldEditor.Routing;
+using Oxygen.Editor.World.ProjectExplorer;
+using Oxygen.Editor.World.Routing;
 using IContainer = DryIoc.IContainer;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 ///     The ViewModel for the <see cref="ContentBrowserView" /> view.

@@ -4,9 +4,8 @@
 
 using System.ComponentModel;
 using Oxygen.Editor.Storage;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// Represents the state of the content browser, including selected folders and the project root path.

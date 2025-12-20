@@ -14,14 +14,14 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
 /// A control that displays a 3D viewport with overlay controls.
 /// </summary>
 public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xaml.cs is doing too much instead of the view model
 {
-    private const string LoggerCategoryName = "Oxygen.Editor.WorldEditor.Controls.Viewport";
+    private const string LoggerCategoryName = "Oxygen.Editor.LevelEditor.Viewport";
     private const uint MinimumPixelExtent = 2;
 
     private IViewportSurfaceLease? surfaceLease;

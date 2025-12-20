@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 /// <summary>
 /// Executes layout operations for the Scene Explorer (folders and ordering), including adapter reconciliation,

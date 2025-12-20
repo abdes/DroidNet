@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Slots;
 
-namespace Oxygen.Editor.WorldEditor.Services;
+namespace Oxygen.Editor.World.Services;
 
 /// <summary>
 ///     Service responsible for synchronizing scene data between the editor's managed model

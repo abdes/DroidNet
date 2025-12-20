@@ -4,7 +4,7 @@
 
 using DroidNet.Controls;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
 ///     Event arguments for a rename request raised by the scene explorer.

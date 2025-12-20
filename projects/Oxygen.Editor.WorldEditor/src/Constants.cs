@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor;
+namespace Oxygen.Editor.World;
 
 /// <summary>
 /// Constants for the debugger application.

@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.InteropServices;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.Messages;
+namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
 /// Snapshot of geometry selection for messaging and undo/redo purposes.

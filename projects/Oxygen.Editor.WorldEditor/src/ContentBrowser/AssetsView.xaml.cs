@@ -4,7 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// Represents the view for displaying assets in the World Editor.

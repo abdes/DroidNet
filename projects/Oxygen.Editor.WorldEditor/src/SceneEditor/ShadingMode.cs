@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Defines the shading mode for the viewport.

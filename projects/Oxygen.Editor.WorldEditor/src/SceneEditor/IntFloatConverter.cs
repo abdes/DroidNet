@@ -5,7 +5,7 @@
 using System.Globalization;
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Converter to allow binding an integer (ViewModel) to a float-valued NumberBox.NumberValue.

@@ -5,10 +5,10 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.LevelEditor;
 using Oxygen.Interop;
-using Oxygen.Editor.WorldEditor.Controls;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 public partial class SceneEditorViewModel
 {

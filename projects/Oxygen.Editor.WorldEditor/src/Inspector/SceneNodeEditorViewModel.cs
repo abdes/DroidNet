@@ -11,12 +11,11 @@ using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.WorldEditor.Messages;
-using Oxygen.Editor.WorldEditor.Services;
+using Oxygen.Editor.World.Messages;
+using Oxygen.Editor.World.Services;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 ///     ViewModel for editing properties of selected SceneNode entities in the World Editor.
