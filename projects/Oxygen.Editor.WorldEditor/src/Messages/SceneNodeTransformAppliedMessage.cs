@@ -4,9 +4,8 @@
 
 using System.Numerics;
 using System.Runtime.InteropServices;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.Messages;
+namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
 /// Snapshot of transform component values for messaging/undo purposes.

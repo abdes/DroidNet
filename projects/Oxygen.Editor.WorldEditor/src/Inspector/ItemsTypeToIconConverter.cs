@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 ///     Converts an item type to a corresponding <see cref="SymbolIcon"/> for display in the UI.

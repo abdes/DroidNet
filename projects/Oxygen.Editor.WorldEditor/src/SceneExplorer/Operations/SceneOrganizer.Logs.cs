@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 public partial class SceneOrganizer
 {

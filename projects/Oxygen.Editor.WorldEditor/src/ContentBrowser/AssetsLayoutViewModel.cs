@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// A base ViewModel for the assets view layout.

@@ -6,11 +6,11 @@ This document inventories and specifies all operations currently implemented in 
 
 Relevant sources
 
-- Service and orchestration: [SceneExplorerService.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200)
-- Layout/Organizer: [ISceneOrganizer.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/ISceneOrganizer.cs#L1-L120), [SceneOrganizer.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/SceneOrganizer.cs#L1-L200)
-- Mutations/Graph: [ISceneMutator.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/ISceneMutator.cs#L1-L120), [SceneMutator.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/SceneMutator.cs#L1-L200)
-- UI and VM entry points: [SceneExplorerViewModel.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneExplorerViewModel.cs#L1-L160), [SceneExplorerView.xaml](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneExplorerView.xaml#L1-L140)
-- Adapters and layout items: [SceneAdapter.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneAdapter.cs#L1-L200), [SceneNodeAdapter.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneNodeAdapter.cs#L1-L120), [FolderAdapter.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/FolderAdapter.cs#L1-L160), [LayoutItemAdapter.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/LayoutItemAdapter.cs#L1-L200)
+- Service and orchestration: [SceneExplorerService.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200)
+- Layout/Organizer: [ISceneOrganizer.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/ISceneOrganizer.cs#L1-L120), [SceneOrganizer.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/SceneOrganizer.cs#L1-L200)
+- Mutations/Graph: [ISceneMutator.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/ISceneMutator.cs#L1-L120), [SceneMutator.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/SceneMutator.cs#L1-L200)
+- UI and VM entry points: [SceneExplorerViewModel.cs](projects/Oxygen.Editor.World/src/SceneExplorer/SceneExplorerViewModel.cs#L1-L160), [SceneExplorerView.xaml](projects/Oxygen.Editor.World/src/SceneExplorer/SceneExplorerView.xaml#L1-L140)
+- Adapters and layout items: [SceneAdapter.cs](projects/Oxygen.Editor.World/src/SceneExplorer/SceneAdapter.cs#L1-L200), [SceneNodeAdapter.cs](projects/Oxygen.Editor.World/src/SceneExplorer/SceneNodeAdapter.cs#L1-L120), [FolderAdapter.cs](projects/Oxygen.Editor.World/src/SceneExplorer/FolderAdapter.cs#L1-L160), [LayoutItemAdapter.cs](projects/Oxygen.Editor.World/src/SceneExplorer/LayoutItemAdapter.cs#L1-L200)
 
 Goal
 
@@ -37,9 +37,9 @@ Detailed specifications
 
 Separation of responsibilities
 
-- SceneExplorerService orchestrates operations and is the single place where UI events map to organizer and mutator calls. See [SceneExplorerService.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200).
-- ISceneMutator is synchronous, modifies the scene model (graph), returns a change record for engine-sync callers to act upon. See [ISceneMutator.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/ISceneMutator.cs#L1-L120).
-- ISceneOrganizer manipulates the explorer layout only and exposes reconciliation features for adapters. See [ISceneOrganizer.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/ISceneOrganizer.cs#L1-L120).
+- SceneExplorerService orchestrates operations and is the single place where UI events map to organizer and mutator calls. See [SceneExplorerService.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200).
+- ISceneMutator is synchronous, modifies the scene model (graph), returns a change record for engine-sync callers to act upon. See [ISceneMutator.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/ISceneMutator.cs#L1-L120).
+- ISceneOrganizer manipulates the explorer layout only and exposes reconciliation features for adapters. See [ISceneOrganizer.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/ISceneOrganizer.cs#L1-L120).
 
 ## UI Interactions (entry/exit contracts)
 
@@ -490,10 +490,10 @@ Checklist before merging a new operation
 
 Appendix — Quick file pointers
 
-- Service orchestration: [SceneExplorerService.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200)
-- Organizer core: [SceneOrganizer.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/SceneOrganizer.cs#L1-L200)
-- Mutator core: [SceneMutator.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/Operations/SceneMutator.cs#L1-L200)
-- ViewModel wiring & undo: [SceneExplorerViewModel.cs](projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneExplorerViewModel.cs#L1-L120)
+- Service orchestration: [SceneExplorerService.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Services/SceneExplorerService.cs#L1-L200)
+- Organizer core: [SceneOrganizer.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/SceneOrganizer.cs#L1-L200)
+- Mutator core: [SceneMutator.cs](projects/Oxygen.Editor.World/src/SceneExplorer/Operations/SceneMutator.cs#L1-L200)
+- ViewModel wiring & undo: [SceneExplorerViewModel.cs](projects/Oxygen.Editor.World/src/SceneExplorer/SceneExplorerViewModel.cs#L1-L120)
 
 ## Redesign Integration
 

@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.WorldEditor.Messages;
+namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
 /// Message published when a component add operation has completed for a <see cref="SceneNode"/>.

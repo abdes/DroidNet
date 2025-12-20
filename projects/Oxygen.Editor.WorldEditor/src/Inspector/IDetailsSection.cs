@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 ///     Represents a section in a details or properties editor, typically used for displaying grouped information with a header, description, and expand/collapse state.

@@ -5,7 +5,7 @@
 using DroidNet.Docking;
 using DroidNet.Routing;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 /// A <see cref="Dockable" /> that can be the target of a route navigated to via an <see cref="IRouter" />.

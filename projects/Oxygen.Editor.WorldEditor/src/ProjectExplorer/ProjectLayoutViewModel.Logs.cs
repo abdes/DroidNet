@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.World.ProjectExplorer;
 
 /// <summary>
 ///    Logging methods for <see cref="ProjectLayoutViewModel"/>.

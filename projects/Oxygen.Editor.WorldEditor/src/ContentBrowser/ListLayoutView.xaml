@@ -1,9 +1,9 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.WorldEditor.ContentBrowser.ListLayoutView"
+    x:Class="Oxygen.Editor.World.ContentBrowser.ListLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Oxygen.Editor.WorldEditor.ContentBrowser">
+    xmlns:local="using:Oxygen.Editor.World.ContentBrowser">
 
     <UserControl.Resources>
         <local:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />

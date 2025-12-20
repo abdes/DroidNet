@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Core;
 using Oxygen.Editor.Storage;
 
-namespace Oxygen.Editor.WorldEditor.ProjectExplorer;
+namespace Oxygen.Editor.World.ProjectExplorer;
 
 /// <summary>
 ///     Represents a folder item in the content browser's tree structure.

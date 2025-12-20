@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
-
-namespace Oxygen.Editor.WorldEditor.SceneExplorer;
+namespace Oxygen.Editor.World.SceneExplorer;
 
 /// <summary>
 /// Layout builder utilities for <see cref="SceneAdapter" />. Provides an adapter tree that

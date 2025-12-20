@@ -6,7 +6,7 @@ using DroidNet.Controls.OutputConsole;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.WorldEditor.Output;
+namespace Oxygen.Editor.World.Output;
 
 /// <summary>
 ///     Represents the view for displaying logs in the World Editor.

@@ -1,4 +1,4 @@
-# Oxygen.Editor.WorldEditor
+# Oxygen.Editor.World
 
 A comprehensive WinUI 3 world editor for the Oxygen game engine, enabling developers to design and manage virtual environments with intuitive tools for terrain sculpting, object placement, lighting configuration, asset management, and real-time playtesting.
 
@@ -133,12 +133,12 @@ src/
 3. Build the WorldEditor project:
 
    ```powershell
-   dotnet build projects/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj
+   dotnet build projects/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj
    ```
 
 ### Running the Application
 
-From the `projects/Oxygen.Editor.WorldEditor` directory:
+From the `projects/Oxygen.Editor.World` directory:
 
 ```powershell
 .\open.cmd
@@ -147,7 +147,7 @@ From the `projects/Oxygen.Editor.WorldEditor` directory:
 Or build and run directly:
 
 ```powershell
-dotnet run --project src/Oxygen.Editor.WorldEditor.csproj
+dotnet run --project src/Oxygen.Editor.World.csproj
 ```
 
 ## Project Structure
@@ -188,7 +188,7 @@ For targeted, efficient development builds:
 
 ```powershell
 # Build just the WorldEditor project
-dotnet build projects/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj
+dotnet build projects/Oxygen.Editor.World/src/Oxygen.Editor.World.csproj
 
 # Build the entire solution
 cd projects
@@ -201,7 +201,7 @@ Tests follow MSTest conventions. Project tests should follow naming: `MethodName
 
 ```powershell
 # Run tests for the WorldEditor
-dotnet test projects/Oxygen.Editor.WorldEditor/tests/Oxygen.Editor.WorldEditor.Tests/Oxygen.Editor.WorldEditor.Tests.csproj
+dotnet test projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests/Oxygen.Editor.World.Tests.csproj
 
 # Run tests with coverage
 dotnet test /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
@@ -250,7 +250,7 @@ This project follows strict C# coding standards defined in `.github/instructions
 
 This project uses **MSTest** for all unit tests:
 
-- **Test Projects** – End with `.Tests` suffix (e.g., `Oxygen.Editor.WorldEditor.Tests`)
+- **Test Projects** – End with `.Tests` suffix (e.g., `Oxygen.Editor.World.Tests`)
 - **UI Tests** – End with `.UI.Tests` suffix if requiring visual interface
 - **Test Pattern** – Arrange-Act-Assert (AAA) style
 - **Naming Convention** – `MethodName_Scenario_ExpectedBehavior`

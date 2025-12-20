@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Documents;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Helper methods for working with scene layouts.

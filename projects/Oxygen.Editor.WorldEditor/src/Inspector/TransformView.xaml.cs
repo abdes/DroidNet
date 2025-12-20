@@ -5,7 +5,7 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 ///     Represents the view for editing transform properties in the World Editor.

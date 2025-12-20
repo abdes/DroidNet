@@ -4,10 +4,9 @@
 
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 /// <summary>
 /// Default implementation of <see cref="ISceneOrganizer"/> that manages a scene's

@@ -8,9 +8,9 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.World.Messages;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
 /// Manages the lifecycle of documents in the World Editor, handling requests to open or create documents.

@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 ///     Logging methods for <see cref="ContentBrowserViewModel"/>.

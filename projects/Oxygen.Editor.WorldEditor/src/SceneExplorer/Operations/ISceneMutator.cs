@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
-
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+namespace Oxygen.Editor.World.SceneExplorer.Operations;
 
 /// <summary>
 /// Executes mutations against the runtime scene graph (scene nodes and <see cref="Scene.RootNodes" />).

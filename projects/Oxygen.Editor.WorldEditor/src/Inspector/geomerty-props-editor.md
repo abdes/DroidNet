@@ -438,7 +438,7 @@ Requirements for integration:
 
 ### 9) Hook into the inspector host (SceneNodeEditorViewModel)
 
-- Update [Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeEditorViewModel.cs](Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeEditorViewModel.cs):
+- Update [Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs](Oxygen.Editor.World/src/Inspector/SceneNodeEditorViewModel.cs):
   - Add `GeometryComponent` to `AllPropertyEditorFactories` so the section appears.
   - Register for `SceneNodeGeometryAppliedMessage` in the constructor (mirroring Transform).
   - Implement an `OnGeometryApplied(...)` handler.

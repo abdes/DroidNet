@@ -11,10 +11,9 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 /// ViewModel for <see cref="SceneNodeDetailsView"/>. This ViewModel assumes a single

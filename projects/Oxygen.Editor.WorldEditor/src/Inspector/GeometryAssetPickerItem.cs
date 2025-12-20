@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 #pragma warning disable SA1402 // File may only contain a single type
 

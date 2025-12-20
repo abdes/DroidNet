@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.WorldEditor.Messages;
+namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
 /// Message published after an attempt to remove a <see cref="GameComponent"/> from a

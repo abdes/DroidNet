@@ -14,10 +14,10 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.WorldEditor.ContentBrowser;
-using Oxygen.Editor.WorldEditor.Routing;
+using Oxygen.Editor.World.ContentBrowser;
+using Oxygen.Editor.World.Routing;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 ///     Base ViewModel for managing the docking workspace.

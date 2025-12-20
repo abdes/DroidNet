@@ -5,10 +5,9 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
+using Oxygen.Editor.World.SceneExplorer.Operations;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Tests;
+namespace Oxygen.Editor.World.SceneExplorer.Tests;
 
 [TestClass]
 public class SceneMutatorTests

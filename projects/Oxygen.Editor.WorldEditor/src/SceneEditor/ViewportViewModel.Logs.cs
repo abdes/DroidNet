@@ -6,7 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.WorldEditor.Controls;
+namespace Oxygen.Editor.LevelEditor;
 
 /// <summary>
 /// Logging helpers for <see cref="ViewportViewModel"/>.

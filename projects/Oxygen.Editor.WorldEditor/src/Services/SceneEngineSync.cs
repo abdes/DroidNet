@@ -5,11 +5,10 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.WorldEditor.Services;
+namespace Oxygen.Editor.World.Services;
 
 /// <summary>
 ///     Default implementation of <see cref="ISceneEngineSync"/> that synchronizes scene data

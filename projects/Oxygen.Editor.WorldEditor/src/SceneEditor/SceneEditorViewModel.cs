@@ -17,13 +17,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.Controls;
-using Oxygen.Editor.WorldEditor.Messages;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Interop;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// ViewModel for the Scene Editor.
@@ -84,7 +84,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Metadata = metadata;
         this.container = container;
         this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.WorldEditor.Editors.Scene.SceneEditorViewModel");
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
 
         // Try to restore layout from metadata if present
         this.CurrentLayout = SceneViewLayout.OnePane;

@@ -6,11 +6,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.World;
+using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.WorldEditor.Messages;
 
-namespace Oxygen.Editor.WorldEditor.Inspector;
+namespace Oxygen.Editor.World.Inspector;
 
 /// <summary>
 /// ViewModel for editing the transform properties (position, rotation, scale) of selected SceneNode instances.

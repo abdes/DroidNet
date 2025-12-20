@@ -5,7 +5,7 @@
 using DroidNet.Docking;
 using DroidNet.Routing;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 /// Extension methods yo help converting between <see cref="IParameters">url parameters</see> and properties of docks and dockables.

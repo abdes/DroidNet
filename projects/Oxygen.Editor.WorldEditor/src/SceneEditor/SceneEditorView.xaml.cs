@@ -7,9 +7,9 @@ using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.WorldEditor.Controls;
+using Oxygen.Editor.LevelEditor;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 ///     Represents the view for editing scenes in the Oxygen World Editor.

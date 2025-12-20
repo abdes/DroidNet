@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
-using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.Messages;
+namespace Oxygen.Editor.World.Messages;
 
 /// <summary>
 ///     Represents a request message for selecting scene nodes within a scene graph.

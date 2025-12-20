@@ -4,8 +4,8 @@
     <PropertyGroup>
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
-        <RootNamespace>Oxygen.Editor.WorldEditor.SceneExplorer.Tests</RootNamespace>
-        <AssemblyName>Oxygen.Editor.WorldEditor.SceneExplorer.Tests</AssemblyName>
+        <RootNamespace>Oxygen.Editor.World.SceneExplorer.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>

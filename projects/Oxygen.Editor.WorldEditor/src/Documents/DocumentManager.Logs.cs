@@ -6,7 +6,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
 ///     Logging helpers for <see cref="DocumentManager"/>.

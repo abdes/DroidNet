@@ -5,7 +5,7 @@
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 ///     Logging methods for <see cref="DockingWorkspaceViewModel" />.

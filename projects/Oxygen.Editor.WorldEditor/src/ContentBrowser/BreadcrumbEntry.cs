@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.WorldEditor.ContentBrowser;
+namespace Oxygen.Editor.World.ContentBrowser;
 
 /// <summary>
 /// Represents one breadcrumb segment with a label and the accumulated relative path.

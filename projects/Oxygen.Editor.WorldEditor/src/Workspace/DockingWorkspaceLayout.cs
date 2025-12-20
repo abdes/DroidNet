@@ -16,7 +16,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 /// A layout strategy for the workspace.

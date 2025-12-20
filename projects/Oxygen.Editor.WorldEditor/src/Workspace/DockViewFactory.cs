@@ -12,9 +12,9 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.WorldEditor.Editors;
+using Oxygen.Editor.World.Documents;
 
-namespace Oxygen.Editor.WorldEditor.Workspace;
+namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 /// A custom factory to create views for the docks in the docking workspace.

@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.WorldEditor.Editors;
+namespace Oxygen.Editor.World.Documents;
 
 /// <summary>
 ///     Logging methods for <see cref="DocumentHostViewModel" />.

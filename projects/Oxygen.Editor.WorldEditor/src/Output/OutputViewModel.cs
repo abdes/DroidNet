@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
 
-namespace Oxygen.Editor.WorldEditor.Output;
+namespace Oxygen.Editor.World.Output;
 
 /* TODO: persist and load settings */
 

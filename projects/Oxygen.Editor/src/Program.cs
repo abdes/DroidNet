@@ -37,7 +37,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Storage;
 using Oxygen.Editor.Storage.Native;
-using Oxygen.Editor.WorldEditor.Workspace;
+using Oxygen.Editor.World.Workspace;
 using Serilog;
 
 namespace Oxygen.Editor;

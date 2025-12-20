@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.WorldEditor.Editors.Scene;
+namespace Oxygen.Editor.World.SceneEditor;
 
 /// <summary>
 /// Converts between the engine logging verbosity integer and the Segmented control index.

@@ -5,11 +5,10 @@
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.SceneExplorer.Operations;
-using Oxygen.Editor.WorldEditor.Services;
+using Oxygen.Editor.World.SceneExplorer.Operations;
+using Oxygen.Editor.World.Services;
 
-namespace Oxygen.Editor.WorldEditor.SceneExplorer.Services;
+namespace Oxygen.Editor.World.SceneExplorer.Services;
 
 /// <summary>
 /// Implementation of the <see cref="ISceneExplorerService"/>.
