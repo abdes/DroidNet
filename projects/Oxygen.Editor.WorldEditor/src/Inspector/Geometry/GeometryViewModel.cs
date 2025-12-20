@@ -8,7 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.World.Messages;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Geometry;
 
 /// <summary>
 /// ViewModel that provides editing support for the <see cref="GeometryComponent"/> of one or
@@ -25,7 +25,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 {
     private readonly ContentBrowser.AssetsIndexingService? assetsIndexingService;
     private readonly IMessenger? messenger;
-    private readonly List<GeometryAssetPickerItem> contentItems = [];
+    private readonly List<AssetPickerItem> contentItems = [];
 
     private ICollection<SceneNode>? selectedItems;
 
@@ -42,19 +42,23 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         this.assetsIndexingService = assetsIndexingService as ContentBrowser.AssetsIndexingService;
         this.messenger = messenger;
 
-        var engineItems = new List<GeometryAssetPickerItem>
+        var engineItems = new List<AssetPickerItem>
         {
             CreateEngineItem("Cube", "asset://Generated/BasicShapes/Cube", "/Engine/BasicShapes/Cube"),
             CreateEngineItem("Sphere", "asset://Generated/BasicShapes/Sphere", "/Engine/BasicShapes/Sphere"),
             CreateEngineItem("Plane", "asset://Generated/BasicShapes/Plane", "/Engine/BasicShapes/Plane"),
             CreateEngineItem("Cylinder", "asset://Generated/BasicShapes/Cylinder", "/Engine/BasicShapes/Cylinder"),
+            CreateEngineItem("Cone", "asset://Generated/BasicShapes/Cone", "/Engine/BasicShapes/Cone"),
+            CreateEngineItem("Quad", "asset://Generated/BasicShapes/Quad", "/Engine/BasicShapes/Quad"),
+            CreateEngineItem("Torus", "asset://Generated/BasicShapes/Torus", "/Engine/BasicShapes/Torus"),
+            CreateEngineItem("ArrowGizmo", "asset://Generated/BasicShapes/ArrowGizmo", "/Engine/BasicShapes/ArrowGizmo"),
         };
 
         // Start with Engine group only
         this.Groups =
         [
-            new GeometryAssetGroup("Engine", engineItems),
-            new GeometryAssetGroup("Content", this.contentItems),
+            new AssetGroup("Engine", engineItems),
+            new AssetGroup("Content", this.contentItems),
         ];
 
         // Subscribe to asset changes for mesh assets
@@ -101,10 +105,10 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
     /// <summary>
     /// Gets the collection of geometry asset groups shown to the user. Each group contains
-    /// a list of <see cref="GeometryAssetPickerItem"/> instances.
+    /// a list of <see cref="AssetPickerItem"/> instances.
     /// </summary>
     [ObservableProperty]
-    public partial IReadOnlyList<GeometryAssetGroup> Groups { get; set; } = [];
+    public partial IReadOnlyList<AssetGroup> Groups { get; set; } = [];
 
     /// <inheritdoc />
     public override string Header => "Geometry";
@@ -168,7 +172,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     /// </summary>
     /// <param name="item">The asset picker item to apply. If <see langword="null"/> or not enabled the method returns immediately.</param>
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
-    public async Task ApplyAssetAsync(GeometryAssetPickerItem item)
+    public async Task ApplyAssetAsync(AssetPickerItem item)
     {
         if (item is null)
         {
@@ -263,32 +267,32 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         return string.IsNullOrWhiteSpace(lastSegment) ? uriString : lastSegment;
     }
 
-    private static GeometryAssetPickerItem CreateEngineItem(string name, string uriString, string displayPath)
+    private static AssetPickerItem CreateEngineItem(string name, string uriString, string displayPath)
     {
         var uri = new Uri(uriString, UriKind.Absolute);
-        return new GeometryAssetPickerItem(
+        return new AssetPickerItem(
             Name: name,
             Uri: uri,
             DisplayType: "Static Mesh",
             DisplayPath: displayPath,
-            Group: GeometryAssetPickerGroup.Engine,
+            Group: AssetPickerGroup.Engine,
             IsEnabled: true,
             ThumbnailModel: "\uE7C3");
     }
 
-    private static GeometryAssetPickerItem CreateContentItem(ContentBrowser.GameAsset asset)
+    private static AssetPickerItem CreateContentItem(ContentBrowser.GameAsset asset)
     {
         // Create URI: asset://Content/{location}
         var uriString = $"asset://Content/{asset.Location}";
         var uri = new Uri(uriString, UriKind.Absolute);
         var displayPath = $"/Content/{asset.Location}";
 
-        return new GeometryAssetPickerItem(
+        return new AssetPickerItem(
             Name: Path.GetFileNameWithoutExtension(asset.Name),
             Uri: uri,
             DisplayType: "Static Mesh",
             DisplayPath: displayPath,
-            Group: GeometryAssetPickerGroup.Content,
+            Group: AssetPickerGroup.Content,
             IsEnabled: false,
             ThumbnailModel: "\uE7C3");
     }

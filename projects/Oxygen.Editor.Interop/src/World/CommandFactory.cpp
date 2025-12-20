@@ -21,7 +21,7 @@
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <World/CommandFactory.h>
 
-using namespace oxygen::interop::module::commands;
+using namespace oxygen::interop::module;
 
 namespace Oxygen::Interop::World {
 

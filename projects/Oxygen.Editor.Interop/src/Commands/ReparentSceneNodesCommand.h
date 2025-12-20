@@ -7,11 +7,16 @@
 #pragma once
 #pragma managed(push, off)
 
-#include "EditorModule/EditorCommand.h"
-#include <Oxygen/Scene/Scene.h>
+#include <utility>
 #include <vector>
 
-namespace oxygen::interop::module::commands {
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+
+#include <EditorModule/EditorCommand.h>
+
+namespace oxygen::interop::module {
 
   class ReparentSceneNodesCommand : public EditorCommand {
   public:
@@ -19,9 +24,9 @@ namespace oxygen::interop::module::commands {
       oxygen::scene::NodeHandle parent,
       bool preserveWorldTransform)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
-        children_(std::move(children)),
-        parent_(parent),
-        preserve_(preserveWorldTransform) {
+      children_(std::move(children)),
+      parent_(parent),
+      preserve_(preserveWorldTransform) {
     }
 
     void Execute(CommandContext& context) override {
@@ -60,6 +65,6 @@ namespace oxygen::interop::module::commands {
     bool preserve_;
   };
 
-} // namespace oxygen::interop::module::commands
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)

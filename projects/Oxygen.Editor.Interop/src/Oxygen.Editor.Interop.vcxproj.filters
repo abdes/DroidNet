@@ -7,6 +7,7 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -63,6 +64,9 @@
       <Filter>Commands</Filter>
     </ClCompile>
     <ClCompile Include="Commands\ShowViewCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
   </ItemGroup>
@@ -169,6 +173,12 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\ShowViewCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\RemoveSceneNodesCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\ReparentSceneNodesCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
   </ItemGroup>

@@ -13,7 +13,7 @@
 
 #include <glm/fwd.hpp>
 
-namespace oxygen::interop::module::commands{
+namespace oxygen::interop::module{
 class CreateSceneNodeCommand;
 class RemoveSceneNodeCommand;
 class RenameSceneNodeCommand;
@@ -25,50 +25,50 @@ class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
 class RemoveSceneNodesCommand;
 class DetachGeometryCommand;
-} // namespace oxygen::interop::module::commands
+} // namespace oxygen::interop::module
 
 namespace Oxygen::Interop::World {
 
   public
     interface class ICommandFactory {
-    oxygen::interop::module::commands::CreateSceneNodeCommand*
+    oxygen::interop::module::CreateSceneNodeCommand*
       CreateSceneNode(std::string name, oxygen::scene::NodeHandle parent,
         System::Action<Oxygen::Editor::Core::NodeHandle>^ onCreated,
         std::array<uint8_t, 16> regKey, bool initializeWorldAsRoot);
 
-    oxygen::interop::module::commands::RemoveSceneNodeCommand*
+    oxygen::interop::module::RemoveSceneNodeCommand*
       CreateRemoveSceneNode(oxygen::scene::NodeHandle handle);
 
-    oxygen::interop::module::commands::RenameSceneNodeCommand*
+    oxygen::interop::module::RenameSceneNodeCommand*
       CreateRenameSceneNode(oxygen::scene::NodeHandle handle, std::string newName);
 
-    oxygen::interop::module::commands::SetLocalTransformCommand*
+    oxygen::interop::module::SetLocalTransformCommand*
       CreateSetLocalTransform(oxygen::scene::NodeHandle handle, glm::vec3 position,
         glm::quat rotation, glm::vec3 scale);
 
-    oxygen::interop::module::commands::CreateBasicMeshCommand*
+    oxygen::interop::module::CreateBasicMeshCommand*
       CreateBasicMesh(oxygen::scene::NodeHandle handle, std::string meshType);
 
-    oxygen::interop::module::commands::DetachGeometryCommand*
+    oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);
 
-    oxygen::interop::module::commands::SetVisibilityCommand*
+    oxygen::interop::module::SetVisibilityCommand*
       CreateSetVisibility(oxygen::scene::NodeHandle handle, bool visible);
 
-    oxygen::interop::module::commands::ReparentSceneNodeCommand*
+    oxygen::interop::module::ReparentSceneNodeCommand*
       CreateReparentSceneNode(oxygen::scene::NodeHandle child,
         oxygen::scene::NodeHandle parent,
         bool preserveWorldTransform);
 
-    oxygen::interop::module::commands::ReparentSceneNodesCommand*
+    oxygen::interop::module::ReparentSceneNodesCommand*
       CreateReparentSceneNodes(std::vector<oxygen::scene::NodeHandle> children,
         oxygen::scene::NodeHandle parent,
         bool preserveWorldTransform);
 
-    oxygen::interop::module::commands::UpdateTransformsForNodesCommand*
+    oxygen::interop::module::UpdateTransformsForNodesCommand*
       CreateUpdateTransformsForNodes(std::vector<oxygen::scene::NodeHandle> nodes);
 
-    oxygen::interop::module::commands::RemoveSceneNodesCommand*
+    oxygen::interop::module::RemoveSceneNodesCommand*
       CreateRemoveSceneNodes(std::vector<oxygen::scene::NodeHandle> nodes);
   };
 

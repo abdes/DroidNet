@@ -27,7 +27,7 @@
 using namespace System::Threading::Tasks;
 
 using namespace oxygen::interop::module;
-using namespace oxygen::interop::module::commands;
+using namespace oxygen::interop::module;
 
 namespace Oxygen::Interop::World {
 

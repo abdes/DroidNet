@@ -6,7 +6,7 @@ using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Geometry;
 
 /// <summary>
 ///     Represents the view for editing geometry properties in the World Editor.
@@ -24,38 +24,14 @@ public partial class GeometryView
 
     private async void OnPickerItemClicked(object? sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement fe)
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling picker item click.");
+
+        if (sender is not FrameworkElement fe || fe.DataContext is not AssetPickerItem item)
         {
             return;
         }
 
-        if (fe.DataContext is not GeometryAssetPickerItem item)
-        {
-            return;
-        }
-
-        if (this.ViewModel is null)
-        {
-            return;
-        }
-
-        try
-        {
-            await this.ViewModel.ApplyAssetAsync(item).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[GeometryView] Error applying asset: {ex.Message}");
-        }
-
-        // Close the flyout if possible
-        try
-        {
-            this.AssetPickerFlyout?.Hide();
-        }
-        catch (Exception)
-        {
-            // ignore
-        }
+        await this.ViewModel.ApplyAssetAsync(item).ConfigureAwait(true);
+        this.AssetPickerFlyout.Hide();
     }
 }

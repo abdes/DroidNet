@@ -7,17 +7,20 @@
 #pragma once
 #pragma managed(push, off)
 
-#include "EditorModule/EditorCommand.h"
-#include <Oxygen/Scene/Scene.h>
 #include <vector>
 
-namespace oxygen::interop::module::commands {
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Scene/Scene.h>
+
+#include <EditorModule/EditorCommand.h>
+
+namespace oxygen::interop::module {
 
   class RemoveSceneNodesCommand : public EditorCommand {
   public:
     explicit RemoveSceneNodesCommand(std::vector<oxygen::scene::NodeHandle> nodes)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
-        nodes_(std::move(nodes)) {
+      nodes_(std::move(nodes)) {
     }
 
     void Execute(CommandContext& context) override {
@@ -41,6 +44,6 @@ namespace oxygen::interop::module::commands {
     std::vector<oxygen::scene::NodeHandle> nodes_;
   };
 
-} // namespace oxygen::interop::module::commands
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)

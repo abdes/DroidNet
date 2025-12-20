@@ -10,40 +10,41 @@
 #include <string>
 #include <utility>
 
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include "EditorModule/EditorCommand.h"
+#include <EditorModule/EditorCommand.h>
 
-namespace oxygen::interop::module::commands{
+namespace oxygen::interop::module {
 
-class RenameSceneNodeCommand : public EditorCommand {
-public:
-  RenameSceneNodeCommand(oxygen::scene::NodeHandle node, std::string newName);
+  class RenameSceneNodeCommand : public EditorCommand {
+  public:
+    RenameSceneNodeCommand(oxygen::scene::NodeHandle node, std::string newName);
 
-  void Execute(CommandContext& context) override;
+    void Execute(CommandContext& context) override;
 
-private:
-  oxygen::scene::NodeHandle node_;
-  std::string newName_;
-};
+  private:
+    oxygen::scene::NodeHandle node_;
+    std::string newName_;
+  };
 
-inline RenameSceneNodeCommand::RenameSceneNodeCommand(
+  inline RenameSceneNodeCommand::RenameSceneNodeCommand(
     oxygen::scene::NodeHandle node, std::string newName)
     : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
-      newName_(std::move(newName)) {
-}
-
-inline void RenameSceneNodeCommand::Execute(CommandContext& context) {
-  if (!context.Scene)
-    return;
-
-  auto sceneNode = context.Scene->GetNode(node_);
-  if (sceneNode && sceneNode->IsAlive()) {
-    (void)sceneNode->SetName(newName_);
+    newName_(std::move(newName)) {
   }
-}
 
-} // namespace oxygen::interop::module::commands
+  inline void RenameSceneNodeCommand::Execute(CommandContext& context) {
+    if (!context.Scene)
+      return;
+
+    auto sceneNode = context.Scene->GetNode(node_);
+    if (sceneNode && sceneNode->IsAlive()) {
+      (void)sceneNode->SetName(newName_);
+    }
+  }
+
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)

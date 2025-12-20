@@ -2,9 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
 using Oxygen.Editor.World.Documents;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.WorldEditor.SceneEditor;
 
 /// <summary>
 /// Helper methods for working with scene layouts.

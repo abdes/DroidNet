@@ -7,39 +7,40 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include "EditorModule/EditorCommand.h"
+#include <EditorModule/EditorCommand.h>
 
-namespace oxygen::interop::module::commands{
+namespace oxygen::interop::module {
 
-class DetachGeometryCommand : public EditorCommand {
-public:
-  DetachGeometryCommand(oxygen::scene::NodeHandle node);
+  class DetachGeometryCommand : public EditorCommand {
+  public:
+    DetachGeometryCommand(oxygen::scene::NodeHandle node);
 
-  void Execute(CommandContext& context) override;
+    void Execute(CommandContext& context) override;
 
-private:
-  oxygen::scene::NodeHandle node_;
-};
+  private:
+    oxygen::scene::NodeHandle node_;
+  };
 
-inline DetachGeometryCommand::DetachGeometryCommand(
+  inline DetachGeometryCommand::DetachGeometryCommand(
     oxygen::scene::NodeHandle node)
     : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node) {
-}
+  }
 
-inline void DetachGeometryCommand::Execute(CommandContext& context) {
-  if (!context.Scene)
-    return;
+  inline void DetachGeometryCommand::Execute(CommandContext& context) {
+    if (!context.Scene)
+      return;
 
-  auto sceneNode = context.Scene->GetNode(node_);
-  if (!sceneNode || !sceneNode->IsAlive())
-    return;
+    auto sceneNode = context.Scene->GetNode(node_);
+    if (!sceneNode || !sceneNode->IsAlive())
+      return;
 
-  auto r = sceneNode->GetRenderable();
-  r.Detach();
-}
+    auto r = sceneNode->GetRenderable();
+    r.Detach();
+  }
 
-} // namespace oxygen::interop::module::commands
+} // namespace oxygen::interop::module
 
 #pragma managed(pop)
