@@ -33,7 +33,7 @@ public abstract class BaseDocumentMetadata(Guid? documentId = null) : IDocumentM
     public bool IsPinnedHint { get; set; }
 
     /// <inheritdoc/>
-    public bool IsClosable { get; set; } = true;
+    public virtual bool IsClosable { get; set; } = true;
 
     /// <summary>
     ///     Gets the type of document (e.g., "Scene", "Asset", "Render", etc.)

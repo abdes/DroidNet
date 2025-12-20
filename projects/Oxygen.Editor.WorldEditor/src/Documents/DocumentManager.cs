@@ -7,7 +7,6 @@ using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.World.Messages;
 
 namespace Oxygen.Editor.World.Documents;
@@ -82,11 +81,7 @@ public sealed partial class DocumentManager : IDisposable
         }
 
         // Create metadata for the new scene document
-        var metadataNew = new SceneDocumentMetadata(message.Scene.Id)
-        {
-            Title = message.Scene.Name,
-            IsClosable = false,
-        };
+        var metadataNew = new SceneDocumentMetadata(message.Scene.Id) { Title = message.Scene.Name };
 
         var openedId = await this.documentService.OpenDocumentAsync(this.windowId, metadataNew).ConfigureAwait(true);
         if (openedId == Guid.Empty)

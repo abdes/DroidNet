@@ -13,8 +13,8 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Interop;
 

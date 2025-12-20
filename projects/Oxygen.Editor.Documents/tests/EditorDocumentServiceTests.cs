@@ -46,9 +46,9 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var expectedId = Guid.NewGuid();
-        var metadata = new SceneDocumentMetadata(expectedId)
+        var metadata = new TestDocumentMetadata(expectedId)
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
 
         // Act
@@ -69,9 +69,9 @@ public class EditorDocumentServiceTests
     public async Task OpenDocumentAsync_WithEmptyGuid_GeneratesNewGuid()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata
+        var metadata = new TestDocumentMetadata
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
 
         // Act
@@ -88,7 +88,7 @@ public class EditorDocumentServiceTests
     public async Task OpenDocumentAsync_AddsDocumentToWindowCollection()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
 
         // Act
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
@@ -106,7 +106,7 @@ public class EditorDocumentServiceTests
     public async Task OpenDocumentAsync_WithShouldSelectTrue_SetsActiveDocument()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
 
         // Act
         var docId = await this.service!.OpenDocumentAsync(
@@ -127,7 +127,7 @@ public class EditorDocumentServiceTests
     public async Task OpenDocumentAsync_WithShouldSelectFalse_DoesNotSetActiveDocument()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
 
         // Act
         _ = await this.service!.OpenDocumentAsync(
@@ -141,51 +141,51 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that opening a second scene document closes the first one.
+    /// Test that opening a second non-closable document of the same type closes the first one.
     /// </summary>
     [TestMethod]
-    public async Task OpenDocumentAsync_WithSecondSceneDocument_ClosesFirstScene()
+    public async Task OpenDocumentAsync_WithSecondNonClosableDocument_ClosesFirstOne()
     {
         // Arrange
-        var firstScene = new SceneDocumentMetadata { Title = "Scene 1" };
-        var secondScene = new SceneDocumentMetadata { Title = "Scene 2" };
+        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
+        var second = new TestDocumentMetadata { Title = "Doc 2", IsClosable = false };
 
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, firstScene).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
 
         // Act
-        var secondId = await this.service.OpenDocumentAsync(this.testWindowId, secondScene).ConfigureAwait(false);
+        var secondId = await this.service.OpenDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
 
         // Assert
         var openDocs = this.service.GetOpenDocuments(this.testWindowId);
         _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Scene 2");
+        _ = openDocs[0].Title.Should().Be("Doc 2");
         _ = openDocs[0].DocumentId.Should().Be(secondId);
     }
 
     /// <summary>
-    /// Test that opening a second scene document when first close is vetoed returns Guid.Empty.
+    /// Test that opening a second non-closable document when first close is vetoed returns Guid.Empty.
     /// </summary>
     [TestMethod]
-    public async Task OpenDocumentAsync_WhenFirstSceneCloseVetoed_ReturnsEmptyGuid()
+    public async Task OpenDocumentAsync_WhenFirstNonClosableCloseVetoed_ReturnsEmptyGuid()
     {
         // Arrange
-        var firstScene = new SceneDocumentMetadata { Title = "Scene 1" };
-        var secondScene = new SceneDocumentMetadata { Title = "Scene 2" };
+        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
+        var second = new TestDocumentMetadata { Title = "Doc 2", IsClosable = false };
 
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, firstScene).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
 
         // Add veto handler
         this.service.DocumentClosing += (sender, args)
             => args.AddVetoTask(Task.FromResult(false));
 
         // Act
-        var result = await this.service.OpenDocumentAsync(this.testWindowId, secondScene).ConfigureAwait(false);
+        var result = await this.service.OpenDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().Be(Guid.Empty);
         var openDocs = this.service.GetOpenDocuments(this.testWindowId);
         _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Scene 1");
+        _ = openDocs[0].Title.Should().Be("Doc 1");
     }
 
     /// <summary>
@@ -195,7 +195,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_WithExistingDocument_ReturnsTrue()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
@@ -212,7 +212,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_RemovesDocumentFromCollection()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
@@ -246,7 +246,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_WithVeto_ReturnsFalseAndDocumentRemainsOpen()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         this.service.DocumentClosing += (sender, args) => args.AddVetoTask(Task.FromResult(false));
@@ -267,7 +267,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_WithForceTrue_BypassesVeto()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         this.service.DocumentClosing += (sender, args)
@@ -289,7 +289,7 @@ public class EditorDocumentServiceTests
     public async Task CloseDocumentAsync_ClearsActiveDocumentId()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
 
         // Act
@@ -307,7 +307,7 @@ public class EditorDocumentServiceTests
     public async Task DetachDocumentAsync_WithExistingDocument_ReturnsMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
@@ -325,7 +325,7 @@ public class EditorDocumentServiceTests
     public async Task DetachDocumentAsync_RemovesDocumentFromCollection()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
@@ -359,9 +359,9 @@ public class EditorDocumentServiceTests
     public async Task AttachDocumentAsync_WithValidMetadata_ReturnsTrue()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata
+        var metadata = new TestDocumentMetadata
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
 
         // Act
@@ -379,9 +379,9 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var docId = Guid.NewGuid();
-        var metadata = new SceneDocumentMetadata(docId)
+        var metadata = new TestDocumentMetadata(docId)
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
 
         // Act
@@ -394,52 +394,55 @@ public class EditorDocumentServiceTests
     }
 
     /// <summary>
-    /// Test that attaching a scene document when one exists closes the existing one.
+    /// Test that attaching a non-closable document when one of the same type exists closes the existing one.
     /// </summary>
     [TestMethod]
-    public async Task AttachDocumentAsync_WithExistingScene_ClosesExistingScene()
+    public async Task AttachDocumentAsync_WithExistingNonClosable_ClosesExistingOne()
     {
         // Arrange
-        var firstScene = new SceneDocumentMetadata
+        var first = new TestDocumentMetadata
         {
-            Title = "Scene 1",
+            Title = "Doc 1",
+            IsClosable = false,
         };
-        var secondScene = new SceneDocumentMetadata
+        var second = new TestDocumentMetadata
         {
-            Title = "Scene 2",
+            Title = "Doc 2",
+            IsClosable = false,
         };
 
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, firstScene).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
 
         // Act
-        _ = await this.service.AttachDocumentAsync(this.testWindowId, secondScene).ConfigureAwait(false);
+        _ = await this.service.AttachDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
 
         // Assert
         var openDocs = this.service.GetOpenDocuments(this.testWindowId);
         _ = openDocs.Count.Should().Be(1);
-        _ = openDocs[0].Title.Should().Be("Scene 2");
+        _ = openDocs[0].Title.Should().Be("Doc 2");
     }
 
     /// <summary>
-    /// Test that attaching when existing scene close is vetoed returns false.
+    /// Test that attaching when existing non-closable close is vetoed returns false.
     /// </summary>
     [TestMethod]
-    public async Task AttachDocumentAsync_WhenExistingSceneCloseVetoed_ReturnsFalse()
+    public async Task AttachDocumentAsync_WhenExistingNonClosableCloseVetoed_ReturnsFalse()
     {
         // Arrange
-        var firstScene = new SceneDocumentMetadata { Title = "Scene 1" };
-        var secondScene = new SceneDocumentMetadata
+        var first = new TestDocumentMetadata { Title = "Doc 1", IsClosable = false };
+        var second = new TestDocumentMetadata
         {
-            Title = "Scene 2",
+            Title = "Doc 2",
+            IsClosable = false,
         };
 
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, firstScene).ConfigureAwait(false);
+        _ = await this.service!.OpenDocumentAsync(this.testWindowId, first).ConfigureAwait(false);
 
         this.service.DocumentClosing += (sender, args)
             => args.AddVetoTask(Task.FromResult(false));
 
         // Act
-        var result = await this.service.AttachDocumentAsync(this.testWindowId, secondScene).ConfigureAwait(false);
+        var result = await this.service.AttachDocumentAsync(this.testWindowId, second).ConfigureAwait(false);
 
         // Assert
         _ = result.Should().BeFalse();
@@ -454,10 +457,10 @@ public class EditorDocumentServiceTests
     public async Task UpdateMetadataAsync_WithExistingDocument_ReturnsTrue()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Original Title" };
+        var metadata = new TestDocumentMetadata { Title = "Original Title" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
-        var updatedMetadata = new SceneDocumentMetadata(docId)
+        var updatedMetadata = new TestDocumentMetadata(docId)
         {
             Title = "Updated Title",
         };
@@ -476,10 +479,10 @@ public class EditorDocumentServiceTests
     public async Task UpdateMetadataAsync_UpdatesStoredMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Original Title" };
+        var metadata = new TestDocumentMetadata { Title = "Original Title" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
-        var updatedMetadata = new SceneDocumentMetadata(docId)
+        var updatedMetadata = new TestDocumentMetadata(docId)
         {
             Title = "Updated Title",
         };
@@ -500,7 +503,7 @@ public class EditorDocumentServiceTests
     {
         // Arrange
         var nonExistentId = Guid.NewGuid();
-        var metadata = new SceneDocumentMetadata(nonExistentId)
+        var metadata = new TestDocumentMetadata(nonExistentId)
         {
             Title = "Test",
         };
@@ -519,7 +522,7 @@ public class EditorDocumentServiceTests
     public async Task SelectDocumentAsync_WithExistingDocument_ReturnsTrue()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
 
         // Act
@@ -536,7 +539,7 @@ public class EditorDocumentServiceTests
     public async Task SelectDocumentAsync_SetsDocumentAsActive()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
 
         // Act
@@ -585,7 +588,7 @@ public class EditorDocumentServiceTests
     public async Task GetOpenDocuments_ReturnsAllOpenDocuments()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
 
         // Act
@@ -615,7 +618,7 @@ public class EditorDocumentServiceTests
     public async Task GetActiveDocumentId_ReturnsActiveDocumentId()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
 
         // Act

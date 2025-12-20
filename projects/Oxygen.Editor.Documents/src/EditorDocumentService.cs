@@ -19,7 +19,7 @@ namespace Oxygen.Editor.Documents;
 public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     : IDocumentService, IDocumentServiceState
 {
-    private readonly ILogger logger = loggerFactory?.CreateLogger<EditorDocumentService>() ?? NullLoggerFactory.Instance.CreateLogger<EditorDocumentService>();
+    private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<EditorDocumentService>();
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<Guid, IDocumentMetadata>> windowDocs = [];
@@ -52,38 +52,13 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
         var documentId = metadata.DocumentId;
         this.LogOpenDocumentCalled(windowId.Value, documentId);
 
-        var docs = this.GetDocumentsForWindow(windowId);
-
-        // Ensure only one Scene document is open per window. If the incoming metadata is a
-        // SceneDocumentMetadata, attempt to close any existing scene document in this window before
-        // opening the new one. If the close is vetoed, abort.
-        if (metadata is SceneDocumentMetadata)
+        if (!await this.EnsureSingleNonClosableDocumentAsync(windowId, metadata).ConfigureAwait(false))
         {
-            Guid? existingSceneId = null;
-            foreach (var kv in docs)
-            {
-                if (kv.Value is SceneDocumentMetadata)
-                {
-                    existingSceneId = kv.Key;
-                    break;
-                }
-            }
-
-            if (existingSceneId.HasValue)
-            {
-                var closed = await this.CloseDocumentAsync(windowId, existingSceneId.Value, force: false).ConfigureAwait(false);
-                if (!closed)
-                {
-                    this.LogDocumentOpenAborted(windowId.Value, documentId);
-                    return Guid.Empty;
-                }
-
-                // Closing the last document removes the dictionary entry; reacquire it so the
-                // upcoming assignment is tracked in the global windowDocs map.
-                docs = this.GetDocumentsForWindow(windowId);
-            }
+            this.LogDocumentOpenAborted(windowId.Value, documentId);
+            return Guid.Empty;
         }
 
+        var docs = this.GetDocumentsForWindow(windowId);
         docs[documentId] = metadata;
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
         if (shouldSelect)
@@ -166,35 +141,13 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
     {
         this.LogAttachDocumentCalled(targetWindowId.Value, metadata.DocumentId);
 
-        var docs = this.GetDocumentsForWindow(targetWindowId);
-
-        // If attaching a Scene document, replace any existing Scene document in the target window.
-        if (metadata is SceneDocumentMetadata)
+        if (!await this.EnsureSingleNonClosableDocumentAsync(targetWindowId, metadata).ConfigureAwait(false))
         {
-            Guid? existingSceneId = null;
-            foreach (var kv in docs)
-            {
-                if (kv.Value is SceneDocumentMetadata)
-                {
-                    existingSceneId = kv.Key;
-                    break;
-                }
-            }
-
-            if (existingSceneId.HasValue)
-            {
-                var closed = await this.CloseDocumentAsync(targetWindowId, existingSceneId.Value, force: false).ConfigureAwait(false);
-                if (!closed)
-                {
-                    this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
-                    return false;
-                }
-
-                // Closing may remove the window entry; reacquire to keep the attach tracked.
-                docs = this.GetDocumentsForWindow(targetWindowId);
-            }
+            this.LogAttachDocumentAborted(targetWindowId.Value, metadata.DocumentId);
+            return false;
         }
 
+        var docs = this.GetDocumentsForWindow(targetWindowId);
         docs[metadata.DocumentId] = metadata;
         if (shouldSelect)
         {
@@ -254,6 +207,52 @@ public partial class EditorDocumentService(ILoggerFactory? loggerFactory = null)
         => this.activeDocuments.TryGetValue(windowId, out var documentId) && documentId != Guid.Empty
             ? documentId
             : null;
+
+    private async Task<bool> EnsureSingleNonClosableDocumentAsync(WindowId windowId, IDocumentMetadata metadata)
+    {
+        // Ensure only one non-closable document of the same type is open per window. If the
+        // incoming metadata is non-closable, attempt to close any existing non-closable document of
+        // the same type in this window before opening the new one. If the close is vetoed, abort.
+        if (metadata.IsClosable)
+        {
+            return true;
+        }
+
+        var docs = this.GetDocumentsForWindow(windowId);
+        Guid? existingId = null;
+        foreach (var kv in docs)
+        {
+            var existing = kv.Value;
+            if (existing.IsClosable)
+            {
+                continue;
+            }
+
+            // Match by DocumentType if both are BaseDocumentMetadata, otherwise by C# type
+            var isMatch = (metadata, existing) switch
+            {
+                (BaseDocumentMetadata b1, BaseDocumentMetadata b2) => string.Equals(b1.DocumentType, b2.DocumentType, StringComparison.Ordinal),
+                _ => metadata.GetType() == existing.GetType(),
+            };
+
+            if (isMatch)
+            {
+                existingId = kv.Key;
+                break;
+            }
+        }
+
+        if (existingId.HasValue)
+        {
+            var closed = await this.CloseDocumentAsync(windowId, existingId.Value, force: false).ConfigureAwait(false);
+            if (!closed)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     private Dictionary<Guid, IDocumentMetadata> GetDocumentsForWindow(WindowId windowId)
     {
