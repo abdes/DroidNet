@@ -4,8 +4,8 @@
 
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.World.Documents;
 using Oxygen.Interop;
 
 namespace Oxygen.Editor.World.SceneEditor;

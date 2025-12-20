@@ -45,7 +45,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_RaisesDocumentOpenedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var eventRaised = false;
 
         this.service!.DocumentOpened += (sender, args) => eventRaised = true;
@@ -64,7 +64,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectWindowId()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         WindowId? capturedWindowId = null;
 
         this.service!.DocumentOpened += (sender, args) => capturedWindowId = args.WindowId;
@@ -84,7 +84,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         IDocumentMetadata? capturedMetadata = null;
 
         this.service!.DocumentOpened += (sender, args) => capturedMetadata = args.Metadata;
@@ -104,7 +104,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectIndexHint()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         const int expectedIndexHint = 5;
         int? capturedIndexHint = null;
 
@@ -125,7 +125,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectShouldSelect()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         bool? capturedShouldSelect = null;
 
         this.service!.DocumentOpened += (sender, args) => capturedShouldSelect = args.ShouldSelect;
@@ -145,7 +145,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_RaisesDocumentClosingEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
 
@@ -165,7 +165,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_DocumentClosingEvent_ContainsCorrectForceFlag()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         bool? capturedForce = null;
 
@@ -186,7 +186,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_WithForceTrue_StillRaisesDocumentClosingEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
 
@@ -210,7 +210,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_RaisesDocumentClosedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
 
@@ -230,7 +230,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_DocumentClosedEvent_ContainsCorrectMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         IDocumentMetadata? capturedMetadata = null;
 
@@ -241,7 +241,7 @@ public class EditorDocumentServiceEventTests
 
         // Assert
         _ = capturedMetadata.Should().NotBeNull();
-        _ = capturedMetadata!.Title.Should().Be("Test Scene");
+        _ = capturedMetadata!.Title.Should().Be("Test Document");
     }
 
     /// <summary>
@@ -251,7 +251,7 @@ public class EditorDocumentServiceEventTests
     public async Task CloseDocumentAsync_WhenVetoed_DoesNotRaiseDocumentClosedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var closedEventRaised = false;
 
@@ -274,7 +274,7 @@ public class EditorDocumentServiceEventTests
     public async Task DetachDocumentAsync_RaisesDocumentDetachedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
 
@@ -294,7 +294,7 @@ public class EditorDocumentServiceEventTests
     public async Task DetachDocumentAsync_DocumentDetachedEvent_ContainsCorrectMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         IDocumentMetadata? capturedMetadata = null;
 
@@ -334,9 +334,9 @@ public class EditorDocumentServiceEventTests
     public async Task AttachDocumentAsync_RaisesDocumentAttachedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata
+        var metadata = new TestDocumentMetadata
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
         var eventRaised = false;
 
@@ -356,9 +356,9 @@ public class EditorDocumentServiceEventTests
     public async Task AttachDocumentAsync_DocumentAttachedEvent_ContainsCorrectMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata
+        var metadata = new TestDocumentMetadata
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
         IDocumentMetadata? capturedMetadata = null;
 
@@ -379,9 +379,9 @@ public class EditorDocumentServiceEventTests
     public async Task AttachDocumentAsync_DocumentAttachedEvent_ContainsCorrectIndexHint()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata
+        var metadata = new TestDocumentMetadata
         {
-            Title = "Test Scene",
+            Title = "Test Document",
         };
         const int expectedIndexHint = 3;
         int? capturedIndexHint = null;
@@ -403,13 +403,13 @@ public class EditorDocumentServiceEventTests
     public async Task UpdateMetadataAsync_RaisesDocumentMetadataChangedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Original Title" };
+        var metadata = new TestDocumentMetadata { Title = "Original Title" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         var eventRaised = false;
 
         this.service.DocumentMetadataChanged += (sender, args) => eventRaised = true;
 
-        var updatedMetadata = new SceneDocumentMetadata(docId)
+        var updatedMetadata = new TestDocumentMetadata(docId)
         {
             Title = "Updated Title",
         };
@@ -428,13 +428,13 @@ public class EditorDocumentServiceEventTests
     public async Task UpdateMetadataAsync_DocumentMetadataChangedEvent_ContainsNewMetadata()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Original Title" };
+        var metadata = new TestDocumentMetadata { Title = "Original Title" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
         IDocumentMetadata? capturedMetadata = null;
 
         this.service.DocumentMetadataChanged += (sender, args) => capturedMetadata = args.NewMetadata;
 
-        var updatedMetadata = new SceneDocumentMetadata(docId)
+        var updatedMetadata = new TestDocumentMetadata(docId)
         {
             Title = "Updated Title",
         };
@@ -455,7 +455,7 @@ public class EditorDocumentServiceEventTests
     {
         // Arrange
         var nonExistentId = Guid.NewGuid();
-        var metadata = new SceneDocumentMetadata(nonExistentId)
+        var metadata = new TestDocumentMetadata(nonExistentId)
         {
             Title = "Test",
         };
@@ -477,7 +477,7 @@ public class EditorDocumentServiceEventTests
     public async Task SelectDocumentAsync_RaisesDocumentActivatedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
         var eventRaised = false;
 
@@ -497,7 +497,7 @@ public class EditorDocumentServiceEventTests
     public async Task SelectDocumentAsync_DocumentActivatedEvent_ContainsCorrectDocumentId()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var docId = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: false).ConfigureAwait(false);
         Guid? capturedDocId = null;
 
@@ -537,7 +537,7 @@ public class EditorDocumentServiceEventTests
     public async Task OpenDocumentAsync_WithShouldSelectTrue_RaisesDocumentActivatedEvent()
     {
         // Arrange
-        var metadata = new SceneDocumentMetadata { Title = "Test Scene" };
+        var metadata = new TestDocumentMetadata { Title = "Test Document" };
         var eventRaised = false;
 
         this.service!.DocumentActivated += (sender, args) => eventRaised = true;
