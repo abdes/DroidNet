@@ -12,18 +12,19 @@
 
 namespace oxygen::interop::module {
 
-class EditorModule;
+  class EditorModule;
 
-class DestroySceneCommand final : public EditorCommand {
-public:
-  DestroySceneCommand(EditorModule* module)
-    : EditorCommand(oxygen::core::PhaseId::kFrameStart), module_(module) {}
+  class DestroySceneCommand final : public EditorCommand {
+  public:
+    DestroySceneCommand(EditorModule* module)
+      : EditorCommand(oxygen::core::PhaseId::kFrameStart), module_(module) {
+    }
 
-  void Execute(CommandContext& context) override;
+    void Execute(CommandContext& context) override;
 
-private:
-  EditorModule* module_;
-};
+  private:
+    EditorModule* module_;
+  };
 
 } // namespace oxygen::interop::module
 

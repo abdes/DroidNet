@@ -2,23 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Geometry;
 
 #pragma warning disable SA1402 // File may only contain a single type
 
 /// <summary>
 /// Categorizes geometry assets for display in the asset picker UI.
 /// </summary>
-public enum GeometryAssetPickerGroup
+public enum AssetPickerGroup
 {
-    /// <summary>
-    /// Engine-provided built-in assets.
-    /// </summary>
+    /// <summary>Engine-provided built-in assets.</summary>
     Engine,
 
-    /// <summary>
-    /// User/project content assets discovered by the content browser.
-    /// </summary>
+    /// <summary>User/project content assets discovered by the content browser.</summary>
     Content,
 }
 
@@ -32,24 +28,24 @@ public enum GeometryAssetPickerGroup
 /// <param name="Group">The group the asset belongs to (engine or content).</param>
 /// <param name="IsEnabled">Whether the asset may be selected/used. Disabled items can be shown but not applied.</param>
 /// <param name="ThumbnailModel">An optional model used to render the asset's thumbnail. May be <see langword="null"/>.</param>
-public sealed record GeometryAssetPickerItem(
+public sealed record AssetPickerItem(
     string Name,
     Uri Uri,
     string DisplayType,
     string DisplayPath,
-    GeometryAssetPickerGroup Group,
+    AssetPickerGroup Group,
     bool IsEnabled,
     object? ThumbnailModel);
 
 /// <summary>
-/// Represents a named group of <see cref="GeometryAssetPickerItem"/> instances shown in the picker.
+/// Represents a named group of <see cref="AssetPickerItem"/> instances shown in the picker.
 /// </summary>
 /// <param name="Key">The group key used for identification (for example, "Engine" or "Content").</param>
 /// <param name="Items">The items that belong to the group.</param>
-public sealed record GeometryAssetGroup(string Key, IReadOnlyList<GeometryAssetPickerItem> Items);
+public sealed record AssetGroup(string Key, IReadOnlyList<AssetPickerItem> Items);
 
 /// <summary>
 /// Lightweight header record used to represent a group header in UI lists.
 /// </summary>
 /// <param name="Title">The title to display for the header.</param>
-public sealed record GeometryAssetGroupHeader(string Title);
+public sealed record AssetGroupHeader(string Title);

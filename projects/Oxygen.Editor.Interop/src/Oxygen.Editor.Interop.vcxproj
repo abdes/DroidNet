@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
+    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp" />
     <ClCompile Include="Commands\CreateSceneCommand.cpp" />
     <ClCompile Include="Commands\DestroySceneCommand.cpp" />
     <ClCompile Include="Commands\HideViewCommand.cpp" />
@@ -59,7 +60,9 @@
     <ClInclude Include="Commands\HideViewCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
+    <ClInclude Include="Commands\RemoveSceneNodesCommand.h" />
     <ClInclude Include="Commands\RenameSceneNodeCommand.h" />
+    <ClInclude Include="Commands\ReparentSceneNodesCommand.h" />
     <ClInclude Include="Commands\SetLocalTransformCommand.h" />
     <ClInclude Include="Commands\CreateBasicMeshCommand.h" />
     <ClInclude Include="Commands\SetVisibilityCommand.h" />

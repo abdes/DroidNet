@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.World.Inspector.Geometry;
 
 /// <summary>
 /// Template selector used by the geometry asset picker list to choose between group header
@@ -14,11 +14,11 @@ namespace Oxygen.Editor.World.Inspector;
 /// </summary>
 /// <remarks>
 /// The selector examines the runtime type of the data item and returns <see cref="HeaderTemplate"/>
-/// for <see cref="GeometryAssetGroupHeader"/> instances and <see cref="ItemTemplate"/> for
-/// <see cref="GeometryAssetPickerItem"/> instances. For unknown types the selector falls back
+/// for <see cref="AssetGroupHeader"/> instances and <see cref="ItemTemplate"/> for
+/// <see cref="AssetPickerItem"/> instances. For unknown types the selector falls back
 /// to <see cref="ItemTemplate"/>.
 /// </remarks>
-public sealed class GeometryPickerEntryTemplateSelector : DataTemplateSelector
+public sealed partial class AssetPickerEntryTemplateSelector : DataTemplateSelector
 {
     /// <summary>
     /// Gets or sets the template used to render group headers in the picker list.
@@ -46,8 +46,8 @@ public sealed class GeometryPickerEntryTemplateSelector : DataTemplateSelector
 
         return item switch
         {
-            GeometryAssetGroupHeader => this.HeaderTemplate,
-            GeometryAssetPickerItem => this.ItemTemplate,
+            AssetGroupHeader => this.HeaderTemplate,
+            AssetPickerItem => this.ItemTemplate,
             _ => this.ItemTemplate,
         };
     }

@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.World.ContentBrowser;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Output;
 using Oxygen.Editor.World.Routing;
 using Oxygen.Editor.World.SceneEditor;

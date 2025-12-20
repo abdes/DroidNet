@@ -14,16 +14,16 @@
 
 namespace oxygen::interop::module {
 
-void DestroySceneCommand::Execute(CommandContext& context) {
-  if (!module_)
-    return;
+  void DestroySceneCommand::Execute(CommandContext& context) {
+    if (!module_)
+      return;
 
-  try {
-    module_->ApplyDestroyScene();
+    try {
+      module_->ApplyDestroyScene();
+    }
+    catch (...) {
+      // swallow exceptions across engine boundary
+    }
   }
-  catch (...) {
-    // swallow exceptions across engine boundary
-  }
-}
 
 } // namespace oxygen::interop::module

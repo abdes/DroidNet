@@ -8,6 +8,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.WorldEditor.SceneEditor;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
