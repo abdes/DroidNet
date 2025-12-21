@@ -11,7 +11,7 @@ Our design is based on four core principles:
 1. **Thread-Safe Command Relay**: Input events from the WinUI thread are treated as asynchronous commands to the engine. This ensures that input is processed at the correct point in the engine's frame lifecycle, avoiding race conditions.
 2. **Contextual Routing**: Every input event is tagged with a `ViewId`. The engine uses this to determine which viewport, camera, or gizmo should receive the input.
 3. **Priority-Based Consumption**: Input flows through a stack of handlers. High-priority editor tools (like Gizmos) can "consume" an event, preventing it from reaching lower-priority systems (like game logic).
-4. **Stateful Cursor Management**: The system must handle cursor visibility, locking, and wrapping (infinite scroll) natively during continuous operations like orbiting or dragging.
+4. **Stateful Cursor Management**: The system handles cursor visibility and confinement during continuous operations like orbiting or dragging.
 
 ### 1.2 Why a Unified System?
 
@@ -20,7 +20,8 @@ By routing editor input through the engine's `InputSystem` rather than bypassing
 * **Chorded Actions**: Easily handle complex combinations like `Alt + Shift + LMB` without manual state tracking.
 * **Rebindable Hotkeys**: Users can customize editor shortcuts (e.g., changing the "Translate" tool from `W` to something else) using the same mapping system as the game.
 * **Consistent State**: The engine maintains a single source of truth for key/button states (e.g., "Is the Ctrl key currently pressed?").
-* **Transaction Awareness**: Input actions that modify scene state (like Gizmo drags) can automatically delimit Undo/Redo transactions (Begin/End).
+
+> **Note**: Undo/Redo transaction management is handled by the editor-level system (out of scope for this document). The input pipeline enables this by providing clear action lifecycle events (Started/Completed/Canceled).
 
 ---
 
@@ -49,37 +50,106 @@ We use the engine's `InputMappingContext` system to manage input priority. The s
 
 > **Note on Focus vs. Hover**:
 >
-> * **Hover**: Sufficient for `Zoom` (Scroll Wheel) and `Gizmo Pre-highlighting`.
+> * **Hover**: Sufficient for `Zoom` (Scroll Wheel) and `Gizmo Pre-highlighting`. Scroll events are delivered to the **last-hovered viewport** (UE5 convention).
 > * **Focus**: Required for `Keyboard` shortcuts and `Orbit/Pan` operations. Clicking a viewport should grant it focus.
+> * **Multi-Viewport Scroll**: WinUI tracks which viewport last received `PointerEntered`. Scroll events are tagged with that viewport's `ViewId`.
 
 ---
 
-## 4. Technical Implementation Details
+## 4. Editor Input Bindings
 
-### 4.1 Direct Input Injection
+Standard 3D editor controls based on UE5/Maya/Blender conventions:
+
+### 4.1 Viewport Navigation
+
+| Action | Input | Description |
+| :------- | :------ | :------------ |
+| **Orbit** | `Alt + LMB` drag | Rotate camera around pivot point (tumble) |
+| **Pan** | `Alt + MMB` drag | Move camera parallel to view plane (track) |
+| **Zoom** | `Mouse Wheel` | Dolly camera toward/away from pivot |
+| **Fly Mode** | `RMB` hold + `WASD` | Free camera movement (FPS-style) |
+| **Zoom Alt** | `Alt + RMB` drag | Alternative zoom via mouse drag |
+
+### 4.2 Selection
+
+| Action | Input | Description |
+| :------- | :------ | :------------ |
+| **Select** | `LMB` click | Replace selection with clicked object |
+| **Add to Selection** | `Shift + LMB` | Add clicked object to current selection |
+| **Toggle Selection** | `Ctrl + LMB` | Toggle clicked object in/out of selection |
+| **Box Select** | `LMB` drag on empty space | Rectangular selection (future) |
+| **Deselect All** | `Escape` or click empty | Clear selection |
+
+### 4.3 Gizmo Modes
+
+| Action | Input | Description |
+| :------- | :------ | :------------ |
+| **Translate Mode** | `W` | Switch to move gizmo (3-axis arrows) |
+| **Rotate Mode** | `E` | Switch to rotation gizmo (3-axis circles) |
+| **Scale Mode** | `R` | Switch to scale gizmo (3-axis handles) |
+| **Cycle Modes** | `Space` | Cycle through translate/rotate/scale |
+| **Toggle Local/World** | `Q` | Switch between local and world space gizmos |
+
+### 4.4 Gizmo Interaction
+
+| Action | Input | Description |
+| :------- | :------ | :------------ |
+| **Drag Axis** | `LMB` drag on axis handle | Constrained movement along single axis |
+| **Drag Plane** | `LMB` drag on plane handle | Constrained movement in plane (2 axes) |
+| **Free Drag** | `LMB` drag on center | Unconstrained screen-space movement |
+| **Precision Drag** | `Shift` (hold during drag) | Slow down drag speed (0.1x multiplier) |
+| **Snap Toggle** | `Ctrl` (hold during drag) | Enable/disable grid/angle snapping |
+
+### 4.5 Viewport Utilities
+
+| Action | Input | Description |
+| :------- | :------ | :------------ |
+| **Focus Selection** | `F` | Frame selected object(s) in viewport |
+| **Reset Camera** | `Home` | Reset to default camera position/rotation |
+| **Toggle Wireframe** | `Alt + W` | Switch between shaded/wireframe |
+| **Toggle Grid** | `G` | Show/hide grid overlay |
+
+### 4.6 Modifier Key Semantics
+
+* **Shift**: Additive (add to selection, precision mode)
+* **Ctrl**: Toggle (toggle selection, toggle snap)
+* **Alt**: Camera manipulation (orbit/pan/zoom prefix)
+
+**Design Notes**:
+
+* Bindings are **configurable** via Input Mapping Contexts.
+* Default bindings match UE5 conventions (most widely used).
+* Maya users can remap to Maya-style (`Alt+Shift+LMB` for pan).
+* All bindings route through `InputSystem` - no hardcoded checks in UI layer.
+
+---
+
+## 5. Technical Implementation Details
+
+### 5.1 Direct Input Injection
 
 In a standalone game, the `Platform` layer pulls input directly from the OS (via SDL3). In the Editor, this relationship is inverted: the `Platform` layer must accept input provided by the host application (WinUI).
 
 To achieve this efficiently, we bypass the `EventPump` entirely in Editor Mode.
 
-#### 4.1.1 Configurable Input Source
+#### 5.1.1 Configurable Input Source
 
 The `InputEvents` component in `Oxygen.Engine` will be refactored to support two modes of operation:
 
 1. **Pull Mode (Standalone)**: The default behavior. It pulls events from the `EventPump` (which polls SDL).
 2. **Push Mode (Editor)**: It exposes a public `InjectEvent(std::unique_ptr<InputEvent>)` method. In this mode, it does **not** subscribe to `EventPump`.
 
-#### 4.1.2 Editor-Side Injection
+#### 5.1.2 Editor-Side Injection
 
 1. **Configuration**: When the `EditorModule` initializes the engine, it configures the `InputEvents` component to run in **Push Mode**.
 2. **Event Bridge**:
-    * WinUI events are captured by `Viewport.xaml.cs`.
-    * Passed to `EditorModule` via `EngineRunner`.
-    * `EditorModule` translates them into `InputEvent` objects.
+    * WinUI events are captured by `Viewport.xaml.cs`. **Critical**: Each `Viewport` control has an assigned `ViewId`.
+    * Events are passed to `EditorModule` via `EngineRunner` along with the `ViewId` of the source viewport.
+    * `EditorModule` translates them into `InputEvent` objects, **embedding the `ViewId`** in each event.
     * `EditorModule` calls `InputEvents::InjectEvent()` directly.
-3. **Seamless Consumption**: The engine's `InputSystem` remains completely unaware of this swap. It continues to read from the `InputEvents` channel, receiving events that originated in WinUI.
+3. **Seamless Consumption**: The engine's `InputSystem` remains completely unaware of this swap. It continues to read from the `InputEvents` channel, receiving events that originated in WinUI. The `ViewId` tag allows systems like `EditorCameraController` to route input to the correct viewport camera.
 
-#### 4.1.3 Handling High-Frequency Input (Throttling)
+#### 5.1.3 Handling High-Frequency Input (Throttling)
 
 Since we are bypassing the OS event queue, the **EditorModule** becomes responsible for flow control.
 
@@ -91,7 +161,7 @@ Since we are bypassing the OS event queue, the **EditorModule** becomes responsi
 * **Injection**: Once per frame (during `kFrameStart` phase), the `EditorModule` drains the accumulator, generates optimized `InputEvent`s (e.g., one MouseMove event representing the sum of 100 raw moves), and injects them into the engine.
 * **Benefit**: This prevents channel flooding and ensures the engine processes exactly one logical input update per simulation step, matching the frame rate.
 
-### 4.2 Context-Based Routing
+### 5.2 Context-Based Routing
 
 Instead of maintaining a separate `InputSystem` for the editor, we leverage the engine's native **Input Mapping Context (IMC)** system to handle mode switching. This ensures a unified architecture where the Editor is just another "player" with high-priority input needs.
 
@@ -103,13 +173,13 @@ Instead of maintaining a separate `InputSystem` for the editor, we leverage the 
 | **Editing** | `IMC_Editor_Gizmos`, `IMC_Editor_Viewport`, `IMC_Editor_Global` | Game contexts are **Deactivated**. The game receives no input. |
 | **Play-In-Editor (PIE)** | `IMC_Game`, `IMC_Editor_Global` (limited) | Editor viewport navigation is **Deactivated**. Game logic receives full input. |
 
-#### 4.2.1 Advantages
+#### 5.2.1 Advantages
 
 * **Simplicity**: Single code path for input processing.
 * **Consistency**: Editor controls use the exact same Action/Axis system as the game.
 * **Configurability**: Users can rebind editor keys using the same UI used for game controls.
 
-#### 4.2.2 Priority and Consumption
+#### 5.2.2 Priority and Consumption
 
 We use the standard **IMC priority system** to manage conflicts:
 
@@ -118,7 +188,7 @@ We use the standard **IMC priority system** to manage conflicts:
 2. **Navigation Fallback**: If no gizmo or tool consumes the input, it falls through to `IMC_Editor_Viewport` (Orbit/Pan/Zoom).
 3. **Clean State**: When switching modes, we simply call `ActivateMappingContext` / `DeactivateMappingContext` on the relevant contexts.
 
-### 4.3 Camera Control & View Matrix Updates
+### 5.3 Camera Control & View Matrix Updates
 
 The `EditorCameraController` processes `Editor.Camera.*` actions during the engine's `kInput` phase. It retrieves action values from the global `InputSystem` snapshot.
 
@@ -130,10 +200,10 @@ The `EditorCameraController` processes `Editor.Camera.*` actions during the engi
    void EditorCameraController::OnInput(ViewId viewId, const InputSnapshot& snapshot) {
        auto& cam = cameras_[viewId];
 
-       // Accumulate deltas from global actions (only active if IMC_Editor_Viewport is active)
-       float2 orbitDelta = snapshot.GetActionValue<float2>("Editor.Camera.Orbit");
-       float2 panDelta = snapshot.GetActionValue<float2>("Editor.Camera.Pan");
-       float zoomDelta = snapshot.GetActionValue<float1>("Editor.Camera.Zoom");
+       // Accumulate deltas from global InputSystem actions (only active if IMC_Editor_Viewport is active)
+       Axis2D orbitDelta = snapshot.GetActionValue<Axis2D>("Editor.Camera.Orbit");
+       Axis2D panDelta = snapshot.GetActionValue<Axis2D>("Editor.Camera.Pan");
+       Axis1D zoomDelta = snapshot.GetActionValue<Axis1D>("Editor.Camera.Zoom");
 
        // Update camera state
        cam.Orbit(orbitDelta);
@@ -148,40 +218,181 @@ The `EditorCameraController` processes `Editor.Camera.*` actions during the engi
 
 4. **Renderer Synchronization**: The `Renderer` uses the `ViewContext`'s matrix during the next frame's draw call, ensuring that the viewport reflects the latest input before rendering begins.
 
-### 4.4 Selection & Raycasting
+### 5.4 Selection via GPU Picking
 
-Selection is triggered by the `Editor.Select` action (usually bound to `LMB`) within the local editor input context.
+Selection is triggered by the `Editor.Select` action (usually bound to `LMB`) within the editor input context.
 
-1. **Ray Generation**: The `EditorModule` uses the `ViewId` to get the viewport's camera and projection parameters. It generates a world-space ray from the screen-space mouse coordinates.
-2. **Scene Query**: The ray is passed to the `PhysicsSystem` or a specialized `SceneQuerySystem` to perform a raycast against the `GameScene`.
-   * *Note*: For high-precision selection (e.g., selecting a specific vertex or edge), we may eventually need an **ID Buffer** pass, but raycasting is sufficient for object-level selection in Phase 1.
-3. **Hit Result**: If an object is hit, its `EntityId` is retrieved.
-4. **Selection Update**: The `EditorModule` updates the `SelectionManager`, which in turn triggers a refresh of the Properties panel and updates the stencil-based outlining in the renderer.
-   * *Multi-Select*: The system must check for `Shift` or `Ctrl` modifiers to support Add/Toggle selection modes.
+**Implementation** (Detailed in `editor-artifacts-rendering.md` §5.3):
+
+1. **Pick Request Generation**: On `LMB` press, `EditorModule` generates a **Click Pick Request**:
+   * Tagged with `request_id`, `timestamp`, `view_id`, and cursor screen position.
+   * Queued for rendering in next frame's pick pass.
+
+2. **GPU Pick Pass** (Frame N+1):
+   * Render MainScene + GizmoScene with ID shader to 1×1 `R32_UINT` texture at cursor position.
+   * Separate passes for opaque (depth write on) and transparent (depth write off) geometry.
+   * Readback ID value from persistent CPU-readable texture.
+
+3. **Pick Result Delivery** (Frame N+2):
+   * Result delivered to `EditorModule` with picked `EntityId` (0 = miss).
+   * Timeout validation applied (see §6.3).
+   * If valid, update `SelectionManager`.
+
+4. **Selection Update**:
+   * `SelectionManager` updates internal state based on modifier keys:
+     * Query current key states from `InputSystem::GetKeyState()`:
+       * `Shift` pressed: Add to selection (union).
+       * `Ctrl` pressed: Toggle selection (XOR).
+       * Neither: Replace selection (clear + add).
+     * **Rationale**: Modifier logic belongs in selection handler, not action mapping. Allows runtime behavior changes without remapping.
+   * Triggers stencil buffer update for outline rendering.
+   * Notifies Properties panel to display selected object properties.
+
+**Advantages**:
+
+* Handles gizmos, scene objects, and transparent geometry uniformly.
+* Predictable 1-frame latency (imperceptible in editor).
+* No CPU-side raycasting needed.
 
 ---
 
-## 5. Advanced Interaction Details
+## 6. Advanced Interaction Details
 
-### 5.1 Cursor Policy
+### 6.0 Gizmo Hover Detection
+
+**Purpose**: Determine which gizmo axis is under the cursor before the user clicks, enabling pre-highlighting and conditional IMC activation.
+
+**Implementation** (Leverages existing GPU picking infrastructure from rendering design):
+
+1. **Hover Query Generation**:
+   * Every frame during `EditorModule::OnPreRender` phase, for each active viewport:
+     * If cursor is over viewport, generate a **Hover Pick Request**.
+     * Request uses current cursor position, renders to 1×1 ID texture.
+   * Hover picks use a **rolling 2-frame buffer**: Frame N renders hover pick, Frame N+1 reads result.
+   * **Phase Rationale**: Pick requests must be generated before rendering begins, not during input processing.
+
+2. **Hover State Management**:
+   * `GizmoManager` maintains:
+     * `EntityId hovered_gizmo_part_` — ID of currently hovered gizmo axis/handle (0 = none).
+     * `EntityId hovered_scene_object_` — ID of currently hovered scene object (0 = none).
+   * **Priority**: Gizmo IDs take priority over scene object IDs (checked first in pick result).
+
+3. **IMC Consumption Logic**:
+   * `IMC_Editor_Gizmos` is **always active** (registered at editor startup).
+   * Gizmo actions check hover state before consuming input:
+     * `Editor.Gizmo.BeginDrag`: Consumes LMB only if `hovered_gizmo_part_ != 0`.
+     * `Editor.Gizmo.ContinueDrag`: Consumes mouse delta if drag is in progress.
+
+4. **Performance**:
+   * Hover picks reuse the same GPU picking pass infrastructure as click-based selection (see `editor-artifacts-rendering.md` §5.3).
+   * Cost: ~1 draw call per frame (MainScene + GizmoScene with ID shader, 1×1 viewport). Negligible overhead.
+
+**Note**: Hover detection does NOT require a separate picking system. The existing GPU-based unified picking design (§5.3 in rendering doc) handles both hover and click seamlessly.
+
+### 6.1 Cursor Policy
 
 To provide a professional feel, the cursor behavior must change based on the active operation:
 
 * **Default**: Standard arrow pointer.
 * **Hovering Gizmo**: Context-specific icon (e.g., "Move X", "Rotate").
 * **Orbiting/Panning**:
-  * **Hide**: The cursor is hidden.
-  * **Lock/Wrap**: The cursor position is locked to the start point, OR wrapped around screen edges to allow infinite movement.
-  * **Restore**: On release, the cursor reappears at the original position (if locked) or current position (if wrapped).
+  * **Hide**: The cursor is hidden during the operation.
+  * **Restore**: On release, the cursor reappears at the original position.
+  * **Note**: Cursor position is locked to the start point. Delta accumulation allows unlimited rotation without cursor escaping viewport.
 
-### 5.2 Focus Policy
+### 6.2 Mouse Constraint vs. Snapping (Separation of Concerns)
 
-* **Click-to-Focus**: A viewport gains focus when clicked. This prevents accidental camera movement when interacting with other panels.
-* **Hover-for-Scroll**: Mouse wheel zoom should work on hover without requiring a click, as per standard UI conventions.
+**Mouse Constraint** (WinUI Responsibility):
+
+* **Purpose**: Constrain cursor movement to a specific screen-space direction during gizmo drag (e.g., lock cursor to vertical line when dragging Y-axis handle).
+* **Implementation** (Per-Request Callback Pattern):
+  * **Step 1 - User Clicks**: User presses LMB. WinUI sends pick request with callback:
+
+    ```csharp
+    EngineRunner.RequestPick(viewId, cursorPos, PickType.Click, result => {
+        if (result.entity_id != 0 && IsGizmoPart(result.entity_id)) {
+            // Store constraint from pick result
+            active_constraint = result.screen_axis_direction;
+        }
+    });
+    ```
+
+  * **Step 2 - Engine Processes**: Engine does GPU pick (1-2 frames later), constructs `PickResult`:
+    * `EntityId entity_id` — picked object/gizmo part (0 = miss).
+    * `Vector2 screen_axis_direction` — if gizmo part: axis already projected to screen space.
+    * Engine invokes callback with result.
+  * **Step 3 - Callback Stores Constraint**: Callback receives result, stores `active_constraint` if gizmo.
+  * **Step 4 - Constraint Application** (`PointerMoved` handler):
+    * If `active_constraint` exists:
+      * `constrained_delta = dot(delta, active_constraint) * active_constraint`.
+      * Send constrained delta to accumulator.
+    * Else: Send raw delta.
+  * **Step 5 - Constraint Release**: On LMB release, clear `active_constraint`.
+* **Benefit**: User feels direct manipulation along the axis.
+* **Note**: Matches `CreateScene`/`CreateViewAsync` pattern — per-request callback, not global registration.
+
+**Transform Snapping** (Engine Responsibility):
+
+* **Purpose**: Quantize object transforms to grid increments or angle steps.
+* **Implementation** (Engine `GizmoManager`):
+  * `EditorSettings` defines:
+    * `grid_snap_enabled` (bool), `grid_size` (float, e.g., 0.5 units).
+    * `angle_snap_enabled` (bool), `angle_step` (float, e.g., 15 degrees).
+  * During gizmo drag, `GizmoManager::ApplyDrag(delta)` checks snap settings:
+    * Check `InputSystem::GetKeyState(Key::Ctrl)` to determine if snap is active.
+    * **Translation**: If snap active: `new_pos = round(new_pos / grid_size) * grid_size`.
+    * **Rotation**: If snap active: `new_angle = round(new_angle / angle_step) * angle_step`.
+    * **Scale**: If snap active: snap scale to fixed increments (e.g., 0.1x steps).
+  * Snapping is applied **after** constraint, so the two systems compose cleanly.
+* **Benefit**: Objects align to level geometry, rotations are clean (0°, 90°, etc.).
+* **Note**: Snapping is geometric logic involving world-space transforms. WinUI has no visibility into this.
+
+**Summary**:
+
+* **WinUI**: Constrains cursor motion in screen space (UX polish).
+* **Engine**: Snaps transforms in world space (level design tool).
+* The two features are orthogonal and can be enabled independently.
+
+### 6.3 Pick Request Timeout and Invalidation
+
+**Purpose**: Prevent stale pick results from being applied if the engine is slow or the request is abandoned.
+
+**Implementation**:
+
+* Each pick request (hover or click) is tagged with:
+  * `request_id` (unique per request).
+  * `timestamp` (request submission time).
+  * `view_id` (which viewport issued the request).
+  * `request_type` (hover vs. click).
+* **Timeout Threshold**: `kPickTimeoutMs = 100ms` (configurable).
+* **Invalidation Logic** (in `EditorModule` pick result handler):
+  * When a pick result arrives, check:
+    * `if (current_time - request.timestamp > kPickTimeoutMs)`: Discard result, log warning.
+    * `if (!ViewExists(request.view_id))`: Discard (viewport was closed mid-pick).
+    * `if (request_type == Click && !ViewHasFocus(request.view_id))`: Discard (user clicked elsewhere, losing focus).
+    * For hover picks: Always deliver if view exists (hover doesn't require focus).
+    * Otherwise: Deliver result to `GizmoManager` or `SelectionManager` with `view_id` context.
+* **Multi-Viewport Safety**: Each viewport maintains independent hover/selection state. Pick results are routed to the originating viewport only.
+* **User Scenario**: User rapidly clicks in different viewports. Stale or cross-viewport pick results are ignored, preventing incorrect selection.
+
+**Note**: This is a simple timeout mechanism. No complex camera-based invalidation is needed—the GPU pick design in `editor-artifacts-rendering.md` is already robust. The 1-frame latency is inherent and well-handled.
+
+### 6.4 Batch Updates for Multi-Object Transforms
+
+**Status**: Future enhancement. Tracked but not implemented in Phase 1.
+
+**Rationale**: Current test scenes have ~10 objects. Premature optimization. Defer until perf profiling shows bottlenecks with large selections (>100 objects).
+
+**Tracking Note**: When implemented, use a transaction-scoped batch update pattern:
+
+* `EditorModule::BeginBatchUpdate()` defers scene graph updates.
+* Transform changes are queued.
+* `EndBatchUpdate()` applies all changes in one traversal.
+* Single undo record for the batch.
 
 ---
 
-## 6. Implementation Plan
+## 7. Implementation Plan
 
 1. [ ] **Refactor `InputEvents` Component**:
    * Modify `Oxygen.Engine/src/Oxygen/Platform/InputEvents.h` to support a "Push Mode".
@@ -194,6 +405,30 @@ To provide a professional feel, the cursor behavior must change based on the act
    * Create `EditorModule::InputAccumulator` class to buffer raw input data from the interop layer.
    * Implement **Coalescing Logic**: Sum mouse deltas (`dx`, `dy`) and scroll deltas to ensure one update per frame.
    * Ensure thread safety (mutex) as WinUI writes and Engine reads.
+   * **Delta Accumulation Details**:
+     * `InputAccumulator` maintains per-frame staging buffers:
+       * `Vector2 mouse_delta_accum_` — Sum of all pointer move deltas since last drain.
+       * `float scroll_delta_accum_` — Sum of all mouse wheel deltas since last drain.
+       * `std::vector<KeyStateChange> key_events_` — Ordered list of key press/release events (NOT accumulated, preserved in order).
+       * `std::vector<ButtonStateChange> button_events_` — Ordered list of mouse button press/release events (NOT accumulated).
+     * **WinUI→Accumulator** (UI Thread):
+       * `PointerMoved`: `mouse_delta_accum_ += delta` (thread-safe write).
+       * `PointerWheelChanged`: `scroll_delta_accum_ += wheel_delta`.
+       * `KeyDown/KeyUp`: Append to `key_events_`.
+       * `PointerPressed/PointerReleased`: Append to `button_events_`.
+     * **Accumulator→Engine** (`EditorModule::OnFrameStart`, Engine Thread):
+       * Drain accumulator (acquire lock, copy values, reset accumulators).
+       * Generate single `InputEvent::MouseMove` with accumulated `mouse_delta_accum_`.
+       * Generate single `InputEvent::MouseWheel` with accumulated `scroll_delta_accum_`.
+       * Generate `InputEvent::Key` for each key event (preserve order).
+       * Generate `InputEvent::MouseButton` for each button event (preserve order).
+       * Inject all events into `InputEvents::InjectEvent()`.
+   * **Focus-Loss Handling**:
+     * When a viewport loses focus (`LostFocus` event in WinUI):
+       * Acquire lock on accumulator for that viewport.
+       * Discard accumulated `mouse_delta_accum_` and `scroll_delta_accum_`.
+       * Keep key/button events (state transitions must be preserved).
+     * **Rationale**: Prevents stale accumulated deltas from being applied after focus returns.
 4. [ ] **Implement Input Dispatcher**:
    * In `EditorModule::OnFrameStart`:
      * Drain the `InputAccumulator`.
@@ -205,30 +440,98 @@ To provide a professional feel, the cursor behavior must change based on the act
 5. [ ] **Update EngineRunner (Interop)**:
    * Expose methods `SendMouseMove`, `SendMouseButton`, `SendKey`, `SendWheel`.
    * Forward these calls to `EditorModule::EnqueueInput()`.
+   * **Pick Request API** (matches `CreateScene`/`CreateViewAsync` pattern):
+
+     ```cpp
+     void RequestPick(
+         ViewId viewId,
+         Vector2 screenPos,
+         PickType type,
+         std::function<void(PickResult)> callback
+     );
+     ```
+
+   * **PickResult Structure**:
+     * `EntityId entity_id` — picked entity (0 = miss).
+     * `ViewId view_id` — originating viewport.
+     * `Vector2 screen_axis_direction` — if gizmo part: axis projected to screen space (normalized).
+     * `bool is_gizmo` — true if entity is gizmo part.
+   * **Implementation**: `RequestPick` enqueues `PickCommand` to EditorModule command queue. Command executes in OnPreRender, invokes callback when GPU pick completes.
 
 6. [ ] **Implement WinUI Event Handlers**:
-   * In `Viewport.xaml.cs`, bind `Pointer*` and `Key*` events.
-   * Implement **Focus Management**: Ensure Viewport requests focus on click.
-   * Implement **Cursor Wrapping/Locking**: Add C# logic to handle `SetCursorPos` when requested by the engine.
+   * In `Viewport.xaml.cs`, bind `Pointer*`, `Key*`, and focus events.
+   * Implement **Focus Management**:
+     * Request focus on click.
+     * On `LostFocus`: Clear accumulated mouse/scroll deltas for this viewport (preserve key/button events).
+   * Implement **Cursor Management** (Local WinUI State):
+     * Track orbit/pan state by detecting `Alt+LMB` press/release:
+       * On `Alt+LMB` press: Save `cursor_saved_pos`, set `CoreWindow.PointerCursor = null`.
+       * On `Alt+LMB` release: Restore position and cursor.
+   * Implement **Pick Request** (with per-request callback):
+     * On `PointerPressed`:
 
-7. [ ] **Define Input Actions**:
-   * Create `Editor.Camera.Orbit`, `Editor.Camera.Pan`, `Editor.Camera.Zoom`.
-   * Create `IMC_Editor_Navigation` and map these to `Alt+LMB`, `Alt+MMB`, `MouseWheel`.
+       ```csharp
+       EngineRunner.RequestPick(viewId, cursorPos, PickType.Click, result => {
+           if (result.is_gizmo) {
+               active_constraint = result.screen_axis_direction;
+           } else if (result.entity_id != 0) {
+               // Scene object picked - trigger selection
+               UpdateSelection(result.entity_id);
+           }
+       });
+       ```
+
+   * Implement **Mouse Constraint** (applied in `PointerMoved`):
+     * If `active_constraint` exists, project delta onto constraint.
+     * On `PointerReleased`: Clear `active_constraint`.
+   * Implement **Hover Tracking**: Maintain `last_hovered_viewport_id` for scroll routing.
+
+7. [ ] **Define Input Actions and Mappings**:
+   * Implement all bindings from §4 (Editor Input Bindings).
+   * Create IMCs: `IMC_Editor_Navigation`, `IMC_Editor_Gizmos`, `IMC_Editor_Tools`.
+   * Map actions to inputs per binding tables (§4.1-§4.5).
 
 8. [ ] **Implement EditorCameraController**:
    * Create class to consume `Editor.Camera.*` actions.
    * Update `ViewContext` view matrix based on deltas.
    * Handle "Fly Mode" (WASD + RMB) logic.
+   * **Note**: Cursor hiding is handled by WinUI layer when it detects `Alt+LMB` press. Engine just processes camera deltas.
 
 9. [ ] **Implement GizmoManager**:
     * Create `GizmoManager` class.
-    * Implement `IMC_Editor_Gizmos` with high-priority actions.
-    * Implement `OnInput` handler to consume clicks on gizmo handles.
+    * Register `IMC_Editor_Gizmos` at startup (persistent, not dynamically activated).
+    * Implement gizmo action handlers:
+      * `Editor.Gizmo.BeginDrag`: Check `hovered_gizmo_part_ != 0` before consuming input.
+      * `Editor.Gizmo.ContinueDrag`: Consume deltas only if drag is active.
+    * **Hover Detection**:
+      * Process hover pick results (updated every frame in OnPreRender).
+      * Maintain `hovered_gizmo_part_` state.
+    * **Transform Snapping**:
+      * Read `EditorSettings` for grid/angle snap configuration.
+      * In `ApplyDrag()`, quantize transforms based on snap settings.
+      * Check `InputSystem::GetKeyState(Key::Ctrl)` for snap toggle (matches §4.4).
+    * **Note**: Mouse constraint is handled by WinUI layer (see §6.2). Engine receives pre-constrained deltas.
 
-10. [ ] **Implement Selection Raycast**:
-    * Implement `EditorModule::GetMouseRay(ViewId)`.
-    * Integrate with `PhysicsSystem::Raycast`.
-    * Update `SelectionManager` on click.
+10. [ ] **Implement GPU-Based Picking** (Note: Already designed in `editor-artifacts-rendering.md` §5.3):
+    * **Pick Command**: `RequestPick` enqueues `PickCommand` with stored callback.
+    * **Execution** (OnPreRender phase):
+      * Generate GPU pick request (1×1 viewport at cursor position).
+      * Render MainScene + GizmoScene with ID shader.
+      * Readback result (1-2 frames later).
+    * **Result Construction**:
+      * `entity_id`: From readback.
+      * `is_gizmo`: Check if entity is in gizmo scene.
+      * `screen_axis_direction`: If gizmo, get axis from scene node, project to screen space using view-projection matrix, return normalized.
+    * **Callback Invocation**: Invoke stored callback with `PickResult`.
+    * **Timeout Handling**: If >100ms since request, skip callback invocation, log warning.
+    * **Multi-Viewport**: Each request tagged with `view_id`, callback invoked with originating viewport's context.
 
-11. [ ] **Undo/Redo Integration**:
-    * Ensure Gizmo drag operations call `UndoSystem::BeginTransaction()` and `EndTransaction()`.
+## 8 Deliberate Omissions (No Bloat)
+
+Features NOT included (deferred or unnecessary for Phase 1):
+
+* **Box Selection**: Marked as future (§4.2). Rarely used in 3D editors (more common in 2D).
+* **Multi-Object Batch Updates**: Deferred until profiling shows bottlenecks (§6.4). Current test scenes have ~10 objects.
+* **Complex Snapping Modes**: No vertex snapping, surface snapping, or alignment tools. Grid/angle snapping covers 90% of use cases.
+* **Gesture Support**: No touch/pen gestures. Desktop-first.
+* **Macro Recording**: No input recording/playback. Out of scope.
