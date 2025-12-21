@@ -35,4 +35,4 @@ add_test(NAME "Oxygen.Platform.LinkTest" COMMAND "Oxygen.Platform.LinkTest")
 
 include(GTestHelpers)
 
-m_gtest_program(Input SOURCES "Input_test.cpp")
+m_gtest_program(Input SOURCES "Input_test.cpp" "InputEvents_test.cpp")

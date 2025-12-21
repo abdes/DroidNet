@@ -174,6 +174,7 @@ void Platform::UnregisterWindowAboutToBeDestroyedHandler(size_t token)
 auto Platform::Compose(const PlatformConfig& config) -> void
 {
   AddComponent<AsyncOps>(config);
+  AddComponent<InputEvents>();
 
   if (config.headless) {
     LOG_F(INFO, "Platform is headless -> no input, no window");
@@ -181,7 +182,6 @@ auto Platform::Compose(const PlatformConfig& config) -> void
   }
   AddComponent<EventPump>();
   AddComponent<WindowManager>();
-  AddComponent<InputEvents>();
 }
 
 auto Platform::GetInputSlotForKey(const platform::Key key)
@@ -190,4 +190,4 @@ auto Platform::GetInputSlotForKey(const platform::Key key)
   return platform::InputSlots::GetInputSlotForKey(key);
 }
 
-} // namespace oxygen::platform
+} // namespace oxygen

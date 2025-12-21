@@ -296,6 +296,12 @@ auto TranslateMouseWheelEvent(const SDL_Event& event)
 
 auto InputEvents::ProcessPlatformEvents() -> co::Co<>
 {
+  // No event pump means we are in headless mode, and we do not pull events
+  // from anywhere. We just accept injected events via the writer.
+  if (!event_pump_) {
+    co_return;
+  }
+
   while (async_->IsRunning()) {
     // Check if the event pump is still running. If not, the next event is a
     // dummy one that we should just ignore, and this loop should immediately

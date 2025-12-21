@@ -6,10 +6,8 @@
 
 #pragma once
 
-#include <array>
 #include <atomic>
 #include <concepts>
-#include <deque>
 #include <functional>
 #include <memory>
 #include <type_traits>
@@ -20,6 +18,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
@@ -32,7 +31,6 @@
 #include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
-#include <Oxygen/Platform/Display.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
 #include <Oxygen/Platform/Window.h>
@@ -175,18 +173,37 @@ namespace platform {
 
   class InputEvents final : public Component {
     OXYGEN_COMPONENT(InputEvents)
-    OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
+    OXYGEN_COMPONENT_REQUIRES(AsyncOps)
   public:
+    //! The maximum number of events buffered in the input events channel before
+    //! it starts blocking on writes.
+    static constexpr size_t kMaxBufferedEvents = 32;
+
     auto ForRead() { return channel_.ForRead(); }
+    auto ForWrite() -> co::BroadcastChannel<InputEvent>::Writer&
+    {
+      return channel_writer_;
+    }
 
   protected:
     auto UpdateDependencies(
       const std::function<Component&(TypeId)>& get_component) noexcept
       -> void override
     {
-      async_ = &static_cast<AsyncOps&>(get_component(AsyncOps::ClassTypeId()));
-      event_pump_
-        = &static_cast<EventPump&>(get_component(EventPump::ClassTypeId()));
+      // NOLINTBEGIN(*-pro-type-static-cast-downcast)
+      // Must always be present even in headless mode
+      async_ = observer_ptr { &static_cast<AsyncOps&>(
+        get_component(AsyncOps::ClassTypeId())) };
+      // Optional if we are in headless mode, so let's deal with it not being
+      // there and an exception thrown by the get_component call.
+      try {
+        event_pump_ = observer_ptr { &static_cast<EventPump&>(
+          get_component(EventPump::ClassTypeId())) };
+      } catch (const ComponentError&) {
+        // If it's not there, we will simply not pull events
+        (void)0;
+      }
+      // NOLINTEND(*-pro-type-static-cast-downcast)
     }
 
   private:
@@ -197,14 +214,14 @@ namespace platform {
       return event_pump_ != nullptr && event_pump_->IsRunning();
     };
 
-    co::BroadcastChannel<InputEvent> channel_ { 8 };
+    co::BroadcastChannel<InputEvent> channel_ { kMaxBufferedEvents };
     // NOLINTNEXTLINE(*-avoid-const-or-ref-data-members) - lifetime is linked to
     // channel_
     co::BroadcastChannel<InputEvent>::Writer& channel_writer_
       = channel_.ForWrite();
 
-    AsyncOps* async_ { nullptr };
-    EventPump* event_pump_ { nullptr };
+    observer_ptr<AsyncOps> async_ { nullptr };
+    observer_ptr<EventPump> event_pump_ { nullptr };
   };
 
   class WindowManager final : public Component {
@@ -368,9 +385,9 @@ private:
   auto Compose(const PlatformConfig& config) -> void;
 
   [[nodiscard]] auto FilterPlatformEvents() -> co::Co<>;
-  std::function<void(const platform::PlatformEvent&)> event_filter_ {};
+  std::function<void(const platform::PlatformEvent&)> event_filter_;
 
-  time::PhysicalClock physical_clock_ {};
+  time::PhysicalClock physical_clock_;
 };
 
 } // namespace oxygen
