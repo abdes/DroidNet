@@ -128,37 +128,34 @@ Standard 3D editor controls based on UE5/Maya/Blender conventions:
 
 ### 5.1 Direct Input Injection
 
-In a standalone game, the `Platform` layer pulls input directly from the OS (via SDL3). In the Editor, this relationship is inverted: the `Platform` layer must accept input provided by the host application (WinUI).
+In a standalone game, the `Platform` layer pulls input directly from the OS (via SDL3). In hosted/editor scenarios, the `Platform` layer accepts input provided by the host application (WinUI).
 
-To achieve this efficiently, we bypass the `EventPump` entirely in Editor Mode.
+The `InputEvents` component automatically adjusts its behavior based on `PlatformConfig.headless`: when `headless` is false it continues to pull events from the `EventPump` (standalone mode); when `headless` is true (hosted/embedded) it operates in an injected-mode and accepts events supplied by the host without subscribing to the `EventPump`.
 
 #### 5.1.1 Configurable Input Source
 
-The `InputEvents` component in `Oxygen.Engine` will be refactored to support two modes of operation:
-
-1. **Pull Mode (Standalone)**: The default behavior. It pulls events from the `EventPump` (which polls SDL).
-2. **Push Mode (Editor)**: It exposes a public `InjectEvent(std::unique_ptr<InputEvent>)` method. In this mode, it does **not** subscribe to `EventPump`.
+The `InputEvents` component in `Oxygen.Engine` will support both the default pull-from-`EventPump` behavior used in standalone games and an injected-mode suitable for hosted/editor scenarios. Selection between these internal behaviors is **automatic** and driven by `PlatformConfig.headless`: when `headless` is false, `InputEvents` pulls from the `EventPump`; when `headless` is true (hosted/embedded), `InputEvents` allows external producers to send events via its `ForWrite()` interface and does not subscribe to the `EventPump`. This is an internal implementation detail and does not introduce a public mode toggle.
 
 #### 5.1.2 Editor-Side Injection
 
-1. **Configuration**: When the `EditorModule` initializes the engine, it configures the `InputEvents` component to run in **Push Mode**.
+1. **Configuration**: In host scenarios, the host (for example, the Editor's interop layer) delivers input to the engine. `InputEvents` will automatically operate in injected-mode when `PlatformConfig.headless` is true; hosts should obtain a writer via `InputEvents::ForWrite()` to deliver events instead of relying on the `EventPump`.
 2. **Event Bridge**:
     * WinUI events are captured by `Viewport.xaml.cs`. **Critical**: Each `Viewport` control has an assigned `ViewId`.
     * Events are passed to `EditorModule` via `EngineRunner` along with the `ViewId` of the source viewport.
     * `EditorModule` translates them into `InputEvent` objects, **embedding the `ViewId`** in each event.
-    * `EditorModule` calls `InputEvents::InjectEvent()` directly.
+    * `EditorModule` sends events to the engine via the `InputEvents::ForWrite()` writer.
 3. **Seamless Consumption**: The engine's `InputSystem` remains completely unaware of this swap. It continues to read from the `InputEvents` channel, receiving events that originated in WinUI. The `ViewId` tag allows systems like `EditorCameraController` to route input to the correct viewport camera.
 
 #### 5.1.3 Handling High-Frequency Input (Throttling)
 
-Since we are bypassing the OS event queue, the **EditorModule** becomes responsible for flow control.
+Since the host bypasses the OS event queue, the host (e.g., the Editor's interop layer) becomes responsible for flow control.
 
-* **Accumulation**: The `EditorModule` maintains a thread-safe "Input Accumulator" that receives raw events from the WinUI thread.
+* **Accumulation**: The host maintains a thread-safe "Input Accumulator" that receives raw events from the WinUI thread. In automated tests and CI, prefer using a direct-injection test harness rather than the full EditorModule to exercise this logic.
 * **Coalescing**:
   * **Mouse Moves**: Continuous mouse deltas are summed into a single "Frame Delta".
   * **Scroll Wheel**: Deltas are summed.
   * **Keys/Buttons**: All state changes are preserved in order.
-* **Injection**: Once per frame (during `kFrameStart` phase), the `EditorModule` drains the accumulator, generates optimized `InputEvent`s (e.g., one MouseMove event representing the sum of 100 raw moves), and injects them into the engine.
+* **Injection**: Once per frame (during the host's frame-start or dispatch phase), the host drains the accumulator, generates optimized `InputEvent`s (e.g., one MouseMove event representing the sum of 100 raw moves), and sends them to the engine via the `InputEvents::ForWrite()` writer.
 * **Benefit**: This prevents channel flooding and ensures the engine processes exactly one logical input update per simulation step, matching the frame rate.
 
 ### 5.2 Context-Based Routing
@@ -395,16 +392,18 @@ To provide a professional feel, the cursor behavior must change based on the act
 ## 7. Implementation Plan
 
 1. [ ] **Refactor `InputEvents` Component**:
-   * Modify `Oxygen.Engine/src/Oxygen/Platform/InputEvents.h` to support a "Push Mode".
-   * Implement `public void InjectEvent(std::unique_ptr<InputEvent> evt)` that writes directly to the internal channel.
-   * Ensure `ProcessPlatformEvents` (the SDL poller) is skipped or disabled when in Push Mode.
-2. [ ] **Update Platform Configuration**:
-   * Add an option to `PlatformConfig` (e.g., `input_mode: kPull, kPush`) to enable Push Mode during initialization.
+   * Modify `Oxygen.Engine/src/Oxygen/Platform/InputEvents.h` to support injected events.
+   * Expose `ForWrite()` on `InputEvents` to allow external producers to send events.
+   * Ensure `ProcessPlatformEvents` (the SDL poller) is skipped or disabled when `PlatformConfig.headless` is true so the component does not subscribe to the `EventPump` in hosted mode.
+   * Make the selection of pull vs injected-mode **automatic** based on `PlatformConfig.headless` (no public mode toggle).
+
+2. [ ] **Platform testing**:
+   * Add unit tests for the Platform, following OxCo testing patterns for coroutines.
 
 3. [ ] **Implement Input Accumulator**:
-   * Create `EditorModule::InputAccumulator` class to buffer raw input data from the interop layer.
+   * Create a host-side `InputAccumulator` class (e.g., in the interop layer) to buffer raw input data from the host/WinUI.
    * Implement **Coalescing Logic**: Sum mouse deltas (`dx`, `dy`) and scroll deltas to ensure one update per frame.
-   * Ensure thread safety (mutex) as WinUI writes and Engine reads.
+   * Ensure thread safety (mutex) as WinUI writes and the engine reads.
    * **Delta Accumulation Details**:
      * `InputAccumulator` maintains per-frame staging buffers:
        * `Vector2 mouse_delta_accum_` — Sum of all pointer move deltas since last drain.
@@ -416,30 +415,31 @@ To provide a professional feel, the cursor behavior must change based on the act
        * `PointerWheelChanged`: `scroll_delta_accum_ += wheel_delta`.
        * `KeyDown/KeyUp`: Append to `key_events_`.
        * `PointerPressed/PointerReleased`: Append to `button_events_`.
-     * **Accumulator→Engine** (`EditorModule::OnFrameStart`, Engine Thread):
+     * **Accumulator→Engine** (host frame-start / dispatch, Engine Thread):
        * Drain accumulator (acquire lock, copy values, reset accumulators).
        * Generate single `InputEvent::MouseMove` with accumulated `mouse_delta_accum_`.
        * Generate single `InputEvent::MouseWheel` with accumulated `scroll_delta_accum_`.
        * Generate `InputEvent::Key` for each key event (preserve order).
        * Generate `InputEvent::MouseButton` for each button event (preserve order).
-       * Inject all events into `InputEvents::InjectEvent()`.
+       * Send all events to the engine via the `InputEvents::ForWrite()` writer.
    * **Focus-Loss Handling**:
      * When a viewport loses focus (`LostFocus` event in WinUI):
        * Acquire lock on accumulator for that viewport.
        * Discard accumulated `mouse_delta_accum_` and `scroll_delta_accum_`.
        * Keep key/button events (state transitions must be preserved).
      * **Rationale**: Prevents stale accumulated deltas from being applied after focus returns.
+   * **Testing**: Use a direct-injection test harness to validate the accumulator and injection behavior; do not require `EditorModule` in tests.
 4. [ ] **Implement Input Dispatcher**:
-   * In `EditorModule::OnFrameStart`:
+   * In the host's frame-start/dispatch (or the interop layer's per-frame hook):
      * Drain the `InputAccumulator`.
      * Convert raw data to `platform::InputEvent`.
-     * Call `InputEvents::InjectEvent()` to push to the global channel.
-   * In `EditorModule::OnInput` (register for `kInput` phase):
+     * Send events to the engine via the `InputEvents::ForWrite()` writer.
+   * In engine modules' input phase (register for `kInput`):
      * Manage IMC activation/deactivation based on current mode.
 
 5. [ ] **Update EngineRunner (Interop)**:
    * Expose methods `SendMouseMove`, `SendMouseButton`, `SendKey`, `SendWheel`.
-   * Forward these calls to `EditorModule::EnqueueInput()`.
+   * Forward these calls to `EditorModule` which will send them to the engine via the `InputEvents::ForWrite()` writer.
    * **Pick Request API** (matches `CreateScene`/`CreateViewAsync` pattern):
 
      ```cpp
