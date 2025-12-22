@@ -10,6 +10,9 @@
 
 #include "EditorModule/EditorViewportWheelZoomFeature.h"
 
+#include "EditorModule/EditorViewportInputHelpers.h"
+#include "EditorModule/EditorViewportMathHelpers.h"
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -41,57 +44,6 @@ namespace oxygen::interop::module {
       }
 
       return std::max(params.min_radius, max_radius);
-    }
-
-    [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
-      return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    }
-
-    [[nodiscard]] auto NormalizeSafe(glm::vec3 v, glm::vec3 fallback) noexcept
-      -> glm::vec3 {
-      const float len2 = glm::dot(v, v);
-      if (len2 <= std::numeric_limits<float>::epsilon()) {
-        return fallback;
-      }
-      return v / std::sqrt(len2);
-    }
-
-    [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> bool {
-      return snapshot.GetActionStateFlags(name) != input::ActionState::kNone;
-    }
-
-    [[nodiscard]] auto GetAxis1DOrZero(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> float {
-      if (!HasAction(snapshot, name)) {
-        return 0.0f;
-      }
-      const auto v = snapshot.GetActionValue(name).GetAs<Axis1D>();
-      return v.x;
-    }
-
-    [[nodiscard]] auto AccumulateAxis1DFromTransitionsOrZero(
-      const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> float {
-      if (!HasAction(snapshot, name)) {
-        return 0.0f;
-      }
-
-      float delta = 0.0f;
-      bool saw_non_zero = false;
-      for (const auto& tr : snapshot.GetActionTransitions(name)) {
-        const auto& v = tr.value_at_transition.GetAs<Axis1D>();
-        if (std::abs(v.x) > 0.0f) {
-          delta += v.x;
-          saw_non_zero = true;
-        }
-      }
-
-      if (saw_non_zero) {
-        return delta;
-      }
-
-      return GetAxis1DOrZero(snapshot, name);
     }
 
   } // namespace
@@ -137,7 +89,8 @@ namespace oxygen::interop::module {
 
     auto transform = camera_node.GetTransform();
     const float wheel_ticks =
-      AccumulateAxis1DFromTransitionsOrZero(input_snapshot, "Editor.Camera.Zoom");
+      viewport::AccumulateAxis1DFromTransitionsOrZero(input_snapshot,
+        "Editor.Camera.Zoom");
 
     if (std::abs(wheel_ticks) <= 0.0f) {
       return;
@@ -160,7 +113,7 @@ namespace oxygen::interop::module {
     const glm::vec3 position =
       transform.GetLocalPosition().value_or(glm::vec3 {});
 
-    if (!IsFinite(position) || !IsFinite(focus_point)) {
+    if (!viewport::IsFinite(position) || !viewport::IsFinite(focus_point)) {
       // Recover from non-finite state by resetting to a sane view.
       focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
       const glm::vec3 safe_position = focus_point + glm::vec3(0.0f, 0.0f, 5.0f);
@@ -180,7 +133,8 @@ namespace oxygen::interop::module {
       radius = params.min_radius;
     }
 
-    const glm::vec3 dir = NormalizeSafe(offset, glm::vec3(0.0f, 0.0f, 1.0f));
+    const glm::vec3 dir = viewport::NormalizeSafe(offset,
+      glm::vec3(0.0f, 0.0f, 1.0f));
     const float dr = wheel_ticks * params.zoom_sensitivity_units_per_tick;
     float new_radius = radius - dr;
     if (!std::isfinite(new_radius)) {

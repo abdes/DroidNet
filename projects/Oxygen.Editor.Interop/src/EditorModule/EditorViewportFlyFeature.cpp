@@ -10,6 +10,9 @@
 
 #include "EditorModule/EditorViewportFlyFeature.h"
 
+#include "EditorModule/EditorViewportInputHelpers.h"
+#include "EditorModule/EditorViewportMathHelpers.h"
+
 #include <algorithm>
 #include <unordered_map>
 
@@ -38,72 +41,10 @@ namespace oxygen::interop::module {
       float pitch_radians = 0.0f;
     };
 
-    [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> bool {
-      return snapshot.GetActionStateFlags(name) != input::ActionState::kNone;
-    }
-
-    [[nodiscard]] auto GetAxis2DOrZero(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-      const auto v = snapshot.GetActionValue(name).GetAs<Axis2D>();
-      return v;
-    }
-
-    [[nodiscard]] auto AccumulateAxis2DFromTransitionsOrZero(
-      const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-
-      Axis2D delta{ .x = 0.0f, .y = 0.0f };
-      bool saw_non_zero = false;
-      for (const auto& tr : snapshot.GetActionTransitions(name)) {
-        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-        if ((std::abs(v.x) > 0.0f) || (std::abs(v.y) > 0.0f)) {
-          delta.x += v.x;
-          delta.y += v.y;
-          saw_non_zero = true;
-        }
-      }
-
-      if (saw_non_zero) {
-        return delta;
-      }
-
-      return GetAxis2DOrZero(snapshot, name);
-    }
-
-    [[nodiscard]] auto NormalizeSafe(const glm::vec3 v,
-      const glm::vec3 fallback) noexcept -> glm::vec3 {
-      const float len2 = glm::dot(v, v);
-      if (len2 <= std::numeric_limits<float>::epsilon()) {
-        return fallback;
-      }
-      return v / std::sqrt(len2);
-    }
-
     [[nodiscard]] auto ClampPitchRadians(const FlyParams& params,
       float pitch_radians) noexcept -> float {
       const float max_pitch = std::asin(std::clamp(params.max_up_dot, 0.0f, 1.0f));
       return std::clamp(pitch_radians, -max_pitch, max_pitch);
-    }
-
-    [[nodiscard]] auto LookRotationFromForwardUp(const glm::vec3 forward,
-      const glm::vec3 up_direction) noexcept -> glm::quat {
-      const glm::vec3 f = NormalizeSafe(forward, glm::vec3(0.0f, 0.0f, -1.0f));
-      const glm::vec3 r =
-        NormalizeSafe(glm::cross(f, up_direction), glm::vec3(1.0f, 0.0f, 0.0f));
-      const glm::vec3 u = glm::cross(r, f);
-
-      glm::mat4 look_matrix(1.0f);
-      look_matrix[0] = glm::vec4(r, 0.0f);
-      look_matrix[1] = glm::vec4(u, 0.0f);
-      look_matrix[2] = glm::vec4(-f, 0.0f);
-      return glm::quat_cast(look_matrix);
     }
 
     [[nodiscard]] auto GetOrInitFlyState(
@@ -212,7 +153,7 @@ namespace oxygen::interop::module {
       transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
 
     const glm::vec3 current_forward =
-      NormalizeSafe(current_rot * glm::vec3(0.0f, 0.0f, -1.0f),
+      viewport::NormalizeSafe(current_rot * glm::vec3(0.0f, 0.0f, -1.0f),
         glm::vec3(0.0f, 0.0f, -1.0f));
 
     if (just_activated) {
@@ -224,7 +165,8 @@ namespace oxygen::interop::module {
     }
 
     const auto mouse_delta =
-      AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
+      viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+        "Editor.Mouse.Delta");
     const bool mouse_moved = (std::abs(mouse_delta.x) > 0.0f)
       || (std::abs(mouse_delta.y) > 0.0f);
     const bool should_apply_mouse_look = !just_activated && mouse_moved;
@@ -242,10 +184,11 @@ namespace oxygen::interop::module {
       const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
 
       const glm::vec3 forward =
-        NormalizeSafe(pitch_q * (yaw_q * glm::vec3(0.0f, 0.0f, -1.0f)),
+        viewport::NormalizeSafe(pitch_q * (yaw_q * glm::vec3(0.0f, 0.0f, -1.0f)),
           glm::vec3(0.0f, 0.0f, -1.0f));
 
-      const glm::quat new_rot = LookRotationFromForwardUp(forward, params.up);
+      const glm::quat new_rot = viewport::LookRotationFromForwardUp(forward,
+        params.up);
       (void)transform.SetLocalRotation(new_rot);
       applied_rot = new_rot;
     }
