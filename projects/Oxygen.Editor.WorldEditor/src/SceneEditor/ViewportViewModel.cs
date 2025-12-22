@@ -91,6 +91,9 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(MaximizeGlyph))]
     public partial bool IsMaximized { get; set; }
 
+    [ObservableProperty]
+    public partial bool IsFocused { get; set; }
+
     /// <summary>
     /// Gets the document identifier owning this viewport.
     /// </summary>

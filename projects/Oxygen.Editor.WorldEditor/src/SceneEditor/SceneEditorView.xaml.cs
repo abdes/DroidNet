@@ -7,6 +7,7 @@ using System.ComponentModel;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 
@@ -147,6 +148,10 @@ public sealed partial class SceneEditorView : UserControl
             if (!this.viewportControls.TryGetValue(viewportVm, out var viewportControl))
             {
                 viewportControl = new Viewport { ViewModel = viewportVm };
+
+                viewportControl.PointerPressed += this.OnViewportPointerPressed;
+                viewportControl.GotFocus += this.OnViewportGotFocus;
+
                 this.viewportControls[viewportVm] = viewportControl;
                 this.ViewportGrid.Children.Add(viewportControl);
             }
@@ -179,5 +184,44 @@ public sealed partial class SceneEditorView : UserControl
         {
             _ = this.viewportControls.Remove(key);
         }
+    }
+
+    private void OnViewportPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _ = e;
+
+        if (sender is not Viewport viewport)
+        {
+            return;
+        }
+
+        // Ensure the control becomes focusable via mouse interaction.
+        _ = viewport.Focus(FocusState.Pointer);
+
+        var viewModel = this.currentViewModel ?? this.ViewModel as SceneEditorViewModel;
+        if (viewModel is null || viewport.ViewModel is null)
+        {
+            return;
+        }
+
+        viewModel.SetFocusedViewport(viewport.ViewModel);
+    }
+
+    private void OnViewportGotFocus(object sender, RoutedEventArgs e)
+    {
+        _ = e;
+
+        if (sender is not Viewport viewport)
+        {
+            return;
+        }
+
+        var viewModel = this.currentViewModel ?? this.ViewModel as SceneEditorViewModel;
+        if (viewModel is null || viewport.ViewModel is null)
+        {
+            return;
+        }
+
+        viewModel.SetFocusedViewport(viewport.ViewModel);
     }
 }
