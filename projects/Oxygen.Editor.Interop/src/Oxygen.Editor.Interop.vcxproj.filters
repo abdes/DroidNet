@@ -9,6 +9,7 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -38,9 +39,6 @@
       <Filter>EditorModule</Filter>
     </ClCompile>
     <ClCompile Include="World\OxygenWorld.cpp">
-      <Filter>World</Filter>
-    </ClCompile>
-    <ClCompile Include="World\CommandFactory.cpp">
       <Filter>World</Filter>
     </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
@@ -78,6 +76,33 @@
     </ClCompile>
     <ClCompile Include="Input\OxygenInput.cpp">
       <Filter>Input</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportDollyFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportFlyFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportNavigation.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportOrbitFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportPanFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportResetFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportWheelZoomFeature.cpp">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
+      <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\CommandFactory.cpp">
+      <Filter>EditorModule</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -137,7 +162,6 @@
     <ClInclude Include="EditorModule\ThreadSafeQueue.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
-    <ClInclude Include="World\ICommandFactory.h" />
     <ClInclude Include="LogHandler.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Views\ViewConfigManaged.h">
@@ -151,9 +175,6 @@
     </ClInclude>
     <ClInclude Include="Views\ColorManaged.h">
       <Filter>Views</Filter>
-    </ClInclude>
-    <ClInclude Include="World\CommandFactory.h">
-      <Filter>World</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\EditorCompositor.h">
       <Filter>EditorModule</Filter>
@@ -200,6 +221,39 @@
     <ClInclude Include="Input\OxygenInput.h">
       <Filter>Input</Filter>
     </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportDollyFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportFlyFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportNavigation.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportNavigationFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportOrbitFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportPanFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\EditorViewportWheelZoomFeature.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="Views\CameraViewPresetManaged.h">
+      <Filter>EditorModule\Viewport</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetViewCameraPresetCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\CommandFactory.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\ICommandFactory.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EditorModule">
@@ -210,6 +264,9 @@
     </Filter>
     <Filter Include="Input">
       <UniqueIdentifier>{a276d837-c441-4246-89b4-618ca3dfd563}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="EditorModule\Viewport">
+      <UniqueIdentifier>{94941d2b-f8de-48ce-a8bf-c48dc060a27e}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

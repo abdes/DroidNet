@@ -7,8 +7,9 @@
 #pragma once
 #pragma managed(push, off)
 
-#include <EditorModule/EditorCommand.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+
+#include <EditorModule/EditorCommand.h>
 
 namespace oxygen::interop::module {
 

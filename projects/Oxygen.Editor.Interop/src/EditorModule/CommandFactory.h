@@ -14,7 +14,7 @@
 
 #include <glm/fwd.hpp>
 
-#include <World/ICommandFactory.h>
+#include <EditorModule/ICommandFactory.h>
 
 // Forward declarations for types used in method signatures to avoid heavy
 // includes

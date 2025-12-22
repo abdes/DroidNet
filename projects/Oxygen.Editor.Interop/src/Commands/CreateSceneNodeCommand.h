@@ -27,9 +27,6 @@ namespace oxygen::interop::module {
   public:
     using Callback = std::function<void(oxygen::scene::NodeHandle)>;
 
-    CreateSceneNodeCommand(std::string name, oxygen::scene::NodeHandle parent,
-      Callback callback, bool initializeWorldAsRoot = false);
-
     // Overload for managed callbacks
     CreateSceneNodeCommand(std::string name, oxygen::scene::NodeHandle parent,
       System::Action<Oxygen::Editor::Core::NodeHandle>^
@@ -56,16 +53,6 @@ namespace oxygen::interop::module {
     bool has_register_key_;
     bool initialize_world_as_root_ = false;
   };
-
-  inline CreateSceneNodeCommand::CreateSceneNodeCommand(
-    std::string name, oxygen::scene::NodeHandle parent, Callback callback,
-    bool initializeWorldAsRoot)
-    : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
-    name_(std::move(name)), parent_(parent), callback_(std::move(callback)),
-    managed_callback_(nullptr), has_managed_callback_(false),
-    has_register_key_(false),
-    initialize_world_as_root_(initializeWorldAsRoot) {
-  }
 
   // Overload for managed callbacks
   inline CreateSceneNodeCommand::CreateSceneNodeCommand(

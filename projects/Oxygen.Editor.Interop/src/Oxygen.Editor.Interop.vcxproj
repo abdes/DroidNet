@@ -38,6 +38,9 @@
     <ClCompile Include="Commands\CreateViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="EditorModule\CommandFactory.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="EditorModule\EditorCompositor.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -115,9 +118,6 @@
     <ClCompile Include="Utils\TokenHelpers.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="World\CommandFactory.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="World\OxygenWorld.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -156,6 +156,7 @@
     <ClInclude Include="Commands\UpdateTransformsForNodesCommand.h" />
     <ClInclude Include="Base\LoguruWrapper.h" />
     <ClInclude Include="Config.h" />
+    <ClInclude Include="EditorModule\CommandFactory.h" />
     <ClInclude Include="EditorModule\EditorCommand.h" />
     <ClInclude Include="EditorModule\EditorCompositor.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />
@@ -167,6 +168,7 @@
     <ClInclude Include="EditorModule\EditorViewportOrbitFeature.h" />
     <ClInclude Include="EditorModule\EditorViewportWheelZoomFeature.h" />
     <ClInclude Include="EditorModule\EditorView.h" />
+    <ClInclude Include="EditorModule\ICommandFactory.h" />
     <ClInclude Include="EditorModule\InputAccumulator.h" />
     <ClInclude Include="EditorModule\InputAccumulatorAdapter.h" />
     <ClInclude Include="EditorModule\NodeRegistry.h" />
@@ -187,8 +189,6 @@
     <ClInclude Include="EngineRunner.h" />
     <ClInclude Include="RenderThreadContext.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
-    <ClInclude Include="World\CommandFactory.h" />
-    <ClInclude Include="World\ICommandFactory.h" />
     <ClInclude Include="World\OxygenWorld.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

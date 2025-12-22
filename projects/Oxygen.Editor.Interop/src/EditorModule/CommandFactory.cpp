@@ -34,7 +34,7 @@
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
-#include <World/CommandFactory.h>
+#include <EditorModule/CommandFactory.h>
 
 using namespace oxygen::interop::module;
 
