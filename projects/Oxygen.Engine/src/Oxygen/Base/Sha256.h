@@ -12,20 +12,28 @@
 #include <filesystem>
 #include <span>
 
-namespace oxygen::content::internal {
+#include <Oxygen/Base/api_export.h>
+
+namespace oxygen::base {
 
 using Sha256Digest = std::array<uint8_t, 32>;
 
-//! Incremental SHA-256 implementation used for mount-time validation.
+//! Incremental SHA-256 implementation.
+/*!
+ Provides a small incremental SHA-256 implementation for hashing memory and
+ files.
+
+ @note This API is used by higher-level modules (e.g. Content validation).
+*/
 class Sha256 final {
 public:
   static constexpr size_t kDigestSize = 32;
 
-  Sha256() noexcept;
+  OXYGEN_BASE_API Sha256() noexcept;
 
-  auto Update(std::span<const std::byte> data) noexcept -> void;
+  OXYGEN_BASE_API auto Update(std::span<const std::byte> data) noexcept -> void;
 
-  [[nodiscard]] auto Finalize() noexcept -> Sha256Digest;
+  OXGN_BASE_NDAPI auto Finalize() noexcept -> Sha256Digest;
 
 private:
   auto ProcessBlock_(std::span<const std::byte, 64> block) noexcept -> void;
@@ -36,12 +44,12 @@ private:
   std::array<uint32_t, 8> state_ = {};
 };
 
-[[nodiscard]] auto ComputeSha256(std::span<const std::byte> data) noexcept
+OXGN_BASE_NDAPI auto ComputeSha256(std::span<const std::byte> data) noexcept
   -> Sha256Digest;
 
-[[nodiscard]] auto ComputeFileSha256(const std::filesystem::path& path)
+OXGN_BASE_NDAPI auto ComputeFileSha256(const std::filesystem::path& path)
   -> Sha256Digest;
 
-[[nodiscard]] auto IsAllZero(const Sha256Digest& digest) noexcept -> bool;
+OXGN_BASE_NDAPI auto IsAllZero(const Sha256Digest& digest) noexcept -> bool;
 
-} // namespace oxygen::content::internal
+} // namespace oxygen::base
