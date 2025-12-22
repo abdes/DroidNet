@@ -10,6 +10,8 @@
 
 #include "EditorModule/EditorViewportPanFeature.h"
 
+#include "EditorModule/EditorViewportInputHelpers.h"
+
 #include <algorithm>
 #include <unordered_map>
 
@@ -33,45 +35,6 @@ namespace oxygen::interop::module {
       std::unordered_map<scene::NodeHandle, PanState>& states,
       const scene::SceneNode& camera_node) noexcept -> PanState& {
       return states[camera_node.GetHandle()];
-    }
-
-    [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> bool {
-      return snapshot.GetActionStateFlags(name) != input::ActionState::kNone;
-    }
-
-    [[nodiscard]] auto GetAxis2DOrZero(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-      const auto v = snapshot.GetActionValue(name).GetAs<Axis2D>();
-      return v;
-    }
-
-    [[nodiscard]] auto AccumulateAxis2DFromTransitionsOrZero(
-      const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-
-      Axis2D delta{ .x = 0.0f, .y = 0.0f };
-      bool saw_non_zero = false;
-      for (const auto& tr : snapshot.GetActionTransitions(name)) {
-        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-        if ((std::abs(v.x) > 0.0f) || (std::abs(v.y) > 0.0f)) {
-          delta.x += v.x;
-          delta.y += v.y;
-          saw_non_zero = true;
-        }
-      }
-
-      if (saw_non_zero) {
-        return delta;
-      }
-
-      return GetAxis2DOrZero(snapshot, name);
     }
 
   } // namespace
@@ -133,7 +96,8 @@ namespace oxygen::interop::module {
     }
 
     const auto mouse_delta =
-      AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
+      viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+        "Editor.Mouse.Delta");
     if ((std::abs(mouse_delta.x) <= 0.0f) && (std::abs(mouse_delta.y) <= 0.0f)) {
       return;
     }

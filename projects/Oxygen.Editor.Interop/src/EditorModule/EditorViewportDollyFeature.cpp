@@ -10,6 +10,9 @@
 
 #include "EditorModule/EditorViewportDollyFeature.h"
 
+#include "EditorModule/EditorViewportInputHelpers.h"
+#include "EditorModule/EditorViewportMathHelpers.h"
+
 #include <algorithm>
 #include <cmath>
 #include <unordered_map>
@@ -60,76 +63,6 @@ namespace oxygen::interop::module {
       }
 
       return std::max(min_radius, max_radius);
-    }
-
-    [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
-      return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
-    }
-
-    [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> bool {
-      return snapshot.GetActionStateFlags(name) != input::ActionState::kNone;
-    }
-
-    [[nodiscard]] auto GetAxis2DOrZero(const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-      const auto v = snapshot.GetActionValue(name).GetAs<Axis2D>();
-      return v;
-    }
-
-    [[nodiscard]] auto AccumulateAxis2DFromTransitionsOrZero(
-      const input::InputSnapshot& snapshot,
-      std::string_view name) noexcept -> Axis2D {
-      if (!HasAction(snapshot, name)) {
-        return Axis2D{ .x = 0.0f, .y = 0.0f };
-      }
-
-      Axis2D delta{ .x = 0.0f, .y = 0.0f };
-      bool saw_non_zero = false;
-      for (const auto& tr : snapshot.GetActionTransitions(name)) {
-        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-        if ((std::abs(v.x) > 0.0f) || (std::abs(v.y) > 0.0f)) {
-          delta.x += v.x;
-          delta.y += v.y;
-          saw_non_zero = true;
-        }
-      }
-
-      if (saw_non_zero) {
-        return delta;
-      }
-
-      return GetAxis2DOrZero(snapshot, name);
-    }
-
-    [[nodiscard]] auto NormalizeSafe(const glm::vec3 v,
-      const glm::vec3 fallback) noexcept -> glm::vec3 {
-      const float len2 = glm::dot(v, v);
-      if (len2 <= std::numeric_limits<float>::epsilon()) {
-        return fallback;
-      }
-      return v / std::sqrt(len2);
-    }
-
-    [[nodiscard]] auto LookRotationFromPositionToTarget(
-      const glm::vec3& position,
-      const glm::vec3& target_position,
-      const glm::vec3& up_direction) noexcept -> glm::quat {
-      const glm::vec3 forward =
-        NormalizeSafe(target_position - position, glm::vec3(0.0f, 0.0f, -1.0f));
-      const glm::vec3 right =
-        NormalizeSafe(glm::cross(forward, up_direction), glm::vec3(1.0f, 0.0f, 0.0f));
-      const glm::vec3 up = glm::cross(right, forward);
-
-      glm::mat4 look_matrix(1.0f);
-      look_matrix[0] = glm::vec4(right, 0.0f);
-      look_matrix[1] = glm::vec4(up, 0.0f);
-      look_matrix[2] = glm::vec4(-forward, 0.0f);
-
-      return glm::quat_cast(look_matrix);
     }
 
   } // namespace
@@ -209,7 +142,8 @@ namespace oxygen::interop::module {
     }
 
     const auto mouse_delta =
-      AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
+      viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+        "Editor.Mouse.Delta");
     if ((std::abs(mouse_delta.x) <= 0.0f) && (std::abs(mouse_delta.y) <= 0.0f)) {
       return;
     }
@@ -221,7 +155,7 @@ namespace oxygen::interop::module {
     const glm::quat rotation =
       transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
 
-    if (!IsFinite(position) || !IsFinite(focus_point)) {
+    if (!viewport::IsFinite(position) || !viewport::IsFinite(focus_point)) {
       // If we ever reach non-finite state (e.g., runaway radius overflow),
       // reset to a sane view so the user can recover.
       focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -230,12 +164,13 @@ namespace oxygen::interop::module {
       (void)transform.SetLocalPosition(safe_position);
 
       const glm::quat look_rotation =
-        LookRotationFromPositionToTarget(safe_position, focus_point, params.up);
+        viewport::LookRotationFromPositionToTarget(safe_position, focus_point,
+          params.up);
       (void)transform.SetLocalRotation(look_rotation);
       return;
     }
 
-    const glm::vec3 fallback_dir = NormalizeSafe(
+    const glm::vec3 fallback_dir = viewport::NormalizeSafe(
       -(rotation * glm::vec3(0.0f, 0.0f, -1.0f)),
       glm::vec3(0.0f, 0.0f, 1.0f));
 
@@ -249,7 +184,7 @@ namespace oxygen::interop::module {
     if (radius > std::numeric_limits<float>::epsilon()) {
       dir = offset / radius;
     }
-    dir = NormalizeSafe(dir, fallback_dir);
+    dir = viewport::NormalizeSafe(dir, fallback_dir);
 
     radius = std::clamp(radius, min_radius, max_radius);
 
@@ -273,7 +208,8 @@ namespace oxygen::interop::module {
     (void)transform.SetLocalPosition(new_position);
 
     const glm::quat look_rotation =
-      LookRotationFromPositionToTarget(new_position, focus_point, params.up);
+      viewport::LookRotationFromPositionToTarget(new_position, focus_point,
+        params.up);
     (void)transform.SetLocalRotation(look_rotation);
   }
 

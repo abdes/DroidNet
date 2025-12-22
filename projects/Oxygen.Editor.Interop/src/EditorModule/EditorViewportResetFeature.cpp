@@ -10,6 +10,8 @@
 
 #include "EditorModule/EditorViewportResetFeature.h"
 
+#include "EditorModule/EditorViewportMathHelpers.h"
+
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
@@ -24,33 +26,6 @@ namespace oxygen::interop::module {
       glm::vec3 default_camera_position = glm::vec3(10.0f, -10.0f, 7.0f);
       glm::vec3 up = oxygen::space::move::Up;
     };
-
-    [[nodiscard]] auto NormalizeSafe(const glm::vec3 v,
-      const glm::vec3 fallback) noexcept -> glm::vec3 {
-      const float len2 = glm::dot(v, v);
-      if (len2 <= std::numeric_limits<float>::epsilon()) {
-        return fallback;
-      }
-      return v / std::sqrt(len2);
-    }
-
-    [[nodiscard]] auto LookRotationFromPositionToTarget(
-      const glm::vec3& position,
-      const glm::vec3& target_position,
-      const glm::vec3& up_direction) noexcept -> glm::quat {
-      const glm::vec3 forward =
-        NormalizeSafe(target_position - position, glm::vec3(0.0f, 0.0f, -1.0f));
-      const glm::vec3 right =
-        NormalizeSafe(glm::cross(forward, up_direction), glm::vec3(1.0f, 0.0f, 0.0f));
-      const glm::vec3 up = glm::cross(right, forward);
-
-      glm::mat4 look_matrix(1.0f);
-      look_matrix[0] = glm::vec4(right, 0.0f);
-      look_matrix[1] = glm::vec4(up, 0.0f);
-      look_matrix[2] = glm::vec4(-forward, 0.0f);
-
-      return glm::quat_cast(look_matrix);
-    }
 
   } // namespace
 
@@ -101,7 +76,7 @@ namespace oxygen::interop::module {
     auto transform = camera_node.GetTransform();
     (void)transform.SetLocalPosition(params.default_camera_position);
 
-    const glm::quat look_rotation = LookRotationFromPositionToTarget(
+    const glm::quat look_rotation = viewport::LookRotationFromPositionToTarget(
       params.default_camera_position,
       focus_point,
       params.up);
