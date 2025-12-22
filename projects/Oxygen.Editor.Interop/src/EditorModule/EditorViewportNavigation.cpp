@@ -13,11 +13,13 @@
 #include "EditorModule/EditorViewportFlyFeature.h"
 #include "EditorModule/EditorViewportOrbitFeature.h"
 #include "EditorModule/EditorViewportPanFeature.h"
+#include "EditorModule/EditorViewportResetFeature.h"
 #include "EditorModule/EditorViewportWheelZoomFeature.h"
 
 namespace oxygen::interop::module {
 
   EditorViewportNavigation::EditorViewportNavigation() {
+    features_.push_back(std::make_unique<EditorViewportResetFeature>());
     features_.push_back(std::make_unique<EditorViewportOrbitFeature>());
     features_.push_back(std::make_unique<EditorViewportPanFeature>());
     features_.push_back(std::make_unique<EditorViewportDollyFeature>());

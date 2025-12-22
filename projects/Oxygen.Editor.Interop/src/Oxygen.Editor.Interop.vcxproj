@@ -44,6 +44,9 @@
     <ClCompile Include="EditorModule\EditorViewportNavigation.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportResetFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="EditorModule\EditorViewportPanFeature.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>

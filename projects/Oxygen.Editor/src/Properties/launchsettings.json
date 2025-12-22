@@ -9,7 +9,7 @@
       "commandName": "Project",
       "commandLineArgs": "--mode dev",
       "environmentVariables": {
-        "OXYGEN_VIEWPORT_WHEEL_LOGS": "1"
+        "OXYGEN_VIEWPORT_DOLLY_LOGS": "1"
       },
       "nativeDebugging": false
     }

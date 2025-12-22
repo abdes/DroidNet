@@ -53,6 +53,11 @@ We use the engine's `InputMappingContext` system to manage input priority. The s
 > * **Hover**: Sufficient for `Zoom` (Scroll Wheel) and `Gizmo Pre-highlighting`. Scroll events are delivered to the **last-hovered viewport** (UE5 convention).
 > * **Focus**: Required for `Keyboard` shortcuts and `Orbit/Pan` operations. Clicking a viewport should grant it focus.
 > * **Multi-Viewport Scroll**: WinUI tracks which viewport last received `PointerEntered`. Scroll events are tagged with that viewport's `ViewId`.
+>
+> **WinUI Focus Highlight (implemented)**:
+>
+> * The WinUI scene editor tracks `FocusedViewportId` in `SceneEditorViewModel` and exposes `ViewportViewModel.IsFocused`.
+> * The viewport draws a focus border as an **overlay** (e.g., a `Border` inside the root `Grid`) so it does **not** change layout/measure. This prevents the SwapChainPanel size (and thus the camera's projection) from subtly changing when focus changes.
 
 ---
 
@@ -68,7 +73,7 @@ Standard 3D editor controls based on UE5/Maya/Blender conventions:
 | **Pan** | `Alt + MMB` drag | Move camera parallel to view plane (track) |
 | **Zoom** | `Mouse Wheel` | Dolly camera toward/away from pivot |
 | **Fly Mode** | `RMB` hold + mouse look + `WASD` (`Q/E` up/down, `Shift` fast) | Free camera movement (FPS-style). `Alt + RMB` is reserved for dolly. |
-| **Zoom Alt** | `Alt + RMB` drag | Alternative zoom via mouse drag |
+| **Zoom Alt** | `Alt + RMB` drag | Alternative dolly via mouse drag (bounded multiplicative zoom; clamped to safe near/far limits) |
 
 ### 4.2 Selection
 
@@ -192,7 +197,17 @@ Viewport navigation is implemented as a **feature compositor** in the interop/ed
 1. **Per-view state**: Each `EditorView` owns a camera `SceneNode` and a mutable `focus_point` (pivot) used by orbit/dolly/zoom and updated by pan.
 1. **Input consumption**: `EditorViewportNavigation` registers and activates `IMC_Editor_Viewport`, then each frame calls `feature->Apply(...)` for each navigation feature (Orbit/Pan/Dolly/WheelZoom/Fly) using the per-frame `InputSnapshot`.
 1. **Transform updates (critical constraint)**: Navigation runs during scene mutation, so it must avoid APIs that require up-to-date world transforms. The implementation updates the camera using **local-only** operations (`SetLocalPosition`, `SetLocalRotation`) and computes look rotations locally (no `Transform::LookAt()` / no world queries).
+1. **Clamping & stability**: Dolly/zoom operations clamp camera-to-pivot distance to remain in a valid camera frustum range (avoid near-plane and far-plane clipping). Drag-dolly uses a bounded multiplicative zoom model to prevent large jumps when far from the pivot.
 1. **Renderer synchronization**: The renderer computes final world transforms and view/projection data later in the frame. Because navigation only marks local transforms dirty, it integrates cleanly with the renderer's single authoritative world-transform update pass.
+
+#### 5.3.1 View-aware Routing (implemented)
+
+Multi-viewport navigation depends on deciding which viewport receives which inputs:
+
+* **Keyboard + mouse buttons + drag deltas** route to the **active/focused viewport**.
+* **Scroll wheel** routes to the **last-hovered viewport**.
+
+WinUI is responsible for establishing focus/hover intent (click to focus; pointer enter to hover). The engine/editor module is responsible for using the per-event `ViewId` to apply the correct per-view navigation state.
 
 ### 5.4 Selection via GPU Picking
 
@@ -431,24 +446,30 @@ Picking/selection/gizmos remain part of the design, but are explicitly deferred 
 6. [X] (CANCELED) BAD TASK - **Update EngineRunner (Interop) — navigation only**:
   This task is intentionally canceled. Navigation input already flows through the existing interop input bridge (`OxygenInput` → `InputAccumulator` → `InputEvents::ForWrite()` via `EditorModule`). Adding parallel `EngineRunner::Send*` methods would duplicate the pipeline and invite divergence.
 
-7. [ ] **Implement WinUI viewport event handlers — navigation only**:
-   * In `Viewport.xaml.cs`, bind `Pointer*`, `Key*`, and focus events.
-   * Implement **Focus Management**:
-     * Request focus on click.
-     * On `LostFocus`: call `OnFocusLost(viewId)` to clear accumulated mouse/scroll deltas for this viewport (preserve key/button events).
-   * Implement **Hover Tracking**: maintain `last_hovered_viewport_id` for scroll routing.
-   * Implement **Cursor Management** for camera manipulation (orbit/pan/zoom/fly):
-     * On navigation drag start (e.g., `Alt+LMB`/`Alt+MMB`/`Alt+RMB`): hide cursor and restore it on release.
-   * Do **not** implement pick requests, mouse constraints, or selection callbacks in Phase 1.
+7. [X] **Implement WinUI viewport event handlers — navigation only**:
+   * Pointer/keyboard/focus event wiring is implemented.
+   * Focus and hover routing behavior is validated:
+     * Drag operations follow the focused viewport.
+     * Scroll wheel follows the last-hovered viewport.
+   * No additional WinUI work is required for routing.
 
 8. [X] **Implement viewport navigation compositor**:
   Implemented `EditorViewportNavigation` and per-action features (`Orbit`, `Pan`, `Dolly`, `WheelZoom`, `Fly`). Navigation is applied during `EditorModule::OnSceneMutation` using `InputSnapshot` and a per-view `focus_point`, and updates the camera via local-only transforms to respect the renderer-owned world transform update pass.
+
+9. [ ] **Cursor polish for navigation modes**:
+
+    * Hide and restore the cursor during camera manipulation (orbit/pan/dolly/fly).
+    * Change cursor shape per mode (for example: orbit/pan/dolly) and restore on end.
 
 ### Phase 1.5 (Leftovers): Pivot and multi-viewport
 
 * [ ] **Focus/Pivot: make `focus_point` meaningful (not default origin)**. Add an explicit "has pivot" state per `EditorView` (or equivalent) so we can distinguish between a real pivot and the default. Implement a first-pass pivot initialization rule for new views (e.g., set `focus_point` in front of the camera at a reasonable default distance, or derive it from initial scene contents once available). When selection/picking is introduced (Phase 2), update `focus_point` to the selection center and (optionally) adjust camera radius.
 
-* [ ] **Multi-viewport: ensure navigation applies to the correct view only**. Short-term: track `active_view_id` (focused viewport) and apply navigation only to that view during `OnSceneMutation`. Long-term (correct architecture): make action evaluation window-scoped so the `InputSystem` can produce a per-view (per-window) snapshot, or provide a query API that filters action state/transitions by `WindowId`. Verify scroll/hover routing and focus rules (keyboard to focused viewport; wheel to last-hovered viewport).
+* [X] **Multi-viewport: route navigation to the correct view (short-term)**. Track `active_view_id` (focused viewport) and `hover_view_id` (last-hovered viewport) and apply:
+  * Keyboard + mouse buttons + drag deltas to the focused viewport.
+  * Scroll wheel to the last-hovered viewport.
+
+* [ ] **Multi-viewport: per-view input snapshots (long-term)**. Make action evaluation window-scoped so the `InputSystem` can produce a per-view (per-window) snapshot, or provide a query API that filters action state/transitions by `WindowId`.
 
 ### Phase 2 (Deferred): Picking, selection, gizmos, snapping
 
