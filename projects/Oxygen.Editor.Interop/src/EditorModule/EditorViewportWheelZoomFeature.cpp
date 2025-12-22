@@ -14,6 +14,7 @@
 #include <cmath>
 #include <limits>
 
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::interop::module {
@@ -22,6 +23,8 @@ namespace oxygen::interop::module {
 
     struct WheelZoomParams {
       float zoom_sensitivity_units_per_tick = 0.6f;
+      float ortho_zoom_scale_per_tick = 0.12f;
+      float ortho_min_half_height = 0.001f;
       float min_radius = 0.25f;
       float max_radius = 100000.0f;
     };
@@ -123,6 +126,7 @@ namespace oxygen::interop::module {
   auto EditorViewportWheelZoomFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& ortho_half_height,
     float dt_seconds) noexcept -> void {
     if (!camera_node.IsAlive()) {
       return;
@@ -136,6 +140,20 @@ namespace oxygen::interop::module {
       AccumulateAxis1DFromTransitionsOrZero(input_snapshot, "Editor.Camera.Zoom");
 
     if (std::abs(wheel_ticks) <= 0.0f) {
+      return;
+    }
+
+    if (camera_node.GetCameraAs<scene::OrthographicCamera>()) {
+      if (!std::isfinite(ortho_half_height) || ortho_half_height <= 0.0f) {
+        ortho_half_height = 10.0f;
+      }
+
+      // Multiplicative zoom feels more stable for orthographic cameras.
+      const float scale = std::exp(-wheel_ticks * params.ortho_zoom_scale_per_tick);
+      const float new_half_height = ortho_half_height * scale;
+      if (std::isfinite(new_half_height)) {
+        ortho_half_height = std::max(params.ortho_min_half_height, new_half_height);
+      }
       return;
     }
 

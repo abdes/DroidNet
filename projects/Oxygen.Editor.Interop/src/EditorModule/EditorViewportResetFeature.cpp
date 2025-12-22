@@ -13,6 +13,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
+#include <Oxygen/Core/Constants.h>
+
 namespace oxygen::interop::module {
 
   namespace {
@@ -20,7 +22,7 @@ namespace oxygen::interop::module {
     struct ResetParams {
       glm::vec3 default_focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
       glm::vec3 default_camera_position = glm::vec3(10.0f, -10.0f, 7.0f);
-      glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+      glm::vec3 up = oxygen::space::move::Up;
     };
 
     [[nodiscard]] auto NormalizeSafe(const glm::vec3 v,
@@ -82,6 +84,7 @@ namespace oxygen::interop::module {
   auto EditorViewportResetFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& /*ortho_half_height*/,
     float /*dt_seconds*/) noexcept -> void {
     if (!camera_node.IsAlive()) {
       return;

@@ -144,6 +144,9 @@ namespace oxygen::interop::module {
     void ShowView(ViewId view_id);
     void HideView(ViewId view_id);
 
+    //! Set the camera view preset for a specific view.
+    void SetViewCameraPreset(ViewId view_id, CameraViewPreset preset);
+
   private:
     struct SubscriptionToken;
 

@@ -131,6 +131,19 @@ namespace oxygen::interop::module {
     return (it != views_.end()) ? it->second.view.get() : nullptr;
   }
 
+  void ViewManager::SetCameraViewPreset(ViewId engine_id,
+    CameraViewPreset preset) {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto it = views_.find(engine_id);
+    if (it == views_.end() || !it->second.view) {
+      LOG_F(WARNING, "SetCameraViewPreset: invalid view id {}", engine_id.get());
+      return;
+    }
+
+    it->second.view->SetCameraViewPreset(preset);
+  }
+
   auto ViewManager::GetAllViews() -> std::vector<EditorView*> {
     std::lock_guard<std::mutex> lock(mutex_);
 

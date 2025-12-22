@@ -26,6 +26,9 @@
     <ClCompile Include="Commands\HideViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
+    <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
     <ClCompile Include="Commands\ShowViewCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -137,6 +140,7 @@
     <ClInclude Include="Commands\DestroySceneCommand.h" />
     <ClInclude Include="Commands\DetachGeometryCommand.h" />
     <ClInclude Include="Commands\HideViewCommand.h" />
+    <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodesCommand.h" />
@@ -174,6 +178,7 @@
     <ClInclude Include="Utils\TokenHelpers.h" />
     <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="Views\ColorManaged.h" />
+    <ClInclude Include="Views\CameraViewPresetManaged.h" />
     <ClInclude Include="Views\ViewConfigManaged.h" />
     <ClInclude Include="EditorModule\ThreadSafeQueue.h" />
     <ClInclude Include="EditorModule\ViewManager.h" />

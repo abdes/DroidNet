@@ -10,6 +10,10 @@
 
 #include "EditorModule/EditorViewportPanFeature.h"
 
+#include <algorithm>
+
+#include <Oxygen/Scene/Camera/Orthographic.h>
+
 namespace oxygen::interop::module {
 
   namespace {
@@ -90,6 +94,7 @@ namespace oxygen::interop::module {
   auto EditorViewportPanFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& /*ortho_half_height*/,
     float /*dt_seconds*/) noexcept -> void {
     if (!camera_node.IsAlive()) {
       return;
@@ -118,10 +123,29 @@ namespace oxygen::interop::module {
       transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
 
     const glm::vec3 offset = position - focus_point;
-    const float radius = std::max(params.min_radius,
-      std::sqrt(glm::dot(offset, offset)));
+    float pan_scale_x = 0.0f;
+    float pan_scale_y = 0.0f;
 
-    const float pan_scale = params.units_per_pixel_at_unit_distance * radius;
+    if (auto cam_ref = camera_node.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+      const auto ext = cam_ref->get().GetExtents();
+      const auto vp = cam_ref->get().ActiveViewport();
+
+      const float width_world = std::abs(ext[1] - ext[0]);
+      const float height_world = std::abs(ext[3] - ext[2]);
+
+      const float vp_w = std::max(1.0f, vp.width);
+      const float vp_h = std::max(1.0f, vp.height);
+
+      pan_scale_x = width_world / vp_w;
+      pan_scale_y = height_world / vp_h;
+    }
+    else {
+      const float radius = std::max(params.min_radius,
+        std::sqrt(glm::dot(offset, offset)));
+      const float pan_scale = params.units_per_pixel_at_unit_distance * radius;
+      pan_scale_x = pan_scale;
+      pan_scale_y = pan_scale;
+    }
 
     const glm::vec3 right = rotation * glm::vec3(1.0f, 0.0f, 0.0f);
     const glm::vec3 up = rotation * glm::vec3(0.0f, 1.0f, 0.0f);
@@ -130,7 +154,8 @@ namespace oxygen::interop::module {
     // Drag right => scene moves right => camera moves left.
     // Drag up    => scene moves up    => camera moves down.
     const glm::vec3 delta_world =
-      (right * (-mouse_delta.x) + up * (mouse_delta.y)) * pan_scale;
+      (right * (-mouse_delta.x) * pan_scale_x) +
+      (up * (mouse_delta.y) * pan_scale_y);
 
     const glm::vec3 new_position = position + delta_world;
     focus_point += delta_world;

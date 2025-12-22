@@ -320,4 +320,15 @@ public interface IEngineService : IAsyncDisposable
     ///     termination of the application process in debug builds.
     /// </remarks>
     public Task<bool> HideViewAsync(ViewIdManaged viewId);
+
+    /// <summary>
+    /// Set the camera view preset for an existing view (Perspective/Top/etc).
+    /// </summary>
+    /// <param name="viewId">The id of the view to update.</param>
+    /// <param name="preset">The preset to apply.</param>
+    /// <returns>
+    ///     A <see cref="Task"/> that completes with <see langword="true"/> on success, or
+    ///     <see langword="false"/> on failure.
+    /// </returns>
+    public Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset);
 }
