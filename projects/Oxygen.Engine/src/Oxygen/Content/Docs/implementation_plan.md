@@ -24,15 +24,15 @@ Content provides **CPU-side acquisition** of engine assets/resources, including:
 ## Implementation tracking (ordered task list)
 
 This table is the **work order**. Higher rows unblock lower rows.
-✅ Complete | 🔄 In progress / partial | ❌ Missing | 🧪 Prototype (code exists; not production-ready)
+✅ Complete | 🔄 In progress / partial | ❌ Missing | 🧪 Prototype (code exists; not production-ready) | ⏸ Deferred
 
 | # | Status | Priority | Deliverable | Design doc | Notes |
 | -: | :---: | :------: | ----------- | ---------- | ----- |
 | 1 | ✅ | P0 | Keep `overview.md` authoritative and consistent | `overview.md` | Enforce Content↔Renderer boundary and invariants |
 | 2 | ✅ | P0 | Forward-only deps + unified cache + refcount eviction | `deps_and_cache.md` | Implemented in `AssetLoader` + `AnyCache` |
 | 3 | ✅ | P0 | Safe unload ordering + tests + docs polish | (in plan) | Release cascade evicts/unloads safely; tests assert resource-before-asset ordering |
-| 4 | ✅ | P0 | **Loose cooked content** (filesystem-backed) | `loose_cooked_content.md` | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place; remaining robustness work is tracked under #5 (index sections, hashes, virtual paths) |
-| 5 | 🔄 | P0 | Loose cooked **index** (AssetKey→descriptor path, resources) | `loose_cooked_content.md` | `container.index.bin` v1 schema + parser are in place; mount-time validation enforces section layout/range sanity, canonical path rules, descriptor/resource existence+size, required table/data pairing, duplicate record rejection (including duplicate virtual-path strings), supported `FileKind` values, SHA-256 verification when the index provides non-zero digests, and strict `IndexHeader::flags` semantics (unknown bits rejected; declared section presence enforced); editor-facing virtual-path resolution is available via `VirtualPathResolver`; deterministic/sticky resource indexing across regenerated containers is deferred (patchability/cook concern) |
+| 4 | ✅ | P0 | **Loose cooked content** (filesystem-backed) | `loose_cooked_content.md` | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place. |
+| 5 | ✅ | P0 | Loose cooked **index** (AssetKey→descriptor path, resources) | `loose_cooked_content.md` | `container.index.bin` v1 schema + parser + strict mount-time validation are complete; editor-facing virtual-path resolution is available via `VirtualPathResolver`. |
 | 6 | ❌ | P0 | **Scene/Level asset** (editor maps/levels) | `scenes_and_levels.md` | Biggest current hole; defines composition and references |
 | 7 | ❌ | P0 | Minimal scene serialization toolchain (cooked, loose) | `scenes_and_levels.md` | Separate from runtime loader; produces cooked scene format |
 | 8 | ❌ | P0 | Asset database (project index, GUID ownership, metadata) | `asset_database_and_ddc.md` | Editor-oriented; maps GUIDs to source/cooked artifacts |
@@ -46,6 +46,7 @@ This table is the **work order**. Higher rows unblock lower rows.
 | 16 | ❌ | P2 | Dependency analyzer output (JSON) | `tooling_and_diagnostics.md` | Graph extraction + refcounts + fan-out stats |
 | 17 | ❌ | P2 | Perf benchmark suite for Content | `tooling_and_diagnostics.md` | Cold/warm/parallel burst scenarios |
 | 18 | ❌ | P3 | Memory mapping prototype for PAK and/or loose cooked | `streaming_and_chunks.md` | Optional optimization; not required for editor unblock |
+| 19 | ⏸ | P4 | Stable resource indices across regenerated loose cooked roots | `loose_cooked_content.md` | Future enhancement: keep `ResourceIndexT` values stable across recooks (patchability / determinism); runtime correctness only requires per-root internal consistency |
 
 **Policy:** Any “big feature” above must have its own design doc (linked).
 Small enhancements should be specified in short design notes inside this plan.
@@ -72,15 +73,15 @@ Phases communicate dependency order, not strict calendar time.
 - Synchronous PAK-based loading
 - Unified cache + dependencies + release cascades
 
-### Phase 1.5 (editor unblock: loose cooked + scenes) — ❌ planned
+### Phase 1.5 (editor unblock: loose cooked + scenes) — 🔄 in progress
 
 Primary objective: **render real content in the editor without PAK packing**.
 
 Deliverables:
 
 - Refactor runtime loader around a "content source" seam (PAK now; loose cooked later).
-- Register a filesystem-backed content container (“loose cooked root”).
-- Resolve `AssetKey → descriptor file` via a cooked index.
+- Register a filesystem-backed content container (“loose cooked root”). ✅
+- Resolve `AssetKey → descriptor file` via a cooked index. ✅
 - Load assets/resources through the existing `LoaderContext` pipeline.
 - Define and load a minimal **Scene/Level asset** that instantiates Geometry/Material.
 
@@ -168,7 +169,7 @@ This matrix is a convenience view. The ordered task list above is authoritative.
 | Feature | Status | Notes |
 | ------- | ------ | ----- |
 | PAK file container (`PakFile`) | ✅ | Stable |
-| Loose cooked container | 🔄 | End-to-end mount + descriptor discovery + table/data readers are in place; remaining robustness and editor-facing mapping work tracked under #5 |
+| Loose cooked container | ✅ | Complete (mount, index validation, descriptor + table/data readers, virtual-path resolver). Future enhancement tracked under #19 (stable indices across recooks). |
 | Container registration + ordering | ✅ | `AssetLoader` registers sources deterministically; PAK and loose cooked sources are both functional |
 
 ### Loading + lifecycle

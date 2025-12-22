@@ -694,11 +694,12 @@ to different AssetKeys across mounted cooked roots).
 - Ensure `ResourceKey` decoding remains unchanged and `containerId` routes the
   request to the right container.
 
-Status: ⏸ deferred (future enhancement). Runtime correctness only requires that
-each cooked container is internally consistent (asset descriptors reference
-valid table row indices). Stable indices across regenerated containers are a
-cook/pack determinism and patchability concern (smaller deltas when content does
-not change), and require additional cook-side bookkeeping.
+Status: ⏸ deferred (future enhancement; tracked in `implementation_plan.md`).
+Runtime correctness only requires that each cooked container is internally
+consistent (asset descriptors reference valid table row indices). Stable indices
+across regenerated containers are a cook/pack determinism and patchability
+concern (smaller deltas when content does not change), and require additional
+cook-side bookkeeping.
 
 5.5 Implement loose cooked resource table reading
 
@@ -731,3 +732,5 @@ Coverage:
   descriptor paths) for diagnostics.
 - Add a quick validation entry point usable by tests (mount/validate without
   doing full loads).
+
+Status: ✅ complete.
