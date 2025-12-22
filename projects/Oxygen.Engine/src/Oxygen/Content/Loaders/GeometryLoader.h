@@ -142,7 +142,6 @@ namespace detail {
         info.vertex_buffer);
       context.asset_loader->AddResourceDependency(
         context.current_asset_key, vb_resource_key);
-      vertex_guard->disable(); // Success - disable cleanup
     }
 
     if (info.index_buffer != 0) {
@@ -150,7 +149,6 @@ namespace detail {
         info.index_buffer);
       context.asset_loader->AddResourceDependency(
         context.current_asset_key, ib_resource_key);
-      index_guard->disable(); // Success - disable cleanup
     }
 
     return { vertex_buffer_resource, index_buffer_resource };

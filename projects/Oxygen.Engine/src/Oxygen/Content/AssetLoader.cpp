@@ -234,6 +234,15 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
 auto AssetLoader::ReleaseAsset(const data::AssetKey& key, bool offline) -> bool
 {
   AssertOwningThread();
+  // Enable eviction notifications for the whole release cascade, since
+  // dependency check-ins may evict multiple entries (resources and/or assets).
+  auto eviction_guard
+    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
+                                  std::shared_ptr<void> value, TypeId type_id) {
+        LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
+        UnloadObject(type_id, value, offline);
+      });
+
   // Recursively release (check in) the asset and all its dependencies.
   ReleaseAssetTree(key, offline);
   // Return true if the asset is no longer present in the cache
@@ -266,14 +275,6 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
     data::AssetKey key_;
   } visit_guard(release_visit_set, key);
 #endif
-
-  auto eviction_guard
-    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
-                                  std::shared_ptr<void> value, TypeId type_id) {
-        DCHECK_EQ_F(HashAssetKey(key), cache_key);
-        LOG_F(2, "Evict asset: key_hash={} type_id={}", cache_key, type_id);
-        UnloadObject(type_id, value, offline);
-      });
 
   // Release resource dependencies first
   auto res_dep_it = resource_dependencies_.find(key);

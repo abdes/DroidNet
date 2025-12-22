@@ -1,152 +1,222 @@
-# Asset Dependency & Caching Design (Forward-Only Model)
+# Asset dependency & caching deep dive (Content)
 
-> Canonical feature status: see
-> `implementation_plan.md#detailed-feature-matrix`. This doc captures the
-> forward-only dependency + caching model actually adopted in Phase 1 and the
-> planned evolution toward the async CPU pipeline (Phase 2).
+This document complements `overview.md` and is the **deep dive** on how Content
+tracks dependencies and uses caching to enforce safe lifetimes for assets and
+resources.
+
+> Canonical status/roadmap: `implementation_plan.md`.
 >
-> GPU upload / residency is explicitly out of scope for Content. Assets reach a
-> terminal Content state of `DecodedCPUReady`; GPU materialization & residency
-> are Renderer responsibilities.
+> GPU upload / residency is out of scope for Content. Content ends at
+> **DecodedCPUReady**. GPU materialization is the Renderer’s job (see
+> `src/Oxygen/Renderer/Upload/README.md`).
 
-## Core Philosophy
+---
 
-**Unified Approach**: Dependency tracking and asset caching are a single
-concern: reference counting drives safe lifetime. We deliberately removed
-reverse dependency maps to reduce memory usage and complexity. A forward graph
-(each asset stores its direct dependencies) plus per-asset reference counts and
-cycle detection supply required safety.
+## What problem this solves
 
-## Design Principles
+We need three things simultaneously:
 
-1. **Reference Counting**: Track usage counts for shared assets (extends current
-   dependency registration)
-2. **Automatic Cascading**: Both loading and unloading cascade through
-   dependency graphs automatically
-3. **Safe Unloading**: Implemented via ref counts + forward dependency ordering
-  (diagnostic ordering tests pending)
-4. **Cycle Rejection**: Cycle detection prevents invalid graphs (introduced in
-  Phase 1)
-5. **Deterministic Ordering**: Load/unload proceed in forward topological order
-  (depth-first) with recursion guard
+1. **Deduplication**: repeated requests for the same asset/resource return the
+   same instance.
+2. **Safety**: you cannot evict/unload something that is still in use, either
+   directly by callers or indirectly as a dependency of another cached object.
+3. **Low bookkeeping cost**: the dependency model should be cheap in memory and
+   simple to reason about.
 
-## Implementation Overview
+The chosen approach is:
 
-High-level flow (synchronous path; async wrapper arrives Phase 2):
+- One unified cache (`AnyCache`) for both assets and resources.
+- Forward-only dependency maps in `AssetLoader`.
+- Reference counting enforced by the cache eviction policy.
 
-1. Request comes in via `AssetLoader::LoadAsset<T>(key)`.
-2. Cache lookup: hit → ref_count++ → return handle.
-3. Miss: locate PAK entry & dispatch registered loader (see `AssetLoader.h`).
-4. Loader decodes asset, registering forward dependencies as they are
-   discovered.
-5. Asset inserted with its dependency span and ref_count = 1.
-6. Release path decrements ref_count; on zero triggers unloader then cascades
-   through recorded dependencies.
+---
 
-The system is intentionally forward-only (no reverse maps); safety comes from
-ref counts + cycle detection at registration time. GPU materialization is
-explicitly deferred to the Renderer.
+## Key idea: “dependency registration increments lifetime”
 
-### Dependency Types
+Dependencies are registered at decode time by the loaders. Registration is not
+just metadata: it also increments the dependency’s reference count in the cache.
 
-**Asset → Asset Dependencies** (`AssetKey → AssetKey`):
+Concretely:
 
-- Example: GeometryAsset depends on MaterialAsset
-- Registration: `AddAssetDependency()` (forward-only) ✅
-- Unload safety: enforced by child holding a ref (refcounts + cycle detection)
-  🔄 (ordering tests pending)
+- `AddAssetDependency(dependent, dependency)` stores the edge and **Touch()**es
+  the dependency in the cache.
+- `AddResourceDependency(dependent, resource_key)` stores the edge and
+  **Touch()**es the resource in the cache.
 
-**Asset → Resource Dependencies** (`AssetKey → ResourceIndexT`):
+This is what ensures that once a dependency is discovered, it cannot be evicted
+while the dependent is still checked out.
 
-- Example: MaterialAsset → TextureResource; GeometryAsset → BufferResource
-- Registration: `AddResourceDependency()` ✅ (forward-only)
-- Release policy: when asset ref_count hits zero and unloader runs, it
-  decrements resource tables / releases indices.
+---
 
-**Note**: Resources never depend on Assets. They are lower-level primitives
-referenced by index (bindless-friendly). Reverse dependency maps for resources
-were intentionally omitted; diagnostics rely on asset-level references.
+## The unified cache: exact semantics
 
-## Key Scenarios
+Content uses `AnyCache<uint64_t, RefCountedEviction<uint64_t>>`.
 
-### Loading with Automatic Caching (Synchronous Path)
+Important behaviors (these match `AnyCache.h` and the `RefCountedEviction`
+policy):
 
-Flow summary:
+- **Store(key, value)**
+  - Inserts the value and sets refcount to **1** (the store operation assumes
+   the caller is “using” the item).
+- **CheckOut(key)**
+  - Returns a typed `shared_ptr<T>` and increments refcount.
+- **Touch(key)**
+  - Increments refcount but does not return the value.
+  - Content uses this to represent “held alive by dependency.”
+- **CheckIn(key)**
+  - Decrements refcount.
+  - When refcount reaches **0**, the cache evicts the entry and runs the
+   eviction callback.
 
-1. Cache hit → increment ref_count → return.
-2. Cache miss → locate PAK entry → decode via registered loader.
-3. Loader registers forward dependencies.
-4. Insert asset with ref_count = 1 + dependency span.
-5. Return shared handle.
+Eviction callback = “invoke the type’s unloader.”
 
-### Safe Unloading with Dependency Validation (Forward-Only)
+This is why unloading is deterministic: it happens **only** on eviction.
 
-Flow summary:
+---
 
-1. Decrement ref_count; stop if > 0.
-2. Invoke unloader (releases resource refs first).
-3. Recursively ReleaseAsset on each recorded dependency (recursion guard +
-   cycle-proof ordering).
-4. Erase asset entry.
+## Dependency graph model (what is stored)
 
-### Shared Asset Protection
+`AssetLoader` stores *forward edges only*:
 
-Example timeline: load geometry A (material M=1), load geometry B (M=2), release
-A (M=1), release B (M=0 → unloader triggers cascade).
+- Asset→asset: `asset_dependencies_[dependent] = { dependency, ... }`
+- Asset→resource: `resource_dependencies_[dependent] = { resource_key, ... }`
 
-## Critical Implementation Details (Summarized)
+There is no reverse map in production builds.
 
-StoreAsset: insert-or-increment; attach forward dependency span.
+In debug builds, `ForEachDependent(...)` exists, implemented by scanning the
+forward map (useful for tests/diagnostics, not for runtime behavior).
 
-ReleaseAsset: decrement; on zero → unloader (type-dispatched) → release forward
-dependencies depth-first → erase entry.
+### Dependency types
 
-### Dependency Validation & Cycle Detection
+#### Asset → Asset
 
-During dependency registration, a depth-first walk over the forward graph is
-performed; encountering a node already on the active path aborts the load. Error
-reports include the partial path (extended context logging is a backlog item).
-No reverse maps are maintained.
+- Example: GeometryAsset → MaterialAsset
+- Registration: `AddAssetDependency()`
+- Safety: enforced by cache refcounts (Touch on dependency)
+- Cycle handling: cycles are rejected (see below)
 
-## State Model
+#### Asset → Resource
 
-Loading State (Content module):
+- Example: MaterialAsset → TextureResource, GeometryAsset → BufferResource
+- Registration: `AddResourceDependency()`
+- Safety: enforced by cache refcounts (Touch on resource)
 
-1. Loading (IO + decode executing)
-2. DecodedCPUReady (asset in cache; dependencies also ready)
+#### Resource → (anything)
 
-GPU materialization/residency: external (Renderer). Content does not block on,
-or track, GPU presence.
+- Not supported. Resources are leaf nodes from the Content subsystem’s point of
+   view.
 
-## Design Advantages
+---
 
-1. **Builds on Existing Work**: Extends current LoaderContext system without
-   breaking changes
-2. **Safety**: Impossible to unload something still in use (new capability)
-3. **Automatic**: Cascading load/unload reduces manual management (new
-   capability)
-4. **Performance**: Shared assets cached, duplicate loading eliminated (new
-   capability)
-5. **Debugging**: Clear dependency graphs for asset analysis tools
+## Cycle rejection
 
-## Design Limitations
+Cycles in asset→asset edges are invalid for two reasons:
 
-1. **Manual Registration**: Loaders must explicitly register dependencies
-   (already implemented, works well)
-2. **Cycle Detection Implemented**: Cycles rejected early (diagnostics can be
-  improved with better error context)
-3. **Synchronous Only (Phase 1)**: Async CPU pipeline coming in Phase 2 (see
-  below)
+- They prevent a strict release order.
+- They create “immortal” graphs that never reach refcount zero naturally.
 
-## Future: Async CPU Pipeline (Phase 2 Preview)
+The implementation rejects cycles when registering an asset→asset edge.
 
-Planned adjustments (see implementation plan Phase 2):
+Notes:
 
-- `task<AssetHandle>`-returning `LoadAsync` ending at DecodedCPUReady
-- In-flight deduplication map for concurrent loads
-- Cancellation tokens passed through loader context
-- Non-blocking interface; initial file IO may remain blocking internally until
-  async backend swapped in
-- Bridge descriptor (`GpuMaterializationInfo`) populated but not consumed here
+- Cycle detection currently runs in debug builds (DFS over forward edges).
+- On detecting a cycle, the edge is rejected; in debug builds a DCHECK also
+   fires.
 
-Out of scope: GPU upload queues, residency / LRU, GPU memory budgets. design)
+---
+
+## Release and unload ordering (what happens on ReleaseAsset)
+
+Release is explicit: callers must call `ReleaseAsset(key)` when they’re done
+using an asset.
+
+The release algorithm is depth-first and ordered:
+
+1. Check-in resource dependencies
+2. Recurse into asset dependencies
+3. Check-in the asset itself
+
+When any check-in drives an entry’s refcount to zero, the cache evicts it and
+invokes the registered unloader.
+
+```mermaid
+flowchart TD
+   A["Caller: ReleaseAsset(AssetKey)"] --> B["ReleaseAssetTree(AssetKey)"]
+   B --> C["CheckIn all resource deps<br/>(resource_dependencies_[key])"]
+   C --> D["Recurse ReleaseAssetTree on asset deps<br/>(asset_dependencies_[key])"]
+   D --> E["CheckIn asset itself<br/>(HashAssetKey(key))"]
+   E --> F{"Refcount reaches 0?"}
+   F -- No --> G["Entry remains cached"]
+   F -- Yes --> H["Cache evicts entry"]
+   H --> I["Invoke registered unloader"]
+```
+
+### Unloader contract (important)
+
+Unloaders are registered per type via `AssetLoader::RegisterLoader(...)`. The
+contract encoded in `AssetLoader.h` is:
+
+- Called only on cache eviction (refcount hits zero).
+- Ordering: resource deps checked in first, asset deps released recursively,
+   then unloader runs.
+- Unloader should not trigger new loads (avoid re-entrancy).
+- Unloader must not throw.
+
+---
+
+## How loaders should participate (practical guidance)
+
+### Do: register dependencies at point of discovery
+
+As you decode an asset descriptor, register every asset/reference you discover
+immediately:
+
+- For asset references: `AddAssetDependency(current, other_asset_key)`
+- For resource references: construct a `ResourceKey` with
+   `MakeResourceKey<ResourceT>(*context.source_pak, index)` and then call
+   `AddResourceDependency(current, key)`
+
+### Do: avoid “hidden” dependencies
+
+If an asset uses a resource/asset but does not register it, the cache refcount
+won’t reflect the true lifetime and eviction can become unsafe.
+
+### Do: avoid leaking dependency checkouts
+
+When a loader calls `LoadResource(...)` (or `LoadAsset(...)`) while decoding an
+owning asset, the returned `shared_ptr<T>` represents a *temporary checkout*.
+
+If the owning asset does not retain that `shared_ptr<T>` long-term (most of our
+formats store indices/handles, not CPU pointers), then the loader must ensure
+that temporary checkout is checked back in after successful dependency
+registration.
+
+Practical rule:
+
+- Keep the dependency alive via `Add*Dependency(...)` (which does a `Touch(...)`)
+   and then drop the temporary checkout.
+
+If you keep both, you effectively double-count the lifetime and dependencies
+may never reach refcount zero even after `ReleaseAsset(...)`.
+
+### Do not: retain `LoaderContext` or readers
+
+The context is passed by value and contains pointers/readers valid only for the
+duration of the load call.
+
+---
+
+## Limitations and roadmap linkage
+
+Current (Phase 1):
+
+- Load path is synchronous.
+- Dependency registration is manual (by loader code).
+- Cycle detection and some safety checks are debug-focused.
+
+Next (Phase 2):
+
+- Async CPU decode (`LoadAsync`) that still ends at DecodedCPUReady.
+- In-flight deduplication and cancellation guarantees.
+- Optional “bridge descriptor” data for the Renderer to materialize GPU
+   resources (Content does not submit uploads).

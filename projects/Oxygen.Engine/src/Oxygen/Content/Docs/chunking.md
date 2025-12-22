@@ -28,7 +28,7 @@ capability.
 #### First-Class Assets
 
 | Type | Purpose |
-|------|---------|
+| ---- | ------- |
 | **GeometryAsset** | Multi-LOD mesh hierarchies |
 | **MaterialAsset** | Shader + texture combinations |
 | **SceneAsset** | Scene composition |
@@ -39,7 +39,7 @@ capability.
 #### Resources
 
 | Type | Purpose |
-|------|---------|
+| ---- | ------- |
 | **TextureResource** | GPU texture data |
 | **BufferResource** | Vertex/index/constant buffers |
 | **ShaderResource** | Compiled shader bytecode (stored separately, not in PAK) |
@@ -50,7 +50,7 @@ capability.
 #### Embedded Descriptors
 
 | Type | Purpose |
-|------|---------|
+| ---- | ------- |
 | **MeshDesc** | LOD-specific mesh data |
 | **SubMeshDesc** | Material-specific submesh data |
 | **MeshViewDesc** | Draw call specifications |
@@ -94,13 +94,13 @@ capability.
 
 ## 🧠 3. GPU Alignment Guidelines
 
-| Resource Type    | PAK File Alignment | GPU Upload Alignment (D3D12 Example) | Notes |
-|------------------|-------------------|-------------------------------|--------------------------------|
-| Constant Buffer  | 256 bytes         | 256 bytes (CBV upload)        | Required by D3D12/Vulkan for CBV; PAK file aligns for direct mapping |
-| Vertex Buffer    | 16 bytes          | 16 bytes (VB upload)          | D3D12 requires 16-byte alignment for vertex buffers; PAK file matches for zero-copy |
-| Index Buffer     | 4 bytes           | 4 bytes (IB upload)           | D3D12 requires 4-byte alignment for index buffers |
-| Texture Data     | 256 bytes         | 256 bytes (copy/upload)       | D3D12 optimal copy granularity; PAK file aligns for direct mapping |
-| Audio Data       | 16 bytes          | 16 bytes                      | For cache line alignment; not directly uploaded to GPU |
+| Resource Type | PAK File Alignment | GPU Upload Alignment (D3D12 Example) | Notes |
+| ------------- | ------------------ | ------------------------------------ | ----- |
+| Constant Buffer | 256 bytes | 256 bytes (CBV upload) | Required by D3D12/Vulkan for CBV; PAK file aligns for direct mapping |
+| Vertex Buffer | 16 bytes | 16 bytes (VB upload) | D3D12 requires 16-byte alignment for vertex buffers; PAK file matches for zero-copy |
+| Index Buffer | 4 bytes | 4 bytes (IB upload) | D3D12 requires 4-byte alignment for index buffers |
+| Texture Data | 256 bytes | 256 bytes (copy/upload) | D3D12 optimal copy granularity; PAK file aligns for direct mapping |
+| Audio Data | 16 bytes | 16 bytes | For cache line alignment; not directly uploaded to GPU |
 
 ### Alignment Clarification: Storage vs GPU Upload
 
@@ -146,6 +146,10 @@ streaming, and efficient resource management.
 (especially for D3D12 and Vulkan), enabling direct mapping and zero-copy
 streaming. This distinction is critical for high-performance asset loading and
 future-proofing the format.
+
+**Module boundary note:** This document explains the *format* constraints.
+Actual upload planning, staging, command recording, and fence tracking are
+Renderer responsibilities (see `src/Oxygen/Renderer/Upload/README.md`).
 
 ---
 

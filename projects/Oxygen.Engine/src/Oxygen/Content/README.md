@@ -5,7 +5,7 @@
 ## Documentation Index
 
 | Topic | File | Focus |
-|-------|------|-------|
+| ----- | ---- | ----- |
 | Entity relationships & intra-PAK rule | `Docs/overview.md` | Conceptual model & dependency boundaries |
 | PAK format, alignment, classification | `Docs/chunking.md` | File layout, alignment, resource tiers |
 | Loader & planned async pipeline | `Docs/asset_loader.md` | Sync loader + future coroutine design |
@@ -23,56 +23,52 @@ See `Docs/implementation_plan.md#roadmap-phases`.
 
 ## LoaderContext Architecture
 
-### Unified Loading Interface
+`LoaderContext` is a small value-type bundle passed to every asset/resource
+loader so it can decode the descriptor and register dependencies as they are
+discovered.
 
-All asset and resource loaders now use a consistent LoaderContext interface:
+The authoritative definition is in `LoaderContext.h`.
+
+### Key fields
+
+- `asset_loader`: used for dependency registration (non-null during loads)
+- `current_asset_key`: the asset currently being loaded (empty for resources)
+- `desc_reader`: positioned at the start of the descriptor to decode
+- `data_readers`: per-resource-type readers positioned at the start of each
+  resource data region (do not use `desc_reader` for data regions)
+- `offline`: CPU-only mode flag (no renderer/GPU side effects)
+- `source_pak`: the `PakFile` the descriptor originates from
+
+### Loader function shape
+
+Load functions are registered with `AssetLoader::RegisterLoader(...)` and are
+called as:
 
 ```cpp
-template<typename StreamT>
-struct LoaderContext {
-  AssetLoader* asset_loader;           // For dependency registration (nullable for resources)
-  AssetKey current_asset_key;         // Asset being loaded
-  std::reference_wrapper<Reader<StreamT>> reader;  // Stream reader
-  bool offline;                       // Offline/GPU-less mode flag
-};
+std::unique_ptr<T> LoadXxx(LoaderContext context);
 ```
 
-### Key Benefits
+### Dependency registration
 
-- **Type Safety**: Template-based context ensures stream type consistency
-- **Dependency Registration**: Dependencies registered at point of discovery during loading
-- **Unified API**: All loaders (assets and resources) use the same interface
-- **Context Passing**: All loading state encapsulated in single context object
-
-### Loader Function Signatures
+Dependencies are registered inline during loading. The loader records forward
+dependencies and increments cache reference counts so that a later
+`AssetLoader::ReleaseAsset(...)` can safely cascade releases.
 
 ```cpp
-// Asset loaders
-template<Stream S> auto LoadGeometryAsset(LoaderContext<S> context) -> std::unique_ptr<GeometryAsset>;
-template<Stream S> auto LoadMaterialAsset(LoaderContext<S> context) -> std::unique_ptr<MaterialAsset>;
-
-// Resource loaders
-template<Stream S> auto LoadBufferResource(LoaderContext<S> context) -> std::unique_ptr<BufferResource>;
-template<Stream S> auto LoadTextureResource(LoaderContext<S> context) -> std::unique_ptr<TextureResource>;
-```
-
-### Dependency Registration
-
-Dependencies are registered inline during loading, but safe unloading is not yet implemented:
-
-```cpp
-// Asset dependencies (material references) - REGISTRATION ONLY
-if (material_key != AssetKey{} && context.asset_loader) {
+// Asset dependency (e.g., geometry -> material)
+if (material_key != data::AssetKey{} && context.asset_loader) {
   context.asset_loader->AddAssetDependency(context.current_asset_key, material_key);
 }
 
-// Resource dependencies (buffer/texture references) - REGISTRATION ONLY
-if (vertex_buffer_index != 0 && context.asset_loader) {
-  context.asset_loader->AddResourceDependency(context.current_asset_key, vertex_buffer_index);
+// Resource dependency (e.g., material -> texture)
+if (context.asset_loader && context.source_pak) {
+  const auto texture_rk = context.asset_loader->MakeResourceKey<data::TextureResource>(*context.source_pak, texture_index);
+  context.asset_loader->AddResourceDependency(context.current_asset_key, texture_rk);
 }
 ```
 
-**Note**: Dependencies are tracked during loading but there's no validation during unload operations yet. This means assets can still be unloaded even if other assets depend on them, potentially causing dangling references.
+Cycle detection is enforced for asset→asset dependencies, and release is
+ordered (resources first, then asset dependencies, then the asset itself).
 
 ## Overview
 

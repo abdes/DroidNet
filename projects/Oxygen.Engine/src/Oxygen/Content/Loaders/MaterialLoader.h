@@ -40,7 +40,9 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
   using data::pak::kNoResourceIndex;
   using data::pak::ResourceIndexT;
 
-  // Collection to track loaded resources for cleanup on error
+  // Track loaded resources for cleanup on error, and register dependencies
+  // only after all loads succeed.
+  std::vector<ResourceKey> loaded_texture_keys;
   std::vector<ResourceCleanupGuard> texture_guards;
 
   // Helper to load and register a texture dependency
@@ -72,12 +74,9 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
         LOG_F(2, "Loaded texture resource: {}_texture ({} bytes)", texture_name,
           texture_resource->GetDataSize());
 
-        // Register resource dependency using proper ResourceKey
-        LOG_F(2, "Registering resource dependency: {}_texture = {}",
-          texture_name, texture_index);
-        loader.AddResourceDependency(current_asset_key, texture_resource_key);
-
-        // Add cleanup guard for this resource
+        // Track the resource for dependency registration and ensure we release
+        // the temporary checkout if anything goes wrong later.
+        loaded_texture_keys.push_back(texture_resource_key);
         texture_guards.emplace_back(loader, texture_resource_key);
       };
 
@@ -89,9 +88,10 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
     load_texture(desc.roughness_texture, "roughness");
     load_texture(desc.ambient_occlusion_texture, "ambient_occlusion");
 
-    // Success: disable all guards to keep the resources loaded
-    for (auto& guard : texture_guards) {
-      guard.disable();
+    // Success: register dependencies. The guards remain enabled so they drop
+    // the temporary load checkout, leaving only the dependency hold.
+    for (const auto& texture_resource_key : loaded_texture_keys) {
+      loader.AddResourceDependency(current_asset_key, texture_resource_key);
     }
   } catch (...) {
     // Error: guards will automatically clean up resources

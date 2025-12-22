@@ -9,12 +9,19 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
+
 using testing::NotNull;
 
 using oxygen::content::testing::AssetLoaderDependencyTest;
 using oxygen::data::AssetKey;
+using oxygen::data::BufferResource;
 using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
+using oxygen::data::TextureResource;
 
 //=== AssetLoader Dependency Mgmt Tests ===-----------------------------------//
 
@@ -217,16 +224,98 @@ NOLINT_TEST_F(
 */
 NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_ResourcesBeforeAssets)
 {
+  //! Arrange
   const auto pak_path = GeneratePakFile("geometry_with_buffers");
   asset_loader_->AddPakFile(pak_path);
+
+  std::vector<std::string> unload_events;
+
+  // Wrap unloaders so we can observe actual eviction/unload order.
+  asset_loader_->RegisterLoader(oxygen::content::loaders::LoadBufferResource,
+    [&unload_events](std::shared_ptr<BufferResource> /*resource*/,
+      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      unload_events.emplace_back("BufferResource");
+    });
+
+  asset_loader_->RegisterLoader(oxygen::content::loaders::LoadGeometryAsset,
+    [&unload_events](std::shared_ptr<GeometryAsset> /*asset*/,
+      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      unload_events.emplace_back("GeometryAsset");
+    });
+
   const auto geom_key = CreateTestAssetKey("buffered_geometry");
   const auto geom = asset_loader_->LoadAsset<GeometryAsset>(geom_key, false);
   ASSERT_THAT(geom, NotNull());
 
+  //! Act
   const auto first_release = asset_loader_->ReleaseAsset(geom_key, false);
+
+  //! Assert
   EXPECT_TRUE(first_release);
+
+  // We expect at least one buffer resource eviction, and it must happen before
+  // the geometry asset is evicted.
+  const auto first_geom_it
+    = std::find(unload_events.begin(), unload_events.end(), "GeometryAsset");
+  ASSERT_NE(first_geom_it, unload_events.end());
+  ASSERT_NE(
+    std::find(unload_events.begin(), unload_events.end(), "BufferResource"),
+    unload_events.end());
+
+  for (auto it = unload_events.begin(); it != first_geom_it; ++it) {
+    EXPECT_EQ(*it, "BufferResource");
+  }
+
+  // Idempotence
   const auto second_release = asset_loader_->ReleaseAsset(geom_key, false);
   EXPECT_TRUE(second_release);
+}
+
+//! Test: Texture resources unload before material asset
+/*!
+ Scenario: Load textured_material so the material asset depends on texture
+ resources. Release the asset and verify that texture unloads happen before the
+ material unload.
+*/
+NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_TexturesBeforeMaterial)
+{
+  // Arrange
+  const auto pak_path = GeneratePakFile("material_with_textures");
+  asset_loader_->AddPakFile(pak_path);
+
+  std::vector<std::string> unload_events;
+
+  asset_loader_->RegisterLoader(oxygen::content::loaders::LoadTextureResource,
+    [&unload_events](std::shared_ptr<TextureResource> /*resource*/,
+      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      unload_events.emplace_back("TextureResource");
+    });
+
+  asset_loader_->RegisterLoader(oxygen::content::loaders::LoadMaterialAsset,
+    [&unload_events](std::shared_ptr<MaterialAsset> /*asset*/,
+      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      unload_events.emplace_back("MaterialAsset");
+    });
+
+  const auto material_key = CreateTestAssetKey("textured_material");
+  const auto material
+    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  ASSERT_THAT(material, NotNull());
+
+  // Act
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(material_key, false));
+
+  // Assert
+  const auto first_material_it
+    = std::find(unload_events.begin(), unload_events.end(), "MaterialAsset");
+  ASSERT_NE(first_material_it, unload_events.end());
+  ASSERT_NE(
+    std::find(unload_events.begin(), unload_events.end(), "TextureResource"),
+    unload_events.end());
+
+  for (auto it = unload_events.begin(); it != first_material_it; ++it) {
+    EXPECT_EQ(*it, "TextureResource");
+  }
 }
 
 #if !defined(NDEBUG)
