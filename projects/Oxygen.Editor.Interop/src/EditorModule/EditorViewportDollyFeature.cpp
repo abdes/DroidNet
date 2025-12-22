@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <limits>
@@ -19,6 +20,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::interop::module {
 
@@ -32,6 +34,16 @@ namespace oxygen::interop::module {
       float max_abs_log_zoom_per_frame = 1.5f;
       glm::vec3 up = oxygen::space::move::Up;
     };
+
+    struct DollyState {
+      bool was_active = false;
+    };
+
+    [[nodiscard]] auto GetOrInitDollyState(
+      std::unordered_map<scene::NodeHandle, DollyState>& states,
+      const scene::SceneNode& camera_node) noexcept -> DollyState& {
+      return states[camera_node.GetHandle()];
+    }
 
     [[nodiscard]] auto ComputeMaxRadius(scene::SceneNode camera_node,
       const DollyParams& params,
@@ -178,10 +190,21 @@ namespace oxygen::interop::module {
 
     float max_radius = ComputeMaxRadius(camera_node, params, min_radius);
 
+    static std::unordered_map<scene::NodeHandle, DollyState> dolly_states;
+    auto& state = GetOrInitDollyState(dolly_states, camera_node);
+
     const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
     const bool rmb_held =
       input_snapshot.IsActionOngoing("Editor.Mouse.RightButton");
-    if (!alt_held || !rmb_held) {
+    const bool active = alt_held && rmb_held;
+    if (!active) {
+      state.was_active = false;
+      return;
+    }
+
+    if (!state.was_active) {
+      state.was_active = true;
+      // Consume the activation frame so a stale mouse delta doesn't cause a jump.
       return;
     }
 

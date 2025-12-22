@@ -11,8 +11,10 @@
 #include "EditorModule/EditorViewportPanFeature.h"
 
 #include <algorithm>
+#include <unordered_map>
 
 #include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::interop::module {
 
@@ -22,6 +24,16 @@ namespace oxygen::interop::module {
       float units_per_pixel_at_unit_distance = 0.0025f;
       float min_radius = 0.25f;
     };
+
+    struct PanState {
+      bool was_active = false;
+    };
+
+    [[nodiscard]] auto GetOrInitPanState(
+      std::unordered_map<scene::NodeHandle, PanState>& states,
+      const scene::SceneNode& camera_node) noexcept -> PanState& {
+      return states[camera_node.GetHandle()];
+    }
 
     [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
       std::string_view name) noexcept -> bool {
@@ -102,10 +114,21 @@ namespace oxygen::interop::module {
 
     const PanParams params{};
 
+    static std::unordered_map<scene::NodeHandle, PanState> pan_states;
+    auto& state = GetOrInitPanState(pan_states, camera_node);
+
     const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
     const bool mmb_held =
       input_snapshot.IsActionOngoing("Editor.Mouse.MiddleButton");
-    if (!alt_held || !mmb_held) {
+    const bool active = alt_held && mmb_held;
+    if (!active) {
+      state.was_active = false;
+      return;
+    }
+
+    if (!state.was_active) {
+      state.was_active = true;
+      // Consume the activation frame so a stale mouse delta doesn't cause a jump.
       return;
     }
 
