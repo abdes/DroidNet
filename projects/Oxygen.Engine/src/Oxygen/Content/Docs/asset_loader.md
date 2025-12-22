@@ -2,13 +2,17 @@
 
 > For canonical feature status & roadmap see `implementation_plan.md` (sections: Current Status Summary & Roadmap Phases). This document focuses on architecture and the future async design.
 
-_Last reviewed: August 2025._
+_Last reviewed: December 2025._
 
 ## Overview
 
 Current implementation: synchronous loader with dependency registration + caching.
 Planned extension: coroutine-based, staged pipeline (disk I/O → decode → buffer prep → GPU upload).
 This file outlines the target architecture and conceptual awaitables.
+
+Current note (Dec 2025): the runtime loader is being refactored around an internal
+"content source" seam (`IContentSource`) so `.pak` and future loose cooked roots can
+share the same resolution path.
 
 ## Planned Async Feature Set
 

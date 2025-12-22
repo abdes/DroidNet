@@ -59,6 +59,16 @@ struct LoaderContext {
   //! Source PAK file from which the asset/resource is being loaded. Guaranteed
   //! to be valid during a load operation.
   const PakFile* source_pak { nullptr };
+
+  //! Parse-only mode: loaders should not attempt to load/register dependencies.
+  /*!
+   When true, loaders must avoid calling back into AssetLoader to resolve
+   other assets/resources or to register dependencies.
+
+   This is intended for tooling and unit tests that validate descriptor parsing
+   without requiring a mounted content source.
+  */
+  bool parse_only { false };
 };
 
 } // namespace oxygen::content

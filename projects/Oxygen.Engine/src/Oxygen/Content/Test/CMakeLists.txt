@@ -41,9 +41,11 @@ m_gtest_program(
     "AssetLoader_loading_test.cpp"
     "AssetLoader_test.h"
     "BufferLoader_test.cpp"
+    "LooseCookedIndex_test.cpp"
     "MaterialLoader_test.cpp"
     "Mocks/MockStream.h"
     "TextureLoader_test.cpp"
+    "VirtualPathResolver_test.cpp"
     "Utils/PakUtils.h"
 )
 

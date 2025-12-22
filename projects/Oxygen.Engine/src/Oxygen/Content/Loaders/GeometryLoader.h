@@ -85,6 +85,10 @@ namespace detail {
       CheckResult(max_result, "m.bounding_box_max");
     }
 
+    if (context.parse_only) {
+      return { nullptr, nullptr };
+    }
+
     // Load vertex and index buffer data using AssetLoader with robust error
     // handling
 
@@ -93,11 +97,11 @@ namespace detail {
 
     auto vb_resource_key
       = context.asset_loader->MakeResourceKey<data::BufferResource>(
-        *context.source_pak, info.vertex_buffer);
+        info.vertex_buffer);
 
     auto ib_resource_key
       = context.asset_loader->MakeResourceKey<data::BufferResource>(
-        *context.source_pak, info.index_buffer);
+        info.index_buffer);
 
     std::optional<ResourceCleanupGuard> vertex_guard;
     std::optional<ResourceCleanupGuard> index_guard;
@@ -106,7 +110,7 @@ namespace detail {
     if (info.vertex_buffer != 0) {
       vertex_buffer_resource
         = context.asset_loader->LoadResource<data::BufferResource>(
-          *context.source_pak, info.vertex_buffer, context.offline);
+          info.vertex_buffer, context.offline);
       if (!vertex_buffer_resource) {
         LOG_F(ERROR, "-failed- to load vertex buffer resource: index = {}",
           info.vertex_buffer);
@@ -123,7 +127,7 @@ namespace detail {
     if (info.index_buffer != 0) {
       index_buffer_resource
         = context.asset_loader->LoadResource<data::BufferResource>(
-          *context.source_pak, info.index_buffer, context.offline);
+          info.index_buffer, context.offline);
       if (!index_buffer_resource) {
         LOG_F(ERROR, "-failed- to load index buffer resource: index = {}",
           info.index_buffer);
@@ -322,10 +326,15 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   MeshBuilder builder(/*lod=*/0, name);
   builder.WithDescriptor(desc);
 
+  const bool should_build_mesh = !(context.parse_only && desc.IsStandard());
+
   // Configure builder based on mesh type
   if (desc.IsStandard()) {
-    // Reference external buffer resources (zero-copy)
-    builder.WithBufferResources(vertex_buffer_resource, index_buffer_resource);
+    if (should_build_mesh) {
+      // Reference external buffer resources (zero-copy)
+      builder.WithBufferResources(
+        vertex_buffer_resource, index_buffer_resource);
+    }
   } else if (desc.IsProcedural()) {
     // Use owned vertex/index data (data is moved into builder)
     builder.WithVertices(vertices).WithIndices(indices);
@@ -353,7 +362,9 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 
     // Resolve the material asset key to a MaterialAsset
     std::shared_ptr<const MaterialAsset> material;
-    if (sm_desc.material_asset_key != AssetKey {}) {
+    if (context.parse_only) {
+      material = MaterialAsset::CreateDefault();
+    } else if (sm_desc.material_asset_key != AssetKey {}) {
       // Save reader position before loading material asset
       auto saved_position = reader.Position();
 
@@ -389,17 +400,23 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
       material = MaterialAsset::CreateDefault();
     }
 
-    auto sm_builder
-      = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
-    for (const auto& mv_desc : mesh_views) {
-      sm_builder.WithMeshView(mv_desc);
+    if (should_build_mesh) {
+      auto sm_builder
+        = builder.BeginSubMesh(sm_name, material).WithDescriptor(sm_desc);
+      for (const auto& mv_desc : mesh_views) {
+        sm_builder.WithMeshView(mv_desc);
+      }
+      builder.EndSubMesh(std::move(sm_builder));
     }
-    builder.EndSubMesh(std::move(sm_builder));
   }
 
   if (total_read_views != desc.mesh_view_count) {
     LOG_F(ERROR, "Total read mesh views ({}) != expected ({})",
       total_read_views, desc.mesh_view_count);
+    return nullptr;
+  }
+
+  if (!should_build_mesh) {
     return nullptr;
   }
 

@@ -92,9 +92,8 @@ protected:
 
   //! Helper method to create LoaderContext for testing.
   /*!
-    NOTE: This creates a context with a null PAK file, which means dependency
-    registration will be skipped. This is intentional for testing basic material
-    loading without requiring a real PAK file infrastructure.
+    NOTE: This creates a context for parse-only testing without requiring a
+    mounted content source. Dependency loading/registration is skipped.
   */
   auto CreateLoaderContext() -> oxygen::content::LoaderContext
   {
@@ -113,6 +112,7 @@ protected:
       .offline = true,
       .source_pak
       = nullptr, // No PAK file - dependency registration will be skipped
+      .parse_only = true,
     };
   }
 

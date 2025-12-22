@@ -27,14 +27,16 @@ namespace oxygen::content::loaders {
  following the GeometryLoader approach.
 
  @param loader The asset loader to register dependencies with
- @param pak The PAK file containing the material and its texture resources
+ @param source_pak Optional PAK file containing the texture resources
  @param current_asset_key The asset key of the material being loaded
  @param desc The material asset descriptor containing dependency information
  @param offline Whether to load in offline mode (no GPU side effects)
+ @param parse_only Whether to skip dependency loading/registration
  */
 inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
-  const PakFile& pak, const data::AssetKey& current_asset_key,
-  const data::pak::MaterialAssetDesc& desc, bool offline) -> void
+  const PakFile* source_pak, const data::AssetKey& current_asset_key,
+  const data::pak::MaterialAssetDesc& desc, bool offline, bool parse_only)
+  -> void
 {
   using data::TextureResource;
   using data::pak::kNoResourceIndex;
@@ -52,16 +54,27 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
           return; // No texture assigned
         }
 
+        if (parse_only) {
+          return;
+        }
+
         LOG_F(2, "Loading texture dependency: {}_texture = {}", texture_name,
           texture_index);
 
-        // Create proper ResourceKey for this texture
-        auto texture_resource_key
-          = loader.MakeResourceKey<TextureResource>(pak, texture_index);
+        ResourceKey texture_resource_key {};
+        std::shared_ptr<TextureResource> texture_resource;
 
-        // Load the texture resource with proper error handling
-        auto texture_resource
-          = loader.LoadResource<TextureResource>(pak, texture_index, offline);
+        if (source_pak) {
+          texture_resource_key = loader.MakeResourceKey<TextureResource>(
+            *source_pak, texture_index);
+          texture_resource = loader.LoadResource<TextureResource>(
+            *source_pak, texture_index, offline);
+        } else {
+          texture_resource_key
+            = loader.MakeResourceKey<TextureResource>(texture_index);
+          texture_resource
+            = loader.LoadResource<TextureResource>(texture_index, offline);
+        }
 
         if (!texture_resource) {
           LOG_F(ERROR, "-failed- to load texture resource: {}_texture = {}",
@@ -250,11 +263,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
-  // Register texture dependencies if we have a valid PAK file
-  if (context.source_pak) {
-    LoadAndRegisterMaterialTextureDependencies(loader, *context.source_pak,
-      context.current_asset_key, desc, context.offline);
-  }
+  LoadAndRegisterMaterialTextureDependencies(loader, context.source_pak,
+    context.current_asset_key, desc, context.offline, context.parse_only);
 
   // Create the material asset with the loaded shader references
   auto material_asset

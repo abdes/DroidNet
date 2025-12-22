@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <limits>
+#include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Internal/ContentSource.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -22,6 +25,21 @@ using oxygen::content::LoaderContext;
 using oxygen::content::LoadFunction;
 using oxygen::content::PakFile;
 using oxygen::content::PakResource;
+
+namespace oxygen::content {
+struct AssetLoader::Impl final {
+  std::vector<std::unique_ptr<internal::IContentSource>> sources;
+
+  std::vector<uint16_t> source_ids;
+  std::unordered_map<uint16_t, size_t> source_id_to_index;
+
+  uint16_t next_loose_source_id = 0x8000;
+
+  // Keep a dense, deterministic PAK index space for ResourceKey encoding.
+  // This must not be affected by registering non-PAK sources.
+  std::vector<std::filesystem::path> pak_paths;
+};
+} // namespace oxygen::content
 
 //=== Helpers to get Resource TypeId by index in ResourceTypeList ============//
 
@@ -41,6 +59,32 @@ inline auto GetResourceTypeIdByIndex(std::size_t type_index)
 } // namespace
 
 //=== Sanity Checking Helper =================================================//
+constexpr uint16_t kLooseCookedSourceIdBase = 0x8000;
+thread_local bool g_has_current_source_id = false;
+thread_local uint16_t g_current_source_id = 0;
+class ScopedCurrentSourceId final {
+public:
+  explicit ScopedCurrentSourceId(const uint16_t source_id) noexcept
+    : prev_has_(g_has_current_source_id)
+    , prev_id_(g_current_source_id)
+  {
+    g_has_current_source_id = true;
+    g_current_source_id = source_id;
+  }
+
+  ~ScopedCurrentSourceId() noexcept
+  {
+    g_has_current_source_id = prev_has_;
+    g_current_source_id = prev_id_;
+  }
+
+  ScopedCurrentSourceId(const ScopedCurrentSourceId&) = delete;
+  ScopedCurrentSourceId& operator=(const ScopedCurrentSourceId&) = delete;
+
+private:
+  bool prev_has_;
+  uint16_t prev_id_;
+};
 
 namespace {
 // Helper validates eviction callback arguments. Parameter ordering chosen to
@@ -63,6 +107,7 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
 //=== Basic methods ==========================================================//
 
 AssetLoader::AssetLoader()
+  : impl_(std::make_unique<Impl>())
 {
   using serio::FileStream;
 
@@ -79,18 +124,46 @@ AssetLoader::AssetLoader()
   RegisterLoader(loaders::LoadTextureResource, loaders::UnloadTextureResource);
 }
 
+AssetLoader::~AssetLoader() = default;
+
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
   // Normalize the path to ensure consistent handling
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
-  paks_.push_back(std::make_unique<PakFile>(normalized));
+  const auto pak_index = static_cast<uint16_t>(impl_->pak_paths.size());
+  impl_->sources.push_back(
+    std::make_unique<internal::PakFileSource>(normalized));
+  impl_->source_ids.push_back(pak_index);
+  impl_->source_id_to_index.insert_or_assign(
+    pak_index, impl_->sources.size() - 1);
+
+  impl_->pak_paths.push_back(normalized);
+
+  LOG_F(INFO, "Mounted PAK content source: id={} path={}", pak_index,
+    normalized.string());
+}
+
+auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
+{
+  std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
+  impl_->sources.push_back(
+    std::make_unique<internal::LooseCookedSource>(normalized));
+
+  const auto source_id = impl_->next_loose_source_id++;
+  DCHECK_F(source_id >= kLooseCookedSourceIdBase);
+  impl_->source_ids.push_back(source_id);
+  impl_->source_id_to_index.insert_or_assign(
+    source_id, impl_->sources.size() - 1);
+
+  LOG_F(INFO, "Mounted loose cooked content source: id={} root={}", source_id,
+    normalized.string());
 }
 
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
-  const std::string_view type_name, LoadAssetFnErased&& loader) -> void
+  const std::string_view type_name, LoadFnErased&& loader) -> void
 {
   auto [it, inserted] = asset_loaders_.insert_or_assign(
-    type_id, std::forward<LoadAssetFnErased>(loader));
+    type_id, std::forward<LoadFnErased>(loader));
   if (!inserted) {
     LOG_F(WARNING, "Replacing loader for type: {}/{}", type_id, type_name);
   } else {
@@ -99,10 +172,10 @@ auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
 }
 
 auto AssetLoader::AddTypeErasedResourceLoader(const TypeId type_id,
-  const std::string_view type_name, LoadResourceFnErased&& loader) -> void
+  const std::string_view type_name, LoadFnErased&& loader) -> void
 {
   auto [it, inserted] = resource_loaders_.insert_or_assign(
-    type_id, std::forward<LoadResourceFnErased>(loader));
+    type_id, std::forward<LoadFnErased>(loader));
   if (!inserted) {
     LOG_F(
       WARNING, "Replacing resource loader for type: {}/{}", type_id, type_name);
@@ -174,29 +247,13 @@ auto AssetLoader::AddResourceDependency(
 
 //=== Asset Loading Implementations ==========================================//
 
-// Common template implementation for asset loading
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-auto AssetLoader::InvokeAssetLoaderImpl(
-  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-  AssetLoader& loader, const PakFile& pak,
-  const data::pak::AssetDirectoryEntry& entry, bool offline)
-  -> std::shared_ptr<void>
+auto AssetLoader::GetCurrentSourceId() const -> uint16_t
 {
-  auto reader = pak.CreateReader(entry);
-  // FIXME: for now we just get a reader on the PAK file itself - future mem map
-  auto buf_reader = pak.CreateDataReader<data::BufferResource>();
-  auto tex_reader = pak.CreateDataReader<data::TextureResource>();
-
-  LoaderContext context {
-    .asset_loader = &loader,
-    .current_asset_key = entry.asset_key,
-    .desc_reader = &reader,
-    .data_readers = std::make_tuple(&buf_reader, &tex_reader),
-    .offline = offline,
-    .source_pak = &pak,
-  };
-
-  return loader_fn(context);
+  if (!g_has_current_source_id) {
+    throw std::runtime_error(
+      "Current source id is not set (invalid outside load operation)");
+  }
+  return g_current_source_id;
 }
 
 template <oxygen::IsTyped T>
@@ -209,24 +266,67 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
     return cached;
   }
 
-  // Not cached - load from PAK files
-  for (const auto& pak : paks_) {
-    if (const auto entry_opt = pak->FindEntry(key)) {
-      const auto& entry = *entry_opt;
-      auto loader_it = asset_loaders_.find(T::ClassTypeId());
-      if (loader_it != asset_loaders_.end()) {
-        auto void_ptr = loader_it->second(*this, *pak, entry, offline);
-        auto typed = std::static_pointer_cast<T>(void_ptr);
-        if (typed && typed->GetTypeId() == T::ClassTypeId()) {
-          // Cache the loaded asset
-          content_cache_.Store(hash_key, typed);
-          return typed;
-        }
-        LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
-          T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
-      }
+  // Not cached - load from registered content sources.
+  for (size_t source_index = 0; source_index < impl_->sources.size();
+    ++source_index) {
+    const auto& source = *impl_->sources[source_index];
+
+    const auto locator_opt = source.FindAsset(key);
+    if (!locator_opt) {
+      continue;
+    }
+
+    const auto source_id = impl_->source_ids.at(source_index);
+    ScopedCurrentSourceId source_guard(source_id);
+
+    auto desc_reader = source.CreateAssetDescriptorReader(*locator_opt);
+    if (!desc_reader) {
+      continue;
+    }
+
+    auto buf_reader = source.CreateBufferDataReader();
+    auto tex_reader = source.CreateTextureDataReader();
+
+    const PakFile* source_pak = nullptr;
+    if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+      const auto* pak_source
+        = static_cast<const internal::PakFileSource*>(&source);
+      source_pak = &pak_source->Pak();
+    }
+
+    LoaderContext context {
+      .asset_loader = this,
+      .current_asset_key = key,
+      .desc_reader = desc_reader.get(),
+      .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
+      .offline = offline,
+      .source_pak = source_pak,
+    };
+
+    auto loader_it = asset_loaders_.find(T::ClassTypeId());
+    if (loader_it == asset_loaders_.end()) {
+      LOG_F(ERROR, "No loader registered for asset type: {}",
+        T::ClassTypeNamePretty());
       return nullptr;
     }
+
+    auto void_ptr = loader_it->second(context);
+    auto typed = std::static_pointer_cast<T>(void_ptr);
+    if (typed && typed->GetTypeId() == T::ClassTypeId()) {
+      content_cache_.Store(hash_key, typed);
+      return typed;
+    }
+
+    LOG_F(ERROR, "Loaded asset type mismatch: expected {}, got {}",
+      T::ClassTypeNamePretty(), typed ? typed->GetTypeName() : "nullptr");
+    return nullptr;
+  }
+
+  LOG_F(WARNING, "Asset not found: key={} type={}",
+    nostd::to_string(key).c_str(), T::ClassTypeNamePretty());
+  for (size_t i = 0; i < impl_->sources.size(); ++i) {
+    LOG_F(INFO, "Searched source: idx={} id={} name={}", i,
+      impl_->source_ids[i], impl_->sources[i]->DebugName());
   }
   return nullptr;
 }
@@ -297,101 +397,95 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
 }
 
 //=== Resource Loading  ======================================================//
-
-// Common implementation for resource loading
-template <PakResource T>
-auto AssetLoader::InvokeResourceLoaderImpl(
-  const std::function<std::shared_ptr<void>(LoaderContext)>& loader_fn,
-  AssetLoader& loader, const PakFile& pak,
-  data::pak::ResourceIndexT resource_index, bool offline)
-  -> std::shared_ptr<void>
-{
-  // Get ResourceTable and offset for this resource type
-  auto* resource_table = pak.GetResourceTable<T>();
-  if (!resource_table) {
-    LOG_F(ERROR, "PAK file '{}' does not contain resource table for {}",
-      pak.FilePath().string().c_str(), T::ClassTypeNamePretty());
-    return nullptr;
-  }
-  auto offset = resource_table->GetResourceOffset(resource_index);
-  if (!offset) {
-    LOG_F(ERROR, "Resource({}) index {} not found in PAK file '{}'",
-      T::ClassTypeNamePretty(), resource_index,
-      pak.FilePath().string().c_str());
-    return nullptr;
-  }
-
-  // Create a new FileStream from the original file path, and position it at
-  // the correct offset for the Reader that will be used for loading
-  const auto table_stream
-    = std::make_unique<serio::FileStream<>>(pak.FilePath(), std::ios::in);
-  if (!table_stream->Seek(*offset)) {
-    LOG_F(ERROR, "Failed to seek to resource offset {} in PAK file '{}'",
-      *offset, pak.FilePath().string().c_str());
-    return nullptr;
-  }
-  serio::Reader reader(*table_stream);
-  // FIXME: for now we just get a reader on the PAK file itself - future mem map
-  auto buf_reader = pak.CreateDataReader<data::BufferResource>();
-  auto tex_reader = pak.CreateDataReader<data::TextureResource>();
-
-  LoaderContext context {
-    .asset_loader = &loader,
-    .current_asset_key = {}, // No asset key for resources
-    .desc_reader = &reader,
-    .data_readers = std::make_tuple(&buf_reader, &tex_reader),
-    .offline = offline,
-    .source_pak = &pak,
-  };
-
-  return loader_fn(context);
-}
-
-// Concrete implementations for specific resource types
-auto AssetLoader::InvokeBufferResourceLoader(
-  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-  AssetLoader& loader, const PakFile& pak,
-  data::pak::ResourceIndexT resource_index, bool offline)
-  -> std::shared_ptr<void>
-{
-  return InvokeResourceLoaderImpl<data::BufferResource>(
-    loader_fn, loader, pak, resource_index, offline);
-}
-
-auto AssetLoader::InvokeTextureResourceLoader(
-  std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-  AssetLoader& loader, const PakFile& pak,
-  data::pak::ResourceIndexT resource_index, bool offline)
-  -> std::shared_ptr<void>
-{
-  return InvokeResourceLoaderImpl<data::TextureResource>(
-    loader_fn, loader, pak, resource_index, offline);
-}
-
 template <PakResource T>
 auto AssetLoader::LoadResource(const PakFile& pak,
   data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
 {
-  const uint16_t pak_index = GetPakIndex(pak);
-  const uint16_t resource_type_index = IndexOf<T, ResourceTypeList>::value;
-  const internal::InternalResourceKey internal_key(
-    pak_index, resource_type_index, resource_index);
-  auto key_hash = std::hash<internal::InternalResourceKey> {}(internal_key);
+  const auto pak_index = GetPakIndex(pak);
+  ScopedCurrentSourceId source_guard(pak_index);
+  return LoadResource<T>(resource_index, offline);
+}
 
-  // Check cache first using the ResourceKey directly
+template <PakResource T>
+auto AssetLoader::LoadResource(
+  data::pak::ResourceIndexT resource_index, bool offline) -> std::shared_ptr<T>
+{
+  const auto source_id = GetCurrentSourceId();
+  const auto resource_type_index
+    = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
+  const internal::InternalResourceKey internal_key(
+    source_id, resource_type_index, resource_index);
+  const auto key_hash
+    = std::hash<internal::InternalResourceKey> {}(internal_key);
+
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
     return cached;
   }
 
+  const auto source_it = impl_->source_id_to_index.find(source_id);
+  if (source_it == impl_->source_id_to_index.end()) {
+    return nullptr;
+  }
+  const auto& source = *impl_->sources.at(source_it->second);
+
+  const PakFile* source_pak = nullptr;
+  if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+    const auto* pak_source
+      = static_cast<const internal::PakFileSource*>(&source);
+    source_pak = &pak_source->Pak();
+  }
+
+  const ResourceTable<T>* resource_table = nullptr;
+  std::unique_ptr<serio::AnyReader> table_reader;
+
+  if constexpr (std::same_as<T, data::BufferResource>) {
+    resource_table = source.GetBufferTable();
+    table_reader = source.CreateBufferTableReader();
+  } else if constexpr (std::same_as<T, data::TextureResource>) {
+    resource_table = source.GetTextureTable();
+    table_reader = source.CreateTextureTableReader();
+  } else {
+    static_assert(std::same_as<T, data::BufferResource>
+        || std::same_as<T, data::TextureResource>,
+      "Unsupported resource type");
+  }
+
+  if (!resource_table || !table_reader) {
+    return nullptr;
+  }
+
+  const auto offset = resource_table->GetResourceOffset(resource_index);
+  if (!offset) {
+    return nullptr;
+  }
+
+  if (auto seek_res = table_reader->Seek(static_cast<size_t>(*offset));
+    !seek_res) {
+    return nullptr;
+  }
+
+  auto buf_reader = source.CreateBufferDataReader();
+  auto tex_reader = source.CreateTextureDataReader();
+
+  LoaderContext context {
+    .asset_loader = this,
+    .current_asset_key = {},
+    .desc_reader = table_reader.get(),
+    .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
+    .offline = offline,
+    .source_pak = source_pak,
+  };
+
   auto loader_it = resource_loaders_.find(T::ClassTypeId());
-  if (loader_it != resource_loaders_.end()) {
-    auto void_ptr = loader_it->second(*this, pak, resource_index, offline);
-    auto typed = std::static_pointer_cast<T>(void_ptr);
-    if (typed && typed->GetTypeId() == T::ClassTypeId()) {
-      // Cache the loaded resource
-      content_cache_.Store(key_hash, typed);
-      return typed;
-    }
+  if (loader_it == resource_loaders_.end()) {
+    return nullptr;
+  }
+
+  auto void_ptr = loader_it->second(context);
+  auto typed = std::static_pointer_cast<T>(void_ptr);
+  if (typed && typed->GetTypeId() == T::ClassTypeId()) {
+    content_cache_.Store(key_hash, typed);
+    return typed;
   }
   return nullptr;
 }
@@ -431,9 +525,8 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
   // Normalize the path of the input pak
   const auto& pak_path = std::filesystem::weakly_canonical(pak.FilePath());
 
-  for (size_t i = 0; i < paks_.size(); ++i) {
-    // Compare normalized paths
-    if (std::filesystem::weakly_canonical(paks_[i]->FilePath()) == pak_path) {
+  for (size_t i = 0; i < impl_->pak_paths.size(); ++i) {
+    if (impl_->pak_paths[i] == pak_path) {
       return static_cast<uint16_t>(i);
     }
   }
@@ -477,19 +570,30 @@ auto AssetLoader::DetectCycle(
 //=== Explicit Template Instantiations =======================================//
 
 // Instantiate for all supported asset types
-template auto AssetLoader::LoadAsset<oxygen::data::GeometryAsset>(
+template OXGN_CNTT_API auto AssetLoader::LoadAsset<oxygen::data::GeometryAsset>(
   const data::AssetKey& key, bool offline)
   -> std::shared_ptr<data::GeometryAsset>;
-template auto AssetLoader::LoadAsset<oxygen::data::MaterialAsset>(
+template OXGN_CNTT_API auto AssetLoader::LoadAsset<oxygen::data::MaterialAsset>(
   const data::AssetKey& key, bool offline)
   -> std::shared_ptr<data::MaterialAsset>;
 
 // Instantiate for all supported resource types
-template auto AssetLoader::LoadResource<oxygen::data::BufferResource>(
+template OXGN_CNTT_API auto
+AssetLoader::LoadResource<oxygen::data::BufferResource>(
   const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
   -> std::shared_ptr<data::BufferResource>;
-template auto AssetLoader::LoadResource<oxygen::data::TextureResource>(
+template OXGN_CNTT_API auto
+AssetLoader::LoadResource<oxygen::data::TextureResource>(
   const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
+  -> std::shared_ptr<data::TextureResource>;
+
+template OXGN_CNTT_API auto
+AssetLoader::LoadResource<oxygen::data::BufferResource>(
+  data::pak::ResourceIndexT resource_index, bool)
+  -> std::shared_ptr<data::BufferResource>;
+template OXGN_CNTT_API auto
+AssetLoader::LoadResource<oxygen::data::TextureResource>(
+  data::pak::ResourceIndexT resource_index, bool)
   -> std::shared_ptr<data::TextureResource>;
 
 //=== Hash Key Generation ====================================================//

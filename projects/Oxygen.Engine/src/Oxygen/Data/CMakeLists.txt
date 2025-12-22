@@ -56,6 +56,7 @@ set(
   "AssetType.h"
   "BufferResource.h"
   "GeometryAsset.h"
+  "LooseCookedIndexFormat.h"
   "MaterialAsset.h"
   "MaterialDomain.h"
   "MeshType.h"
