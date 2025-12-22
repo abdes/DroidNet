@@ -10,6 +10,12 @@
 
 #include "EditorModule/EditorViewportWheelZoomFeature.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
+#include <Oxygen/Scene/Camera/Perspective.h>
+
 namespace oxygen::interop::module {
 
   namespace {
@@ -17,7 +23,26 @@ namespace oxygen::interop::module {
     struct WheelZoomParams {
       float zoom_sensitivity_units_per_tick = 0.6f;
       float min_radius = 0.25f;
+      float max_radius = 100000.0f;
     };
+
+    [[nodiscard]] auto ComputeMaxRadius(scene::SceneNode camera_node,
+      const WheelZoomParams& params) noexcept -> float {
+      float max_radius = params.max_radius;
+
+      if (auto cam_ref = camera_node.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+        const float far_plane = cam_ref->get().GetFarPlane();
+        if (std::isfinite(far_plane) && far_plane > params.min_radius) {
+          max_radius = std::min(max_radius, far_plane * 0.95f);
+        }
+      }
+
+      return std::max(params.min_radius, max_radius);
+    }
+
+    [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
+      return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    }
 
     [[nodiscard]] auto NormalizeSafe(glm::vec3 v, glm::vec3 fallback) noexcept
       -> glm::vec3 {
@@ -104,6 +129,7 @@ namespace oxygen::interop::module {
     }
 
     const WheelZoomParams params {};
+    const float max_radius = ComputeMaxRadius(camera_node, params);
 
     auto transform = camera_node.GetTransform();
     const float wheel_ticks =
@@ -116,8 +142,21 @@ namespace oxygen::interop::module {
     const glm::vec3 position =
       transform.GetLocalPosition().value_or(glm::vec3 {});
 
+    if (!IsFinite(position) || !IsFinite(focus_point)) {
+      // Recover from non-finite state by resetting to a sane view.
+      focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
+      const glm::vec3 safe_position = focus_point + glm::vec3(0.0f, 0.0f, 5.0f);
+      (void)transform.SetLocalPosition(safe_position);
+      return;
+    }
+
     glm::vec3 offset = position - focus_point;
     float radius = std::sqrt(glm::dot(offset, offset));
+    if (!std::isfinite(radius)) {
+      radius = max_radius;
+    }
+
+    radius = std::clamp(radius, params.min_radius, max_radius);
     if (radius <= std::numeric_limits<float>::epsilon()) {
       offset = glm::vec3(0.0f, 0.0f, params.min_radius);
       radius = params.min_radius;
@@ -125,7 +164,11 @@ namespace oxygen::interop::module {
 
     const glm::vec3 dir = NormalizeSafe(offset, glm::vec3(0.0f, 0.0f, 1.0f));
     const float dr = wheel_ticks * params.zoom_sensitivity_units_per_tick;
-    const float new_radius = std::max(params.min_radius, radius - dr);
+    float new_radius = radius - dr;
+    if (!std::isfinite(new_radius)) {
+      new_radius = max_radius;
+    }
+    new_radius = std::clamp(new_radius, params.min_radius, max_radius);
     const glm::vec3 new_position = focus_point + dir * new_radius;
     (void)transform.SetLocalPosition(new_position);
 

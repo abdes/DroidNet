@@ -10,18 +10,47 @@
 
 #include "EditorModule/EditorViewportDollyFeature.h"
 
+#include <algorithm>
+#include <cmath>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
+#include <limits>
+
+#include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::interop::module {
 
   namespace {
 
     struct DollyParams {
-      float units_per_pixel_at_unit_distance = 0.01f;
+      float zoom_log_per_pixel = 0.0025f;
       float min_radius = 0.25f;
+      float max_radius = 100000.0f;
+      float max_abs_pixels_per_frame = 500.0f;
+      float max_abs_log_zoom_per_frame = 1.5f;
       glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
     };
+
+    [[nodiscard]] auto ComputeMaxRadius(scene::SceneNode camera_node,
+      const DollyParams& params,
+      const float min_radius) noexcept -> float {
+      float max_radius = params.max_radius;
+
+      // Keep the focus point within the camera frustum.
+      if (auto cam_ref = camera_node.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+        const float far_plane = cam_ref->get().GetFarPlane();
+        if (std::isfinite(far_plane) && far_plane > min_radius) {
+          // Leave a small margin so the focus doesn't sit exactly on the far plane.
+          max_radius = std::min(max_radius, far_plane * 0.95f);
+        }
+      }
+
+      return std::max(min_radius, max_radius);
+    }
+
+    [[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
+      return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+    }
 
     [[nodiscard]] auto HasAction(const input::InputSnapshot& snapshot,
       std::string_view name) noexcept -> bool {
@@ -127,6 +156,21 @@ namespace oxygen::interop::module {
     }
 
     const DollyParams params{};
+    float far_plane = std::numeric_limits<float>::quiet_NaN();
+    float near_plane = std::numeric_limits<float>::quiet_NaN();
+
+    if (auto cam_ref = camera_node.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+      far_plane = cam_ref->get().GetFarPlane();
+      near_plane = cam_ref->get().GetNearPlane();
+    }
+
+    float min_radius = params.min_radius;
+    if (std::isfinite(near_plane) && near_plane > 0.0f) {
+      // Keep the focus point comfortably outside the near plane.
+      min_radius = std::max(min_radius, near_plane * 2.0f);
+    }
+
+    float max_radius = ComputeMaxRadius(camera_node, params, min_radius);
 
     const bool alt_held = input_snapshot.IsActionOngoing("Editor.Modifier.Alt");
     const bool rmb_held =
@@ -145,19 +189,56 @@ namespace oxygen::interop::module {
 
     const glm::vec3 position =
       transform.GetLocalPosition().value_or(glm::vec3{});
+    const glm::quat rotation =
+      transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
 
-    glm::vec3 offset = position - focus_point;
-    float radius = std::sqrt(glm::dot(offset, offset));
-    if (radius < params.min_radius) {
-      offset = glm::vec3(0.0f, 0.0f, params.min_radius);
-      radius = params.min_radius;
+    if (!IsFinite(position) || !IsFinite(focus_point)) {
+      // If we ever reach non-finite state (e.g., runaway radius overflow),
+      // reset to a sane view so the user can recover.
+      focus_point = glm::vec3(0.0f, 0.0f, 0.0f);
+
+      const glm::vec3 safe_position = focus_point + glm::vec3(0.0f, 0.0f, 5.0f);
+      (void)transform.SetLocalPosition(safe_position);
+
+      const glm::quat look_rotation =
+        LookRotationFromPositionToTarget(safe_position, focus_point, params.up);
+      (void)transform.SetLocalRotation(look_rotation);
+      return;
     }
 
-    const glm::vec3 dir = NormalizeSafe(offset, glm::vec3(0.0f, 0.0f, 1.0f));
+    const glm::vec3 fallback_dir = NormalizeSafe(
+      -(rotation * glm::vec3(0.0f, 0.0f, -1.0f)),
+      glm::vec3(0.0f, 0.0f, 1.0f));
+
+    const glm::vec3 offset = position - focus_point;
+    float radius = std::sqrt(glm::dot(offset, offset));
+    if (!std::isfinite(radius)) {
+      radius = max_radius;
+    }
+
+    glm::vec3 dir = fallback_dir;
+    if (radius > std::numeric_limits<float>::epsilon()) {
+      dir = offset / radius;
+    }
+    dir = NormalizeSafe(dir, fallback_dir);
+
+    radius = std::clamp(radius, min_radius, max_radius);
 
     // Drag up should dolly in (reduce radius).
-    const float dr = mouse_delta.y * params.units_per_pixel_at_unit_distance * radius;
-    const float new_radius = std::max(params.min_radius, radius + dr);
+    const float dy = std::clamp(mouse_delta.y,
+      -params.max_abs_pixels_per_frame,
+      params.max_abs_pixels_per_frame);
+    float log_zoom = dy * params.zoom_log_per_pixel;
+    log_zoom = std::clamp(log_zoom,
+      -params.max_abs_log_zoom_per_frame,
+      params.max_abs_log_zoom_per_frame);
+
+    const float unclamped_new_radius = radius * std::exp(log_zoom);
+    float new_radius = unclamped_new_radius;
+    if (!std::isfinite(new_radius)) {
+      new_radius = max_radius;
+    }
+    new_radius = std::clamp(new_radius, min_radius, max_radius);
 
     const glm::vec3 new_position = focus_point + dir * new_radius;
     (void)transform.SetLocalPosition(new_position);
