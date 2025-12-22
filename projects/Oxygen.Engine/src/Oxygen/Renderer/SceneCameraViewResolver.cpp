@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <functional>
+#include <glm/geometric.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <Oxygen/Core/Constants.h>
@@ -44,8 +45,23 @@ auto FromNodeLookup::ResolveForNode(scene::SceneNode& camera_node)
 
   const auto view_m = [](const Vec3& pos, const Quat& rot) -> Mat4 {
     const Vec3 forward = rot * space::look::Forward;
-    // Use World Up (Z+) to ensure the camera doesn't roll
-    return glm::lookAt(pos, pos + forward, space::move::Up);
+    // Prefer World Up (Z+) to keep the camera stable, but fall back to the
+    // camera's own up vector when looking nearly straight up/down.
+    //
+    // Using a fixed up vector makes `glm::lookAt` singular when `forward` is
+    // colinear with `up` (e.g. Top/Bottom views), which can produce NaNs and
+    // an effectively empty frame.
+    Vec3 up = space::move::Up;
+    const float forward_len2 = glm::dot(forward, forward);
+    if (forward_len2 > 0.0F) {
+      const float dot_abs
+        = glm::abs(glm::dot(glm::normalize(forward), up));
+      if (dot_abs > 0.999F) {
+        up = rot * space::look::Up;
+      }
+    }
+
+    return glm::lookAt(pos, pos + forward, up);
   }(cam_pos, cam_rot);
 
   // Projection from camera component
