@@ -7,11 +7,13 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <utility>
 #include <vector>
 
-#include "EditorModule/EditorCommand.h"
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
-#include <utility>
+
+#include <EditorModule/EditorCommand.h>
 
 namespace oxygen::interop::module {
 

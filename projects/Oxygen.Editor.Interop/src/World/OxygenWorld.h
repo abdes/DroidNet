@@ -7,8 +7,8 @@
 #pragma once
 #pragma managed(push, on)
 
+#include <EditorModule/ICommandFactory.h>
 #include <EngineContext.h>
-#include <World/ICommandFactory.h>
 
 using namespace System;
 using namespace System::Numerics;

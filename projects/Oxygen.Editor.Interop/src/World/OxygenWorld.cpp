@@ -17,6 +17,7 @@
 #include <utility>
 #include <vector>
 
+#include <msclr/gcroot.h>
 #include <msclr/marshal.h>
 #include <msclr/marshal_cppstd.h>
 
@@ -35,11 +36,11 @@
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
+#include <EditorModule/CommandFactory.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/NodeRegistry.h>
-#include <msclr/gcroot.h>
-#include <World/CommandFactory.h>
 #include <World/OxygenWorld.h>
+
 using namespace System::Threading::Tasks;
 
 using namespace oxygen::interop::module;

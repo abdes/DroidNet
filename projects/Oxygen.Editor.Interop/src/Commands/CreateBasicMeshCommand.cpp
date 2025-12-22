@@ -8,13 +8,8 @@
 
 #include "pch.h"
 
-#include <Commands/CreateBasicMeshCommand.h>
-#include <EditorModule/EditorCommand.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
-#include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/Vertex.h>
+#include "Commands/CreateBasicMeshCommand.h"
+#include "EditorModule/EditorCommand.h"
 
 namespace oxygen::interop::module {
 

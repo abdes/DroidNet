@@ -13,6 +13,8 @@
 
 #include <glm/fwd.hpp>
 
+#include <Oxygen/Scene/Types/NodeHandle.h>
+
 namespace oxygen::interop::module{
 class CreateSceneNodeCommand;
 class RemoveSceneNodeCommand;

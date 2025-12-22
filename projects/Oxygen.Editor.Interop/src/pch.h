@@ -16,6 +16,7 @@
 // Standard library
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -60,6 +61,11 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Core/Types/ViewResolver.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/EditorInterface/Api.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
