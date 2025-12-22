@@ -8,6 +8,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -66,10 +67,12 @@ public:
   explicit ResourceTable(const data::pak::ResourceTable& table_meta)
     : table_meta_(table_meta)
   {
-    // Validate entry size or abort
+    // Validate entry size
     constexpr std::size_t expected_entry_size = sizeof(DescT);
-    CHECK_EQ_F(table_meta.entry_size, expected_entry_size,
-      "ResourceTable: entry_size does not match expected size");
+    if (table_meta.entry_size != expected_entry_size) {
+      throw std::invalid_argument(
+        "ResourceTable: entry_size does not match expected size");
+    }
   }
 
   //! Get the file offset for a resource key

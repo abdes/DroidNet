@@ -1,0 +1,110 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <Oxygen/Content/LooseCookedInspection.h>
+
+#include <array>
+#include <utility>
+
+#include <Oxygen/Content/Internal/LooseCookedIndex.h>
+
+namespace oxygen::content {
+
+struct LooseCookedInspection::Impl {
+  std::vector<AssetEntry> assets;
+  std::vector<FileEntry> files;
+};
+
+LooseCookedInspection::LooseCookedInspection()
+  : impl_(std::make_unique<Impl>())
+{
+}
+
+LooseCookedInspection::~LooseCookedInspection() = default;
+
+auto LooseCookedInspection::LoadFromRoot(
+  const std::filesystem::path& cooked_root) -> void
+{
+  LoadFromFile(cooked_root / "container.index.bin");
+}
+
+auto LooseCookedInspection::LoadFromFile(
+  const std::filesystem::path& index_path) -> void
+{
+  const internal::LooseCookedIndex index
+    = internal::LooseCookedIndex::LoadFromFile(index_path);
+
+  impl_->assets.clear();
+  impl_->files.clear();
+
+  for (const auto& key : index.GetAllAssetKeys()) {
+    AssetEntry out;
+    out.key = key;
+
+    if (const auto vpath = index.FindVirtualPath(key); vpath) {
+      out.virtual_path = std::string(*vpath);
+    }
+
+    if (const auto rel = index.FindDescriptorRelPath(key); rel) {
+      out.descriptor_relpath = std::string(*rel);
+    }
+
+    if (const auto size = index.FindDescriptorSize(key); size) {
+      out.descriptor_size = *size;
+    }
+
+    if (const auto sha = index.FindDescriptorSha256(key); sha) {
+      base::Sha256Digest digest = {};
+      std::copy_n(sha->begin(), digest.size(), digest.begin());
+      out.descriptor_sha256 = digest;
+    }
+
+    impl_->assets.push_back(std::move(out));
+  }
+
+  const std::array<data::loose_cooked::v1::FileKind, 4> kinds = {
+    data::loose_cooked::v1::FileKind::kBuffersTable,
+    data::loose_cooked::v1::FileKind::kBuffersData,
+    data::loose_cooked::v1::FileKind::kTexturesTable,
+    data::loose_cooked::v1::FileKind::kTexturesData,
+  };
+
+  for (const auto kind : kinds) {
+    const auto rel = index.FindFileRelPath(kind);
+    if (!rel) {
+      continue;
+    }
+
+    FileEntry out;
+    out.kind = kind;
+    out.relpath = std::string(*rel);
+
+    if (const auto size = index.FindFileSize(kind); size) {
+      out.size = *size;
+    }
+
+    if (const auto sha = index.FindFileSha256(kind); sha) {
+      base::Sha256Digest digest = {};
+      std::copy_n(sha->begin(), digest.size(), digest.begin());
+      out.sha256 = digest;
+    }
+
+    impl_->files.push_back(std::move(out));
+  }
+}
+
+auto LooseCookedInspection::Assets() const noexcept
+  -> std::span<const AssetEntry>
+{
+  return impl_->assets;
+}
+
+auto LooseCookedInspection::Files() const noexcept -> std::span<const FileEntry>
+{
+  return impl_->files;
+}
+
+} // namespace oxygen::content

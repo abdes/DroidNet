@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/Internal/Sha256.h>
+#include <Oxygen/Base/Sha256.h>
 
 #include <algorithm>
 #include <array>
@@ -14,7 +14,7 @@
 #include <fstream>
 #include <stdexcept>
 
-namespace oxygen::content::internal {
+namespace oxygen::base {
 
 namespace {
 
@@ -320,4 +320,4 @@ auto ComputeFileSha256(const std::filesystem::path& path) -> Sha256Digest
   return hasher.Finalize();
 }
 
-} // namespace oxygen::content::internal
+} // namespace oxygen::base

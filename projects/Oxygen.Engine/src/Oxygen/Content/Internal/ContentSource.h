@@ -24,9 +24,13 @@
 #include <Oxygen/Serio/Reader.h>
 
 #include <Oxygen/Content/Internal/LooseCookedIndex.h>
-#include <Oxygen/Content/Internal/Sha256.h>
+#include <Oxygen/Base/Sha256.h>
 
 namespace oxygen::content::internal {
+
+using oxygen::base::ComputeFileSha256;
+using oxygen::base::IsAllZero;
+using oxygen::base::Sha256Digest;
 
 //! Asset location within a PAK file.
 struct PakAssetLocator {

@@ -74,6 +74,7 @@ set(
   "Result.h"
   "ReturnAddress.h"
   "Signals.h"
+  "Sha256.h"
   "StateMachine.h"
   "StaticVector.h"
   "StringTypes.h"
@@ -89,6 +90,7 @@ set(
 set(
   OXYGEN_BASE_PRIVATE_SOURCES
   "Detail/loguru.cpp"
+  "Sha256.cpp"
   "Windows/ComError.cpp"
   "Windows/Exceptions.cpp"
 )

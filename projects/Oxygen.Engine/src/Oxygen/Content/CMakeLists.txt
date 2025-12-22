@@ -50,6 +50,7 @@ set(
   "PakFile.h"
   "AssetLoader.h"
   "VirtualPathResolver.h"
+  "LooseCookedInspection.h"
   "LoaderContext.h"
   "LoaderFunctions.h"
   "ResourceKey.h"
@@ -59,13 +60,12 @@ set(
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
   "AssetLoader.cpp"
+  "LooseCookedInspection.cpp"
   "PakFile.cpp"
   "VirtualPathResolver.cpp"
   "Internal/ContentSource.h"
   "Internal/LooseCookedIndex.h"
   "Internal/LooseCookedIndex.cpp"
-  "Internal/Sha256.h"
-  "Internal/Sha256.cpp"
   "Internal/InternalResourceKey.h"
   "Internal/LooseCookedIndexLoad.h"
   "Loaders/BufferLoader.h"
