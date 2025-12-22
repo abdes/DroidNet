@@ -6,21 +6,28 @@
 
 #pragma once
 
-// Managed compilation
-#pragma managed
+// This project is built with /clr (NetCore).
+//
+// Keep the precompiled header *native* by default. Compiling large STL/Win32/DX
+// headers as managed can trigger CLR metadata emission/link failures
+// (e.g. LNK2022 on pch.obj).
+#pragma managed(push, off)
 
 // Standard library
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <ctime>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <string>
 #include <string_view>
+#include <string>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -28,15 +35,9 @@
 
 // Windows (include winsock2 before windows.h if needed elsewhere)
 #ifdef _WIN32
-# include <winsock2.h>
-# include <ws2tcpip.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
 #endif
-
-// CLR helpers
-#include <msclr/marshal.h>
-#include <msclr/marshal_cppstd.h>
-#include <msclr/auto_gcroot.h>
-#include <vcclr.h>
 
 // DX12 and DXGI
 #include <dxgi1_2.h>
@@ -71,7 +72,15 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/InputSnapshot.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Renderer/Passes/DepthPrePass.h>
 #include <Oxygen/Renderer/Passes/ShaderPass.h>
 #include <Oxygen/Renderer/Passes/TransparentPass.h>
@@ -83,3 +92,5 @@
 #include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #pragma warning(pop)
+
+#pragma managed(pop)

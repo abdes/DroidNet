@@ -6,8 +6,6 @@
 
 #pragma managed
 
-#include "pch.h"
-
 #include "RenderThreadContext.h"
 
 using namespace System;

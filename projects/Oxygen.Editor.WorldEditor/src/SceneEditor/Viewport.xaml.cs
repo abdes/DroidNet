@@ -7,12 +7,20 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Runtime.Input;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
+using Oxygen.Interop.Input;
+using System.Numerics;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Oxygen.Editor.LevelEditor;
 
@@ -45,6 +53,76 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     private Subject<Microsoft.UI.Xaml.SizeChangedEventArgs>? sizeChangedSubject;
     private IDisposable? sizeChangedSubscription;
 
+    private bool inputHandlersHooked;
+    private Vector2 lastPointerPosition;
+    private bool hasPointerPosition;
+
+    private bool lastAltKeyDown;
+
+    private static readonly bool EnableInputDebugLogs =
+        string.Equals(
+            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_INPUT_LOGS"),
+            "1",
+            StringComparison.Ordinal);
+
+    // Dedicated wheel-only tracing to help verify scroll routing and
+    // accumulator correctness without turning on noisy full input logs.
+    private static readonly bool EnableWheelDebugLogs =
+        string.Equals(
+            Environment.GetEnvironmentVariable("OXYGEN_VIEWPORT_WHEEL_LOGS"),
+            "1",
+            StringComparison.Ordinal);
+
+    private void DebugInputLog(string message)
+    {
+        if (!EnableInputDebugLogs)
+        {
+            return;
+        }
+
+        var viewportId = this.ViewModel?.ViewportId;
+        var viewId = this.ViewModel?.AssignedViewId;
+        Debug.WriteLine($"[Viewport] vm.viewportId={viewportId} viewId={viewId} :: {message}");
+    }
+
+    private void DebugWheelLog(string message)
+    {
+        if (!EnableWheelDebugLogs)
+        {
+            return;
+        }
+
+        var viewportId = this.ViewModel?.ViewportId;
+        var viewId = this.ViewModel?.AssignedViewId;
+        Debug.WriteLine($"[Viewport.Wheel] vm.viewportId={viewportId} viewId={viewId} :: {message}");
+    }
+
+    private void SyncAltKeyStateIfNeeded(ViewportViewModel viewModel, ViewIdManaged viewId)
+    {
+        var is_down = InputKeyboardSource
+            .GetKeyStateForCurrentThread(VirtualKey.Menu)
+            .HasFlag(CoreVirtualKeyStates.Down);
+
+        if (is_down == this.lastAltKeyDown)
+        {
+            return;
+        }
+
+        this.lastAltKeyDown = is_down;
+        var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
+
+        viewModel.EngineService.Input.PushKeyEvent(
+            viewId,
+            new EditorKeyEventManaged
+            {
+                key = PlatformKey.LeftAlt,
+                pressed = is_down,
+                repeat = false,
+                timestamp = DateTime.UtcNow,
+                position = position,
+            });
+    }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="Viewport"/> class.
     /// </summary>
@@ -54,6 +132,10 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
         this.DataContextChanged += this.OnDataContextChanged;
+
+        this.LostFocus += this.OnLostFocus;
+        this.KeyDown += this.OnKeyDown;
+        this.KeyUp += this.OnKeyUp;
 
         if (this.DataContext is ViewportViewModel existingViewModel)
         {
@@ -91,6 +173,12 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.Loaded -= this.OnLoaded;
         this.Unloaded -= this.OnUnloaded;
         this.DataContextChanged -= this.OnDataContextChanged;
+
+        this.LostFocus -= this.OnLostFocus;
+        this.KeyDown -= this.OnKeyDown;
+        this.KeyUp -= this.OnKeyUp;
+
+        this.UnregisterInputHandlers();
 
         this.UnregisterSwapChainPanelSizeChanged();
 
@@ -222,6 +310,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.LogSwapChainHookRegistered();
         }
 
+        this.RegisterInputHandlers();
+
         _ = this.AttachSurfaceAsync("Loaded");
     }
 
@@ -325,7 +415,475 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
 
         this.UnregisterSwapChainPanelSizeChanged();
 
+        this.UnregisterInputHandlers();
+
         await this.DetachSurfaceAsync("ActiveLoadCountZero").ConfigureAwait(true);
+    }
+
+    private void RegisterInputHandlers()
+    {
+        if (this.inputHandlersHooked)
+        {
+            this.DebugInputLog("RegisterInputHandlers: already hooked");
+            return;
+        }
+
+        if (this.SwapChainPanel == null)
+        {
+            this.DebugInputLog("RegisterInputHandlers: SwapChainPanel is null");
+            return;
+        }
+
+        this.IsTabStop = true;
+
+        // Ensure this element participates in hit-testing.
+        this.SwapChainPanel.IsHitTestVisible = true;
+
+        this.SwapChainPanel.PointerPressed += this.OnSwapChainPointerPressed;
+        this.SwapChainPanel.PointerReleased += this.OnSwapChainPointerReleased;
+        this.SwapChainPanel.PointerMoved += this.OnSwapChainPointerMoved;
+        this.SwapChainPanel.PointerWheelChanged += this.OnSwapChainPointerWheelChanged;
+
+        this.inputHandlersHooked = true;
+        this.DebugInputLog("RegisterInputHandlers: hooked SwapChainPanel pointer events");
+    }
+
+    private void UnregisterInputHandlers()
+    {
+        if (!this.inputHandlersHooked)
+        {
+            return;
+        }
+
+        if (this.SwapChainPanel != null)
+        {
+            this.SwapChainPanel.PointerPressed -= this.OnSwapChainPointerPressed;
+            this.SwapChainPanel.PointerReleased -= this.OnSwapChainPointerReleased;
+            this.SwapChainPanel.PointerMoved -= this.OnSwapChainPointerMoved;
+            this.SwapChainPanel.PointerWheelChanged -= this.OnSwapChainPointerWheelChanged;
+        }
+
+        this.inputHandlersHooked = false;
+        this.hasPointerPosition = false;
+
+        this.DebugInputLog("UnregisterInputHandlers: unhooked");
+    }
+
+    private static bool TryTranslateMouseButton(PointerUpdateKind kind, out PlatformMouseButton button, out bool pressed)
+    {
+        button = PlatformMouseButton.None;
+        pressed = false;
+
+        switch (kind)
+        {
+            case PointerUpdateKind.LeftButtonPressed:
+                button = PlatformMouseButton.Left;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.LeftButtonReleased:
+                button = PlatformMouseButton.Left;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.RightButtonPressed:
+                button = PlatformMouseButton.Right;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.RightButtonReleased:
+                button = PlatformMouseButton.Right;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.MiddleButtonPressed:
+                button = PlatformMouseButton.Middle;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.MiddleButtonReleased:
+                button = PlatformMouseButton.Middle;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.XButton1Pressed:
+                button = PlatformMouseButton.ExtButton1;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.XButton1Released:
+                button = PlatformMouseButton.ExtButton1;
+                pressed = false;
+                return true;
+            case PointerUpdateKind.XButton2Pressed:
+                button = PlatformMouseButton.ExtButton2;
+                pressed = true;
+                return true;
+            case PointerUpdateKind.XButton2Released:
+                button = PlatformMouseButton.ExtButton2;
+                pressed = false;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private bool TryGetInputTarget(out ViewportViewModel? viewModel, out ViewIdManaged viewId)
+    {
+        viewModel = this.ViewModel;
+        viewId = viewModel?.AssignedViewId ?? ViewIdManaged.Invalid;
+        return viewModel?.EngineService?.Input != null && viewId.IsValid;
+    }
+
+    private bool TryGetInputTargetVerbose(out ViewportViewModel? viewModel, out ViewIdManaged viewId)
+    {
+        viewModel = this.ViewModel;
+        viewId = viewModel?.AssignedViewId ?? ViewIdManaged.Invalid;
+
+        if (viewModel is null)
+        {
+            this.DebugInputLog("Input target missing: ViewModel is null");
+            return false;
+        }
+
+        if (viewModel.EngineService is null)
+        {
+            this.DebugInputLog("Input target missing: EngineService is null");
+            return false;
+        }
+
+        if (viewModel.EngineService.Input is null)
+        {
+            this.DebugInputLog("Input target missing: EngineService.Input is null");
+            return false;
+        }
+
+        if (!viewId.IsValid)
+        {
+            this.DebugInputLog("Input target missing: AssignedViewId is invalid");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void PushFocusLostIfNeeded()
+    {
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("FocusLost: disposed");
+            return;
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("FocusLost: no input target");
+            return;
+        }
+
+        this.DebugInputLog("FocusLost: forwarding to EngineService.Input.OnFocusLost");
+        viewModel.EngineService.Input.OnFocusLost(viewId);
+    }
+
+    private void OnLostFocus(object sender, RoutedEventArgs e)
+    {
+        _ = sender;
+        _ = e;
+        this.PushFocusLostIfNeeded();
+    }
+
+    private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        _ = sender;
+
+        this.DebugInputLog($"KeyDown: key={e.Key} repeatCount={e.KeyStatus.RepeatCount}");
+
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("KeyDown: disposed");
+            return;
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("KeyDown: no input target");
+            return;
+        }
+
+        // Prevent Alt (Menu) from being treated as a system menu activation.
+        if (e.Key == VirtualKey.Menu)
+        {
+            e.Handled = true;
+        }
+
+        var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
+        if (translated == PlatformKey.None)
+        {
+            this.DebugInputLog("KeyDown: TranslateKey returned None");
+            return;
+        }
+
+        var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
+        this.DebugInputLog($"KeyDown: forwarding key={translated} pressed=true");
+
+        if (translated == PlatformKey.LeftAlt)
+        {
+            this.lastAltKeyDown = true;
+        }
+
+        viewModel.EngineService.Input.PushKeyEvent(
+            viewId,
+            new EditorKeyEventManaged
+            {
+                key = translated,
+                pressed = true,
+                repeat = e.KeyStatus.RepeatCount > 1,
+                timestamp = DateTime.UtcNow,
+                position = position,
+            });
+    }
+
+    private void OnKeyUp(object sender, KeyRoutedEventArgs e)
+    {
+        _ = sender;
+
+        this.DebugInputLog($"KeyUp: key={e.Key}");
+
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("KeyUp: disposed");
+            return;
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("KeyUp: no input target");
+            return;
+        }
+
+        if (e.Key == VirtualKey.Menu)
+        {
+            e.Handled = true;
+        }
+
+        var translated = InputTranslation.TranslateKey((VirtualKey)e.Key);
+        if (translated == PlatformKey.None)
+        {
+            this.DebugInputLog("KeyUp: TranslateKey returned None");
+            return;
+        }
+
+        var position = this.hasPointerPosition ? this.lastPointerPosition : Vector2.Zero;
+        this.DebugInputLog($"KeyUp: forwarding key={translated} pressed=false");
+
+        if (translated == PlatformKey.LeftAlt)
+        {
+            this.lastAltKeyDown = false;
+        }
+
+        viewModel.EngineService.Input.PushKeyEvent(
+            viewId,
+            new EditorKeyEventManaged
+            {
+                key = translated,
+                pressed = false,
+                repeat = false,
+                timestamp = DateTime.UtcNow,
+                position = position,
+            });
+    }
+
+    private void OnSwapChainPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        _ = sender;
+
+        this.DebugInputLog($"PointerPressed: pointerId={e.Pointer.PointerId}");
+
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("PointerPressed: disposed");
+            return;
+        }
+
+        _ = this.Focus(FocusState.Pointer);
+
+        if (this.SwapChainPanel != null)
+        {
+            this.SwapChainPanel.CapturePointer(e.Pointer);
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("PointerPressed: no input target");
+            return;
+        }
+
+        this.SyncAltKeyStateIfNeeded(viewModel, viewId);
+
+        var point = e.GetCurrentPoint(this.SwapChainPanel);
+        this.DebugInputLog($"PointerPressed: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}");
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        this.lastPointerPosition = pos;
+        this.hasPointerPosition = true;
+
+        var kind = point.Properties.PointerUpdateKind;
+        if (!TryTranslateMouseButton(kind, out var button, out var pressed) || !pressed)
+        {
+            button = InputTranslation.TranslateMouseButton(point.Properties);
+            pressed = true;
+        }
+
+        if (button == PlatformMouseButton.None)
+        {
+            this.DebugInputLog("PointerPressed: could not determine button");
+            return;
+        }
+
+        this.DebugInputLog($"PointerPressed: forwarding button={button} pressed={pressed}");
+        viewModel.EngineService.Input.PushButtonEvent(
+            viewId,
+            new EditorButtonEventManaged
+            {
+                button = button,
+                pressed = pressed,
+                timestamp = DateTime.UtcNow,
+                position = pos,
+            });
+    }
+
+    private void OnSwapChainPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        _ = sender;
+
+        this.DebugInputLog($"PointerReleased: pointerId={e.Pointer.PointerId}");
+
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("PointerReleased: disposed");
+            return;
+        }
+
+        if (this.SwapChainPanel != null)
+        {
+            this.SwapChainPanel.ReleasePointerCapture(e.Pointer);
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("PointerReleased: no input target");
+            return;
+        }
+
+        this.SyncAltKeyStateIfNeeded(viewModel, viewId);
+
+        var point = e.GetCurrentPoint(this.SwapChainPanel);
+        this.DebugInputLog($"PointerReleased: pos=({point.Position.X:0.0},{point.Position.Y:0.0}) updateKind={point.Properties.PointerUpdateKind}");
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        this.lastPointerPosition = pos;
+        this.hasPointerPosition = true;
+
+        var kind = point.Properties.PointerUpdateKind;
+        if (!TryTranslateMouseButton(kind, out var button, out var pressed))
+        {
+            button = InputTranslation.TranslateMouseButton(point.Properties);
+            pressed = false;
+        }
+
+        if (button == PlatformMouseButton.None)
+        {
+            this.DebugInputLog("PointerReleased: could not determine button");
+            return;
+        }
+
+        this.DebugInputLog($"PointerReleased: forwarding button={button} pressed={pressed}");
+        viewModel.EngineService.Input.PushButtonEvent(
+            viewId,
+            new EditorButtonEventManaged
+            {
+                button = button,
+                pressed = pressed,
+                timestamp = DateTime.UtcNow,
+                position = pos,
+            });
+    }
+
+    private void OnSwapChainPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        _ = sender;
+
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            return;
+        }
+
+        this.SyncAltKeyStateIfNeeded(viewModel, viewId);
+
+        var point = e.GetCurrentPoint(this.SwapChainPanel);
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        var delta = this.hasPointerPosition ? (pos - this.lastPointerPosition) : Vector2.Zero;
+
+        this.lastPointerPosition = pos;
+        this.hasPointerPosition = true;
+
+        if (delta != Vector2.Zero)
+        {
+            this.DebugInputLog($"PointerMoved: pos=({pos.X:0.0},{pos.Y:0.0}) delta=({delta.X:0.0},{delta.Y:0.0})");
+        }
+
+        viewModel.EngineService.Input.PushMouseMotion(
+            viewId,
+            new EditorMouseMotionEventManaged
+            {
+                motion = delta,
+                position = pos,
+                timestamp = DateTime.UtcNow,
+            });
+    }
+
+    private void OnSwapChainPointerWheelChanged(object sender, PointerRoutedEventArgs e)
+    {
+        _ = sender;
+
+        this.DebugInputLog($"PointerWheelChanged: pointerId={e.Pointer.PointerId}");
+
+        if (this.isDisposed)
+        {
+            this.DebugInputLog("PointerWheelChanged: disposed");
+            return;
+        }
+
+        if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
+        {
+            this.DebugInputLog("PointerWheelChanged: no input target");
+            return;
+        }
+
+        this.SyncAltKeyStateIfNeeded(viewModel, viewId);
+
+        var point = e.GetCurrentPoint(this.SwapChainPanel);
+        var pos = new Vector2((float)point.Position.X, (float)point.Position.Y);
+        this.lastPointerPosition = pos;
+        this.hasPointerPosition = true;
+
+        var rawDelta = point.Properties.MouseWheelDelta;
+        var ticks = rawDelta / 120.0f;
+        if (Math.Abs(ticks) <= float.Epsilon)
+        {
+            this.DebugInputLog("PointerWheelChanged: zero delta");
+            this.DebugWheelLog($"rawDelta={rawDelta} ticks={ticks:0.00} (ignored: zero)");
+            return;
+        }
+
+        this.DebugWheelLog(
+            $"rawDelta={rawDelta} ticks={ticks:0.00} pos=({pos.X:0.0},{pos.Y:0.0})");
+
+        this.DebugInputLog($"PointerWheelChanged: forwarding ticks={ticks:0.00}");
+        viewModel.EngineService.Input.PushMouseWheel(
+            viewId,
+            new EditorMouseWheelEventManaged
+            {
+                scroll = new Vector2(0.0f, (float)ticks),
+                position = pos,
+                timestamp = DateTime.UtcNow,
+            });
     }
 
     private async Task AttachSurfaceAsync(string reason = "General")

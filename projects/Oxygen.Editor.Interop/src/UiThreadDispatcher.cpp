@@ -6,8 +6,6 @@
 
 #pragma managed
 
-#include "pch.h"
-
 #include "UiThreadDispatcher.h"
 
 using namespace System;

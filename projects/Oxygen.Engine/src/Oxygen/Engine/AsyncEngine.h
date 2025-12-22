@@ -78,7 +78,6 @@ public:
     return completed_.Triggered();
   }
 
-  //! Graphics layer access
   [[nodiscard]] auto GetGraphics() noexcept -> std::weak_ptr<Graphics>
   {
     return gfx_weak_;
@@ -87,6 +86,16 @@ public:
   [[nodiscard]] auto GetGraphics() const noexcept -> std::weak_ptr<Graphics>
   {
     return gfx_weak_;
+  }
+
+  [[nodiscard]] auto GetPlatform() noexcept -> Platform&
+  {
+    return *platform_; // Guaranteed non-null
+  }
+
+  [[nodiscard]] auto GetPlatform() const noexcept -> const Platform&
+  {
+    return *platform_; // Guaranteed non-null
   }
 
   // Register a module (takes ownership). Modules are sorted by priority.

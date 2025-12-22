@@ -11,34 +11,110 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AssemblyInfo.cpp" />
-    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp" />
-    <ClCompile Include="Commands\CreateSceneCommand.cpp" />
-    <ClCompile Include="Commands\DestroySceneCommand.cpp" />
-    <ClCompile Include="Commands\HideViewCommand.cpp" />
-    <ClCompile Include="Commands\ShowViewCommand.cpp" />
-    <ClCompile Include="Commands\DestroyViewCommand.cpp" />
-    <ClCompile Include="Commands\CreateViewCommand.cpp" />
-    <ClCompile Include="EditorModule\EditorCompositor.cpp" />
-    <ClCompile Include="EditorModule\EditorModule.cpp" />
-    <ClCompile Include="EditorModule\EditorView.cpp" />
-    <ClCompile Include="EditorModule\NodeRegistry.cpp" />
-    <ClCompile Include="EditorModule\RenderGraph.cpp" />
-    <ClCompile Include="EditorModule\ViewManager.cpp" />
-    <ClCompile Include="EditorModule\ViewRenderer.cpp" />
-    <ClCompile Include="EngineRunner.cpp" />
-    <ClCompile Include="EngineRunner_logging.cpp" />
-    <ClCompile Include="EngineRunner_surfaces.cpp" />
-    <ClCompile Include="EngineRunner_views.cpp" />
+    <ClCompile Include="AssemblyInfo.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\CreateSceneCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\DestroySceneCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\HideViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\ShowViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\DestroyViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\CreateViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorCompositor.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorModule.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportNavigation.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportPanFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportDollyFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportFlyFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportOrbitFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorViewportWheelZoomFeature.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\EditorView.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\InputAccumulator.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\InputAccumulatorAdapter.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\NodeRegistry.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\RenderGraph.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\ViewManager.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EditorModule\ViewRenderer.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="EngineRunner.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="EngineRunner_logging.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="EngineRunner_surfaces.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="EngineRunner_views.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Input\OxygenInput.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+      <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
-    <ClCompile Include="RenderThreadContext.cpp" />
-    <ClCompile Include="UiThreadDispatcher.cpp" />
-    <ClCompile Include="Utils\TokenHelpers.cpp" />
-    <ClCompile Include="World\CommandFactory.cpp" />
-    <ClCompile Include="World\OxygenWorld.cpp" />
+    <ClCompile Include="RenderThreadContext.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="UiThreadDispatcher.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Utils\TokenHelpers.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="World\CommandFactory.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="World\OxygenWorld.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="$(OxygenEditorInterfaceProject)">
@@ -76,10 +152,20 @@
     <ClInclude Include="EditorModule\EditorCommand.h" />
     <ClInclude Include="EditorModule\EditorCompositor.h" />
     <ClInclude Include="EditorModule\EditorModule.h" />
+    <ClInclude Include="EditorModule\EditorViewportNavigation.h" />
+    <ClInclude Include="EditorModule\EditorViewportNavigationFeature.h" />
+    <ClInclude Include="EditorModule\EditorViewportPanFeature.h" />
+    <ClInclude Include="EditorModule\EditorViewportDollyFeature.h" />
+    <ClInclude Include="EditorModule\EditorViewportFlyFeature.h" />
+    <ClInclude Include="EditorModule\EditorViewportOrbitFeature.h" />
+    <ClInclude Include="EditorModule\EditorViewportWheelZoomFeature.h" />
     <ClInclude Include="EditorModule\EditorView.h" />
+    <ClInclude Include="EditorModule\InputAccumulator.h" />
+    <ClInclude Include="EditorModule\InputAccumulatorAdapter.h" />
     <ClInclude Include="EditorModule\NodeRegistry.h" />
     <ClInclude Include="EditorModule\RenderGraph.h" />
     <ClInclude Include="EditorModule\SurfaceRegistry.h" />
+    <ClInclude Include="Input\OxygenInput.h" />
     <ClInclude Include="LogHandler.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Utils\TokenHelpers.h" />
@@ -174,7 +260,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;FMT_HEADER_ONLY=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
@@ -182,7 +268,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -192,14 +278,14 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;LOGURU_USE_FMTLIB=1;OXGN_EI_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <UseStandardPreprocessor>true</UseStandardPreprocessor>
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

@@ -6,7 +6,31 @@
 
 #pragma managed
 
-#include "pch.h"
+#include <cstdint>
+#include <exception>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+#include <utility>
+
+#ifdef _WIN32
+#include <WinSock2.h> // include before any header that might include <windows.h>
+#endif
+
+#include <dxgi.h>
+
+#include <Oxygen/Base/Detail/NamedType_impl.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/EditorInterface/EngineContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Renderer/Renderer.h>
 
 #include <EditorModule/EditorModule.h>
 #include <EngineRunner.h>
@@ -240,7 +264,9 @@ namespace Oxygen::Interop {
     try {
       try {
         auto startMsg =
-          fmt::format("EngineLoopAdapter: starting engine loop for ctx_ptr={}",
+          fmt::format(
+            fmt::runtime(
+              "EngineLoopAdapter: starting engine loop for ctx_ptr={}"),
             fmt::ptr(ctx->NativeShared().get()));
         LogInfoMessage(startMsg.c_str());
       }
@@ -251,7 +277,9 @@ namespace Oxygen::Interop {
 
       try {
         auto endMsg =
-          fmt::format("EngineLoopAdapter: engine loop finished for ctx_ptr={}",
+          fmt::format(
+            fmt::runtime(
+              "EngineLoopAdapter: engine loop finished for ctx_ptr={}"),
             fmt::ptr(ctx->NativeShared().get()));
         LogInfoMessage(endMsg.c_str());
       }
@@ -297,8 +325,10 @@ namespace Oxygen::Interop {
     {
       std::lock_guard<std::mutex> lg(tokens_mutex);
       try {
-        auto msg = fmt::format("OnEngineLoopExited: failing outstanding "
-          "tokens_map entries (count={})",
+        auto msg = fmt::format(
+          fmt::runtime(
+            "OnEngineLoopExited: failing outstanding "
+            "tokens_map entries (count={})"),
           tokens_map.size());
         LogInfoMessage(msg.c_str());
       }

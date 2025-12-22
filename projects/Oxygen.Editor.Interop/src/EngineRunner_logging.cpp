@@ -6,7 +6,20 @@
 
 #pragma managed
 
-#include "pch.h"
+#include <string>
+
+#ifdef _WIN32
+#include <WinSock2.h> // include before any header that might include <windows.h>
+#endif
+
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+
+#pragma warning(push)
+#pragma warning(disable : 4793)
+#include <Oxygen/Base/Logging.h>
+#pragma warning(pop)
+#include <Oxygen/EditorInterface/Api.h>
 
 #include "Base/LoguruWrapper.h"
 #include "EngineRunner.h"

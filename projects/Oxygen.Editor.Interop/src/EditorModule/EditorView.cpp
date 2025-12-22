@@ -9,6 +9,9 @@
 #include "pch.h"
 
 #include "EditorModule/EditorView.h"
+
+#include <glm/gtc/quaternion.hpp>
+#include <glm/mat4x4.hpp>
 #include "EditorModule/ViewRenderer.h"
 
 namespace oxygen::interop::module {
@@ -176,7 +179,21 @@ auto EditorView::OnPreRender(engine::Renderer &renderer) -> oxygen::co::Co<> {
 
   // Set initial camera orientation (only once, after transform propagation)
   if (!initial_orientation_set_ && camera_node_.IsAlive()) {
-    camera_node_.GetTransform().LookAt(glm::vec3(0.0f));
+    auto transform = camera_node_.GetTransform();
+    const glm::vec3 position =
+      transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
+
+    const glm::vec3 forward = glm::normalize(focus_point_ - position);
+    const glm::vec3 up_dir = glm::vec3(0.0f, 1.0f, 0.0f);
+    const glm::vec3 right = glm::normalize(glm::cross(forward, up_dir));
+    const glm::vec3 up = glm::cross(right, forward);
+
+    glm::mat4 look_matrix(1.0f);
+    look_matrix[0] = glm::vec4(right, 0.0f);
+    look_matrix[1] = glm::vec4(up, 0.0f);
+    look_matrix[2] = glm::vec4(-forward, 0.0f);
+
+    (void)transform.SetLocalRotation(glm::quat_cast(look_matrix));
     initial_orientation_set_ = true;
   }
 
@@ -281,7 +298,8 @@ void EditorView::ResizeIfNeeded() {
       // EditorView owns this texture (helps avoid generic "Texture" labels).
       std::string dbg_base = config_.name.empty()
                                  ? std::string("EditorView:Unnamed")
-                                 : fmt::format("EditorView:{}", config_.name);
+                     : fmt::format(fmt::runtime("EditorView:{}"),
+                       config_.name);
       color_desc.debug_name = dbg_base + ".Color";
       color_texture_ = gfx->CreateTexture(color_desc);
 

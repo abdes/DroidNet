@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// PCH translation unit
 #include "pch.h"
 
 // This translation unit is used to build the precompiled header.

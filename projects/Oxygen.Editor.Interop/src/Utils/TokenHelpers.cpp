@@ -6,7 +6,10 @@
 
 #pragma managed
 
-#include "pch.h"
+#include <functional>
+#include <list>
+#include <mutex>
+#include <utility>
 
 #include "Utils/TokenHelpers.h"
 
@@ -67,7 +70,7 @@ namespace Oxygen::Interop {
   }
 
   // Return a native callback that resolves the token when invoked.
-  std::function<void(bool)> MakeResolveCallback(const TokenKey &k) {
+  std::function<void(bool)> MakeResolveCallback(const TokenKey& k) {
     // Capture the key by value and call ResolveToken when the callback is
     // invoked. Keeping the lambda simple and noexcept-friendly avoids
     // unnecessary exceptions crossing native/managed boundaries.

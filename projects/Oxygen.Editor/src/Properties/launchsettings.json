@@ -8,6 +8,9 @@
     "Oxygen Editor (Unpackaged)": {
       "commandName": "Project",
       "commandLineArgs": "--mode dev",
+      "environmentVariables": {
+        "OXYGEN_VIEWPORT_WHEEL_LOGS": "1"
+      },
       "nativeDebugging": false
     }
   }

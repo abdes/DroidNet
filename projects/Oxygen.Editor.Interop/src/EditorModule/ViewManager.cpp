@@ -119,6 +119,8 @@ namespace oxygen::interop::module {
   }
 
   void ViewManager::OnFrameStart(engine::FrameContext& frame_ctx) {
+    DLOG_F(INFO, "ViewManager::OnFrameStart (frame_ctx={}, current_phase={})",
+      fmt::ptr(&frame_ctx), static_cast<int>(frame_ctx.GetCurrentPhase()));
     active_frame_ctx_ = observer_ptr{ &frame_ctx };
   }
 
@@ -213,6 +215,15 @@ namespace oxygen::interop::module {
     }
 
     std::lock_guard<std::mutex> lock(mutex_);
+
+    size_t registered_count = 0;
+    for (const auto& pair : views_) {
+      if (pair.second.is_registered) {
+        ++registered_count;
+      }
+    }
+    DLOG_F(INFO, "ViewManager::FinalizeViews (registered_views={})", registered_count);
+
     for (auto& [id, entry] : views_) {
       if (entry.is_registered) {
         const float w = entry.view->GetWidth();
@@ -243,6 +254,10 @@ namespace oxygen::interop::module {
         };
 
         active_frame_ctx_->UpdateView(id, std::move(vc));
+
+        DLOG_F(INFO,
+          "ViewManager::FinalizeViews updated view={} size={}x{} name='{}'",
+          id.get(), w, h, entry.view->GetConfig().name);
       }
     }
 
