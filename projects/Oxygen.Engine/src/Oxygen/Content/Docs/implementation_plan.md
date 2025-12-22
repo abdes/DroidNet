@@ -1,310 +1,223 @@
-<!-- Canonical implementation status & planning hub for Oxygen Content subsystem -->
+# Content subsystem implementation plan
 
-# Content Subsystem Implementation Plan
+**Last updated:** 23 Dec 2025
 
-**Last updated:** 13 Aug 2025
+This file is the **single source of truth for roadmap and status** for the
+Content subsystem.
 
-## Quick Links
+Conceptual model and boundaries live in `overview.md`. If this plan conflicts
+with `overview.md`, update the plan.
 
-| Section | Anchor |
-|---------|--------|
-| Current Status Summary | #current-status-summary |
-| Detailed Feature Matrix | #detailed-feature-matrix |
-| Roadmap Phases | #roadmap-phases |
-| Backlog / Open Items | #backlog--open-items |
-| Glossary | #glossary |
+## Goals (what we are building)
+
+Content provides **CPU-side acquisition** of engine assets/resources, including:
+
+- Decoding assets/resources into CPU objects.
+- Enforcing safe lifetimes via caching and dependency tracking.
+- Supporting both shipping containers (`.pak`) and editor iteration (loose cooked files).
+
+## Non-goals (by design)
+
+- GPU upload, GPU residency, and GPU memory budgeting.
+  Those are Renderer-owned (`src/Oxygen/Renderer/Upload/README.md`).
+
+## Implementation tracking (ordered task list)
+
+This table is the **work order**. Higher rows unblock lower rows.
+✅ Complete | 🔄 In progress / partial | ❌ Missing | 🧪 Prototype (code exists; not production-ready)
+
+| # | Status | Priority | Deliverable | Design doc | Notes |
+| -: | :---: | :------: | ----------- | ---------- | ----- |
+| 1 | ✅ | P0 | Keep `overview.md` authoritative and consistent | `overview.md` | Enforce Content↔Renderer boundary and invariants |
+| 2 | ✅ | P0 | Forward-only deps + unified cache + refcount eviction | `deps_and_cache.md` | Implemented in `AssetLoader` + `AnyCache` |
+| 3 | ✅ | P0 | Safe unload ordering + tests + docs polish | (in plan) | Release cascade evicts/unloads safely; tests assert resource-before-asset ordering |
+| 4 | ✅ | P0 | **Loose cooked content** (filesystem-backed) | `loose_cooked_content.md` | End-to-end mount + descriptor discovery + table/data readers + focused tests + diagnostics are in place; remaining robustness work is tracked under #5 (index sections, hashes, virtual paths) |
+| 5 | 🔄 | P0 | Loose cooked **index** (AssetKey→descriptor path, resources) | `loose_cooked_content.md` | `container.index.bin` v1 schema + parser are in place; mount-time validation enforces section layout/range sanity, canonical path rules, descriptor/resource existence+size, required table/data pairing, duplicate record rejection (including duplicate virtual-path strings), supported `FileKind` values, SHA-256 verification when the index provides non-zero digests, and strict `IndexHeader::flags` semantics (unknown bits rejected; declared section presence enforced); editor-facing virtual-path resolution is available via `VirtualPathResolver`; deterministic/sticky resource indexing across regenerated containers is deferred (patchability/cook concern) |
+| 6 | ❌ | P0 | **Scene/Level asset** (editor maps/levels) | `scenes_and_levels.md` | Biggest current hole; defines composition and references |
+| 7 | ❌ | P0 | Minimal scene serialization toolchain (cooked, loose) | `scenes_and_levels.md` | Separate from runtime loader; produces cooked scene format |
+| 8 | ❌ | P0 | Asset database (project index, GUID ownership, metadata) | `asset_database_and_ddc.md` | Editor-oriented; maps GUIDs to source/cooked artifacts |
+| 9 | ❌ | P0 | Derived data cache (DDC) for cooked artifacts | `asset_database_and_ddc.md` | Keyed by (inputs + import settings + platform) |
+| 10 | ❌ | P1 | Async CPU load API (`LoadAsync`) + in-flight dedup | `async_cpu_pipeline.md` | Must preserve current cache semantics |
+| 11 | ❌ | P1 | Cancellation propagation + “no partial insertion” guarantee | `async_cpu_pipeline.md` | Deterministic cleanup on cancel/failure |
+| 12 | ❌ | P1 | Content observability counters + scoped tracing hooks | (short design below) | Timing: IO/decode/cache-hit/miss/evictions |
+| 13 | ❌ | P1 | Hot reload for loose cooked content | `hot_reload.md` | File watch → invalidation → reload dependents |
+| 14 | ❌ | P1 | Hot reload safety model (generation IDs, handle policy) | `hot_reload.md` | Defines what remains stable for the editor |
+| 15 | ❌ | P2 | Chunk metadata + partial decode hooks (CPU-side) | `streaming_and_chunks.md` | Complements `chunking.md` (format-level) |
+| 16 | ❌ | P2 | Dependency analyzer output (JSON) | `tooling_and_diagnostics.md` | Graph extraction + refcounts + fan-out stats |
+| 17 | ❌ | P2 | Perf benchmark suite for Content | `tooling_and_diagnostics.md` | Cold/warm/parallel burst scenarios |
+| 18 | ❌ | P3 | Memory mapping prototype for PAK and/or loose cooked | `streaming_and_chunks.md` | Optional optimization; not required for editor unblock |
+
+**Policy:** Any “big feature” above must have its own design doc (linked).
+Small enhancements should be specified in short design notes inside this plan.
+
+## Current state (what Content already does well)
+
+- `.pak` container reading via `PakFile` (directory, resource tables, data regions).
+- Loader model (`LoaderContext`) with separate descriptor and data-region readers.
+- Unified caching (`AnyCache` + refcount eviction) for assets and resources.
+- Forward-only dependency registration (asset→asset, asset→resource) with debug cycle rejection.
+
+Corrections to older wording:
+
+- `data::AssetKey` is a **128-bit GUID** (no additional metadata in the type itself).
 
 ---
 
-## Current Status Summary
+## Roadmap phases
 
-Synchronous loading, caching, and forward-only dependency registration are
-implemented (see `AssetLoader.*`, `ResourceTable.h`, `PakFile.*`). Safe
-unloading protections (cycle rejection + recursion guard + single-thread policy)
-are in place; remaining work is completion of specific ordering diagnostics &
-tests (see missing tests list below). Async pipeline, streaming, residency
-management, and hot-reload are still pending design → implementation transition.
+Phases communicate dependency order, not strict calendar time.
 
-No SceneAsset implementation exists yet; integration with the Scene subsystem
-will depend on establishing a `SceneAsset` descriptor + build tooling. Internal
-key separation (`InternalResourceKey.h`) is present for encapsulation of
-resource indices; future unification/clarification doc is needed.
+### Phase 1 (foundation) — ✅ complete
 
----
+- Synchronous PAK-based loading
+- Unified cache + dependencies + release cascades
 
-## Detailed Feature Matrix
+### Phase 1.5 (editor unblock: loose cooked + scenes) — ❌ planned
 
-Legend: ✅ Complete | 🔄 Partial/in-progress | ❌ Missing | 🧪 Prototype (code
-present but not production-ready)
+Primary objective: **render real content in the editor without PAK packing**.
 
-### Core Infrastructure
+Deliverables:
+
+- Refactor runtime loader around a "content source" seam (PAK now; loose cooked later).
+- Register a filesystem-backed content container (“loose cooked root”).
+- Resolve `AssetKey → descriptor file` via a cooked index.
+- Load assets/resources through the existing `LoaderContext` pipeline.
+- Define and load a minimal **Scene/Level asset** that instantiates Geometry/Material.
+
+Acceptance criteria:
+
+- Editor can load a mesh + material + textures from loose cooked outputs.
+- Editor can load a simple scene/level that references those assets.
+- Dependency tracking and release semantics remain identical to PAK mode.
+
+### Phase 2 (async CPU pipeline) — ❌ planned
+
+Objective: non-blocking CPU-side acquisition ending at **DecodedCPUReady**.
+
+Deliverables:
+
+- `LoadAsync(AssetKey, CancellationToken)` returning when dependencies are CPU-ready.
+- In-flight deduplication (only one decode per key concurrently).
+- Cancellation with rollback (no partial cache insertion).
+
+### Phase 3 (hot reload + diagnostics) — ❌ planned
+
+Objective: iterate quickly in editor and inspect Content behavior.
+
+- Hot reload for loose cooked mode (file watch + invalidation + dependent rebuild).
+- Diagnostics counters, structured events, and graph export.
+
+### Phase 4 (streaming/partial decode) — ❌ planned
+
+Objective: support large scenes and streaming without entangling GPU residency.
+
+- Chunk metadata schema + partial decode hooks.
+- Prefetch/priority hints (CPU-side only).
+
+## Small feature designs (inline)
+
+These are intentionally short; anything that grows beyond a page becomes its own doc.
+
+### Content observability counters (P1)
+
+Goal: make Content measurable without requiring a profiler.
+
+Proposed minimal API surface:
+
+- Counters: cache hit/miss, bytes read, decode time, eviction count, dependency edges registered.
+- Scope timing: RAII helper around load phases (find-entry, descriptor read, data read, decode).
+- Sink: either engine logging, a pull-based snapshot struct, or a callback hook.
+
+Constraints:
+
+- Must not allocate per operation in the hot path.
+- Must not impose global locking across loads (especially once async lands).
+
+### Debugging failing Content tests (pakgen + PakDump)
+
+Some Content unit tests generate a `.pak` on the fly from a YAML spec.
+
+Facts and locations:
+
+- YAML specs live in `src/Oxygen/Content/Test/TestData/*.yaml`.
+- PAK generation happens in `AssetLoaderLoadingTest::GeneratePakFile(...)`.
+  - Primary invocation: `pakgen build <spec.yaml> <output.pak> --deterministic`
+  - Fallback invocation: `python -m pakgen.cli build <spec.yaml> <output.pak> --deterministic`
+- Generated PAKs are written under the system temp directory (see
+  `std::filesystem::temp_directory_path()`), in a folder named
+  `oxygen_asset_loader_tests`.
+
+Repro steps (when a test fails):
+
+1. Identify the YAML spec name used by the test (e.g. `material_with_textures`).
+2. Re-run the same `pakgen build` command manually to reproduce deterministically.
+3. Run PakDump against the generated `.pak` to inspect directory entries,
+   resource tables, and optionally asset/resource hex dumps.
+
+PakDump notes:
+
+- Build target name: `Oxygen.Content.PakDump`.
+- Example: `Oxygen.Content.PakDump <path-to.pak> --verbose --show-data`.
+
+## Detailed feature matrix (status snapshot)
+
+This matrix is a convenience view. The ordered task list above is authoritative.
+
+### Containers / sources
 
 | Feature | Status | Notes |
-|---------|--------|-------|
-| PAK File Format | ✅ Complete | Binary container with alignment & directory |
-| Asset Directory | ✅ Complete | Key → descriptor mapping |
-| Resource Tables | ✅ Complete | Type-safe indexed access |
-| Asset Key System | ✅ Complete | 16-byte key (GUID+metadata) |
-| Asset Type System | ✅ Complete | Extensible enum |
+| ------- | ------ | ----- |
+| PAK file container (`PakFile`) | ✅ | Stable |
+| Loose cooked container | 🔄 | End-to-end mount + descriptor discovery + table/data readers are in place; remaining robustness and editor-facing mapping work tracked under #5 |
+| Container registration + ordering | ✅ | `AssetLoader` registers sources deterministically; PAK and loose cooked sources are both functional |
 
-### Asset Loading Pipeline
+### Loading + lifecycle
 
 | Feature | Status | Notes |
-|---------|--------|-------|
-| Synchronous Asset Loader | ✅ Complete | LoaderContext pattern |
-| Loader Registration | ✅ Complete | Unified registration API |
-| Resource Caching | ✅ Complete | ResourceTable + ref counting |
-| Dependency Registration | ✅ Complete | Asset→Asset & Asset→Resource inline |
-| Safe Asset Unloading | 🔄 Partial | Core logic present; ordering tests & docs pending |
-| Asset Caching | ✅ Complete | Asset cache with ref counts |
-| Hot Reload | ❌ Missing | No invalidation or watcher |
+| ------- | ------ | ----- |
+| Synchronous load | ✅ | Current `AssetLoader::LoadAsset/LoadResource` |
+| Dependency registration | ✅ | Forward-only maps + cache Touch |
+| Safe unloading | ✅ | Resource-before-asset unload ordering asserted in tests |
+| Async CPU pipeline | ❌ | Design + implementation pending |
+| Hot reload | ❌ | Requires invalidation + dependent rebuild |
 
-### Asynchronous System (Design Stage → Early Prototype)
+### Asset families
 
 | Feature | Status | Notes |
-|---------|--------|-------|
-| Coroutine-based API | ❌ Missing | Design in `asset_loader.md` |
-| ThreadPool Integration | 🔄 Partial | Primitive exists; not wired to loaders |
-| Async File I/O | ❌ Missing | Blocking reads currently |
-| GPU Upload Queue | ❌ Missing | Awaitable design only |
-| Background Processing | ❌ Missing | CPU offload not implemented |
-
-### Asset Types
-
-| Type | Status | Notes |
-|------|--------|-------|
-| GeometryAsset | ✅ Complete | Multi-LOD + submesh hierarchy |
-| BufferResource | ✅ Complete | Vertex / index / constant buffers |
-| TextureResource | ✅ Complete | 2D / array / cube |
-| MaterialAsset | ✅ Complete | Shader + texture refs |
-| SceneAsset | ❌ Missing | Scene composition |
-| AnimationAsset | ❌ Missing | Anim sequences |
-| AudioResource | ❌ Missing | Compressed audio |
-
-### Streaming & Chunking
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Chunked Loading | ❌ Missing | Documented in `chunking.md` |
-| Memory Mapping | ❌ Missing | Potential zero-copy future |
-| GPU Alignment | ✅ Complete | 256B / 16B / 4B rules implemented |
-| Progressive Loading | ❌ Missing | Priority-based scheduling |
-| Residency Management | ❌ Missing | Budget + eviction policies |
-
-### Tooling & Analysis
-
-| Tool | Status | Notes |
-|------|--------|-------|
-| PAK Generator | ✅ Complete | YAML → binary |
-| PAK Dumper | ✅ Complete | Introspection / debug |
-| Performance Profiler | ❌ Missing | Load timing & memory stats |
-| Dependency Analyzer | ❌ Missing | Graph & shared usage inspection |
-
-### Testing & Validation
-
-| Area | Status | Notes |
-|------|--------|-------|
-| Unit Tests | ✅ Excellent | Coverage for loaders & cache logic |
-| Integration Tests | ✅ Good | Directory + dependency flows |
-| Performance Tests | ❌ Missing | Need benchmarks |
-| Memory Tests | ❌ Missing | Leak & fragmentation tracking |
-
----
-
-## Roadmap Phases
-
-### Phase 1 (Foundation) – COMPLETE
-
-Scope: Core caching, dependency registration, reference counting, baseline
-synchronous loaders, safe unloading protections.
-
-Outcome Summary:
-
-* Forward-only dependency tracking with cycle detection and recursion guard
-  implemented.
-* Reverse dependency maps removed (simpler, memory-stable design validated under
-  soak).
-* Single-thread confinement policy enforced (foundation phase) ahead of async
-  introduction.
-* Verbose eviction diagnostics available (log level gated).
-* All core infrastructure & asset loading matrix items (except Hot Reload) at ✅.
-
-### Phase 2 (Async CPU Pipeline & Renderer Boundary)
-
-Objective: Add asynchronous, non-blocking CPU-side asset acquisition ending at a
-"DecodedCPUReady" state (asset + dependencies decoded & cached) without
-performing any GPU uploads or assuming GPU residency. Establish a narrow,
-explicit boundary for later renderer-driven materialization.
-
-Scope (Content module only):
-
-1. Coroutine task wrappers around current synchronous loaders (file IO +
-   decode).
-2. ThreadPool integration (`co_threadpool`) for decode / transcode / packing
-   work.
-3. Non-blocking async file read abstraction (initially still synchronous under
-  the hood; interface designed for future true async I/O swap-in).
-4. Dual API: `Load(const AssetKey&)` (legacy sync) layered atop `LoadAsync(const
-  AssetKey&, CancellationToken)`.
-5. Minimal cancellation primitive propagated through loader contexts; cancelled
-  operations guarantee no partial cache insertion.
-6. Consolidated deduplication: concurrent `LoadAsync` for same key coalesce to a
-  single in-flight task (winner populates cache; others await result).
-7. Explicit state enum introduced (e.g., `AssetLoadState::{Loading,
-  DecodedCPUReady}`) clarifying that GPU residency is external.
-8. Definition of a lightweight bridge descriptor (e.g.,
-  `GpuMaterializationInfo`) stored with decoded assets but not acted upon by
-  Content.
-
-Out of Scope (moved to Renderer or future phases): GPU upload queue, staging
-buffer management, residency / LRU, GPU memory budgets, eviction policies.
-
-Deliverables & Acceptance:
-
-* API: `task<AssetHandle> LoadAsync(const AssetKey&, CancellationToken)` returns
-  once asset + dependencies reach DecodedCPUReady (no GPU blocking).
-* Cancellation test: cancel mid-file read → no cache entry, no leaked temp
-  buffers.
-* Deduplication test: N parallel `LoadAsync` for same key results in exactly one
-  decode execution (instrumented counter == 1).
-* Dependency await test: dependent asset `LoadAsync` suspends until all direct
-  dependencies DecodedCPUReady (not GPU resident).
-* Performance sanity: Bulk async load of geometry assets saturates ThreadPool
-  with main thread idle except at `co_await` suspend points.
-* Documentation: Updated glossary & comments to remove any implication that
-  Content ensures GPU residency.
-* Bridge descriptor unit test: verifies `GpuMaterializationInfo` populated with
-  expected format/usage metadata without invoking renderer code.
-
-### Phase 3 (Hot Reload, Streaming Metadata & Analytics)
-
-Objective: Add dynamic content invalidation, introduce CPU-side streaming /
-chunk metadata & prioritization signals (still independent of GPU residency),
-and provide analytical tooling for dependency & usage insights.
-
-Scope:
-
-1. Hot Reload: file hash watcher → invalidation queue → safe unload & reload of
-   affected assets; dependency cascade (rebuild dependents to DecodedCPUReady).
-2. Chunk / Streaming Metadata: define per-asset chunk descriptors & partial load
-   table (e.g., mesh LOD segments, texture mip groups) stored in Content cache.
-3. Priority & Prefetch Hints: lightweight API (`SetAssetPriority`,
-   `PrefetchAsync`) that schedules background decode ahead of expected use (no
-   GPU action).
-4. Progressive/Partial Decode Hooks: optional staged decode phases (e.g., header
-   parse first → schedule heavy body decode) enabling fast placeholder data.
-5. Dependency Analyzer Tool: export graph (JSON + Graphviz) with reference
-   counts, shared dependency fan-out statistics.
-6. Observability: instrumentation counters (decode time, IO time, queue wait)
-   exposed via a Content diagnostics API.
-
-Out of Scope: Actual GPU memory budgets, GPU eviction, LRU of GPU resources
-(renderer phase).
-
-Deliverables & Acceptance:
-
-* Hot reload test: modify underlying file → asset & dependents reach new hash
-  version; old handles safely replaced.
-* Prefetch test: calling `PrefetchAsync` on N assets triggers background decode
-  without blocking main thread.
-* Partial decode test: staged loader produces minimal placeholder then completes
-  full decode later (verified via timing / state).
-* Analyzer CLI produces JSON with nodes = assets, edges = dependencies;
-  validated by a unit/integration test snapshot.
-* Instrumentation: metrics accessible & unit tested for monotonicity / reset
-  behavior.
-
-### Phase 4 (Quality, Benchmarking & Automation)
-
-Objective: Harden the Content subsystem with comprehensive performance / memory
-metrics, diagnostic validation, and automated documentation to reduce drift.
-
-Scope:
-
-1. Performance benchmarks: cold load vs warm cache vs parallel burst; measure IO
-   latency, decode time, scheduling overhead.
-2. Memory diagnostics: peak decoded bytes, per-asset-type footprint,
-   fragmentation or slack (if applicable).
-3. Dependency integrity checks: shutdown assertions for no dangling dependencies
-   / leaked in-flight tasks.
-4. Telemetry & Histograms: expose structured event stream (load start/end,
-   decode phases, cancellation) plus percentile histograms.
-5. Automated documentation generation: scripts extract feature matrix & status
-   from annotated code / registry macros.
-6. Reliability tests: fuzz or randomized cancellation / interleaving to detect
-   race conditions.
-
-Acceptance:
-
-* Benchmark suite produces stable metrics; CI gate can compare against
-  thresholds.
-* Telemetry API consumed in a sample tool printing histogram percentiles.
-* Integrity test simulates random load/cancel sequences → zero leaks &
-  consistent ref counts.
-* Generated docs match manually maintained sections (diff-free) or report
-  discrepancies.
-
----
-
-## Backlog / Open Items
-
-| Item | Category | Notes | Priority |
-|------|----------|-------|----------|
-| Unloader contract docs | Lifecycle | Specify ordering & constraints | High |
-| Verbose eviction diagnostics | Observability | Runtime log-level controlled | Medium |
-| Graph snapshot API | Tooling | Structured dependency export (post Phase 1) | Low |
-| Formal unloader function registration | Lifecycle | Per-type cleanup & GPU release | High |
-| Coroutine wrapper layer | Async | Transitional API around sync loaders | High |
-| Async file I/O abstraction | Async | Interface + stub impl (future OS async) | High |
-| In-flight deduplication map | Async | Single execution per key guarantee | High |
-| Hot reload invalidation graph | Tooling | Watch + recompute dependents | Medium |
-| Streaming prioritization heuristics | Streaming | Priority & prefetch hints (no GPU) | Medium |
-| Chunk metadata schema | Streaming | Per-asset chunk & partial decode descriptors | High |
-| Dependency analyzer CLI | Tooling | Graphviz / JSON output | Medium |
-| Performance benchmark suite | Testing | Measure load stage timings | Medium |
-| Automated doc status extraction | Docs | Avoid manual table drift | Low |
-| SceneAsset descriptor & importer | Asset | Define schema + loader + toolchain | High |
-| Async test harness (fake I/O) | Testing | Deterministic coroutine/unit tests | High |
-| Cancellation token propagation | Async | Uniform cancellation semantics | High |
-| Bridge descriptor (GpuMaterializationInfo) | Interface | Data-only; consumed by Renderer | High |
-| Memory mapping prototype | Performance | Evaluate zero-copy feasibility | Low |
-| PAK diff tool | Tooling | Compare two PAKs (size, hash, delta) | Medium |
-| Partial load recovery (crash safety) | Robustness | Resume or rollback incomplete loads | Low |
-| Content versioning & migration hooks | Lifecycle | Descriptor schema evolution | Medium |
-| Unified key doc (Asset/Resource/Internal) | Docs | Clarify key domains & constraints | Low |
-| Log capture helper for tests | Testing | Assert diagnostics without global state | Medium |
-| Dependency graph visualization (interactive) | Tooling | Build atop analyzer JSON | Low |
-| Instrumentation counters API | Observability | Decode/IO timing, queue wait metrics | High |
-| Progressive decode staging support | Streaming | Header-first fast path | Medium |
-
----
+| ------- | ------ | ----- |
+| Geometry + Material + Texture/Buffer | ✅ | Cooked formats supported |
+| Scene/Level | ❌ | Immediate editor hole |
+| Animation | ❌ | Future |
+| Audio | ❌ | Future |
 
 ## Glossary
 
 | Term | Definition |
-|------|------------|
-| Asset | First-class loadable descriptor (Geometry, Material, etc.) |
-| Resource | Raw data blob (TextureResource, BufferResource) referenced by index |
-| Embedded Descriptor | Metadata struct existing only inside an asset descriptor (e.g., MeshDesc) |
-| LoaderContext | Struct passed to loaders containing loader state & dependency hooks |
-| Upload Queue | Planned asynchronous staging→GPU submission mechanism |
-| Residency | Management of GPU memory presence & eviction |
+| ---- | ---------- |
+| Asset | A keyed, first-class descriptor (Geometry, Material, Scene/Level, …) |
+| Resource | Typed bulk data referenced by an index in a container’s resource tables |
+| DecodedCPUReady | Content terminal state: decoded CPU objects cached and safe to use |
+| Loose cooked content | Cooked Oxygen formats stored on disk without PAK packaging |
+| UploadCoordinator (Renderer) | Renderer-owned staging→GPU submission + fence tracking |
 
----
-
-## Cross-Reference Map
+## Cross-reference map
 
 | Topic | File |
-|-------|------|
-| PAK Layout & Alignment | `chunking.md` |
-| Async Design Details | `asset_loader.md` |
-| Dependency & Cache Mechanics | `deps_and_cache.md` |
-| Entity Relationships | `overview.md` |
+| ----- | ---- |
+| Conceptual model + boundaries | `overview.md` |
+| Dependency + cache mechanics | `deps_and_cache.md` |
+| PAK layout & alignment | `chunking.md` |
+| Loose cooked content design | `loose_cooked_content.md` |
+| Scene/Level (maps) design | `scenes_and_levels.md` |
+| Asset DB + DDC design | `asset_database_and_ddc.md` |
+| Async CPU pipeline design | `async_cpu_pipeline.md` |
+| Hot reload design | `hot_reload.md` |
+| Streaming + chunks (runtime-facing) | `streaming_and_chunks.md` |
+| Tooling + diagnostics | `tooling_and_diagnostics.md` |
+| GPU uploads (Renderer) | `../../Renderer/Upload/README.md` |
 
----
+## Update policy
 
-## Update Policy
-
-All future status or roadmap edits must be applied here first; other docs should
-only link to the relevant anchors. CI (future) can lint for stray status tables
-elsewhere.
+- Status/roadmap changes must land here first.
+- Big features require a dedicated design doc linked above.
+- Other documents must not carry their own competing status tables.

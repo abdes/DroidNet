@@ -34,12 +34,15 @@ namespace oxygen::content {
 class AssetLoader {
 public:
   OXGN_CNTT_API AssetLoader();
-  virtual ~AssetLoader() = default;
+  OXGN_CNTT_API virtual ~AssetLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
   OXYGEN_DEFAULT_MOVABLE(AssetLoader)
 
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& path) -> void;
+
+  OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
+    -> void;
 
   //=== Dependency Management ===---------------------------------------------//
 
@@ -205,6 +208,28 @@ public:
     return key.GetRawKey();
   }
 
+  //! Create a resource key for the current source and resource index.
+  /*!
+   This overload is intended for use inside loader functions. The current
+   source is established by AssetLoader when invoking a loader.
+
+   @tparam T The resource type (must satisfy PakResource concept)
+   @param resource_index The index of the resource within the current source
+   @return A ResourceKey that uniquely identifies the resource
+
+   @warning Calling this outside of a load operation is invalid.
+  */
+  template <typename T>
+  inline auto MakeResourceKey(uint32_t resource_index) -> ResourceKey
+  {
+    const auto source_index = GetCurrentSourceId();
+    auto resource_type_index
+      = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
+    auto key = internal::InternalResourceKey(
+      source_index, resource_type_index, resource_index);
+    return key.GetRawKey();
+  }
+
   //! Load or get cached resource from a specific PAK file and resource index
   /*!
    Loads a resource of type T from the specified PAK file and resource index,
@@ -239,6 +264,22 @@ public:
   auto LoadResource(const PakFile& pak,
     data::pak::ResourceIndexT resource_index, bool offline = false)
     -> std::shared_ptr<T>;
+
+  //! Load or get cached resource from the current content source.
+  /*!
+   This overload is intended for use inside loader functions. The current
+   source is established by AssetLoader when invoking a loader.
+
+   @tparam T The resource type (must satisfy PakResource concept)
+   @param resource_index The index of the resource within the current source
+   @param offline Whether to load in offline mode (no GPU side effects)
+   @return Shared pointer to the resource, or nullptr if not found
+
+   @warning Calling this outside of a load operation is invalid.
+  */
+  template <PakResource T>
+  auto LoadResource(data::pak::ResourceIndexT resource_index,
+    bool offline = false) -> std::shared_ptr<T>;
 
   //! Get cached resource without loading
   /*!
@@ -362,21 +403,20 @@ public:
 
     if constexpr (PakResource<T>) {
       // Resource loader path
-      LoadResourceFnErased loader_erased
-        = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
-            const PakFile& pak, data::pak::ResourceIndexT resource_index,
-            bool offline) -> std::shared_ptr<void> {
-        return InvokeResourceLoaderFunction<T>(
-          load_fn, loader, pak, resource_index, offline);
+      LoadFnErased loader_erased
+        = [load_fn = std::forward<LF>(load_fn)](
+            LoaderContext context) -> std::shared_ptr<void> {
+        auto result = load_fn(context);
+        return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
       };
       AddTypeErasedResourceLoader(type_id, type_name, std::move(loader_erased));
     } else {
       // Asset loader path
-      LoadAssetFnErased loader_erased
-        = [load_fn = std::forward<LF>(load_fn)](AssetLoader& loader,
-            const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
-            bool offline) -> std::shared_ptr<void> {
-        return InvokeAssetLoaderFunction(load_fn, loader, pak, entry, offline);
+      LoadFnErased loader_erased
+        = [load_fn = std::forward<LF>(load_fn)](
+            LoaderContext context) -> std::shared_ptr<void> {
+        auto result = load_fn(context);
+        return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
       };
       AddTypeErasedAssetLoader(type_id, type_name, std::move(loader_erased));
     }
@@ -388,7 +428,8 @@ protected:
     -> uint16_t;
 
 private:
-  std::vector<std::unique_ptr<PakFile>> paks_;
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
 
   //=== Dependency Tracking ===-----------------------------------------------//
 
@@ -407,7 +448,7 @@ private:
   //=== Unified Content Cache ===---------------------------------------------//
 
   //! Unified content cache for both assets and resources
-  AnyCache<uint64_t, RefCountedEviction<uint64_t>> content_cache_;
+  mutable AnyCache<uint64_t, RefCountedEviction<uint64_t>> content_cache_;
 
   //! Hash an AssetKey for cache storage
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
@@ -417,93 +458,24 @@ private:
 
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 
-  // Use shared_ptr<void> for type erasure, loader functions get AssetLoader&
-  // reference
-  using LoadAssetFnErased = std::function<std::shared_ptr<void>(
-    AssetLoader&, const PakFile&, const data::pak::AssetDirectoryEntry&, bool)>;
-
-  // Resource loader type erasure - similar to asset loaders but with
-  // ResourceIndexT
-  using LoadResourceFnErased = std::function<std::shared_ptr<void>(
-    AssetLoader&, const PakFile&, data::pak::ResourceIndexT, bool)>;
+  using LoadFnErased = std::function<std::shared_ptr<void>(LoaderContext)>;
 
   // Type-erased unload function signature
   using UnloadFnErased
     = std::function<void(std::shared_ptr<void>, AssetLoader&, bool)>;
 
-  std::unordered_map<TypeId, LoadAssetFnErased> asset_loaders_;
-  std::unordered_map<TypeId, LoadResourceFnErased> resource_loaders_;
+  std::unordered_map<TypeId, LoadFnErased> asset_loaders_;
+  std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
   std::unordered_map<TypeId, UnloadFnErased> unloaders_;
-
-  template <LoadFunction F>
-  static auto InvokeAssetLoaderFunction(const F& fn, AssetLoader& loader,
-    const PakFile& pak, const data::pak::AssetDirectoryEntry& entry,
-    bool offline) -> std::shared_ptr<void>
-  {
-    auto loader_fn = [&fn](LoaderContext context) -> std::shared_ptr<void> {
-      auto result = fn(context);
-      return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
-    };
-
-    return InvokeAssetLoaderImpl(loader_fn, loader, pak, entry, offline);
-  }
-
-  template <PakResource T, LoadFunction F>
-  static auto InvokeResourceLoaderFunction(const F& fn, AssetLoader& loader,
-    const PakFile& pak, data::pak::ResourceIndexT resource_index, bool offline)
-    -> std::shared_ptr<void>
-  {
-    auto loader_fn = [&fn](LoaderContext context) -> std::shared_ptr<void> {
-      auto result = fn(context);
-      return result ? std::shared_ptr<void>(std::move(result)) : nullptr;
-    };
-
-    if constexpr (std::same_as<T, data::BufferResource>) {
-      return InvokeBufferResourceLoader(
-        loader_fn, loader, pak, resource_index, offline);
-    } else if constexpr (std::same_as<T, data::TextureResource>) {
-      return InvokeTextureResourceLoader(
-        loader_fn, loader, pak, resource_index, offline);
-    } else {
-      static_assert(std::same_as<T, data::BufferResource>
-          || std::same_as<T, data::TextureResource>,
-        "Unsupported resource type");
-    }
-  }
-
-  OXGN_CNTT_NDAPI static auto InvokeAssetLoaderImpl(
-    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-    AssetLoader& loader, const PakFile& pak,
-    const data::pak::AssetDirectoryEntry& entry, bool offline)
-    -> std::shared_ptr<void>;
-
-  template <PakResource T>
-  static auto InvokeResourceLoaderImpl(
-    const std::function<std::shared_ptr<void>(LoaderContext)>& loader_fn,
-    AssetLoader& loader, const PakFile& pak,
-    data::pak::ResourceIndexT resource_index, bool offline)
-    -> std::shared_ptr<void>;
-
-  OXGN_CNTT_NDAPI static auto InvokeBufferResourceLoader(
-    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-    AssetLoader& loader, const PakFile& pak,
-    data::pak::ResourceIndexT resource_index, bool offline)
-    -> std::shared_ptr<void>;
-
-  OXGN_CNTT_NDAPI static auto InvokeTextureResourceLoader(
-    std::function<std::shared_ptr<void>(LoaderContext)> loader_fn,
-    AssetLoader& loader, const PakFile& pak,
-    data::pak::ResourceIndexT resource_index, bool offline)
-    -> std::shared_ptr<void>;
 
   void UnloadObject(
     oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline);
 
-  OXGN_CNTT_API auto AddTypeErasedAssetLoader(TypeId type_id,
-    std::string_view type_name, LoadAssetFnErased&& loader) -> void;
+  OXGN_CNTT_API auto AddTypeErasedAssetLoader(
+    TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
-  OXGN_CNTT_API auto AddTypeErasedResourceLoader(TypeId type_id,
-    std::string_view type_name, LoadResourceFnErased&& loader) -> void;
+  OXGN_CNTT_API auto AddTypeErasedResourceLoader(
+    TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   OXGN_CNTT_API auto AddTypeErasedUnloader(TypeId type_id,
     std::string_view type_name, UnloadFnErased&& unloader) -> void;
@@ -523,6 +495,8 @@ private:
 
   // Debug visited guard for ReleaseAssetTree recursion protection.
   struct ReleaseVisitGuard;
+
+  OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
 
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).
