@@ -25,7 +25,7 @@ namespace oxygen::interop::module {
   namespace {
 
     struct FlyParams {
-      float look_radians_per_pixel = 0.0035f;
+      float look_radians_per_pixel = 0.0025f;
       float base_speed_units_per_second = 5.0f;
       float fast_multiplier = 4.0f;
       float max_up_dot = 0.99f;
@@ -205,6 +205,8 @@ namespace oxygen::interop::module {
       return;
     }
 
+    const bool just_activated = !state.was_active;
+
     auto transform = camera_node.GetTransform();
     const glm::quat current_rot =
       transform.GetLocalRotation().value_or(glm::quat{ 1.0f, 0.0f, 0.0f, 0.0f });
@@ -213,7 +215,7 @@ namespace oxygen::interop::module {
       NormalizeSafe(current_rot * glm::vec3(0.0f, 0.0f, -1.0f),
         glm::vec3(0.0f, 0.0f, -1.0f));
 
-    if (!state.was_active) {
+    if (just_activated) {
       // Derive yaw/pitch from the current forward vector.
       // For base forward (0,0,-1), yaw=0. Match the orbit convention.
       state.yaw_radians = std::atan2(-current_forward.x, -current_forward.z);
@@ -223,21 +225,30 @@ namespace oxygen::interop::module {
 
     const auto mouse_delta =
       AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
-    if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
+    const bool mouse_moved = (std::abs(mouse_delta.x) > 0.0f)
+      || (std::abs(mouse_delta.y) > 0.0f);
+    const bool should_apply_mouse_look = !just_activated && mouse_moved;
+
+    if (should_apply_mouse_look) {
       state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
       state.pitch_radians = ClampPitchRadians(params,
         state.pitch_radians + (-mouse_delta.y * params.look_radians_per_pixel));
     }
 
-    const glm::quat yaw_q = glm::angleAxis(state.yaw_radians, params.up);
-    const glm::vec3 right = yaw_q * glm::vec3(1.0f, 0.0f, 0.0f);
-    const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
+    glm::quat applied_rot = current_rot;
+    if (should_apply_mouse_look) {
+      const glm::quat yaw_q = glm::angleAxis(state.yaw_radians, params.up);
+      const glm::vec3 right = yaw_q * glm::vec3(1.0f, 0.0f, 0.0f);
+      const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
 
-    const glm::vec3 forward = NormalizeSafe(pitch_q * (yaw_q * glm::vec3(0.0f, 0.0f, -1.0f)),
-      glm::vec3(0.0f, 0.0f, -1.0f));
+      const glm::vec3 forward =
+        NormalizeSafe(pitch_q * (yaw_q * glm::vec3(0.0f, 0.0f, -1.0f)),
+          glm::vec3(0.0f, 0.0f, -1.0f));
 
-    const glm::quat new_rot = LookRotationFromForwardUp(forward, params.up);
-    (void)transform.SetLocalRotation(new_rot);
+      const glm::quat new_rot = LookRotationFromForwardUp(forward, params.up);
+      (void)transform.SetLocalRotation(new_rot);
+      applied_rot = new_rot;
+    }
 
     const bool w = input_snapshot.IsActionOngoing("Editor.Fly.W");
     const bool a = input_snapshot.IsActionOngoing("Editor.Fly.A");
@@ -259,8 +270,8 @@ namespace oxygen::interop::module {
     const float speed = params.base_speed_units_per_second
       * (fast ? params.fast_multiplier : 1.0f);
 
-    const glm::vec3 fly_right = new_rot * glm::vec3(1.0f, 0.0f, 0.0f);
-    const glm::vec3 fly_forward = new_rot * glm::vec3(0.0f, 0.0f, -1.0f);
+    const glm::vec3 fly_right = applied_rot * glm::vec3(1.0f, 0.0f, 0.0f);
+    const glm::vec3 fly_forward = applied_rot * glm::vec3(0.0f, 0.0f, -1.0f);
 
     const glm::vec3 delta =
       (fly_forward * forward_axis + fly_right * right_axis + params.up * up_axis)

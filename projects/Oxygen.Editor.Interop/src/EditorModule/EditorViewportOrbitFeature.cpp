@@ -205,8 +205,7 @@ namespace oxygen::interop::module {
       return;
     }
 
-    const auto mouse_delta =
-      AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
+    const bool just_activated = !state.was_active;
 
     auto transform = camera_node.GetTransform();
 
@@ -214,7 +213,7 @@ namespace oxygen::interop::module {
       transform.GetLocalPosition().value_or(glm::vec3{});
 
     // Initialize orbit angles from current camera position when the drag starts.
-    if (!state.was_active) {
+    if (just_activated) {
       glm::vec3 offset = position - focus_point;
       float radius = std::sqrt(glm::dot(offset, offset));
       if (radius < params.min_radius) {
@@ -231,7 +230,13 @@ namespace oxygen::interop::module {
 
       state.radius = radius;
       state.was_active = true;
+
+      // Consume the activation frame so a stale mouse delta doesn't cause a jump.
+      return;
     }
+
+    const auto mouse_delta =
+      AccumulateAxis2DFromTransitionsOrZero(input_snapshot, "Editor.Mouse.Delta");
 
     if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
       state.yaw_radians += -mouse_delta.x * params.radians_per_pixel;
