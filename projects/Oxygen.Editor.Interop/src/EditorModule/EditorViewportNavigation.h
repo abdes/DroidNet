@@ -42,9 +42,24 @@ namespace oxygen::interop::module {
       glm::vec3& focus_point,
       float dt_seconds) noexcept -> void;
 
+    auto ApplyNonWheel(oxygen::scene::SceneNode camera_node,
+      const oxygen::input::InputSnapshot& input_snapshot,
+      glm::vec3& focus_point,
+      float dt_seconds) noexcept -> void;
+
+    auto ApplyWheelOnly(oxygen::scene::SceneNode camera_node,
+      const oxygen::input::InputSnapshot& input_snapshot,
+      glm::vec3& focus_point,
+      float dt_seconds) noexcept -> void;
+
   private:
     std::shared_ptr<oxygen::input::InputMappingContext> ctx_;
     std::vector<std::unique_ptr<IEditorViewportNavigationFeature>> features_;
+
+    // A cached pointer to the wheel-zoom feature instance owned by `features_`.
+    // This allows the editor module to route wheel input to the hovered view
+    // without re-applying all other navigation features.
+    IEditorViewportNavigationFeature* wheel_zoom_feature_{ nullptr };
   };
 
 } // namespace oxygen::interop::module

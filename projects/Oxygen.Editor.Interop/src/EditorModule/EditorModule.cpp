@@ -184,6 +184,8 @@ namespace oxygen::interop::module {
       const auto view_id = view->GetViewId();
       auto batch = input_accumulator_->Drain(view_id);
 
+      UpdateViewRoutingFromInputBatch(view_id, batch);
+
       const bool has_mouse = (batch.mouse_delta.dx != 0.0F) || (batch.mouse_delta.dy != 0.0F);
       const bool has_wheel = (batch.scroll_delta.dx != 0.0F) || (batch.scroll_delta.dy != 0.0F);
       const bool has_keys = !batch.key_events.empty();
@@ -242,6 +244,24 @@ namespace oxygen::interop::module {
 
     context.SetScene(observer_ptr{ scene_.get() });
     view_manager_->FinalizeViews();
+  }
+
+  void EditorModule::UpdateViewRoutingFromInputBatch(ViewId view_id,
+    const AccumulatedInput& batch) noexcept {
+    const bool has_mouse = (batch.mouse_delta.dx != 0.0F) || (batch.mouse_delta.dy != 0.0F);
+    const bool has_wheel = (batch.scroll_delta.dx != 0.0F) || (batch.scroll_delta.dy != 0.0F);
+    const bool has_keys = !batch.key_events.empty();
+    const bool has_buttons = !batch.button_events.empty();
+
+    // Mouse motion and wheel identify the last-hovered view.
+    if (has_mouse || has_wheel) {
+      hover_view_id_ = view_id;
+    }
+
+    // Key and button events identify the focused (active) view.
+    if (has_keys || has_buttons) {
+      active_view_id_ = view_id;
+    }
   }
 
   void EditorModule::ProcessSurfaceRegistrations() {
@@ -422,10 +442,38 @@ namespace oxygen::interop::module {
         view->OnSceneMutation();
 
         if (input_snapshot) {
-          auto focus_point = view->GetFocusPoint();
-          viewport_navigation_->Apply(view->GetCameraNode(), *input_snapshot,
-            focus_point, dt_seconds);
-          view->SetFocusPoint(focus_point);
+          const auto view_id = view->GetViewId();
+
+          const auto active = (active_view_id_ != kInvalidViewId)
+            ? active_view_id_
+            : hover_view_id_;
+
+          const auto hovered = hover_view_id_;
+
+          // Non-wheel navigation applies to the focused (active) viewport.
+          if (active != kInvalidViewId && view_id == active) {
+            auto focus_point = view->GetFocusPoint();
+
+            // If the hovered view differs, keep wheel routing separate.
+            if (hovered != kInvalidViewId && hovered != active) {
+              viewport_navigation_->ApplyNonWheel(view->GetCameraNode(),
+                *input_snapshot, focus_point, dt_seconds);
+            }
+            else {
+              viewport_navigation_->Apply(view->GetCameraNode(),
+                *input_snapshot, focus_point, dt_seconds);
+            }
+
+            view->SetFocusPoint(focus_point);
+          }
+
+          // Wheel navigation applies to the last-hovered viewport.
+          if (hovered != kInvalidViewId && hovered != active && view_id == hovered) {
+            auto focus_point = view->GetFocusPoint();
+            viewport_navigation_->ApplyWheelOnly(view->GetCameraNode(),
+              *input_snapshot, focus_point, dt_seconds);
+            view->SetFocusPoint(focus_point);
+          }
         }
         view->ClearPhaseRecorder();
       }

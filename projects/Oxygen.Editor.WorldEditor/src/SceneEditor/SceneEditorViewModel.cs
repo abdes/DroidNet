@@ -150,6 +150,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public partial SceneViewLayout CurrentLayout { get; set; }
 
     /// <summary>
+    /// Gets or sets the currently focused viewport identifier.
+    /// </summary>
+    [ObservableProperty]
+    public partial Guid FocusedViewportId { get; set; }
+
+    /// <summary>
     /// Gets the collection of active viewports.
     /// </summary>
     public ObservableCollection<ViewportViewModel> Viewports { get; }
@@ -323,6 +329,50 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             viewport.UpdateLayoutMetadata(i, i == 0);
             viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
         }
+
+        this.EnsureFocusedViewportIsValid();
+    }
+
+    /// <summary>
+    /// Marks the given viewport as focused and clears focus from all other viewports.
+    /// </summary>
+    /// <param name="viewport">The viewport to focus.</param>
+    public void SetFocusedViewport(ViewportViewModel viewport)
+    {
+        if (viewport is null)
+        {
+            throw new ArgumentNullException(nameof(viewport));
+        }
+
+        this.FocusedViewportId = viewport.ViewportId;
+        this.ApplyFocusedViewportFlags();
+    }
+
+    private void EnsureFocusedViewportIsValid()
+    {
+        if (this.Viewports.Count == 0)
+        {
+            this.FocusedViewportId = Guid.Empty;
+            return;
+        }
+
+        var isValid = this.FocusedViewportId != Guid.Empty && this.Viewports.Any(v => v.ViewportId == this.FocusedViewportId);
+        if (!isValid)
+        {
+            // Default focus to primary viewport (index 0).
+            this.FocusedViewportId = this.Viewports[0].ViewportId;
+        }
+
+        this.ApplyFocusedViewportFlags();
+    }
+
+    private void ApplyFocusedViewportFlags()
+    {
+        var focusedId = this.FocusedViewportId;
+        foreach (var viewport in this.Viewports)
+        {
+            viewport.IsFocused = focusedId != Guid.Empty && viewport.ViewportId == focusedId;
+        }
     }
 
     private void ToggleMaximize(ViewportViewModel viewport)
@@ -351,6 +401,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.previousLayout = this.CurrentLayout;
             this.CurrentLayout = SceneViewLayout.OnePane;
         }
+
+        this.EnsureFocusedViewportIsValid();
     }
 
     [RelayCommand]

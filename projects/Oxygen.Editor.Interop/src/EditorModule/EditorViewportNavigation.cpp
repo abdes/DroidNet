@@ -22,7 +22,10 @@ namespace oxygen::interop::module {
     features_.push_back(std::make_unique<EditorViewportPanFeature>());
     features_.push_back(std::make_unique<EditorViewportDollyFeature>());
     features_.push_back(std::make_unique<EditorViewportFlyFeature>());
-    features_.push_back(std::make_unique<EditorViewportWheelZoomFeature>());
+
+    auto wheel = std::make_unique<EditorViewportWheelZoomFeature>();
+    wheel_zoom_feature_ = wheel.get();
+    features_.push_back(std::move(wheel));
   }
 
   auto EditorViewportNavigation::InitializeBindings(
@@ -53,6 +56,32 @@ namespace oxygen::interop::module {
     for (auto& feature : features_) {
       feature->Apply(camera_node, input_snapshot, focus_point, dt_seconds);
     }
+  }
+
+  auto EditorViewportNavigation::ApplyNonWheel(
+    oxygen::scene::SceneNode camera_node,
+    const oxygen::input::InputSnapshot& input_snapshot,
+    glm::vec3& focus_point,
+    float dt_seconds) noexcept -> void {
+    for (auto& feature : features_) {
+      if (feature.get() == wheel_zoom_feature_) {
+        continue;
+      }
+      feature->Apply(camera_node, input_snapshot, focus_point, dt_seconds);
+    }
+  }
+
+  auto EditorViewportNavigation::ApplyWheelOnly(
+    oxygen::scene::SceneNode camera_node,
+    const oxygen::input::InputSnapshot& input_snapshot,
+    glm::vec3& focus_point,
+    float dt_seconds) noexcept -> void {
+    if (wheel_zoom_feature_ == nullptr) {
+      return;
+    }
+
+    wheel_zoom_feature_->Apply(camera_node, input_snapshot, focus_point,
+      dt_seconds);
   }
 
 } // namespace oxygen::interop::module

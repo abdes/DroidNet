@@ -147,6 +147,9 @@ namespace oxygen::interop::module {
   private:
     struct SubscriptionToken;
 
+    void UpdateViewRoutingFromInputBatch(ViewId view_id,
+      const AccumulatedInput& batch) noexcept;
+
     void ProcessSurfaceRegistrations();
     void ProcessSurfaceDestructions();
     auto ProcessResizeRequests()
@@ -178,6 +181,14 @@ namespace oxygen::interop::module {
 
     // Viewport navigation is composed from small, independent features.
     std::unique_ptr<EditorViewportNavigation> viewport_navigation_;
+
+    // View routing: input is produced per view (window), but the current
+    // InputSystem snapshot is global. We route editor navigation explicitly
+    // using these ids:
+    // - active_view_id_: keyboard and drag navigation (focused viewport)
+    // - hover_view_id_: wheel navigation (last-hovered viewport)
+    ViewId active_view_id_{ kInvalidViewId };
+    ViewId hover_view_id_{ kInvalidViewId };
 
     // Input actions / mapping contexts (Phase 1: navigation only)
     bool input_bindings_initialized_ { false };
