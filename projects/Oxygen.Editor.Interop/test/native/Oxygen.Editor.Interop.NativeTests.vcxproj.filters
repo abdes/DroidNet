@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{18A4C9F3-8D4A-4B95-9D3E-1C2E6F7B8A9C}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{D4B2E9C7-0FA8-4F7A-8ACB-2E2EDE3C9F01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{F0E1D2C3-B4A5-6789-0ABC-DEF123456789}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\InputAccumulator_native_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'icon.png'))" />
+    <None Include="$([MSBUILD]::NormalizePath($(MyTopLevelDirectory), 'LICENSE'))" />
+  </ItemGroup>
+</Project>

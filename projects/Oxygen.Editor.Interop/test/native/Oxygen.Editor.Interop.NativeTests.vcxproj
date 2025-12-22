@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- Configurations -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <!-- Global Properties -->
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{C9F1A1D1-8E37-4C3D-A6B3-8C2E3B9F4D12}</ProjectGuid>
+    <!-- Declare DLL project type early so SDK checks succeed -->
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <CLRSupport>NetCore</CLRSupport>
+    <!--
+      Workaround: The .NET test SDK (Microsoft.NET.Test.Sdk / MSTest) can cause
+      test projects to be evaluated with OutputType=Exe, which trips the
+      NETSDK1116 check for C++/CLI ("C++/CLI projects targeting .NET Core must be dynamic libraries").
+      Setting <_EnablePackageReferencesInVCProjects>true</_EnablePackageReferencesInVCProjects>
+      instructs MSBuild to handle PackageReferences in VC projects in a way that keeps
+      this project treated as a library (DynamicLibrary) and avoids the NETSDK1116 error.
+      If this causes compatibility issues on some older VS/MSBuild installs, an alternative
+      is to avoid PackageReference and add explicit <Reference> entries for test assemblies.
+    -->
+    <_EnablePackageReferencesInVCProjects>true</_EnablePackageReferencesInVCProjects>
+    <!-- Ensure .NET SDK sees this as a library and not an EXE (fixes NETSDK1116) -->
+    <OutputType>Library</OutputType>
+    <!-- Mark as NetCoreCProj so msbuild treats this as a .NET-targeted C++/CLI project -->
+    <Keyword>NetCoreCProj</Keyword>
+    <RootNamespace>Oxygen.Editor.Interop.NativeTests</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.26100.0</WindowsTargetPlatformVersion>
+    <!-- C++/CLI .NET Core/5+/6+/7+/8+/9+ -->
+    <TargetFramework>net9.0</TargetFramework>
+    <ProjectName>Oxygen.Editor.Interop.NativeTests</ProjectName>
+    <WindowsTargetPlatformMinVersion>7.0</WindowsTargetPlatformMinVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <!-- Debug -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CLRSupport>NetCore</CLRSupport>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <!-- Release -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v145</PlatformToolset>
+    <CLRSupport>NetCore</CLRSupport>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <!-- Source Files -->
+  <ItemGroup>
+    <ClCompile Include="src\InputAccumulator_native_test.cpp" />
+  </ItemGroup>
+  <!-- Intermediate Output -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(SolutionDir)artifacts\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+  </PropertyGroup>
+  <!-- Debug Settings -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>_DEBUG;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(ProjectsRoot)\Oxygen.Editor.Interop\src;$(ProjectsRoot)\Oxygen.Engine\out\install\include;$(ProjectsRoot)\Oxygen.Engine\src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <AdditionalOptions>/Zc:__cplusplus %(AdditionalOptions)</AdditionalOptions>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;$(MSBuildProjectDirectory)\..\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>$(MSBuildProjectDirectory)\..\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0\DroidNet.Oxygen.Editor.Interop.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Release Settings -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PreprocessorDefinitions>NDEBUG;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>
+        $(ProjectsRoot)\Oxygen.Editor.Interop\src;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\include;
+        $(ProjectsRoot)\Oxygen.Engine\src;
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp20</LanguageStandard>
+      <UseStandardPreprocessor>true</UseStandardPreprocessor>
+      <LanguageStandard_C>stdc17</LanguageStandard_C>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;
+        $(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+      <AdditionalLibraryDirectories>
+        $(ProjectsRoot)\Oxygen\Engine\out\lib;
+        $(MSBuildProjectDirectory)\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0;
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>
+        $(MSBuildProjectDirectory)\..\..\..\artifacts\bin\Oxygen.Editor.Interop\_net9.0\DroidNet.Oxygen.Editor.Interop.lib;
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- Reference to your interop project -->
+  <ItemGroup>
+    <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj">
+      <Private>true</Private>
+      <LinkLibraryDependencies>true</LinkLibraryDependencies>
+      <UseLibraryDependencyInputs>true</UseLibraryDependencyInputs>
+    </ProjectReference>
+  </ItemGroup>
+  <!-- Use MSTest v4 via package references (Microsoft.NET.Test.Sdk + MSTest v4). We keep _EnablePackageReferencesInVCProjects=true so VC++ projects handle PackageReference correctly. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="MSTest.TestAdapter" />
+    <PackageReference Include="MSTest.TestFramework" />
+  </ItemGroup>
+  <!-- Ensure consistent System.Diagnostics.DiagnosticSource version across projects to avoid MSB3277 warnings -->
+  <ItemGroup>
+    <PackageReference Include="System.Diagnostics.DiagnosticSource" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <!-- Debug target to display evaluated properties -->
+  <Target Name="ShowProps">
+    <Message Text="ConfigurationType=$(ConfigurationType)" Importance="High" />
+    <Message Text="CLRSupport=$(CLRSupport)" Importance="High" />
+    <Message Text="Keyword=$(Keyword)" Importance="High" />
+    <Message Text="IsCPlusPlusCli=$(IsCPlusPlusCli)" Importance="High" />
+    <Message Text="TargetFramework=$(TargetFramework)" Importance="High" />
+    <Message Text="OutputType=$(OutputType)" Importance="High" />
+  </Target>
+</Project>

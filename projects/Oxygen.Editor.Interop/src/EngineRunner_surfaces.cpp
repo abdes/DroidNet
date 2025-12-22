@@ -6,7 +6,31 @@
 
 #pragma managed
 
-#include "pch.h"
+#include <array>
+#include <cstdint>
+#include <fmt/base.h>
+#include <fmt/format.h>
+#include <functional>
+#include <list>
+#include <memory>
+#include <mutex>
+#include <new>
+#include <string>
+#include <unordered_map>
+#include <utility>
+
+#ifdef _WIN32
+#include <WinSock2.h> // include before any header that might include <windows.h>
+#endif
+
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+
+#include <dxgi.h>
+#include <dxgi1_3.h>
+
+#include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 
 #include <EngineRunner.h>
 #include <Utils/TokenHelpers.h>
@@ -86,7 +110,7 @@ namespace Oxygen::Interop {
 
     try {
       auto msg = fmt::format(
-        "UnregisterSurfaceAsync: stored token for viewport={}",
+        fmt::runtime("UnregisterSurfaceAsync: stored token for viewport={}"),
         msclr::interop::marshal_as<std::string>(viewportId.ToString()));
       LogInfoMessage(msg.c_str());
     }
@@ -108,7 +132,7 @@ namespace Oxygen::Interop {
 
     try {
       auto msg = fmt::format(
-        "UnregisterSurfaceAsync: stored token for viewport={}",
+        fmt::runtime("UnregisterSurfaceAsync: stored token for viewport={}"),
         msclr::interop::marshal_as<std::string>(viewportId.ToString()));
       LogInfoMessage(msg.c_str());
     }
@@ -123,7 +147,8 @@ namespace Oxygen::Interop {
       registry->RemoveSurface(key, std::move(cb));
       try {
         auto msg2 = fmt::format(
-          "UnregisterSurfaceAsync: staged removal for viewport={}",
+          fmt::runtime(
+            "UnregisterSurfaceAsync: staged removal for viewport={}"),
           msclr::interop::marshal_as<std::string>(viewportId.ToString()));
         LogInfoMessage(msg2.c_str());
       }
@@ -134,8 +159,9 @@ namespace Oxygen::Interop {
       // ensure the saved GCHandle is freed and token removed
       try {
         auto msg = fmt::format(
-          "UnregisterSurfaceAsync: staging removal failed for viewport={}, "
-          "cleaning up token.",
+          fmt::runtime(
+            "UnregisterSurfaceAsync: staging removal failed for viewport={}, "
+            "cleaning up token."),
           msclr::interop::marshal_as<std::string>(viewportId.ToString()));
         LogInfoMessage(msg.c_str());
       }
@@ -208,7 +234,8 @@ namespace Oxygen::Interop {
       registry->RegisterResizeCallback(key, std::move(cb));
       try {
         auto msg = fmt::format(
-          "ResizeSurfaceAsync: staged resize for viewport={} size={}x{}",
+          fmt::runtime(
+            "ResizeSurfaceAsync: staged resize for viewport={} size={}x{}"),
           msclr::interop::marshal_as<std::string>(viewportId.ToString()), width,
           height);
         LogInfoMessage(msg.c_str());
@@ -293,7 +320,8 @@ namespace Oxygen::Interop {
 
     try {
       auto registrationLog = fmt::format(
-        "RegisterSurfaceAsync doc={} viewport={} name='{}'", doc, view, disp);
+        fmt::runtime("RegisterSurfaceAsync doc={} viewport={} name='{}'"), doc,
+        view, disp);
       LogInfoMessage(registrationLog.c_str());
     }
     catch (...) {
@@ -340,7 +368,8 @@ namespace Oxygen::Interop {
       registry->RegisterSurface(key, surface, std::move(cb));
       try {
         auto msg = fmt::format(
-          "RegisterSurfaceAsync: staged registration for viewport={}",
+          fmt::runtime(
+            "RegisterSurfaceAsync: staged registration for viewport={}"),
           msclr::interop::marshal_as<std::string>(viewportId.ToString()));
         LogInfoMessage(msg.c_str());
       }
@@ -393,8 +422,9 @@ namespace Oxygen::Interop {
           static_cast<uint32_t>(initialHeight));
         try {
           auto msg = fmt::format(
-            "RegisterSurfaceAsync: requested initial resize for viewport={} "
-            "size={}x{}",
+            fmt::runtime(
+              "RegisterSurfaceAsync: requested initial resize for viewport={} "
+              "size={}x{}"),
             msclr::interop::marshal_as<std::string>(viewportId.ToString()),
             initialWidth, initialHeight);
           LogInfoMessage(msg.c_str());
@@ -484,10 +514,12 @@ namespace Oxygen::Interop {
     // provided).
     try {
       auto attachLog =
-        fmt::format("AttachSwapChainCallback: panel={} swapchain={}",
+        fmt::format(
+          fmt::runtime("AttachSwapChainCallback: panel={} swapchain={}"),
           fmt::ptr(panelUnknown), fmt::ptr(swapChain));
       if (surfaceHandlePtr != nullptr) {
-        attachLog += fmt::format(" surface_handle_ptr={} use_count={}",
+        attachLog += fmt::format(
+          fmt::runtime(" surface_handle_ptr={} use_count={}"),
           fmt::ptr(surfaceHandlePtr),
           surfaceHandlePtr->use_count());
       }
@@ -518,8 +550,9 @@ namespace Oxygen::Interop {
       if (surfaceHandlePtr != nullptr) {
         try {
           auto errLog = fmt::format(
-            "AttachSwapChainCallback: SetSwapChain failed, cleaning "
-            "surface_handle_ptr={} pre-delete use_count={}",
+            fmt::runtime(
+              "AttachSwapChainCallback: SetSwapChain failed, cleaning "
+              "surface_handle_ptr={} pre-delete use_count={}"),
             fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
           LogInfoMessage(errLog.c_str());
         }
@@ -570,8 +603,9 @@ namespace Oxygen::Interop {
     if (surfaceHandlePtr != nullptr) {
       try {
         auto cleanupLog = fmt::format(
-          "AttachSwapChainCallback cleaning surface_handle_ptr={} pre-delete "
-          "use_count={}",
+          fmt::runtime(
+            "AttachSwapChainCallback cleaning surface_handle_ptr={} pre-delete "
+            "use_count={}"),
           fmt::ptr(surfaceHandlePtr), surfaceHandlePtr->use_count());
         LogInfoMessage(cleanupLog.c_str());
       }

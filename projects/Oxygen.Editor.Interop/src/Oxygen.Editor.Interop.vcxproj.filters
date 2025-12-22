@@ -8,6 +8,7 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -68,6 +69,15 @@
     </ClCompile>
     <ClCompile Include="Commands\CreateBasicMeshCommand.cpp">
       <Filter>Commands</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\InputAccumulator.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="EditorModule\InputAccumulatorAdapter.cpp">
+      <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="Input\OxygenInput.cpp">
+      <Filter>Input</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -181,6 +191,15 @@
     <ClInclude Include="Commands\ReparentSceneNodesCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
+    <ClInclude Include="EditorModule\InputAccumulator.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="EditorModule\InputAccumulatorAdapter.h">
+      <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Input\OxygenInput.h">
+      <Filter>Input</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="EditorModule">
@@ -188,6 +207,9 @@
     </Filter>
     <Filter Include="Utils">
       <UniqueIdentifier>{6ca27deb-fd2c-4b01-8bed-041a931df74e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Input">
+      <UniqueIdentifier>{a276d837-c441-4246-89b4-618ca3dfd563}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

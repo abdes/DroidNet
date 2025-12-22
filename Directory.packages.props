@@ -90,5 +90,6 @@
     <PackageVersion Include="Verify.SourceGenerators" Version="2.5.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net80" Version="1.8.3" />
     <PackageVersion Include="Testably.Abstractions.Testing" Version="5.0.0" />
+    <PackageVersion Include="System.Diagnostics.DiagnosticSource" Version="10.0.0" />
   </ItemGroup>
 </Project>

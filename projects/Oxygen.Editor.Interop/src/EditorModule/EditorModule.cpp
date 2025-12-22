@@ -17,13 +17,81 @@
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorCompositor.h>
 #include <EditorModule/EditorModule.h>
-#include <EditorModule/SurfaceRegistry.h>
+#include <EditorModule/EditorViewportNavigation.h>
+#include <EditorModule/InputAccumulatorAdapter.h>
 #include <EditorModule/NodeRegistry.h>
+#include <EditorModule/SurfaceRegistry.h>
 
 namespace oxygen::interop::module {
 
   using namespace oxygen;
   using namespace oxygen::renderer;
+
+  namespace {
+    class EditorInputWriter final : public IInputWriter {
+    public:
+      explicit EditorInputWriter(
+        co::BroadcastChannel<platform::InputEvent>::Writer& writer)
+        : writer_(writer) {
+      }
+
+      void WriteMouseMove(ViewId view, SubPixelMotion delta,
+        SubPixelPosition position) override {
+        const auto now =
+          oxygen::time::PhysicalTime{ std::chrono::steady_clock::now() };
+        if (!writer_.TrySend(std::make_shared<platform::MouseMotionEvent>(
+          now, static_cast<platform::WindowIdType>(view.get()),
+          position, delta))) {
+          LOG_F(ERROR, "Failed to send MouseMotionEvent for view {}", view.get());
+        }
+      }
+
+      void WriteMouseWheel(ViewId view, SubPixelMotion delta,
+        SubPixelPosition position) override {
+        const auto now =
+          oxygen::time::PhysicalTime{ std::chrono::steady_clock::now() };
+        if (!writer_.TrySend(std::make_shared<platform::MouseWheelEvent>(
+          now, static_cast<platform::WindowIdType>(view.get()),
+          position, delta))) {
+          LOG_F(ERROR, "Failed to send MouseWheelEvent for view {}", view.get());
+        }
+      }
+
+      void WriteKey(ViewId view, EditorKeyEvent ev) override {
+        if (!writer_.TrySend(std::make_shared<platform::KeyEvent>(
+          ev.timestamp, static_cast<platform::WindowIdType>(view.get()),
+          platform::input::KeyInfo(ev.key, ev.repeat),
+          ev.pressed ? platform::ButtonState::kPressed
+          : platform::ButtonState::kReleased))) {
+          LOG_F(ERROR, "Failed to send KeyEvent for view {}", view.get());
+        }
+      }
+
+      void WriteMouseButton(ViewId view, EditorButtonEvent ev) override {
+        if (!writer_.TrySend(std::make_shared<platform::MouseButtonEvent>(
+          ev.timestamp, static_cast<platform::WindowIdType>(view.get()),
+          ev.position, ev.button,
+          ev.pressed ? platform::ButtonState::kPressed
+          : platform::ButtonState::kReleased))) {
+          LOG_F(ERROR, "Failed to send MouseButtonEvent for view {}", view.get());
+        }
+      }
+
+    private:
+      co::BroadcastChannel<platform::InputEvent>::Writer& writer_;
+    };
+  } // namespace
+
+  // Opaque token type used to keep an AsyncEngine module subscription alive
+  // without exposing the subscription type in the public header.
+  struct EditorModule::SubscriptionToken {
+    explicit SubscriptionToken(oxygen::AsyncEngine::ModuleSubscription sub)
+      : sub_(std::move(sub))
+    {
+    }
+
+    oxygen::AsyncEngine::ModuleSubscription sub_;
+  };
 
   EditorModule::EditorModule(std::shared_ptr<SurfaceRegistry> registry)
     : registry_(std::move(registry)) {
@@ -33,21 +101,66 @@ namespace oxygen::interop::module {
         "EditorModule requires a non-null surface registry.");
     }
     view_manager_ = std::make_unique<ViewManager>();
+    input_accumulator_ = std::make_unique<InputAccumulator>();
+    viewport_navigation_ = std::make_unique<EditorViewportNavigation>();
   }
 
   EditorModule::~EditorModule() { LOG_F(INFO, "EditorModule destroyed."); }
 
   auto EditorModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept
     -> bool {
+    DCHECK_NOTNULL_F(engine);
+
+    auto writer = std::make_unique<EditorInputWriter>(
+      engine->GetPlatform().Input().ForWrite());
+    input_accumulator_adapter_ =
+      std::make_unique<InputAccumulatorAdapter>(std::move(writer));
+
     graphics_ = engine->GetGraphics();
     if (auto gfx = graphics_.lock()) {
       compositor_ =
         std::make_unique<EditorCompositor>(gfx, *view_manager_, *registry_);
     }
+
     // Keep a non-owning reference to the engine so we can access other
     // engine modules (renderer) during command recording.
     engine_ = engine;
+
+    // InputSystem is registered by the engine interface layer during the
+    // engine startup sequence. In the editor, EditorModule may be registered
+    // earlier, so we subscribe and initialize bindings once InputSystem is
+    // attached.
+    auto sub = engine->SubscribeModuleAttached(
+      [this](const ::oxygen::engine::ModuleEvent& ev) {
+        if (input_bindings_initialized_) {
+          return;
+        }
+        if (ev.type_id != oxygen::engine::InputSystem::ClassTypeId()) {
+          return;
+        }
+
+        auto opt = engine_->GetModule<oxygen::engine::InputSystem>();
+        if (!opt) {
+          LOG_F(ERROR,
+            "InputSystem attachment event received but module lookup failed");
+          return;
+        }
+        input_bindings_initialized_ = InitInputBindings(opt->get());
+      },
+      /*replay_existing=*/true);
+    input_system_subscription_token_
+      = std::make_unique<SubscriptionToken>(std::move(sub));
+
     return true;
+  }
+
+  auto EditorModule::InitInputBindings(
+    oxygen::engine::InputSystem& input_system) noexcept -> bool
+  {
+    if (!viewport_navigation_) {
+      viewport_navigation_ = std::make_unique<EditorViewportNavigation>();
+    }
+    return viewport_navigation_->InitializeBindings(input_system);
   }
 
   auto EditorModule::OnFrameStart(engine::FrameContext& context) -> void {
@@ -64,6 +177,29 @@ namespace oxygen::interop::module {
     ProcessSurfaceDestructions();
     auto surfaces = ProcessResizeRequests();
     SyncSurfacesWithFrameContext(context, surfaces);
+
+    // Drain and dispatch input from the accumulator to the engine's input
+    // system.
+    for (auto* view : view_manager_->GetAllViews()) {
+      const auto view_id = view->GetViewId();
+      auto batch = input_accumulator_->Drain(view_id);
+
+      const bool has_mouse = (batch.mouse_delta.dx != 0.0F) || (batch.mouse_delta.dy != 0.0F);
+      const bool has_wheel = (batch.scroll_delta.dx != 0.0F) || (batch.scroll_delta.dy != 0.0F);
+      const bool has_keys = !batch.key_events.empty();
+      const bool has_buttons = !batch.button_events.empty();
+      if (has_mouse || has_wheel || has_keys || has_buttons) {
+        LOG_F(INFO,
+          "EditorModule input: draining+dispatching view={} mouse(dx={},dy={}) wheel(dx={},dy={}) keys={} buttons={} pos(x={},y={})",
+          view_id.get(),
+          batch.mouse_delta.dx, batch.mouse_delta.dy,
+          batch.scroll_delta.dx, batch.scroll_delta.dy,
+          batch.key_events.size(), batch.button_events.size(),
+          batch.last_position.x, batch.last_position.y);
+      }
+
+      input_accumulator_adapter_->DispatchForView(view_id, batch);
+    }
 
     // After surface handling, execute frame-start commands related to views
     // with a strict ordering to avoid race conditions: destroy -> create -> rest.
@@ -259,6 +395,19 @@ namespace oxygen::interop::module {
     if (scene_ && !graphics_.expired() && view_manager_) {
       auto gfx = graphics_.lock();
 
+      const auto input_blob = context.GetInputSnapshot();
+      const auto input_snapshot = input_blob
+        ? std::static_pointer_cast<const input::InputSnapshot>(input_blob)
+        : std::shared_ptr<const input::InputSnapshot> {};
+
+      float dt_seconds =
+        std::chrono::duration<float>(context.GetGameDeltaTime().get()).count();
+      if (dt_seconds <= 0.0f) {
+        dt_seconds =
+          std::chrono::duration<float>(context.GetFrameTiming().frameDuration)
+            .count();
+      }
+
       // Iterate over all registered views
       for (auto* view : view_manager_->GetAllRegisteredViews()) {
         if (!view) {
@@ -271,6 +420,13 @@ namespace oxygen::interop::module {
 
         view->SetRenderingContext(view_ctx);
         view->OnSceneMutation();
+
+        if (input_snapshot) {
+          auto focus_point = view->GetFocusPoint();
+          viewport_navigation_->Apply(view->GetCameraNode(), *input_snapshot,
+            focus_point, dt_seconds);
+          view->SetFocusPoint(focus_point);
+        }
         view->ClearPhaseRecorder();
       }
     }
@@ -334,12 +490,14 @@ namespace oxygen::interop::module {
     co_return;
   }
 
-  auto EditorModule::CreateScene(std::string_view name, std::function<void(bool)> onComplete) -> void {
+  auto EditorModule::CreateScene(std::string_view name,
+    std::function<void(bool)> onComplete) -> void {
     LOG_F(INFO, "EditorModule::CreateScene called: name='{}'", name);
     // Marshal scene creation to the engine thread by enqueuing a command
     // that will execute during FrameStart. Provide onComplete callback so
     // callers can observe when the scene has been created.
-    auto cmd = std::make_unique<CreateSceneCommand>(this, std::string(name), std::move(onComplete));
+    auto cmd = std::make_unique<CreateSceneCommand>(this, std::string(name),
+      std::move(onComplete));
     Enqueue(std::move(cmd));
   }
 

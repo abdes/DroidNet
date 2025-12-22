@@ -67,7 +67,7 @@ Standard 3D editor controls based on UE5/Maya/Blender conventions:
 | **Orbit** | `Alt + LMB` drag | Rotate camera around pivot point (tumble) |
 | **Pan** | `Alt + MMB` drag | Move camera parallel to view plane (track) |
 | **Zoom** | `Mouse Wheel` | Dolly camera toward/away from pivot |
-| **Fly Mode** | `RMB` hold + `WASD` | Free camera movement (FPS-style) |
+| **Fly Mode** | `RMB` hold + mouse look + `WASD` (`Q/E` up/down, `Shift` fast) | Free camera movement (FPS-style). `Alt + RMB` is reserved for dolly. |
 | **Zoom Alt** | `Alt + RMB` drag | Alternative zoom via mouse drag |
 
 ### 4.2 Selection
@@ -187,33 +187,12 @@ We use the standard **IMC priority system** to manage conflicts:
 
 ### 5.3 Camera Control & View Matrix Updates
 
-The `EditorCameraController` processes `Editor.Camera.*` actions during the engine's `kInput` phase. It retrieves action values from the global `InputSystem` snapshot.
+Viewport navigation is implemented as a **feature compositor** in the interop/editor layer.
 
-1. **State Tracking**: The controller maintains the camera's state (Position, Rotation, Pivot, Zoom Level) for each `ViewId`.
-2. **Matrix Calculation**: During `OnInput`, the controller calculates the new **View Matrix** based on the accumulated deltas from the local `InputSystem`'s actions.
-3. **ViewContext Update**: The updated matrix is pushed to the `ViewContext` associated with the `ViewId`.
-
-   ```cpp
-   void EditorCameraController::OnInput(ViewId viewId, const InputSnapshot& snapshot) {
-       auto& cam = cameras_[viewId];
-
-       // Accumulate deltas from global InputSystem actions (only active if IMC_Editor_Viewport is active)
-       Axis2D orbitDelta = snapshot.GetActionValue<Axis2D>("Editor.Camera.Orbit");
-       Axis2D panDelta = snapshot.GetActionValue<Axis2D>("Editor.Camera.Pan");
-       Axis1D zoomDelta = snapshot.GetActionValue<Axis1D>("Editor.Camera.Zoom");
-
-       // Update camera state
-       cam.Orbit(orbitDelta);
-       cam.Pan(panDelta);
-       cam.Zoom(zoomDelta);
-
-       // Sync with ViewContext
-       auto viewContext = viewManager_->GetViewContext(viewId);
-       viewContext->SetViewMatrix(cam.GetViewMatrix());
-   }
-   ```
-
-4. **Renderer Synchronization**: The `Renderer` uses the `ViewContext`'s matrix during the next frame's draw call, ensuring that the viewport reflects the latest input before rendering begins.
+1. **Per-view state**: Each `EditorView` owns a camera `SceneNode` and a mutable `focus_point` (pivot) used by orbit/dolly/zoom and updated by pan.
+1. **Input consumption**: `EditorViewportNavigation` registers and activates `IMC_Editor_Viewport`, then each frame calls `feature->Apply(...)` for each navigation feature (Orbit/Pan/Dolly/WheelZoom/Fly) using the per-frame `InputSnapshot`.
+1. **Transform updates (critical constraint)**: Navigation runs during scene mutation, so it must avoid APIs that require up-to-date world transforms. The implementation updates the camera using **local-only** operations (`SetLocalPosition`, `SetLocalRotation`) and computes look rotations locally (no `Transform::LookAt()` / no world queries).
+1. **Renderer synchronization**: The renderer computes final world transforms and view/projection data later in the frame. Because navigation only marks local transforms dirty, it integrates cleanly with the renderer's single authoritative world-transform update pass.
 
 ### 5.4 Selection via GPU Picking
 
@@ -391,45 +370,47 @@ To provide a professional feel, the cursor behavior must change based on the act
 
 ## 7. Implementation Plan
 
-1. [ ] **Refactor `InputEvents` Component**:
+The plan below is ordered to optimize for **quick verification** of the core pipeline:
+
+> WinUI `Viewport` → interop/EditorModule → injected `InputEvents` → `InputSystem` → `EditorViewportNavigation` mutates per-view camera `SceneNode` transforms.
+
+Picking/selection/gizmos remain part of the design, but are explicitly deferred to a later phase.
+
+### Phase 1 (Fast Path): Camera navigation end-to-end
+
+1. [X] **Refactor `InputEvents` Component**:
    * Modify `Oxygen.Engine/src/Oxygen/Platform/InputEvents.h` to support injected events.
    * Expose `ForWrite()` on `InputEvents` to allow external producers to send events.
    * Ensure `ProcessPlatformEvents` (the SDL poller) is skipped or disabled when `PlatformConfig.headless` is true so the component does not subscribe to the `EventPump` in hosted mode.
    * Make the selection of pull vs injected-mode **automatic** based on `PlatformConfig.headless` (no public mode toggle).
 
-2. [ ] **Platform testing**:
+2. [X] **Platform testing**:
    * Add unit tests for the Platform, following OxCo testing patterns for coroutines.
 
-3. [ ] **Implement Input Accumulator**:
-   * Create a host-side `InputAccumulator` class (e.g., in the interop layer) to buffer raw input data from the host/WinUI.
-   * Implement **Coalescing Logic**: Sum mouse deltas (`dx`, `dy`) and scroll deltas to ensure one update per frame.
-   * Ensure thread safety (mutex) as WinUI writes and the engine reads.
-   * **Delta Accumulation Details**:
-     * `InputAccumulator` maintains per-frame staging buffers:
-       * `Vector2 mouse_delta_accum_` — Sum of all pointer move deltas since last drain.
-       * `float scroll_delta_accum_` — Sum of all mouse wheel deltas since last drain.
-       * `std::vector<KeyStateChange> key_events_` — Ordered list of key press/release events (NOT accumulated, preserved in order).
-       * `std::vector<ButtonStateChange> button_events_` — Ordered list of mouse button press/release events (NOT accumulated).
-     * **WinUI→Accumulator** (UI Thread):
-       * `PointerMoved`: `mouse_delta_accum_ += delta` (thread-safe write).
-       * `PointerWheelChanged`: `scroll_delta_accum_ += wheel_delta`.
-       * `KeyDown/KeyUp`: Append to `key_events_`.
-       * `PointerPressed/PointerReleased`: Append to `button_events_`.
-     * **Accumulator→Engine** (host frame-start / dispatch, Engine Thread):
-       * Drain accumulator (acquire lock, copy values, reset accumulators).
-       * Generate single `InputEvent::MouseMove` with accumulated `mouse_delta_accum_`.
-       * Generate single `InputEvent::MouseWheel` with accumulated `scroll_delta_accum_`.
-       * Generate `InputEvent::Key` for each key event (preserve order).
-       * Generate `InputEvent::MouseButton` for each button event (preserve order).
-       * Send all events to the engine via the `InputEvents::ForWrite()` writer.
-   * **Focus-Loss Handling**:
-     * When a viewport loses focus (`LostFocus` event in WinUI):
-       * Acquire lock on accumulator for that viewport.
-       * Discard accumulated `mouse_delta_accum_` and `scroll_delta_accum_`.
-       * Keep key/button events (state transitions must be preserved).
-     * **Rationale**: Prevents stale accumulated deltas from being applied after focus returns.
-   * **Testing**: Use a direct-injection test harness to validate the accumulator and injection behavior; do not require `EditorModule` in tests.
-4. [ ] **Implement Input Dispatcher**:
+3. [X] **Implement Input Accumulator**:
+   * Implemented the host-side `InputAccumulator` as part of the interop/EditorModule layer to buffer and coalesce raw input before injection into the engine.
+   * Coalescing logic (implemented):
+     * **Mouse/Scroll**: `mouse_delta` and `scroll_delta` are summed per-viewport; the **last** `position` seen is recorded and forwarded with mouse/wheel events.
+     * **Key/Button events**: Preserved in order and forwarded as-is.
+   * Thread-safety: per-viewport `ViewportAccumulator` protected by a mutex and the views map guarded by `map_mutex_` (implemented via `EnsureViewport`).
+   * Drain/View semantics (implemented):
+     * `AccumulatedInput Drain(ViewId view)` returns an `AccumulatedInput` where `mouse_delta`, `scroll_delta`, `last_position` are copied and `key_events`/`button_events` are moved out (via `std::move`).
+     * After `Drain`, `mouse_delta`, `scroll_delta`, and `last_position` are reset to defaults; key/button containers are moved so the viewport no longer owns the drained events.
+   * Focus loss (implemented): `OnFocusLost(ViewId)` clears the accumulated deltas (mouse + scroll) but preserves ordered key/button events.
+   * Adapter & forwarding (implemented): `InputAccumulatorAdapter::DispatchForView` forwards `mouse_delta`/`scroll_delta` together with `last_position` to an `IInputWriter`, which the `EditorModule` implements to send engine `InputEvent`s.
+   * Managed bridge (implemented): `OxygenInput` pushers convert managed event structs to native `Editor*Event` and call the `Push*` methods on the accumulator.
+   * Tests added (native MSTest): `projects/Oxygen.Editor.Interop/test/native/src/InputAccumulator_native_test.cpp` includes:
+     * `DrainAggregatesMotionAndKeys`
+     * `DrainClearsAccumulator`
+     * `EventsAreScopedToView`
+     * `MouseWheelAggregationAndPosition`
+     * `ButtonEventsOrdering`
+     * `MultipleKeyEventsOrdering`
+     * `OnFocusLostClearsDeltasKeepsEvents`
+     * `DrainEmptyReturnsNothing`
+   * Test results: all tests pass locally (8/8) — validating the implemented behavior and adapter dispatch.
+
+4. [X] **Implement Input Dispatcher**:
    * In the host's frame-start/dispatch (or the interop layer's per-frame hook):
      * Drain the `InputAccumulator`.
      * Convert raw data to `platform::InputEvent`.
@@ -437,10 +418,42 @@ To provide a professional feel, the cursor behavior must change based on the act
    * In engine modules' input phase (register for `kInput`):
      * Manage IMC activation/deactivation based on current mode.
 
-5. [ ] **Update EngineRunner (Interop)**:
-   * Expose methods `SendMouseMove`, `SendMouseButton`, `SendKey`, `SendWheel`.
-   * Forward these calls to `EditorModule` which will send them to the engine via the `InputEvents::ForWrite()` writer.
-   * **Pick Request API** (matches `CreateScene`/`CreateViewAsync` pattern):
+5. [X] **Define minimal editor navigation actions + mappings** (no tools/picking/selection yet):
+   * Create `IMC_Editor_Viewport` containing only the navigation-related inputs used by the compositor:
+     * `Editor.Modifier.Alt` (`LeftAlt` / `RightAlt`)
+     * `Editor.Mouse.LeftButton`, `Editor.Mouse.MiddleButton`, `Editor.Mouse.RightButton`
+     * `Editor.Mouse.Delta` (`MouseXY`)
+     * `Editor.Camera.Zoom` (`MouseWheelY`)
+     * `Editor.Fly.W/A/S/D/Q/E` + `Editor.Fly.Shift`
+   * Keep any game IMCs deactivated while in Editing mode.
+   * Defer all bindings from §4.2–§4.5 (selection, gizmo modes, utilities) until Phase 2.
+
+6. [X] (CANCELED) BAD TASK - **Update EngineRunner (Interop) — navigation only**:
+  This task is intentionally canceled. Navigation input already flows through the existing interop input bridge (`OxygenInput` → `InputAccumulator` → `InputEvents::ForWrite()` via `EditorModule`). Adding parallel `EngineRunner::Send*` methods would duplicate the pipeline and invite divergence.
+
+7. [ ] **Implement WinUI viewport event handlers — navigation only**:
+   * In `Viewport.xaml.cs`, bind `Pointer*`, `Key*`, and focus events.
+   * Implement **Focus Management**:
+     * Request focus on click.
+     * On `LostFocus`: call `OnFocusLost(viewId)` to clear accumulated mouse/scroll deltas for this viewport (preserve key/button events).
+   * Implement **Hover Tracking**: maintain `last_hovered_viewport_id` for scroll routing.
+   * Implement **Cursor Management** for camera manipulation (orbit/pan/zoom/fly):
+     * On navigation drag start (e.g., `Alt+LMB`/`Alt+MMB`/`Alt+RMB`): hide cursor and restore it on release.
+   * Do **not** implement pick requests, mouse constraints, or selection callbacks in Phase 1.
+
+8. [X] **Implement viewport navigation compositor**:
+  Implemented `EditorViewportNavigation` and per-action features (`Orbit`, `Pan`, `Dolly`, `WheelZoom`, `Fly`). Navigation is applied during `EditorModule::OnSceneMutation` using `InputSnapshot` and a per-view `focus_point`, and updates the camera via local-only transforms to respect the renderer-owned world transform update pass.
+
+### Phase 1.5 (Leftovers): Pivot and multi-viewport
+
+* [ ] **Focus/Pivot: make `focus_point` meaningful (not default origin)**. Add an explicit "has pivot" state per `EditorView` (or equivalent) so we can distinguish between a real pivot and the default. Implement a first-pass pivot initialization rule for new views (e.g., set `focus_point` in front of the camera at a reasonable default distance, or derive it from initial scene contents once available). When selection/picking is introduced (Phase 2), update `focus_point` to the selection center and (optionally) adjust camera radius.
+
+* [ ] **Multi-viewport: ensure navigation applies to the correct view only**. Short-term: track `active_view_id` (focused viewport) and apply navigation only to that view during `OnSceneMutation`. Long-term (correct architecture): make action evaluation window-scoped so the `InputSystem` can produce a per-view (per-window) snapshot, or provide a query API that filters action state/transitions by `WindowId`. Verify scroll/hover routing and focus rules (keyboard to focused viewport; wheel to last-hovered viewport).
+
+### Phase 2 (Deferred): Picking, selection, gizmos, snapping
+
+1. [ ] **Update EngineRunner (Interop) — picking API** (deferred):
+   * Add **Pick Request API** (matches `CreateScene`/`CreateViewAsync` pattern):
 
      ```cpp
      void RequestPick(
@@ -456,75 +469,20 @@ To provide a professional feel, the cursor behavior must change based on the act
      * `ViewId view_id` — originating viewport.
      * `Vector2 screen_axis_direction` — if gizmo part: axis projected to screen space (normalized).
      * `bool is_gizmo` — true if entity is gizmo part.
-   * **Implementation**: `RequestPick` enqueues `PickCommand` to EditorModule command queue. Command executes in OnPreRender, invokes callback when GPU pick completes.
 
-6. [ ] **Implement WinUI Event Handlers**:
-   * In `Viewport.xaml.cs`, bind `Pointer*`, `Key*`, and focus events.
-   * Implement **Focus Management**:
-     * Request focus on click.
-     * On `LostFocus`: Clear accumulated mouse/scroll deltas for this viewport (preserve key/button events).
-   * Implement **Cursor Management** (Local WinUI State):
-     * Track orbit/pan state by detecting `Alt+LMB` press/release:
-       * On `Alt+LMB` press: Save `cursor_saved_pos`, set `CoreWindow.PointerCursor = null`.
-       * On `Alt+LMB` release: Restore position and cursor.
-   * Implement **Pick Request** (with per-request callback):
-     * On `PointerPressed`:
+2. [ ] **Implement GPU-Based Picking** (deferred; designed in `editor-artifacts-rendering.md` §5.3):
+    * `RequestPick` enqueues `PickCommand` with stored callback.
+    * Execute during `OnPreRender`, read back 1–2 frames later.
+    * Apply timeout/invalidation rules from §6.3.
 
-       ```csharp
-       EngineRunner.RequestPick(viewId, cursorPos, PickType.Click, result => {
-           if (result.is_gizmo) {
-               active_constraint = result.screen_axis_direction;
-           } else if (result.entity_id != 0) {
-               // Scene object picked - trigger selection
-               UpdateSelection(result.entity_id);
-           }
-       });
-       ```
+3. [ ] **Define remaining input actions and mappings** (deferred):
+    * Add bindings from §4.2–§4.5 (selection, gizmo modes, viewport utilities).
+    * Add `IMC_Editor_Gizmos` and `IMC_Editor_Tools` on top of navigation.
 
-   * Implement **Mouse Constraint** (applied in `PointerMoved`):
-     * If `active_constraint` exists, project delta onto constraint.
-     * On `PointerReleased`: Clear `active_constraint`.
-   * Implement **Hover Tracking**: Maintain `last_hovered_viewport_id` for scroll routing.
-
-7. [ ] **Define Input Actions and Mappings**:
-   * Implement all bindings from §4 (Editor Input Bindings).
-   * Create IMCs: `IMC_Editor_Navigation`, `IMC_Editor_Gizmos`, `IMC_Editor_Tools`.
-   * Map actions to inputs per binding tables (§4.1-§4.5).
-
-8. [ ] **Implement EditorCameraController**:
-   * Create class to consume `Editor.Camera.*` actions.
-   * Update `ViewContext` view matrix based on deltas.
-   * Handle "Fly Mode" (WASD + RMB) logic.
-   * **Note**: Cursor hiding is handled by WinUI layer when it detects `Alt+LMB` press. Engine just processes camera deltas.
-
-9. [ ] **Implement GizmoManager**:
-    * Create `GizmoManager` class.
-    * Register `IMC_Editor_Gizmos` at startup (persistent, not dynamically activated).
-    * Implement gizmo action handlers:
-      * `Editor.Gizmo.BeginDrag`: Check `hovered_gizmo_part_ != 0` before consuming input.
-      * `Editor.Gizmo.ContinueDrag`: Consume deltas only if drag is active.
-    * **Hover Detection**:
-      * Process hover pick results (updated every frame in OnPreRender).
-      * Maintain `hovered_gizmo_part_` state.
-    * **Transform Snapping**:
-      * Read `EditorSettings` for grid/angle snap configuration.
-      * In `ApplyDrag()`, quantize transforms based on snap settings.
-      * Check `InputSystem::GetKeyState(Key::Ctrl)` for snap toggle (matches §4.4).
-    * **Note**: Mouse constraint is handled by WinUI layer (see §6.2). Engine receives pre-constrained deltas.
-
-10. [ ] **Implement GPU-Based Picking** (Note: Already designed in `editor-artifacts-rendering.md` §5.3):
-    * **Pick Command**: `RequestPick` enqueues `PickCommand` with stored callback.
-    * **Execution** (OnPreRender phase):
-      * Generate GPU pick request (1×1 viewport at cursor position).
-      * Render MainScene + GizmoScene with ID shader.
-      * Readback result (1-2 frames later).
-    * **Result Construction**:
-      * `entity_id`: From readback.
-      * `is_gizmo`: Check if entity is in gizmo scene.
-      * `screen_axis_direction`: If gizmo, get axis from scene node, project to screen space using view-projection matrix, return normalized.
-    * **Callback Invocation**: Invoke stored callback with `PickResult`.
-    * **Timeout Handling**: If >100ms since request, skip callback invocation, log warning.
-    * **Multi-Viewport**: Each request tagged with `view_id`, callback invoked with originating viewport's context.
+4. [ ] **Implement GizmoManager** (deferred):
+    * Register `IMC_Editor_Gizmos` at startup.
+    * Add hover detection (via GPU picking) + drag consumption.
+    * Add transform snapping (engine responsibility) and optional mouse constraint (WinUI responsibility) as described in §6.2.
 
 ## 8 Deliberate Omissions (No Bloat)
 

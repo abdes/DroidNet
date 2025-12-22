@@ -80,6 +80,37 @@ auto InputSystem::OnFrameStart(FrameContext& context) -> void
 
 auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
 {
+  // Per-frame pass: advance time for triggers using the game delta time.
+  //
+  // NOTE:
+  // Run this pass BEFORE draining events. Otherwise, transient axis mappings
+  // (mouse motion / wheel) that clear their local value after evaluation can
+  // be re-evaluated in this pass with a cleared (zero) value, overwriting the
+  // action's final value before the snapshot is frozen.
+  if (context.GetGameDeltaTime() > time::CanonicalDuration {}) {
+    for (const auto& [priority, is_active, mapping_context] :
+      std::ranges::reverse_view(mapping_contexts_)) {
+      if (is_active) {
+        if (mapping_context->Update(context.GetGameDeltaTime())) {
+          // Input is consumed
+          DLOG_F(1, "Stopping updates to mapping contexts (input consumed)");
+          // Flush staged input in remaining active contexts to avoid leaking
+          // stale staged events into subsequent frames.
+          auto it = std::ranges::find_if(mapping_contexts_,
+            [&mapping_context](const InputMappingContextEntry& e) {
+              return e.mapping_context.get() == mapping_context.get();
+            });
+          for (auto fit = mapping_contexts_.begin(); fit != it; ++fit) {
+            if (fit->is_active) {
+              fit->mapping_context->FlushPending();
+            }
+          }
+          break;
+        }
+      }
+    }
+  }
+
   // Drain all events from BroadcastChannel for this frame
   frame_events_.clear();
   while (auto event = input_reader_.TryReceive()) {
@@ -104,33 +135,6 @@ auto InputSystem::OnInput(FrameContext& context) -> co::Co<>
           // we must flush the remaining lower-priority contexts that would be
           // evaluated after it. In the forward-sorted list, those contexts are
           // the ones that come BEFORE the consumer.
-          auto it = std::ranges::find_if(mapping_contexts_,
-            [&mapping_context](const InputMappingContextEntry& e) {
-              return e.mapping_context.get() == mapping_context.get();
-            });
-          for (auto fit = mapping_contexts_.begin(); fit != it; ++fit) {
-            if (fit->is_active) {
-              fit->mapping_context->FlushPending();
-            }
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  // Per-frame pass: advance time for triggers using the game delta time.
-  // Skip this pass when delta time is zero to avoid immediately clearing
-  // transient motion/wheel values after micro-updates in the same frame.
-  if (context.GetGameDeltaTime() > time::CanonicalDuration {}) {
-    for (const auto& [priority, is_active, mapping_context] :
-      std::ranges::reverse_view(mapping_contexts_)) {
-      if (is_active) {
-        if (mapping_context->Update(context.GetGameDeltaTime())) {
-          // Input is consumed
-          DLOG_F(1, "Stopping updates to mapping contexts (input consumed)");
-          // Flush staged input in remaining active contexts to avoid leaking
-          // stale staged events into subsequent frames.
           auto it = std::ranges::find_if(mapping_contexts_,
             [&mapping_context](const InputMappingContextEntry& e) {
               return e.mapping_context.get() == mapping_context.get();

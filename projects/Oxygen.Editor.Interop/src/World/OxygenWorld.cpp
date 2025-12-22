@@ -6,7 +6,23 @@
 
 #pragma managed
 
-#include "pch.h"
+#include <array>
+#include <cstdint>
+#include <functional>
+#include <glm/fwd.hpp>
+#include <memory>
+#include <new>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <msclr/marshal.h>
+#include <msclr/marshal_cppstd.h>
+
+#include <Oxygen/EditorInterface/EngineContext.h>
+#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <Commands/CreateBasicMeshCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
@@ -21,9 +37,9 @@
 #include <Commands/UpdateTransformsForNodesCommand.h>
 #include <EditorModule/EditorModule.h>
 #include <EditorModule/NodeRegistry.h>
+#include <msclr/gcroot.h>
 #include <World/CommandFactory.h>
 #include <World/OxygenWorld.h>
-#include <msclr/gcroot.h>
 using namespace System::Threading::Tasks;
 
 using namespace oxygen::interop::module;
@@ -31,22 +47,22 @@ using namespace oxygen::interop::module;
 
 namespace Oxygen::Interop::World {
 
-namespace {
-  // Helper to build a native completion callback that posts into a managed
-  // TaskCompletionSource. The pointer is owned by the callback and deleted
-  // after invocation to avoid leaks.
-  static std::function<void(bool)> MakeTcsCallback(msclr::gcroot<System::Threading::Tasks::TaskCompletionSource<bool>^>* ptr) {
-    return [ptr](bool ok) mutable {
-      try {
-        (*ptr)->SetResult(ok);
-      }
-      catch (...) {
-        // swallow
-      }
-      delete ptr;
-    };
+  namespace {
+    // Helper to build a native completion callback that posts into a managed
+    // TaskCompletionSource. The pointer is owned by the callback and deleted
+    // after invocation to avoid leaks.
+    static std::function<void(bool)> MakeTcsCallback(msclr::gcroot<System::Threading::Tasks::TaskCompletionSource<bool>^>* ptr) {
+      return [ptr](bool ok) mutable {
+        try {
+          (*ptr)->SetResult(ok);
+        }
+        catch (...) {
+          // swallow
+        }
+        delete ptr;
+        };
+    }
   }
-}
 
   // Managed helper that invokes the editor-provided GUID callback on the engine
   // thread.
@@ -104,7 +120,8 @@ namespace {
       // Synchronously wait for async creation to complete to preserve
       // behavior of callers using the old synchronous API.
       auto task = CreateSceneAsync(name);
-      try { task->GetAwaiter().GetResult(); } catch (...) { /* swallow */ }
+      try { task->GetAwaiter().GetResult(); }
+      catch (...) { /* swallow */ }
     }
     catch (...) {
       // swallow
@@ -149,7 +166,8 @@ namespace {
     }
     catch (...) {
       // Ensure we don't leak the allocated pointer on error
-      try { delete tcs_ptr; } catch (...) {}
+      try { delete tcs_ptr; }
+      catch (...) {}
       tcs->SetResult(false);
     }
 

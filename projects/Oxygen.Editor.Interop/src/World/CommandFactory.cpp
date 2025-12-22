@@ -4,9 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#pragma unmanaged
+// This translation unit implements member functions on managed types.
+// It must be compiled as managed code.
+#pragma managed
 
-#include "pch.h"
+#include <array>
+#include <cstdint>
+#include <new>
+#include <string>
+#include <utility>
+#include <vector>
+
+//#ifdef _WIN32
+//#include <WinSock2.h> // include before any header that might include <windows.h>
+//#endif
+
+#include <glm/fwd.hpp>
+
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 #include <Commands/CreateBasicMeshCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>

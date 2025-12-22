@@ -8,6 +8,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Interop;
+using Oxygen.Interop.Input;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -140,6 +141,20 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     = null!; // will be initialized during engine initialization
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
+    public OxygenInput Input
+    {
+        get
+        {
+            _ = this.EnsureIsReadyOrRunning();
+            return field;
+        }
+
+        private set => field = value;
+    }
+    = null!; // will be initialized during engine initialization
+
+    /// <inheritdoc />
     public async ValueTask<bool> InitializeAsync(CancellationToken cancellationToken = default)
     {
         await this.initializationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -189,6 +204,7 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             }
 
             this.World = new OxygenWorld(this.engineContext);
+            this.Input = new OxygenInput(this.engineContext);
 
             this.LogContextReady();
             this.state = EngineServiceState.Ready;
@@ -398,6 +414,7 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
         {
             this.engineContext = null;
             this.World = null!;
+            this.Input = null!;
             this.LogContextDestroyed();
         }
     }

@@ -4,6 +4,7 @@
 
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Interop;
+using Oxygen.Interop.Input;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -105,6 +106,20 @@ public interface IEngineService : IAsyncDisposable
     /// </remarks>
     /// <throws cref="InvalidOperationException">>If used in an invalid state.</throws>
     public OxygenWorld World { get; }
+
+    /// <summary>
+    ///     Gets the input bridge instance associated with this engine service. This provides
+    ///     managed access to runtime input facilities of the native engine.
+    ///     May be null if the engine is not yet initialized.
+    /// </summary>
+    /// <remarks>
+    ///     Allowed only in the following states:
+    ///     <list type="bullet">
+    ///      <item><see cref="EngineServiceState.Ready"/></item>
+    ///      <item><see cref="EngineServiceState.Running"/></item>
+    ///     </list>
+    /// </remarks>
+    public OxygenInput Input { get; }
 
     /// <summary>
     ///     Initializes the runtime engine.

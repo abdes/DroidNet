@@ -11,6 +11,8 @@
 #include <optional>
 #include <string>
 
+#include <glm/vec3.hpp>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -116,6 +118,14 @@ namespace oxygen::interop::module {
     [[nodiscard]] auto GetWidth() const -> float { return width_; }
     [[nodiscard]] auto GetHeight() const -> float { return height_; }
 
+    [[nodiscard]] auto GetFocusPoint() const noexcept -> const glm::vec3& {
+      return focus_point_;
+    }
+
+    void SetFocusPoint(const glm::vec3& focus_point) noexcept {
+      focus_point_ = focus_point;
+    }
+
     // Renderer registration
     void RegisterWithRenderer(engine::Renderer& renderer);
     void UnregisterFromRenderer(engine::Renderer& renderer);
@@ -135,6 +145,8 @@ namespace oxygen::interop::module {
     bool initial_orientation_set_{ false };
     float width_{ 0.0f };
     float height_{ 0.0f };
+
+    glm::vec3 focus_point_{ 0.0f, 0.0f, 0.0f };
 
     scene::SceneNode camera_node_;
     ViewId view_id_{ kInvalidViewId };
