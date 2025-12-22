@@ -34,6 +34,7 @@ namespace oxygen::interop::module {
     auto Apply(oxygen::scene::SceneNode camera_node,
       const oxygen::input::InputSnapshot& input_snapshot,
       glm::vec3& focus_point,
+      float& ortho_half_height,
       float dt_seconds) noexcept -> void override;
 
   private:

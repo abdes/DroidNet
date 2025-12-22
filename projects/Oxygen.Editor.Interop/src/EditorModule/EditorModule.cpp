@@ -13,6 +13,7 @@
 #include <Commands/DestroySceneCommand.h>
 #include <Commands/DestroyViewCommand.h>
 #include <Commands/HideViewCommand.h>
+#include <Commands/SetViewCameraPresetCommand.h>
 #include <Commands/ShowViewCommand.h>
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/EditorCompositor.h>
@@ -453,26 +454,30 @@ namespace oxygen::interop::module {
           // Non-wheel navigation applies to the focused (active) viewport.
           if (active != kInvalidViewId && view_id == active) {
             auto focus_point = view->GetFocusPoint();
+            auto ortho_half_height = view->GetOrthoHalfHeight();
 
             // If the hovered view differs, keep wheel routing separate.
             if (hovered != kInvalidViewId && hovered != active) {
               viewport_navigation_->ApplyNonWheel(view->GetCameraNode(),
-                *input_snapshot, focus_point, dt_seconds);
+                *input_snapshot, focus_point, ortho_half_height, dt_seconds);
             }
             else {
               viewport_navigation_->Apply(view->GetCameraNode(),
-                *input_snapshot, focus_point, dt_seconds);
+                *input_snapshot, focus_point, ortho_half_height, dt_seconds);
             }
 
             view->SetFocusPoint(focus_point);
+            view->SetOrthoHalfHeight(ortho_half_height);
           }
 
           // Wheel navigation applies to the last-hovered viewport.
           if (hovered != kInvalidViewId && hovered != active && view_id == hovered) {
             auto focus_point = view->GetFocusPoint();
+            auto ortho_half_height = view->GetOrthoHalfHeight();
             viewport_navigation_->ApplyWheelOnly(view->GetCameraNode(),
-              *input_snapshot, focus_point, dt_seconds);
+              *input_snapshot, focus_point, ortho_half_height, dt_seconds);
             view->SetFocusPoint(focus_point);
+            view->SetOrthoHalfHeight(ortho_half_height);
           }
         }
         view->ClearPhaseRecorder();
@@ -624,6 +629,17 @@ namespace oxygen::interop::module {
   }
 
   void EditorModule::Enqueue(std::unique_ptr<EditorCommand> cmd) {
+    command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::SetViewCameraPreset(ViewId view_id,
+    CameraViewPreset preset) {
+    if (view_id == kInvalidViewId || !view_manager_) {
+      return;
+    }
+
+    auto cmd = std::make_unique<SetViewCameraPresetCommand>(
+      view_manager_.get(), view_id, preset);
     command_queue_.Enqueue(std::move(cmd));
   }
 

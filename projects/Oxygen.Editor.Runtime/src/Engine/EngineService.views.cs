@@ -43,4 +43,12 @@ public sealed partial class EngineService
         this.LogHideView(viewId);
         return await runner.TryHideViewAsync(this.engineContext, viewId).ConfigureAwait(true);
     }
+
+    /// <inheritdoc/>
+    public async Task<bool> SetViewCameraPresetAsync(ViewIdManaged viewId, CameraViewPresetManaged preset)
+    {
+        var runner = this.EnsureIsRunning();
+        this.LogSetViewCameraPreset(viewId, preset);
+        return await runner.TrySetViewCameraPresetAsync(this.engineContext, viewId, preset).ConfigureAwait(true);
+    }
 }

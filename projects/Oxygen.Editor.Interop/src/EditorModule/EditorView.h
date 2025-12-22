@@ -41,6 +41,24 @@ namespace oxygen {
 
 namespace oxygen::interop::module {
 
+  //! Viewport camera view presets.
+  enum class CameraViewPreset {
+    //! Perspective view (free camera).
+    kPerspective = 0,
+    //! Top orthographic view.
+    kTop,
+    //! Bottom orthographic view.
+    kBottom,
+    //! Left orthographic view.
+    kLeft,
+    //! Right orthographic view.
+    kRight,
+    //! Front orthographic view.
+    kFront,
+    //! Back orthographic view.
+    kBack,
+  };
+
   class ViewRenderer;
   // struct ViewContext; // Removed forward declaration
 
@@ -126,6 +144,24 @@ namespace oxygen::interop::module {
       focus_point_ = focus_point;
     }
 
+    //! Sets the camera to a predefined view preset.
+    /*!
+     Perspective keeps the current transform but ensures the camera component is
+     a PerspectiveCamera.
+
+     Orthographic presets (Top/Bottom/Left/Right/Front/Back) replace the camera
+     component with an OrthographicCamera and align the camera transform to
+     look at the current focus point.
+
+     @param preset The preset to apply.
+    */
+    void SetCameraViewPreset(CameraViewPreset preset);
+
+    //! Gets the last requested camera view preset.
+    [[nodiscard]] auto GetCameraViewPreset() const noexcept -> CameraViewPreset {
+      return camera_view_preset_;
+    }
+
     // Renderer registration
     void RegisterWithRenderer(engine::Renderer& renderer);
     void UnregisterFromRenderer(engine::Renderer& renderer);
@@ -133,6 +169,13 @@ namespace oxygen::interop::module {
     // Render graph customization
     void
       SetRenderGraph(std::shared_ptr<engine::Renderer::RenderGraphFactory> factory);
+
+  public:
+    //! Gets the current orthographic half-height used to derive extents.
+    auto GetOrthoHalfHeight() const noexcept -> float;
+
+    //! Sets the orthographic half-height used to derive extents.
+    auto SetOrthoHalfHeight(float half_height) noexcept -> void;
 
   private:
     void ResizeIfNeeded();
@@ -147,6 +190,9 @@ namespace oxygen::interop::module {
     float height_{ 0.0f };
 
     glm::vec3 focus_point_{ 0.0f, 0.0f, 0.0f };
+
+    CameraViewPreset camera_view_preset_{ CameraViewPreset::kPerspective };
+    float ortho_half_height_{ 10.0f };
 
     scene::SceneNode camera_node_;
     ViewId view_id_{ kInvalidViewId };

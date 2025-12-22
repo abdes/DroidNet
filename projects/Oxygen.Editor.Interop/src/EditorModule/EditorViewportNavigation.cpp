@@ -54,9 +54,11 @@ namespace oxygen::interop::module {
   auto EditorViewportNavigation::Apply(oxygen::scene::SceneNode camera_node,
     const oxygen::input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& ortho_half_height,
     float dt_seconds) noexcept -> void {
     for (auto& feature : features_) {
-      feature->Apply(camera_node, input_snapshot, focus_point, dt_seconds);
+      feature->Apply(camera_node, input_snapshot, focus_point, ortho_half_height,
+        dt_seconds);
     }
   }
 
@@ -64,12 +66,14 @@ namespace oxygen::interop::module {
     oxygen::scene::SceneNode camera_node,
     const oxygen::input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& ortho_half_height,
     float dt_seconds) noexcept -> void {
     for (auto& feature : features_) {
       if (feature.get() == wheel_zoom_feature_) {
         continue;
       }
-      feature->Apply(camera_node, input_snapshot, focus_point, dt_seconds);
+      feature->Apply(camera_node, input_snapshot, focus_point, ortho_half_height,
+        dt_seconds);
     }
   }
 
@@ -77,13 +81,14 @@ namespace oxygen::interop::module {
     oxygen::scene::SceneNode camera_node,
     const oxygen::input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
+    float& ortho_half_height,
     float dt_seconds) noexcept -> void {
     if (wheel_zoom_feature_ == nullptr) {
       return;
     }
 
     wheel_zoom_feature_->Apply(camera_node, input_snapshot, focus_point,
-      dt_seconds);
+      ortho_half_height, dt_seconds);
   }
 
 } // namespace oxygen::interop::module

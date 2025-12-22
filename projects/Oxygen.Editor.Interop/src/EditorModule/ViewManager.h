@@ -75,6 +75,9 @@ namespace oxygen::interop::module {
     auto GetAllViews() -> std::vector<EditorView*>; // All views
     auto GetAllRegisteredViews()
       -> std::vector<EditorView*>; // Only views in FrameContext
+
+    //! Applies a camera view preset to a specific view.
+    void SetCameraViewPreset(ViewId engine_id, CameraViewPreset preset);
     // Returns true if a transient frame context is currently set (OnFrameStart
     // has been called but FinalizeViews has not yet been called). Non-owning.
     bool HasActiveFrameContext() const;

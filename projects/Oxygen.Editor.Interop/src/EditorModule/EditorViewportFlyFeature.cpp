@@ -16,6 +16,8 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::interop::module {
@@ -27,7 +29,7 @@ namespace oxygen::interop::module {
       float base_speed_units_per_second = 5.0f;
       float fast_multiplier = 4.0f;
       float max_up_dot = 0.99f;
-      glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+      glm::vec3 up = oxygen::space::move::Up;
     };
 
     struct FlyState {
@@ -174,8 +176,13 @@ namespace oxygen::interop::module {
   auto EditorViewportFlyFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
     glm::vec3& /*focus_point*/,
+    float& /*ortho_half_height*/,
     float dt_seconds) noexcept -> void {
     if (!camera_node.IsAlive()) {
+      return;
+    }
+
+    if (camera_node.GetCameraAs<scene::OrthographicCamera>()) {
       return;
     }
 

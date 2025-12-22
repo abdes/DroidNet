@@ -10,11 +10,98 @@
 
 #include "EditorModule/EditorView.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include "EditorModule/ViewRenderer.h"
 
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+
 namespace oxygen::interop::module {
+
+namespace {
+
+[[nodiscard]] auto IsFinite(const glm::vec3& v) noexcept -> bool {
+  return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
+}
+
+[[nodiscard]] auto NormalizeSafe(const glm::vec3 v,
+  const glm::vec3 fallback) noexcept -> glm::vec3 {
+  const float len2 = glm::dot(v, v);
+  if (len2 <= std::numeric_limits<float>::epsilon()) {
+    return fallback;
+  }
+  return v / std::sqrt(len2);
+}
+
+[[nodiscard]] auto LookRotationFromPositionToTarget(
+  const glm::vec3& position,
+  const glm::vec3& target_position,
+  const glm::vec3& up_direction) noexcept -> glm::quat {
+  const glm::vec3 forward =
+    NormalizeSafe(target_position - position, glm::vec3(0.0f, 0.0f, -1.0f));
+  const glm::vec3 right =
+    NormalizeSafe(glm::cross(forward, up_direction), glm::vec3(1.0f, 0.0f, 0.0f));
+  const glm::vec3 up = glm::cross(right, forward);
+
+  // Build a rotation matrix with -Z as forward.
+  glm::mat4 look_matrix(1.0f);
+  look_matrix[0] = glm::vec4(right, 0.0f);
+  look_matrix[1] = glm::vec4(up, 0.0f);
+  look_matrix[2] = glm::vec4(-forward, 0.0f);
+
+  return glm::quat_cast(look_matrix);
+}
+
+[[nodiscard]] auto ResolvePresetForward(CameraViewPreset preset) noexcept
+  -> glm::vec3 {
+  // These are world-space directions from the focus point towards the camera.
+  // Engine conventions (see Oxygen/Core/Constants.h):
+  // - Right-handed
+  // - Z-up
+  // - World forward = -Y
+  switch (preset) {
+  case CameraViewPreset::kTop:
+    return oxygen::space::move::Up;
+  case CameraViewPreset::kBottom:
+    return oxygen::space::move::Down;
+  case CameraViewPreset::kLeft:
+    return oxygen::space::move::Left;
+  case CameraViewPreset::kRight:
+    return oxygen::space::move::Right;
+  case CameraViewPreset::kFront:
+    // "Front" view: camera is in +Y looking toward -Y.
+    return oxygen::space::move::Back;
+  case CameraViewPreset::kBack:
+    // "Back" view: camera is in -Y looking toward +Y.
+    return oxygen::space::move::Forward;
+  case CameraViewPreset::kPerspective:
+  default:
+    return oxygen::space::move::Back;
+  }
+}
+
+[[nodiscard]] auto ResolvePresetUp(CameraViewPreset preset) noexcept
+  -> glm::vec3 {
+  // Choose up vectors that keep screen orientation stable for each preset.
+  // For Top/Bottom, use +/-Y so right stays +X.
+  switch (preset) {
+  case CameraViewPreset::kTop:
+    return oxygen::space::move::Back;
+  case CameraViewPreset::kBottom:
+    return oxygen::space::move::Forward;
+  default:
+    return oxygen::space::move::Up;
+  }
+}
+
+} // namespace
 
 auto EditorView::Config::ResolveExtent() const -> SubPixelExtent {
   if (compositing_target.has_value() && compositing_target.value()) {
@@ -183,9 +270,11 @@ auto EditorView::OnPreRender(engine::Renderer &renderer) -> oxygen::co::Co<> {
     const glm::vec3 position =
       transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
 
-    const glm::vec3 forward = glm::normalize(focus_point_ - position);
-    const glm::vec3 up_dir = glm::vec3(0.0f, 1.0f, 0.0f);
-    const glm::vec3 right = glm::normalize(glm::cross(forward, up_dir));
+    const glm::vec3 forward =
+      NormalizeSafe(focus_point_ - position, oxygen::space::look::Forward);
+    const glm::vec3 up_dir = oxygen::space::move::Up;
+    const glm::vec3 right =
+      NormalizeSafe(glm::cross(forward, up_dir), oxygen::space::look::Right);
     const glm::vec3 up = glm::cross(right, forward);
 
     glm::mat4 look_matrix(1.0f);
@@ -347,24 +436,122 @@ void EditorView::UpdateCameraForFrame() {
     return;
   }
 
-  // Update camera aspect ratio and viewport
-  if (camera_node_.IsAlive()) {
-    auto cam_ref = camera_node_.GetCameraAs<scene::PerspectiveCamera>();
-    if (cam_ref) {
-      const float aspect =
-          (width_ > 0.0f && height_ > 0.0f) ? (width_ / height_) : 1.0f;
-      auto &cam = cam_ref->get();
-      cam.SetAspectRatio(aspect);
-      cam.SetViewport(ViewPort{
-          .top_left_x = 0.0f,
-          .top_left_y = 0.0f,
-          .width = width_,
-          .height = height_,
-          .min_depth = 0.0f,
-          .max_depth = 1.0f,
-      });
+  if (!camera_node_.IsAlive()) {
+    return;
+  }
+
+  const float aspect =
+    (width_ > 0.0f && height_ > 0.0f) ? (width_ / height_) : 1.0f;
+
+  const ViewPort vp{
+      .top_left_x = 0.0f,
+      .top_left_y = 0.0f,
+      .width = width_,
+      .height = height_,
+      .min_depth = 0.0f,
+      .max_depth = 1.0f,
+  };
+
+  if (auto cam_ref = camera_node_.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    auto& cam = cam_ref->get();
+    cam.SetAspectRatio(aspect);
+    cam.SetViewport(vp);
+    return;
+  }
+
+  if (auto cam_ref = camera_node_.GetCameraAs<scene::OrthographicCamera>(); cam_ref) {
+    auto& cam = cam_ref->get();
+    cam.SetViewport(vp);
+
+    // Keep ortho extents stable in screen-space by deriving width from aspect.
+    const float half_h = std::max(0.001f, ortho_half_height_);
+    const float half_w = half_h * std::max(0.001f, aspect);
+
+    // Keep near/far in a sane range.
+    // Using fixed planes can make orthographic presets appear empty if the
+    // camera is far from the focus point (everything gets clipped).
+    constexpr float kNear = 0.1f;
+    float far_plane = 1000.0f;
+    if (auto transform = camera_node_.GetTransform(); true) {
+      const glm::vec3 pos =
+        transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 0.0f));
+      const glm::vec3 focus = focus_point_;
+      const glm::vec3 d = pos - focus;
+      const float dist = std::sqrt(glm::dot(d, d));
+      if (std::isfinite(dist)) {
+        far_plane = std::max(far_plane, dist * 4.0f);
+      }
+    }
+    cam.SetExtents(-half_w, half_w, -half_h, half_h, kNear, far_plane);
+  }
+}
+
+void EditorView::SetCameraViewPreset(CameraViewPreset preset) {
+  camera_view_preset_ = preset;
+
+  if (!camera_node_.IsAlive()) {
+    return;
+  }
+
+  auto transform = camera_node_.GetTransform();
+
+  glm::vec3 focus = focus_point_;
+  if (!IsFinite(focus)) {
+    focus = glm::vec3(0.0f, 0.0f, 0.0f);
+    focus_point_ = focus;
+  }
+
+  const glm::vec3 position =
+    transform.GetLocalPosition().value_or(glm::vec3(0.0f, 0.0f, 5.0f));
+
+  const glm::vec3 offset = position - focus;
+  float radius = std::sqrt(glm::dot(offset, offset));
+  if (!std::isfinite(radius) || radius <= 0.001f) {
+    radius = 10.0f;
+  }
+
+  if (preset == CameraViewPreset::kPerspective) {
+    // Ensure the camera component is perspective.
+    if (!camera_node_.GetCameraAs<scene::PerspectiveCamera>()) {
+      camera_node_.ReplaceCamera(std::make_unique<scene::PerspectiveCamera>());
+    }
+    // Do not override the existing transform for perspective.
+    return;
+  }
+
+  // If we are switching from a perspective camera to an orthographic preset,
+  // initialize the orthographic size to approximately match the current view.
+  // This avoids surprising "empty" frames when the default ortho size is too
+  // small or too large for the current focus/radius.
+  if (auto cam_ref = camera_node_.GetCameraAs<scene::PerspectiveCamera>(); cam_ref) {
+    const float fov_y = cam_ref->get().GetFieldOfView();
+    if (std::isfinite(fov_y) && fov_y > 0.001f && std::isfinite(radius)) {
+      const float half_h = std::tan(fov_y * 0.5f) * radius;
+      if (std::isfinite(half_h)) {
+        ortho_half_height_ = std::max(0.001f, half_h);
+      }
     }
   }
+
+  // Orthographic presets: ensure the camera component is orthographic.
+  if (!camera_node_.GetCameraAs<scene::OrthographicCamera>()) {
+    camera_node_.ReplaceCamera(std::make_unique<scene::OrthographicCamera>());
+  }
+
+  // Align transform to the preset.
+  const glm::vec3 view_dir = NormalizeSafe(ResolvePresetForward(preset),
+    glm::vec3(0.0f, 0.0f, 1.0f));
+  const glm::vec3 new_position = focus + view_dir * radius;
+
+  const glm::vec3 up = ResolvePresetUp(preset);
+  const glm::quat rot = LookRotationFromPositionToTarget(new_position, focus, up);
+
+  (void)transform.SetLocalPosition(new_position);
+  (void)transform.SetLocalRotation(rot);
+
+  // Mark initial orientation as set so OnPreRender doesn't re-orient using
+  // the old (pre-preset) data.
+  initial_orientation_set_ = true;
 }
 
 auto EditorView::GetViewId() const -> ViewId { return view_id_; }
@@ -375,6 +562,17 @@ auto EditorView::IsVisible() const -> bool { return visible_; }
 
 auto EditorView::GetCameraNode() const -> scene::SceneNode {
   return camera_node_;
+}
+
+auto EditorView::GetOrthoHalfHeight() const noexcept -> float {
+  return ortho_half_height_;
+}
+
+auto EditorView::SetOrthoHalfHeight(const float half_height) noexcept -> void {
+  if (!std::isfinite(half_height)) {
+    return;
+  }
+  ortho_half_height_ = std::max(0.001f, half_height);
 }
 
 void EditorView::RegisterWithRenderer(engine::Renderer &renderer) {

@@ -340,13 +340,37 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
     {
         var builder = new MenuBuilder(this.LoggerFactory);
 
+        void ApplyCameraPreset(CameraType type)
+        {
+            this.CameraType = type;
+
+            if (!this.AssignedViewId.IsValid)
+            {
+                return;
+            }
+
+            var preset = type switch
+            {
+                CameraType.Perspective => CameraViewPresetManaged.Perspective,
+                CameraType.Top => CameraViewPresetManaged.Top,
+                CameraType.Bottom => CameraViewPresetManaged.Bottom,
+                CameraType.Left => CameraViewPresetManaged.Left,
+                CameraType.Right => CameraViewPresetManaged.Right,
+                CameraType.Front => CameraViewPresetManaged.Front,
+                CameraType.Back => CameraViewPresetManaged.Back,
+                _ => CameraViewPresetManaged.Perspective,
+            };
+
+            _ = this.EngineService.SetViewCameraPresetAsync(this.AssignedViewId, preset);
+        }
+
         _ = builder
-            .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => this.CameraType = CameraType.Perspective))
+            .AddRadioMenuItem("Perspective", "CameraType", this.CameraType == CameraType.Perspective, new RelayCommand(() => ApplyCameraPreset(CameraType.Perspective)))
             .AddSeparator();
 
         foreach (var type in new[] { CameraType.Top, CameraType.Bottom, CameraType.Left, CameraType.Right, CameraType.Front, CameraType.Back })
         {
-            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => this.CameraType = type));
+            _ = builder.AddRadioMenuItem(type.ToString(), "CameraType", this.CameraType == type, new RelayCommand(() => ApplyCameraPreset(type)));
         }
 
         return builder.Build();

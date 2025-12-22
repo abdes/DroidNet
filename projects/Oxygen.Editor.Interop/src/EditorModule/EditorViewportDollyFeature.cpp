@@ -16,6 +16,8 @@
 #include <glm/mat4x4.hpp>
 #include <limits>
 
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 namespace oxygen::interop::module {
@@ -28,7 +30,7 @@ namespace oxygen::interop::module {
       float max_radius = 100000.0f;
       float max_abs_pixels_per_frame = 500.0f;
       float max_abs_log_zoom_per_frame = 1.5f;
-      glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+      glm::vec3 up = oxygen::space::move::Up;
     };
 
     [[nodiscard]] auto ComputeMaxRadius(scene::SceneNode camera_node,
@@ -150,8 +152,12 @@ namespace oxygen::interop::module {
   auto EditorViewportDollyFeature::Apply(scene::SceneNode camera_node,
     const input::InputSnapshot& input_snapshot,
     glm::vec3& focus_point,
-    float /*dt_seconds*/) noexcept -> void {
+    float& /*ortho_half_height*/, float /*dt_seconds*/) noexcept -> void {
     if (!camera_node.IsAlive()) {
+      return;
+    }
+
+    if (camera_node.GetCameraAs<scene::OrthographicCamera>()) {
       return;
     }
 
