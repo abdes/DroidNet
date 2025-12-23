@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using Oxygen.Assets.Model;
 using Oxygen.Assets.Resolvers;
 
 namespace Oxygen.Assets.Tests;
@@ -28,7 +29,7 @@ public sealed class GeneratedAssetResolverTests
         var result = resolver.CanResolve(authority);
 
         // Assert
-        result.Should().BeTrue();
+        _ = result.Should().BeTrue();
     }
 
     [TestMethod]
@@ -44,7 +45,7 @@ public sealed class GeneratedAssetResolverTests
         var result = resolver.CanResolve(authority);
 
         // Assert
-        result.Should().BeFalse();
+        _ = result.Should().BeFalse();
     }
 
     [TestMethod]
@@ -62,14 +63,14 @@ public sealed class GeneratedAssetResolverTests
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().BeOfType<GeometryAsset>();
-        result!.Uri.Should().Be(uri);
+        _ = result.Should().NotBeNull();
+        _ = result.Should().BeOfType<GeometryAsset>();
+        _ = result!.Uri.Should().Be(uri);
         var geometry = (GeometryAsset)result;
-        geometry.Lods.Should().HaveCount(1);
-        geometry.Lods[0].LodIndex.Should().Be(0);
-        geometry.Lods[0].SubMeshes.Should().HaveCount(1);
-        geometry.Lods[0].SubMeshes[0].Name.Should().Be("Main");
+        _ = geometry.Lods.Should().ContainSingle();
+        _ = geometry.Lods[0].LodIndex.Should().Be(0);
+        _ = geometry.Lods[0].SubMeshes.Should().ContainSingle();
+        _ = geometry.Lods[0].SubMeshes[0].Name.Should().Be("Main");
     }
 
     [TestMethod]
@@ -83,9 +84,9 @@ public sealed class GeneratedAssetResolverTests
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
-        result.Should().NotBeNull();
-        result.Should().BeOfType<MaterialAsset>();
-        result!.Uri.Should().Be(uri);
+        _ = result.Should().NotBeNull();
+        _ = result.Should().BeOfType<MaterialAsset>();
+        _ = result!.Uri.Should().Be(uri);
     }
 
     [TestMethod]
@@ -99,7 +100,7 @@ public sealed class GeneratedAssetResolverTests
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
-        result.Should().BeNull();
+        _ = result.Should().BeNull();
     }
 
     [TestMethod]
@@ -113,6 +114,6 @@ public sealed class GeneratedAssetResolverTests
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
 
         // Assert
-        result.Should().BeNull();
+        _ = result.Should().BeNull();
     }
 }
