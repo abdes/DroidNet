@@ -51,7 +51,13 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
                 "Id": "{{projectInfo.Id}}",
                 "Name": "name",
                 "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
-                "Thumbnail": "Media/Preview.png"
+                "Thumbnail": "Media/Preview.png",
+                "MountPoints": [
+                    {
+                        "Name": "Content",
+                        "RelativePath": "Content"
+                    }
+                ]
               }
               """;
 
@@ -178,15 +184,13 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         _ = scenesFolderMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
         _ = sceneDocumentMock.Setup(d => d.Name).Returns("scene1.scene");
 
-        // Provide valid scene JSON so Scene.FromJson can deserialize and be added to the project
-        const string sceneJson = /*lang=json,strict*/
-            """
-            {
-              "Name": "scene1",
-              "Nodes": []
-            }
-            """;
-        _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
+                // Provide valid scene JSON via the real serializer (keeps the test aligned with the schema)
+                var sceneToSerialize = new Scene(new Project(projectInfo) { Name = projectInfo.Name }) { Name = "scene1" };
+                var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(sceneToSerialize.Project);
+                using var stream = new System.IO.MemoryStream();
+                await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
+                var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+                _ = sceneDocumentMock.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>())).ReturnsAsync(sceneJson);
         _ = sceneDocumentMock.Setup(d => d.ExistsAsync()).ReturnsAsync(value: true);
 
         // Act
@@ -253,17 +257,14 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
         var project = new Project(projectInfo) { Name = projectInfo.Name };
         var scene = new Scene(project) { Name = "scene" };
-        const string sceneJson =
-            """
-            {
-                "Name": "scene",
-                "Nodes": [
-                    {
-                        "Name": "node1"
-                    }
-                ]
-            }
-            """;
+
+        // Serialize a scene with one root node using the real serializer.
+        var sceneToSerialize = new Scene(project) { Name = "scene" };
+        sceneToSerialize.RootNodes.Add(new SceneNode(sceneToSerialize) { Name = "node1" });
+        var serializer = new Oxygen.Editor.World.Serialization.SceneSerializer(project);
+        using var stream = new System.IO.MemoryStream();
+        await serializer.SerializeAsync(stream, sceneToSerialize).ConfigureAwait(false);
+        var sceneJson = System.Text.Encoding.UTF8.GetString(stream.ToArray());
         var documentMock = new Mock<IDocument>();
         var projectFolderMock = new Mock<IFolder>();
         var scenesFolderMock = new Mock<IFolder>();

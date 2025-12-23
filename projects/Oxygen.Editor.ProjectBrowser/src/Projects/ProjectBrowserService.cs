@@ -259,7 +259,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
                     node["Name"] = newName;
 
                     // Set Id to a new GUID
-                    node["Id"] = System.Guid.NewGuid().ToString();
+                    node["Id"] = System.Guid.NewGuid().ToString("D");
 
                     // Write back with indentation
                     var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };

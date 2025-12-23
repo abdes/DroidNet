@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Oxygen.Editor.Projects** module provides workspace and project file management for the Oxygen Editor. It handles the creation, loading, and saving of editor projects ( `.oxyproj` files), managing project metadata, and orchestrating the persistence of world scenes to disk.
+The **Oxygen.Editor.Projects** module provides workspace and project file management for the Oxygen Editor. It handles loading and saving project metadata (`Project.oxy`), discovering scene files, and orchestrating persistence of editor world scenes to disk.
 
 This module sits **above** the `Oxygen.Editor.World` domain model, providing file I/O, project lifecycle management, and workspace-level operations.
 
@@ -10,16 +10,16 @@ This module sits **above** the `Oxygen.Editor.World` domain model, providing fil
 
 The Projects module exists to:
 
-1. **Manage Project Files** - Create, load, and save `.oxyproj` workspace files
-2. **Persist Scenes** - Serialize/deserialize world scenes to/from JSON files
-3. **Track Project Metadata** - Project name, version, author, creation date, etc.
+1. **Manage Project Manifest** - Load and save `Project.oxy` (project metadata)
+2. **Persist Scenes** - Serialize/deserialize world scenes to/from scene JSON files
+3. **Track Project Metadata** - Project name, category, thumbnail, last-used time, mount points
 4. **Provide Lifecycle APIs** - High-level service for project operations
-5. **Enable Multi-Scene Projects** - Manage collections of scene files within a project
+5. **Enable Multi-Scene Projects** - Discover and manage scene files within a project folder
 
 ## Technology Stack
 
 | Technology | Version | Purpose |
-|-----------|---------|---------|
+| ---------- | ------- | ------- |
 | **.NET** | 9.0 (Windows 10.0.26100.0) | Target framework |
 | **C#** | 13 (preview) | Language with nullable reference types |
 | **System.Linq.Async** | Latest | Async LINQ operations |
@@ -65,7 +65,7 @@ graph TB
 ### Core Components
 
 | Component | Purpose | Key Responsibilities |
-|-----------|---------|---------------------|
+| --------- | ------- | -------------------- |
 | **`ProjectManagerService`** | High-level project API | Create, open, save, close projects |
 | **`Project`** | Workspace model | Metadata, scene references, serialization |
 | **`ProjectInfo`** | Project metadata | Name, version, author, timestamps |
@@ -77,21 +77,26 @@ graph TB
 
 An **Oxygen Project** is a workspace containing:
 
-```
-MyGame.oxyproj         ← Project file (metadata + scene list)
+```text
+Project.oxy            ← Project manifest (metadata + mount points)
 ├── Scenes/
-│   ├── Main.scene.json       ← Scene files
-│   ├── Menu.scene.json
-│   └── Level1.scene.json
+│   ├── Main.scene       ← Scene files
+│   ├── Menu.scene
+│   └── Level1.scene
 ├── Assets/                   ← (Future: Assets, prefabs, etc.)
 └── ProjectSettings/          ← (Future: Build settings, etc.)
 ```
 
-**Project File** (`.oxyproj`):
+**Project Manifest** (`Project.oxy`):
+
 - Project-wide metadata (name, version, author)
-- List of scenes (file paths relative to project root)
 - Unique project ID (GUID)
-- References `Oxygen.Editor.World` scenes by path
+- Authoring mount points (`MountPoints`: `Name` + project-relative `RelativePath`)
+
+Notes:
+
+- Scene files are **discovered** by enumerating the `Scenes/` folder (currently `*.scene`). They are not listed in `Project.oxy`.
+- `MountPoints` are persisted in `Project.oxy` and define project-local authoring mounts (e.g., `Content -> Content/`).
 
 ### Project Lifecycle
 
@@ -144,139 +149,107 @@ stateDiagram-v2
 
 ### Project File Format
 
-**File Extension**: `.oxyproj`
+**File Name**: `Project.oxy`
 
-**Example**:
 ```json
 {
   "Id": "8f2b2b16-3a4a-4f39-9f2c-2d9f3a1b2c3d",
   "Name": "MyGame",
-  "Version": "1.0.0",
-  "Author": "Game Developer",
-  "Created": "2025-01-15T10:30:00Z",
-  "Modified": "2025-01-20T14:45:00Z",
-  "Scenes": [
+  "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
+  "Thumbnail": "Media/Preview.png",
+  "MountPoints": [
     {
-      "Path": "Scenes/Main.scene.json",
-      "Name": "Main Scene"
-    },
-    {
-      "Path": "Scenes/Menu.scene.json",
-      "Name": "Menu"
+      "Name": "Content",
+      "RelativePath": "Content"
     }
   ]
 }
 ```
 
-**Required Fields:**
 - `Id` - Non-empty GUID (project identity)
 - `Name` - Project display name
+- `Category` - Project category identifier
+- `Thumbnail` - Optional project thumbnail path
+- `MountPoints` - Authoring mounts (`Name` + project-relative `RelativePath`)
 
-**Optional Fields:**
-- `Version`, `Author`, `Created`, `Modified`
-- `Scenes` - Array of scene references
+**Compatibility:**
 
-### Scene File References
+- If `MountPoints` is missing/empty, the loader defaults it to a single mount: `Content -> Content`.
 
-Projects do **not** embed scene content - they reference scene files:
+### Scene File Format
 
-```json
-{
-  "Scenes": [
-    {
-      "Path": "Scenes/Main.scene.json",  ← Relative path from project root
-      "Name": "Main Scene"                ← Display name (optional)
-    }
-  ]
-}
-```
+Scene files are JSON and are serialized/deserialized by `Oxygen.Editor.World.Serialization.SceneSerializer`.
+This module treats scenes as **lazy-loaded**:
 
-**Scene files** are managed by `Oxygen.Editor.World` serialization - see [World README](../Oxygen.Editor.World/README.md).
+- Project load discovers scene files and loads minimal scene metadata.
+- `LoadSceneAsync` loads the full scene graph (nodes/components).
+
+See [World README](../Oxygen.Editor.World/README.md).
 
 ## Usage
-
-### Creating a New Project
-
-```csharp
-var service = serviceProvider.GetRequiredService<IProjectManagerService>();
-
-var projectInfo = new ProjectInfo
-{
-    Name = "MyGame",
-    Author = "Developer",
-    Version = "1.0.0"
-};
-
-var project = await service.CreateProjectAsync(
-    path: @"C:\Projects\MyGame\MyGame.oxyproj",
-    info: projectInfo,
-    cancellationToken: ct
-);
-```
 
 ### Loading an Existing Project
 
 ```csharp
-var project = await service.LoadProjectAsync(
-    path: @"C:\Projects\MyGame\MyGame.oxyproj",
-    cancellationToken: ct
-);
+var service = serviceProvider.GetRequiredService<IProjectManagerService>();
+
+// 1) Load project metadata (Project.oxy) from a project folder
+var projectInfo = await service.LoadProjectInfoAsync(
+  projectFolderPath: @"C:\Projects\MyGame",
+  cancellationToken: ct);
+
+// 2) Load the project and discover scene files
+var ok = await service.LoadProjectAsync(projectInfo!);
+var project = service.CurrentProject;
 ```
 
 ### Loading Scenes
 
 ```csharp
-// Load specific scene
-var scene = await service.LoadSceneAsync(
-    project,
-    scenePath: "Scenes/Main.scene.json",
-    cancellationToken: ct
-);
+// Scenes are discovered on project load.
+var scene = project!.Scenes[0];
 
-// Load all scenes
-var allScenes = await service.LoadAllScenesAsync(project, ct);
+// Load full scene graph for one scene (replaces that entry in project.Scenes)
+var loaded = await service.LoadSceneAsync(scene);
 ```
 
 ### Saving Changes
 
 ```csharp
-// Save single scene
-await service.SaveSceneAsync(project, scene, ct);
+// Save project metadata back to Project.oxy
+await service.SaveProjectInfoAsync(project!.ProjectInfo);
 
-// Save project metadata
-await service.SaveProjectAsync(project, ct);
-
-// Save all (project + all open scenes)
-await service.SaveAllAsync(project, ct);
-```
-
-### Closing a Project
-
-```csharp
-await service.CloseProjectAsync(project, saveChanges: true, ct);
+// Save a scene back to Scenes/<name>.scene
+await service.SaveSceneAsync(loaded!);
 ```
 
 ## Design Patterns
 
 ### Service Pattern
+
 `ProjectManagerService` provides high-level facade over file I/O and serialization
 
 ### Repository Pattern
+
 Projects act as containers/references to scenes (repository of scene files)
 
 ### Metadata Separation
+
 Project metadata is separated from scene content for modularity
 
 ### Async-First
+
 All I/O operations are async for UI responsiveness
 
 ## Dependencies
 
 ### Project References
+
 - **`Oxygen.Editor.World`** - Domain models (Scene, SceneNode, etc.)
-- **`Oxygen.Storage`** - File system abstractions (IFileSystem)
+- **`Oxygen.Storage`** - File system abstractions (`IStorageProvider`, `IFolder`, `IDocument`)
 
 ### NuGet Packages
+
 - `Microsoft.Extensions.Logging.Abstractions` - Logging
 - `System.Linq.Async` - Async LINQ support
 
@@ -285,6 +258,7 @@ All I/O operations are async for UI responsiveness
 ⚠️ **Not intrinsically thread-safe** - Designed for use on the UI thread.
 
 **Recommendations:**
+
 - Call `ProjectManagerService` methods from **UI thread**
 - Use async/await to prevent blocking
 - Scene modifications should occur on UI thread (property bindings)
@@ -294,7 +268,7 @@ All I/O operations are async for UI responsiveness
 Common exceptions:
 
 | Exception | Cause | Mitigation |
-|-----------|-------|------------|
+| --------- | ----- | ---------- |
 | **FileNotFoundException** | Project/scene file missing | Validate paths, handle gracefully |
 | **JsonException** | Malformed JSON, missing required fields | Validate project files, repair if possible |
 | **UnauthorizedAccessException** | Insufficient permissions | Check file system permissions |
@@ -318,6 +292,7 @@ Common exceptions:
 ## Future Enhancements
 
 ### Planned Features
+
 - **Asset Management** - Track textures, models, shaders in project
 - **Prefab System** - Reusable scene node templates
 - **Build Settings** - Platform-specific build configurations
@@ -327,6 +302,7 @@ Common exceptions:
 - **Backup/Versioning** - Automatic backups, version history
 
 ### Extensibility Points
+
 - Custom project metadata via extension properties
 - Pluggable serialization formats (e.g., binary, YAML)
 - Custom scene loaders (e.g., import from Unity, Unreal)
@@ -334,19 +310,20 @@ Common exceptions:
 ## Testing
 
 Unit tests should cover:
+
 - **Project creation** - Valid metadata, file creation
 - **Project loading** - Deserialization, validation
 - **Scene management** - Add, remove, save scenes
 - **Error handling** - Missing files, invalid JSON
 - **Path resolution** - Relative path handling
 
-Use `Testably.Abstractions.Testing` for mocking file system.
+Unit tests in this module use mocks around `Oxygen.Storage` abstractions.
 
 ## Design Principles
 
 1. **Separation from World** - Projects manage files, World defines data
 2. **Observable Metadata** - `ProjectInfo` implements `INotifyPropertyChanged`
-3. **Lazy Scene Loading** - Don't load all scenes upfront
+3. **Lazy Scene Loading** - Don’t fully load all scene graphs upfront
 4. **Relative Paths** - Projects are relocatable
 5. **Async I/O** - Non-blocking file operations
 
