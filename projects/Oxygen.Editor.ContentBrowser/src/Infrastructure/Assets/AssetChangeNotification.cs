@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser;
+using Oxygen.Editor.ContentBrowser.Models;
+
+namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 
 /// <summary>
 /// Represents a notification of an asset change (added, removed, or modified).

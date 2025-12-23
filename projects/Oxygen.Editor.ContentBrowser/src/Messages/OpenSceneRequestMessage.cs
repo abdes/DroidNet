@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Messaging.Messages;
+using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.World.Messages;
+namespace Oxygen.Editor.ContentBrowser.Messages;
 
 /// <summary>
 ///     Message sent when a scene needs to be opened in the editor.

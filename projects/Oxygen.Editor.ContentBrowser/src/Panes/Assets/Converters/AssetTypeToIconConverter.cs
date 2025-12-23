@@ -3,8 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml.Data;
+using Oxygen.Editor.ContentBrowser.Models;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
 
 /// <summary>
 ///     Converts an <see cref="AssetType" /> to a corresponding icon glyph.

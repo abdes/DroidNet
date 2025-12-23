@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Models;
 
 /// <summary>
 /// Specifies the type of a game asset.

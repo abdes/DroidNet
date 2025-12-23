@@ -16,12 +16,14 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using IContainer = DryIoc.IContainer;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Shell;
 
 /// <summary>
 ///     The ViewModel for the <see cref="ContentBrowserView" /> view.
@@ -251,32 +253,7 @@ public sealed partial class ContentBrowserViewModel(
         base.Dispose(disposing);
     }
 
-    private static string? ParseFirstSelectedFromUrl(string? url)
-    {
-        if (string.IsNullOrEmpty(url))
-        {
-            return null;
-        }
 
-        var qIndex = url.IndexOf('?', StringComparison.Ordinal);
-        if (qIndex < 0 || qIndex >= url.Length - 1)
-        {
-            return null;
-        }
-
-        var query = url[(qIndex + 1)..];
-        foreach (var pair in query.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var kv = pair.Split('=', 2);
-            if (kv.Length == 2 && string.Equals(kv[0], "selected", StringComparison.Ordinal))
-            {
-                var value = Uri.UnescapeDataString(kv[1]);
-                return value;
-            }
-        }
-
-        return null;
-    }
 
     private static string? GetParentRelativePath(string? relativePath)
     {
@@ -340,10 +317,8 @@ public sealed partial class ContentBrowserViewModel(
             return "/(left:project//right:" + this.currentAssetsViewPath + ")";
         }
 
-        // Sort folders to ensure consistent URL generation
-        var sortedFolders = contentBrowserState.SelectedFolders.Order(StringComparer.Ordinal);
-        var selectedParams = string.Join('&', sortedFolders.Select(folder => $"selected={Uri.EscapeDataString(folder)}"));
-        return $"/(left:project//right:{this.currentAssetsViewPath})?{selectedParams}";
+        var query = RouteStateMapping.BuildSelectedQuery(contentBrowserState.SelectedFolders);
+        return $"/(left:project//right:{this.currentAssetsViewPath}){query}";
     }
 
     private void UpdateHistoryForStateChange(string url)
@@ -389,7 +364,7 @@ public sealed partial class ContentBrowserViewModel(
         // Ensure UI elements that depend on the current location update immediately.
         // Rebuild breadcrumbs based on the URL we just navigated to. This avoids waiting
         // for state propagation when navigation was initiated via router/URL (e.g., breadcrumb click).
-        var selectedFromUrl = ParseFirstSelectedFromUrl(navigationEnd.Url);
+        var selectedFromUrl = RouteStateMapping.ParseFirstSelectedFromUrl(navigationEnd.Url);
         this.UpdateBreadcrumbs(selectedFromUrl);
     }
 

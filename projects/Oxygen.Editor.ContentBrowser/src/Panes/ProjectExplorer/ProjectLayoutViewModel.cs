@@ -12,6 +12,7 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.World;
 using Oxygen.Storage;
 
@@ -225,20 +226,13 @@ public partial class ProjectLayoutViewModel(
 
         this.LogRestoreStateStart();
 
-        // CLEAR existing selection first - this is the key fix!
+        var selectedFolders = RouteStateMapping.GetSelectedFolders(this.activeRoute);
         contentBrowserState.SelectedFolders.Clear();
 
-        var selectedFolders = this.activeRoute.QueryParams.GetValues("selected");
-        if (selectedFolders is not null)
+        foreach (var relativePath in selectedFolders)
         {
-            foreach (var relativePath in selectedFolders)
-            {
-                if (!string.IsNullOrEmpty(relativePath))
-                {
-                    this.LogRestoreStateAddFolder(relativePath);
-                    _ = contentBrowserState.SelectedFolders.Add(relativePath);
-                }
-            }
+            this.LogRestoreStateAddFolder(relativePath);
+            _ = contentBrowserState.SelectedFolders.Add(relativePath);
         }
 
         this.LogRestoreStateFinal(string.Join(", ", contentBrowserState.SelectedFolders));

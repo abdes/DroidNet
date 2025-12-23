@@ -4,8 +4,10 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Models;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 /// <summary>
 /// The ViewModel for the <see cref="ListLayoutView"/> view.

@@ -7,6 +7,8 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Hosting.WinUI;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.Projects;
 using Oxygen.Storage;
 

@@ -6,6 +6,8 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.World.Messages;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
@@ -37,7 +39,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     /// asset content is not available.</param>
     /// <param name="messenger">Optional messenger used to send notifications such as applied
     /// geometry changes. May be <see langword="null"/>.</param>
-    public GeometryViewModel(ContentBrowser.IAssetIndexingService? assetsIndexingService = null, IMessenger? messenger = null)
+    public GeometryViewModel(IAssetIndexingService? assetsIndexingService = null, IMessenger? messenger = null)
     {
         this.assetsIndexingService = assetsIndexingService as ContentBrowser.AssetsIndexingService;
         this.messenger = messenger;
@@ -70,7 +72,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             _ = Task.Run(async () =>
             {
                 var meshAssets = await assetsIndexingService.QueryAssetsAsync(
-                    a => a.AssetType == ContentBrowser.AssetType.Mesh).ConfigureAwait(false);
+                    a => a.AssetType == AssetType.Mesh).ConfigureAwait(false);
 
                 var seenLocations = new HashSet<string>(meshAssets.Select(a => a.Location), StringComparer.Ordinal);
 
@@ -83,8 +85,8 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
                 // Subscribe to future changes, deduplicating replayed items
                 _ = assetsIndexingService.AssetChanges
-                    .Where(n => n.ChangeType == ContentBrowser.AssetChangeType.Added)
-                    .Where(n => n.Asset.AssetType == ContentBrowser.AssetType.Mesh)
+                    .Where(n => n.ChangeType == AssetChangeType.Added)
+                    .Where(n => n.Asset.AssetType == AssetType.Mesh)
                     .Where(n => !seenLocations.Contains(n.Asset.Location)) // Deduplicate replay
                     .ObserveOn(System.Reactive.Concurrency.Scheduler.Default)
                     .Subscribe(
@@ -280,7 +282,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             ThumbnailModel: "\uE7C3");
     }
 
-    private static AssetPickerItem CreateContentItem(ContentBrowser.GameAsset asset)
+    private static AssetPickerItem CreateContentItem(GameAsset asset)
     {
         // Create URI: asset://Content/{location}
         var uriString = $"asset://Content/{asset.Location}";
