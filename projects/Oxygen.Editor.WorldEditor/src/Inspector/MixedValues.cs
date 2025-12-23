@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 
 namespace Oxygen.Editor.World.Inspector;
 

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core;
+namespace Oxygen.Core;
 
 /// <summary>
 /// Provides constant values used throughout the Oxygen Editor application.

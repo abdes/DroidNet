@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core;
+namespace Oxygen.Core;
 
 /// <summary>
 ///     Utility math helpers used by the editor for common floating-point comparisons.

@@ -125,7 +125,7 @@ The Oxygen projects represent a comprehensive game editor and engine implementat
 
 - **[Oxygen.Editor](projects/Oxygen.Editor/)** - Main game editor application built with WinUI 3, integrating all DroidNet components for a professional IDE-like experience.
 
-- **[Oxygen.Editor.Core](projects/Oxygen.Editor.Core/)** - Core libraries providing path finding, input validation, and essential services for the Oxygen Editor.
+- **[Oxygen.Core](projects/Oxygen.Core/)** - Core libraries providing path finding, input validation, and essential services for the Oxygen Editor.
 
 - **[Oxygen.Editor.Interop](projects/Oxygen.Editor.Interop/)** - Interoperability layer between managed code and the C++ engine.
 

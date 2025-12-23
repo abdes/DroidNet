@@ -6,7 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 using Oxygen.Storage;
 
 namespace Oxygen.Editor.World.ProjectExplorer;

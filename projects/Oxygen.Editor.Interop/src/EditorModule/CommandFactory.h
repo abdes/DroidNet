@@ -42,7 +42,7 @@ namespace Oxygen::Interop::World {
   public:
     virtual oxygen::interop::module::CreateSceneNodeCommand*
       CreateSceneNode(std::string name, oxygen::scene::NodeHandle parent,
-        System::Action<Oxygen::Editor::Core::NodeHandle>^ onCreated,
+        System::Action<Oxygen::Core::NodeHandle>^ onCreated,
         std::array<uint8_t, 16> regKey, bool initializeWorldAsRoot);
 
     virtual oxygen::interop::module::RemoveSceneNodeCommand*

@@ -4,7 +4,7 @@
 
 using System.Text.RegularExpressions;
 
-namespace Oxygen.Editor.Core;
+namespace Oxygen.Core;
 
 /// <summary>
 /// Provides input validation helpers.

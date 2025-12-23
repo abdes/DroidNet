@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Core;
+namespace Oxygen.Core;
 
 /// <summary>
 ///     Represents a handle to a scene node in the native engine.
