@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using Oxygen.Assets.Import;
+using Oxygen.Assets.Import.Geometry;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Assets.Cook;
@@ -74,9 +75,17 @@ public sealed class LooseCookedBuildService
 
         foreach (var group in groups)
         {
+            await BuildIndexForMountPointAsync(group).ConfigureAwait(false);
+        }
+
+        async Task BuildIndexForMountPointAsync(IGrouping<string, ImportedAsset> group)
+        {
             cancellationToken.ThrowIfCancellationRequested();
 
             var mountPoint = group.Key;
+            var fileRecords = new List<FileRecord>();
+
+            await CookGeometryAsync(files, mountPoint, group, fileRecords, cancellationToken).ConfigureAwait(false);
             var entries = new List<AssetEntry>();
 
             foreach (var asset in group.OrderBy(static a => a.VirtualPath, StringComparer.Ordinal))
@@ -103,10 +112,11 @@ public sealed class LooseCookedBuildService
                 ContentVersion: ContentVersion,
                 Flags: IndexFeatures.None,
                 Assets: entries,
-                Files: Array.Empty<FileRecord>());
+                Files: fileRecords);
 
             byte[] indexBytes;
-            using (var ms = new MemoryStream())
+            var ms = new MemoryStream();
+            await using (ms.ConfigureAwait(false))
             {
                 LooseCookedIndex.Write(ms, document);
                 indexBytes = ms.ToArray();
@@ -118,6 +128,90 @@ public sealed class LooseCookedBuildService
         }
     }
 
+    private static async Task CookGeometryAsync(
+        IImportFileAccess files,
+        string mountPoint,
+        IGrouping<string, ImportedAsset> group,
+        List<FileRecord> fileRecords,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(files);
+        ArgumentException.ThrowIfNullOrWhiteSpace(mountPoint);
+        ArgumentNullException.ThrowIfNull(group);
+        ArgumentNullException.ThrowIfNull(fileRecords);
+
+        var geometry = CollectGeometryAssets();
+        if (geometry.Count == 0)
+        {
+            return;
+        }
+
+        var cooked = CookBuffers();
+        await WriteBuffersAsync(cooked).ConfigureAwait(false);
+        await WriteGeometryDescriptorsAsync(cooked).ConfigureAwait(false);
+
+        List<(ImportedAsset asset, ImportedGeometry payload)> CollectGeometryAssets()
+            => [.. group
+                .Where(static a => string.Equals(a.AssetType, "Geometry", StringComparison.Ordinal) && a.Payload is ImportedGeometry)
+                .Select(static a => (a, (ImportedGeometry)a.Payload))
+                .OrderBy(static x => x.a.VirtualPath, StringComparer.Ordinal)
+                .Select(static x => (x.a, x.Item2)),];
+
+        CookedBuffersResult CookBuffers()
+            => CookedBuffersWriter.Write(
+                geometry.ConvertAll(static g => new GeometryCookInput(g.asset.AssetKey, g.payload)));
+
+        async Task WriteBuffersAsync(CookedBuffersResult cooked)
+        {
+            // Write resources/buffers.*
+            const string buffersTableRel = "resources/buffers.table";
+            const string buffersDataRel = "resources/buffers.data";
+
+            var tablePath = $".cooked/{mountPoint}/{buffersTableRel}";
+            var dataPath = $".cooked/{mountPoint}/{buffersDataRel}";
+
+            await files.WriteAllBytesAsync(tablePath, cooked.BuffersTableBytes, cancellationToken).ConfigureAwait(false);
+            await files.WriteAllBytesAsync(dataPath, cooked.BuffersDataBytes, cancellationToken).ConfigureAwait(false);
+
+            fileRecords.Add(CreateFileRecord(FileKind.BuffersTable, buffersTableRel, cooked.BuffersTableBytes));
+            fileRecords.Add(CreateFileRecord(FileKind.BuffersData, buffersDataRel, cooked.BuffersDataBytes));
+        }
+
+        async Task WriteGeometryDescriptorsAsync(CookedBuffersResult cooked)
+        {
+            // Write per-asset .ogeo descriptors.
+            foreach (var (asset, payload) in geometry)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                if (!cooked.BufferIndices.TryGetValue(asset.AssetKey, out var buffers))
+                {
+                    continue;
+                }
+
+                var descriptorRelativePath = GetDescriptorRelativePath(asset.VirtualPath, mountPoint);
+                var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
+
+                byte[] ogBytes;
+                var ms = new MemoryStream();
+                await using (ms.ConfigureAwait(false))
+                {
+                    CookedGeometryWriter.Write(ms, payload, buffers.VertexBufferIndex, buffers.IndexBufferIndex);
+                    ogBytes = ms.ToArray();
+                }
+
+                await files.WriteAllBytesAsync(cookedDescriptorPath, ogBytes, cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        static FileRecord CreateFileRecord(FileKind kind, string relativePath, ReadOnlyMemory<byte> bytes)
+            => new(
+                Kind: kind,
+                RelativePath: relativePath,
+                Size: (ulong)bytes.Length,
+                Sha256: SHA256.HashData(bytes.Span));
+    }
+
     private static string GetMountPointFromVirtualPath(string virtualPath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(virtualPath);
@@ -127,12 +221,9 @@ public sealed class LooseCookedBuildService
         }
 
         var slash = virtualPath.IndexOf('/', startIndex: 1);
-        if (slash < 0)
-        {
-            throw new InvalidDataException($"VirtualPath must include mount point and file path: '{virtualPath}'.");
-        }
-
-        return virtualPath[1..slash];
+        return slash < 0
+            ? throw new InvalidDataException($"VirtualPath must include mount point and file path: '{virtualPath}'.")
+            : virtualPath[1..slash];
     }
 
     private static string GetDescriptorRelativePath(string virtualPath, string mountPoint)
@@ -145,12 +236,9 @@ public sealed class LooseCookedBuildService
         }
 
         var relative = virtualPath[prefix.Length..];
-        if (string.IsNullOrWhiteSpace(relative))
-        {
-            throw new InvalidDataException($"VirtualPath '{virtualPath}' does not include a descriptor path.");
-        }
-
-        return relative;
+        return string.IsNullOrWhiteSpace(relative)
+            ? throw new InvalidDataException($"VirtualPath '{virtualPath}' does not include a descriptor path.")
+            : relative;
     }
 
     private static byte MapAssetType(string assetType)

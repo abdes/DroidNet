@@ -15,5 +15,6 @@
     <ItemGroup>
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="Testably.Abstractions.Testing" />
+        <PackageReference Include="SharpGLTF.Toolkit" />
     </ItemGroup>
 </Project>
