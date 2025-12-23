@@ -9,8 +9,10 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 
 #include <fmt/format.h>
 
@@ -97,6 +99,40 @@ template <typename T> auto ToHexString(T value) -> std::string
   oss << "0x" << std::hex << value;
   return oss.str();
 }
+
+namespace {
+
+auto ReadPakFooter(const std::filesystem::path& pak_path)
+  -> std::optional<PakFooter>
+{
+  std::ifstream file(pak_path, std::ios::binary);
+  if (!file) {
+    return std::nullopt;
+  }
+
+  file.seekg(0, std::ios::end);
+  const auto file_size = file.tellg();
+  if (file_size < static_cast<std::streamoff>(sizeof(PakFooter))) {
+    return std::nullopt;
+  }
+
+  file.seekg(file_size - static_cast<std::streamoff>(sizeof(PakFooter)));
+  PakFooter footer{};
+  file.read(reinterpret_cast<char*>(&footer), sizeof(footer));
+  if (!file) {
+    return std::nullopt;
+  }
+  return footer;
+}
+
+auto FooterMagicOk(const PakFooter& footer) -> bool
+{
+  constexpr std::string_view kFooterMagic = "OXPAKEND";
+  return std::string_view(footer.footer_magic, sizeof(footer.footer_magic))
+    == kFooterMagic;
+}
+
+} // namespace
 
 /*!
  Helper function to print asset descriptor data (the metadata describing
@@ -613,8 +649,49 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   }
   using namespace PrintUtils;
   Separator("PAK FOOTER");
-  auto dir = pak.Directory();
-  Field("Asset Count", dir.size());
+
+  const auto footer = ReadPakFooter(ctx_.pak_path);
+  if (!footer) {
+    Field("Footer", "Failed to read from file");
+    std::cout << "\n";
+    return;
+  }
+
+  const auto& f = *footer;
   Field("Footer Size", std::to_string(sizeof(PakFooter)) + " bytes");
+  Field("Footer Magic", FooterMagicOk(f) ? "OK" : "MISMATCH");
+
+  Field("Directory Offset", ToHexString(f.directory_offset));
+  Field("Directory Size", std::to_string(f.directory_size));
+  Field("Asset Count (footer)", std::to_string(f.asset_count));
+
+  Field("Browse Index Offset", ToHexString(f.browse_index_offset));
+  Field("Browse Index Size", std::to_string(f.browse_index_size));
+  Field("Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
+  if (pak.HasBrowseIndex()) {
+    Field("Browse Index Entries", std::to_string(pak.BrowseIndex().size()));
+  }
+
+  Field("PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));
+
+  if (ctx_.verbose && pak.HasBrowseIndex()) {
+    std::cout << "\n";
+    Separator("BROWSE INDEX");
+    const auto entries = pak.BrowseIndex();
+    constexpr size_t kMaxEntriesToPrint = 32;
+    const auto count = (std::min)(entries.size(), kMaxEntriesToPrint);
+    for (size_t i = 0; i < count; ++i) {
+      const auto& e = entries[i];
+      std::cout << "  [" << i << "]\n";
+      Field("Virtual Path", e.virtual_path, 4);
+      Field("Asset Key", to_string(e.asset_key), 4);
+      std::cout << "\n";
+    }
+    if (entries.size() > kMaxEntriesToPrint) {
+      std::cout << "  ... (" << (entries.size() - kMaxEntriesToPrint)
+                << " more entries)\n\n";
+    }
+  }
+
   std::cout << "\n";
 }

@@ -6,13 +6,17 @@
 
 #pragma once
 
+#include <cstdint>
+#include <limits>
+
 #include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Composition/Typed.h>
 
 // Forward declarations for resource types
 namespace oxygen::data {
 class BufferResource;
 class TextureResource;
-} // namespace oxygen
+} // namespace oxygen::data
 
 namespace oxygen::content {
 

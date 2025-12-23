@@ -12,6 +12,8 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -110,6 +112,26 @@ public:
   OXGN_CNTT_NDAPI auto CreateReader(
     const data::pak::AssetDirectoryEntry& entry) const -> Reader;
 
+  //=== Browse Index (Virtual Paths) ===-------------------------------------//
+
+  //! Browse index entry mapping an AssetKey to a canonical virtual path.
+  struct BrowseEntry {
+    std::string virtual_path;
+    data::AssetKey asset_key;
+  };
+
+  //! Check whether this pak contains an embedded browse index.
+  OXGN_CNTT_NDAPI auto HasBrowseIndex() const noexcept -> bool;
+
+  //! Get the embedded browse index entries.
+  OXGN_CNTT_NDAPI auto BrowseIndex() const noexcept
+    -> std::span<const BrowseEntry>;
+
+  //! Resolve a virtual path to an AssetKey using the embedded browse index.
+  OXGN_CNTT_NDAPI auto ResolveAssetKeyByVirtualPath(
+    std::string_view virtual_path) const noexcept
+    -> std::optional<data::AssetKey>;
+
   //=== Header Information ===-----------------------------------------------//
 
   //! Get the PAK format version from the header.
@@ -195,6 +217,7 @@ private:
   auto ReadFooter(serio::FileStream<>* stream) -> void;
   auto ReadDirectory(serio::FileStream<>* stream, uint32_t asset_count) -> void;
   auto ReadDirectoryEntry(Reader& reader) -> void;
+  auto ReadBrowseIndex(serio::FileStream<>* stream, size_t file_size) -> void;
 
   std::filesystem::path file_path_; // Path to the PAK file
 
@@ -212,6 +235,9 @@ private:
   std::vector<data::pak::AssetDirectoryEntry> directory_;
   mutable std::mutex mutex_;
   mutable std::unordered_map<data::AssetKey, size_t> key_to_index_;
+
+  std::vector<BrowseEntry> browse_index_;
+  std::unordered_map<std::string_view, data::AssetKey> browse_vpath_to_key_;
 
   // Resource table members (optional, only if present in the PAK file)
   mutable std::optional<BuffersTableT> buffers_table_;

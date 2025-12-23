@@ -143,6 +143,8 @@ inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
   CHECK_RESULT(reader.ReadInto(footer.texture_table));
   CHECK_RESULT(reader.ReadInto(footer.buffer_table));
   CHECK_RESULT(reader.ReadInto(footer.audio_table));
+  CHECK_RESULT(reader.ReadInto(footer.browse_index_offset));
+  CHECK_RESULT(reader.ReadInto(footer.browse_index_size));
   CHECK_RESULT(
     reader.ReadBlobInto(std::span(reinterpret_cast<std::byte*>(footer.reserved),
       std::size(footer.reserved))));
@@ -150,6 +152,31 @@ inline auto Load(AnyReader& reader, data::pak::PakFooter& footer)
   CHECK_RESULT(reader.ReadBlobInto(
     std::span(reinterpret_cast<std::byte*>(footer.footer_magic),
       std::size(footer.footer_magic))));
+  return {};
+}
+
+//! Load specialization for PakBrowseIndexHeader.
+inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexHeader& header)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadBlobInto(std::span(
+    reinterpret_cast<std::byte*>(header.magic), std::size(header.magic))));
+  CHECK_RESULT(reader.ReadInto(header.version));
+  CHECK_RESULT(reader.ReadInto(header.entry_count));
+  CHECK_RESULT(reader.ReadInto(header.string_table_size));
+  CHECK_RESULT(reader.ReadInto(header.reserved));
+  return {};
+}
+
+//! Load specialization for PakBrowseIndexEntry.
+inline auto Load(AnyReader& reader, data::pak::PakBrowseIndexEntry& entry)
+  -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(entry.asset_key));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_length));
   return {};
 }
 

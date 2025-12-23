@@ -32,6 +32,9 @@ namespace oxygen::content {
  Today, resolution is performed by consulting the `container.index.bin` of one
  or more mounted loose cooked roots.
 
+ Resolution can also be backed by mounted `.pak` files when they contain an
+ embedded browse index.
+
  @note This does not load assets. It only resolves identities.
 */
 class VirtualPathResolver final {
@@ -52,6 +55,16 @@ public:
   */
   OXGN_CNTT_API auto AddLooseCookedRoot(
     const std::filesystem::path& cooked_root) -> void;
+
+  //! Add a pak file in priority order.
+  /*!
+   Opens the pak file and registers its embedded browse index (if present) for
+   subsequent resolutions.
+
+   @param pak_path Path to the `.pak` file.
+   @throw std::runtime_error If the pak cannot be opened.
+  */
+  OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& pak_path) -> void;
 
   //! Resolve a virtual path to an AssetKey.
   /*!

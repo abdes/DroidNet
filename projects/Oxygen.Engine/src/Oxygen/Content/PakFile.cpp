@@ -11,9 +11,13 @@
 // ReSharper disable once CppUnusedIncludeDirective
 #include <Oxygen/Content/Loaders/Helpers.h>
 
+#include <cstring>
+
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
 using oxygen::data::pak::AssetDirectoryEntry;
+using oxygen::data::pak::PakBrowseIndexEntry;
+using oxygen::data::pak::PakBrowseIndexHeader;
 using oxygen::data::pak::PakFooter;
 using oxygen::data::pak::PakHeader;
 
@@ -124,6 +128,128 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   }
 }
 
+auto PakFile::ReadBrowseIndex(serio::FileStream<>* stream, const size_t file_size)
+  -> void
+{
+  LOG_SCOPE_FUNCTION(INFO);
+
+  browse_index_.clear();
+  browse_vpath_to_key_.clear();
+
+  const data::pak::OffsetT browse_offset = footer_.browse_index_offset;
+  const uint64_t browse_size = footer_.browse_index_size;
+
+  if (browse_offset == 0 || browse_size == 0) {
+    return;
+  }
+
+  const auto end_offset = browse_offset + browse_size;
+  if (browse_offset >= file_size || end_offset > file_size
+    || end_offset < browse_offset) {
+    LOG_F(ERROR,
+      "Browse index out of bounds: offset={} size={} file_size={} (ignoring)",
+      browse_offset, browse_size, file_size);
+    return;
+  }
+
+  if (auto res = stream->Seek(static_cast<size_t>(browse_offset)); !res) {
+    LOG_F(ERROR, "Failed to seek to browse index offset {}: {}", browse_offset,
+      res.error().message());
+    return;
+  }
+
+  Reader reader(*stream);
+  auto header_result = reader.Read<PakBrowseIndexHeader>();
+  if (!header_result) {
+    LOG_F(ERROR, "Failed to read browse index header: {}",
+      header_result.error().message());
+    return;
+  }
+
+  const auto header = header_result.value();
+  constexpr std::array<uint8_t, 8> kBrowseMagic
+    = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
+  if (std::memcmp(header.magic, kBrowseMagic.data(), kBrowseMagic.size()) != 0) {
+    LOG_F(ERROR, "Browse index magic mismatch (ignoring)");
+    return;
+  }
+
+  if (header.version != 1) {
+    LOG_F(ERROR, "Unsupported browse index version {} (ignoring)",
+      header.version);
+    return;
+  }
+
+  const uint64_t entries_size
+    = static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry);
+  const uint64_t expected_min_size
+    = sizeof(PakBrowseIndexHeader) + entries_size + header.string_table_size;
+  if (expected_min_size > browse_size) {
+    LOG_F(ERROR,
+      "Browse index payload is truncated: expected_at_least={} actual={}",
+      expected_min_size, browse_size);
+    return;
+  }
+
+  std::vector<PakBrowseIndexEntry> entries;
+  entries.reserve(header.entry_count);
+  for (uint32_t i = 0; i < header.entry_count; ++i) {
+    auto entry_result = reader.Read<PakBrowseIndexEntry>();
+    if (!entry_result) {
+      LOG_F(ERROR, "Failed to read browse index entry {}: {}", i,
+        entry_result.error().message());
+      return;
+    }
+    entries.push_back(entry_result.value());
+  }
+
+  auto strings_blob_result
+    = reader.ReadBlob(static_cast<size_t>(header.string_table_size));
+  if (!strings_blob_result) {
+    LOG_F(ERROR, "Failed to read browse index string table: {}",
+      strings_blob_result.error().message());
+    return;
+  }
+  const auto& strings_blob = strings_blob_result.value();
+
+  browse_index_.reserve(header.entry_count);
+  for (const auto& e : entries) {
+    const uint64_t off = e.virtual_path_offset;
+    const uint64_t len = e.virtual_path_length;
+    const uint64_t end = off + len;
+    if (off > header.string_table_size || len > header.string_table_size
+      || end > header.string_table_size || end < off) {
+      LOG_F(ERROR, "Browse index string reference out of bounds (ignoring)");
+      return;
+    }
+
+    const auto* base = reinterpret_cast<const char*>(strings_blob.data());
+    std::string vpath(base + off, base + end);
+    if (vpath.empty() || vpath.front() != '/') {
+      LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
+      return;
+    }
+
+    browse_index_.push_back(BrowseEntry {
+      .virtual_path = std::move(vpath),
+      .asset_key = e.asset_key,
+    });
+  }
+
+  browse_vpath_to_key_.reserve(browse_index_.size());
+  for (const auto& entry : browse_index_) {
+    const std::string_view key_view(entry.virtual_path);
+    if (browse_vpath_to_key_.contains(key_view)) {
+      LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'",
+        entry.virtual_path);
+      browse_index_.clear();
+      browse_vpath_to_key_.clear();
+      return;
+    }
+    browse_vpath_to_key_.emplace(key_view, entry.asset_key);
+  }
+}
+
 auto PakFile::ReadDirectoryEntry(Reader& reader) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
@@ -168,7 +294,35 @@ PakFile::PakFile(const std::filesystem::path& path)
   LOG_F(INFO, "file : {}", path.string());
   ReadHeader(meta_stream_.get());
   ReadFooter(meta_stream_.get());
+
+  const auto size_result = meta_stream_->Size();
+  if (!size_result) {
+    LOG_F(ERROR, "Failed to get pak file size: {}", size_result.error().message());
+    throw std::runtime_error("Failed to get pak file size");
+  }
+  ReadBrowseIndex(meta_stream_.get(), size_result.value());
+
   ReadDirectory(meta_stream_.get(), static_cast<uint32_t>(footer_.asset_count));
+}
+
+auto PakFile::HasBrowseIndex() const noexcept -> bool
+{
+  return !browse_index_.empty();
+}
+
+auto PakFile::BrowseIndex() const noexcept -> std::span<const BrowseEntry>
+{
+  return { browse_index_.data(), browse_index_.size() };
+}
+
+auto PakFile::ResolveAssetKeyByVirtualPath(const std::string_view virtual_path)
+  const noexcept -> std::optional<data::AssetKey>
+{
+  const auto it = browse_vpath_to_key_.find(virtual_path);
+  if (it == browse_vpath_to_key_.end()) {
+    return std::nullopt;
+  }
+  return it->second;
 }
 
 /*!

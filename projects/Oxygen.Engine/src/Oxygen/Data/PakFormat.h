@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -21,8 +22,10 @@
  - All structures are packed with `#pragma pack(push,1)` eliminating implicit
    padding in the serialized on-disk representation. The engine may copy
    these packed structs into runtime-aligned representations before use.
- - All offsets are absolute from the start of the PAK file (no relative
+ - All *file* offsets are absolute from the start of the PAK file (no relative
    offsets) and are of type `OffsetT` (uint64_t).
+ - Offsets into embedded tables/blobs (e.g., string tables) are relative to the
+   start of the containing blob and use the smallest appropriate integer type.
  - Endianness is little-endian (Intel / x86-64). Cross-platform loaders on
    big-endian architectures MUST byte-swap scalar fields.
  - All sizes are in bytes.
@@ -54,6 +57,12 @@ using ResourceIndexT = uint32_t;
 
 //! Data blob size type (4 bytes)
 using DataBlobSizeT = uint32_t;
+
+//! Offset type for slices into embedded string tables (4 bytes)
+using StringTableOffsetT = uint32_t;
+
+//! Size type for slices into embedded string tables (4 bytes)
+using StringTableSizeT = uint32_t;
 
 //=== Constants ===-----------------------------------------------------------//
 
@@ -161,8 +170,16 @@ struct PakFooter {
   ResourceTable buffer_table = {};
   ResourceTable audio_table = {};
 
+  // -- Embedded Browse Index (Optional) --
+  //
+  // When non-zero, these fields describe the location of an embedded browse
+  // index (OXPAKBIX) used by editor/tooling for virtual-path enumeration.
+  // Runtime loading does not require this index.
+  OffsetT browse_index_offset = 0;
+  uint64_t browse_index_size = 0;
+
   // Reserved for future use
-  uint8_t reserved[124] = {};
+  uint8_t reserved[108] = {};
 
   // -- CRC32 Integrity --
   // CRC32 covers the *entire* file, including the footer and footer magic
@@ -201,6 +218,44 @@ struct AssetDirectoryEntry {
 };
 #pragma pack(pop)
 static_assert(sizeof(AssetDirectoryEntry) == 64);
+
+//! Embedded browse index header (24 bytes).
+/*!
+ Provides a mapping from canonical virtual paths to AssetKeys for editor and
+ tooling use. The browse index is not required for runtime loading.
+
+ The browse index payload is stored as a contiguous blob at
+ `browse_index_offset` with length `browse_index_size` and is referenced from
+ the PakFooter browse index fields.
+
+ @note Virtual paths are UTF-8 bytes and are not null-terminated in the string
+ table.
+ @see PakFooter
+*/
+#pragma pack(push, 1)
+struct PakBrowseIndexHeader {
+  char magic[8] = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
+  uint32_t version = 1;
+  uint32_t entry_count = 0;
+  StringTableSizeT string_table_size = 0;
+  uint32_t reserved = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(PakBrowseIndexHeader) == 24);
+
+//! Embedded browse index entry (24 bytes).
+/*!
+ Each entry maps one AssetKey to a virtual path, stored as a slice in the
+ string table.
+*/
+#pragma pack(push, 1)
+struct PakBrowseIndexEntry {
+  AssetKey asset_key;
+  StringTableOffsetT virtual_path_offset = 0;
+  StringTableSizeT virtual_path_length = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(PakBrowseIndexEntry) == 24);
 
 // -----------------------------------------------------------------------------
 // Resource Descriptors

@@ -116,7 +116,13 @@ def test_planner_basic_layout(tmp_path: Path):  # noqa: N802
     directory_size = footer["directory"]["size"]
     assert _aligned(directory_offset, TABLE_ALIGNMENT)
     footer_offset = footer["offset"]
-    assert footer_offset == directory_offset + directory_size
+    directory_end = directory_offset + directory_size
+    browse = footer.get("browse_index") or {"offset": 0, "size": 0}
+    if browse.get("size", 0):
+        assert browse["offset"] == directory_end
+        assert footer_offset == browse["offset"] + browse["size"]
+    else:
+        assert footer_offset == directory_end
     assert info["file_size"] == footer_offset + FOOTER_SIZE
 
     # CRC32 location sanity (last 12 bytes has crc32 + magic)
