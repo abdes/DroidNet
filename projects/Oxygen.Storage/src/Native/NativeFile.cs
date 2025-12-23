@@ -299,6 +299,33 @@ public class NativeFile : IDocument
     }
 
     /// <summary>
+    /// Opens the document for read access.
+    /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A readable stream positioned at the beginning of the document.</returns>
+    /// <exception cref="ItemNotFoundException">Thrown if the document does not exist at the time of opening.</exception>
+    /// <exception cref="StorageException">Thrown for errors during the open operation.</exception>
+    public async Task<Stream> OpenReadAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (!await this.ExistsAsync().ConfigureAwait(true))
+        {
+            throw new ItemNotFoundException($"document not found at location [{this.Location}]");
+        }
+
+        try
+        {
+            var fs = this.StorageProvider.FileSystem;
+            return fs.File.OpenRead(this.Location);
+        }
+        catch (Exception ex)
+        {
+            throw new StorageException($"could not open document for read at location [{this.Location}]", ex);
+        }
+    }
+
+    /// <summary>
     /// Renames this storage item.
     /// </summary>
     /// <param name="desiredNewName">The desired new name, which must be valid as required by the underlying storage system (see <see cref="InvalidPathException"/>), should not contain path separators and should not refer to an existing folder or document under the current folder.</param>

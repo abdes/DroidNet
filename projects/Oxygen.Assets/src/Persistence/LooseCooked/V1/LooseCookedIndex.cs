@@ -116,6 +116,12 @@ public static class LooseCookedIndex
         {
             stream.Position = (long)layout.AssetEntriesOffset;
             WriteAssetsSection(stream, document, offsets);
+
+            if (document.Files.Count == 0)
+            {
+                return;
+            }
+
             PadTo(stream, layout.FileRecordsOffset);
         }
 

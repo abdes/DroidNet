@@ -281,6 +281,15 @@ public interface IDocument : INestedItem, IStorageItem
     public Task<string> ReadAllTextAsync(CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Opens the document for read access.
+    /// </summary>
+    /// <param name="cancellationToken">A token to monitor for cancellation requests.</param>
+    /// <returns>A readable stream positioned at the beginning of the document.</returns>
+    /// <exception cref="ItemNotFoundException">Thrown if the document does not exist at the time of opening.</exception>
+    /// <exception cref="StorageException">Thrown for errors during the open operation.</exception>
+    public Task<Stream> OpenReadAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Asynchronously writes the specified string to the document, using the "UTF-8" encoding. If the document already exists, it
     /// is truncated and overwritten. If it does not exist, it is created.
     /// </summary>

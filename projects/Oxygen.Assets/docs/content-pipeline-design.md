@@ -29,13 +29,13 @@ This document captures decisions for the asset/content pipeline architecture, th
   - Reader (validate header, offsets, string table, entry sizes)
   - Writer (deterministic ordering, stable string table, SHA-256 metadata)
   - Implementation + docs live in `src/Persistence/LooseCooked/V1`
-- [ ] Implement validation helpers
+- [X] Implement validation helpers
   - Verify SHA-256 for descriptors and resource files
   - Enforce invariants (no cross-container deps at pack time)
-- [~] Filesystem-backed catalog provider(s)
+- [X] Filesystem-backed catalog provider(s)
   - Source/authoring file catalog (what the Content Browser browses under a mounted authoring root)
   - Cooked-content catalog backed by `container.index.bin` (what PIE/runtime mounting uses)
-- [ ] Implement an index-backed catalog provider (loose cooked) that enumerates cooked assets via `container.index.bin`
+- [X] Implement an index-backed catalog provider (loose cooked) that enumerates cooked assets via `container.index.bin`
 - [ ] Add a pak/index-backed catalog provider (shipping view) that enumerates assets in `.pak` (including embedded browse index)
 
 ### Phase 4 — Pipeline and integration
