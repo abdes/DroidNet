@@ -59,7 +59,7 @@ public sealed partial class SidecarAssetIdentityPolicy : IAssetIdentityPolicy
         ArgumentNullException.ThrowIfNull(importer);
         ArgumentNullException.ThrowIfNull(options);
 
-        this.importer = CreateImporterData(importer, options);
+        this.importer = CreateImporterData(importer, options, input);
     }
 
     /// <inheritdoc />
@@ -212,7 +212,7 @@ public sealed partial class SidecarAssetIdentityPolicy : IAssetIdentityPolicy
 
     private static string GetSidecarPath(string sourcePath) => sourcePath + ".import.json";
 
-    private static SidecarImporterData CreateImporterData(IAssetImporter importer, ImportOptions options)
+    private static SidecarImporterData CreateImporterData(IAssetImporter importer, ImportOptions options, ImportInput input)
     {
         var version = importer.GetType().Assembly.GetName().Version?.ToString() ?? "0";
 
@@ -222,6 +222,14 @@ public sealed partial class SidecarAssetIdentityPolicy : IAssetIdentityPolicy
             ["ReimportIfUnchanged"] = JsonSerializer.SerializeToElement(options.ReimportIfUnchanged),
             ["LogLevel"] = JsonSerializer.SerializeToElement(options.LogLevel.ToString()),
         };
+
+        if (input.Settings is not null)
+        {
+            foreach (var (key, value) in input.Settings)
+            {
+                settings[key] = JsonSerializer.SerializeToElement(value);
+            }
+        }
 
         return new SidecarImporterData(
             Name: importer.Name,

@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Assets.Import.Geometry;
+using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 using SharpGLTF.Memory;
 using SharpGLTF.Schema2;
@@ -22,6 +23,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
     private const string ImporterName = "Oxygen.Import.GltfGeometry";
 
     private static readonly ReadSettings ReadSettings = new();
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public string Name => ImporterName;
 
@@ -61,7 +63,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
         var sourceHash = SHA256.HashData(sourceBytes.Span);
         var dependencies = DiscoverDependencies(context, ext, sourceBytes);
 
-        var outputs = CreateOutputs(context, model, sourcePath, meta.LastWriteTimeUtc, sourceHash, dependencies, cancellationToken);
+        var outputs = await CreateOutputsAsync(context, model, sourcePath, meta.LastWriteTimeUtc, sourceHash, dependencies, cancellationToken).ConfigureAwait(false);
 
         return outputs;
     }
@@ -191,7 +193,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
             .ThenBy(static d => d.Path, StringComparer.Ordinal),];
     }
 
-    private static List<ImportedAsset> CreateOutputs(
+    private static async Task<List<ImportedAsset>> CreateOutputsAsync(
         ImportContext context,
         ModelRoot model,
         string sourcePath,
@@ -204,6 +206,102 @@ public sealed class GltfGeometryImporter : IAssetImporter
         var dir = Filesystem.VirtualPath.GetDirectory(sourcePath);
         var stem = Filesystem.VirtualPath.GetFileNameWithoutExtension(sourcePath);
 
+        var materialKeys = await ExtractMaterialsAsync(context, model, sourcePath, lastWriteTimeUtc, sourceHash, dependencies, outputs, dir, stem, cancellationToken).ConfigureAwait(false);
+
+        ExtractMeshes(context, model, sourcePath, lastWriteTimeUtc, sourceHash, dependencies, outputs, dir, stem, materialKeys, cancellationToken);
+
+        if (outputs.Count == 0)
+        {
+            context.Diagnostics.Add(
+                ImportDiagnosticSeverity.Warning,
+                code: "OXYIMPORT_GLTF_NO_MESHES",
+                message: $"glTF contains no meshes with primitives: '{sourcePath}'.",
+                sourcePath: sourcePath);
+        }
+
+        return outputs;
+    }
+
+    private static async Task<Dictionary<int, AssetKey>> ExtractMaterialsAsync(
+        ImportContext context,
+        ModelRoot model,
+        string sourcePath,
+        DateTimeOffset lastWriteTimeUtc,
+        byte[] sourceHash,
+        List<ImportedDependency> dependencies,
+        List<ImportedAsset> outputs,
+        string dir,
+        string stem,
+        CancellationToken cancellationToken)
+    {
+        var generateSources = context.Input.Settings?.TryGetValue("GenerateMaterialSources", out var val) == true && bool.Parse(val);
+        var materialDir = context.Input.Settings?.TryGetValue("MaterialDestination", out var dest) == true ? dest : dir;
+
+        var materialKeys = new Dictionary<int, AssetKey>();
+        for (var i = 0; i < model.LogicalMaterials.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var mat = model.LogicalMaterials[i];
+
+            var matSource = BuildMaterial(mat);
+            var matName = string.Create(CultureInfo.InvariantCulture, $"{stem}__material__{i:0000}");
+            var matVirtualPath = "/" + Filesystem.VirtualPath.Combine(dir, matName + ".omat");
+
+            if (generateSources)
+            {
+                // Write .omat.json source file
+                var jsonPath = Filesystem.VirtualPath.Combine(materialDir, matName + ".omat.json");
+                var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(matSource, JsonOptions);
+                await context.Files.WriteAllBytesAsync(jsonPath, jsonBytes, cancellationToken).ConfigureAwait(false);
+
+                // If we generated a source file, the asset should ideally be imported from that source file.
+                // However, to make it available immediately in this build, we can emit it here.
+                // But we must ensure the VirtualPath matches what the MaterialSourceImporter would produce.
+                // MaterialSourceImporter uses the file path.
+                // If jsonPath is "Content/Materials/Foo.omat.json", VirtualPath is "/Content/Materials/Foo.omat".
+
+                // Re-calculate VirtualPath based on the actual jsonPath
+                var jsonDir = Filesystem.VirtualPath.GetDirectory(jsonPath);
+                var jsonStem = Filesystem.VirtualPath.GetFileNameWithoutExtension(Filesystem.VirtualPath.GetFileNameWithoutExtension(jsonPath));
+
+                // MaterialSourceImporter expects .omat.json
+                // VirtualPath is jsonPath without .json
+                // jsonPath: Content/Materials/Foo.omat.json
+                // VirtualPath: /Content/Materials/Foo.omat
+                matVirtualPath = "/" + jsonPath[..^5]; // Remove .json
+            }
+
+            var matKey = context.Identity.GetOrCreateAssetKey(matVirtualPath, assetType: "Material");
+            materialKeys[i] = matKey;
+
+            outputs.Add(new ImportedAsset(
+                AssetKey: matKey,
+                VirtualPath: matVirtualPath,
+                AssetType: "Material",
+                Source: new ImportedAssetSource(
+                    SourcePath: sourcePath,
+                    SourceHashSha256: sourceHash,
+                    LastWriteTimeUtc: lastWriteTimeUtc),
+                Dependencies: dependencies,
+                Payload: matSource));
+        }
+
+        return materialKeys;
+    }
+
+    private static void ExtractMeshes(
+        ImportContext context,
+        ModelRoot model,
+        string sourcePath,
+        DateTimeOffset lastWriteTimeUtc,
+        byte[] sourceHash,
+        List<ImportedDependency> dependencies,
+        List<ImportedAsset> outputs,
+        string dir,
+        string stem,
+        Dictionary<int, AssetKey> materialKeys,
+        CancellationToken cancellationToken)
+    {
         for (var meshIndex = 0; meshIndex < model.LogicalMeshes.Count; meshIndex++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -214,7 +312,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
                 continue;
             }
 
-            var geometry = BuildGeometry(mesh);
+            var geometry = BuildGeometry(mesh, materialKeys);
             var virtualPath = "/" + Filesystem.VirtualPath.Combine(dir, string.Create(CultureInfo.InvariantCulture, $"{stem}__mesh__{meshIndex:0000}.ogeo"));
 
             var assetKey = context.Identity.GetOrCreateAssetKey(virtualPath, assetType: "Geometry");
@@ -231,20 +329,40 @@ public sealed class GltfGeometryImporter : IAssetImporter
                     Dependencies: dependencies,
                     Payload: geometry));
         }
-
-        if (outputs.Count == 0)
-        {
-            context.Diagnostics.Add(
-                ImportDiagnosticSeverity.Warning,
-                code: "OXYIMPORT_GLTF_NO_MESHES",
-                message: $"glTF contains no meshes with primitives: '{sourcePath}'.",
-                sourcePath: sourcePath);
-        }
-
-        return outputs;
     }
 
-    private static ImportedGeometry BuildGeometry(SharpGLTF.Schema2.Mesh mesh)
+    private static MaterialSource BuildMaterial(SharpGLTF.Schema2.Material mat)
+    {
+        var baseColorChannel = mat.FindChannel("BaseColor");
+        var baseColor = baseColorChannel?.Color ?? Vector4.One;
+
+        var mrChannel = mat.FindChannel("MetallicRoughness");
+        var metallic = (float)(mrChannel?.GetFactor("MetallicFactor") ?? 1.0);
+        var roughness = (float)(mrChannel?.GetFactor("RoughnessFactor") ?? 1.0);
+
+        var pbrData = new MaterialPbrMetallicRoughness(
+            baseColorR: baseColor.X,
+            baseColorG: baseColor.Y,
+            baseColorB: baseColor.Z,
+            baseColorA: baseColor.W,
+            metallicFactor: metallic,
+            roughnessFactor: roughness,
+            baseColorTexture: null,
+            metallicRoughnessTexture: null);
+
+        return new MaterialSource(
+            schema: "oxygen.material.v1",
+            type: "PBR",
+            name: mat.Name,
+            pbrMetallicRoughness: pbrData,
+            normalTexture: null,
+            occlusionTexture: null,
+            alphaMode: MaterialAlphaMode.Opaque, // MVP default
+            alphaCutoff: 0.5f,
+            doubleSided: mat.DoubleSided);
+    }
+
+    private static ImportedGeometry BuildGeometry(SharpGLTF.Schema2.Mesh mesh, Dictionary<int, AssetKey> materialKeys)
     {
         var vertices = new List<ImportedVertex>();
         var indices = new List<uint>();
@@ -271,10 +389,14 @@ public sealed class GltfGeometryImporter : IAssetImporter
             boundsMin = Vector3.Min(boundsMin, pMin);
             boundsMax = Vector3.Max(boundsMax, pMax);
 
+            var matKey = prim.Material != null && materialKeys.TryGetValue(prim.Material.LogicalIndex, out var k)
+                ? k
+                : new AssetKey(0, 0);
+
             subMeshes.Add(
                 new ImportedSubMesh(
                     Name: string.Create(CultureInfo.InvariantCulture, $"Prim{primIndex:0000}"),
-                    MaterialAssetKey: new AssetKey(0, 0),
+                    MaterialAssetKey: matKey,
                     FirstIndex: firstIndex,
                     IndexCount: (uint)primIndices.Count,
                     FirstVertex: firstVertex,
