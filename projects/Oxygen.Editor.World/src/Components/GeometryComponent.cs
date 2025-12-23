@@ -4,7 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using Oxygen.Editor.Assets;
+using Oxygen.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;

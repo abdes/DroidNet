@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Assets.Resolvers;
+namespace Oxygen.Assets.Resolvers;
 
 /// <summary>
 /// Resolves assets from PAK files (Engine and Package mount points).

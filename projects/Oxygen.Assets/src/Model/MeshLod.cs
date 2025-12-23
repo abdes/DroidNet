@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Assets;
+namespace Oxygen.Assets;
 
 /// <summary>
 /// Represents a single Level of Detail (LOD) mesh within a geometry asset.

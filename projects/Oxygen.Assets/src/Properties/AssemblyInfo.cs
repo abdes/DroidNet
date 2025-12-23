@@ -4,4 +4,4 @@
 
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("Oxygen.Editor.Assets.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Assets.Tests")]

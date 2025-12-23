@@ -22,7 +22,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Assets\src\Oxygen.Editor.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Assets\src\Oxygen.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
     </ItemGroup>
 

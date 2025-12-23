@@ -4,7 +4,7 @@
 
 using System.Collections.Frozen;
 
-namespace Oxygen.Editor.Assets.Resolvers;
+namespace Oxygen.Assets.Resolvers;
 
 /// <summary>
 /// Resolves assets from the "Generated" mount point, which contains runtime-generated
