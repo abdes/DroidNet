@@ -78,15 +78,17 @@ Target (once the layering is enforced):
 - `Oxygen.Editor.ContentBrowser.Application.*`
 - `Oxygen.Editor.ContentBrowser.Infrastructure.*`
 
-### 3) Treat asset indexing/query as Infrastructure and expose a UI-facing Catalog
+### 3) Treat asset indexing/query as Infrastructure and consume `Oxygen.Assets` Catalog
 
 **Intent:** The UI should depend on a stable concept like “catalog/query service”, not on “indexing mechanics”.
 
-- Introduce `IAssetCatalog` (or similar) with:
+**Important:** Do not introduce a second catalog contract in Content Browser. The catalog/query interface belongs in `Oxygen.Assets`.
+
+- Consume `Oxygen.Assets.IAssetCatalog` with:
   - Snapshot query: `QueryAsync(query, ct)`
   - Change stream: `IObservable<AssetChange>` / event stream
-  - Optional progress/diagnostics hooks
-- Provide a temporary adapter implementation backed by the current indexer, but keep the interface aligned with future `Oxygen.Assets` APIs.
+  - Client-controlled query scope (folder-recursive, mountpoint, content-only, all)
+- Provide a temporary adapter implementation in `Infrastructure/*` backed by the current indexer.
 
 ### 4) Adopt pipeline identity early (VirtualPath / AssetKey)
 
@@ -185,8 +187,8 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 1. [X] Define a target folder layout and move files into `Shell/`, `Panes/`, `Infrastructure/Assets/`, `State/`, `Models/`, `Messages/` without behavior changes.
 2. [X] Extract URL/query-param parsing into a single route/state adapter (keep it in an existing namespace, e.g. `Oxygen.Editor.ContentBrowser.Shell`) so string paths stay at one boundary.
-3. [ ] Introduce `Application/Assets/IAssetCatalog` (snapshot query + change stream) and update assets VMs to depend on it.
-4. [ ] Create an adapter `Infrastructure/Assets/IndexerBackedAssetCatalog` wrapping the current `IAssetIndexingService`.
+3. [ ] Update assets VMs to depend on `Oxygen.Assets.IAssetCatalog` (snapshot query + change stream; client-controlled scope).
+4. [ ] Create `Infrastructure/Assets/IndexerBackedAssetCatalog` implementing `Oxygen.Assets.IAssetCatalog` by wrapping the current `IAssetIndexingService`.
 5. [ ] Replace `ConcurrentBag<GameAsset>` in the indexing implementation with a key-indexed store that supports remove/move/rename deterministically.
 6. [ ] Introduce `AssetQuery` (folder scope/search/filter/sort) and drive results from query state.
 7. [ ] Centralize snapshot+stream merging in an `AssetResultsController` so layouts remain presentation-only.

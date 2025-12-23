@@ -5,7 +5,7 @@
 using System.Text.Json.Serialization;
 using Oxygen.Core;
 
-namespace Oxygen.Assets;
+namespace Oxygen.Assets.Model;
 
 /// <summary>
 /// Represents a serializable reference to an asset of type <typeparamref name="T"/>.

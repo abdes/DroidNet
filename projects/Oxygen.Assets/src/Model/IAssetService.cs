@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Assets;
+namespace Oxygen.Assets.Model;
 
 /// <summary>
 /// Provides asset loading and resolution services.

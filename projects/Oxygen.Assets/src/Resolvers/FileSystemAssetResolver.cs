@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Assets.Model;
+
 namespace Oxygen.Assets.Resolvers;
 
 /// <summary>

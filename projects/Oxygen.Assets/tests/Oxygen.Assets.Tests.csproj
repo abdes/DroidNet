@@ -5,10 +5,15 @@
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
         <RootNamespace>Oxygen.Assets.Tests</RootNamespace>
-        <AssemblyName>Oxygen.Assets.Tests</AssemblyName>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Assets.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="System.Reactive" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 </Project>

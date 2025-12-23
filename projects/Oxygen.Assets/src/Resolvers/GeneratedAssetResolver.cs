@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Frozen;
+using Oxygen.Assets.Model;
 
 namespace Oxygen.Assets.Resolvers;
 
@@ -27,7 +28,6 @@ namespace Oxygen.Assets.Resolvers;
 public sealed class GeneratedAssetResolver : IAssetResolver
 {
     private const string Authority = "Generated";
-    private const string BaseUri = "asset://Generated/";
 
     private readonly FrozenDictionary<Uri, Asset> assets;
 
@@ -37,7 +37,7 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     /// </summary>
     public GeneratedAssetResolver()
     {
-        this.assets = CreateBuiltInAssets().ToFrozenDictionary(a => a.Uri);
+        this.assets = BuiltInAssets.Create().ToFrozenDictionary(a => a.Uri);
     }
 
     /// <inheritdoc/>
@@ -49,67 +49,5 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     {
         var result = this.assets.GetValueOrDefault(uri);
         return Task.FromResult(result);
-    }
-
-    private static IEnumerable<Asset> CreateBuiltInAssets()
-    {
-        // Basic shape geometries (1 LOD, 1 SubMesh "Main")
-        yield return new GeometryAsset
-        {
-            Uri = new($"{BaseUri}BasicShapes/Cube"),
-            Lods =
-            [
-                new MeshLod
-                {
-                    LodIndex = 0,
-                    SubMeshes = [new SubMesh { Name = "Main", MaterialIndex = 0 }],
-                },
-            ],
-        };
-
-        yield return new GeometryAsset
-        {
-            Uri = new($"{BaseUri}BasicShapes/Sphere"),
-            Lods =
-            [
-                new MeshLod
-                {
-                    LodIndex = 0,
-                    SubMeshes = [new SubMesh { Name = "Main", MaterialIndex = 0 }],
-                },
-            ],
-        };
-
-        yield return new GeometryAsset
-        {
-            Uri = new($"{BaseUri}BasicShapes/Plane"),
-            Lods =
-            [
-                new MeshLod
-                {
-                    LodIndex = 0,
-                    SubMeshes = [new SubMesh { Name = "Main", MaterialIndex = 0 }],
-                },
-            ],
-        };
-
-        yield return new GeometryAsset
-        {
-            Uri = new($"{BaseUri}BasicShapes/Cylinder"),
-            Lods =
-            [
-                new MeshLod
-                {
-                    LodIndex = 0,
-                    SubMeshes = [new SubMesh { Name = "Main", MaterialIndex = 0 }],
-                },
-            ],
-        };
-
-        // Default material
-        yield return new MaterialAsset
-        {
-            Uri = new($"{BaseUri}Materials/Default"),
-        };
     }
 }
