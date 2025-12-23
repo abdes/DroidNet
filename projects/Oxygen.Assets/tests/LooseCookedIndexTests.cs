@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
@@ -67,6 +68,60 @@ public sealed class LooseCookedIndexTests
     {
         using var ms = new MemoryStream(new byte[LooseCookedIndex.HeaderSize]);
         Action act = () => _ = LooseCookedIndex.Read(ms);
+        _ = act.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Read_WithUnknownFlagsBits_ShouldThrow()
+    {
+        var doc = CreateSampleDocument();
+
+        byte[] bytes;
+        using (var ms = new MemoryStream())
+        {
+            LooseCookedIndex.Write(ms, doc);
+            bytes = ms.ToArray();
+        }
+
+        // Flags field starts at byte offset 12 in the header.
+        bytes[12] = 0x00;
+        bytes[13] = 0x00;
+        bytes[14] = 0x00;
+        bytes[15] = 0x80; // set a high unknown bit
+
+        using var readStream = new MemoryStream(bytes, writable: false);
+        Action act = () => _ = LooseCookedIndex.Read(readStream);
+        _ = act.Should().Throw<InvalidDataException>();
+    }
+
+    [TestMethod]
+    public void Read_WithStringOffsetOutsideTable_ShouldThrow()
+    {
+        var doc = CreateSampleDocument();
+
+        byte[] bytes;
+        using (var ms = new MemoryStream())
+        {
+            LooseCookedIndex.Write(ms, doc);
+            bytes = ms.ToArray();
+        }
+
+        // Header layout:
+        // - string_table_size at offset 24 (u64)
+        // - asset_entries_offset at offset 32 (u64)
+        var stringTableSize = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(24, 8));
+        var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(32, 8));
+
+        // Asset entry layout (v1 minimum):
+        // - desc_rel_offset at +16 (u32)
+        // Set it to an offset beyond the string table.
+        var firstAssetDescOffsetField = checked((int)assetEntriesOffset) + 16;
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            bytes.AsSpan(firstAssetDescOffsetField, 4),
+            checked((uint)stringTableSize + 1));
+
+        using var readStream = new MemoryStream(bytes, writable: false);
+        Action act = () => _ = LooseCookedIndex.Read(readStream);
         _ = act.Should().Throw<InvalidDataException>();
     }
 

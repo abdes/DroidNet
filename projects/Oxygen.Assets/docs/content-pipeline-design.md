@@ -36,7 +36,7 @@ This document captures decisions for the asset/content pipeline architecture, th
   - Source/authoring file catalog (what the Content Browser browses under a mounted authoring root)
   - Cooked-content catalog backed by `container.index.bin` (what PIE/runtime mounting uses)
 - [X] Implement an index-backed catalog provider (loose cooked) that enumerates cooked assets via `container.index.bin`
-- [ ] Add a pak/index-backed catalog provider (shipping view) that enumerates assets in `.pak` (including embedded browse index)
+- [X] Add a pak/index-backed catalog provider (shipping view) that enumerates assets in `.pak` (requires embedded browse index for virtual-path enumeration)
 
 ### Phase 4 — Pipeline and integration
 
