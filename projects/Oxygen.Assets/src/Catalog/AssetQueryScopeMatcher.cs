@@ -6,9 +6,6 @@ namespace Oxygen.Assets.Catalog;
 
 internal static class AssetQueryScopeMatcher
 {
-    /// <summary>
-    /// Determines whether an asset URI matches the specified query scope.
-    /// </summary>
     public static bool IsMatch(AssetQueryScope scope, Uri assetUri)
     {
         ArgumentNullException.ThrowIfNull(scope);
@@ -41,22 +38,18 @@ internal static class AssetQueryScopeMatcher
     }
 
     private static bool IsMatchRoot(AssetQueryTraversal traversal, Uri root, Uri asset)
-    {
-        return traversal switch
+        => traversal switch
         {
             AssetQueryTraversal.Self => IsSameAsset(root, asset),
             AssetQueryTraversal.Descendants => IsDescendant(root, asset),
             AssetQueryTraversal.Children => IsImmediateChild(root, asset),
             _ => false,
         };
-    }
 
     private static bool IsSameAsset(Uri root, Uri asset)
-    {
-        return string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
+        => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(root.Authority, asset.Authority, StringComparison.OrdinalIgnoreCase)
             && string.Equals(root.AbsolutePath, asset.AbsolutePath, StringComparison.Ordinal);
-    }
 
     private static bool IsDescendant(Uri root, Uri asset)
     {
@@ -104,15 +97,11 @@ internal static class AssetQueryScopeMatcher
     }
 
     private static bool IsSameAuthority(Uri root, Uri asset)
-    {
-        return string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
+        => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(root.Authority, asset.Authority, StringComparison.OrdinalIgnoreCase);
-    }
 
     private static string EnsureFolderPath(string path)
-    {
-        return path.EndsWith("/", StringComparison.Ordinal)
+        => path.EndsWith('/')
             ? path
             : path + "/";
-    }
 }

@@ -40,26 +40,58 @@ This document captures decisions for the asset/content pipeline architecture, th
 
 ### Phase 4 — Pipeline and integration
 
-- [ ] Implement `ICookService` skeleton in `Oxygen.Assets.Cook` (async, progress, cancellation)
-  - Output layout matches runtime expectations: `assets/**`, `resources/*.table`, `resources/*.data`, `container.index.bin`
-  - Deterministic `VirtualPath ⇄ AssetKey` mapping (Asset DB policy)
-- [ ] Implement `IPackService` skeleton that produces `.pak` and enforces intra-container deps
-- [ ] Implement `Oxygen.Assets.Runtime` for deterministic container registration and PIE adapters
-- [ ] Create `projects/Oxygen.Editor.ContentBrowser` and wire UI to `Oxygen.Assets` APIs (lookup, diagnostics, cook/validate)
+Editor UX note: expose a single user action: **Import (updates runtime data)**.
+Internally, that action runs **Import → Build** and writes to the dev-friendly loose runtime-compatible layout.
+Reserve **Cook** for optimization/minimization policies later.
+
+- [~] Implement `Oxygen.Assets.Import` (real, minimal MVP)
+  - [X] `IImportService` (async + cancellation + diagnostics; progress optional)
+  - [X] Importer registry/selection by extension and/or signature
+  - [X] Deterministic identity policy via per-source sidecar (`VirtualPath ⇄ AssetKey` stability)
+  - [~] Dependency discovery (enough to drive incremental rebuilds later)
+
+- [ ] Implement glTF importer (GLB/GLTF) using SharpGLTF
+  - Extract meshes/primitives → canonical mesh data (vertices + indices + submesh ranges)
+  - Extract PBR metallic-roughness subset for materials (baseColor/metallic/roughness)
+  - Produce editable material sources (`*.omat.json`) for extracted materials (so import yields both source JSON and cooked runtime `.omat` after Build)
+  - Track external dependencies (`.bin`, external images) for incremental rebuild
+  - MVP scope: geometry + materials only (textures may be discovered but can be ignored for emission)
+
+- [~] Implement material-source importer (JSON → `.omat`)
+  - [X] JSON schema + read/write + validation implemented under `src/Import/Materials/**`
+  - [X] Cooked `.omat` writer implemented + unit-tested
+  - [X] Importer is registered and executed via `IImportService`
+  - [ ] Still needs wiring into `Import → Build` orchestration (Build step owns final runtime outputs)
+
+- [ ] Implement `Oxygen.Assets.Cook` build step (runtime-ready loose cooked outputs)
+  - Inputs: imported assets + resolved identity mapping
+  - Outputs under `.cooked/<MountPoint>/`:
+    - `assets/**` descriptor files: `.ogeo`, `.omat` (binary-compatible with `PakFormat.h`)
+    - `resources/buffers.table` + `resources/buffers.data`
+    - (later) `resources/textures.table` + `resources/textures.data`
+    - `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
+  - Compatibility-first (see `runtime-formats.md`); no optimization/minimization in Phase 4
+
+- [ ] Implement `Oxygen.Assets.Runtime` adapters for editor/PIE
+  - Deterministic container registration (mount points → cooked roots)
+  - Provide a simple “PIE uses cooked root” integration path
+
+- [ ] Wire `projects/Oxygen.Editor.ContentBrowser` UI to the pipeline
+  - One command: **Import** → runs Import → Build and refreshes cooked catalog
+  - Show diagnostics in UI (best-effort, don’t crash the editor on common import errors)
+
+- [ ] Defer to later phases
+  - `ICookService` (optimize/minimize) policies
+  - `IPackService` (`.pak`) and strict intra-container dependency enforcement
 
 ### Phase 5 — Tests, CI, docs
 
 - [~] Add `Oxygen.Assets.Tests`:
   - Catalog tests exist for Generated/Composite/FileSystem providers.
-  - Still needed: persistence (index) read/write tests, validation tests, cook atomic-swap tests.
+  - Import tests exist for importer selection and material import (including sidecar identity).
+  - Still needed: persistence (index) read/write tests, validation tests, import→build integration tests, build/cook atomic-swap tests.
 - [ ] Add CI jobs to run validation and integration tests on `master`
 - [ ] Publish a migration guide and update this design doc with implementer notes
-
-## Current status (Dec 2025)
-
-- The durable catalog/query foundation lives in `Oxygen.Assets` and is ready to be consumed by UI code (Content Browser) without duplicating contracts.
-- Multiple catalog providers already exist (Generated, Composite, FileSystem) and unit tests are passing.
-- Next durable layer to build is persistence + validation (index format, read/write, index-backed catalog), then cook orchestration.
 
 ## Taxonomy alignment with the runtime Content subsystem
 
@@ -84,8 +116,10 @@ Runtime invariants that the pipeline must respect:
 The runtime distinguishes editor-facing identity from runtime identity:
 
 - **Virtual path** (editor-facing): canonical string with a leading slash, e.g. `/Content/Materials/Wood.mat`.
-- **AssetKey** (runtime-facing): `oxygen::data::AssetKey` is a 128-bit GUID.
+- **AssetKey** (runtime-facing): `oxygen::data::AssetKey` is a 128-bit key.
 - **ResourceKey** (runtime cache key): 64-bit key encoding `(source/container id, resource type, resource index)`.
+
+Virtual path invariants and normalization are defined in [virtual-paths.md](virtual-paths.md).
 
 In `Oxygen.Assets`, we currently use `asset://{MountPoint}/{Path}` URIs as catalog identities.
 To align with runtime taxonomy:

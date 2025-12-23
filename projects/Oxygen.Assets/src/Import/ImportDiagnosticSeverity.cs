@@ -1,0 +1,15 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+namespace Oxygen.Assets.Import;
+
+/// <summary>
+/// Defines the severity of an import diagnostic.
+/// </summary>
+public enum ImportDiagnosticSeverity
+{
+    Info,
+    Warning,
+    Error,
+}

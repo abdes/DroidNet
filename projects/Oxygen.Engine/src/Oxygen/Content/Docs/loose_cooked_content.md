@@ -277,13 +277,9 @@ asset_loader.AddPakFile("C:/Hello/Kitty/MyStuff/content.pak");
 
 ### Canonical virtual path rules (required)
 
-- Start with `/`.
-- Use `/` as the separator (never `\\`).
-- No `.` or `..` segments after normalization.
-- No trailing `/` (except the root itself).
-- Case policy must be explicit and consistent. Recommendation:
-  - Treat virtual paths as case-sensitive for identity.
-  - Provide editor UX that normalizes case only when the underlying platform requires it.
+Single source of truth:
+
+- See [virtual-paths.md](../../../../../Oxygen.Assets/docs/virtual-paths.md) for canonical virtual path invariants and case policy.
 
 ### Deterministic container registration order (required)
 

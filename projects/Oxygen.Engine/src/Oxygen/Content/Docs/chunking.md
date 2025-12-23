@@ -255,9 +255,9 @@ All values are little-endian.
 
 ### Virtual Path Rules
 
-- Must be canonical and start with `/`.
-- Must be of the form `/{Mount}/{Path}` (e.g. `/Content/Textures/Wood.png`).
-- Must not contain `\\`, `//`, `.` or `..` path segments.
+Single source of truth:
+
+- See [virtual-paths.md](../../../../../Oxygen.Assets/docs/virtual-paths.md).
 
 ### Requirements
 

@@ -80,9 +80,16 @@ public static class LooseCookedIndexValidator
 
         try
         {
-            using var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
-            var index = LooseCookedIndex.Read(stream);
-            return (index, []);
+            var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                var index = LooseCookedIndex.Read(stream);
+                return (index, []);
+            }
+            finally
+            {
+                await stream.DisposeAsync().ConfigureAwait(false);
+            }
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or StorageException)
         {
@@ -120,17 +127,24 @@ public static class LooseCookedIndexValidator
 
             try
             {
-                using var s = await descriptor.OpenReadAsync(cancellationToken).ConfigureAwait(false);
-                var (length, sha) = await ComputeSha256Async(s, cancellationToken).ConfigureAwait(false);
-                AddSizeAndHashIssues(
-                    expectedSize: asset.DescriptorSize,
-                    expectedSha256: asset.DescriptorSha256,
-                    actualSize: (ulong)length,
-                    actualSha256: sha,
-                    sizeCode: "asset.descriptorSize",
-                    shaCode: "asset.descriptorSha256",
-                    label: asset.DescriptorRelativePath,
-                    issues);
+                var s = await descriptor.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var (length, sha) = await ComputeSha256Async(s, cancellationToken).ConfigureAwait(false);
+                    AddSizeAndHashIssues(
+                        expectedSize: asset.DescriptorSize,
+                        expectedSha256: asset.DescriptorSha256.Span,
+                        actualSize: (ulong)length,
+                        actualSha256: sha,
+                        sizeCode: "asset.descriptorSize",
+                        shaCode: "asset.descriptorSha256",
+                        label: asset.DescriptorRelativePath,
+                        issues);
+                }
+                finally
+                {
+                    await s.DisposeAsync().ConfigureAwait(false);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or StorageException or ItemNotFoundException)
             {
@@ -171,17 +185,24 @@ public static class LooseCookedIndexValidator
 
             try
             {
-                using var s = await doc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
-                var (length, sha) = await ComputeSha256Async(s, cancellationToken).ConfigureAwait(false);
-                AddSizeAndHashIssues(
-                    expectedSize: file.Size,
-                    expectedSha256: file.Sha256,
-                    actualSize: (ulong)length,
-                    actualSha256: sha,
-                    sizeCode: "file.size",
-                    shaCode: "file.sha256",
-                    label: rel,
-                    issues);
+                var s = await doc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+                try
+                {
+                    var (length, sha) = await ComputeSha256Async(s, cancellationToken).ConfigureAwait(false);
+                    AddSizeAndHashIssues(
+                        expectedSize: file.Size,
+                        expectedSha256: file.Sha256.Span,
+                        actualSize: (ulong)length,
+                        actualSha256: sha,
+                        sizeCode: "file.size",
+                        shaCode: "file.sha256",
+                        label: rel,
+                        issues);
+                }
+                finally
+                {
+                    await s.DisposeAsync().ConfigureAwait(false);
+                }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or StorageException or ItemNotFoundException)
             {
@@ -194,9 +215,9 @@ public static class LooseCookedIndexValidator
 
     private static void AddSizeAndHashIssues(
         ulong expectedSize,
-        byte[] expectedSha256,
+        ReadOnlySpan<byte> expectedSha256,
         ulong actualSize,
-        byte[] actualSha256,
+        ReadOnlySpan<byte> actualSha256,
         string sizeCode,
         string shaCode,
         string label,

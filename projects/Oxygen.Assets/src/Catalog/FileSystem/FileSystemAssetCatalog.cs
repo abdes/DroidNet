@@ -44,6 +44,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     {
     }
 
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "MA0015:Specify the parameter name in ArgumentException", Justification = "valid use")]
     internal FileSystemAssetCatalog(
         IStorageProvider storage,
         FileSystemAssetCatalogOptions options,
@@ -74,6 +75,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "LINQ is more clear like that")]
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
@@ -206,7 +208,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
                 }
             }
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidPathException or StorageException)
         {
             // If anything goes wrong while applying deltas, fall back to a full rescan.
             await this.RescanAsync().ConfigureAwait(false);
