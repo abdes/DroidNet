@@ -48,38 +48,48 @@ Reserve **Cook** for optimization/minimization policies later.
   - [X] `IImportService` (async + cancellation + diagnostics; progress optional)
   - [X] Importer registry/selection by extension and/or signature
   - [X] Deterministic identity policy via per-source sidecar (`VirtualPath ⇄ AssetKey` stability)
-  - [~] Dependency discovery (enough to drive incremental rebuilds later)
-  - [~] Import → Build orchestration (currently writes loose cooked index)
+  - [X] Dependency discovery (MVP: source + sidecar + referenced resources; deterministic ordering)
+  - [X] Incremental up-to-date decisions (no-op reimport when unchanged; sidecar stores fingerprints)
+  - [X] Import → Build orchestration (writes loose cooked outputs + loose cooked index)
 
-- [ ] Implement glTF importer (GLB/GLTF) using SharpGLTF
-  - Extract meshes/primitives → canonical mesh data (vertices + indices + submesh ranges)
-  - Extract PBR metallic-roughness subset for materials (baseColor/metallic/roughness)
-  - Produce editable material sources (`*.omat.json`) for extracted materials (so import yields both source JSON and cooked runtime `.omat` after Build)
-  - Track external dependencies (`.bin`, external images) for incremental rebuild
+- [~] Implement glTF importer (GLB/GLTF) using SharpGLTF
+  - [X] Extract meshes/primitives → canonical mesh data (vertices + indices + submesh ranges)
+  - [X] Track external dependencies (`.bin`, external images) for incremental rebuild
+  - [ ] Extract PBR metallic-roughness subset for materials (baseColor/metallic/roughness)
+  - [ ] Produce editable material sources (`*.omat.json`) for extracted materials (so import yields both source JSON and cooked runtime `.omat` after Build)
   - MVP scope: geometry + materials only (textures may be discovered but can be ignored for emission)
 
-- [~] Implement material-source importer (JSON → `.omat`)
+- [X] Implement material-source importer (JSON → `.omat`)
   - [X] JSON schema + read/write + validation implemented under `src/Import/Materials/**`
   - [X] Cooked `.omat` writer implemented + unit-tested
   - [X] Importer is registered and executed via `IImportService`
-  - [~] Build step still needs full runtime outputs beyond descriptors + index (resource tables, file records)
+  - [X] Dependency discovery for referenced textures/resources (for incremental rebuild decisions)
+  - [X] Build step still needs full runtime outputs beyond descriptors + index (resource tables, file records)
 
-- [~] Implement `Oxygen.Assets.Cook` build step (runtime-ready loose cooked outputs)
-  - Inputs: imported assets + resolved identity mapping
-  - Outputs under `.cooked/<MountPoint>/`:
-    - `assets/**` descriptor files: `.ogeo`, `.omat` (binary-compatible with `PakFormat.h`)
-    - `resources/buffers.table` + `resources/buffers.data`
+- [X] Implement `Oxygen.Assets.Cook` build step (runtime-ready loose cooked outputs)
+  - [X] Inputs: imported assets + resolved identity mapping
+  - [X] Outputs under `.cooked/<MountPoint>/`:
+    - [X] `assets/**` descriptor files: `.ogeo`, `.omat` (binary-compatible with `PakFormat.h`)
+    - [X] `resources/buffers.table` + `resources/buffers.data`
     - (later) `resources/textures.table` + `resources/textures.data`
-    - [~] `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
-  - Compatibility-first (see `runtime-formats.md`); no optimization/minimization in Phase 4
+    - [X] `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
+  - [X] Compatibility-first (see `runtime-formats.md`); no optimization/minimization in Phase 4
 
 - [ ] Implement `Oxygen.Assets.Runtime` adapters for editor/PIE
   - Deterministic container registration (mount points → cooked roots)
   - Provide a simple “PIE uses cooked root” integration path
+  - [ ] Provide a mount-point registry: `MountPoint -> .cooked/<MountPoint>/` root
+  - [ ] Provide an `IAssetResolver` that loads descriptors from loose cooked root via `container.index.bin`
+  - [ ] Provide a minimal “PIE bootstrap” helper that registers cooked roots for selected mount points
+  - [ ] Add a small integration test that can load one cooked `.omat` by URI
 
 - [ ] Wire `projects/Oxygen.Editor.ContentBrowser` UI to the pipeline
   - One command: **Import** → runs Import → Build and refreshes cooked catalog
   - Show diagnostics in UI (best-effort, don’t crash the editor on common import errors)
+  - [ ] Add a command handler that calls `IImportService.ImportAsync` with progress + cancellation
+  - [ ] Refresh/requery the cooked (index-backed) catalog after import completes
+  - [ ] Surface `ImportResult.Diagnostics` in the UI (at least Info/Warning/Error)
+  - [ ] Confirm the browser displays cooked assets from `.cooked/<MountPoint>/container.index.bin`
 
 - [ ] Defer to later phases
   - `ICookService` (optimize/minimize) policies
