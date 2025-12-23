@@ -6,8 +6,9 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.Routing;
-using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -102,7 +103,7 @@ public partial class WorkspaceViewModel(IContainer container, IRouter router, IL
         _ = childContainer.Resolve<DocumentManager>();
 
         // Register shared services at workspace level
-        childContainer.Register<ContentBrowser.IAssetIndexingService, ContentBrowser.AssetsIndexingService>(Reuse.Singleton);
+        childContainer.Register<IAssetIndexingService, ContentBrowser.AssetsIndexingService>(Reuse.Singleton);
 
         // Register scene-engine synchronization service
         childContainer.Register<ISceneEngineSync, SceneEngineSync>(Reuse.Singleton);

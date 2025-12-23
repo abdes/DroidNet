@@ -8,8 +8,10 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Models;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 /// <summary>
 /// A base ViewModel for the assets view layout.

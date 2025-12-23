@@ -10,9 +10,13 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Editor.ContentBrowser.Messages;
+using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Editor.ContentBrowser.Panes.Assets;
+using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Messages;
 
 namespace Oxygen.Editor.ContentBrowser;
 

@@ -5,7 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Shell;
 
 /// <summary>
 /// The View for the Content Browser UI.

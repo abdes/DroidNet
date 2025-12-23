@@ -1,20 +1,21 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.ContentBrowser.TilesLayoutView"
+    x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts.TilesLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:local="using:Oxygen.Editor.ContentBrowser"
+    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:models="using:Oxygen.Editor.ContentBrowser.Models"
     mc:Ignorable="d">
 
     <UserControl.Resources>
         <!--  Converters for icon glyphs and per-asset-type brushes  -->
-        <local:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
-        <local:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
+        <localcvt:AssetTypeToIconConverter x:Key="AssetTypeToIconConverter" />
+        <localcvt:AssetTypeToBrushConverter x:Key="AssetTypeToBrushConverter" />
 
         <!--  Tile template: card with icon area, colored separator line, and details area  -->
-        <DataTemplate x:Key="GameAssetTemplate" x:DataType="local:GameAsset">
+        <DataTemplate x:Key="GameAssetTemplate" x:DataType="models:GameAsset">
             <Grid Width="180">
                 <Border CornerRadius="8">
                     <Grid>

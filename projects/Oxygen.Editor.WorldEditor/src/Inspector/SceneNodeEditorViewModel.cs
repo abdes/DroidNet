@@ -11,6 +11,7 @@ using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
@@ -69,7 +70,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
     /// </param>
-    public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ISceneEngineSync sceneEngineSync, ContentBrowser.IAssetIndexingService assetsIndexingService, ILoggerFactory? loggerFactory = null)
+    public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ISceneEngineSync sceneEngineSync, IAssetIndexingService assetsIndexingService, ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();

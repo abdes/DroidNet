@@ -8,31 +8,32 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.ContentBrowser.Models;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 /// <summary>
-/// Represents the view for displaying assets in a tiles layout in the World Editor.
+/// Represents the view for displaying assets in a list layout in the World Editor.
 /// </summary>
-[ViewModel(typeof(TilesLayoutViewModel))]
-public sealed partial class TilesLayoutView
+[ViewModel(typeof(ListLayoutViewModel))]
+public sealed partial class ListLayoutView
 {
     /// <summary>
-    /// Initializes a new instance of the <see cref="TilesLayoutView"/> class.
+    /// Initializes a new instance of the <see cref="ListLayoutView"/> class.
     /// </summary>
-    public TilesLayoutView()
+    public ListLayoutView()
     {
         this.InitializeComponent();
     }
 
     /// <summary>
-    /// Handles the double-tap event on the GridView.
+    /// Handles the double-tap event on the ListView.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
-    private void GridView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
+    private void ListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
-        if (sender is not GridView { SelectedItem: GameAsset selectedItem })
+        if (sender is not ListView { SelectedItem: GameAsset selectedItem })
         {
             return;
         }
@@ -43,21 +44,21 @@ public sealed partial class TilesLayoutView
     }
 
     /// <summary>
-    /// Handles the pointer pressed event on the GridView.
+    /// Handles the pointer pressed event on the ListView.
     /// </summary>
     /// <param name="sender">The source of the event.</param>
     /// <param name="args">The event data.</param>
-    private void GridView_PointerPressed(object sender, PointerRoutedEventArgs args)
+    private void ListView_PointerPressed(object sender, PointerRoutedEventArgs args)
     {
-        if (sender is not GridView gridView)
+        if (sender is not ListView listView)
         {
             return;
         }
 
         var originalSource = args.OriginalSource as DependencyObject;
-        while (originalSource != null && originalSource != gridView)
+        while (originalSource != null && originalSource != listView)
         {
-            if (originalSource is GridViewItem)
+            if (originalSource is ListViewItem)
             {
                 return;
             }
@@ -66,6 +67,6 @@ public sealed partial class TilesLayoutView
         }
 
         // Clicked outside of any item, clear selection
-        gridView.SelectedItems.Clear();
+        listView.SelectedItems.Clear();
     }
 }

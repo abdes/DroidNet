@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser;
+using Oxygen.Editor.ContentBrowser.Models;
+
+namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
 /// <summary>
-///     Provides data for the <see cref="AssetsLayoutViewModel.ItemInvoked"/> event.
+///     Provides data for the <see cref="Layouts.AssetsLayoutViewModel.ItemInvoked"/> event.
 /// </summary>
 /// <param name="invokedItem">The item that was invoked.</param>
 public class AssetsViewItemInvokedEventArgs(GameAsset invokedItem) : EventArgs
