@@ -14,6 +14,16 @@ namespace Oxygen.Assets.Import;
 public interface IImportFileAccess
 {
     /// <summary>
+    /// Gets basic metadata for the given project-relative file.
+    /// </summary>
+    /// <param name="sourcePath">Project-relative path using <c>/</c> separators.</param>
+    /// <param name="cancellationToken">A cancellation token.</param>
+    /// <returns>The file metadata.</returns>
+    public ValueTask<ImportFileMetadata> GetMetadataAsync(
+        string sourcePath,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Reads a small header prefix from the given project-relative path.
     /// </summary>
     /// <param name="sourcePath">Project-relative path using <c>/</c> separators.</param>

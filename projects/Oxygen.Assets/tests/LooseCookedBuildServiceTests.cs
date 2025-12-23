@@ -3,23 +3,23 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
-using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Assets.Cook;
 using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Materials;
+using Oxygen.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Assets.Tests;
 
 [TestClass]
-public sealed class SidecarAssetIdentityPolicyTests
+public sealed class LooseCookedBuildServiceTests
 {
     [TestMethod]
-    public async Task ImportAsync_ShouldReuseAssetKeyFromSidecarAcrossReimport()
+    public async Task BuildIndexesAsync_ShouldWriteContainerIndexForCookedMaterial()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
-        const string sidecarPath = "Content/Materials/Wood.omat.json.import.json";
 
-        const string jsonV1 = """
+        const string json = """
         {
           "Schema": "oxygen.material.v1",
           "Type": "PBR",
@@ -27,52 +27,64 @@ public sealed class SidecarAssetIdentityPolicyTests
         }
         """;
 
-        const string jsonV2 = """
-        {
-          "Schema": "oxygen.material.v1",
-          "Type": "PBR",
-          "Name": "Wood",
-          "DoubleSided": true
-        }
-        """;
-
         var files = new InMemoryImportFileAccess();
-        files.AddUtf8(sourcePath, jsonV1);
+        files.AddUtf8(sourcePath, json);
 
         var registry = new ImporterRegistry();
         registry.Register(new MaterialSourceImporter());
 
-        var service = new ImportService(
+        var import = new ImportService(
             registry,
             fileAccessFactory: _ => files,
-            identityPolicyFactory: static (f, input, importer, options) => new SidecarAssetIdentityPolicy(f, input, importer, options));
+            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
 
         var request = new ImportRequest(
             ProjectRoot: "C:/Fake",
             Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
             Options: new ImportOptions(FailFast: true));
 
-        var first = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = first.Succeeded.Should().BeTrue();
-        _ = files.TryGet(sidecarPath, out var sidecarBytes).Should().BeTrue();
-        _ = sidecarBytes.Length.Should().BePositive();
+        var imported = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+        _ = imported.Succeeded.Should().BeTrue();
+        _ = imported.Imported.Should().ContainSingle();
 
-        using (var doc = JsonDocument.Parse(sidecarBytes))
+        var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
+        await build.BuildIndexesAsync("C:/Fake", imported.Imported, CancellationToken.None).ConfigureAwait(false);
+
+        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
+        var ms = new MemoryStream(indexBytes);
+        Document doc;
+        try
         {
-            var root = doc.RootElement;
-            _ = root.GetProperty("Importer").GetProperty("Name").GetString().Should().Be("Oxygen.Import.MaterialSource");
-            _ = root.GetProperty("Importer").GetProperty("Type").GetString().Should().Be("Oxygen.Assets.Import.Materials.MaterialSourceImporter");
-            _ = root.GetProperty("Importer").GetProperty("Version").GetString().Should().NotBeNullOrWhiteSpace();
-            _ = root.GetProperty("Importer").GetProperty("Settings").TryGetProperty("FailFast", out _).Should().BeTrue();
+            doc = LooseCookedIndex.Read(ms);
+        }
+        finally
+        {
+            await ms.DisposeAsync().ConfigureAwait(false);
         }
 
-        var firstKey = first.Imported.Single().AssetKey;
+        _ = doc.Assets.Should().ContainSingle();
+        var entry = doc.Assets[0];
 
-        files.AddUtf8(sourcePath, jsonV2);
+        _ = entry.AssetKey.Should().Be(new AssetKey(1, 2));
+        _ = entry.VirtualPath.Should().Be("/Content/Materials/Wood.omat");
+        _ = entry.DescriptorRelativePath.Should().Be("Materials/Wood.omat");
+        _ = entry.AssetType.Should().Be(1);
+        _ = entry.DescriptorSize.Should().Be(256);
 
-        var second = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = second.Succeeded.Should().BeTrue();
-        _ = second.Imported.Single().AssetKey.Should().Be(firstKey);
+        _ = files.TryGet(".cooked/Content/Materials/Wood.omat", out var cookedBytes).Should().BeTrue();
+        _ = entry.DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));
+    }
+
+    private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy
+    {
+        public AssetKey Key { get; } = key;
+
+        public AssetKey GetOrCreateAssetKey(string virtualPath, string assetType)
+        {
+            _ = virtualPath;
+            _ = assetType;
+            return this.Key;
+        }
     }
 
     private sealed class InMemoryImportFileAccess : IImportFileAccess

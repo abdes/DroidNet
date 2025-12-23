@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Assets.Cook;
+
 namespace Oxygen.Assets.Import;
 
 /// <summary>
@@ -71,7 +73,39 @@ public sealed class ImportService : IImportService
 
         var state = this.CreateState(request);
         await this.ProcessInputsAsync(state, cancellationToken).ConfigureAwait(false);
+
+        await BuildAsync(state, cancellationToken).ConfigureAwait(false);
         return state.ToResult();
+    }
+
+    private static async Task BuildAsync(ImportState state, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+
+        if (state.Imported.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            await LooseCookedBuildService
+                .BuildIndexesAsync(state.Files, state.Imported, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            state.Diagnostics.Add(
+                ImportDiagnosticSeverity.Error,
+                code: "OXYBUILD_INDEX_FAILED",
+                message: ex.Message,
+                sourcePath: null);
+
+            if (state.Request.Options.FailFast)
+            {
+                throw;
+            }
+        }
     }
 
     private static async ValueTask<ImportProbe> CreateProbeAsync(
@@ -89,6 +123,115 @@ public sealed class ImportService : IImportService
         return new ImportProbe(SourcePath: sourcePath, Extension: extension, HeaderBytes: headerBytes);
     }
 
+    private static void ReportProgress(ImportState state, string stage, string currentItem)
+        => state.Request.Options.Progress?.Report(
+            new ImportProgress(
+                Stage: stage,
+                CurrentItem: currentItem,
+                Completed: state.Completed,
+                Total: state.Total));
+
+    private static void MergeUpToDateForBuild(ImportState state)
+    {
+        // If any input was actually imported, include the up-to-date assets too so the build step
+        // can generate complete mount point indexes for the requested input set.
+        if (state.AnyImported && state.UpToDateImported.Count > 0)
+        {
+            state.Imported.AddRange(state.UpToDateImported);
+        }
+    }
+
+    private static async Task<bool> TrySkipUpToDateAsync(
+        ImportState state,
+        ImportInput input,
+        IAssetIdentityPolicy identity,
+        CancellationToken cancellationToken)
+    {
+        if (state.Request.Options.ReimportIfUnchanged || identity is not SidecarAssetIdentityPolicy sidecar)
+        {
+            return false;
+        }
+
+        var upToDateAssets = await sidecar.TryGetUpToDateImportedAssetsAsync(cancellationToken).ConfigureAwait(false);
+        if (upToDateAssets is null)
+        {
+            return false;
+        }
+
+        state.Diagnostics.Add(
+            ImportDiagnosticSeverity.Info,
+            code: "OXYIMPORT_UP_TO_DATE",
+            message: $"Skipped import; inputs unchanged for '{input.SourcePath}'.",
+            sourcePath: input.SourcePath);
+
+        state.UpToDateImported.AddRange(upToDateAssets);
+        return true;
+    }
+
+    private static async Task<IReadOnlyList<ImportedAsset>> RunImporterAsync(
+        ImportState state,
+        ImportInput input,
+        IAssetImporter importer,
+        IAssetIdentityPolicy identity,
+        CancellationToken cancellationToken)
+    {
+        var context = new ImportContext(
+            Files: state.Files,
+            Input: input,
+            Identity: identity,
+            Options: state.Request.Options,
+            Diagnostics: state.Diagnostics);
+
+        var assets = await importer.ImportAsync(context, cancellationToken).ConfigureAwait(false);
+
+        if (identity is SidecarAssetIdentityPolicy sidecarAfter)
+        {
+            await sidecarAfter.RecordImportAsync(assets, cancellationToken).ConfigureAwait(false);
+        }
+
+        return assets;
+    }
+
+    private async Task<bool> ProcessSingleInputAsync(
+        ImportState state,
+        ImportInput input,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        ReportProgress(state, stage: "Probe", currentItem: input.SourcePath);
+
+        var probe = await CreateProbeAsync(state.Files, input.SourcePath, cancellationToken).ConfigureAwait(false);
+        var importer = this.registry.Select(probe);
+        if (importer is null)
+        {
+            state.Diagnostics.Add(
+                ImportDiagnosticSeverity.Error,
+                code: "OXYIMPORT_NO_IMPORTER",
+                message: $"No importer registered for '{input.SourcePath}'.",
+                sourcePath: input.SourcePath);
+
+            state.Completed++;
+            return !state.Request.Options.FailFast;
+        }
+
+        ReportProgress(state, stage: "Import", currentItem: input.SourcePath);
+
+        var identity = this.CreateIdentity(state, input, importer);
+        if (await TrySkipUpToDateAsync(state, input, identity, cancellationToken).ConfigureAwait(false))
+        {
+            state.Completed++;
+            return true;
+        }
+
+        var assets = await RunImporterAsync(state, input, importer, identity, cancellationToken).ConfigureAwait(false);
+        state.Imported.AddRange(assets);
+        state.AnyImported = state.AnyImported || assets.Count > 0;
+        state.Completed++;
+
+        return true;
+    }
+
     private ImportState CreateState(ImportRequest request)
     {
         var diagnostics = new ImportDiagnostics();
@@ -103,53 +246,14 @@ public sealed class ImportService : IImportService
     {
         foreach (var input in state.Request.Inputs)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            state.Request.Options.Progress?.Report(
-                new ImportProgress(
-                    Stage: "Probe",
-                    CurrentItem: input.SourcePath,
-                    Completed: state.Completed,
-                    Total: state.Total));
-
-            var probe = await CreateProbeAsync(state.Files, input.SourcePath, cancellationToken).ConfigureAwait(false);
-            var importer = this.registry.Select(probe);
-            if (importer is null)
+            var shouldContinue = await this.ProcessSingleInputAsync(state, input, cancellationToken).ConfigureAwait(false);
+            if (!shouldContinue)
             {
-                state.Diagnostics.Add(
-                    ImportDiagnosticSeverity.Error,
-                    code: "OXYIMPORT_NO_IMPORTER",
-                    message: $"No importer registered for '{input.SourcePath}'.",
-                    sourcePath: input.SourcePath);
-
-                state.Completed++;
-
-                if (state.Request.Options.FailFast)
-                {
-                    return;
-                }
-
-                continue;
+                break;
             }
-
-            state.Request.Options.Progress?.Report(
-                new ImportProgress(
-                    Stage: "Import",
-                    CurrentItem: input.SourcePath,
-                    Completed: state.Completed,
-                    Total: state.Total));
-
-            var context = new ImportContext(
-                Files: state.Files,
-                Input: input,
-                Identity: this.CreateIdentity(state, input, importer),
-                Options: state.Request.Options,
-                Diagnostics: state.Diagnostics);
-
-            var assets = await importer.ImportAsync(context, cancellationToken).ConfigureAwait(false);
-            state.Imported.AddRange(assets);
-            state.Completed++;
         }
+
+        MergeUpToDateForBuild(state);
     }
 
     private IAssetIdentityPolicy CreateIdentity(ImportState state, ImportInput input, IAssetImporter importer)
@@ -177,6 +281,7 @@ public sealed class ImportService : IImportService
             this.Identity = identity;
             this.Diagnostics = diagnostics;
             this.Imported = imported;
+            this.UpToDateImported = [];
             this.Total = request.Inputs.Count;
         }
 
@@ -189,6 +294,10 @@ public sealed class ImportService : IImportService
         public ImportDiagnostics Diagnostics { get; }
 
         public List<ImportedAsset> Imported { get; }
+
+        public List<ImportedAsset> UpToDateImported { get; }
+
+        public bool AnyImported { get; set; }
 
         public int Total { get; }
 
