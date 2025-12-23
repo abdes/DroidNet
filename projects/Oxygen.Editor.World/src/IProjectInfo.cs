@@ -56,6 +56,15 @@ public interface IProjectInfo
     public string? Thumbnail { get; set; }
 
     /// <summary>
+    ///     Gets or sets the project authoring mount points.
+    /// </summary>
+    /// <remarks>
+    ///     Mount points are persisted in the project manifest (<c>Project.oxy</c>) and provide the authoritative mapping
+    ///     from a mount point name (virtual root segment) to a project-relative authoring folder.
+    /// </remarks>
+    public IList<ProjectMountPoint> MountPoints { get; set; }
+
+    /// <summary>
     ///     Gets or sets the last used date of the project.
     /// </summary>
     /// <value>

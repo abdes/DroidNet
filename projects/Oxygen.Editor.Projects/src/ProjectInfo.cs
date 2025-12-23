@@ -68,6 +68,8 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         this.Location = location;
         this.Thumbnail = thumbnail;
         this.LastUsedOn = DateTime.Now;
+
+        this.EnsureDefaultMountPoints();
     }
 
     /// <summary>
@@ -87,6 +89,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 
     /// <inheritdoc />
     public string? Thumbnail { get; set; }
+
+    /// <inheritdoc />
+    public IList<ProjectMountPoint> MountPoints { get; set; } = new List<ProjectMountPoint>();
 
     /// <inheritdoc />
     public DateTime LastUsedOn { get; set; }
@@ -125,6 +130,8 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
 
         var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
             ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
+
+        obj.EnsureDefaultMountPoints();
         return obj.Id == Guid.Empty
             ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
             : (IProjectInfo)obj;
@@ -136,4 +143,14 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <param name="projectInfo">The <see cref="IProjectInfo" /> object to serialize.</param>
     /// <returns>The JSON string representation of the <see cref="IProjectInfo" /> object.</returns>
     internal static string ToJson(IProjectInfo projectInfo) => JsonSerializer.Serialize(projectInfo, JsonOptions);
+
+    private void EnsureDefaultMountPoints()
+    {
+        // "Works just like that": a project always has a default authoring mount point.
+        // Keep it minimal and deterministic.
+        if (this.MountPoints.Count == 0)
+        {
+            this.MountPoints.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
+        }
+    }
 }
