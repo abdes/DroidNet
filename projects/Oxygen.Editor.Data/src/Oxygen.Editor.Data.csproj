@@ -29,7 +29,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Core\src\Oxygen.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\Attributes\src\Oxygen.Editor.Data.Generators.Attributes.csproj" Transitive="True" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\Generators\src\Oxygen.Editor.Data.Generators.csproj" OutputItemType="Analyzer" />
     </ItemGroup>

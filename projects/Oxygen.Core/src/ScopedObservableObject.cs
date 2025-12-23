@@ -5,7 +5,7 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace Oxygen.Editor.Core;
+namespace Oxygen.Core;
 
 /// <summary>
 /// Base class for observable objects with support for scoped notification suppression.

@@ -128,7 +128,7 @@
       <Private>true</Private>
       <CopyLocalSatelliteAssemblies>false</CopyLocalSatelliteAssemblies>
     </ProjectReference>
-    <ProjectReference Include="..\..\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj">
+    <ProjectReference Include="..\..\Oxygen.Core\src\Oxygen.Core.csproj">
       <Private>true</Private>
     </ProjectReference>
   </ItemGroup>

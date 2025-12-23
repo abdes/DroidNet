@@ -42,7 +42,7 @@ namespace Oxygen::Interop::World {
 
   CreateSceneNodeCommand* CommandFactory::CreateSceneNode(
     std::string name, oxygen::scene::NodeHandle parent,
-    System::Action<Oxygen::Editor::Core::NodeHandle>^ onCreated,
+    System::Action<Oxygen::Core::NodeHandle>^ onCreated,
     std::array<uint8_t, 16> regKey, bool initializeWorldAsRoot) {
     return new CreateSceneNodeCommand(name, parent, onCreated, regKey,
       initializeWorldAsRoot);

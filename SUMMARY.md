@@ -11,7 +11,7 @@
       * [AnalyzerReleases.Shipped](projects/Hosting.Generators/src/AnalyzerReleases.Shipped.md)
       * [AnalyzerReleases.Unshipped](projects/Hosting.Generators/src/AnalyzerReleases.Unshipped.md)
   * [Generic Host for WinUI applications](projects/Hosting/README.md)
-  * [Oxygen Editor Core](projects/Oxygen.Editor.Core/README.md)
+  * [Oxygen Editor Core](projects/Oxygen.Core/README.md)
   * [Oxygen Editor Data Layer](projects/Oxygen.Editor.Data/README.md)
   * [Oxygen Editor Projects](projects/Oxygen.Editor.Projects/README.md)
   * [Oxygen Editor Document Storage Layer](projects/Oxygen.Storage/README.md)

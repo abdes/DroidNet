@@ -7,7 +7,7 @@ using System.IO.Abstractions;
 using AwesomeAssertions;
 using DroidNet.Config;
 using Moq;
-using Oxygen.Editor.Core.Services;
+using Oxygen.Core.Services;
 
 namespace DroidNet.TestHelpers.Tests;
 

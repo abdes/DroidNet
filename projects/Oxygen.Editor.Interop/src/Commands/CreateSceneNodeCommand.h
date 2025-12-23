@@ -29,13 +29,13 @@ namespace oxygen::interop::module {
 
     // Overload for managed callbacks
     CreateSceneNodeCommand(std::string name, oxygen::scene::NodeHandle parent,
-      System::Action<Oxygen::Editor::Core::NodeHandle>^
+      System::Action<Oxygen::Core::NodeHandle>^
       managedCallback,
       bool initializeWorldAsRoot = false);
 
     // Overload for managed callbacks with registration key
     CreateSceneNodeCommand(std::string name, oxygen::scene::NodeHandle parent,
-      System::Action<Oxygen::Editor::Core::NodeHandle>^
+      System::Action<Oxygen::Core::NodeHandle>^
       managedCallback,
       const std::array<uint8_t, 16>& registerKey,
       bool initializeWorldAsRoot = false);
@@ -46,7 +46,7 @@ namespace oxygen::interop::module {
     std::string name_;
     oxygen::scene::NodeHandle parent_;
     Callback callback_;
-    msclr::auto_gcroot<System::Action<Oxygen::Editor::Core::NodeHandle>^>
+    msclr::auto_gcroot<System::Action<Oxygen::Core::NodeHandle>^>
       managed_callback_;
     bool has_managed_callback_;
     std::array<uint8_t, 16> register_key_{};
@@ -57,7 +57,7 @@ namespace oxygen::interop::module {
   // Overload for managed callbacks
   inline CreateSceneNodeCommand::CreateSceneNodeCommand(
     std::string name, oxygen::scene::NodeHandle parent,
-    System::Action<Oxygen::Editor::Core::NodeHandle>^ managedCallback,
+    System::Action<Oxygen::Core::NodeHandle>^ managedCallback,
     bool initializeWorldAsRoot)
     : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
     name_(std::move(name)), parent_(parent),
@@ -69,7 +69,7 @@ namespace oxygen::interop::module {
   // Overload for managed callbacks with registration key
   inline CreateSceneNodeCommand::CreateSceneNodeCommand(
     std::string name, oxygen::scene::NodeHandle parent,
-    System::Action<Oxygen::Editor::Core::NodeHandle>^ managedCallback,
+    System::Action<Oxygen::Core::NodeHandle>^ managedCallback,
     const std::array<uint8_t, 16>& registerKey, bool initializeWorldAsRoot)
     : EditorCommand(oxygen::core::PhaseId::kSceneMutation),
     name_(std::move(name)), parent_(parent),
@@ -123,7 +123,7 @@ namespace oxygen::interop::module {
 
     if (has_managed_callback_ && managed_callback_.get()) {
       // Invoke managed callback - construct NodeHandle with the Value property
-      Oxygen::Editor::Core::NodeHandle managedHandle(handle.Handle());
+      Oxygen::Core::NodeHandle managedHandle(handle.Handle());
       managed_callback_->Invoke(managedHandle);
     }
     else if (callback_) {

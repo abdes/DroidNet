@@ -578,7 +578,7 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 
 **Dependencies:**
 
-- `Oxygen.Editor.Core` (for `ScopedObservableObject`)
+- `Oxygen.Core` (for `ScopedObservableObject`)
 - `System.Text.Json` (for serialization)
 
 **File Organization:**
@@ -602,7 +602,7 @@ Oxygen.Assets/
 **Phase 4 Implementation Checklist:**
 
 - [x] Create `Oxygen.Assets` project
-- [x] Add reference to `Oxygen.Editor.Core`
+- [x] Add reference to `Oxygen.Core`
 - [x] Implement `Asset`, `GeometryAsset`, `MaterialAsset` (domain models)
 - [x] Implement `AssetReference<T>` (using `ScopedObservableObject`)
 - [x] Define `IAssetResolver` interface

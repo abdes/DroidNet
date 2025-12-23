@@ -26,7 +26,7 @@ Oxygen.Editor is organized as a modular system with clear separation of concerns
 ### Core Modules
 
 - **Oxygen.Editor.App** (`src/`) - Main WinUI application entry point with bootstrapping and UI configuration
-- **Oxygen.Editor.Core** - Core services and utilities, foundational extensions for framework classes
+- **Oxygen.Core** - Core services and utilities, foundational extensions for framework classes
 - **Oxygen.Editor.Data** - Data layer with Entity Framework Core models and persistence services
 - **Oxygen.Editor.ProjectBrowser** - Project browsing, discovery, and template management UI
 - **Oxygen.Editor.Projects** - Project metadata and project-related services
@@ -95,7 +95,7 @@ Oxygen.Editor/
 
 **Related Modules** (referenced from `projects/Oxygen.Editor.*` and used by the app):
 
-- `Oxygen.Editor.Core` - Core services and utilities
+- `Oxygen.Core` - Core services and utilities
 - `Oxygen.Editor.Data` - Data layer with Entity Framework Core
 - `Oxygen.Editor.ProjectBrowser` - Project browsing UI
 - `Oxygen.Editor.Projects` - Project metadata services
@@ -133,7 +133,7 @@ dotnet build projects/Oxygen.Editor/src/Oxygen.Editor.App.csproj
 **Run tests for a module:**
 
 ```powershell
-dotnet test projects/Oxygen.Editor.Core/tests/Oxygen.Editor.Core.Tests.csproj
+dotnet test projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj
 ```
 
 **Clean artifacts:**
@@ -199,7 +199,7 @@ See `.github/instructions/csharp_coding_style.instructions.md` for detailed styl
 
 The project uses **MSTest** with the AAA (Arrange-Act-Assert) pattern:
 
-- **Test Projects:** Named with `.Tests` suffix (e.g., `Oxygen.Editor.Core.Tests`)
+- **Test Projects:** Named with `.Tests` suffix (e.g., `Oxygen.Core.Tests`)
 - **UI Tests:** Named with `.UI.Tests` suffix
 - **Framework:** MSTest 4.0, AwesomeAssertions, optional Moq
 

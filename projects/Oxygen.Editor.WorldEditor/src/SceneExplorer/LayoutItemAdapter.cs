@@ -5,7 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using DroidNet.Controls;
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 

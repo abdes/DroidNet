@@ -68,7 +68,7 @@ The module uses Entity Framework Core with SQLite for local-first, zero-configur
 ### Project References
 
 - `DroidNet.Config` — Provides `PathFinder` for database location resolution
-- `Oxygen.Editor.Core` — Core editor interfaces and types
+- `Oxygen.Core` — Core editor interfaces and types
 
 ## Architecture
 

@@ -20,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Core\src\Oxygen.Editor.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Core\src\Oxygen.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Storage\src\Oxygen.Storage.csproj" />
     </ItemGroup>
 

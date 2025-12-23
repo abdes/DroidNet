@@ -1,6 +1,6 @@
-# Oxygen.Editor.Core
+# Oxygen.Core
 
-**Oxygen.Editor.Core** provides core services and utilities for the Oxygen Editor, including path finding for Oxygen projects, application data management, and input validation. Part of the DroidNet ecosystem, this library abstracts file system operations and offers a domain-specific interface for managing Oxygen project and application directories.
+**Oxygen.Core** provides core services and utilities for the Oxygen Editor, including path finding for Oxygen projects, application data management, and input validation. Part of the DroidNet ecosystem, this library abstracts file system operations and offers a domain-specific interface for managing Oxygen project and application directories.
 
 ## Technology Stack
 
@@ -11,10 +11,10 @@
 
 ## Project Architecture
 
-Oxygen.Editor.Core follows a layered, interface-driven architecture:
+Oxygen.Core follows a layered, interface-driven architecture:
 
 ```text
-Oxygen.Editor.Core
+Oxygen.Core
 ├── Services/
 │   ├── IOxygenPathFinder (interface)
 │   └── OxygenPathFinder (implementation)
@@ -41,7 +41,7 @@ Oxygen.Editor.Core
 Install from NuGet:
 
 ```powershell
-dotnet add package Oxygen.Editor.Core
+dotnet add package Oxygen.Core
 ```
 
 ### Basic Usage
@@ -51,7 +51,7 @@ dotnet add package Oxygen.Editor.Core
 ```csharp
 using System.IO.Abstractions;
 using DroidNet.Config;
-using Oxygen.Editor.Core.Services;
+using Oxygen.Core.Services;
 
 // Create a base path finder (from DroidNet.Config)
 var fileSystem = new FileSystem();
@@ -74,7 +74,7 @@ Console.WriteLine($"State Database: {pathFinder.StateDatabasePath}");
 #### File Name Validation
 
 ```csharp
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 
 // Validate file names (Windows-compatible)
 string fileName = "myScene.scene";
@@ -93,7 +93,7 @@ if (!isValid)
 
 ```text
 src/
-  Oxygen.Editor.Core.csproj      - Main library project
+  Oxygen.Core.csproj      - Main library project
   Constants.cs                    - Application constants (Company, Application)
   InputValidation.cs              - File name validation utilities
   MathUtil.cs                     - Math helper functions
@@ -102,7 +102,7 @@ src/
     OxygenPathFinder.cs           - Implementation delegating to IPathFinder
 
 tests/
-  Oxygen.Editor.Core.Tests.csproj - Test project
+  Oxygen.Core.Tests.csproj - Test project
   InputValidationTests.cs          - Comprehensive file name validation tests
   OxygenPathFinderTests.cs         - Path finder functionality tests
 ```
@@ -123,20 +123,20 @@ Build the library and tests:
 
 ```powershell
 # Build the main library
-dotnet build projects/Oxygen.Editor.Core/src/Oxygen.Editor.Core.csproj
+dotnet build projects/Oxygen.Core/src/Oxygen.Core.csproj
 
 # Build including tests
-dotnet build projects/Oxygen.Editor.Core
+dotnet build projects/Oxygen.Core
 ```
 
 ### Running Tests
 
 ```powershell
 # Run all tests
-dotnet test projects/Oxygen.Editor.Core/tests/Oxygen.Editor.Core.Tests.csproj
+dotnet test projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj
 
 # Run with coverage reporting
-dotnet test projects/Oxygen.Editor.Core/tests/Oxygen.Editor.Core.Tests.csproj `
+dotnet test projects/Oxygen.Core/tests/Oxygen.Core.Tests.csproj `
   /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
 ```
 
@@ -145,7 +145,7 @@ dotnet test projects/Oxygen.Editor.Core/tests/Oxygen.Editor.Core.Tests.csproj `
 For faster iteration, build just the project file:
 
 ```powershell
-dotnet build projects/Oxygen.Editor.Core/src/Oxygen.Editor.Core.csproj
+dotnet build projects/Oxygen.Core/src/Oxygen.Core.csproj
 ```
 
 ## Coding Standards
@@ -193,7 +193,7 @@ See `projects/TestHelpers/` for shared testing utilities across the repository.
 
 ## Contributing
 
-When contributing to Oxygen.Editor.Core:
+When contributing to Oxygen.Core:
 
 1. Follow the C# coding standards (see `.github/instructions/csharp_coding_style.instructions.md`)
 2. Add tests for new functionality (MSTest with AAA pattern)
@@ -205,4 +205,4 @@ For architectural questions or public API additions, reference design documents 
 
 ## License
 
-Oxygen.Editor.Core is distributed under the **MIT License**. See the LICENSE file in the repository root for details.
+Oxygen.Core is distributed under the **MIT License**. See the LICENSE file in the repository root for details.

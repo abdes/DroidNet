@@ -274,7 +274,7 @@ Copyright © 2024 Abdessattar Sassi. This product is licensed under the MIT Lice
 
 ## Related Documentation
 
-- [Oxygen Editor Core](../Oxygen.Editor.Core/README.md)
+- [Oxygen Editor Core](../Oxygen.Core/README.md)
 - [DroidNet Repository Documentation](../../.github/copilot-instructions.md)
 - [C# Coding Standards](../../.github/instructions/csharp_coding_style.instructions.md)
 - [WinUI 3 Guidelines](../../.github/instructions/csharp_coding_style.instructions.md#winui-3-specific-guidelines)

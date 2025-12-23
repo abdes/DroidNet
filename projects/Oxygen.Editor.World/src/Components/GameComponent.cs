@@ -4,7 +4,7 @@
 
 using System.Collections.Concurrent;
 using System.Text.Json.Serialization;
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Components;

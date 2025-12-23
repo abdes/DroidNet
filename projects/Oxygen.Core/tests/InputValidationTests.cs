@@ -4,7 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.Core;
+using Oxygen.Core;
 
 namespace DroidNet.TestHelpers.Tests;
 

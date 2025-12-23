@@ -5,7 +5,7 @@
 using System.IO.Abstractions;
 using DroidNet.Config;
 
-namespace Oxygen.Editor.Core.Services;
+namespace Oxygen.Core.Services;
 
 /// <summary>
 /// Provides methods to find paths related to Oxygen projects and application data.
