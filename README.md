@@ -133,7 +133,7 @@ The Oxygen projects represent a comprehensive game editor and engine implementat
 
 - **[Oxygen.Editor.Projects](projects/Oxygen.Editor.Projects/)** - Project file and structure management.
 
-- **[Oxygen.Editor.Storage](projects/Oxygen.Editor.Storage/)** - Persistence and data storage services for projects and editor state.
+- **[Oxygen.Storage](projects/Oxygen.Storage/)** - Persistence and data storage services for projects and editor state.
 
 - **[Oxygen.Editor.WorldEditor](projects/Oxygen.Editor.WorldEditor/)** - World editing and scene management UI.
 

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage;
+namespace Oxygen.Storage;
 
 /// <summary>
 /// Represents a document item that is always nested within a folder.

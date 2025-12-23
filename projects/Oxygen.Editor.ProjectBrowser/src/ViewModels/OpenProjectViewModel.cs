@@ -13,10 +13,10 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.Storage;
-using Oxygen.Editor.Storage.Native;
+using Oxygen.Storage;
+using Oxygen.Storage.Native;
 #pragma warning disable IDE0001 // Simplify Names
-using IStorageItem = Oxygen.Editor.Storage.IStorageItem;
+using IStorageItem = Oxygen.Storage.IStorageItem;
 #pragma warning restore IDE0001 // Simplify Names
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;

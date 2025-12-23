@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using System.Text;
 
-namespace Oxygen.Editor.Storage.Native;
+namespace Oxygen.Storage.Native;
 
 /// <summary>
 /// Represents a document in the file system, providing methods for deleting, copying, moving,

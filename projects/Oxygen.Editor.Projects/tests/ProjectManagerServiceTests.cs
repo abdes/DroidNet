@@ -8,7 +8,7 @@ using AwesomeAssertions;
 using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging;
 using Moq;
-using Oxygen.Editor.Storage;
+using Oxygen.Storage;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects.Tests;

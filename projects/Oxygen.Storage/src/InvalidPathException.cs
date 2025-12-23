@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage;
+namespace Oxygen.Storage;
 
 /// <summary>
 /// Exception that is thrown when a storage item is created with an invalid path string or when its current location or name are

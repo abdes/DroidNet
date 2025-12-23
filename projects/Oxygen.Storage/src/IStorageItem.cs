@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage;
+namespace Oxygen.Storage;
 
 /// <summary>
 /// Represents an item stored in a storage system (a disk, an archive, a remote location, etc).

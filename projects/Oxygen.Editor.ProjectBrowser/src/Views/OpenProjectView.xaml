@@ -11,7 +11,7 @@
     xmlns:local="using:Oxygen.Editor.ProjectBrowser.Views"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls"
-    xmlns:storage="using:Oxygen.Editor.Storage"
+    xmlns:storage="using:Oxygen.Storage"
     xmlns:vm="using:Oxygen.Editor.ProjectBrowser.ViewModels"
     x:Name="Root"
     d:DataContext="{d:DesignInstance Type=vm:OpenProjectViewModel}"

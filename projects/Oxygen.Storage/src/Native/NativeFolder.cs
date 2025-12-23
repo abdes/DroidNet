@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace Oxygen.Editor.Storage.Native;
+namespace Oxygen.Storage.Native;
 
 /// <summary>
 /// Represents a folder in the file system, providing methods for managing folders and documents within it.

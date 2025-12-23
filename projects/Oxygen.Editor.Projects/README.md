@@ -46,7 +46,7 @@ graph TB
         NODE[SceneNode]
     end
 
-    subgraph Storage["Oxygen.Editor.Storage"]
+    subgraph Storage["Oxygen.Storage"]
         FS[File System<br/>Abstractions]
     end
 
@@ -274,7 +274,7 @@ All I/O operations are async for UI responsiveness
 
 ### Project References
 - **`Oxygen.Editor.World`** - Domain models (Scene, SceneNode, etc.)
-- **`Oxygen.Editor.Storage`** - File system abstractions (IFileSystem)
+- **`Oxygen.Storage`** - File system abstractions (IFileSystem)
 
 ### NuGet Packages
 - `Microsoft.Extensions.Logging.Abstractions` - Logging
@@ -354,7 +354,7 @@ Use `Testably.Abstractions.Testing` for mocking file system.
 
 - [Oxygen.Editor.World](../Oxygen.Editor.World/README.md) - Domain models for scenes
 - [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Engine integration
-- [Oxygen.Editor.Storage](../Oxygen.Editor.Storage/) - File system abstractions
+- [Oxygen.Storage](../Oxygen.Storage/) - File system abstractions
 
 ## License
 

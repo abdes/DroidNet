@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage;
+namespace Oxygen.Storage;
 
 /// <summary>
 /// Provides methods for managing storage items (folders and documents) in the storage system.

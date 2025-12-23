@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage.Native;
+namespace Oxygen.Storage.Native;
 
 /// <summary>
 /// Represents a nested folder in the file system, providing methods for managing folders and documents within it.

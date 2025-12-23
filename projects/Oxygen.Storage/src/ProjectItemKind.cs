@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Storage;
+namespace Oxygen.Storage;
 
 /// <summary>
 /// A set of flags to specify the kind of storage items that should be included

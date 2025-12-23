@@ -30,7 +30,7 @@ Oxygen.Editor is organized as a modular system with clear separation of concerns
 - **Oxygen.Editor.Data** - Data layer with Entity Framework Core models and persistence services
 - **Oxygen.Editor.ProjectBrowser** - Project browsing, discovery, and template management UI
 - **Oxygen.Editor.Projects** - Project metadata and project-related services
-- **Oxygen.Editor.Storage** - File system abstraction and storage operations
+- **Oxygen.Storage** - File system abstraction and storage operations
 - **Oxygen.Editor.WorldEditor** - World editing interface and viewport management
 - **Oxygen.Editor.Interop** - Native interoperability layer for platform-specific operations
 
@@ -99,7 +99,7 @@ Oxygen.Editor/
 - `Oxygen.Editor.Data` - Data layer with Entity Framework Core
 - `Oxygen.Editor.ProjectBrowser` - Project browsing UI
 - `Oxygen.Editor.Projects` - Project metadata services
-- `Oxygen.Editor.Storage` - File system abstraction
+- `Oxygen.Storage` - File system abstraction
 - `Oxygen.Editor.WorldEditor` - World editing interface
 - `Oxygen.Editor.Interop` - Native interoperability
 
