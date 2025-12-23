@@ -25,9 +25,10 @@ This document captures decisions for the asset/content pipeline architecture, th
 
 ### Phase 3 — Persistence & FS adapters
 
-- [ ] Implement `container.index.bin` persistence compatible with runtime LooseCookedIndex v1
+- [X] Implement `container.index.bin` persistence compatible with runtime LooseCookedIndex v1
   - Reader (validate header, offsets, string table, entry sizes)
   - Writer (deterministic ordering, stable string table, SHA-256 metadata)
+  - Implementation + docs live in `src/Persistence/LooseCooked/V1`
 - [ ] Implement validation helpers
   - Verify SHA-256 for descriptors and resource files
   - Enforce invariants (no cross-container deps at pack time)
