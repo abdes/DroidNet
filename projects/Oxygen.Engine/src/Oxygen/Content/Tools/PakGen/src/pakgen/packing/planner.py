@@ -108,6 +108,15 @@ class FooterPlan:
 
 
 @dataclass(slots=True)
+class BrowseIndexPlan:
+    offset: int
+    size: int
+    entry_count: int
+    string_table_size: int
+    padding_before: int
+
+
+@dataclass(slots=True)
 class PaddingStats:
     total: int
     by_section: Dict[str, int]
@@ -119,6 +128,7 @@ class PakPlan:
     tables: List[TablePlan]
     assets: List[AssetPlan]
     directory: DirectoryPlan
+    browse_index: Optional[BrowseIndexPlan]
     footer: FooterPlan
     padding: PaddingStats
     file_size: int
@@ -160,7 +170,7 @@ def to_plan_dict(plan: PakPlan) -> Dict[str, Any]:  # lightweight serializer
             "warnings": list(a.warnings),
         }
 
-    return {
+    out: Dict[str, Any] = {
         "version": plan.version,
         "content_version": plan.content_version,
         "deterministic": plan.deterministic,
@@ -174,6 +184,17 @@ def to_plan_dict(plan: PakPlan) -> Dict[str, Any]:  # lightweight serializer
             "asset_count": plan.directory.asset_count,
             "padding_before": plan.directory.padding_before,
         },
+        "browse_index": (
+            {
+                "offset": plan.browse_index.offset,
+                "size": plan.browse_index.size,
+                "entry_count": plan.browse_index.entry_count,
+                "string_table_size": plan.browse_index.string_table_size,
+                "padding_before": plan.browse_index.padding_before,
+            }
+            if plan.browse_index
+            else None
+        ),
         "footer": {"offset": plan.footer.offset, "size": plan.footer.size},
         "padding": {
             "total": plan.padding.total,
@@ -194,6 +215,7 @@ def to_plan_dict(plan: PakPlan) -> Dict[str, Any]:  # lightweight serializer
             },
         },
     }
+    return out
 
 
 def _validate_name_length(name: str) -> None:
@@ -679,6 +701,43 @@ def compute_pak_plan(
             offset=0, size=0, asset_count=0, padding_before=0
         )
 
+    # Embedded browse index (optional; lives after directory and before footer)
+    if assets:
+        from .browse_index import (
+            BrowseIndexEntrySpec,
+            build_browse_index_payload,
+            derive_virtual_path_from_asset_name,
+        )
+
+        entry_specs = [
+            BrowseIndexEntrySpec(
+                asset_key=bytes.fromhex(a.key_hex),
+                virtual_path=derive_virtual_path_from_asset_name(a.name),
+            )
+            for a in assets
+        ]
+        payload, entry_count, string_table_size = build_browse_index_payload(
+            entry_specs
+        )
+
+        cursor_aligned, pad_before_bix = align(
+            cursor, TABLE_ALIGNMENT, "browse_index"
+        )
+        cursor = cursor_aligned
+        browse_index_offset = cursor
+        browse_index_size = len(payload)
+        cursor += browse_index_size
+
+        browse_index_plan = BrowseIndexPlan(
+            offset=browse_index_offset,
+            size=browse_index_size,
+            entry_count=entry_count,
+            string_table_size=string_table_size,
+            padding_before=pad_before_bix,
+        )
+    else:
+        browse_index_plan = None
+
     # Footer: lives at end; we simply append FOOTER_SIZE
     footer_offset = cursor
     cursor += FOOTER_SIZE
@@ -692,6 +751,7 @@ def compute_pak_plan(
         tables=tables,
         assets=assets,
         directory=directory_plan,
+        browse_index=browse_index_plan,
         footer=footer_plan,
         padding=padding_stats,
         file_size=cursor,
@@ -713,6 +773,7 @@ __all__ = [
     "AssetPlan",
     "DirectoryPlan",
     "FooterPlan",
+    "BrowseIndexPlan",
     "PaddingStats",
     "to_plan_dict",
     "compute_pak_plan",

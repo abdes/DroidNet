@@ -7,10 +7,13 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace {
 
@@ -66,6 +69,69 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   out.write(reinterpret_cast<const char*>(&header), sizeof(header));
   out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
   out.write(reinterpret_cast<const char*>(&entry), sizeof(entry));
+}
+
+//! Test helper: write a minimal pak with an embedded browse index.
+/*!
+ Scenario: Creates a `.pak` file whose footer references an embedded browse
+ index mapping the given virtual path to the provided AssetKey.
+*/
+auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
+  const oxygen::data::AssetKey& key, const std::string_view virtual_path)
+  -> void
+{
+  using oxygen::data::pak::AssetDirectoryEntry;
+  using oxygen::data::pak::PakBrowseIndexEntry;
+  using oxygen::data::pak::PakBrowseIndexHeader;
+  using oxygen::data::pak::PakFooter;
+  using oxygen::data::pak::PakHeader;
+
+  PakHeader header {};
+
+  std::string strings;
+  const auto off_vpath = static_cast<uint32_t>(strings.size());
+  strings += virtual_path;
+
+  PakBrowseIndexHeader bheader {};
+  bheader.version = 1;
+  bheader.entry_count = 1;
+  bheader.string_table_size = static_cast<uint32_t>(strings.size());
+
+  PakBrowseIndexEntry bentry {};
+  bentry.asset_key = key;
+  bentry.virtual_path_offset = off_vpath;
+  bentry.virtual_path_length = static_cast<uint32_t>(strings.size());
+
+  AssetDirectoryEntry dir {};
+  dir.asset_key = key;
+  dir.asset_type = 1;
+
+  const uint64_t directory_offset = sizeof(PakHeader);
+  const uint64_t browse_offset = directory_offset + sizeof(AssetDirectoryEntry);
+  const uint64_t browse_size = sizeof(PakBrowseIndexHeader)
+    + sizeof(PakBrowseIndexEntry) + strings.size();
+  const uint64_t footer_offset = browse_offset + browse_size;
+
+  dir.entry_offset = directory_offset;
+  dir.desc_offset = 0;
+  dir.desc_size = 0;
+
+  PakFooter footer {};
+  footer.directory_offset = directory_offset;
+  footer.directory_size = sizeof(AssetDirectoryEntry);
+  footer.asset_count = 1;
+
+  footer.browse_index_offset = browse_offset;
+  footer.browse_index_size = browse_size;
+
+  std::filesystem::create_directories(pak_path.parent_path());
+  std::ofstream out(pak_path, std::ios::binary);
+  out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+  out.write(reinterpret_cast<const char*>(&dir), sizeof(dir));
+  out.write(reinterpret_cast<const char*>(&bheader), sizeof(bheader));
+  out.write(reinterpret_cast<const char*>(&bentry), sizeof(bentry));
+  out.write(strings.data(), static_cast<std::streamsize>(strings.size()));
+  out.write(reinterpret_cast<const char*>(&footer), sizeof(footer));
 }
 
 //! Test: Resolver returns the AssetKey for a matching virtual path
@@ -168,6 +234,34 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_InvalidVirtualPath_Throws)
   EXPECT_THROW(
     { (void)resolver.ResolveAssetKey("Content/A.bin"); },
     std::invalid_argument);
+}
+
+//! Test: Resolver can resolve virtual paths using mounted pak browse index.
+/*!
+ Scenario: Creates a `.pak` with an embedded browse index and resolves a known
+ virtual path.
+*/
+NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_PakBrowseIndex_Found_ReturnsKey)
+{
+  // Arrange
+  const auto root
+    = std::filesystem::temp_directory_path() / "oxygen_vpath_resolver_test";
+  const auto pak_path = root / "mounted.pak";
+
+  oxygen::data::AssetKey key {};
+  key.guid[0] = 0x33;
+
+  WriteSingleAssetPakWithBrowseIndex(pak_path, key, "/Content/Pak.bin");
+
+  oxygen::content::VirtualPathResolver resolver;
+  resolver.AddPakFile(pak_path);
+
+  // Act
+  const auto resolved = resolver.ResolveAssetKey("/Content/Pak.bin");
+
+  // Assert
+  EXPECT_TRUE(resolved.has_value());
+  EXPECT_EQ(resolved->guid[0], 0x33);
 }
 
 } // namespace

@@ -1,24 +1,113 @@
 {
-  "version": 1,
+  "assets": [
+    {
+      "alignment": 16,
+      "descriptor_offset": 768,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "mat0",
+      "type": "material",
+      "variable_extra_size": 0,
+      "warnings": []
+    },
+    {
+      "alignment": 1,
+      "descriptor_offset": 1024,
+      "descriptor_size": 256,
+      "key": "00000000000000000000000000000000",
+      "name": "geo0",
+      "type": "geometry",
+      "variable_extra_size": 229,
+      "warnings": []
+    }
+  ],
+  "browse_index": {
+    "entry_count": 2,
+    "offset": 1648,
+    "padding_before": 0,
+    "size": 82,
+    "string_table_size": 10
+  },
   "content_version": 1,
   "deterministic": true,
-  "file_size": 1904,
+  "directory": {
+    "asset_count": 2,
+    "offset": 1520,
+    "padding_before": 11,
+    "size": 128
+  },
+  "file_size": 1986,
+  "footer": {
+    "offset": 1730,
+    "size": 256
+  },
+  "padding": {
+    "by_section": {
+      "assets_region": 160,
+      "directory": 11,
+      "region_buffer": 253,
+      "region_texture": 192,
+      "table_buffer": 8,
+      "table_texture": 12
+    },
+    "total": 636
+  },
   "regions": [
-    {"name": "texture", "offset": 256, "size": 3, "alignment": 256, "padding_before": 192, "padding_after": 0},
-    {"name": "buffer", "offset": 512, "size": 4, "alignment": 256, "padding_before": 253, "padding_after": 0},
-    {"name": "audio", "offset": 0, "size": 0, "alignment": 256, "padding_before": 0, "padding_after": 0}
+    {
+      "alignment": 256,
+      "name": "texture",
+      "offset": 256,
+      "padding_after": 0,
+      "padding_before": 192,
+      "size": 3
+    },
+    {
+      "alignment": 256,
+      "name": "buffer",
+      "offset": 512,
+      "padding_after": 0,
+      "padding_before": 253,
+      "size": 4
+    },
+    {
+      "alignment": 256,
+      "name": "audio",
+      "offset": 0,
+      "padding_after": 0,
+      "padding_before": 0,
+      "size": 0
+    }
   ],
+  "statistics": {
+    "asset_counts": {
+      "geometries": 1,
+      "materials": 1,
+      "total": 2
+    },
+    "variable_extra_total": 229
+  },
   "tables": [
-    {"name": "texture", "offset": 528, "count": 1, "entry_size": 40, "padding_before": 12},
-    {"name": "buffer", "offset": 576, "count": 1, "entry_size": 32, "padding_before": 8},
-    {"name": "audio", "offset": 0, "count": 0, "entry_size": 0, "padding_before": 0}
+    {
+      "count": 1,
+      "entry_size": 40,
+      "name": "texture",
+      "offset": 528,
+      "padding_before": 12
+    },
+    {
+      "count": 1,
+      "entry_size": 32,
+      "name": "buffer",
+      "offset": 576,
+      "padding_before": 8
+    },
+    {
+      "count": 0,
+      "entry_size": 0,
+      "name": "audio",
+      "offset": 0,
+      "padding_before": 0
+    }
   ],
-  "assets": [
-    {"type": "material", "key": "00000000000000000000000000000000", "descriptor_offset": 768, "descriptor_size": 256, "alignment": 16, "variable_extra_size": 0, "name": "mat0", "warnings": []},
-    {"type": "geometry", "key": "00000000000000000000000000000000", "descriptor_offset": 1024, "descriptor_size": 256, "alignment": 1, "variable_extra_size": 229, "name": "geo0", "warnings": []}
-  ],
-  "directory": {"offset": 1520, "size": 128, "asset_count": 2, "padding_before": 11},
-  "footer": {"offset": 1648, "size": 256},
-  "padding": {"total": 636, "by_section": {"region_texture": 192, "region_buffer": 253, "table_texture": 12, "table_buffer": 8, "assets_region": 160, "directory": 11}},
-  "statistics": {"variable_extra_total": 229, "asset_counts": {"materials": 1, "geometries": 1, "total": 2}}
+  "version": 1
 }

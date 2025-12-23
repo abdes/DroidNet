@@ -89,14 +89,13 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
     audio_table = unpack_table(off)
     off += 16
 
-    placeholder_crc32 = struct.unpack_from("<I", raw, off)[0]
+    browse_index_offset, browse_index_size = struct.unpack_from("<QQ", raw, off)
+    off += 16
+    reserved = raw[off : off + 108]
+    off += 108
+    pak_crc32 = struct.unpack_from("<I", raw, off)[0]
     off += 4
-    magic_len = len(FOOTER_MAGIC)
-    remaining = FOOTER_SIZE - 124  # bytes after fixed fields
-    reserved_len = remaining - magic_len
-    reserved = raw[off : off + reserved_len]
-    off += reserved_len
-    magic = raw[off : off + magic_len]
+    magic = raw[off : off + len(FOOTER_MAGIC)]
     return {
         "offset": footer_offset,
         "directory": {
@@ -114,7 +113,11 @@ def parse_footer(data: bytes) -> Dict[str, Any]:
             "buffer": Table(*buffer_table),
             "audio": Table(*audio_table),
         },
-        "placeholder_crc32": placeholder_crc32,
+        "browse_index": {
+            "offset": browse_index_offset,
+            "size": browse_index_size,
+        },
+        "pak_crc32": pak_crc32,
         "reserved_zero": all(b == 0 for b in reserved),
         "magic_ok": magic == FOOTER_MAGIC,
     }
@@ -192,8 +195,6 @@ def validate_pak(info: Dict[str, Any]) -> List[str]:
         issues.append("Footer magic mismatch")
     if not footer["crc_match"]:
         issues.append("CRC mismatch")
-    if footer.get("placeholder_crc32", 0) != 0:
-        issues.append("Unexpected non-zero placeholder CRC in footer body")
     regions = footer["regions"]
     tables = footer["tables"]
     file_size = info["file_size"]

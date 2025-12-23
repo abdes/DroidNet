@@ -6,13 +6,16 @@
 
 #include <Oxygen/Content/VirtualPathResolver.h>
 
+#include <memory>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
+#include <variant>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/LooseCookedIndex.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content {
@@ -62,12 +65,17 @@ namespace {
 } // namespace
 
 struct VirtualPathResolver::Impl final {
-  struct Mount {
+  struct LooseCookedMount {
     std::filesystem::path root;
     internal::LooseCookedIndex index;
   };
 
-  std::vector<Mount> mounts;
+  struct PakMount {
+    std::filesystem::path pak_path;
+    std::shared_ptr<PakFile> pak;
+  };
+
+  std::vector<std::variant<LooseCookedMount, PakMount>> mounts;
 };
 
 VirtualPathResolver::VirtualPathResolver()
@@ -86,9 +94,23 @@ auto VirtualPathResolver::AddLooseCookedRoot(
 
   auto index = internal::LooseCookedIndex::LoadFromFile(index_path);
 
-  impl_->mounts.push_back(Impl::Mount {
+  impl_->mounts.emplace_back(Impl::LooseCookedMount {
     .root = std::move(normalized),
     .index = std::move(index),
+  });
+}
+
+auto VirtualPathResolver::AddPakFile(const std::filesystem::path& pak_path)
+  -> void
+{
+  std::filesystem::path normalized
+    = std::filesystem::weakly_canonical(pak_path);
+
+  auto pak = std::make_shared<PakFile>(normalized);
+
+  impl_->mounts.emplace_back(Impl::PakMount {
+    .pak_path = normalized,
+    .pak = std::move(pak),
   });
 }
 
@@ -101,14 +123,26 @@ auto VirtualPathResolver::ResolveAssetKey(
   std::optional<std::filesystem::path> first_root;
 
   for (const auto& mount : impl_->mounts) {
-    const auto resolved = mount.index.FindAssetKeyByVirtualPath(virtual_path);
+    std::optional<data::AssetKey> resolved;
+    std::optional<std::filesystem::path> this_location;
+
+    if (std::holds_alternative<Impl::LooseCookedMount>(mount)) {
+      const auto& m = std::get<Impl::LooseCookedMount>(mount);
+      resolved = m.index.FindAssetKeyByVirtualPath(virtual_path);
+      this_location = m.root;
+    } else {
+      const auto& m = std::get<Impl::PakMount>(mount);
+      resolved = m.pak->ResolveAssetKeyByVirtualPath(virtual_path);
+      this_location = m.pak_path;
+    }
+
     if (!resolved) {
       continue;
     }
 
     if (!first_key) {
       first_key = *resolved;
-      first_root = mount.root;
+      first_root = *this_location;
       continue;
     }
 
@@ -117,7 +151,7 @@ auto VirtualPathResolver::ResolveAssetKey(
         "Virtual path collision: path='{}' first_root='{}' first_key='{}' "
         "other_root='{}' other_key='{}'",
         std::string(virtual_path), first_root->string(),
-        data::to_string(*first_key), mount.root.string(),
+        data::to_string(*first_key), this_location->string(),
         data::to_string(*resolved));
     }
   }

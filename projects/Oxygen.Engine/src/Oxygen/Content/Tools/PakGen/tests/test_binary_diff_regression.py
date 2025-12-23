@@ -1,7 +1,7 @@
 from pathlib import Path
 import hashlib
 import json
-from pakgen.api import BuildOptions, build_pak
+from pakgen.api import BuildOptions, build_pak, inspect_pak
 
 
 def _read_bytes(path: Path) -> bytes:
@@ -13,10 +13,16 @@ def _hexdigest(data: bytes) -> str:
 
 
 def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
-    """Build minimal spec and compare bytes to committed golden PAK.
+    """Build minimal spec and validate structural compatibility.
 
-    Ensures writer refactor maintains bitwise stability per Phase 6 exit criteria.
-    On mismatch prints first differing offset and short context window plus hashes.
+    The PAK format now includes an optional embedded browse index blob (OXPAKBIX)
+    inserted between the directory and footer. That intentionally changes the
+    byte layout vs historical golden files.
+
+    This test keeps a strong regression signal by asserting:
+    - Byte stability for all content *before* the directory end.
+    - Directory entries remain identical.
+    - New output contains a valid browse index referenced by the footer.
     """
     repo_root = Path(__file__).parent
     golden_spec = repo_root / "_golden" / "minimal_spec.json"
@@ -32,39 +38,29 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     out_pak = tmp_path / "out_minimal.pak"
     build_pak(BuildOptions(input_spec=spec_copy, output_path=out_pak))
 
+    golden_info = inspect_pak(golden_pak)
+    new_info = inspect_pak(out_pak)
+
+    assert golden_info["header"] == new_info["header"]
+    assert golden_info["footer"]["directory"] == new_info["footer"]["directory"]
+    assert golden_info.get("directory_entries", []) == new_info.get(
+        "directory_entries", []
+    )
+
     golden_bytes = _read_bytes(golden_pak)
     new_bytes = _read_bytes(out_pak)
 
-    if golden_bytes != new_bytes:
-        # Find first diff
-        limit = min(len(golden_bytes), len(new_bytes))
-        diff_index = None
-        for i in range(limit):
-            if golden_bytes[i] != new_bytes[i]:
-                diff_index = i
-                break
-        if diff_index is None and len(golden_bytes) != len(new_bytes):
-            diff_index = limit
-        ctx_start = max(0, (diff_index or 0) - 16)
-        ctx_end = min(limit, (diff_index or 0) + 16)
-        golden_slice = golden_bytes[ctx_start:ctx_end].hex()
-        new_slice = new_bytes[ctx_start:ctx_end].hex()
-        msg = (
-            "Binary diff regression: first difference at offset {}\n"
-            "Golden SHA256: {}\nNew    SHA256: {}\n"
-            "Golden slice[{}:{}]: {}\nNew    slice[{}:{}]: {}".format(
-                diff_index,
-                _hexdigest(golden_bytes),
-                _hexdigest(new_bytes),
-                ctx_start,
-                ctx_end,
-                golden_slice,
-                ctx_start,
-                ctx_end,
-                new_slice,
-            )
-        )
-        raise AssertionError(msg)
+    directory = new_info["footer"]["directory"]
+    directory_end = directory["offset"] + directory["size"]
+    assert golden_bytes[:directory_end] == new_bytes[:directory_end]
 
-    # Hash equality assertion for clarity
-    assert _hexdigest(golden_bytes) == _hexdigest(new_bytes)
+    browse = new_info["footer"].get("browse_index") or {"offset": 0, "size": 0}
+    assert browse["size"] > 0
+    bix_offset = browse["offset"]
+    bix_size = browse["size"]
+    assert new_bytes[bix_offset : bix_offset + 8] == b"OXPAKBIX"
+    assert bix_offset == directory_end
+    assert bix_offset + bix_size == new_info["footer"]["offset"]
+
+    # Sanity: new file integrity should validate.
+    assert new_info["footer"]["crc_match"]

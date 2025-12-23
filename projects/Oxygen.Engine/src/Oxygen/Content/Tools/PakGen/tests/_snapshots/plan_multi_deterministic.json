@@ -41,6 +41,13 @@
       "warnings": []
     }
   ],
+  "browse_index": {
+    "entry_count": 4,
+    "offset": 2800,
+    "padding_before": 0,
+    "size": 144,
+    "string_table_size": 24
+  },
   "content_version": 2,
   "deterministic": true,
   "directory": {
@@ -49,9 +56,9 @@
     "padding_before": 11,
     "size": 256
   },
-  "file_size": 3056,
+  "file_size": 3200,
   "footer": {
-    "offset": 2800,
+    "offset": 2944,
     "size": 256
   },
   "padding": {

@@ -20,6 +20,11 @@ import zlib
 from ..logging import get_logger, section
 from ..reporting import get_reporter
 from .planner import BuildPlan, PakPlan
+from .browse_index import (
+    BrowseIndexEntrySpec,
+    build_browse_index_payload,
+    derive_virtual_path_from_asset_name,
+)
 from .constants import (
     DATA_ALIGNMENT,
     TABLE_ALIGNMENT,
@@ -403,6 +408,45 @@ def write_pak(
             directory_offset, directory_size, asset_count = (
                 _write_assets_and_directory_from_plan(f, build_plan, pak_plan)
             )
+
+            # Embedded browse index (after directory, before footer)
+            browse_index_offset = 0
+            browse_index_size = 0
+            bix_plan = pak_plan.browse_index
+            if bix_plan and bix_plan.size > 0:
+                _pad_to(f, bix_plan.offset)
+                payload, entry_count, string_table_size = (
+                    build_browse_index_payload(
+                        [
+                            BrowseIndexEntrySpec(
+                                asset_key=bytes.fromhex(a.key_hex),
+                                virtual_path=derive_virtual_path_from_asset_name(
+                                    a.name
+                                ),
+                            )
+                            for a in pak_plan.assets
+                        ]
+                    )
+                )
+                if entry_count != bix_plan.entry_count:
+                    raise RuntimeError(
+                        "Browse index entry_count mismatch: "
+                        f"plan={bix_plan.entry_count} actual={entry_count}"
+                    )
+                if string_table_size != bix_plan.string_table_size:
+                    raise RuntimeError(
+                        "Browse index string_table_size mismatch: "
+                        f"plan={bix_plan.string_table_size} actual={string_table_size}"
+                    )
+                if len(payload) != bix_plan.size:
+                    raise RuntimeError(
+                        "Browse index size mismatch: "
+                        f"plan={bix_plan.size} actual={len(payload)}"
+                    )
+                f.write(payload)
+                browse_index_offset = bix_plan.offset
+                browse_index_size = bix_plan.size
+
             # Footer
             footer_plan = pak_plan.footer
             _pad_to(f, footer_plan.offset)
@@ -425,6 +469,8 @@ def write_pak(
                     texture_table=table_lookup.get("texture", (0, 0, 0)),
                     buffer_table=table_lookup.get("buffer", (0, 0, 0)),
                     audio_table=table_lookup.get("audio", (0, 0, 0)),
+                    browse_index_offset=browse_index_offset,
+                    browse_index_size=browse_index_size,
                     pak_crc32=0,
                 )
             )

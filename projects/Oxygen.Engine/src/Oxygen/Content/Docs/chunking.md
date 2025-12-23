@@ -190,6 +190,10 @@ The binary layout of a `.pak` file is as follows:
     [ Asset 1 Descriptor ]
     ...
     [ Asset N-1 Descriptor (aligned) ]
+[ Browse Index (Optional) ]
+    [ PakBrowseIndexHeader ]
+    [ PakBrowseIndexEntry[] ]
+    [ UTF-8 String Table (not null-terminated) ]
 [ AssetDirectory[] ]
     [ AssetDirectoryEntry 0 ]
     [ AssetDirectoryEntry 1 ]
@@ -197,6 +201,69 @@ The binary layout of a `.pak` file is as follows:
     [ AssetDirectoryEntry N-1 ]
 [ PakFooter ]
 ```
+
+## 🔎 5. Embedded Browse Index (Virtual Paths)
+
+The `.pak` directory is keyed by `AssetKey` and is sufficient for runtime
+loading, but it is not sufficient for editor browsing because it does not
+contain canonical virtual paths.
+
+To support editor and tooling workflows (scene explorer, content browser,
+diagnostics), a pak file may embed a **Browse Index** that maps virtual paths
+to `AssetKey`.
+
+### Location
+
+The browse index is stored as a contiguous blob anywhere in the file. Its
+location is referenced from the pak footer fields:
+
+- `PakFooter.browse_index_offset` (uint64, absolute)
+- `PakFooter.browse_index_size`   (uint64, size in bytes)
+
+If either value is `0`, the browse index is considered absent.
+
+> Recommended placement: immediately before `PakFooter` to keep patching simple
+> (write the blob, then write the footer with the final offset/size).
+
+### Payload Format (v1)
+
+All values are little-endian.
+
+#### PakBrowseIndexHeader (24 bytes)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `magic` | 8 bytes | ASCII `OXPAKBIX` |
+| `version` | uint32 | `1` |
+| `entry_count` | uint32 | number of entries |
+| `string_table_size` | uint32 | bytes |
+| `reserved` | uint32 | must be 0 |
+
+#### PakBrowseIndexEntry (24 bytes)
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `asset_key` | 16 bytes | serialized `AssetKey` |
+| `virtual_path_offset` | uint32 | offset into the string table |
+| `virtual_path_length` | uint32 | length in bytes |
+
+#### String Table
+
+- Raw UTF-8 bytes.
+- Strings are **not** null-terminated.
+- Each entry references a slice via `(offset,length)`.
+
+### Virtual Path Rules
+
+- Must be canonical and start with `/`.
+- Must be of the form `/{Mount}/{Path}` (e.g. `/Content/Textures/Wood.png`).
+- Must not contain `\\`, `//`, `.` or `..` path segments.
+
+### Requirements
+
+- Runtime loading does not require the browse index.
+- Editor browsing and any feature that needs **virtual-path enumeration**
+  requires the browse index to be present.
 
 ## Loading Procedure
 

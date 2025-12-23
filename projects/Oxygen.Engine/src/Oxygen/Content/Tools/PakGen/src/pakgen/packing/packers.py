@@ -57,6 +57,8 @@ def pack_footer(
     texture_table: Sequence[int],
     buffer_table: Sequence[int],
     audio_table: Sequence[int],
+    browse_index_offset: int = 0,
+    browse_index_size: int = 0,
     pak_crc32: int = 0,
 ) -> bytes:
     def pack_region(region: Sequence[int]) -> bytes:
@@ -67,7 +69,7 @@ def pack_footer(
         off, count, entry_size = table
         return struct.pack("<QII", off, count, entry_size)
 
-    reserved = b"\x00" * 124
+    reserved = b"\x00" * 108
     footer = (
         struct.pack("<QQQ", directory_offset, directory_size, asset_count)
         + pack_region(texture_region)
@@ -76,8 +78,9 @@ def pack_footer(
         + pack_table(texture_table)
         + pack_table(buffer_table)
         + pack_table(audio_table)
-        + struct.pack("<I", pak_crc32)
+        + struct.pack("<QQ", browse_index_offset, browse_index_size)
         + reserved
+        + struct.pack("<I", pak_crc32)
         + FOOTER_MAGIC
     )
     if len(footer) != 256:
