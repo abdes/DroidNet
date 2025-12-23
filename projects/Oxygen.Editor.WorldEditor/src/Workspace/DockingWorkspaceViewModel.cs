@@ -7,6 +7,8 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Docking;
+using DroidNet.Docking.Layouts;
+using DroidNet.Docking.Workspace;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
@@ -14,8 +16,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.ContentBrowser;
-using Oxygen.Editor.World.Routing;
+using Oxygen.Editor.Routing;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -89,8 +90,10 @@ public abstract partial class DockingWorkspaceViewModel(
                 {
                     ParentRouter = router,
                     RootViewModel = this.ThisViewModel,
-                })
-            .WithDocking();
+                });
+        this.childContainer.Register<IDocker, Docker>(Reuse.Singleton);
+        this.childContainer.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
+        this.childContainer.Register<DockingWorkspaceLayout>(Reuse.Singleton);
 
         this.OnSetupChildContainer(this.childContainer);
 

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <UseWinUI>true</UseWinUI>
+        <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+        <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
+
+        <RootNamespace>Oxygen.Editor.Routing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Abstractions\src\Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
+    </ItemGroup>
+</Project>
