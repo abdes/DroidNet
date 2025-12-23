@@ -22,6 +22,27 @@ public sealed class SystemIoImportFileAccess : IImportFileAccess
     }
 
     /// <inheritdoc />
+    public ValueTask<ImportFileMetadata> GetMetadataAsync(
+        string sourcePath,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+
+        var fullPath = this.ResolveFullPath(sourcePath);
+        if (!File.Exists(fullPath))
+        {
+            throw new FileNotFoundException("Missing file.", fullPath);
+        }
+
+        var info = new FileInfo(fullPath);
+        var lastWriteTimeUtc = DateTime.SpecifyKind(info.LastWriteTimeUtc, DateTimeKind.Utc);
+        return ValueTask.FromResult(new ImportFileMetadata(
+                ByteLength: info.Length,
+                LastWriteTimeUtc: new DateTimeOffset(lastWriteTimeUtc)));
+    }
+
+    /// <inheritdoc />
     public async ValueTask<ReadOnlyMemory<byte>> ReadHeaderAsync(
         string sourcePath,
         int maxBytes,
@@ -74,6 +95,7 @@ public sealed class SystemIoImportFileAccess : IImportFileAccess
     }
 
     /// <inheritdoc />
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
     public async ValueTask<ReadOnlyMemory<byte>> ReadAllBytesAsync(
         string sourcePath,
         CancellationToken cancellationToken = default)

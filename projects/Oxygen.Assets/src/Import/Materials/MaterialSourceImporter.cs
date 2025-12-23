@@ -39,6 +39,7 @@ public sealed class MaterialSourceImporter : IAssetImporter
             throw new InvalidOperationException($"{nameof(MaterialSourceImporter)} cannot import '{sourcePath}'.");
         }
 
+        var meta = await context.Files.GetMetadataAsync(sourcePath, cancellationToken).ConfigureAwait(false);
         var jsonBytes = await ReadJsonAsync(context.Files, sourcePath, cancellationToken).ConfigureAwait(false);
         if (!TryReadMaterial(jsonBytes.Span, context, out var material))
         {
@@ -53,7 +54,7 @@ public sealed class MaterialSourceImporter : IAssetImporter
             .WriteAllBytesAsync(cookedRelativePath, cookedBytes, cancellationToken)
             .ConfigureAwait(false);
 
-        return [CreateImportedAsset(context, sourcePath, virtualPath, jsonBytes, material)];
+        return [CreateImportedAsset(context, sourcePath, virtualPath, jsonBytes, meta.LastWriteTimeUtc, material)];
     }
 
     private static async ValueTask<ReadOnlyMemory<byte>> ReadJsonAsync(
@@ -107,10 +108,12 @@ public sealed class MaterialSourceImporter : IAssetImporter
         string sourcePath,
         string virtualPath,
         ReadOnlyMemory<byte> jsonBytes,
+        DateTimeOffset lastWriteTimeUtc,
         MaterialSource material)
     {
         var assetKey = context.Identity.GetOrCreateAssetKey(virtualPath, assetType: "Material");
         var sourceHash = SHA256.HashData(jsonBytes.Span);
+        var dependencies = DiscoverDependencies(sourcePath, material);
 
         return new ImportedAsset(
             AssetKey: assetKey,
@@ -119,9 +122,103 @@ public sealed class MaterialSourceImporter : IAssetImporter
             Source: new ImportedAssetSource(
                 SourcePath: sourcePath,
                 SourceHashSha256: sourceHash,
-                LastWriteTimeUtc: DateTimeOffset.UnixEpoch),
-            Dependencies: [new ImportedDependency(sourcePath, ImportedDependencyKind.SourceFile)],
+                LastWriteTimeUtc: lastWriteTimeUtc),
+            Dependencies: dependencies,
             Payload: material);
+    }
+
+    private static List<ImportedDependency> DiscoverDependencies(string sourcePath, MaterialSource material)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourcePath);
+        ArgumentNullException.ThrowIfNull(material);
+
+        // Deterministic ordering is important for incremental rebuild decisions.
+        // We keep SourceFile then Sidecar then ReferencedResource (sorted by path).
+        var seen = new HashSet<(ImportedDependencyKind, string)>();
+        var deps = new List<ImportedDependency>(capacity: 8);
+
+        Add(ImportedDependencyKind.SourceFile, sourcePath);
+        Add(ImportedDependencyKind.Sidecar, sourcePath + ".import.json");
+
+        AddAssetUri(material.PbrMetallicRoughness.BaseColorTexture?.Source);
+        AddAssetUri(material.PbrMetallicRoughness.MetallicRoughnessTexture?.Source);
+        AddAssetUri(material.NormalTexture?.Source);
+        AddAssetUri(material.OcclusionTexture?.Source);
+
+        deps.Sort(static (a, b) =>
+        {
+            var kind = a.Kind.CompareTo(b.Kind);
+            return kind != 0
+                ? kind
+                : string.CompareOrdinal(a.Path, b.Path);
+        });
+
+        return deps;
+
+        void Add(ImportedDependencyKind kind, string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            if (seen.Add((kind, path)))
+            {
+                deps.Add(new ImportedDependency(path, kind));
+            }
+        }
+
+        void AddAssetUri(string? assetUri)
+        {
+            if (string.IsNullOrWhiteSpace(assetUri))
+            {
+                return;
+            }
+
+            if (TryGetProjectRelativePathFromAssetUri(assetUri, out var projectRelativePath))
+            {
+                Add(ImportedDependencyKind.ReferencedResource, projectRelativePath);
+            }
+        }
+    }
+
+    private static bool TryGetProjectRelativePathFromAssetUri(string assetUri, out string projectRelativePath)
+    {
+        const string prefix = "asset://";
+
+        if (!assetUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            projectRelativePath = string.Empty;
+            return false;
+        }
+
+        // Important: we parse manually instead of using <see cref="Uri"/> for the authority because
+        // Uri normalizes the host to lowercase, but our mount point tokens are case-sensitive in practice.
+        var rest = assetUri[prefix.Length..];
+        var slash = rest.IndexOf('/', StringComparison.Ordinal);
+        if (slash <= 0)
+        {
+            projectRelativePath = string.Empty;
+            return false;
+        }
+
+        var mountPoint = rest[..slash];
+        var relativePath = rest[(slash + 1)..];
+
+        var delimiter = relativePath.IndexOfAny(['?', '#']);
+        if (delimiter >= 0)
+        {
+            relativePath = relativePath[..delimiter];
+        }
+
+        if (string.IsNullOrWhiteSpace(mountPoint) || string.IsNullOrWhiteSpace(relativePath))
+        {
+            projectRelativePath = string.Empty;
+            return false;
+        }
+
+        projectRelativePath = mountPoint + "/" + Uri.UnescapeDataString(relativePath);
+        return true;
     }
 
     private static string DeriveVirtualPath(ImportInput input)

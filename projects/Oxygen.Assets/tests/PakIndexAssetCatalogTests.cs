@@ -150,7 +150,7 @@ public sealed class PakIndexAssetCatalogTests
             throw new ArgumentException("keys and virtualPaths length must match.", nameof(virtualPaths));
         }
 
-        var directoryOffset = PakHeaderSize;
+        const int directoryOffset = PakHeaderSize;
         var directorySize = AssetDirectoryEntrySize * keys.Length;
 
         var browseIndexBytes = includeBrowseIndex ? CreateBrowseIndexV1(keys, virtualPaths) : Array.Empty<byte>();
@@ -219,8 +219,8 @@ public sealed class PakIndexAssetCatalogTests
             strings.AddRange(bytes);
         }
 
-        var headerSize = 24;
-        var entrySize = 24;
+        const int headerSize = 24;
+        const int entrySize = 24;
         var totalSize = headerSize + (entrySize * keys.Length) + strings.Count;
         var buffer = new byte[totalSize];
 

@@ -49,6 +49,7 @@ Reserve **Cook** for optimization/minimization policies later.
   - [X] Importer registry/selection by extension and/or signature
   - [X] Deterministic identity policy via per-source sidecar (`VirtualPath ⇄ AssetKey` stability)
   - [~] Dependency discovery (enough to drive incremental rebuilds later)
+  - [~] Import → Build orchestration (currently writes loose cooked index)
 
 - [ ] Implement glTF importer (GLB/GLTF) using SharpGLTF
   - Extract meshes/primitives → canonical mesh data (vertices + indices + submesh ranges)
@@ -61,15 +62,15 @@ Reserve **Cook** for optimization/minimization policies later.
   - [X] JSON schema + read/write + validation implemented under `src/Import/Materials/**`
   - [X] Cooked `.omat` writer implemented + unit-tested
   - [X] Importer is registered and executed via `IImportService`
-  - [ ] Still needs wiring into `Import → Build` orchestration (Build step owns final runtime outputs)
+  - [~] Build step still needs full runtime outputs beyond descriptors + index (resource tables, file records)
 
-- [ ] Implement `Oxygen.Assets.Cook` build step (runtime-ready loose cooked outputs)
+- [~] Implement `Oxygen.Assets.Cook` build step (runtime-ready loose cooked outputs)
   - Inputs: imported assets + resolved identity mapping
   - Outputs under `.cooked/<MountPoint>/`:
     - `assets/**` descriptor files: `.ogeo`, `.omat` (binary-compatible with `PakFormat.h`)
     - `resources/buffers.table` + `resources/buffers.data`
     - (later) `resources/textures.table` + `resources/textures.data`
-    - `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
+    - [~] `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
   - Compatibility-first (see `runtime-formats.md`); no optimization/minimization in Phase 4
 
 - [ ] Implement `Oxygen.Assets.Runtime` adapters for editor/PIE
