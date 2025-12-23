@@ -14,7 +14,11 @@ namespace Oxygen.Assets.Import;
 /// <param name="VirtualPath">
 /// Optional explicit virtual path. If not provided, the import pipeline derives one from the source path.
 /// </param>
+/// <param name="Settings">
+/// Optional importer-specific settings (for example <c>ExtractMaterials=true</c>).
+/// </param>
 public sealed record ImportInput(
     string SourcePath,
     string MountPoint,
-    string? VirtualPath = null);
+    string? VirtualPath = null,
+    IReadOnlyDictionary<string, string>? Settings = null);

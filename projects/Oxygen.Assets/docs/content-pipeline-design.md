@@ -55,8 +55,10 @@ Reserve **Cook** for optimization/minimization policies later.
 - [~] Implement glTF importer (GLB/GLTF) using SharpGLTF
   - [X] Extract meshes/primitives → canonical mesh data (vertices + indices + submesh ranges)
   - [X] Track external dependencies (`.bin`, external images) for incremental rebuild
-  - [ ] Extract PBR metallic-roughness subset for materials (baseColor/metallic/roughness)
-  - [ ] Produce editable material sources (`*.omat.json`) for extracted materials (so import yields both source JSON and cooked runtime `.omat` after Build)
+  - [X] Extract PBR metallic-roughness subset for materials (baseColor/metallic/roughness)
+  - [X] Produce editable material sources (`*.omat.json`) for extracted materials (so import yields both source JSON and cooked runtime `.omat` after Build)
+  - [ ] Extract textures (baseColor, normal, metallicRoughness, occlusion, emissive) and import them as `.otex` assets
+  - [ ] Update material sources to reference the extracted texture assets
   - MVP scope: geometry + materials only (textures may be discovered but can be ignored for emission)
 
 - [X] Implement material-source importer (JSON → `.omat`)

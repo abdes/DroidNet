@@ -5,6 +5,7 @@
 using System.Security.Cryptography;
 using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Geometry;
+using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Assets.Cook;
@@ -86,6 +87,7 @@ public sealed class LooseCookedBuildService
             var fileRecords = new List<FileRecord>();
 
             await CookGeometryAsync(files, mountPoint, group, fileRecords, cancellationToken).ConfigureAwait(false);
+            await CookMaterialAsync(files, mountPoint, group, cancellationToken).ConfigureAwait(false);
             var entries = new List<AssetEntry>();
 
             foreach (var asset in group.OrderBy(static a => a.VirtualPath, StringComparer.Ordinal))
@@ -125,6 +127,40 @@ public sealed class LooseCookedBuildService
             await files
                 .WriteAllBytesAsync($".cooked/{mountPoint}/container.index.bin", indexBytes, cancellationToken)
                 .ConfigureAwait(false);
+        }
+    }
+
+    private static async Task CookMaterialAsync(
+        IImportFileAccess files,
+        string mountPoint,
+        IGrouping<string, ImportedAsset> group,
+        CancellationToken cancellationToken)
+    {
+        var materials = group
+            .Where(static a => string.Equals(a.AssetType, "Material", StringComparison.Ordinal) && a.Payload is MaterialSource)
+            .Select(static a => (a, (MaterialSource)a.Payload))
+            .ToList();
+
+        if (materials.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (asset, source) in materials)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var descriptorRelativePath = GetDescriptorRelativePath(asset.VirtualPath, mountPoint);
+            var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
+
+            byte[] cookedBytes;
+            using (var ms = new MemoryStream())
+            {
+                CookedMaterialWriter.Write(ms, source);
+                cookedBytes = ms.ToArray();
+            }
+
+            await files.WriteAllBytesAsync(cookedDescriptorPath, cookedBytes, cancellationToken).ConfigureAwait(false);
         }
     }
 
