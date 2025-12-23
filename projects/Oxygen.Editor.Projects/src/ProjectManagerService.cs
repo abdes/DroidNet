@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.Storage;
+using Oxygen.Storage;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Projects;

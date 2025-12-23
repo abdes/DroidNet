@@ -6,7 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO.Abstractions;
 
-namespace Oxygen.Editor.Storage.Native;
+namespace Oxygen.Storage.Native;
 
 /// <summary>
 /// Provides methods for managing storage items (folders and documents) in the file system.

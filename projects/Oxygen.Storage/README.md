@@ -37,24 +37,24 @@ The storage layer follows a contract-based design pattern with clear separation 
 
 ### Installation
 
-Add a reference to the Oxygen.Editor.Storage NuGet package:
+Add a reference to the Oxygen.Storage NuGet package:
 
 ```xml
 <ItemGroup>
-    <PackageReference Include="Oxygen.Editor.Storage" Version="*" />
+    <PackageReference Include="Oxygen.Storage" Version="*" />
 </ItemGroup>
 ```
 
 Or via the dotnet CLI:
 
 ```powershell
-dotnet add package Oxygen.Editor.Storage
+dotnet add package Oxygen.Storage
 ```
 
 ### Basic Setup
 
 ```csharp
-using Oxygen.Editor.Storage;
+using Oxygen.Storage;
 using Testably.Abstractions;
 
 // Create a file system abstraction
@@ -92,7 +92,7 @@ src/
     └── NativeFile.cs            # Document implementation
 
 tests/
-└── Oxygen.Editor.Storage.Tests/ # MSTest test suite
+└── Oxygen.Storage.Tests/ # MSTest test suite
 ```
 
 ## Key Features
@@ -125,7 +125,7 @@ tests/
 Build the project using the solution or directly via project file:
 
 ```powershell
-dotnet build src/Oxygen.Editor.Storage.csproj
+dotnet build src/Oxygen.Storage.csproj
 ```
 
 ### Running Tests
@@ -133,7 +133,7 @@ dotnet build src/Oxygen.Editor.Storage.csproj
 Execute the test suite:
 
 ```powershell
-dotnet test tests/Oxygen.Editor.Storage.Tests/Oxygen.Editor.Storage.Tests.csproj
+dotnet test tests/Oxygen.Storage.Tests/Oxygen.Storage.Tests.csproj
 ```
 
 ### Code Standards
@@ -151,7 +151,7 @@ This project follows the DroidNet repository code standards:
 The project uses **MSTest** with the AAA (Arrange-Act-Assert) pattern:
 
 - **Test Framework**: MSTest 4.0
-- **Test Location**: `tests/Oxygen.Editor.Storage.Tests/`
+- **Test Location**: `tests/Oxygen.Storage.Tests/`
 - **Naming Convention**: `MethodName_Scenario_ExpectedBehavior`
 - **Assertion Library**: AwesomeAssertions for fluent assertions
 - **Mocking**: Moq for interface mocking and file system abstraction

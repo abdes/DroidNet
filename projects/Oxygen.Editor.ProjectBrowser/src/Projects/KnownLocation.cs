@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.CompilerServices;
-using Oxygen.Editor.Storage;
-using Oxygen.Editor.Storage.Native;
+using Oxygen.Storage;
+using Oxygen.Storage.Native;
 
 namespace Oxygen.Editor.ProjectBrowser.Projects;
 

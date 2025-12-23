@@ -14,7 +14,7 @@
   * [Oxygen Editor Core](projects/Oxygen.Editor.Core/README.md)
   * [Oxygen Editor Data Layer](projects/Oxygen.Editor.Data/README.md)
   * [Oxygen Editor Projects](projects/Oxygen.Editor.Projects/README.md)
-  * [Oxygen Editor Document Storage Layer](projects/Oxygen.Editor.Storage/README.md)
+  * [Oxygen Editor Document Storage Layer](projects/Oxygen.Storage/README.md)
   * [Application Resources](projects/Resources/README.md)
   * [Test Helpers](projects/TestHelpers/README.md)
   * [Undo/Redo](projects/TimeMachine/README.md)

@@ -4,10 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.Storage.Native;
+using Oxygen.Storage.Native;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.Storage.Tests.Native;
+namespace Oxygen.Storage.Tests.Native;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

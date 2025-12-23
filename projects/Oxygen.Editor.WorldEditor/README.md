@@ -52,7 +52,7 @@ The WorldEditor integrates with multiple framework modules:
 - **Oxygen.Editor.Core** – Core editor services
 - **Oxygen.Editor.Data** – Data management and persistence
 - **Oxygen.Editor.Projects** – Project file handling
-- **Oxygen.Editor.Storage** – Storage abstraction layer
+- **Oxygen.Storage** – Storage abstraction layer
 
 ## Project Architecture
 
