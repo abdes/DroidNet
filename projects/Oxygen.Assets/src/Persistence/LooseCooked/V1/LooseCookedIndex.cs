@@ -449,7 +449,7 @@ public static class LooseCookedIndex
                 throw new ArgumentException($"DescriptorSha256 must be {Sha256Size} bytes.", nameof(document));
             }
 
-            asset.DescriptorSha256.CopyTo(entry.Slice(36, Sha256Size));
+            asset.DescriptorSha256.Span.CopyTo(entry.Slice(36, Sha256Size));
             stream.Write(entry);
         }
     }
@@ -475,7 +475,7 @@ public static class LooseCookedIndex
                 throw new ArgumentException($"Sha256 must be {Sha256Size} bytes.", nameof(document));
             }
 
-            file.Sha256.CopyTo(record.Slice(16, Sha256Size));
+            file.Sha256.Span.CopyTo(record.Slice(16, Sha256Size));
             stream.Write(record);
         }
     }

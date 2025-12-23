@@ -33,11 +33,11 @@ public sealed class LooseCookedIndexTests
         _ = read.Assets[0].DescriptorRelativePath.Should().Be(doc.Assets[0].DescriptorRelativePath);
         _ = read.Assets[0].VirtualPath.Should().Be(doc.Assets[0].VirtualPath);
         _ = read.Assets[0].AssetKey.Should().Be(doc.Assets[0].AssetKey);
-        _ = read.Assets[0].DescriptorSha256.Should().Equal(doc.Assets[0].DescriptorSha256);
+        _ = read.Assets[0].DescriptorSha256.Span.ToArray().Should().Equal(doc.Assets[0].DescriptorSha256.Span.ToArray());
 
         _ = read.Files[0].Kind.Should().Be(doc.Files[0].Kind);
         _ = read.Files[0].RelativePath.Should().Be(doc.Files[0].RelativePath);
-        _ = read.Files[0].Sha256.Should().Equal(doc.Files[0].Sha256);
+        _ = read.Files[0].Sha256.Span.ToArray().Should().Equal(doc.Files[0].Sha256.Span.ToArray());
     }
 
     [TestMethod]

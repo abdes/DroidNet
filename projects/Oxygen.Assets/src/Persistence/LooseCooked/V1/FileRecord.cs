@@ -8,4 +8,4 @@ public sealed record FileRecord(
     FileKind Kind,
     string RelativePath,
     ulong Size,
-    byte[] Sha256);
+    System.ReadOnlyMemory<byte> Sha256);

@@ -31,12 +31,8 @@ Because virtual paths are editor-facing identity (what scenes persist), the edit
 
 Required capabilities:
 
-- Normalize and validate virtual paths:
-  - start with `/`
-  - use `/` separators only
-  - no `.` or `..` segments after normalization
-  - no trailing `/` (except root)
-- Establish and enforce an explicit **case policy** (recommended: treat virtual paths as case-sensitive for identity; handle platform case quirks in UI).
+- Normalize and validate virtual paths according to the single source of truth: [virtual-paths.md](../../../../../Oxygen.Assets/docs/virtual-paths.md).
+- Establish and enforce an explicit case policy (recommended: treat virtual paths as case-sensitive for identity; handle platform case quirks in UI).
 - Provide a single canonicalization implementation used consistently by:
   - content browser
   - scene serialization

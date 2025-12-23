@@ -10,4 +10,4 @@ public sealed record AssetEntry(
     string? VirtualPath,
     byte AssetType,
     ulong DescriptorSize,
-    byte[] DescriptorSha256);
+    System.ReadOnlyMemory<byte> DescriptorSha256);

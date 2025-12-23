@@ -17,9 +17,6 @@ internal static class BuiltInAssets
 {
     private const string BaseUri = "asset://Generated/";
 
-    /// <summary>
-    /// Creates the set of built-in generated assets.
-    /// </summary>
     public static IEnumerable<Asset> Create()
     {
         // Basic shape geometries (1 LOD, 1 SubMesh "Main")
