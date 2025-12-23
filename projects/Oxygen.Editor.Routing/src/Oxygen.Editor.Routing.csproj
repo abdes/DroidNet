@@ -8,6 +8,12 @@
 
         <RootNamespace>Oxygen.Editor.Routing</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+
+        <Title>Oxygen editor routing system.</Title>
+		<Description>Local (embedded) routed navigation for the Oxygen Editor. This project adapts the shared `DroidNet.Routing` router to work as a **child router** hosted inside an existing editor view model tree (rather than as a top-level, window-targeted router).</Description>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageTags>winui;routing;navigation;editor</PackageTags>
+		<PackageReleaseNotes>Initial version.</PackageReleaseNotes>
     </PropertyGroup>
 
     <ItemGroup>
