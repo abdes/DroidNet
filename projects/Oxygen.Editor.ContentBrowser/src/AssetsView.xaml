@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentBrowser.AssetsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Routing.WinUI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.ContentBrowser"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Border Margin="0,0,4,4" Background="{ThemeResource LayerFillColorDefaultBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <dnc:ToolBar
+                Grid.Column="0"
+                HorizontalAlignment="Left"
+                Background="Transparent">
+
+                <dnc:ToolBarButton Label="New">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Add" />
+                    </dnc:ToolBarButton.Icon>
+                    <dnc:ToolBarButton.Flyout>
+                        <MenuFlyout x:Name="NewEmptySpace" Placement="BottomEdgeAlignedLeft">
+                            <MenuFlyoutItem
+                                x:Name="ToolbarNewFolderItem"
+                                AccessKey="D"
+                                AutomationProperties.AutomationId="InnerNavigationToolbarNewFolderButton"
+                                Text="Folder">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE8B7;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutItem
+                                x:Name="NewFile"
+                                AccessKey="F"
+                                Command="{x:Bind ViewModel.CreateNewSceneWithPromptCommand}"
+                                Text="Scene">
+                                <MenuFlyoutItem.Icon>
+                                    <FontIcon Glyph="&#xE7C3;" />
+                                </MenuFlyoutItem.Icon>
+                            </MenuFlyoutItem>
+                            <MenuFlyoutSeparator x:Name="NewMenuFileFolderSeparator" />
+                        </MenuFlyout>
+                    </dnc:ToolBarButton.Flyout>
+                </dnc:ToolBarButton>
+
+                <dnc:ToolBarSeparator />
+
+                <dnc:ToolBarButton Label="Cut" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Cut" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+                <dnc:ToolBarButton Label="Copy" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Copy" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+                <dnc:ToolBarButton Label="Paste" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Paste" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+                <dnc:ToolBarButton Label="Rename" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Rename" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+
+                <dnc:ToolBarSeparator />
+
+                <dnc:ToolBarButton Label="Delete" ToolBarLabelPosition="Collapsed">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Delete" />
+                    </dnc:ToolBarButton.Icon>
+                </dnc:ToolBarButton>
+                <dnc:ToolBarSeparator />
+            </dnc:ToolBar>
+
+            <controls:RouterOutlet
+                Grid.Row="1"
+                Outlet="assets"
+                ViewModel="{x:Bind ViewModel.LayoutViewModel, Mode=OneWay}"
+                VmToViewConverter="{x:Bind ViewModel.VmToViewConverter}" />
+
+        </Grid>
+    </Border>
+</UserControl>

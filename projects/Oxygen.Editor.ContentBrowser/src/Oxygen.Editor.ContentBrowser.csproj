@@ -6,45 +6,30 @@
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
         <TargetFrameworks>net9.0-windows10.0.26100.0</TargetFrameworks>
 
-        <RootNamespace>Oxygen.Editor.World</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ContentBrowser</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
-        <PackageReference Include="CommunityToolkit.WinUI.Collections" />
-        <PackageReference Include="CommunityToolkit.WinUI.Controls.Segmented" />
         <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
-        <PackageReference Include="DryIoc.dll" />
-        <PackageReference Include="Testably.Abstractions" />
-        <PackageReference Include="CommunityToolkit.WinUI.Triggers" />
-        <!-- Reactive Extensions used for UI-level debounced resize handling -->
-        <PackageReference Include="System.Reactive" />
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\InPlaceEdit\src\Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\Menus\src\Controls.Menus.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\ToolBars\src\Controls.ToolBars.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Converters\src\Converters.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Docking\src\Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm\src\Mvvm.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Core\src\Oxygen.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Routing\src\Oxygen.Editor.Routing.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentBrowser\src\Oxygen.Editor.ContentBrowser.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Runtime\src\Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Storage\src\Oxygen.Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Resources\src\Resources.csproj" />
