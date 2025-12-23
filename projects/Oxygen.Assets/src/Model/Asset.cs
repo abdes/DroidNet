@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Assets;
+namespace Oxygen.Assets;
 
 /// <summary>
 /// Abstract base class for all asset types in the editor.

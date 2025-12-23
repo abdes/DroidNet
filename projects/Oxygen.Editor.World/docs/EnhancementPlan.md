@@ -574,7 +574,7 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 
 #### 4.5 Project Structure & Implementation
 
-**New Module:** `Oxygen.Editor.Assets`
+**New Module:** `Oxygen.Assets`
 
 **Dependencies:**
 
@@ -584,7 +584,7 @@ For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 **File Organization:**
 
 ```text
-Oxygen.Editor.Assets/
+Oxygen.Assets/
 ├─ src/
 │  ├─ Asset.cs                       # Abstract base class
 │  ├─ GeometryAsset.cs               # Geometry + LODs + SubMeshes
@@ -596,12 +596,12 @@ Oxygen.Editor.Assets/
 │     ├─ GeneratedAssetResolver.cs   # In-memory resolver
 │     ├─ FileSystemAssetResolver.cs  # Content folder resolver (stub for Phase 4)
 │     └─ PakAssetResolver.cs         # PAK file resolver (stub for Phase 4)
-└─ Oxygen.Editor.Assets.csproj
+└─ Oxygen.Assets.csproj
 ```
 
 **Phase 4 Implementation Checklist:**
 
-- [x] Create `Oxygen.Editor.Assets` project
+- [x] Create `Oxygen.Assets` project
 - [x] Add reference to `Oxygen.Editor.Core`
 - [x] Implement `Asset`, `GeometryAsset`, `MaterialAsset` (domain models)
 - [x] Implement `AssetReference<T>` (using `ScopedObservableObject`)
@@ -611,11 +611,11 @@ Oxygen.Editor.Assets/
   - `BasicShapes/Cube`, `BasicShapes/Sphere`, `BasicShapes/Plane`, `BasicShapes/Cylinder`
   - `Materials/Default`
 - [x] Implement stub resolvers (`FileSystemAssetResolver`, `PakAssetResolver`)
-- [x] Update `Oxygen.Editor.World` to reference `Oxygen.Editor.Assets`
+- [x] Update `Oxygen.Editor.World` to reference `Oxygen.Assets`
 - [x] Write unit tests for `AssetReference<T>` synchronization logic
 - [x] Write unit tests for `GeneratedAssetResolver`
 
-**Status:** ✅ **Completed** — The asset system foundation is fully implemented. The new `Oxygen.Editor.Assets` module provides URI-based asset references, a pluggable resolver architecture, and 5 built-in generated assets (4 primitive geometries + 1 default material). All 21 unit tests pass. `FileSystemAssetResolver` and `PakAssetResolver` are stubbed for future phases.
+**Status:** ✅ **Completed** — The asset system foundation is fully implemented. The new `Oxygen.Assets` module provides URI-based asset references, a pluggable resolver architecture, and 5 built-in generated assets (4 primitive geometries + 1 default material). All 21 unit tests pass. `FileSystemAssetResolver` and `PakAssetResolver` are stubbed for future phases.
 
 ---
 

@@ -4,9 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.Assets.Resolvers;
+using Oxygen.Assets.Resolvers;
 
-namespace Oxygen.Editor.Assets.Tests;
+namespace Oxygen.Assets.Tests;
 
 /// <summary>
 /// Unit tests for the <see cref="GeneratedAssetResolver"/> class.

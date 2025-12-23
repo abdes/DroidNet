@@ -1,4 +1,4 @@
-# Oxygen.Editor.Assets
+# Oxygen.Assets
 
 A compact asset metadata & resolution surface used by the Oxygen editor. This module provides
 lightweight asset models, serializable references and a pluggable resolver architecture so

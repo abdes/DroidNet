@@ -5,7 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 
-namespace Oxygen.Editor.Assets.Tests;
+namespace Oxygen.Assets.Tests;
 
 /// <summary>
 /// Unit tests for the <see cref="AssetReference{T}"/> class.
