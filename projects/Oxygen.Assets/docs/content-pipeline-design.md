@@ -77,13 +77,11 @@ Reserve **Cook** for optimization/minimization policies later.
     - [X] `container.index.bin` (LooseCookedIndex v1) with file records for produced resource files
   - [X] Compatibility-first (see `runtime-formats.md`); no optimization/minimization in Phase 4
 
-- [ ] Implement `Oxygen.Assets.Runtime` adapters for editor/PIE
-  - Deterministic container registration (mount points → cooked roots)
-  - Provide a simple “PIE uses cooked root” integration path
-  - [ ] Provide a mount-point registry: `MountPoint -> .cooked/<MountPoint>/` root
-  - [ ] Provide an `IAssetResolver` that loads descriptors from loose cooked root via `container.index.bin`
-  - [ ] Provide a minimal “PIE bootstrap” helper that registers cooked roots for selected mount points
-  - [ ] Add a small integration test that can load one cooked `.omat` by URI
+- [X] Implement Editor/PIE asset resolution strategy
+  - [X] Use `FileSystemAssetResolver` as the primary resolver for Editor/PIE
+  - [X] Refactor `FileSystemAssetResolver` to read geometry artifacts directly from `.imported` cache
+  - [X] Remove on-the-fly import logic from resolver (performance fix)
+  - [X] Ensure deterministic mapping from `asset://` URI to `.imported` artifact path
 
 - [ ] Wire `projects/Oxygen.Editor.ContentBrowser` UI to the pipeline
   - One command: **Import** → runs Import → Build and refreshes cooked catalog

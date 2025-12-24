@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Assets.Import.Materials;
+
 namespace Oxygen.Assets.Model;
 
 /// <summary>
@@ -13,6 +15,12 @@ namespace Oxygen.Assets.Model;
 /// </remarks>
 public sealed class MaterialAsset : Asset
 {
-    // Minimal material data for Phase 4
-    // Future phases will add: shader references, texture maps, parameters, etc.
+    /// <summary>
+    /// Gets or sets the source data for this material.
+    /// </summary>
+    /// <remarks>
+    /// This property is populated when loading from source (e.g. via <see cref="Resolvers.FileSystemAssetResolver"/>).
+    /// It may be null when loading from cooked data if the source is not available or not parsed.
+    /// </remarks>
+    public MaterialSource? Source { get; set; }
 }

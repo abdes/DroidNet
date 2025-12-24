@@ -26,7 +26,6 @@ stubs for filesystem & PAK resolvers to be implemented in later phases.
 - [Built-in generated assets](#built-in-generated-assets)
 - [Key types and behavior (quick reference)](#key-types-and-behavior-quick-reference)
 - [Usage examples](#usage-examples)
-- [Notes and roadmap](#notes-and-roadmap)
 
 ## Implementation status
 
@@ -35,7 +34,7 @@ stubs for filesystem & PAK resolvers to be implemented in later phases.
 | Asset domain models | ✅ Implemented | `Asset`, `GeometryAsset`, `MaterialAsset`, `MeshLod`, `SubMesh` |
 | Asset references | ✅ Implemented | `AssetReference<T>` keeps `Uri` and runtime `Asset` in sync (`[JsonIgnore]` for Asset) |
 | Generated assets | ✅ Implemented | `GeneratedAssetResolver` exposes a frozen, thread-safe catalog (basic shapes + default material) |
-| File-system resolver | ⚠️ Stub | `FileSystemAssetResolver` exists but does not load/deserialize files yet |
+| File-system resolver | ✅ Implemented | `FileSystemAssetResolver` maps URIs to source/imported files on disk |
 | PAK/Engine resolver | ⚠️ Stub | `PakAssetResolver` is present as a placeholder (future PAK integration) |
 
 > Note: resolver matching is case-insensitive (e.g. `Generated` and `generated` are equivalent).
@@ -52,16 +51,16 @@ Examples:
 
 - `asset://Generated/BasicShapes/Cube` — runtime-generated built-in geometry
 - `asset://Generated/Materials/Default` — built-in default material
-- `asset://Content/Models/Hero.geo` — content (file-system) — stubbed in Phase 4
-- `asset://Engine/Textures/Skybox` — engine/PAK resources — stubbed in Phase 4
+- `asset://Content/Models/Hero.ogeo` — content (file-system)
+- `asset://Engine/Textures/Skybox.otex` — engine/PAK resources
 
 ## Mount points
 
 | Mount point | Implemented | Typical examples | Implementation |
 |---|:---:|---|---|
 | Generated | ✅ | `asset://Generated/BasicShapes/Cube` | `GeneratedAssetResolver` — frozen in-memory catalog (Cube/Sphere/Plane/Cylinder + Default material) |
-| Content | ⚠️ | `asset://Content/...` | `FileSystemAssetResolver` — stub (future file mapping & deserialization) |
-| Engine / Packages | ⚠️ | `asset://Engine/...`, `asset://SomePackage/...` | `PakAssetResolver` — stub for future PAK integration (treats unknown non-Content, non-Generated authorities as package/engine) |
+| Content | ✅ | `asset://Content/...` | `FileSystemAssetResolver` — configured for "Content" authority, reads from source/imported folders |
+| Engine | ✅ | `asset://Engine/...` | `FileSystemAssetResolver` — configured for "Engine" authority (in Editor) or `PakAssetResolver` (in Runtime) |
 
 ## Built-in generated assets
 
@@ -104,8 +103,3 @@ var builtIn = new GeometryAsset { Uri = new Uri("asset://Generated/BasicShapes/S
 var refToSphere = new AssetReference<GeometryAsset>();
 refToSphere.Asset = builtIn; // refToSphere.Uri is updated to builtIn.Uri
 ```
-
-## Notes and roadmap
-
-- The `FileSystemAssetResolver` and `PakAssetResolver` are intentionally stubbed in Phase 4 — they will be expanded with file mapping, deserialization and caching in subsequent phases.
-- Geometry and material metadata are minimal in this phase. Future work will add textures, shader links, and editor hot-reload support.

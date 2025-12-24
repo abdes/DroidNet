@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Assets.Import.Geometry;
+
 namespace Oxygen.Assets.Model;
 
 /// <summary>
@@ -13,6 +15,15 @@ namespace Oxygen.Assets.Model;
 /// </remarks>
 public sealed class GeometryAsset : Asset
 {
+    /// <summary>
+    /// Gets or sets the source geometry data.
+    /// </summary>
+    /// <value>
+    /// The imported geometry payload containing vertices, indices, and submesh definitions.
+    /// This is typically populated when resolving assets from source files in the editor.
+    /// </value>
+    public ImportedGeometry? Source { get; set; }
+
     /// <summary>
     /// Gets the list of Level of Detail (LOD) meshes for this geometry.
     /// </summary>

@@ -154,7 +154,8 @@ public sealed class LooseCookedBuildService
             var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
 
             byte[] cookedBytes;
-            using (var ms = new MemoryStream())
+            var ms = new MemoryStream();
+            await using (ms.ConfigureAwait(false))
             {
                 CookedMaterialWriter.Write(ms, source);
                 cookedBytes = ms.ToArray();
