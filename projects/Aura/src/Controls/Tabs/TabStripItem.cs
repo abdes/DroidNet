@@ -435,10 +435,7 @@ public partial class TabStripItem : ContentControl
         else if (string.Equals(e.PropertyName, nameof(TabItem.IsDirty), StringComparison.Ordinal))
         {
             this.LogItemPropertyChanged(e);
-            if (this.dirtyIndicator != null)
-            {
-                this.dirtyIndicator.Visibility = this.Item?.IsDirty == true ? Visibility.Visible : Visibility.Collapsed;
-            }
+            _ = this.dirtyIndicator?.Visibility = this.Item?.IsDirty == true ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
