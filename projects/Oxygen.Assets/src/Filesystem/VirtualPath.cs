@@ -10,6 +10,130 @@ namespace Oxygen.Assets.Filesystem;
 public static class VirtualPath
 {
     /// <summary>
+    /// Determines whether a path is a canonical absolute virtual path.
+    /// Canonical absolute virtual paths:
+    /// <list type="bullet">
+    /// <item><description>Start with '/'.</description></item>
+    /// <item><description>Use '/' separators only (no '\').</description></item>
+    /// <item><description>Do not contain empty segments ('//').</description></item>
+    /// <item><description>Do not contain '.' or '..' segments.</description></item>
+    /// </list>
+    /// </summary>
+    /// <param name="path">The path to check.</param>
+    /// <returns><see langword="true"/> when the path is canonical; otherwise <see langword="false"/>.</returns>
+    public static bool IsCanonicalAbsolute(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return false;
+        }
+
+        if (string.Equals(path, "/", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        if (path[0] != '/')
+        {
+            return false;
+        }
+
+        if (path.Contains('\\', StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        // Reject trailing slash (would imply an empty segment).
+        if (path[^1] == '/')
+        {
+            return false;
+        }
+
+        // Split with empty segments preserved to detect "//".
+        var segments = path.Split('/', StringSplitOptions.None);
+        if (segments.Length < 2)
+        {
+            return false;
+        }
+
+        // segments[0] is empty due to leading '/'.
+        for (var i = 1; i < segments.Length; i++)
+        {
+            var segment = segments[i];
+            if (segment.Length == 0)
+            {
+                return false;
+            }
+
+            if (string.Equals(segment, ".", StringComparison.Ordinal)
+                || string.Equals(segment, "..", StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a canonical absolute virtual path from a mount point name and a relative path within that mount.
+    /// The resulting path is guaranteed to be canonical according to <see cref="IsCanonicalAbsolute"/>.
+    /// </summary>
+    /// <param name="mountPointName">The mount point name (first path segment).</param>
+    /// <param name="relativePath">A relative path within the mount (may include '/' or '\' separators).</param>
+    /// <returns>A canonical absolute virtual path.</returns>
+    /// <exception cref="ArgumentException">Thrown when inputs are invalid.</exception>
+    public static string CreateAbsolute(string mountPointName, string? relativePath = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(mountPointName);
+
+        if (mountPointName.Contains('/', StringComparison.Ordinal)
+            || mountPointName.Contains('\\', StringComparison.Ordinal)
+            || string.Equals(mountPointName, ".", StringComparison.Ordinal)
+            || string.Equals(mountPointName, "..", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("Mount point name must be a single, non-dot segment.", nameof(mountPointName));
+        }
+
+        if (string.IsNullOrEmpty(relativePath))
+        {
+            return "/" + mountPointName;
+        }
+
+        var normalizedRelative = NormalizeSlashes(relativePath);
+        if (normalizedRelative.StartsWith('/'))
+        {
+            throw new ArgumentException("Relative path must not start with '/'.", nameof(relativePath));
+        }
+
+        if (normalizedRelative.EndsWith('/'))
+        {
+            throw new ArgumentException("Relative path must not end with '/'.", nameof(relativePath));
+        }
+
+        // Preserve empty segments to detect "//".
+        var parts = normalizedRelative.Split('/', StringSplitOptions.None);
+        foreach (var part in parts)
+        {
+            if (part.Length == 0)
+            {
+                throw new ArgumentException("Relative path must not contain empty segments ('//').", nameof(relativePath));
+            }
+
+            if (string.Equals(part, ".", StringComparison.Ordinal)
+                || string.Equals(part, "..", StringComparison.Ordinal))
+            {
+                throw new ArgumentException("Relative path must not contain '.' or '..' segments.", nameof(relativePath));
+            }
+        }
+
+        var result = "/" + mountPointName + "/" + normalizedRelative;
+        return !IsCanonicalAbsolute(result)
+            ? throw new ArgumentException("Inputs did not produce a canonical absolute virtual path.", nameof(relativePath))
+            : result;
+    }
+
+    /// <summary>
     /// Normalizes path separators to forward slashes ('/').
     /// </summary>
     /// <param name="path">The path to normalize.</param>
