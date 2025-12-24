@@ -5,11 +5,14 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
+using Windows.Storage.Pickers;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using Oxygen.Assets.Import;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Models;
@@ -17,6 +20,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using WinRT.Interop;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -28,13 +32,17 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
+/// <param name="importService">The import service.</param>
+/// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
     IProject currentProject,
     IAssetIndexingService assetsIndexingService,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectManagerService projectManagerService,
-    IMessenger messenger) : AbstractOutletContainer, IRoutingAware
+    IMessenger messenger,
+    IImportService importService,
+    IWindowManagerService windowManagerService) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
     private bool isInitialized;
@@ -240,6 +248,97 @@ public partial class AssetsViewModel(
             && this.LayoutViewModel is AssetsLayoutViewModel layoutViewModel)
         {
             layoutViewModel.ItemInvoked += this.OnAssetItemInvoked;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ImportAsync()
+    {
+        var window = windowManagerService.ActiveWindow?.Window;
+        if (window is null)
+        {
+            return;
+        }
+
+        var picker = new FileOpenPicker();
+        InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(window));
+        picker.ViewMode = PickerViewMode.List;
+        picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+        picker.FileTypeFilter.Add("*");
+
+        var file = await picker.PickSingleFileAsync();
+        if (file is null)
+        {
+            return;
+        }
+
+        var projectRoot = contentBrowserState.ProjectRootPath;
+        if (string.IsNullOrEmpty(projectRoot))
+        {
+             Debug.WriteLine("[AssetsViewModel] Project root path is missing.");
+             return;
+        }
+
+        string relativePath;
+        try
+        {
+            relativePath = Path.GetRelativePath(projectRoot, file.Path);
+        }
+        catch
+        {
+            Debug.WriteLine("[AssetsViewModel] File is not in project directory.");
+            return;
+        }
+
+        if (relativePath.StartsWith("..", StringComparison.Ordinal))
+        {
+             // File is outside project directory. Copy it to the currently selected folder.
+             var destinationFolder = contentBrowserState.SelectedFolders.FirstOrDefault() ?? "Content";
+             var fileName = Path.GetFileName(file.Path);
+             var destinationPath = Path.Combine(projectRoot, destinationFolder, fileName);
+
+             // Ensure destination directory exists
+             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+
+             try
+             {
+                 File.Copy(file.Path, destinationPath, overwrite: true);
+                 Debug.WriteLine($"[AssetsViewModel] Copied {file.Path} to {destinationPath}");
+
+                 // Update relative path to point to the copied file
+                 relativePath = Path.GetRelativePath(projectRoot, destinationPath);
+             }
+             catch (Exception ex)
+             {
+                 Debug.WriteLine($"[AssetsViewModel] Failed to copy file: {ex.Message}");
+                 return;
+             }
+        }
+
+        relativePath = relativePath.Replace('\\', '/');
+
+        var input = new ImportInput(relativePath, "Content");
+        var request = new ImportRequest(projectRoot, [input], new ImportOptions());
+
+        try
+        {
+            var result = await importService.ImportAsync(request);
+            if (result.Succeeded)
+            {
+                 Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
+            }
+            else
+            {
+                 Debug.WriteLine($"[AssetsViewModel] Import failed for {relativePath}");
+                 foreach (var diag in result.Diagnostics)
+                 {
+                     Debug.WriteLine($"[Import] {diag.Severity}: {diag.Message}");
+                 }
+            }
+        }
+        catch (Exception ex)
+        {
+             Debug.WriteLine($"[AssetsViewModel] Import exception: {ex}");
         }
     }
 }

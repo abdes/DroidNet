@@ -70,6 +70,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Storage\src\Oxygen.Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.WorldEditor\src\Oxygen.Editor.WorldEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Assets\src\Oxygen.Assets.csproj" />
 
         <!-- Rererence the attributes project "treat as an analyzer"-->
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

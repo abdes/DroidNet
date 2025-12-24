@@ -22,6 +22,8 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetType.Image => "\uE8B9", // image
                 AssetType.Scene => "\uE914", // scene
                 AssetType.Mesh => "\uE8C1", // mesh
+                AssetType.Material => "\uF515", // material (example glyph)
+                AssetType.Texture => "\uE8B9", // texture (same as image for now)
                 AssetType.Folder => "\uE8B7", // folder (filled)
                 AssetType.Unknown => "\uE8A5", // unknown
                 _ => "\uE8A5",

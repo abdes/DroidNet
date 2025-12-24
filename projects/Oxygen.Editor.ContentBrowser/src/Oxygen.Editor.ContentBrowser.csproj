@@ -37,6 +37,8 @@
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.Router\src\Routing.Router.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Assets\src\Oxygen.Assets.csproj" />
 
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators\src\Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)\Mvvm.Generators.Attributes\src\Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
