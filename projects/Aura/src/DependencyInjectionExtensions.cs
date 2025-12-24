@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
@@ -136,6 +137,9 @@ public static class DependencyInjectionExtensions
 
         // Register window context factory and window manager service
         container.Register<IWindowManagerService, WindowManagerService>(Reuse.Singleton);
+
+        // Register dialog service (WinUI 3 only)
+        container.Register<IDialogService, DialogService>(Reuse.Singleton);
     }
 
     private static void RegisterOptionalServices(IContainer container, AuraOptions options)

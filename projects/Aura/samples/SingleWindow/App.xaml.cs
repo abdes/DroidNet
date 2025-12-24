@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Theming;
 using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
@@ -10,7 +11,6 @@ using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 
 namespace DroidNet.Samples.WinPackagedApp;
@@ -25,6 +25,7 @@ public partial class App
     private readonly IValueConverter vmToViewConverter;
     private readonly IHostApplicationLifetime lifetime;
     private readonly IWindowManagerService windowManager;
+    private readonly IDialogService dialogService;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="App" /> class.
@@ -33,6 +34,7 @@ public partial class App
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter used to set the content inside the content control.</param>
     /// <param name="windowManager">Window manager service - injected to force early initialization before navigation.</param>
+    /// <param name="dialogService">Dialog service used to show dialogs without exposing XamlRoot.</param>
     /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
@@ -48,6 +50,7 @@ public partial class App
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
         IWindowManagerService windowManager,
+        IDialogService dialogService,
         IAppThemeModeService themeModeService)
     {
         // Force WindowManagerService initialization BEFORE navigation starts
@@ -58,6 +61,7 @@ public partial class App
         this.router = router;
         this.vmToViewConverter = converter;
         this.windowManager = windowManager;
+        this.dialogService = dialogService;
 
         // Subscribe to window closing events to request confirmation
         this.windowManager.WindowClosing += this.OnWindowClosingAsync;
@@ -88,18 +92,13 @@ public partial class App
 
     private async System.Threading.Tasks.Task OnWindowClosingAsync(object? sender, WindowClosingEventArgs e)
     {
-        var dialog = new ContentDialog
-        {
-            Title = "Confirm Close",
-            Content = "Are you sure you want to close this window?",
-            PrimaryButtonText = "Yes",
-            CloseButtonText = "No",
-            DefaultButton = ContentDialogButton.Close,
-            XamlRoot = this.windowManager.ActiveWindow?.Window.Content.XamlRoot,
-        };
+        var confirmed = await this.dialogService
+            .ConfirmAsync(
+                "Confirm Close",
+                "Are you sure you want to close this window?")
+            .ConfigureAwait(true);
 
-        var result = await dialog.ShowAsync();
-        if (result != ContentDialogResult.Primary)
+        if (!confirmed)
         {
             e.Cancel = true;
         }
