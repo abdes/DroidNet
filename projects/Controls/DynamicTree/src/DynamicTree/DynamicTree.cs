@@ -89,6 +89,37 @@ public partial class DynamicTree : Control
     }
 
     /// <summary>
+    ///     Begins in-place rename for the provided item, if it is currently shown by the tree.
+    /// </summary>
+    /// <param name="item">The item to rename.</param>
+    /// <returns><see langword="true"/> if rename UI was opened; otherwise <see langword="false"/>.</returns>
+    public async Task<bool> BeginRenameAsync(ITreeItem item)
+    {
+        if (item is null || this.itemsRepeater is null || this.ViewModel is null)
+        {
+            return false;
+        }
+
+        var index = this.itemsRepeater.ItemsSourceView?.IndexOf(item) ?? this.ViewModel.ShownIndexOf(item);
+        if (index == -1)
+        {
+            return false;
+        }
+
+        var element = this.itemsRepeater.TryGetElement(index) ?? this.itemsRepeater.GetOrCreateElement(index);
+        if (element is null)
+        {
+            return false;
+        }
+
+        // Ensure the element is brought into view and has focus before starting rename.
+        await this.FocusRealizedItemAsync(item, FocusState.Programmatic).ConfigureAwait(true);
+
+        var treeItem = (element as FrameworkElement)?.FindName(TreeItemPart) as DynamicTreeItem;
+        return treeItem is not null && treeItem.BeginRename();
+    }
+
+    /// <summary>
     /// Overrideable hook for pointer-press handling on an item.
     /// </summary>
     /// <returns><see langword="true"/> if handled.</returns>

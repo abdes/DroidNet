@@ -84,7 +84,7 @@
                                         Margin="5"
                                         HorizontalAlignment="Left"
                                         VerticalAlignment="Center"
-                                        Text="{Binding Path=ItemAdapter.Label, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}"
+                                        Text="{Binding Path=ItemAdapter.DisplayLabel, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay, FallbackValue='__null__'}"
                                         TextTrimming="CharacterEllipsis"
                                         TextWrapping="NoWrap"
                                         Visibility="Visible" />
