@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.ContentBrowser.AssetsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -49,6 +49,12 @@
                             <MenuFlyoutSeparator x:Name="NewMenuFileFolderSeparator" />
                         </MenuFlyout>
                     </dnc:ToolBarButton.Flyout>
+                </dnc:ToolBarButton>
+
+                <dnc:ToolBarButton Command="{x:Bind ViewModel.ImportCommand}" Label="Import">
+                    <dnc:ToolBarButton.Icon>
+                        <SymbolIconSource Symbol="Import" />
+                    </dnc:ToolBarButton.Icon>
                 </dnc:ToolBarButton>
 
                 <dnc:ToolBarSeparator />

@@ -25,6 +25,16 @@ public enum AssetType
     Mesh,
 
     /// <summary>
+    /// Represents a material asset.
+    /// </summary>
+    Material,
+
+    /// <summary>
+    /// Represents a texture asset.
+    /// </summary>
+    Texture,
+
+    /// <summary>
     /// Represents a folder.
     /// </summary>
     Folder,
@@ -90,9 +100,10 @@ public class GameAsset
         var extension = Path.GetExtension(fileName).ToUpperInvariant();
         return extension switch
         {
-            ".PNG" => AssetType.Image,
-            ".SCENE" => AssetType.Scene,
-            ".MESH" => AssetType.Mesh,
+            ".PNG" or ".JPG" or ".JPEG" or ".TGA" or ".OTEX" => AssetType.Image,
+            ".SCENE" or ".OSCENE" or ".GLB" or ".GLTF" => AssetType.Scene,
+            ".MESH" or ".OGEO" => AssetType.Mesh,
+            ".MAT" or ".OMAT" => AssetType.Material,
             _ => AssetType.Unknown,
         };
     }

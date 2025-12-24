@@ -24,6 +24,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
+using Oxygen.Assets.Import;
+using Oxygen.Assets.Import.Gltf;
+using Oxygen.Assets.Import.Materials;
 using Oxygen.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
@@ -35,9 +38,9 @@ using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.World.Workspace;
 using Oxygen.Storage;
 using Oxygen.Storage.Native;
-using Oxygen.Editor.World.Workspace;
 using Serilog;
 
 namespace Oxygen.Editor;
@@ -256,6 +259,7 @@ public static partial class Program
         container.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
 
         RegisterEditorDataServices(container);
+        RegisterAssetServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
 
         /*
@@ -351,5 +355,37 @@ public static partial class Program
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);
         container.Register<WorkspaceView>(Reuse.Transient);
+    }
+
+    private static void RegisterAssetServices(IContainer container)
+    {
+        container.Register<ImporterRegistry>(Reuse.Singleton);
+        container.Register<ImportPluginRegistration>(Reuse.Transient);
+
+        // Register Importers
+        container.Register<IAssetImporter, GltfGeometryImporter>(Reuse.Singleton);
+        container.Register<IAssetImporter, MaterialSourceImporter>(Reuse.Singleton);
+
+        // Register ImportService
+        container.Register<IImportService, ImportService>(Reuse.Singleton);
+
+        // Auto-register importers with the registry
+        container.RegisterDelegate<object>(
+            resolver =>
+            {
+                var registry = resolver.Resolve<ImporterRegistry>();
+                var importers = resolver.ResolveMany<IAssetImporter>();
+                foreach (var importer in importers)
+                {
+                    registry.Register(importer);
+                }
+
+                return new object();
+            },
+            Reuse.Singleton,
+            serviceKey: "AutoRegisterImporters");
+
+        // Ensure the delegate is invoked
+        _ = container.Resolve<object>("AutoRegisterImporters");
     }
 }

@@ -99,12 +99,17 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                             // Deduplicate replay buffer
                             if (!this.seenLocations.Contains(notification.Asset.Location))
                             {
+                                Debug.WriteLine($"[{this.GetType().Name}] Asset added: {notification.Asset.Name} ({notification.Asset.Location})");
                                 // Modify UI-bound collection on UI dispatcher
                                 _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                                 {
                                     this.Assets.Add(notification.Asset);
                                     this.seenLocations.Add(notification.Asset.Location);
                                 });
+                            }
+                            else
+                            {
+                                Debug.WriteLine($"[{this.GetType().Name}] Asset added (duplicate): {notification.Asset.Name}");
                             }
 
                             break;
