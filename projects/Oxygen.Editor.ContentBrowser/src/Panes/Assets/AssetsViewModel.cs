@@ -5,21 +5,21 @@
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
-using Windows.Storage.Pickers;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
+using Windows.Storage.Pickers;
 using WinRT.Interop;
 
 namespace Oxygen.Editor.ContentBrowser;
@@ -28,7 +28,7 @@ namespace Oxygen.Editor.ContentBrowser;
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
 /// <param name="currentProject">The current project.</param>
-/// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
+/// <param name="assetCatalog">The asset catalog.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentBrowserState">The content browser state to track selection changes.</param>
 /// <param name="projectManagerService">The project manager service for creating scenes.</param>
@@ -36,7 +36,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="windowManagerService">The window manager service.</param>
 public partial class AssetsViewModel(
     IProject currentProject,
-    IAssetIndexingService assetsIndexingService,
+    IAssetCatalog assetCatalog,
     ViewModelToView vmToViewConverter,
     ContentBrowserState contentBrowserState,
     IProjectManagerService projectManagerService,
@@ -126,7 +126,7 @@ public partial class AssetsViewModel(
                 $"[AssetsViewModel] ContentBrowserState.SelectedFolders changed. Selected folders: [{string.Join(", ", contentBrowserState.SelectedFolders)}]");
 
             // Asset indexing runs automatically in background - no manual refresh needed
-            var assetCount = await assetsIndexingService.QueryAssetsAsync().ConfigureAwait(false);
+            var assetCount = await assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
             Debug.WriteLine($"[AssetsViewModel] Assets available: {assetCount.Count}");
         }
     }
@@ -169,16 +169,11 @@ public partial class AssetsViewModel(
             var storageProvider = projectManagerService.GetCurrentProjectStorageProvider();
             var folder = await storageProvider.GetFolderFromPathAsync(folderPath).ConfigureAwait(true);
 
-            var relativePath = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-            Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {relativePath}");
+            Debug.WriteLine($"[AssetsViewModel] Requesting navigation to folder: {folder.Location}");
 
-            // Update ContentBrowserState directly - this will trigger:
-            // 1. ProjectLayoutViewModel to update tree selection via OnContentBrowserStatePropertyChanged
-            // 2. AssetsViewModel to refresh via OnContentBrowserStatePropertyChanged
-            // 3. Router URL update via ProjectLayoutViewModel.UpdateRouterUrl
-            contentBrowserState.SetSelectedFolders([relativePath]);
-
-            Debug.WriteLine($"[AssetsViewModel] ContentBrowserState updated with selected folder: {relativePath}");
+            // Request navigation via the messenger. This allows ProjectLayoutViewModel
+            // to handle the navigation, ensuring correct virtual path resolution.
+            _ = messenger.Send(new NavigateToFolderRequestMessage(folder));
         }
         catch (Exception ex)
         {
@@ -275,8 +270,8 @@ public partial class AssetsViewModel(
         var projectRoot = contentBrowserState.ProjectRootPath;
         if (string.IsNullOrEmpty(projectRoot))
         {
-             Debug.WriteLine("[AssetsViewModel] Project root path is missing.");
-             return;
+            Debug.WriteLine("[AssetsViewModel] Project root path is missing.");
+            return;
         }
 
         string relativePath;
@@ -292,27 +287,27 @@ public partial class AssetsViewModel(
 
         if (relativePath.StartsWith("..", StringComparison.Ordinal))
         {
-             // File is outside project directory. Copy it to the currently selected folder.
-             var destinationFolder = contentBrowserState.SelectedFolders.FirstOrDefault() ?? "Content";
-             var fileName = Path.GetFileName(file.Path);
-             var destinationPath = Path.Combine(projectRoot, destinationFolder, fileName);
+            // File is outside project directory. Copy it to the currently selected folder.
+            var destinationFolder = contentBrowserState.SelectedFolders.FirstOrDefault() ?? "Content";
+            var fileName = Path.GetFileName(file.Path);
+            var destinationPath = Path.Combine(projectRoot, destinationFolder, fileName);
 
-             // Ensure destination directory exists
-             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            // Ensure destination directory exists
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
 
-             try
-             {
-                 File.Copy(file.Path, destinationPath, overwrite: true);
-                 Debug.WriteLine($"[AssetsViewModel] Copied {file.Path} to {destinationPath}");
+            try
+            {
+                File.Copy(file.Path, destinationPath, overwrite: true);
+                Debug.WriteLine($"[AssetsViewModel] Copied {file.Path} to {destinationPath}");
 
-                 // Update relative path to point to the copied file
-                 relativePath = Path.GetRelativePath(projectRoot, destinationPath);
-             }
-             catch (Exception ex)
-             {
-                 Debug.WriteLine($"[AssetsViewModel] Failed to copy file: {ex.Message}");
-                 return;
-             }
+                // Update relative path to point to the copied file
+                relativePath = Path.GetRelativePath(projectRoot, destinationPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[AssetsViewModel] Failed to copy file: {ex.Message}");
+                return;
+            }
         }
 
         relativePath = relativePath.Replace('\\', '/');
@@ -325,20 +320,20 @@ public partial class AssetsViewModel(
             var result = await importService.ImportAsync(request);
             if (result.Succeeded)
             {
-                 Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
+                Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
             }
             else
             {
-                 Debug.WriteLine($"[AssetsViewModel] Import failed for {relativePath}");
-                 foreach (var diag in result.Diagnostics)
-                 {
-                     Debug.WriteLine($"[Import] {diag.Severity}: {diag.Message}");
-                 }
+                Debug.WriteLine($"[AssetsViewModel] Import failed for {relativePath}");
+                foreach (var diag in result.Diagnostics)
+                {
+                    Debug.WriteLine($"[Import] {diag.Severity}: {diag.Message}");
+                }
             }
         }
         catch (Exception ex)
         {
-             Debug.WriteLine($"[AssetsViewModel] Import exception: {ex}");
+            Debug.WriteLine($"[AssetsViewModel] Import exception: {ex}");
         }
     }
 }

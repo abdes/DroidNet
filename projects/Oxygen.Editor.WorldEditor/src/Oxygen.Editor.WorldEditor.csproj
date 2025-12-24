@@ -26,6 +26,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Assets\src\Oxygen.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Collections\src\Collections.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />

@@ -18,8 +18,8 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <remarks>
 ///     Children include:
 ///     - Non-hidden folders directly under the project root (excluding dot-prefixed folders)
-///     - Authoring mount points (from <see cref="IProjectInfo.MountPoints" />)
-///     - Explicitly mounted virtual folders
+///     - Authoring mount points (from <see cref="IProjectInfo.AuthoringMounts" />)
+///     - Explicitly mounted virtual folders.
 /// </remarks>
 public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDisposable
 {
@@ -56,10 +56,15 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
     }
 
+    /// <summary>
+    ///     Raised when a virtual folder mount has been renamed.
+    /// </summary>
+    public event EventHandler<VirtualFolderMountTreeItemAdapter>? MountRenamed;
+
     /// <inheritdoc />
     public override string Label
     {
-        get => $"{this.label} (Project Root)";
+        get => this.label;
         set
         {
             if (string.Equals(value, this.label, StringComparison.Ordinal))
@@ -71,6 +76,9 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             this.OnPropertyChanged();
         }
     }
+
+    /// <inheritdoc />
+    public override string DisplayLabel => $"{this.label} (Project Root)";
 
     /// <summary>
     ///     Gets the current project info.
@@ -87,6 +95,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     /// </summary>
     public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
 
+    /// <summary>
+    ///     Gets the collection of currently mounted virtual folders.
+    /// </summary>
+    public IReadOnlyCollection<VirtualFolderMountTreeItemAdapter> VirtualFolderMounts => this.virtualFolderMounts.Values;
+
     /// <inheritdoc />
     public void Dispose()
     {
@@ -95,10 +108,18 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     }
 
     /// <inheritdoc />
-    public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
+    public override bool ValidateItemName(string name)
+    {
+        if (!InputValidation.IsValidFileName(name))
+        {
+            return false;
+        }
 
-    /// <inheritdoc />
-    protected override int DoGetChildrenCount() => 1;
+        // Check for duplicate mount names.
+        // Note: If we are renaming an existing mount, the UI will call this with the new name.
+        // If the new name is the same as another mount's name, we should reject it.
+        return !this.virtualFolderMounts.ContainsKey(name);
+    }
 
     /// <summary>
     ///     Adds a virtual folder mount as a direct child of the project root.
@@ -109,15 +130,12 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     {
         ArgumentNullException.ThrowIfNull(mount);
 
-        _ = await this.Children.ConfigureAwait(false);
-
         if (this.virtualFolderMounts.ContainsKey(mount.MountPointName))
         {
             return false;
         }
 
         this.virtualFolderMounts.Add(mount.MountPointName, mount);
-        this.AddChildInternal(mount);
         return true;
     }
 
@@ -138,10 +156,28 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
 
         _ = this.virtualFolderMounts.Remove(mountPointName);
-        this.RemoveChildInternal(mount);
         mount.Dispose();
         return true;
     }
+
+    /// <summary>
+    ///     Notifies the root that a virtual folder mount has been renamed.
+    /// </summary>
+    /// <param name="mount">The mount that was renamed.</param>
+    /// <param name="oldName">The previous name of the mount.</param>
+    internal void NotifyMountRenamed(VirtualFolderMountTreeItemAdapter mount, string oldName)
+    {
+        ArgumentNullException.ThrowIfNull(mount);
+
+        if (this.virtualFolderMounts.Remove(oldName))
+        {
+            this.virtualFolderMounts.Add(mount.MountPointName, mount);
+            this.MountRenamed?.Invoke(this, mount);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override int DoGetChildrenCount() => 1;
 
     /// <inheritdoc />
     [SuppressMessage(
@@ -157,7 +193,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             // 1) Non-hidden folders directly under project root.
             await foreach (var child in this.ProjectRootFolder.GetFoldersAsync().ConfigureAwait(true))
             {
-                if (child.Name.StartsWith(".", StringComparison.Ordinal))
+                if (child.Name.StartsWith('.'))
                 {
                     continue;
                 }
@@ -170,7 +206,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
                 FolderTreeItemAdapter? item = null;
                 try
                 {
-                    item = new FolderTreeItemAdapter(this.logger, child, child.Name) { IsExpanded = true };
+                    item = new FolderTreeItemAdapter(this.logger, child, child.Name);
                     this.AddChildInternal(item);
                     item = null;
                 }
@@ -185,7 +221,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             }
 
             // 2) Authoring mounts.
-            foreach (var mountPoint in this.ProjectInfo.MountPoints)
+            foreach (var mountPoint in this.ProjectInfo.AuthoringMounts)
             {
                 try
                 {
@@ -201,7 +237,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
                         mountPoint,
                         mountRootFolder)
                     {
-                        IsExpanded = true,
+                        IsExpanded = mountPoint.IsExpanded,
                     };
 
                     this.AddChildInternal(mountAdapter);
@@ -212,7 +248,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
                 }
             }
 
-            // 3) Virtual folder mounts are inserted/removed via MountVirtualFolderAsync/UnmountVirtualFolderAsync.
+            // 3) Virtual folder mounts.
+            foreach (var mount in this.virtualFolderMounts.Values)
+            {
+                this.AddChildInternal(mount);
+            }
         }
         catch (Exception ex)
         {
@@ -234,12 +274,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     private HashSet<string> GetExcludedDirectFolderNames()
     {
         var excluded = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var mount in this.ProjectInfo.MountPoints)
+        foreach (var mount in this.ProjectInfo.AuthoringMounts)
         {
             // Only exclude direct children of the project root.
             var relative = mount.RelativePath.Trim().Replace('\\', '/');
-            var firstSlash = relative.IndexOf('/', StringComparison.Ordinal);
-            if (firstSlash != -1)
+            if (relative.Contains('/', StringComparison.Ordinal))
             {
                 continue;
             }

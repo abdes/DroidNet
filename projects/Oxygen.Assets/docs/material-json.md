@@ -42,11 +42,11 @@ Top-level is a single JSON object:
     "BaseColorFactor": [1, 1, 1, 1],
     "MetallicFactor": 0.0,
     "RoughnessFactor": 0.8,
-    "BaseColorTexture": { "Source": "asset://Content/Textures/Wood_BaseColor.png" },
-    "MetallicRoughnessTexture": { "Source": "asset://Content/Textures/Wood_MR.png" }
+    "BaseColorTexture": { "Source": "asset:///Content/Textures/Wood_BaseColor.png" },
+    "MetallicRoughnessTexture": { "Source": "asset:///Content/Textures/Wood_MR.png" }
   },
-  "NormalTexture": { "Source": "asset://Content/Textures/Wood_Normal.png", "Scale": 1.0 },
-  "OcclusionTexture": { "Source": "asset://Content/Textures/Wood_AO.png", "Strength": 1.0 },
+  "NormalTexture": { "Source": "asset:///Content/Textures/Wood_Normal.png", "Scale": 1.0 },
+  "OcclusionTexture": { "Source": "asset:///Content/Textures/Wood_AO.png", "Strength": 1.0 },
 
   "AlphaMode": "OPAQUE",
   "AlphaCutoff": 0.5,
@@ -102,12 +102,12 @@ Texture references are **source references** (authoring inputs), not cooked indi
 ### TextureRef
 
 ```json
-{ "Source": "asset://Content/Textures/Wood.png" }
+{ "Source": "asset:///Content/Textures/Wood.png" }
 ```
 
 Rules:
 
-- `Source` is an `asset://{MountPoint}/{Path}` URI.
+- `Source` is an `asset:///{MountPoint}/{Path}` URI.
 - The URI must use `/` separators.
 - The URI should point to a **source** texture (e.g. `.png`) under `Content/**`.
 
@@ -119,13 +119,13 @@ Notes:
 ### TextureRefWithScale
 
 ```json
-{ "Source": "asset://Content/Textures/Wood_Normal.png", "Scale": 1.0 }
+{ "Source": "asset:///Content/Textures/Wood_Normal.png", "Scale": 1.0 }
 ```
 
 ### TextureRefWithStrength
 
 ```json
-{ "Source": "asset://Content/Textures/Wood_AO.png", "Strength": 1.0 }
+{ "Source": "asset:///Content/Textures/Wood_AO.png", "Strength": 1.0 }
 ```
 
 ## Validation rules (MVP)

@@ -106,7 +106,41 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     private static bool MatchesSearch(AssetRecord record, string term)
         => record.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
             || record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
-            || record.Uri.Authority.Contains(term, StringComparison.OrdinalIgnoreCase);
+            || AssetUriHelper.GetMountPoint(record.Uri).Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    private static bool ShouldInclude(string relativePath)
+    {
+        if (string.Equals(relativePath, ".", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        foreach (var segment in segments)
+        {
+            if (string.Equals(segment, ".", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (string.Equals(segment, "..", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (segment.Length > 0 && segment[0] == '.' && !IsAllowedDotName(segment))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsAllowedDotName(string name)
+        => name.Equals(".cooked", StringComparison.OrdinalIgnoreCase)
+            || name.Equals(".imported", StringComparison.OrdinalIgnoreCase)
+            || name.Equals(".build", StringComparison.OrdinalIgnoreCase);
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
@@ -149,13 +183,21 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
 
             await foreach (var document in folder.GetDocumentsAsync(cancellationToken).ConfigureAwait(false))
             {
-                var uri = this.MapFilePathToAssetUri(root.Location, document.Location);
-                results.Add(new AssetRecord(uri));
+                var relative = Path.GetRelativePath(root.Location, document.Location);
+                if (ShouldInclude(relative))
+                {
+                    var uri = this.MapFilePathToAssetUri(root.Location, document.Location);
+                    results.Add(new AssetRecord(uri));
+                }
             }
 
             await foreach (var childFolder in folder.GetFoldersAsync(cancellationToken).ConfigureAwait(false))
             {
-                pending.Push(childFolder);
+                var relative = Path.GetRelativePath(root.Location, childFolder.Location);
+                if (ShouldInclude(relative))
+                {
+                    pending.Push(childFolder);
+                }
             }
         }
 
@@ -165,10 +207,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     private Uri MapFilePathToAssetUri(string rootLocation, string fullPath)
     {
         var relative = Path.GetRelativePath(rootLocation, fullPath);
-        relative = relative.Replace('\\', '/');
-        relative = relative.TrimStart('/');
-
-        return new Uri($"asset://{this.options.Authority}/{relative}");
+        return AssetUriHelper.CreateUri(this.options.Authority, relative);
     }
 
     private async Task ApplyBatchAsync(IReadOnlyList<FileSystemCatalogEvent> batch)
@@ -299,6 +338,12 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
 
         var root = this.rootFolder.Location;
         if (!fullPath.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var relative = Path.GetRelativePath(root, fullPath);
+        if (!ShouldInclude(relative))
         {
             return false;
         }

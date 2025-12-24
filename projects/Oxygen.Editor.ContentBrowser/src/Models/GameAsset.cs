@@ -86,6 +86,11 @@ public class GameAsset
     public string Location { get; set; }
 
     /// <summary>
+    /// Gets or sets the virtual path of the asset (e.g., /Cooked/Folder/Asset).
+    /// </summary>
+    public string? VirtualPath { get; set; }
+
+    /// <summary>
     /// Gets the type of the asset.
     /// </summary>
     public AssetType AssetType { get; init; }

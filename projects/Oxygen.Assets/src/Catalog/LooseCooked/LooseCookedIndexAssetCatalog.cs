@@ -18,7 +18,7 @@ namespace Oxygen.Assets.Catalog.LooseCooked;
 /// <remarks>
 /// This provider treats the v1 index as the source of truth for cooked asset enumeration.
 /// It maps v1 <c>VirtualPath</c> values (e.g. <c>/Content/Textures/Wood.png</c>) to canonical
-/// asset URIs (e.g. <c>asset://Content/Textures/Wood.png</c>).
+/// asset URIs (e.g. <c>asset:///Content/Textures/Wood.png</c>).
 /// </remarks>
 public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
 {
@@ -147,7 +147,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
 
         var authority = trimmed[..slash];
         var path = trimmed[(slash + 1)..];
-        return new Uri($"asset://{authority}/{path}");
+        return new Uri($"asset:///{authority}/{path}");
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

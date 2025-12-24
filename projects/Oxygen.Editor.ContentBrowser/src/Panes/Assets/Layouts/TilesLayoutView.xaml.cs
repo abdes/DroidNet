@@ -67,6 +67,13 @@ public sealed partial class TilesLayoutView
         }
 
         // Clicked outside of any item, clear selection
-        gridView.SelectedItems.Clear();
+        if (gridView.SelectionMode == ListViewSelectionMode.Single)
+        {
+            gridView.SelectedItem = null;
+        }
+        else
+        {
+            gridView.SelectedItems.Clear();
+        }
     }
 }

@@ -91,12 +91,12 @@ Project.oxy            ← Project manifest (metadata + mount points)
 
 - Project-wide metadata (name, version, author)
 - Unique project ID (GUID)
-- Authoring mount points (`MountPoints`: `Name` + project-relative `RelativePath`)
+- Authoring mount points (`AuthoringMounts`: `Name` + project-relative `RelativePath`)
 
 Notes:
 
 - Scene files are **discovered** by enumerating the `Scenes/` folder (currently `*.scene`). They are not listed in `Project.oxy`.
-- `MountPoints` are persisted in `Project.oxy` and define project-local authoring mounts (e.g., `Content -> Content/`).
+- `AuthoringMounts` are persisted in `Project.oxy` and define project-local authoring mounts (e.g., `Content -> Content/`).
 
 ### Project Lifecycle
 
@@ -157,7 +157,7 @@ stateDiagram-v2
   "Name": "MyGame",
   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
   "Thumbnail": "Media/Preview.png",
-  "MountPoints": [
+  "AuthoringMounts": [
     {
       "Name": "Content",
       "RelativePath": "Content"
@@ -170,11 +170,11 @@ stateDiagram-v2
 - `Name` - Project display name
 - `Category` - Project category identifier
 - `Thumbnail` - Optional project thumbnail path
-- `MountPoints` - Authoring mounts (`Name` + project-relative `RelativePath`)
+- `AuthoringMounts` - Authoring mounts (`Name` + project-relative `RelativePath`)
 
 **Compatibility:**
 
-- If `MountPoints` is missing/empty, the loader defaults it to a single mount: `Content -> Content`.
+- If `AuthoringMounts` is missing/empty, the loader defaults it to a single mount: `Content -> Content`.
 
 ### Scene File Format
 

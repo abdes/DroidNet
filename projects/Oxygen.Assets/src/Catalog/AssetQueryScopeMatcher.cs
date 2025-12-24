@@ -48,8 +48,8 @@ internal static class AssetQueryScopeMatcher
 
     private static bool IsSameAsset(Uri root, Uri asset)
         => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(root.Authority, asset.Authority, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(root.AbsolutePath, asset.AbsolutePath, StringComparison.Ordinal);
+            && string.Equals(AssetUriHelper.GetMountPoint(root), AssetUriHelper.GetMountPoint(asset), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(AssetUriHelper.GetRelativePath(root), AssetUriHelper.GetRelativePath(asset), StringComparison.Ordinal);
 
     private static bool IsDescendant(Uri root, Uri asset)
     {
@@ -58,8 +58,8 @@ internal static class AssetQueryScopeMatcher
             return false;
         }
 
-        var rootPath = EnsureFolderPath(root.AbsolutePath);
-        var assetPath = asset.AbsolutePath;
+        var rootPath = EnsureFolderPath(AssetUriHelper.GetRelativePath(root));
+        var assetPath = AssetUriHelper.GetRelativePath(asset);
 
         if (!assetPath.StartsWith(rootPath, StringComparison.Ordinal))
         {
@@ -77,8 +77,8 @@ internal static class AssetQueryScopeMatcher
             return false;
         }
 
-        var rootPath = EnsureFolderPath(root.AbsolutePath);
-        var assetPath = asset.AbsolutePath;
+        var rootPath = EnsureFolderPath(AssetUriHelper.GetRelativePath(root));
+        var assetPath = AssetUriHelper.GetRelativePath(asset);
 
         if (!assetPath.StartsWith(rootPath, StringComparison.Ordinal))
         {
@@ -98,10 +98,12 @@ internal static class AssetQueryScopeMatcher
 
     private static bool IsSameAuthority(Uri root, Uri asset)
         => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(root.Authority, asset.Authority, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(AssetUriHelper.GetMountPoint(root), AssetUriHelper.GetMountPoint(asset), StringComparison.OrdinalIgnoreCase);
 
     private static string EnsureFolderPath(string path)
-        => path.EndsWith('/')
-            ? path
-            : path + "/";
+        => string.IsNullOrEmpty(path)
+            ? string.Empty
+            : path.EndsWith('/')
+                ? path
+                : path + "/";
 }

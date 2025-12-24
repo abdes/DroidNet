@@ -17,7 +17,7 @@ namespace Oxygen.Editor.World.Slots;
 /// </remarks>
 public partial class MaterialsSlot : OverrideSlot
 {
-    private AssetReference<MaterialAsset> material = new("asset://__uninitialized__");
+    private AssetReference<MaterialAsset> material = new("asset:///__uninitialized__");
 
     static MaterialsSlot()
     {

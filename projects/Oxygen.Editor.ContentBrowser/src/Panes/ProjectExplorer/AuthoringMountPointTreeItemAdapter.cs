@@ -17,7 +17,7 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 ///     Represents an authoring mount point node under the project root.
 /// </summary>
 /// <remarks>
-///     Authoring mount points are persisted in <c>Project.oxy</c> via <see cref="IProjectInfo.MountPoints" />
+///     Authoring mount points are persisted in <c>Project.oxy</c> via <see cref="IProjectInfo.AuthoringMounts" />
 ///     and define stable virtual roots for asset identity.
 /// </remarks>
 public sealed partial class AuthoringMountPointTreeItemAdapter : TreeItemAdapter, IDisposable

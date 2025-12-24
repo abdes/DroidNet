@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Oxygen.Core;
@@ -83,16 +82,9 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
     public override bool ValidateItemName(string name) => InputValidation.IsValidFileName(name);
 
     /// <inheritdoc />
-    protected override int DoGetChildrenCount()
-    {
-        Debug.Fail("should never be called");
-
-        // The entire project tree should be expanded when the view is loaded. As a result, the Children.Count will be
-        // used and this method should not be called. As a precautionary measure, we'll simply return 1, indicating that
-        // the item may have children and can be expanded. Once expanded, the real count of the children will be
-        // updated.
-        return 1;
-    }
+    // We return 1 to indicate that the item may have children and can be expanded.
+    // Once expanded, the real count of the children will be updated.
+    protected override int DoGetChildrenCount() => 1;
 
     /// <inheritdoc />
     protected override async Task LoadChildren()
@@ -103,13 +95,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
             FolderTreeItemAdapter? item = null;
             try
             {
-                // IMPORTANT: The entire tree should be expanded to avoid calls to GetChildrenCount and to be able
-                // To mark selected items specified in the ActiveRoute query params
-                item = new FolderTreeItemAdapter(this.logger, child, child.Name)
-                {
-                    IsExpanded = true,
-                };
-
+                item = new FolderTreeItemAdapter(this.logger, child, child.Name);
                 this.AddChildInternal(item);
                 item = null;
             }

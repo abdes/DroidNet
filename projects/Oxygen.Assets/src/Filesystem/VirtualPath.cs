@@ -147,9 +147,14 @@ public static class VirtualPath
     /// <returns>A normalized virtual path.</returns>
     public static string Normalize(string path)
     {
+        if (string.IsNullOrEmpty(path))
+        {
+            return string.Empty;
+        }
+
         var input = NormalizeSlashes(path);
         var parts = input.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var stack = new Stack<string>(parts.Length);
+        var stack = new List<string>(parts.Length);
 
         foreach (var part in parts)
         {
@@ -162,23 +167,16 @@ public static class VirtualPath
             {
                 if (stack.Count > 0)
                 {
-                    _ = stack.Pop();
+                    stack.RemoveAt(stack.Count - 1);
                 }
 
                 continue;
             }
 
-            stack.Push(part);
+            stack.Add(part);
         }
 
-        if (stack.Count == 0)
-        {
-            return string.Empty;
-        }
-
-        var arr = stack.ToArray();
-        Array.Reverse(arr);
-        return string.Join('/', arr);
+        return stack.Count == 0 ? string.Empty : string.Join('/', stack);
     }
 
     /// <summary>
@@ -188,11 +186,24 @@ public static class VirtualPath
     /// <param name="right">The second path.</param>
     /// <returns>The combined virtual path.</returns>
     public static string Combine(string left, string right)
-        => string.IsNullOrEmpty(left)
-            ? NormalizeSlashes(right)
-            : string.IsNullOrEmpty(right)
-                ? NormalizeSlashes(left)
-                : NormalizeSlashes(Path.Combine(left, right));
+    {
+        if (string.IsNullOrEmpty(left))
+        {
+            return NormalizeSlashes(right);
+        }
+
+        if (string.IsNullOrEmpty(right))
+        {
+            return NormalizeSlashes(left);
+        }
+
+        var normalizedLeft = NormalizeSlashes(left);
+        var normalizedRight = NormalizeSlashes(right);
+
+        return normalizedLeft.EndsWith('/')
+            ? normalizedLeft + normalizedRight
+            : normalizedLeft + '/' + normalizedRight;
+    }
 
     /// <summary>
     /// Returns the directory information for the specified path string.

@@ -8,17 +8,24 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 /// <summary>
 /// A base ViewModel for the assets view layout.
 /// </summary>
-public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexingService, ContentBrowserState contentBrowserState, HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
+public abstract class AssetsLayoutViewModel(
+    IAssetCatalog assetCatalog,
+    IProject currentProject,
+    ContentBrowserState contentBrowserState,
+    HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly HashSet<string> seenLocations = [];
+    private readonly IAssetCatalog assetCatalog = assetCatalog;
+    private readonly IProject currentProject = currentProject;
     private readonly ContentBrowserState contentBrowserState = contentBrowserState;
     private readonly HostingContext hostingContext = hostingContext;
 
@@ -81,103 +88,12 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
     /// </summary>
     private async Task InitializeAsync()
     {
-        // Subscribe to asset changes first (so replay buffer is received)
-        this.subscription = assetsIndexingService.AssetChanges
+        // Subscribe to asset changes
+        this.subscription = this.assetCatalog.Changes
             .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(
-                notification =>
-                {
-                    // Only handle notifications that match the current selected folders
-                    if (!this.IsInSelectedFolders(notification.Asset))
-                    {
-                        return;
-                    }
+            .Subscribe(this.OnAssetChange);
 
-                    switch (notification.ChangeType)
-                    {
-                        case AssetChangeType.Added:
-                            // Deduplicate replay buffer
-                            if (!this.seenLocations.Contains(notification.Asset.Location))
-                            {
-                                Debug.WriteLine($"[{this.GetType().Name}] Asset added: {notification.Asset.Name} ({notification.Asset.Location})");
-                                // Modify UI-bound collection on UI dispatcher
-                                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
-                                {
-                                    this.Assets.Add(notification.Asset);
-                                    this.seenLocations.Add(notification.Asset.Location);
-                                });
-                            }
-                            else
-                            {
-                                Debug.WriteLine($"[{this.GetType().Name}] Asset added (duplicate): {notification.Asset.Name}");
-                            }
-
-                            break;
-
-                        case AssetChangeType.Removed:
-                            var toRemove = this.Assets.FirstOrDefault(a =>
-                                a.Location.Equals(notification.Asset.Location, StringComparison.OrdinalIgnoreCase));
-                            if (toRemove != null)
-                            {
-                                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
-                                {
-                                    _ = this.Assets.Remove(toRemove);
-                                    _ = this.seenLocations.Remove(notification.Asset.Location);
-                                });
-                            }
-
-                            break;
-
-                        case AssetChangeType.Modified:
-                            // Could update metadata if needed
-                            Debug.WriteLine($"[{this.GetType().Name}] Asset modified: {notification.Asset.Name}");
-                            break;
-                    }
-                },
-                ex => Debug.WriteLine($"[{this.GetType().Name}] Error in asset stream: {ex.Message}"));
-
-        // Start background task to obtain initial snapshot (non-blocking for UI)
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                // Build predicate based on current selected folders
-                Func<GameAsset, bool>? predicate = null;
-                var folders = this.contentBrowserState.SelectedFolders?.ToList();
-                if (folders?.Count > 0 && !folders.Contains(".", StringComparer.Ordinal))
-                {
-                    predicate = a => this.IsInSelectedFolders(a);
-                }
-
-                var snapshot = await assetsIndexingService.QueryAssetsAsync(predicate).ConfigureAwait(false);
-                Debug.WriteLine($"[{this.GetType().Name}] Initial snapshot: {snapshot.Count} assets");
-
-                // Merge snapshot into collection with deduplication
-                foreach (var asset in snapshot)
-                {
-                    if (!this.IsInSelectedFolders(asset))
-                    {
-                        continue;
-                    }
-
-                    if (this.seenLocations.Contains(asset.Location))
-                    {
-                        continue;
-                    }
-
-                    var a = asset;
-                    _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
-                    {
-                        this.Assets.Add(a);
-                        this.seenLocations.Add(a.Location);
-                    });
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[{this.GetType().Name}] Error obtaining initial snapshot: {ex.Message}");
-            }
-        });
+        await this.RefreshAssetsAsync().ConfigureAwait(false);
 
         // Listen for folder selection changes
         this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
@@ -187,49 +103,127 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
     {
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
-            _ = Task.Run(this.RefreshForSelectedFoldersAsync);
+            _ = Task.Run(this.RefreshAssetsAsync);
         }
     }
 
-    private async Task RefreshForSelectedFoldersAsync()
+    private async Task RefreshAssetsAsync()
     {
         try
         {
-            // Clear current view and rebuild from snapshot filtered by selected folders
-            // Must clear on UI thread
             _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
             {
                 this.Assets.Clear();
                 this.seenLocations.Clear();
             });
 
-            Func<GameAsset, bool>? predicate = null;
-            var folders = this.contentBrowserState.SelectedFolders?.ToList();
-            if (folders?.Count > 0 && !folders.Contains(".", StringComparer.Ordinal))
-            {
-                predicate = this.IsInSelectedFolders;
-            }
+            var items = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
 
-            var snapshot = await assetsIndexingService.QueryAssetsAsync(predicate).ConfigureAwait(false);
-            foreach (var asset in snapshot)
+            foreach (var item in items)
             {
-                if (!this.IsInSelectedFolders(asset))
+                var asset = this.CreateGameAsset(item.Uri);
+                if (asset == null || !this.IsInSelectedFolders(asset))
                 {
                     continue;
                 }
 
-                var a = asset;
                 _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
                 {
-                    this.Assets.Add(a);
-                    this.seenLocations.Add(a.Location);
+                    this.Assets.Add(asset);
+                    this.seenLocations.Add(asset.Location);
                 });
             }
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[{this.GetType().Name}] Error refreshing selected folders: {ex.Message}");
+            Debug.WriteLine($"[{this.GetType().Name}] Error refreshing assets: {ex.Message}");
         }
+    }
+
+    private void OnAssetChange(AssetChange change)
+    {
+        var asset = this.CreateGameAsset(change.Uri);
+        if (asset == null)
+        {
+            return;
+        }
+
+        _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
+        {
+            switch (change.Kind)
+            {
+                case AssetChangeKind.Added:
+                    if (this.IsInSelectedFolders(asset) && !this.seenLocations.Contains(asset.Location))
+                    {
+                        this.Assets.Add(asset);
+                        this.seenLocations.Add(asset.Location);
+                    }
+
+                    break;
+
+                case AssetChangeKind.Removed:
+                    var toRemove = this.Assets.FirstOrDefault(a => string.Equals(a.Location, asset.Location, StringComparison.Ordinal));
+                    if (toRemove != null)
+                    {
+                        _ = this.Assets.Remove(toRemove);
+                        _ = this.seenLocations.Remove(asset.Location);
+                    }
+
+                    break;
+
+                case AssetChangeKind.Updated:
+                    // Handle update if needed
+                    break;
+            }
+        });
+    }
+
+    private GameAsset? CreateGameAsset(Uri uri)
+    {
+        string virtualPath;
+        string location;
+        var name = Uri.UnescapeDataString(Path.GetFileNameWithoutExtension(uri.AbsolutePath));
+        var mountPoint = AssetUriHelper.GetMountPoint(uri);
+
+        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
+        {
+            virtualPath = "/" + AssetUriHelper.GetRelativePath(uri);
+            if (this.currentProject.ProjectInfo.Location != null)
+            {
+                location = Path.Combine(this.currentProject.ProjectInfo.Location, AssetUriHelper.GetRelativePath(uri));
+            }
+            else
+            {
+                return null;
+            }
+        }
+        else
+        {
+            virtualPath = AssetUriHelper.GetVirtualPath(uri);
+            var mount = this.currentProject.ProjectInfo.AuthoringMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
+            if (mount != null && this.currentProject.ProjectInfo.Location != null)
+            {
+                location = Path.Combine(this.currentProject.ProjectInfo.Location, mount.RelativePath, AssetUriHelper.GetRelativePath(uri));
+            }
+            else
+            {
+                var localMount = this.currentProject.ProjectInfo.LocalFolderMounts.FirstOrDefault(m => m.Name.Equals(mountPoint, StringComparison.OrdinalIgnoreCase));
+                if (localMount != null)
+                {
+                    location = Path.Combine(localMount.AbsolutePath, AssetUriHelper.GetRelativePath(uri));
+                }
+                else
+                {
+                    return null;
+                }
+            }
+        }
+
+        return new GameAsset(name, location)
+        {
+            VirtualPath = virtualPath,
+            AssetType = GameAsset.GetAssetType(Uri.UnescapeDataString(uri.AbsolutePath)),
+        };
     }
 
     private bool IsInSelectedFolders(GameAsset asset)
@@ -240,41 +234,16 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
             return true;
         }
 
-        if (folders.Contains("."))
+        // If root is selected, show everything
+        if (folders.Contains(".") || folders.Contains("/"))
         {
             return true;
         }
 
-        // Use project-root-relative, path-segment-aware matching instead of naive substring checks.
-        var projectRoot = this.contentBrowserState.ProjectRootPath ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(projectRoot))
-        {
-            return true;
-        }
-
-        string relative;
-        try
-        {
-            var assetFull = Path.GetFullPath(asset.Location);
-            var projectFull = Path.GetFullPath(projectRoot);
-            relative = Path.GetRelativePath(projectFull, assetFull);
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[AssetsLayoutViewModel] Path resolution failed for asset '{asset?.Location}' with project root '{projectRoot}': {ex}");
-            return false;
-        }
-
-        // If asset is not under project root (starts with ".."), do not consider it a match.
-        if (relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || string.Equals(relative, "..", StringComparison.Ordinal))
+        if (string.IsNullOrEmpty(asset.VirtualPath))
         {
             return false;
         }
-
-        static string NormalizeForCompare(string p)
-            => p.Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar).TrimStart('.', Path.DirectorySeparatorChar);
-
-        var relNorm = NormalizeForCompare(relative);
 
         foreach (var sf in folders)
         {
@@ -283,14 +252,19 @@ public abstract class AssetsLayoutViewModel(IAssetIndexingService assetsIndexing
                 continue;
             }
 
-            var sel = NormalizeForCompare(sf);
+            // Normalize selected folder path to match VirtualPath format (start with /)
+            var normalizedSf = sf.Replace('\\', '/');
+            if (!normalizedSf.StartsWith('/'))
+            {
+                normalizedSf = "/" + normalizedSf;
+            }
 
-            if (string.Equals(relNorm, sel, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(asset.VirtualPath, normalizedSf, StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
 
-            if (relNorm.StartsWith(sel + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            if (asset.VirtualPath.StartsWith(normalizedSf + "/", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

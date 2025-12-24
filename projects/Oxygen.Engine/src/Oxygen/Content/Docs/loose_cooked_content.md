@@ -437,7 +437,7 @@ Determinism (required):
 - Intermediate cooked output:
   - `.../DerivedData/Cooked/<Target>/<MountName>/...`
 - Final packaged output:
-  - `.../Build/<Target>/Content/<MountName>.pak`
+  - `.../.build/<Target>/Content/<MountName>.pak`
 
 ---
 

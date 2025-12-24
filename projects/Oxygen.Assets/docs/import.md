@@ -88,7 +88,7 @@ Design notes:
 | Imported asset (canonical) | Editor-friendly representation of source's meaning (metadata + dependency graph + stable identity) |
 | Built runtime artifact | Runtime-consumable Oxygen formats written to loose layout |
 | VirtualPath | Canonical editor-facing string, e.g., `/Content/Textures/Wood.otex` |
-| Asset URI | `asset://Content/Textures/Wood.otex` (maps 1:1 to VirtualPath) |
+| Asset URI | `asset:///Content/Textures/Wood.otex` (maps 1:1 to VirtualPath) |
 | AssetKey | Stable 128-bit identifier used by runtime |
 
 ### Canonical Oxygen Asset Extensions (MVP)
@@ -117,7 +117,7 @@ ProjectRoot/
   Content/*.import.json    # sidecar metadata
   .imported/Content/**     # imported artifacts (editor-native, disposable)
   .cooked/Content/**       # built artifacts (runtime-ready, canonical)
-  Build/
+  .build/
     <Platform>/
       <PakName>.pak        # packaged outputs (later)
 ```
@@ -137,14 +137,14 @@ Example (glTF):
 
 #### Authoring mount points (Project.oxy)
 
-Authoring mount points are represented in the project manifest (`Project.oxy`) as a `MountPoints` array of
+Authoring mount points are represented in the project manifest (`Project.oxy`) as a `AuthoringMounts` array of
 `{ Name, RelativePath }` objects.
 
 MVP requirements:
 
 - `Name` is the mount point token used as the virtual root segment (e.g. `Content` → virtual root `/Content`).
 - `RelativePath` is project-relative and uses `/` separators (e.g. `Content`).
-- If `MountPoints` is missing or empty, the implicit default is a single mount point: `{ Name: "Content", RelativePath: "Content" }`.
+- If `AuthoringMounts` is missing or empty, the implicit default is a single mount point: `{ Name: "Content", RelativePath: "Content" }`.
 
 ## Architecture & Design
 
@@ -157,7 +157,7 @@ graph LR
     A["Source Files<br/>(PNG, GLB)"] -->|IImportService| B["Canonical<br/>Imported Assets"]
     B -->|Build Step| C[".imported/<br/>Loose Layout"]
     C -->|Sidecar + Index| D[".cooked/<br/>Runtime-Ready"]
-    D -->|Later: Cook| E["Build/Platform<br/>PAK Archive"]
+    D -->|Later: Cook| E[".build/Platform<br/>PAK Archive"]
     F["Sidecar JSON<br/>Metadata"] -.->|Identity| A
     style F fill:#b3e5fc,color:#01579b
     style A fill:#c8e6c9,color:#1b5e20

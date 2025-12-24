@@ -17,11 +17,11 @@ Examples:
 
 The corresponding canonical asset URI form is:
 
-- `asset://{MountPoint}/{Path}`
+- `asset:///{MountPoint}/{Path}`
 
 Example:
 
-- `/Content/Textures/Wood.otex` ⇔ `asset://Content/Textures/Wood.otex`
+- `/Content/Textures/Wood.otex` ⇔ `asset:///Content/Textures/Wood.otex`
 
 ## Canonicalization and validation rules (required)
 

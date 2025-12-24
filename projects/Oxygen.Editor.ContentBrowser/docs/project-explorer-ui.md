@@ -95,7 +95,7 @@ The tree is composed of the following adapter types:
     - Non-hidden project folders directly under the project root (excluding folders that are roots of authoring mount points)
     - Mounted mount point nodes (explicit)
 - **Authoring mount point node** (new adapter)
-  - Backing: `ProjectInfo.MountPoints` (persisted in `Project.oxy`)
+  - Backing: `ProjectInfo.AuthoringMounts` (persisted in `Project.oxy`)
   - Label: mount point name (e.g. `Content`, `Engine`)
   - Root folder: project-relative `RelativePath` from `ProjectMountPoint`
   - Children: folders within that mount
@@ -135,7 +135,7 @@ Important: `.cooked`, `.imported`, and `.build` are not shown as regular folders
 
 ### Authoring mount points (persisted)
 
-Authoring mount points come from `ProjectInfo.MountPoints` (persisted in `Project.oxy`).
+Authoring mount points come from `ProjectInfo.AuthoringMounts` (persisted in `Project.oxy`).
 
 - Default behavior: if the project has no mount points, it has a single default mount point `Content` → `Content`.
 - Authoring mount points should be shown as dedicated nodes so virtual path mapping is stable and does not depend on filesystem casing.
@@ -208,7 +208,7 @@ This section lists concrete implementation tasks to bring Project Explorer to th
 ### A) Introduce mount point adapters
 
 - [x] Add a new adapter type `AuthoringMountPointTreeItemAdapter : TreeItemAdapter`.
-  - Backed by `ProjectInfo.MountPoints` entries (`ProjectMountPoint`), and represents an authoring mount root.
+  - Backed by `ProjectInfo.AuthoringMounts` entries (`ProjectMountPoint`), and represents an authoring mount root.
   - Produces canonical virtual paths rooted at `/{ProjectMountPoint.Name}`.
 
   Implementation: `projects/Oxygen.Editor.ContentBrowser/src/Panes/ProjectExplorer/AuthoringMountPointTreeItemAdapter.cs`.
@@ -230,11 +230,11 @@ This section lists concrete implementation tasks to bring Project Explorer to th
     - Folder adapters for each non-hidden folder directly under the project root, excluding:
       - dot-prefixed folders
       - folders that are the root of an authoring mount point (`ProjectMountPoint.RelativePath`)
-    - Authoring mount point adapters (from `ProjectInfo.MountPoints`)
+    - Authoring mount point adapters (from `ProjectInfo.AuthoringMounts`)
     - Virtual folder mount adapters for explicitly mounted virtual folders
   - Responsible for:
     - enumerating the project root folder and filtering out dot-prefixed folder names
-    - projecting `ProjectInfo.MountPoints` into authoring mount point nodes
+    - projecting `ProjectInfo.AuthoringMounts` into authoring mount point nodes
     - maintaining the current mounted set
     - inserting/removing mount nodes on mount/unmount
 
@@ -248,22 +248,22 @@ This section lists concrete implementation tasks to bring Project Explorer to th
 
 ### B) Update the Project Explorer view to include ToolBar
 
-- [ ] Update [projects/Oxygen.Editor.ContentBrowser/src/Panes/ProjectExplorer/ProjectLayoutView.xaml](../src/Panes/ProjectExplorer/ProjectLayoutView.xaml) to include a `ToolBar` below the `DynamicTree`.
+- [x] Update [projects/Oxygen.Editor.ContentBrowser/src/Panes/ProjectExplorer/ProjectLayoutView.xaml](../src/Panes/ProjectExplorer/ProjectLayoutView.xaml) to include a `ToolBar` below the `DynamicTree`.
   - Do not add extra UI elements beyond tree + toolbar.
 
-- [ ] Add `ToolBarButton` items for:
-- [ ] Add `ToolBarButton` items for:
+- [x] Add `ToolBarButton` items for:
+- [x] Add `ToolBarButton` items for:
   - Mount (with a flyout/menu offering the four mount choices)
   - Unmount
   - Rename (icon-only, right-most, separated from Unmount)
 
-- [ ] Ensure the Mount flyout menu has a separator between:
+- [x] Ensure the Mount flyout menu has a separator between:
   - the known locations group (Cooked/Imported/Build), and
   - Local Folder.
 
 ### C) Add commands and state in the ViewModel
 
-- [ ] Extend `ProjectLayoutViewModel` with commands.
+- [x] Extend `ProjectLayoutViewModel` with commands.
 
 Command design decision (MVVM idioms):
 
@@ -279,14 +279,14 @@ Command design decision (MVVM idioms):
 
 Concrete commands:
 
-- `MountKnownLocationCommand` (argument: `Cooked | Imported | Build`)
-- `MountLocalFolderCommand` (opens the Local Folder mount dialog)
-- `UnmountSelectedItemCommand`
-- `RenameSelectedItemCommand`
+- [x] `MountKnownLocationCommand` (argument: `Cooked | Imported | Build`)
+- [x] `MountLocalFolderCommand` (opens the Local Folder mount dialog)
+- [x] `UnmountSelectedItemCommand`
+- [x] `RenameSelectedItemCommand`
 
-- [ ] Add selection-derived state in `ProjectLayoutViewModel` to drive enablement:
-  - `CanUnmountSelectedItem` (true only when selected item is a mount adapter)
-  - `CanRenameSelectedItem` (true when selected item is renameable)
+- [x] Add selection-derived state in `ProjectLayoutViewModel` to drive enablement:
+  - [x] `CanUnmountSelectedItem` (true only when selected item is a mount adapter)
+  - [x] `CanRenameSelectedItem` (true when selected item is renameable)
 
 Naming rule:
 
@@ -294,31 +294,34 @@ Naming rule:
 
 ### D) Move selection identity to virtual paths
 
-- [ ] Change Project Explorer selection emission so it produces canonical virtual paths (strings at first), not project-relative filesystem paths.
+- [x] Change Project Explorer selection emission so it produces canonical virtual paths (strings at first), not project-relative filesystem paths.
   - Near-term: keep `string` but ensure it always conforms to the canonical virtual-path rules.
   - Mid-term: migrate to a typed `VirtualPath` when it exists in `Oxygen.Assets.Model`.
 
-- [ ] Remove case-insensitive comparisons used for matching selected items.
+- [x] Remove case-insensitive comparisons used for matching selected items.
   - Example: any `StringComparison.OrdinalIgnoreCase` comparisons for selection matching should become `StringComparison.Ordinal`.
 
-- [ ] Centralize virtual path creation by using the existing `Oxygen.Assets.Filesystem.VirtualPath` type.
+- [x] Centralize virtual path creation by using the existing `Oxygen.Assets.Filesystem.VirtualPath` type.
   - Do not introduce a new “VirtualPath-like” abstraction in the editor.
   - Enhance `VirtualPath` (in Oxygen.Assets) if needed with a canonical virtual-path builder/validator appropriate for `/{MountPoint}/{RelativePath}`.
 
+- [x] For “Local Folder” mounts: should the user be able to **rename** the mount point name, or is deriving it from the folder name sufficient for now? USER CAN RENAME MOUNT POINT (logical name not physical folder)
+- [x] Should Local Folder mounts be allowed to point outside the project root (expected: yes)? YES
+
 ### E) Persistence (MUST)
 
-- [ ] Use the existing persisted authoring mount points from `ProjectInfo.MountPoints` (`Project.oxy`) as the source of truth for authoring mounts.
+- [x] Use the existing persisted authoring mount points from `ProjectInfo.AuthoringMounts` (`Project.oxy`) as the source of truth for authoring mounts.
 
-- [ ] Persist the mounted set for **virtual folders** (Cooked/Imported/Build/Local Folder) per project so they can be restored.
-  - Do not store these inside `ProjectInfo.MountPoints` (those are for authoring mounts / asset identity).
+- [x] Persist the mounted set for **virtual folders** (Cooked/Imported/Build/Local Folder) per project so they can be restored.
+  - Do not store these inside `ProjectInfo.AuthoringMounts` (those are for authoring mounts / asset identity).
   - Persist stable identifiers (virtual folder kind for built-ins; name + absolute path for Local Folder).
 
 ### G) `.build` rename (required)
 
-- [ ] Rename the project build output folder from `Build` to `.build` for consistent hidden-folder semantics.
-  - Update Project Explorer built-in mount mapping: `Build` → `.build`.
-  - Update `Oxygen.Assets` to write/read `.build` wherever it currently uses `Build` for packaged/platform outputs.
-  - Update any docs/scripts/tests that reference `Build/` to `.build/`.
+- [x] Rename the project build output folder from `Build` to `.build` for consistent hidden-folder semantics.
+  - [x] Update Project Explorer built-in mount mapping: `Build` → `.build`.
+  - [x] Update `Oxygen.Assets` to write/read `.build` wherever it currently uses `Build` for packaged/platform outputs.
+  - [x] Update any docs/scripts/tests that reference `Build/` to `.build/`.
 
 ### F) Tests (MUST)
 
@@ -331,8 +334,3 @@ Naming rule:
   - Mount name case-sensitivity
   - Mount/unmount updates of the root adapter’s children
   - Rename behavior routing by selected item type (project root vs folder vs mount)
-
-## Open Questions / Clarifications
-
-- For “Local Folder” mounts: should the user be able to **rename** the mount point name, or is deriving it from the folder name sufficient for now?
-- Should Local Folder mounts be allowed to point outside the project root (expected: yes)?

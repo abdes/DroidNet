@@ -29,7 +29,7 @@ public interface IAssetResolver
     /// <summary>
     /// Asynchronously resolves an asset URI to an asset instance.
     /// </summary>
-    /// <param name="uri">The full asset URI to resolve (e.g., "asset://Generated/BasicShapes/Cube").</param>
+    /// <param name="uri">The full asset URI to resolve (e.g., "asset:///Generated/BasicShapes/Cube").</param>
     /// <returns>
     /// A task that represents the asynchronous operation. The task result contains the resolved <see cref="Asset"/>,
     /// or <see langword="null"/> if the asset could not be found or loaded.

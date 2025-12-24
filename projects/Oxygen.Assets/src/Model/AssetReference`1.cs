@@ -53,7 +53,7 @@ where T : Asset
     /// Gets or sets the URI of the referenced asset.
     /// </summary>
     /// <value>
-    /// The asset URI in the format <c>asset://{MountPoint}/{Path}</c>.
+    /// The asset URI in the format <c>asset:///{MountPoint}/{Path}</c>.
     /// Setting this property will invalidate <see cref="Asset"/> if the new URI does not match the current asset's URI.
     /// </value>
     public Uri Uri

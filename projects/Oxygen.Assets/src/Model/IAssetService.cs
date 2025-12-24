@@ -36,7 +36,7 @@ public interface IAssetService
     /// Asynchronously loads an asset of type <typeparamref name="T"/> from the specified URI.
     /// </summary>
     /// <typeparam name="T">The type of asset to load, must derive from <see cref="Asset"/>.</typeparam>
-    /// <param name="uri">The asset URI to resolve (e.g., "asset://Generated/BasicShapes/Cube").</param>
+    /// <param name="uri">The asset URI to resolve (e.g., "asset:///Generated/BasicShapes/Cube").</param>
     /// <returns>
     /// A task that represents the asynchronous operation. The task result contains the loaded asset
     /// of type <typeparamref name="T"/>, or <see langword="null"/> if the asset could not be found,

@@ -162,8 +162,8 @@ public sealed partial class ContentBrowserViewModel(
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
             // Start asset indexing in background now that project is loaded
-            var assetIndexer = this.childContainer.Resolve<IAssetIndexingService>();
-            _ = assetIndexer.StartIndexingAsync();
+            var assetCatalog = this.childContainer.Resolve<IProjectAssetCatalog>();
+            _ = assetCatalog.InitializeAsync();
 
             var initialUrl = "/(left:project//right:" + this.currentAssetsViewPath + ")";
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
@@ -191,6 +191,11 @@ public sealed partial class ContentBrowserViewModel(
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Singleton);
             this.childContainer.Register<ProjectLayoutView>(Reuse.Singleton);
+
+            // Dialog views used via Aura's IDialogService + VmToViewConverter.
+            this.childContainer.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
+            this.childContainer.Register<LocalFolderMountDialogView>(Reuse.Transient);
+
             this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
             this.childContainer.Register<AssetsView>(Reuse.Singleton);
             this.childContainer.Register<ListLayoutViewModel>(Reuse.Singleton);
@@ -252,8 +257,6 @@ public sealed partial class ContentBrowserViewModel(
 
         base.Dispose(disposing);
     }
-
-
 
     private static string? GetParentRelativePath(string? relativePath)
     {
@@ -563,6 +566,8 @@ public sealed partial class ContentBrowserViewModel(
 
             if (!string.IsNullOrEmpty(primary) && !string.Equals(primary, ".", StringComparison.Ordinal))
             {
+                var isVirtual = primary.StartsWith('/');
+
                 // Split path and accumulate segments
                 var parts = primary.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var pathSoFar = new List<string>();
@@ -570,6 +575,11 @@ public sealed partial class ContentBrowserViewModel(
                 {
                     pathSoFar.Add(part);
                     var rel = string.Join('/', pathSoFar);
+                    if (isVirtual)
+                    {
+                        rel = "/" + rel;
+                    }
+
                     entries.Add(new BreadcrumbEntry(part, rel));
                 }
             }

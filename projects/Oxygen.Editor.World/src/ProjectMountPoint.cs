@@ -14,4 +14,4 @@ namespace Oxygen.Editor.World;
 ///
 /// This data is persisted in the project manifest (<c>Project.oxy</c>).
 /// </remarks>
-public sealed record ProjectMountPoint(string Name, string RelativePath);
+public sealed record ProjectMountPoint(string Name, string RelativePath, bool IsExpanded = true);

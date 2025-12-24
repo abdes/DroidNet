@@ -11,6 +11,7 @@ using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
+using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -38,7 +39,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
     private readonly IMessenger messenger;
     private readonly ISceneEngineSync sceneEngineSync;
-    private readonly ContentBrowser.AssetsIndexingService? assetsIndexingService;
+    private readonly IAssetCatalog? assetCatalog;
     private readonly DispatcherQueue? dispatcher;
     private readonly Dictionary<INotifyCollectionChanged, SceneNode> componentNotifiers = [];
 
@@ -65,12 +66,12 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="messenger">The messenger for MVVM messaging.</param>
     /// <param name="sceneEngineSync">The scene engine synchronization service.</param>
-    /// <param name="assetsIndexingService">The assets indexing service for Content browser integration.</param>
+    /// <param name="assetCatalog">The asset catalog for Content browser integration.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
     /// </param>
-    public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ISceneEngineSync sceneEngineSync, IAssetIndexingService assetsIndexingService, ILoggerFactory? loggerFactory = null)
+    public SceneNodeEditorViewModel(HostingContext hosting, ViewModelToView vmToViewConverter, IMessenger messenger, ISceneEngineSync sceneEngineSync, IAssetCatalog assetCatalog, ILoggerFactory? loggerFactory = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
@@ -79,15 +80,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.messenger = messenger;
         this.VmToViewConverter = vmToViewConverter;
         this.sceneEngineSync = sceneEngineSync;
-        this.assetsIndexingService = assetsIndexingService as ContentBrowser.AssetsIndexingService;
+        this.assetCatalog = assetCatalog;
 
-        Debug.WriteLine($"[SceneNodeEditorViewModel] Constructor - AssetsIndexingService is {(this.assetsIndexingService != null ? "available" : "NULL")}");
+        Debug.WriteLine($"[SceneNodeEditorViewModel] Constructor - AssetCatalog is {(this.assetCatalog != null ? "available" : "NULL")}");
 
-        // Register GeometryComponent factory with access to AssetsIndexingService
+        // Register GeometryComponent factory with access to AssetCatalog
         AllPropertyEditorFactories[typeof(GeometryComponent)] = messengerParam =>
         {
-            Debug.WriteLine($"[SceneNodeEditorViewModel] Creating GeometryViewModel with AssetsIndexingService: {(assetsIndexingService != null ? "available" : "NULL")}");
-            return new GeometryViewModel(assetsIndexingService, messengerParam);
+            Debug.WriteLine($"[SceneNodeEditorViewModel] Creating GeometryViewModel with AssetCatalog: {(assetCatalog != null ? "available" : "NULL")}");
+            return new GeometryViewModel(assetCatalog, messengerParam);
         };
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;

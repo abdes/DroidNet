@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
+using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.ContentBrowser.Models;
 using Oxygen.Editor.World.Messages;
@@ -25,7 +26,7 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// </remarks>
 public partial class GeometryViewModel : ComponentPropertyEditor
 {
-    private readonly ContentBrowser.AssetsIndexingService? assetsIndexingService;
+    private readonly IAssetCatalog? assetCatalog;
     private readonly IMessenger? messenger;
     private readonly List<AssetPickerItem> contentItems = [];
 
@@ -34,26 +35,26 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     /// <summary>
     /// Initializes a new instance of the <see cref="GeometryViewModel"/> class.
     /// </summary>
-    /// <param name="assetsIndexingService">Optional asset indexing service used to populate and
+    /// <param name="assetCatalog">Optional asset catalog used to populate and
     /// subscribe to mesh assets from the content database. May be <see langword="null"/> for scenarios where
     /// asset content is not available.</param>
     /// <param name="messenger">Optional messenger used to send notifications such as applied
     /// geometry changes. May be <see langword="null"/>.</param>
-    public GeometryViewModel(IAssetIndexingService? assetsIndexingService = null, IMessenger? messenger = null)
+    public GeometryViewModel(IAssetCatalog? assetCatalog = null, IMessenger? messenger = null)
     {
-        this.assetsIndexingService = assetsIndexingService as ContentBrowser.AssetsIndexingService;
+        this.assetCatalog = assetCatalog;
         this.messenger = messenger;
 
         var engineItems = new List<AssetPickerItem>
         {
-            CreateEngineItem("Cube", "asset://Generated/BasicShapes/Cube", "/Engine/BasicShapes/Cube"),
-            CreateEngineItem("Sphere", "asset://Generated/BasicShapes/Sphere", "/Engine/BasicShapes/Sphere"),
-            CreateEngineItem("Plane", "asset://Generated/BasicShapes/Plane", "/Engine/BasicShapes/Plane"),
-            CreateEngineItem("Cylinder", "asset://Generated/BasicShapes/Cylinder", "/Engine/BasicShapes/Cylinder"),
-            CreateEngineItem("Cone", "asset://Generated/BasicShapes/Cone", "/Engine/BasicShapes/Cone"),
-            CreateEngineItem("Quad", "asset://Generated/BasicShapes/Quad", "/Engine/BasicShapes/Quad"),
-            CreateEngineItem("Torus", "asset://Generated/BasicShapes/Torus", "/Engine/BasicShapes/Torus"),
-            CreateEngineItem("ArrowGizmo", "asset://Generated/BasicShapes/ArrowGizmo", "/Engine/BasicShapes/ArrowGizmo"),
+            CreateEngineItem("Cube", "asset:///Generated/BasicShapes/Cube", "/Engine/BasicShapes/Cube"),
+            CreateEngineItem("Sphere", "asset:///Generated/BasicShapes/Sphere", "/Engine/BasicShapes/Sphere"),
+            CreateEngineItem("Plane", "asset:///Generated/BasicShapes/Plane", "/Engine/BasicShapes/Plane"),
+            CreateEngineItem("Cylinder", "asset:///Generated/BasicShapes/Cylinder", "/Engine/BasicShapes/Cylinder"),
+            CreateEngineItem("Cone", "asset:///Generated/BasicShapes/Cone", "/Engine/BasicShapes/Cone"),
+            CreateEngineItem("Quad", "asset:///Generated/BasicShapes/Quad", "/Engine/BasicShapes/Quad"),
+            CreateEngineItem("Torus", "asset:///Generated/BasicShapes/Torus", "/Engine/BasicShapes/Torus"),
+            CreateEngineItem("ArrowGizmo", "asset:///Generated/BasicShapes/ArrowGizmo", "/Engine/BasicShapes/ArrowGizmo"),
         };
 
         // Start with Engine group only
@@ -64,17 +65,17 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         ];
 
         // Subscribe to asset changes for mesh assets
-        if (assetsIndexingService is not null)
+        if (assetCatalog is not null)
         {
             Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
 
             // Get initial snapshot and track seen assets to deduplicate replay
             _ = Task.Run(async () =>
             {
-                var meshAssets = await assetsIndexingService.QueryAssetsAsync(
-                    a => a.AssetType == AssetType.Mesh).ConfigureAwait(false);
+                var allAssets = await assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
+                var meshAssets = allAssets.Where(a => IsMesh(a.Uri)).ToList();
 
-                var seenLocations = new HashSet<string>(meshAssets.Select(a => a.Location), StringComparer.Ordinal);
+                var seenUris = new HashSet<Uri>(meshAssets.Select(a => a.Uri));
 
                 // Populate initial items
                 foreach (var asset in meshAssets)
@@ -84,24 +85,25 @@ public partial class GeometryViewModel : ComponentPropertyEditor
                 }
 
                 // Subscribe to future changes, deduplicating replayed items
-                _ = assetsIndexingService.AssetChanges
-                    .Where(n => n.ChangeType == AssetChangeType.Added)
-                    .Where(n => n.Asset.AssetType == AssetType.Mesh)
-                    .Where(n => !seenLocations.Contains(n.Asset.Location)) // Deduplicate replay
+                _ = assetCatalog.Changes
+                    .Where(n => n.Kind == AssetChangeKind.Added)
+                    .Where(n => IsMesh(n.Uri))
+                    .Where(n => !seenUris.Contains(n.Uri)) // Deduplicate replay
                     .ObserveOn(System.Reactive.Concurrency.Scheduler.Default)
                     .Subscribe(
                         notification =>
                         {
-                            Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Asset.Name}");
-                            this.contentItems.Add(CreateContentItem(notification.Asset));
-                            seenLocations.Add(notification.Asset.Location);
+                            Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
+                            var record = new AssetRecord(notification.Uri);
+                            this.contentItems.Add(CreateContentItem(record));
+                            seenUris.Add(notification.Uri);
                         },
                         ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex.Message}"));
             });
         }
         else
         {
-            Debug.WriteLine("[GeometryViewModel] No assetsIndexingService available!");
+            Debug.WriteLine("[GeometryViewModel] No AssetCatalog available!");
         }
     }
 
@@ -282,20 +284,33 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             ThumbnailModel: "\uE7C3");
     }
 
-    private static AssetPickerItem CreateContentItem(GameAsset asset)
+    private static bool IsMesh(Uri uri)
     {
-        // Create URI: asset://Content/{location}
-        var uriString = $"asset://Content/{asset.Location}";
-        var uri = new Uri(uriString, UriKind.Absolute);
-        var displayPath = $"/Content/{asset.Location}";
+        var ext = Path.GetExtension(uri.AbsolutePath).ToUpperInvariant();
+        return ext is ".MESH" or ".OGEO";
+    }
+
+    private static AssetPickerItem CreateContentItem(AssetRecord asset)
+    {
+        string displayPath;
+        var mountPoint = AssetUriHelper.GetMountPoint(asset.Uri);
+
+        if (mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase))
+        {
+            displayPath = "/" + AssetUriHelper.GetRelativePath(asset.Uri);
+        }
+        else
+        {
+            displayPath = AssetUriHelper.GetVirtualPath(asset.Uri);
+        }
 
         return new AssetPickerItem(
-            Name: Path.GetFileNameWithoutExtension(asset.Name),
-            Uri: uri,
+            Name: asset.Name,
+            Uri: asset.Uri,
             DisplayType: "Static Mesh",
             DisplayPath: displayPath,
             Group: AssetPickerGroup.Content,
-            IsEnabled: false,
+            IsEnabled: true,
             ThumbnailModel: "\uE7C3");
     }
 

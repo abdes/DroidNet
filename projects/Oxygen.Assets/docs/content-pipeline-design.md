@@ -13,7 +13,7 @@ This document captures decisions for the asset/content pipeline architecture, th
 
 - [X] Create `projects/Oxygen.Assets` (single assembly).
 - [X] Keep expanding minimal public contracts:
-  - Asset identity is expressed as `asset://{MountPoint}/{Path}` URIs.
+  - Asset identity is expressed as `asset:///{MountPoint}/{Path}` URIs.
   - Asset loading uses `IAssetService` + `IAssetResolver` keyed by URI authority (mount point).
   - Catalog/query contract (`IAssetCatalog`) for *enumeration/search* (separate from load-by-URI).
   - Query scope is explicitly client-controlled via `AssetQueryScope` + `AssetQueryTraversal`.
@@ -81,15 +81,13 @@ Reserve **Cook** for optimization/minimization policies later.
   - [X] Use `FileSystemAssetResolver` as the primary resolver for Editor/PIE
   - [X] Refactor `FileSystemAssetResolver` to read geometry artifacts directly from `.imported` cache
   - [X] Remove on-the-fly import logic from resolver (performance fix)
-  - [X] Ensure deterministic mapping from `asset://` URI to `.imported` artifact path
+  - [X] Ensure deterministic mapping from `asset:///` URI to `.imported` artifact path
 
 - [ ] Wire `projects/Oxygen.Editor.ContentBrowser` UI to the pipeline
-  - One command: **Import** → runs Import → Build and refreshes cooked catalog
-  - Show diagnostics in UI (best-effort, don’t crash the editor on common import errors)
-  - [ ] Add a command handler that calls `IImportService.ImportAsync` with progress + cancellation
-  - [ ] Refresh/requery the cooked (index-backed) catalog after import completes
-  - [ ] Surface `ImportResult.Diagnostics` in the UI (at least Info/Warning/Error)
-  - [ ] Confirm the browser displays cooked assets from `.cooked/<MountPoint>/container.index.bin`
+  - Milestone: one user action **Import** runs Import → Build, updates cooked indexes, and the editor can enumerate cooked assets via `.cooked/<MountPoint>/container.index.bin`.
+  - Milestone: import/build diagnostics are visible in the editor UI (best-effort; common import errors must not crash the editor).
+  - Detailed Content Browser implementation tasks live in `projects/Oxygen.Editor.ContentBrowser/docs/refactoring.md`.
+    - Link: [`refactoring.md`](../../Oxygen.Editor.ContentBrowser/docs/refactoring.md)
 
 - [ ] Defer to later phases
   - `ICookService` (optimize/minimize) policies
@@ -132,13 +130,14 @@ The runtime distinguishes editor-facing identity from runtime identity:
 
 Virtual path invariants and normalization are defined in [virtual-paths.md](virtual-paths.md).
 
-In `Oxygen.Assets`, we currently use `asset://{MountPoint}/{Path}` URIs as catalog identities.
+In `Oxygen.Assets`, we currently use `asset:///{MountPoint}/{Path}` URIs as catalog identities.
 To align with runtime taxonomy:
 
 - Treat the URI form as a *serialized/editor-friendly representation* of the same namespace as virtual paths.
 - Define a deterministic mapping:
-  - `asset://Content/Textures/Wood.png` ⇔ `/Content/Textures/Wood.png`
-  - `Uri.Authority` ⇔ virtual root segment (`Content`, `Engine`, …)
+  - `asset:///Content/Textures/Wood.png` ⇔ `/Content/Textures/Wood.png`
+  - `Uri.Authority` ⇔ (empty)
+  - `Uri.AbsolutePath` ⇔ `/{MountPoint}/{Path}`
 
 The runtime loads by `AssetKey` (not by virtual path), so the cook pipeline must also provide a deterministic mapping `VirtualPath ⇄ AssetKey`.
 

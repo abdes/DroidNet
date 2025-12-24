@@ -184,7 +184,7 @@ public sealed class MaterialSourceImporter : IAssetImporter
 
     private static bool TryGetProjectRelativePathFromAssetUri(string assetUri, out string projectRelativePath)
     {
-        const string prefix = "asset://";
+        const string prefix = "asset:///";
 
         if (!assetUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
