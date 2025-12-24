@@ -64,4 +64,19 @@ public interface IDialogService
     /// <param name="cancellationToken">A token that cancels the dialog operation.</param>
     /// <returns>A task that returns <see langword="true"/> if the user selects the primary button; otherwise, <see langword="false"/>.</returns>
     public Task<bool> ConfirmAsync(string title, string message, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Shows a folder picker owned by the currently active Aura window.
+    /// </summary>
+    /// <param name="cancellationToken">A token that cancels the picker operation.</param>
+    /// <returns>The selected folder path, or <see langword="null"/> when cancelled or unavailable.</returns>
+    public Task<string?> PickFolderAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    ///     Shows a folder picker owned by a specific Aura window.
+    /// </summary>
+    /// <param name="ownerWindowId">The owner window id.</param>
+    /// <param name="cancellationToken">A token that cancels the picker operation.</param>
+    /// <returns>The selected folder path, or <see langword="null"/> when cancelled or unavailable.</returns>
+    public Task<string?> PickFolderAsync(WindowId ownerWindowId, CancellationToken cancellationToken = default);
 }
