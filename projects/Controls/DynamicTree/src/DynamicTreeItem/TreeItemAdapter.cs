@@ -4,6 +4,7 @@
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -108,6 +109,15 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
 
     /// <inheritdoc />
     public abstract string Label { get; set; }
+
+    /// <summary>
+    ///     Gets the label to display in the UI.
+    /// </summary>
+    /// <remarks>
+    ///     This exists to allow adapters to present a decorated label (e.g. "{Name} (Project Root)")
+    ///     while keeping <see cref="Label"/> as the editable/identity value.
+    /// </remarks>
+    public virtual string DisplayLabel => this.Label;
 
     /// <inheritdoc />
     public virtual bool CanAcceptChildren => true;
@@ -311,6 +321,17 @@ public abstract partial class TreeItemAdapter : ObservableObject, ITreeItem, ILo
         }
 
         return removeAtIndex;
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+
+        if (string.Equals(e.PropertyName, nameof(this.Label), StringComparison.Ordinal))
+        {
+            base.OnPropertyChanged(new PropertyChangedEventArgs(nameof(this.DisplayLabel)));
+        }
     }
 
     /// <summary>

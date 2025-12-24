@@ -26,12 +26,44 @@ public partial class DynamicTreeItem
     private bool newNameIsValid;
     private string? oldItemName;
 
+    /// <summary>
+    ///     Starts in-place renaming for this tree item.
+    /// </summary>
+    /// <returns><see langword="true"/> if rename UI was opened; otherwise <see langword="false"/>.</returns>
+    public bool BeginRename()
+    {
+        if (this.itemNameTextBlock is null || this.itemNameTextBox is null)
+        {
+            return false;
+        }
+
+        this.itemNameTextBox.Text = this.ItemAdapter?.Label ?? string.Empty;
+        this.oldItemName = this.ItemAdapter?.Label;
+        this.itemNameTextBlock.Visibility = Visibility.Collapsed;
+        this.itemNameTextBox.Visibility = Visibility.Visible;
+        this.itemNameTextBox.SelectAll();
+
+#pragma warning disable IDE0031 // cannot be simplified
+        if (this.inPlaceRenamePart != null)
+        {
+            this.inPlaceRenamePart.IsOpen = true;
+        }
+#pragma warning restore IDE0031
+
+        _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
+
+        this.itemNameTextBox.TextChanged += this.RenameTextBox_TextChanged;
+        this.itemNameTextBox.LostFocus += this.RenameTextBox_LostFocus;
+        this.itemNameTextBox.KeyDown += this.RenameTextBox_KeyDown;
+        this.itemNameTextBox.GotFocus += this.RenameTextBox_GotFocus;
+        this.itemNameTextBox.ContextMenuOpening += this.RenameTextBox_ContextMenuOpening;
+
+        return true;
+    }
+
     private void SetupItemNameParts()
     {
-        if (this.itemNameTextBlock is not null)
-        {
-            this.itemNameTextBlock.DoubleTapped -= this.StartRenameItem;
-        }
+        this.itemNameTextBlock?.DoubleTapped -= this.StartRenameItem;
 
         this.itemContentPart = this.GetTemplateChild(ContentPresenterPart) as ContentPresenter;
         if (this.itemContentPart is null)
@@ -96,32 +128,10 @@ public partial class DynamicTreeItem
 
     private void StartRenameItem(object sender, DoubleTappedRoutedEventArgs e)
     {
+        _ = sender; // unused
+
         e.Handled = true;
-
-        Debug.Assert(
-            this.itemNameTextBlock is not null && this.itemNameTextBox is not null,
-            "event handler should not be setup if parts are missing");
-
-        this.itemNameTextBox.Text = this.itemNameTextBlock.Text;
-        this.oldItemName = this.itemNameTextBlock.Text;
-        this.itemNameTextBlock.Visibility = Visibility.Collapsed;
-        this.itemNameTextBox.Visibility = Visibility.Visible;
-        this.itemNameTextBox.SelectAll();
-
-#pragma warning disable IDE0031 // cannot be simplified
-        if (this.inPlaceRenamePart != null)
-        {
-            this.inPlaceRenamePart.IsOpen = true;
-        }
-#pragma warning restore IDE0031
-
-        _ = this.itemNameTextBox.Focus(FocusState.Programmatic);
-
-        this.itemNameTextBox.TextChanged += this.RenameTextBox_TextChanged;
-        this.itemNameTextBox.LostFocus += this.RenameTextBox_LostFocus;
-        this.itemNameTextBox.KeyDown += this.RenameTextBox_KeyDown;
-        this.itemNameTextBox.GotFocus += this.RenameTextBox_GotFocus;
-        this.itemNameTextBox.ContextMenuOpening += this.RenameTextBox_ContextMenuOpening;
+        _ = this.BeginRename();
     }
 
     private void EndRename()
