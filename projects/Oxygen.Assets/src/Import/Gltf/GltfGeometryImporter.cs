@@ -208,7 +208,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
 
         var materialKeys = await ExtractMaterialsAsync(context, model, sourcePath, lastWriteTimeUtc, sourceHash, dependencies, outputs, dir, stem, cancellationToken).ConfigureAwait(false);
 
-        ExtractMeshes(context, model, sourcePath, lastWriteTimeUtc, sourceHash, dependencies, outputs, dir, stem, materialKeys, cancellationToken);
+        await ExtractMeshesAsync(context, model, sourcePath, lastWriteTimeUtc, sourceHash, dependencies, outputs, dir, stem, materialKeys, cancellationToken).ConfigureAwait(false);
 
         if (outputs.Count == 0)
         {
@@ -254,21 +254,9 @@ public sealed class GltfGeometryImporter : IAssetImporter
                 var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(matSource, JsonOptions);
                 await context.Files.WriteAllBytesAsync(jsonPath, jsonBytes, cancellationToken).ConfigureAwait(false);
 
-                // If we generated a source file, the asset should ideally be imported from that source file.
-                // However, to make it available immediately in this build, we can emit it here.
-                // But we must ensure the VirtualPath matches what the MaterialSourceImporter would produce.
-                // MaterialSourceImporter uses the file path.
-                // If jsonPath is "Content/Materials/Foo.omat.json", VirtualPath is "/Content/Materials/Foo.omat".
-
-                // Re-calculate VirtualPath based on the actual jsonPath
-                var jsonDir = Filesystem.VirtualPath.GetDirectory(jsonPath);
-                var jsonStem = Filesystem.VirtualPath.GetFileNameWithoutExtension(Filesystem.VirtualPath.GetFileNameWithoutExtension(jsonPath));
-
-                // MaterialSourceImporter expects .omat.json
-                // VirtualPath is jsonPath without .json
-                // jsonPath: Content/Materials/Foo.omat.json
-                // VirtualPath: /Content/Materials/Foo.omat
-                matVirtualPath = "/" + jsonPath[..^5]; // Remove .json
+                // Ensure the VirtualPath matches what MaterialSourceImporter produces (stripping .json).
+                // Example: "Content/Materials/Foo.omat.json" -> "/Content/Materials/Foo.omat"
+                matVirtualPath = "/" + jsonPath[..^5];
             }
 
             var matKey = context.Identity.GetOrCreateAssetKey(matVirtualPath, assetType: "Material");
@@ -289,7 +277,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
         return materialKeys;
     }
 
-    private static void ExtractMeshes(
+    private static async Task ExtractMeshesAsync(
         ImportContext context,
         ModelRoot model,
         string sourcePath,
@@ -315,6 +303,8 @@ public sealed class GltfGeometryImporter : IAssetImporter
             var geometry = BuildGeometry(mesh, materialKeys);
             var virtualPath = "/" + Filesystem.VirtualPath.Combine(dir, string.Create(CultureInfo.InvariantCulture, $"{stem}__mesh__{meshIndex:0000}.ogeo"));
 
+            await WriteImportedGeometryAsync(context, virtualPath, geometry, cancellationToken).ConfigureAwait(false);
+
             var assetKey = context.Identity.GetOrCreateAssetKey(virtualPath, assetType: "Geometry");
 
             outputs.Add(
@@ -328,6 +318,25 @@ public sealed class GltfGeometryImporter : IAssetImporter
                         LastWriteTimeUtc: lastWriteTimeUtc),
                     Dependencies: dependencies,
                     Payload: geometry));
+        }
+    }
+
+    private static async Task WriteImportedGeometryAsync(
+        ImportContext context,
+        string virtualPath,
+        ImportedGeometry geometry,
+        CancellationToken cancellationToken)
+    {
+        var relativePath = virtualPath.TrimStart('/');
+        var importedPath = Path.Combine(".imported", relativePath);
+
+        var ms = new MemoryStream();
+        await using (ms.ConfigureAwait(false))
+        {
+            await ImportedGeometrySerializer.WriteAsync(ms, geometry, cancellationToken).ConfigureAwait(false);
+            var bytes = ms.ToArray();
+
+            await context.Files.WriteAllBytesAsync(importedPath, bytes, cancellationToken).ConfigureAwait(false);
         }
     }
 
