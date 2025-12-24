@@ -9,6 +9,8 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
+using Windows.Storage.Pickers;
+using WinRT.Interop;
 
 namespace DroidNet.Aura.Dialogs;
 
@@ -79,6 +81,14 @@ public sealed class DialogService : IDialogService
 
         return result == DialogButton.Primary;
     }
+
+    /// <inheritdoc/>
+    public Task<string?> PickFolderAsync(CancellationToken cancellationToken = default)
+        => this.PickFolderAsync(ownerWindowId: null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<string?> PickFolderAsync(WindowId ownerWindowId, CancellationToken cancellationToken = default)
+        => this.PickFolderAsync((WindowId?)ownerWindowId, cancellationToken);
 
     private static DialogButton MapResult(ContentDialogResult result)
         => result switch
@@ -237,6 +247,35 @@ public sealed class DialogService : IDialogService
         {
             _ = DialogGate.Release();
         }
+    }
+
+    private async Task<string?> PickFolderAsync(WindowId? ownerWindowId, CancellationToken cancellationToken)
+    {
+        var owner = this.ResolveOwnerWindow(ownerWindowId);
+
+        return await owner.DispatcherQueue.EnqueueAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var picker = new FolderPicker();
+            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(owner.Window));
+            picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+            picker.FileTypeFilter.Add("*");
+
+            // FolderPicker does not accept CancellationToken; honor cancellation before/after.
+            cancellationToken.ThrowIfCancellationRequested();
+            var folder = await picker.PickSingleFolderAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var path = folder?.Path;
+            System.Diagnostics.Debug.WriteLine($"[DialogService] PickFolderAsync returned path: {path}");
+            if (string.IsNullOrEmpty(path))
+            {
+                System.Diagnostics.Debug.WriteLine("[DialogService] Picker returned null/empty path");
+            }
+
+            return path;
+        }).ConfigureAwait(false);
     }
 
     private IManagedWindow ResolveOwnerWindow(WindowId? ownerWindowId)
