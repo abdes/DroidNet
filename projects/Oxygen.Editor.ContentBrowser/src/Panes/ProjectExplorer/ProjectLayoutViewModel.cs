@@ -39,7 +39,7 @@ public partial class ProjectLayoutViewModel(
 
     private IActiveRoute? activeRoute;
     private bool isUpdatingFromState;
-    private FolderTreeItemAdapter? projectRoot;
+    private ProjectRootTreeItemAdapter? projectRoot;
     private bool suppressTreeSelectionEvents;
 
     /// <inheritdoc />
@@ -101,8 +101,14 @@ public partial class ProjectLayoutViewModel(
             // Dispose previous root to release resources
             this.projectRoot?.Dispose();
 
-            this.projectRoot =
-                new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true) { IsExpanded = true };
+            this.projectRoot = new ProjectRootTreeItemAdapter(
+                this.logger,
+                storage,
+                projectInfo,
+                folder)
+            {
+                IsExpanded = true,
+            };
 
             // Ensure the root children are loading to avoid assertion in DoGetChildrenCount
             // when logging accesses ChildrenCount before the lazy loader is triggered.
@@ -120,7 +126,7 @@ public partial class ProjectLayoutViewModel(
                 .Order(StringComparer.Ordinal)
                 .ToList();
 
-            FolderTreeItemAdapter? target = null;
+            ITreeItem? target = null;
             if (candidates.Count > 0 && this.projectRoot is not null)
             {
                 foreach (var path in candidates)
@@ -162,7 +168,8 @@ public partial class ProjectLayoutViewModel(
         }
 
         var pathRelativeToProjectRoot = folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
-        var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot).ConfigureAwait(true);
+        var folderAdapter = await this.FindFolderAdapterAsync(this.projectRoot, pathRelativeToProjectRoot)
+            .ConfigureAwait(true);
         if (folderAdapter != null)
         {
             // Use the tree control's selection API to properly select the folder
@@ -209,12 +216,12 @@ public partial class ProjectLayoutViewModel(
     /// <summary>
     ///     Recursively sets the IsSelected property on tree items.
     /// </summary>
-    private static async Task SetTreeItemSelectionRecursively(FolderTreeItemAdapter adapter, bool isSelected)
+    private static async Task SetTreeItemSelectionRecursively(TreeItemAdapter adapter, bool isSelected)
     {
         adapter.IsSelected = isSelected;
 
         var children = await adapter.Children.ConfigureAwait(true);
-        foreach (var child in children.OfType<FolderTreeItemAdapter>())
+        foreach (var child in children.OfType<TreeItemAdapter>())
         {
             await SetTreeItemSelectionRecursively(child, isSelected).ConfigureAwait(true);
         }
@@ -253,8 +260,14 @@ public partial class ProjectLayoutViewModel(
                 // Create the root TreeItem for the project root folder.
                 var storage = projectManager.GetCurrentProjectStorageProvider();
                 var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
-                this.projectRoot =
-                    new FolderTreeItemAdapter(this.logger, folder, projectInfo.Name, isRoot: true) { IsExpanded = true };
+                this.projectRoot = new ProjectRootTreeItemAdapter(
+                    this.logger,
+                    storage,
+                    projectInfo,
+                    folder)
+                {
+                    IsExpanded = true,
+                };
             }
 
             // Preload the project folders
@@ -315,11 +328,22 @@ public partial class ProjectLayoutViewModel(
     /// <param name="targetPath">The target relative path to find.</param>
     /// <returns>The folder adapter if found, null otherwise.</returns>
     private async Task<FolderTreeItemAdapter?> FindFolderAdapterAsync(
-        FolderTreeItemAdapter currentAdapter,
+        ITreeItem currentAdapter,
         string targetPath)
     {
-        // Get the relative path of the current adapter
-        var currentPath = currentAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+        string currentPath;
+        if (currentAdapter is FolderTreeItemAdapter folderAdapter)
+        {
+            currentPath = folderAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath);
+        }
+        else if (currentAdapter is ProjectRootTreeItemAdapter)
+        {
+            currentPath = string.Empty;
+        }
+        else
+        {
+            currentPath = string.Empty;
+        }
 
         // Normalize paths for comparison (handle . for root)
         if (string.Equals(currentPath, ".", StringComparison.Ordinal))
@@ -334,15 +358,20 @@ public partial class ProjectLayoutViewModel(
 
         if (string.Equals(currentPath, targetPath, StringComparison.OrdinalIgnoreCase))
         {
-            return currentAdapter;
+            return currentAdapter as FolderTreeItemAdapter;
         }
 
         // Search in children
-        var children = await currentAdapter.Children.ConfigureAwait(true);
-        foreach (var child in children.OfType<FolderTreeItemAdapter>())
+        if (currentAdapter is not TreeItemAdapter adapterBase)
+        {
+            return null;
+        }
+
+        var children = await adapterBase.Children.ConfigureAwait(true);
+        foreach (var child in children)
         {
             var result = await this.FindFolderAdapterAsync(child, targetPath).ConfigureAwait(true);
-            if (result != null)
+            if (result is not null)
             {
                 return result;
             }
@@ -376,11 +405,18 @@ public partial class ProjectLayoutViewModel(
 
         this.LogTreeSelectionChangedUpdatingState(multipleSelection.SelectedIndices.Count);
 
-        // Get currently selected folder adapters from ALL selected indices
+        // Get currently selected folder adapters from ALL selected indices.
+        // For now, only folder nodes and the project root contribute to ContentBrowserState.SelectedFolders.
         var selectedFolders = multipleSelection.SelectedIndices
             .Select(this.GetShownItemAt)
-            .OfType<FolderTreeItemAdapter>()
-            .Select(adapter => adapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath))
+            .Select(item => item switch
+            {
+                FolderTreeItemAdapter folderAdapter => folderAdapter.Folder.GetPathRelativeTo(contentBrowserState.ProjectRootPath),
+                ProjectRootTreeItemAdapter => ".",
+                _ => null,
+            })
+            .Where(static p => !string.IsNullOrEmpty(p))
+            .Select(static p => p!)
             .ToList();
 
         this.LogSelectedFolders(string.Join(", ", selectedFolders));
@@ -439,6 +475,13 @@ public partial class ProjectLayoutViewModel(
                 if (string.IsNullOrEmpty(path))
                 {
                     this.LogSkippingEmptyPath();
+                    continue;
+                }
+
+                if (string.Equals(path, ".", StringComparison.Ordinal))
+                {
+                    this.LogSettingIsSelected(path);
+                    this.projectRoot.IsSelected = true;
                     continue;
                 }
 

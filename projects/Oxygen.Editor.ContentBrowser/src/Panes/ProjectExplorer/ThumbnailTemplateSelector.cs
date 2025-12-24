@@ -21,7 +21,34 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
     /// </summary>
     public DataTemplate? DefaultTemplate { get; set; }
 
+    /// <summary>
+    ///     Gets or sets the template used for <see cref="FolderTreeItemAdapter"/> items.
+    /// </summary>
+    public DataTemplate? FolderTemplate { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the template used for <see cref="ProjectRootTreeItemAdapter"/> items.
+    /// </summary>
+    public DataTemplate? ProjectRootTemplate { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the template used for <see cref="AuthoringMountPointTreeItemAdapter"/> items.
+    /// </summary>
+    public DataTemplate? AuthoringMountTemplate { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the template used for <see cref="VirtualFolderMountTreeItemAdapter"/> items.
+    /// </summary>
+    public DataTemplate? VirtualFolderMountTemplate { get; set; }
+
     /// <inheritdoc />
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
-        => this.DefaultTemplate;
+        => item switch
+        {
+            FolderTreeItemAdapter => this.FolderTemplate ?? this.DefaultTemplate,
+            ProjectRootTreeItemAdapter => this.ProjectRootTemplate ?? this.DefaultTemplate,
+            AuthoringMountPointTreeItemAdapter => this.AuthoringMountTemplate ?? this.DefaultTemplate,
+            VirtualFolderMountTreeItemAdapter => this.VirtualFolderMountTemplate ?? this.DefaultTemplate,
+            _ => this.DefaultTemplate,
+        };
 }
