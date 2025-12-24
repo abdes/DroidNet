@@ -69,7 +69,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         this.Thumbnail = thumbnail;
         this.LastUsedOn = DateTime.Now;
 
-        this.EnsureDefaultMountPoints();
+        this.EnsureDefaultAuthoringMounts();
     }
 
     /// <summary>
@@ -91,7 +91,10 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public string? Thumbnail { get; set; }
 
     /// <inheritdoc />
-    public IList<ProjectMountPoint> MountPoints { get; set; } = new List<ProjectMountPoint>();
+    public IList<ProjectMountPoint> AuthoringMounts { get; set; } = new List<ProjectMountPoint>();
+
+    /// <inheritdoc />
+    public IList<LocalFolderMount> LocalFolderMounts { get; set; } = new List<LocalFolderMount>();
 
     /// <inheritdoc />
     public DateTime LastUsedOn { get; set; }
@@ -131,7 +134,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         var obj = JsonSerializer.Deserialize<ProjectInfo>(json, JsonOptions)
             ?? throw new JsonException("Failed to deserialize ProjectInfo from JSON.");
 
-        obj.EnsureDefaultMountPoints();
+        obj.EnsureDefaultAuthoringMounts();
         return obj.Id == Guid.Empty
             ? throw new JsonException("ProjectInfo JSON is missing required 'Id' property or it is empty.")
             : (IProjectInfo)obj;
@@ -144,13 +147,13 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     /// <returns>The JSON string representation of the <see cref="IProjectInfo" /> object.</returns>
     internal static string ToJson(IProjectInfo projectInfo) => JsonSerializer.Serialize(projectInfo, JsonOptions);
 
-    private void EnsureDefaultMountPoints()
+    private void EnsureDefaultAuthoringMounts()
     {
         // "Works just like that": a project always has a default authoring mount point.
         // Keep it minimal and deterministic.
-        if (this.MountPoints.Count == 0)
+        if (this.AuthoringMounts.Count == 0)
         {
-            this.MountPoints.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
+            this.AuthoringMounts.Add(new ProjectMountPoint(Name: "Content", RelativePath: "Content"));
         }
     }
 }

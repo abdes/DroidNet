@@ -12,7 +12,7 @@ namespace Oxygen.Assets.Import.Materials;
 internal sealed class TextureRefData
 {
     /// <summary>
-    /// Gets or sets an <c>asset://</c> URI referencing an authoring texture source.
+    /// Gets or sets an <c>asset:///</c> URI referencing an authoring texture source.
     /// </summary>
     [JsonPropertyName("Source")]
     public string Source { get; set; } = string.Empty;

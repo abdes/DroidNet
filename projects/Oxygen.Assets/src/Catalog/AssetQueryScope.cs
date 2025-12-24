@@ -11,8 +11,8 @@ namespace Oxygen.Assets.Catalog;
 /// <para>
 /// Scope is expressed in terms of canonical asset URIs. A root is typically either:
 /// <list type="bullet">
-/// <item><description>A mount point root: <c>asset://Content/</c>, <c>asset://Engine/</c></description></item>
-/// <item><description>A folder root: <c>asset://Content/Textures/</c></description></item>
+/// <item><description>A mount point root: <c>asset:///Content/</c>, <c>asset:///Engine/</c></description></item>
+/// <item><description>A folder root: <c>asset:///Content/Textures/</c></description></item>
 /// </list>
 /// </para>
 /// <para>

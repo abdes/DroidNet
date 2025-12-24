@@ -52,7 +52,7 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
                 "Name": "name",
                 "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
                 "Thumbnail": "Media/Preview.png",
-                "MountPoints": [
+                "AuthoringMounts": [
                     {
                         "Name": "Content",
                         "RelativePath": "Content"

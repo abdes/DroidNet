@@ -44,23 +44,23 @@ stubs for filesystem & PAK resolvers to be implemented in later phases.
 Assets are referenced using canonical URIs:
 
 ```text
-asset://{MountPoint}/{Path}
+asset:///{MountPoint}/{Path}
 ```
 
 Examples:
 
-- `asset://Generated/BasicShapes/Cube` — runtime-generated built-in geometry
-- `asset://Generated/Materials/Default` — built-in default material
-- `asset://Content/Models/Hero.ogeo` — content (file-system)
-- `asset://Engine/Textures/Skybox.otex` — engine/PAK resources
+- `asset:///Generated/BasicShapes/Cube` — runtime-generated built-in geometry
+- `asset:///Generated/Materials/Default` — built-in default material
+- `asset:///Content/Models/Hero.ogeo` — content (file-system)
+- `asset:///Engine/Textures/Skybox.otex` — engine/PAK resources
 
 ## Mount points
 
 | Mount point | Implemented | Typical examples | Implementation |
 |---|:---:|---|---|
-| Generated | ✅ | `asset://Generated/BasicShapes/Cube` | `GeneratedAssetResolver` — frozen in-memory catalog (Cube/Sphere/Plane/Cylinder + Default material) |
-| Content | ✅ | `asset://Content/...` | `FileSystemAssetResolver` — configured for "Content" authority, reads from source/imported folders |
-| Engine | ✅ | `asset://Engine/...` | `FileSystemAssetResolver` — configured for "Engine" authority (in Editor) or `PakAssetResolver` (in Runtime) |
+| Generated | ✅ | `asset:///Generated/BasicShapes/Cube` | `GeneratedAssetResolver` — frozen in-memory catalog (Cube/Sphere/Plane/Cylinder + Default material) |
+| Content | ✅ | `asset:///Content/...` | `FileSystemAssetResolver` — configured for "Content" authority, reads from source/imported folders |
+| Engine | ✅ | `asset:///Engine/...` | `FileSystemAssetResolver` — configured for "Engine" authority (in Editor) or `PakAssetResolver` (in Runtime) |
 
 ## Built-in generated assets
 
@@ -68,11 +68,11 @@ The resolver for the `Generated` mount point exposes a small, always-available s
 
 | Asset path | Type | Notes |
 |---|---:|---|
-| `asset://Generated/BasicShapes/Cube` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
-| `asset://Generated/BasicShapes/Sphere` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
-| `asset://Generated/BasicShapes/Plane` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
-| `asset://Generated/BasicShapes/Cylinder` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
-| `asset://Generated/Materials/Default` | Material | Minimal material metadata used by generated geometry |
+| `asset:///Generated/BasicShapes/Cube` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
+| `asset:///Generated/BasicShapes/Sphere` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
+| `asset:///Generated/BasicShapes/Plane` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
+| `asset:///Generated/BasicShapes/Cylinder` | Geometry | Has 1 LOD with a single `SubMesh` named `Main` |
+| `asset:///Generated/Materials/Default` | Material | Minimal material metadata used by generated geometry |
 
 ## Key types and behavior (quick reference)
 
@@ -92,7 +92,7 @@ Basic: populate an `AssetReference<T>` with a URI and ask the `IAssetService` to
 
 ```csharp
 // serializable ref (Uri persisted) -> runtime Asset loaded by service
-var geometryRef = new AssetReference<GeometryAsset> { Uri = new Uri("asset://Generated/BasicShapes/Cube") };
+var geometryRef = new AssetReference<GeometryAsset> { Uri = new Uri("asset:///Generated/BasicShapes/Cube") };
 geometryRef.Asset = await assetService.LoadAssetAsync<GeometryAsset>(geometryRef.Uri!);
 ```
 

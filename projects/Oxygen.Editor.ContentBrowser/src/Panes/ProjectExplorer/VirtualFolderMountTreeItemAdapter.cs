@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
+using Oxygen.Assets.Filesystem;
 using Oxygen.Core;
 using Oxygen.Storage;
 
@@ -86,15 +87,33 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
                 return;
             }
 
+            var oldName = this.MountPointName;
             this.label = value;
+            this.MountPointName = value;
+
             this.OnPropertyChanged();
+            this.OnPropertyChanged(nameof(this.MountPointName));
+            this.OnPropertyChanged(nameof(this.VirtualRootPath));
+
+            if (this.Parent is ProjectRootTreeItemAdapter root)
+            {
+                root.NotifyMountRenamed(this, oldName);
+            }
         }
     }
 
     /// <summary>
     ///     Gets the mount point identity name.
     /// </summary>
-    public string MountPointName { get; }
+    public string MountPointName { get; private set; }
+
+    /// <summary>
+    ///     Gets the canonical absolute virtual root path for this virtual folder mount.
+    /// </summary>
+    /// <remarks>
+    ///     This is the stable identity for asset selection and must be case-sensitive.
+    /// </remarks>
+    public string VirtualRootPath => VirtualPath.CreateAbsolute(this.MountPointName);
 
     /// <summary>
     ///     Gets the backing root folder for this mount.
@@ -209,20 +228,4 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
         Level = LogLevel.Error,
         Message = "An error occurred while loading folders from mount root `{location}`: {error}")]
     private partial void CouldNotLoadMountFolders(string location, string error);
-}
-
-/// <summary>
-///     Identifies whether a virtual folder mount backing path is project-relative or absolute.
-/// </summary>
-public enum VirtualFolderMountBackingPathKind
-{
-    /// <summary>
-    ///     The backing path is relative to the project root (e.g. <c>.cooked</c>).
-    /// </summary>
-    ProjectRelative,
-
-    /// <summary>
-    ///     The backing path is an absolute OS path.
-    /// </summary>
-    Absolute,
 }

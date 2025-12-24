@@ -27,7 +27,7 @@ namespace Oxygen.Editor.World;
 /// </remarks>
 public partial class GeometryComponent : GameComponent
 {
-    private AssetReference<GeometryAsset>? geometry = new("asset://__uninitialized__");
+    private AssetReference<GeometryAsset>? geometry = new("asset:///__uninitialized__");
 
     static GeometryComponent()
     {

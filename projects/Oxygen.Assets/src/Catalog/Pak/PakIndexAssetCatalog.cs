@@ -8,6 +8,7 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text;
+using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Catalog.FileSystem;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Assets.Persistence.Pak.V1;
@@ -21,7 +22,7 @@ namespace Oxygen.Assets.Catalog.Pak;
 /// <remarks>
 /// This provider enumerates assets via an embedded browse index and maps virtual paths
 /// (e.g. <c>/Content/Textures/Wood.png</c>) to canonical asset URIs
-/// (e.g. <c>asset://Content/Textures/Wood.png</c>).
+/// (e.g. <c>asset:///Content/Textures/Wood.png</c>).
 /// </remarks>
 #pragma warning disable SA1204 // Static elements should appear before instance elements
 public sealed class PakIndexAssetCatalog : IAssetCatalog, IDisposable
@@ -161,7 +162,7 @@ public sealed class PakIndexAssetCatalog : IAssetCatalog, IDisposable
 
         var authority = trimmed[..slash];
         var path = trimmed[(slash + 1)..];
-        return new Uri($"asset://{authority}/{path}");
+        return AssetUriHelper.CreateUri(authority, path);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

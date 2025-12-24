@@ -15,7 +15,7 @@ namespace Oxygen.Assets;
 /// </remarks>
 internal static class BuiltInAssets
 {
-    private const string BaseUri = "asset://Generated/";
+    private const string BaseUri = "asset:///Generated/";
 
     public static IEnumerable<Asset> Create()
     {

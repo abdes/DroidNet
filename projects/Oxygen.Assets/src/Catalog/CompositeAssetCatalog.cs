@@ -66,11 +66,10 @@ public sealed class CompositeAssetCatalog : IAssetCatalog
 
         // Merge and de-duplicate by URI identity.
         // Prefer a stable, deterministic ordering (useful for tests and UI).
-        return results
+        return [.. results
             .SelectMany(r => r)
             .DistinctBy(r => r.Uri, AssetUriComparer.Instance)
-            .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal)
-            .ToArray();
+            .OrderBy(r => r.Uri.ToString(), StringComparer.Ordinal),];
     }
 
     private static IObservable<AssetChange> BuildChanges(IReadOnlyList<IAssetCatalog> catalogs)
@@ -92,6 +91,7 @@ public sealed class CompositeAssetCatalog : IAssetCatalog
     {
         public static AssetUriComparer Instance { get; } = new();
 
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0046:Convert to conditional expression", Justification = "code clarity")]
         public bool Equals(Uri? x, Uri? y)
         {
             if (ReferenceEquals(x, y))
@@ -105,8 +105,8 @@ public sealed class CompositeAssetCatalog : IAssetCatalog
             }
 
             return string.Equals(x.Scheme, y.Scheme, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(x.Authority, y.Authority, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(x.AbsolutePath, y.AbsolutePath, StringComparison.Ordinal);
+                && string.Equals(AssetUriHelper.GetMountPoint(x), AssetUriHelper.GetMountPoint(y), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(AssetUriHelper.GetRelativePath(x), AssetUriHelper.GetRelativePath(y), StringComparison.Ordinal);
         }
 
         public int GetHashCode(Uri obj)
@@ -115,8 +115,8 @@ public sealed class CompositeAssetCatalog : IAssetCatalog
 
             var hash = default(HashCode);
             hash.Add(obj.Scheme, StringComparer.OrdinalIgnoreCase);
-            hash.Add(obj.Authority, StringComparer.OrdinalIgnoreCase);
-            hash.Add(obj.AbsolutePath, StringComparer.Ordinal);
+            hash.Add(AssetUriHelper.GetMountPoint(obj), StringComparer.OrdinalIgnoreCase);
+            hash.Add(AssetUriHelper.GetRelativePath(obj), StringComparer.Ordinal);
             return hash.ToHashCode();
         }
     }

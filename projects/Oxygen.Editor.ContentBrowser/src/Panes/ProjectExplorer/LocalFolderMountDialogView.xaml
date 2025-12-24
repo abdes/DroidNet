@@ -1,0 +1,39 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentBrowser.ProjectExplorer.LocalFolderMountDialogView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:Oxygen.Editor.ContentBrowser.ProjectExplorer"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    x:DataType="local:LocalFolderMountDialogViewModel"
+    mc:Ignorable="d">
+
+    <StackPanel Padding="12" Spacing="12">
+        <TextBox Header="Mount point name" Text="{x:Bind ViewModel.MountPointName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+        <StackPanel Spacing="6">
+            <TextBlock Text="Mount point path" />
+            <Grid ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    x:Name="SelectedFolderText"
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    Text="{x:Bind ViewModel.SelectedFolderPath, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+
+                <Button
+                    Grid.Column="1"
+                    Command="{x:Bind ViewModel.BrowseCommand}"
+                    Content="Browse" />
+            </Grid>
+        </StackPanel>
+
+        <TextBlock x:Name="ErrorText" Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}" />
+    </StackPanel>
+</UserControl>

@@ -7,6 +7,7 @@
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.ContentBrowser.ProjectExplorer"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    DataContext="{x:Bind ViewModel}"
     mc:Ignorable="d">
 
     <UserControl.Resources>
@@ -57,6 +58,88 @@
     </UserControl.Resources>
 
     <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
-        <dnc:DynamicTree ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}" ViewModel="{x:Bind ViewModel}" />
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <dnc:DynamicTree
+                x:Name="ProjectTree"
+                Grid.Row="0"
+                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                ViewModel="{x:Bind ViewModel}" />
+
+            <dnc:ToolBar
+                Grid.Row="1"
+                DefaultLabelPosition="Right"
+                OverflowButtonVisibility="Collapsed">
+                <dnc:ToolBar.PrimaryItems>
+                    <dnc:ToolBarElementHost>
+                        <TextBlock VerticalAlignment="Center" Text="Virtual folders" />
+                    </dnc:ToolBarElementHost>
+                </dnc:ToolBar.PrimaryItems>
+
+                <dnc:ToolBar.SecondaryItems>
+                    <dnc:ToolBarButton Label="Mount" ToolBarLabelPosition="Collapsed">
+                        <dnc:ToolBarButton.Icon>
+                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CE;" />
+                        </dnc:ToolBarButton.Icon>
+                        <dnc:ToolBarButton.Flyout>
+                            <MenuFlyout>
+                                <MenuFlyoutItem
+                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
+                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Cooked}"
+                                    Text="Cooked" />
+                                <MenuFlyoutItem
+                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
+                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Imported}"
+                                    Text="Imported" />
+                                <MenuFlyoutItem
+                                    Command="{x:Bind ViewModel.MountKnownLocationCommand}"
+                                    CommandParameter="{x:Bind local:KnownVirtualFolderMount.Build}"
+                                    Text="Build" />
+                                <MenuFlyoutSeparator />
+                                <MenuFlyoutItem Command="{x:Bind ViewModel.MountLocalFolderCommand}" Text="Local Folder" />
+                            </MenuFlyout>
+                        </dnc:ToolBarButton.Flyout>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.UnmountSelectedItemCommand}"
+                        IsEnabled="{x:Bind ViewModel.CanUnmountSelectedItem, Mode=OneWay}"
+                        Label="Unmount"
+                        ToolBarLabelPosition="Collapsed">
+                        <dnc:ToolBarButton.Icon>
+                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8CD;" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarSeparator />
+
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.RenameSelectedItemCommand}"
+                        IsEnabled="{x:Bind ViewModel.CanRenameSelectedItem, Mode=OneWay}"
+                        Label="Rename"
+                        ToolBarLabelPosition="Collapsed">
+                        <dnc:ToolBarButton.Icon>
+                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE8AC;" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+
+                    <dnc:ToolBarSeparator />
+
+                    <dnc:ToolBarButton
+                        Command="{x:Bind ViewModel.SaveProjectMountsCommand}"
+                        IsEnabled="{x:Bind ViewModel.HasUnsavedChanges, Mode=OneWay}"
+                        Label="Save"
+                        ToolBarLabelPosition="Collapsed">
+                        <dnc:ToolBarButton.Icon>
+                            <FontIconSource FontFamily="Segoe MDL2 Assets" Glyph="&#xE74E;" />
+                        </dnc:ToolBarButton.Icon>
+                    </dnc:ToolBarButton>
+                </dnc:ToolBar.SecondaryItems>
+            </dnc:ToolBar>
+        </Grid>
     </Border>
 </UserControl>

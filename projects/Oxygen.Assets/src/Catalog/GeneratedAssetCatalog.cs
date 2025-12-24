@@ -57,5 +57,5 @@ public sealed class GeneratedAssetCatalog : IAssetCatalog
     private static bool MatchesSearch(AssetRecord record, string term)
         => record.Name.Contains(term, StringComparison.OrdinalIgnoreCase)
             || record.Uri.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
-            || record.Uri.Authority.Contains(term, StringComparison.OrdinalIgnoreCase);
+            || AssetUriHelper.GetMountPoint(record.Uri).Contains(term, StringComparison.OrdinalIgnoreCase);
 }

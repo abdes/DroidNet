@@ -4,16 +4,22 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
+using Oxygen.Assets.Catalog;
 using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 
 /// <summary>
 /// The ViewModel for the <see cref="ListLayoutView"/> view.
 /// </summary>
-/// <param name="assetsIndexingService">The service responsible for indexing assets.</param>
-public partial class ListLayoutViewModel(IAssetIndexingService assetsIndexingService, ContentBrowserState contentBrowserState, HostingContext hostingContext) : AssetsLayoutViewModel(assetsIndexingService, contentBrowserState, hostingContext)
+/// <param name="assetCatalog">The asset catalog.</param>
+public partial class ListLayoutViewModel(
+    IAssetCatalog assetCatalog,
+    IProject currentProject,
+    ContentBrowserState contentBrowserState,
+    HostingContext hostingContext)
+    : AssetsLayoutViewModel(assetCatalog, currentProject, contentBrowserState, hostingContext)
 {
     /// <summary>
     /// Invokes the item.

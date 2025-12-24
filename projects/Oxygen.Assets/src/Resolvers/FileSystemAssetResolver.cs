@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
+using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import.Geometry;
 using Oxygen.Assets.Import.Gltf;
 using Oxygen.Assets.Import.Materials;
@@ -39,14 +40,15 @@ public sealed class FileSystemAssetResolver(string authority, string sourceRoot,
     /// <inheritdoc/>
     public async Task<Asset?> ResolveAsync(Uri uri)
     {
-        if (!this.CanResolve(uri.Authority))
+        var mountPoint = AssetUriHelper.GetMountPoint(uri);
+        if (!this.CanResolve(mountPoint))
         {
             return null;
         }
 
         // Map URI to file system path
-        // asset://Content/Materials/Wood.omat -> {SourceRoot}/Materials/Wood.omat
-        var relativePath = uri.AbsolutePath.TrimStart('/');
+        // asset:///Content/Materials/Wood.omat -> {SourceRoot}/Materials/Wood.omat
+        var relativePath = AssetUriHelper.GetRelativePath(uri);
         var assetPath = Path.Combine(sourceRoot, relativePath);
 
         // Determine asset type from extension
