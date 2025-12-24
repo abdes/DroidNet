@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.ContentBrowser.ProjectExplorer.ProjectLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -32,7 +32,25 @@
                 <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
             </DataTemplate>
 
-            <local:ThumbnailTemplateSelector x:Key="ThumbnailTemplateSelector" DefaultTemplate="{StaticResource FolderThumbnailTemplate}" />
+            <DataTemplate x:Key="ProjectRootThumbnailTemplate" x:DataType="local:ProjectRootTreeItemAdapter">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <DataTemplate x:Key="AuthoringMountThumbnailTemplate" x:DataType="local:AuthoringMountPointTreeItemAdapter">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <DataTemplate x:Key="VirtualFolderMountThumbnailTemplate" x:DataType="local:VirtualFolderMountTreeItemAdapter">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{x:Bind Path=IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <local:ThumbnailTemplateSelector
+                x:Key="ThumbnailTemplateSelector"
+                AuthoringMountTemplate="{StaticResource AuthoringMountThumbnailTemplate}"
+                DefaultTemplate="{StaticResource FolderThumbnailTemplate}"
+                FolderTemplate="{StaticResource FolderThumbnailTemplate}"
+                ProjectRootTemplate="{StaticResource ProjectRootThumbnailTemplate}"
+                VirtualFolderMountTemplate="{StaticResource VirtualFolderMountThumbnailTemplate}" />
             <!--  ~+~  -->
 
         </ResourceDictionary>

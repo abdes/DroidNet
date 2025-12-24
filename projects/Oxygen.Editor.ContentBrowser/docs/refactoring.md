@@ -2,6 +2,8 @@
 
 This document captures a refactoring direction for `Oxygen.Editor.ContentBrowser` so it can evolve into the UI side of the Oxygen asset/content pipeline.
 
+This document is the detailed, trackable source of truth for Content Browser implementation tasks. The pipeline-level milestone is tracked in `projects/Oxygen.Assets/docs/content-pipeline-design.md`.
+
 ## Goals
 
 - Align project structure with architecture (shell/panes/application/infrastructure), not with file types.
@@ -187,25 +189,27 @@ TimeMachine is a good fit, but it impacts *where* mutations live and *how* they 
 
 1. [X] Define a target folder layout and move files into `Shell/`, `Panes/`, `Infrastructure/Assets/`, `State/`, `Models/`, `Messages/` without behavior changes.
 2. [X] Extract URL/query-param parsing into a single route/state adapter (keep it in an existing namespace, e.g. `Oxygen.Editor.ContentBrowser.Shell`) so string paths stay at one boundary.
-3. [ ] Update assets VMs to depend on `Oxygen.Assets.IAssetCatalog` (snapshot query + change stream; client-controlled scope).
-4. [ ] Create `Infrastructure/Assets/IndexerBackedAssetCatalog` implementing `Oxygen.Assets.IAssetCatalog` by wrapping the current `IAssetIndexingService`.
-5. [ ] Replace `ConcurrentBag<GameAsset>` in the indexing implementation with a key-indexed store that supports remove/move/rename deterministically.
-6. [ ] Introduce `AssetQuery` (folder scope/search/filter/sort) and drive results from query state.
-7. [ ] Centralize snapshot+stream merging in an `AssetResultsController` so layouts remain presentation-only.
-8. [ ] Add `OpenAssetAction` and route all item invocation through it (no asset-type switch in viewmodels).
-9. [ ] Add `NavigateToFolderAction` and route all folder navigation through it (single place updates state/router).
-10. [ ] Add `CreateSceneAction` and route scene creation through it.
-11. [ ] Extend `ContentBrowserState` to include selected assets (in addition to selected folders).
-12. [ ] When `Oxygen.Assets.Model.VirtualPath` and `AssetKey` exist, replace string-based paths/identity in state and UI models.
-13. [ ] Add pipeline operation stubs: import, reimport, cook selection, validate selection (application services first).
-14. [ ] Add diagnostics surfacing: per-asset badges (errors/warnings) + a details view/log stream.
-15. [ ] Add thumbnail pipeline abstraction (async + caching + cancellation) and update layouts to use it.
-16. [ ] Add scalability safeguards: throttle/debounce change streams and enable UI virtualization for large asset sets.
-17. [ ] Add unit tests for URL↔state mapping, folder-scope matching, and snapshot+stream deduplication.
-18. [ ] Define Content Browser settings keys and descriptors using `IEditorSettingsManager` (application vs project scope).
-19. [ ] Implement `IContentBrowserPreferencesStore` backed by `Oxygen.Editor.Data` settings and wire it to default view/query/layout preferences.
-20. [ ] Implement `IContentBrowserSessionStateStore` backed by `IProjectUsageService.UpdateContentBrowserStateAsync` with versioned, compact JSON payload.
-21. [ ] Load session state on project open and apply it to `ContentBrowserState` + route (debounced persistence of subsequent changes).
-22. [ ] Introduce `IUndoHistory`/provider using TimeMachine `HistoryKeeper` per project/document root.
-23. [ ] Implement first undoable asset operation action (e.g., rename or move) using TimeMachine inverse-registration pattern.
-24. [ ] Wrap multi-asset operations in TimeMachine transactions so they undo as a single step.
+3. [ ] Add `OpenAssetAction` and route all item invocation through it (no asset-type switch in viewmodels).
+4. [ ] Add `NavigateToFolderAction` and route all folder navigation through it (single place updates state/router).
+5. [ ] Add `CreateSceneAction` and route scene creation through it.
+6. [ ] Add pipeline operation stubs: import, reimport, cook selection, validate selection (application services first).
+7. [ ] Implement `ImportAssetAction` calling `IImportService.ImportAsync` with cancellation + `ImportOptions.Progress` wiring (no pipeline logic in ViewModels).
+8. [ ] Add an editor-friendly diagnostics surface for import/build (summary + details; best-effort; non-fatal on common errors).
+9. [ ] Update assets VMs to depend on `Oxygen.Assets.IAssetCatalog` (snapshot query + change stream; client-controlled scope).
+10. [ ] Create `Infrastructure/Assets/IndexerBackedAssetCatalog` implementing `Oxygen.Assets.IAssetCatalog` by wrapping the current `IAssetIndexingService` (temporary bridge; avoid leaking indexer semantics into UI).
+11. [ ] Centralize snapshot+stream merging in an `AssetResultsController` so layouts remain presentation-only.
+12. [ ] Introduce `AssetQuery` (folder scope/search/filter/sort) and drive results from query state.
+13. [ ] Extend `ContentBrowserState` to include selected assets (in addition to selected folders).
+14. [ ] When `Oxygen.Assets.Model.VirtualPath` and `AssetKey` exist, replace string-based paths/identity in state and UI models.
+15. [ ] Replace `ConcurrentBag<GameAsset>` in the indexing implementation with a key-indexed store that supports remove/move/rename deterministically (only if the indexer remains a long-lived provider after catalog migration).
+16. [ ] Add diagnostics surfacing: per-asset badges (errors/warnings) + a details view/log stream.
+17. [ ] Add thumbnail pipeline abstraction (async + caching + cancellation) and update layouts to use it.
+18. [ ] Add scalability safeguards: throttle/debounce change streams and enable UI virtualization for large asset sets.
+19. [ ] Add unit tests for URL↔state mapping, folder-scope matching, and snapshot+stream deduplication.
+20. [ ] Define Content Browser settings keys and descriptors using `IEditorSettingsManager` (application vs project scope).
+21. [ ] Implement `IContentBrowserPreferencesStore` backed by `Oxygen.Editor.Data` settings and wire it to default view/query/layout preferences.
+22. [ ] Implement `IContentBrowserSessionStateStore` backed by `IProjectUsageService.UpdateContentBrowserStateAsync` with versioned, compact JSON payload.
+23. [ ] Load session state on project open and apply it to `ContentBrowserState` + route (debounced persistence of subsequent changes).
+24. [ ] Introduce `IUndoHistory`/provider using TimeMachine `HistoryKeeper` per project/document root.
+25. [ ] Implement first undoable asset operation action (e.g., rename or move) using TimeMachine inverse-registration pattern.
+26. [ ] Wrap multi-asset operations in TimeMachine transactions so they undo as a single step.
