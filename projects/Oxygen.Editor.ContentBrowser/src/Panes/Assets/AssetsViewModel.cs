@@ -285,10 +285,15 @@ public partial class AssetsViewModel(
             return;
         }
 
-        if (relativePath.StartsWith("..", StringComparison.Ordinal))
+        if (relativePath.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relativePath))
         {
             // File is outside project directory. Copy it to the currently selected folder.
             var destinationFolder = contentBrowserState.SelectedFolders.FirstOrDefault() ?? "Content";
+
+            // Ensure destinationFolder is treated as relative to projectRoot by trimming leading slashes.
+            // Otherwise, Path.Combine might treat it as an absolute path on the current drive.
+            destinationFolder = destinationFolder.TrimStart('/', '\\');
+
             var fileName = Path.GetFileName(file.Path);
             var destinationPath = Path.Combine(projectRoot, destinationFolder, fileName);
 
@@ -310,6 +315,12 @@ public partial class AssetsViewModel(
             }
         }
 
+        if (Path.IsPathRooted(relativePath))
+        {
+            Debug.WriteLine($"[AssetsViewModel] Import failed: relative path '{relativePath}' is still absolute. Check project root and destination paths.");
+            return;
+        }
+
         relativePath = relativePath.Replace('\\', '/');
 
         var input = new ImportInput(relativePath, "Content");
@@ -321,6 +332,7 @@ public partial class AssetsViewModel(
             if (result.Succeeded)
             {
                 Debug.WriteLine($"[AssetsViewModel] Import succeeded for {relativePath}");
+                _ = messenger.Send(new AssetsCookedMessage());
             }
             else
             {

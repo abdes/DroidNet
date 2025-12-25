@@ -14,7 +14,7 @@ This document captures decisions for the asset/content pipeline architecture, th
 - [X] Create `projects/Oxygen.Assets` (single assembly).
 - [X] Keep expanding minimal public contracts:
   - Asset identity is expressed as `asset:///{MountPoint}/{Path}` URIs.
-  - Asset loading uses `IAssetService` + `IAssetResolver` keyed by URI authority (mount point).
+  - Asset loading uses `IAssetService` + `IAssetResolver` keyed by URI mount point.
   - Catalog/query contract (`IAssetCatalog`) for *enumeration/search* (separate from load-by-URI).
   - Query scope is explicitly client-controlled via `AssetQueryScope` + `AssetQueryTraversal`.
 - [X] Adopt Rx (`System.Reactive`) for catalog change streams.
@@ -209,8 +209,8 @@ Therefore, queries take an explicit `AssetQueryScope` describing *where* to sear
 
 The roots are expressed using the existing canonical URI format:
 
-- Mount point root: `asset://Content/` or `asset://Engine/`
-- Folder root: `asset://Content/Textures/`
+- Mount point root: `asset:///Content/` or `asset:///Engine/`
+- Folder root: `asset:///Content/Textures/`
 
 ### Providers: Loose FS is one provider
 

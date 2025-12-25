@@ -31,11 +31,11 @@ public sealed class GeneratedAssetCatalogTests
         _ = results.Should().HaveCount(5);
         _ = results.Select(r => r.Uri)
             .Should().Contain([
-                new Uri("asset://Generated/BasicShapes/Cube"),
-                new Uri("asset://Generated/BasicShapes/Sphere"),
-                new Uri("asset://Generated/BasicShapes/Plane"),
-                new Uri("asset://Generated/BasicShapes/Cylinder"),
-                new Uri("asset://Generated/Materials/Default"),
+                new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+                new Uri("asset:///Engine/Generated/BasicShapes/Sphere"),
+                new Uri("asset:///Engine/Generated/BasicShapes/Plane"),
+                new Uri("asset:///Engine/Generated/BasicShapes/Cylinder"),
+                new Uri("asset:///Engine/Generated/Materials/Default"),
             ]);
     }
 
@@ -45,7 +45,7 @@ public sealed class GeneratedAssetCatalogTests
         // Arrange
         var catalog = new GeneratedAssetCatalog();
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset://Generated/")],
+            Roots: [new Uri("asset:///Engine/Generated/")],
             Traversal: AssetQueryTraversal.Descendants);
 
         // Act
@@ -61,7 +61,7 @@ public sealed class GeneratedAssetCatalogTests
         // Arrange
         var catalog = new GeneratedAssetCatalog();
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset://Generated/BasicShapes/")],
+            Roots: [new Uri("asset:///Engine/Generated/BasicShapes/")],
             Traversal: AssetQueryTraversal.Descendants);
 
         // Act
@@ -69,7 +69,7 @@ public sealed class GeneratedAssetCatalogTests
 
         // Assert
         _ = results.Should().HaveCount(4);
-        _ = results.Select(r => r.Uri.AbsolutePath).Should().AllSatisfy(p => p.Should().StartWith("/BasicShapes/"));
+        _ = results.Select(r => r.Uri.AbsolutePath).Should().AllSatisfy(p => p.Should().StartWith("/Generated/BasicShapes/"));
     }
 
     [TestMethod]
@@ -78,7 +78,7 @@ public sealed class GeneratedAssetCatalogTests
         // Arrange
         var catalog = new GeneratedAssetCatalog();
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset://Generated/Materials/Default")],
+            Roots: [new Uri("asset:///Engine/Generated/Materials/Default")],
             Traversal: AssetQueryTraversal.Self);
 
         // Act
@@ -86,7 +86,7 @@ public sealed class GeneratedAssetCatalogTests
 
         // Assert
         _ = results.Should().ContainSingle();
-        _ = results[0].Uri.Should().Be(new Uri("asset://Generated/Materials/Default"));
+        _ = results[0].Uri.Should().Be(new Uri("asset:///Engine/Generated/Materials/Default"));
     }
 
     [TestMethod]
@@ -95,7 +95,7 @@ public sealed class GeneratedAssetCatalogTests
         // Arrange
         var catalog = new GeneratedAssetCatalog();
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset://Generated/BasicShapes/")],
+            Roots: [new Uri("asset:///Engine/Generated/BasicShapes/")],
             Traversal: AssetQueryTraversal.Children);
 
         // Act
@@ -104,10 +104,10 @@ public sealed class GeneratedAssetCatalogTests
         // Assert
         _ = results.Should().HaveCount(4);
         _ = results.Select(r => r.Uri).Should().Contain([
-            new Uri("asset://Generated/BasicShapes/Cube"),
-            new Uri("asset://Generated/BasicShapes/Sphere"),
-            new Uri("asset://Generated/BasicShapes/Plane"),
-            new Uri("asset://Generated/BasicShapes/Cylinder"),
+            new Uri("asset:///Engine/Generated/BasicShapes/Cube"),
+            new Uri("asset:///Engine/Generated/BasicShapes/Sphere"),
+            new Uri("asset:///Engine/Generated/BasicShapes/Plane"),
+            new Uri("asset:///Engine/Generated/BasicShapes/Cylinder"),
         ]);
     }
 
@@ -124,6 +124,6 @@ public sealed class GeneratedAssetCatalogTests
 
         // Assert
         _ = results.Should().ContainSingle();
-        _ = results[0].Uri.Should().Be(new Uri("asset://Generated/BasicShapes/Cube"));
+        _ = results[0].Uri.Should().Be(new Uri("asset:///Engine/Generated/BasicShapes/Cube"));
     }
 }

@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Oxygen.Assets.Catalog.FileSystem;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
+using Oxygen.Core;
 using Oxygen.Storage;
 
 namespace Oxygen.Assets.Catalog.LooseCooked;
@@ -145,9 +146,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
             throw new InvalidDataException("VirtualPath must be of the form '/{Mount}/{Path}'.");
         }
 
-        var authority = trimmed[..slash];
+        var mountPoint = trimmed[..slash];
         var path = trimmed[(slash + 1)..];
-        return new Uri($"asset:///{authority}/{path}");
+        return new Uri($"{AssetUris.Scheme}:///{mountPoint}/{path}");
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

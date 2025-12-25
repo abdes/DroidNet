@@ -139,7 +139,7 @@ public sealed class ImportServiceTests
           "Type": "PBR",
           "Name": "Wood",
           "PbrMetallicRoughness": {
-            "BaseColorTexture": { "Source": "asset://Content/Textures/Wood_BaseColor.png" }
+            "BaseColorTexture": { "Source": "asset:///Content/Textures/Wood_BaseColor.png" }
           }
         }
         """;

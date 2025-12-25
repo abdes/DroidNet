@@ -47,13 +47,12 @@ internal static class AssetQueryScopeMatcher
         };
 
     private static bool IsSameAsset(Uri root, Uri asset)
-        => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(AssetUriHelper.GetMountPoint(root), AssetUriHelper.GetMountPoint(asset), StringComparison.OrdinalIgnoreCase)
+        => IsSameMountPoint(root, asset)
             && string.Equals(AssetUriHelper.GetRelativePath(root), AssetUriHelper.GetRelativePath(asset), StringComparison.Ordinal);
 
     private static bool IsDescendant(Uri root, Uri asset)
     {
-        if (!IsSameAuthority(root, asset))
+        if (!IsSameMountPoint(root, asset))
         {
             return false;
         }
@@ -72,7 +71,7 @@ internal static class AssetQueryScopeMatcher
 
     private static bool IsImmediateChild(Uri root, Uri asset)
     {
-        if (!IsSameAuthority(root, asset))
+        if (!IsSameMountPoint(root, asset))
         {
             return false;
         }
@@ -96,7 +95,7 @@ internal static class AssetQueryScopeMatcher
         return remainder.Length > 0 && remainder.IndexOf('/', StringComparison.Ordinal) < 0;
     }
 
-    private static bool IsSameAuthority(Uri root, Uri asset)
+    private static bool IsSameMountPoint(Uri root, Uri asset)
         => string.Equals(root.Scheme, asset.Scheme, StringComparison.OrdinalIgnoreCase)
             && string.Equals(AssetUriHelper.GetMountPoint(root), AssetUriHelper.GetMountPoint(asset), StringComparison.OrdinalIgnoreCase);
 

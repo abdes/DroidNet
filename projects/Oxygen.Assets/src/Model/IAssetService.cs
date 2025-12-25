@@ -11,13 +11,13 @@ namespace Oxygen.Assets.Model;
 /// <para>
 /// The asset service acts as the central orchestrator for asset resolution, maintaining
 /// a registry of <see cref="IAssetResolver"/> implementations and delegating requests
-/// based on the URI's authority component.
+/// based on the URI's mount point.
 /// </para>
 /// <para>
 /// Implementations of this service are responsible for:
 /// <list type="bullet">
 /// <item>Managing the resolver registry</item>
-/// <item>Parsing asset URIs to extract the authority</item>
+/// <item>Parsing asset URIs to extract the mount point</item>
 /// <item>Selecting the appropriate resolver</item>
 /// <item>Invoking the resolver and returning the result</item>
 /// </list>
@@ -36,7 +36,7 @@ public interface IAssetService
     /// Asynchronously loads an asset of type <typeparamref name="T"/> from the specified URI.
     /// </summary>
     /// <typeparam name="T">The type of asset to load, must derive from <see cref="Asset"/>.</typeparam>
-    /// <param name="uri">The asset URI to resolve (e.g., "asset:///Generated/BasicShapes/Cube").</param>
+    /// <param name="uri">The asset URI to resolve (e.g., "asset:///Engine/Generated/BasicShapes/Cube").</param>
     /// <returns>
     /// A task that represents the asynchronous operation. The task result contains the loaded asset
     /// of type <typeparamref name="T"/>, or <see langword="null"/> if the asset could not be found,

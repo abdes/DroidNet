@@ -10,12 +10,12 @@ namespace Oxygen.Assets.Catalog.FileSystem;
 public sealed record FileSystemAssetCatalogOptions
 {
     /// <summary>
-    /// Gets the mount point authority used in asset URIs.
+    /// Gets the mount point used in asset URIs.
     /// </summary>
     /// <remarks>
     /// Defaults to <c>Content</c>.
     /// </remarks>
-    public string Authority { get; init; } = "Content";
+    public string MountPoint { get; init; } = "Content";
 
     /// <summary>
     /// Gets the root folder path to index.

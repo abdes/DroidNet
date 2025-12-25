@@ -17,16 +17,15 @@ namespace Oxygen.Assets.Tests;
 public sealed class GeneratedAssetResolverTests
 {
     [TestMethod]
-    [DataRow("Generated")]
-    [DataRow("GENERATED")]
-    [DataRow("generated")]
-    public void CanResolve_WithGeneratedAuthority_ShouldReturnTrue(string authority)
+    [DataRow("Engine")]
+    [DataRow("ENGINE")]
+    public void CanResolve_WithEngineMountPoint_ShouldReturnTrue(string mountPoint)
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
 
         // Act
-        var result = resolver.CanResolve(authority);
+        var result = resolver.CanResolve(mountPoint);
 
         // Assert
         _ = result.Should().BeTrue();
@@ -34,25 +33,25 @@ public sealed class GeneratedAssetResolverTests
 
     [TestMethod]
     [DataRow("Content")]
-    [DataRow("Engine")]
     [DataRow("Package")]
-    public void CanResolve_WithOtherAuthority_ShouldReturnFalse(string authority)
+    [DataRow("Generated")]
+    public void CanResolve_WithOtherMountPoint_ShouldReturnFalse(string mountPoint)
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
 
         // Act
-        var result = resolver.CanResolve(authority);
+        var result = resolver.CanResolve(mountPoint);
 
         // Assert
         _ = result.Should().BeFalse();
     }
 
     [TestMethod]
-    [DataRow("asset://Generated/BasicShapes/Cube")]
-    [DataRow("asset://Generated/BasicShapes/Sphere")]
-    [DataRow("asset://Generated/BasicShapes/Plane")]
-    [DataRow("asset://Generated/BasicShapes/Cylinder")]
+    [DataRow("asset:///Engine/Generated/BasicShapes/Cube")]
+    [DataRow("asset:///Engine/Generated/BasicShapes/Sphere")]
+    [DataRow("asset:///Engine/Generated/BasicShapes/Plane")]
+    [DataRow("asset:///Engine/Generated/BasicShapes/Cylinder")]
     [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "test data")]
     public async Task ResolveAsync_WithBuiltInGeometry_ShouldReturnGeometryAsset(string uri)
     {
@@ -78,7 +77,7 @@ public sealed class GeneratedAssetResolverTests
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
-        const string uri = "asset://Generated/Materials/Default";
+        const string uri = "asset:///Engine/Generated/Materials/Default";
 
         // Act
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
@@ -94,7 +93,7 @@ public sealed class GeneratedAssetResolverTests
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
-        const string uri = "asset://Generated/Unknown/Asset";
+        const string uri = "asset:///Engine/Generated/Unknown/Asset";
 
         // Act
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);
@@ -108,7 +107,7 @@ public sealed class GeneratedAssetResolverTests
     {
         // Arrange
         var resolver = new GeneratedAssetResolver();
-        const string uri = "asset://GENERATED/BASICSHAPES/CUBE";
+        const string uri = "asset:///ENGINE/GENERATED/BASICSHAPES/CUBE";
 
         // Act
         var result = await resolver.ResolveAsync(new Uri(uri)).ConfigureAwait(false);

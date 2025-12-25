@@ -10,12 +10,12 @@ namespace Oxygen.Assets.Catalog.Pak;
 public sealed record PakIndexAssetCatalogOptions
 {
     /// <summary>
-    /// Gets the mount point / authority used in canonical asset URIs.
+    /// Gets the mount point used in canonical asset URIs.
     /// </summary>
     /// <remarks>
     /// For example, for Engine shipping content use <c>Engine</c>, and for project packages use a package name.
     /// </remarks>
-    public required string Authority { get; init; }
+    public required string MountPoint { get; init; }
 
     /// <summary>
     /// Gets the absolute path to the <c>.pak</c> file.

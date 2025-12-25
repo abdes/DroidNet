@@ -17,13 +17,13 @@
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
-          "GeometryUri": "asset://Generated/BasicShapes/Cube",
+          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cube",
           "OverrideSlots": [ { "$type": "RenderingSlot", "IsVisible": { "Value": true } } ],
           "TargetedOverrides": [
             {
               "LodIndex": 0,
               "SubmeshIndex": 0,
-              "OverrideSlots": [ { "$type": "MaterialsSlot", "Material": { "Uri": "asset://Generated/Materials/Default" } } ]
+              "OverrideSlots": [ { "$type": "MaterialsSlot", "Material": { "Uri": "asset:///Engine/Generated/Materials/Default" } } ]
             }
           ]
         }
@@ -41,7 +41,7 @@
           "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
-        { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset://Generated/BasicShapes/Sphere" }
+        { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere" }
       ]
     },
     {
@@ -76,7 +76,7 @@
           "LocalRotation": { "x": 10.2, "y": 20.3, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 2.0, "y": 2.0, "z": 4.0 }
         },
-        { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset://Generated/BasicShapes/Cylinder" }
+        { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cylinder" }
       ]
     }
   ],

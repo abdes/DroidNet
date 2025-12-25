@@ -27,10 +27,10 @@ namespace Oxygen.Assets.Resolvers;
 public sealed class PakAssetResolver : IAssetResolver
 {
     /// <inheritdoc/>
-    public bool CanResolve(string authority)
-        => string.Equals(authority, "Engine", StringComparison.OrdinalIgnoreCase)
-            || (!string.Equals(authority, "Content", StringComparison.OrdinalIgnoreCase)
-               && !string.Equals(authority, "Generated", StringComparison.OrdinalIgnoreCase));
+    public bool CanResolve(string mountPoint)
+        => string.Equals(mountPoint, "Engine", StringComparison.OrdinalIgnoreCase)
+            || (!string.Equals(mountPoint, "Content", StringComparison.OrdinalIgnoreCase)
+               && !string.Equals(mountPoint, "Generated", StringComparison.OrdinalIgnoreCase));
 
     /// <inheritdoc/>
     public Task<Asset?> ResolveAsync(Uri uri)

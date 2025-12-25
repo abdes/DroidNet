@@ -4,14 +4,14 @@ Non-UI asset pipeline primitives for Oxygen.
 
 This project provides:
 
-- Canonical asset identity via `asset://{MountPoint}/{Path}` URIs
-- Asset loading via `IAssetService` + `IAssetResolver` (per mount point authority)
+- Canonical asset identity via `asset:///{MountPoint}/{Path}` URIs
+- Asset loading via `IAssetService` + `IAssetResolver` (per mount point)
 - Catalog/query contracts for enumeration via `IAssetCatalog` + `AssetQuery` (client-controlled scope)
 
 ## Key concepts
 
-- **Asset URI**: `asset://Content/Textures/Wood01` or `asset://Generated/BasicShapes/Cube`
-- **Mount point**: the URI authority (e.g. `Content`, `Engine`, `Generated`)
+- **Asset URI**: `asset:///Content/Textures/Wood01` or `asset:///Engine/Generated/BasicShapes/Cube`
+- **Mount point**: the first segment of the URI path (e.g. `Content`, `Engine`, `Generated`)
 
 ## Usage
 
@@ -24,7 +24,7 @@ assetService.RegisterResolver(new Oxygen.Assets.Resolvers.GeneratedAssetResolver
 // assetService.RegisterResolver(new Oxygen.Assets.Resolvers.FileSystemAssetResolver());
 
 var cube = await assetService.LoadAssetAsync<Oxygen.Assets.GeometryAsset>(
- new Uri("asset://Generated/BasicShapes/Cube"));
+ new Uri("asset:///Engine/Generated/BasicShapes/Cube"));
 ```
 
 Enumerate assets with a caller-specified scope:
@@ -33,7 +33,7 @@ Enumerate assets with a caller-specified scope:
 IAssetCatalog catalog = /* resolve from DI */;
 
 var scope = new AssetQueryScope(
- Roots: [new Uri("asset://Content/Textures/")],
+ Roots: [new Uri("asset:///Content/Textures/")],
  Traversal: AssetQueryTraversal.Descendants);
 
 var results = await catalog.QueryAsync(new AssetQuery(scope, SearchText: "wood"));

@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using Oxygen.Assets.Cook;
+using Oxygen.Core;
 
 namespace Oxygen.Assets.Import.Materials;
 
@@ -184,7 +185,7 @@ public sealed class MaterialSourceImporter : IAssetImporter
 
     private static bool TryGetProjectRelativePathFromAssetUri(string assetUri, out string projectRelativePath)
     {
-        const string prefix = "asset:///";
+        var prefix = $"{AssetUris.Scheme}://";
 
         if (!assetUri.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
         {
@@ -192,9 +193,9 @@ public sealed class MaterialSourceImporter : IAssetImporter
             return false;
         }
 
-        // Important: we parse manually instead of using <see cref="Uri"/> for the authority because
+        // Important: we parse manually instead of using <see cref="Uri"/> for the mount point because
         // Uri normalizes the host to lowercase, but our mount point tokens are case-sensitive in practice.
-        var rest = assetUri[prefix.Length..];
+        var rest = assetUri[prefix.Length..].TrimStart('/');
         var slash = rest.IndexOf('/', StringComparison.Ordinal);
         if (slash <= 0)
         {

@@ -4,12 +4,12 @@
 
 using System.Collections.Frozen;
 using Oxygen.Assets.Model;
+using Oxygen.Core;
 
 namespace Oxygen.Assets.Resolvers;
 
 /// <summary>
-/// Resolves assets from the "Generated" mount point, which contains runtime-generated
-/// procedural assets (e.g., built-in primitives).
+/// Resolves assets from the "Engine" mount point, specifically those under the "Generated" path.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,7 +27,7 @@ namespace Oxygen.Assets.Resolvers;
 /// </remarks>
 public sealed class GeneratedAssetResolver : IAssetResolver
 {
-    private const string Authority = "Generated";
+    private const string MountPoint = AssetUris.EngineMountPoint;
 
     private readonly FrozenDictionary<Uri, Asset> assets;
 
@@ -41,8 +41,8 @@ public sealed class GeneratedAssetResolver : IAssetResolver
     }
 
     /// <inheritdoc/>
-    public bool CanResolve(string authority)
-        => string.Equals(authority, Authority, StringComparison.OrdinalIgnoreCase);
+    public bool CanResolve(string mountPoint)
+        => string.Equals(mountPoint, MountPoint, StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
     public Task<Asset?> ResolveAsync(Uri uri)

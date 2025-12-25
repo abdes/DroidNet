@@ -5,6 +5,7 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using Oxygen.Assets.Model;
+using Oxygen.Core;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
@@ -27,7 +28,7 @@ namespace Oxygen.Editor.World;
 /// </remarks>
 public partial class GeometryComponent : GameComponent
 {
-    private AssetReference<GeometryAsset>? geometry = new("asset:///__uninitialized__");
+    private AssetReference<GeometryAsset>? geometry = new($"{AssetUris.Scheme}:///__uninitialized__");
 
     static GeometryComponent()
     {

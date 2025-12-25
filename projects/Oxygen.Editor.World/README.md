@@ -263,7 +263,7 @@ Scenes serialize to JSON with custom converters:
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
-          "GeometryUri": "asset://Generated/BasicShapes/Cube",
+          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cube",
           "OverrideSlots": [
             {
               "$type": "RenderingSlot",
@@ -277,7 +277,7 @@ Scenes serialize to JSON with custom converters:
               "OverrideSlots": [
                 {
                   "$type": "MaterialsSlot",
-                  "Material": { "Uri": "asset://Generated/Materials/Default" }
+                  "Material": { "Uri": "asset:///Engine/Generated/Materials/Default" }
                 }
               ]
             }
@@ -319,7 +319,7 @@ Scenes serialize to JSON with custom converters:
             {
               "$type": "GeometryComponent",
               "Name": "WeaponMesh",
-              "GeometryUri": "asset://Generated/BasicShapes/Plane"
+              "GeometryUri": "asset:///Engine/Generated/BasicShapes/Plane"
             }
           ]
         }
@@ -353,7 +353,7 @@ Scenes serialize to JSON with custom converters:
         {
           "$type": "GeometryComponent",
           "Name": "EnemyMesh",
-          "GeometryUri": "asset://Generated/BasicShapes/Sphere"
+          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere"
         }
       ]
     },

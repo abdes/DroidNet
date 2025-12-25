@@ -375,18 +375,18 @@ public class SceneTests
         {
             Name = "HeroGeometry",
             Node = node,
-            Geometry = new("asset://Generated/BasicShapes/Cube"),
+            Geometry = new("asset:///Engine/Generated/BasicShapes/Cube"),
         };
 
         // component-level override
         var compMat = new Slots.MaterialsSlot();
-        compMat.Material.Uri = new("asset://Generated/Materials/Default");
+        compMat.Material.Uri = new("asset:///Engine/Generated/Materials/Default");
         geo.OverrideSlots.Add(compMat);
 
         // targeted override for LOD 0, submesh 1
         var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         var mat = new Slots.MaterialsSlot();
-        mat.Material.Uri = new("asset://Generated/Materials/Gold");
+        mat.Material.Uri = new("asset:///Engine/Generated/Materials/Gold");
         target.OverrideSlots.Add(mat);
         geo.TargetedOverrides.Add(target);
 
@@ -403,13 +403,13 @@ public class SceneTests
         var rgeo = rnode.Components.OfType<GeometryComponent>().Single();
 
         _ = rgeo.Should().NotBeNull();
-        _ = rgeo.Geometry!.Uri.Should().Be("asset://Generated/BasicShapes/Cube");
+        _ = rgeo.Geometry!.Uri.Should().Be("asset:///Engine/Generated/BasicShapes/Cube");
         _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
-        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset://Generated/Materials/Default");
+        _ = rgeo.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Default");
 
         _ = rgeo.TargetedOverrides.Should().ContainSingle();
         var rt = rgeo.TargetedOverrides[0];
         _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().Should().ContainSingle();
-        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset://Generated/Materials/Gold");
+        _ = rt.OverrideSlots.OfType<Slots.MaterialsSlot>().First().Material.Uri.Should().Be("asset:///Engine/Generated/Materials/Gold");
     }
 }

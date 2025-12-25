@@ -328,7 +328,8 @@ public sealed class GltfGeometryImporter : IAssetImporter
         CancellationToken cancellationToken)
     {
         var relativePath = virtualPath.TrimStart('/');
-        var importedPath = Path.Combine(".imported", relativePath);
+        var importedPath = Path.Combine(AssetPipelineConstants.ImportedFolderName, relativePath);
+        System.Diagnostics.Debug.WriteLine($"[GltfGeometryImporter] Writing imported geometry metadata to {importedPath}");
 
         var ms = new MemoryStream();
         await using (ms.ConfigureAwait(false))

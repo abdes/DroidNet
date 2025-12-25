@@ -10,26 +10,26 @@ namespace Oxygen.Assets.Model;
 /// <remarks>
 /// <para>
 /// Resolvers are responsible for loading assets from specific sources (e.g., filesystem, PAK files, memory).
-/// Each resolver handles one or more mount point authorities (e.g., "Content", "Engine", "Generated").
+/// Each resolver handles one or more mount points (e.g., "Content", "Engine").
 /// </para>
 /// <para>
 /// The <see cref="IAssetService"/> maintains a registry of resolvers and delegates resolution requests
-/// based on the URI's authority component.
+/// based on the URI's mount point.
 /// </para>
 /// </remarks>
 public interface IAssetResolver
 {
     /// <summary>
-    /// Determines whether this resolver can handle the specified authority.
+    /// Determines whether this resolver can handle the specified mount point.
     /// </summary>
-    /// <param name="authority">The mount point authority from the asset URI (e.g., "Content", "Engine", "Generated").</param>
-    /// <returns><see langword="true"/> if this resolver can handle the authority; otherwise, <see langword="false"/>.</returns>
-    public bool CanResolve(string authority);
+    /// <param name="mountPoint">The mount point from the asset URI (e.g., "Content", "Engine").</param>
+    /// <returns><see langword="true"/> if this resolver can handle the mount point; otherwise, <see langword="false"/>.</returns>
+    public bool CanResolve(string mountPoint);
 
     /// <summary>
     /// Asynchronously resolves an asset URI to an asset instance.
     /// </summary>
-    /// <param name="uri">The full asset URI to resolve (e.g., "asset:///Generated/BasicShapes/Cube").</param>
+    /// <param name="uri">The full asset URI to resolve (e.g., "asset:///Engine/Generated/BasicShapes/Cube").</param>
     /// <returns>
     /// A task that represents the asynchronous operation. The task result contains the resolved <see cref="Asset"/>,
     /// or <see langword="null"/> if the asset could not be found or loaded.

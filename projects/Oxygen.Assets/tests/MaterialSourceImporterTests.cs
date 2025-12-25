@@ -25,11 +25,11 @@ public sealed class MaterialSourceImporterTests
           "Name": "Wood",
                     "PbrMetallicRoughness": {
                         "BaseColorFactor": [1, 1, 1, 1],
-                        "BaseColorTexture": { "Source": "asset://Content/Textures/Wood_BaseColor.png" },
-                        "MetallicRoughnessTexture": { "Source": "asset://Content/Textures/Wood_MR.png" }
+                        "BaseColorTexture": { "Source": "asset:///Content/Textures/Wood_BaseColor.png" },
+                        "MetallicRoughnessTexture": { "Source": "asset:///Content/Textures/Wood_MR.png" }
                     },
-                    "NormalTexture": { "Source": "asset://Content/Textures/Wood_Normal.png", "Scale": 1.0 },
-                    "OcclusionTexture": { "Source": "asset://Content/Textures/Wood_AO.png", "Strength": 1.0 }
+                    "NormalTexture": { "Source": "asset:///Content/Textures/Wood_Normal.png", "Scale": 1.0 },
+                    "OcclusionTexture": { "Source": "asset:///Content/Textures/Wood_AO.png", "Strength": 1.0 }
         }
         """;
 

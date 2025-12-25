@@ -26,22 +26,22 @@ namespace Oxygen.Assets.Resolvers;
 /// <remarks>
 /// Initializes a new instance of the <see cref="FileSystemAssetResolver"/> class.
 /// </remarks>
-/// <param name="authority">The authority (mount point) this resolver handles (e.g. "Content").</param>
+/// <param name="mountPoint">The mount point this resolver handles (e.g. "Content").</param>
 /// <param name="sourceRoot">The root directory for source assets.</param>
 /// <param name="importedRoot">The root directory for imported artifacts.</param>
-public sealed class FileSystemAssetResolver(string authority, string sourceRoot, string importedRoot) : IAssetResolver
+public sealed class FileSystemAssetResolver(string mountPoint, string sourceRoot, string importedRoot) : IAssetResolver
 {
-    private readonly string authority = authority;
+    private readonly string mountPoint = mountPoint;
 
     /// <inheritdoc/>
-    public bool CanResolve(string authority)
-        => string.Equals(authority, this.authority, StringComparison.OrdinalIgnoreCase);
+    public bool CanResolve(string mountPoint)
+        => string.Equals(mountPoint, this.mountPoint, StringComparison.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
     public async Task<Asset?> ResolveAsync(Uri uri)
     {
-        var mountPoint = AssetUriHelper.GetMountPoint(uri);
-        if (!this.CanResolve(mountPoint))
+        var uriMountPoint = AssetUriHelper.GetMountPoint(uri);
+        if (!this.CanResolve(uriMountPoint))
         {
             return null;
         }

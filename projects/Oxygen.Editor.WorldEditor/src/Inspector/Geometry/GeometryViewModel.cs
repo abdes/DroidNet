@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Assets.Catalog;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
-using Oxygen.Editor.ContentBrowser.Models;
+using Oxygen.Core;
 using Oxygen.Editor.World.Messages;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
@@ -28,7 +28,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 {
     private readonly IAssetCatalog? assetCatalog;
     private readonly IMessenger? messenger;
-    private readonly List<AssetPickerItem> contentItems = [];
+    private readonly ObservableCollection<AssetPickerItem> contentItems = [];
 
     private ICollection<SceneNode>? selectedItems;
 
@@ -47,14 +47,14 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
         var engineItems = new List<AssetPickerItem>
         {
-            CreateEngineItem("Cube", "asset:///Generated/BasicShapes/Cube", "/Engine/BasicShapes/Cube"),
-            CreateEngineItem("Sphere", "asset:///Generated/BasicShapes/Sphere", "/Engine/BasicShapes/Sphere"),
-            CreateEngineItem("Plane", "asset:///Generated/BasicShapes/Plane", "/Engine/BasicShapes/Plane"),
-            CreateEngineItem("Cylinder", "asset:///Generated/BasicShapes/Cylinder", "/Engine/BasicShapes/Cylinder"),
-            CreateEngineItem("Cone", "asset:///Generated/BasicShapes/Cone", "/Engine/BasicShapes/Cone"),
-            CreateEngineItem("Quad", "asset:///Generated/BasicShapes/Quad", "/Engine/BasicShapes/Quad"),
-            CreateEngineItem("Torus", "asset:///Generated/BasicShapes/Torus", "/Engine/BasicShapes/Torus"),
-            CreateEngineItem("ArrowGizmo", "asset:///Generated/BasicShapes/ArrowGizmo", "/Engine/BasicShapes/ArrowGizmo"),
+            CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("Cube"), "/Engine/BasicShapes/Cube"),
+            CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("Sphere"), "/Engine/BasicShapes/Sphere"),
+            CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("Plane"), "/Engine/BasicShapes/Plane"),
+            CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("Cylinder"), "/Engine/BasicShapes/Cylinder"),
+            CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("Cone"), "/Engine/BasicShapes/Cone"),
+            CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("Quad"), "/Engine/BasicShapes/Quad"),
+            CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("Torus"), "/Engine/BasicShapes/Torus"),
+            CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("ArrowGizmo"), "/Engine/BasicShapes/ArrowGizmo"),
         };
 
         // Start with Engine group only
@@ -69,6 +69,9 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         {
             Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
 
+            // Capture the current synchronization context to ensure updates happen on the UI thread
+            var syncContext = SynchronizationContext.Current;
+
             // Get initial snapshot and track seen assets to deduplicate replay
             _ = Task.Run(async () =>
             {
@@ -77,26 +80,68 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
                 var seenUris = new HashSet<Uri>(meshAssets.Select(a => a.Uri));
 
-                // Populate initial items
-                foreach (var asset in meshAssets)
+                // Populate initial items on the UI thread
+                if (syncContext != null)
                 {
-                    Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name}");
-                    this.contentItems.Add(CreateContentItem(asset));
+                    syncContext.Post(_ =>
+                    {
+                        foreach (var asset in meshAssets)
+                        {
+                            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name}");
+                            this.contentItems.Add(CreateContentItem(asset));
+                        }
+                    }, null);
+                }
+                else
+                {
+                    // Fallback if no sync context (e.g. unit tests), though ObservableCollection might fail if bound
+                    foreach (var asset in meshAssets)
+                    {
+                        this.contentItems.Add(CreateContentItem(asset));
+                    }
                 }
 
                 // Subscribe to future changes, deduplicating replayed items
                 _ = assetCatalog.Changes
-                    .Where(n => n.Kind == AssetChangeKind.Added)
                     .Where(n => IsMesh(n.Uri))
-                    .Where(n => !seenUris.Contains(n.Uri)) // Deduplicate replay
-                    .ObserveOn(System.Reactive.Concurrency.Scheduler.Default)
                     .Subscribe(
                         notification =>
                         {
-                            Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
-                            var record = new AssetRecord(notification.Uri);
-                            this.contentItems.Add(CreateContentItem(record));
-                            seenUris.Add(notification.Uri);
+                            void HandleNotification(object? state)
+                            {
+                                if (notification.Kind == AssetChangeKind.Added)
+                                {
+                                    if (!seenUris.Contains(notification.Uri))
+                                    {
+                                        Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
+                                        var record = new AssetRecord(notification.Uri);
+                                        this.contentItems.Add(CreateContentItem(record));
+                                        seenUris.Add(notification.Uri);
+                                    }
+                                }
+                                else if (notification.Kind == AssetChangeKind.Removed)
+                                {
+                                    if (seenUris.Contains(notification.Uri))
+                                    {
+                                        Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
+                                        var itemToRemove = this.contentItems.FirstOrDefault(i => i.Uri == notification.Uri);
+                                        if (itemToRemove != null)
+                                        {
+                                            this.contentItems.Remove(itemToRemove);
+                                        }
+                                        seenUris.Remove(notification.Uri);
+                                    }
+                                }
+                            }
+
+                            if (syncContext != null)
+                            {
+                                syncContext.Post(HandleNotification, null);
+                            }
+                            else
+                            {
+                                HandleNotification(null);
+                            }
                         },
                         ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex.Message}"));
             });

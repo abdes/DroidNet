@@ -140,6 +140,20 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
     }
     = null!; // will be initialized during engine initialization
 
+    /// <inheritdoc/>
+    public void MountProjectCookedRoot(string path)
+    {
+        _ = this.EnsureIsRunning();
+        this.World.AddLooseCookedRoot(path);
+    }
+
+    /// <inheritdoc/>
+    public void UnmountProjectCookedRoot()
+    {
+        _ = this.EnsureIsRunning();
+        this.World.ClearCookedRoots();
+    }
+
     /// <inheritdoc />
     [System.Diagnostics.CodeAnalysis.SuppressMessage("StyleCop.CSharp.LayoutRules", "SA1513:Closing brace should be followed by blank line", Justification = "not for property default value")]
     public OxygenInput Input

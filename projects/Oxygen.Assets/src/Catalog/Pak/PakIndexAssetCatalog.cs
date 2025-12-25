@@ -69,9 +69,9 @@ public sealed class PakIndexAssetCatalog : IAssetCatalog, IDisposable
     {
         ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(options);
-        if (string.IsNullOrEmpty(options.Authority))
+        if (string.IsNullOrEmpty(options.MountPoint))
         {
-            throw new ArgumentException("Authority must not be null or empty.", nameof(options));
+            throw new ArgumentException("MountPoint must not be null or empty.", nameof(options));
         }
 
         if (string.IsNullOrEmpty(options.PakFilePath))
@@ -160,9 +160,9 @@ public sealed class PakIndexAssetCatalog : IAssetCatalog, IDisposable
             throw new InvalidDataException("VirtualPath must be of the form '/{Mount}/{Path}'.");
         }
 
-        var authority = trimmed[..slash];
+        var mountPoint = trimmed[..slash];
         var path = trimmed[(slash + 1)..];
-        return AssetUriHelper.CreateUri(authority, path);
+        return AssetUriHelper.CreateUri(mountPoint, path);
     }
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)

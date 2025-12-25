@@ -394,16 +394,16 @@ Status: ✅ Implemented — The persistence layer has been fully refactored. We 
 
 #### 4.1 Asset Naming & URI Scheme
 
-We will use a **URI-based** naming convention where the **Authority** corresponds directly to a **Mount Point** in the Content Browser.
+We will use a **URI-based** naming convention where the first segment of the path corresponds directly to a **Mount Point** in the Content Browser.
 
-**Format:** `asset://<MountPoint>/<Path/To/Asset>`
+**Format:** `asset:///<MountPoint>/<Path/To/Asset>`
 
 | Mount Point | Description | Physical Source | Read-Only | Example |
 | :--- | :--- | :--- | :--- | :--- |
-| **`Content`** | User project assets. | `<ProjectRoot>/Content/` | ❌ No | `asset://Content/Models/Hero.geo` |
-| **`Engine`** | Built-in engine resources. | `oxygen.pak` | ✅ Yes | `asset://Engine/Mesh/Cube` |
-| **`Generated`** | Runtime procedural assets. | In-Memory | ✅ Yes | `asset://Generated/Preview/Sphere` |
-| **`<PakName>`** | External package content. | `<PakName>.pak` | ✅ Yes | `asset://Oxygen.StandardAssets/Skybox` |
+| **`Content`** | User project assets. | `<ProjectRoot>/Content/` | ❌ No | `asset:///Content/Models/Hero.geo` |
+| **`Engine`** | Built-in engine resources. | `oxygen.pak` | ✅ Yes | `asset:///Engine/Mesh/Cube` |
+| **`Generated`** | Runtime procedural assets. | In-Memory | ✅ Yes | `asset:///Generated/Preview/Sphere` |
+| **`<PakName>`** | External package content. | `<PakName>.pak` | ✅ Yes | `asset:///Oxygen.StandardAssets/Skybox` |
 
 #### 4.2 Asset Resolution Architecture
 
@@ -414,8 +414,8 @@ To handle different asset sources (Files, PAKs, Memory) uniformly, we will use a
 ```csharp
 public interface IAssetResolver
 {
-    // Returns true if this resolver handles the given mount point (Authority)
-    bool CanResolve(string authority);
+    // Returns true if this resolver handles the given mount point
+    bool CanResolve(string mountPoint);
 
     // Resolves the URI to an Asset object
     Task<Asset?> ResolveAsync(string uri);
@@ -424,7 +424,7 @@ public interface IAssetResolver
 
 **2. The Asset Service (Orchestrator):**
 
-The `IAssetService` maintains a registry of resolvers and delegates requests based on the URI's authority.
+The `IAssetService` maintains a registry of resolvers and delegates requests based on the URI's mount point.
 
 ```csharp
 public interface IAssetService
@@ -436,12 +436,12 @@ public interface IAssetService
 
 **3. Concrete Resolvers:**
 
-- **`GeneratedAssetResolver`**: Handles `Generated` authority.
+- **`GeneratedAssetResolver`**: Handles `Generated` mount point.
   - *Mechanism:* Looks up assets in a thread-safe in-memory dictionary.
   - *Usage:* Used for built-in primitives and procedural content.
-- **`FileSystemAssetResolver`**: Handles `Content` authority.
+- **`FileSystemAssetResolver`**: Handles `Content` mount point.
   - *Mechanism:* Maps URI path to `<ProjectRoot>/Content` and deserializes files (JSON/Binary).
-- **`PakAssetResolver`**: Handles `Engine` and Package authorities.
+- **`PakAssetResolver`**: Handles `Engine` and Package mount points.
   - *Mechanism:* Uses `Oxygen.Content.PakFile` (via Interop) to read from `.pak` archives.
 
 **4. Resolution Flow (External):**
@@ -460,7 +460,7 @@ public interface IAssetService
 public abstract class Asset
 {
     // The canonical URI for this asset
-    public string Uri { get; set; } // e.g., "asset://builtin/Mesh/Cube"
+    public string Uri { get; set; } // e.g., "asset:///Engine/Mesh/Cube"
 
     public string Name => System.IO.Path.GetFileNameWithoutExtension(Uri);
 }
@@ -548,8 +548,8 @@ public class AssetReference<T> : ScopedObservableObject where T : Asset
 ```csharp
 public interface IAssetService
 {
-    // Registers a physical location for a given authority
-    void Mount(string authority, string physicalPath);
+    // Registers a physical location for a given mount point
+    void Mount(string mountPoint, string physicalPath);
 
     // Resolves URIs to Asset objects.
     Task<T?> LoadAssetAsync<T>(string uri) where T : Asset;
@@ -560,17 +560,17 @@ public interface IAssetService
 
 For Phase 4, we will strictly use the **Generated** resolver for built-ins.
 
-- `asset://Generated/BasicShapes/Cube` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
-- `asset://Generated/BasicShapes/Sphere` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
-- `asset://Generated/BasicShapes/Plane` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
-- `asset://Generated/BasicShapes/Cylinder` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
-- `asset://Generated/Materials/Default` -> MaterialAsset
+- `asset:///Generated/BasicShapes/Cube` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset:///Generated/BasicShapes/Sphere` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset:///Generated/BasicShapes/Plane` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset:///Generated/BasicShapes/Cylinder` -> GeometryAsset (1 LOD, 1 SubMesh "Main")
+- `asset:///Generated/Materials/Default` -> MaterialAsset
 
 **Rationale:**
 
 - **Future Proof:** The URI scheme scales to packages, remote assets, and generated content.
 - **Consistent:** Uniform way to reference everything.
-- **Extensible:** `IAssetService` can add handlers for new authorities (e.g., `http`) later.
+- **Extensible:** `IAssetService` can add handlers for new schemes (e.g., `http`) or mount points later.
 
 #### 4.5 Project Structure & Implementation
 
@@ -820,7 +820,7 @@ public class MaterialsSlot : OverrideSlot
         {
           "$type": "GeometryComponent",
           "Name": "HeroGeometry",
-          "GeometryUri": "asset://Content/Models/Hero.geo",
+          "GeometryUri": "asset:///Content/Models/Hero.geo",
           "OverrideSlots": [
             {
               "$type": "LightingSlot",
@@ -837,7 +837,7 @@ public class MaterialsSlot : OverrideSlot
               "OverrideSlots": [
                 {
                   "$type": "MaterialsSlot",
-                  "MaterialUri": "asset://Content/Materials/Gold.mat"
+                  "MaterialUri": "asset:///Content/Materials/Gold.mat"
                 },
                 {
                   "$type": "RenderingSlot",
@@ -874,7 +874,7 @@ public class MaterialsSlot : OverrideSlot
             {
               "$type": "GeometryComponent",
               "Name": "CampfireGeometry",
-              "GeometryUri": "asset://Content/Models/Props/Campfire.geo",
+              "GeometryUri": "asset:///Content/Models/Props/Campfire.geo",
               "OverrideSlots": [
                 {
                   "$type": "LightingSlot",

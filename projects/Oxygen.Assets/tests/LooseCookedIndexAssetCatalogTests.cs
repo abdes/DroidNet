@@ -60,7 +60,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
 
         var results = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/A.asset"));
-        results.Select(r => r.Uri).Should().Contain(new Uri("asset://Engine/B.asset"));
+        results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/A.asset"));
+        results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Engine/B.asset"));
     }
 }

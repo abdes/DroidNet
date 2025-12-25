@@ -101,7 +101,7 @@ Examples:
 
 ### Asset Reference Value
 
-The Geometry component stores the asset as an `AssetReference<GeometryAsset>` with a URI (`asset://{Authority}/{Path}`).
+The Geometry component stores the asset as an `AssetReference<GeometryAsset>` with a URI (`asset:///{MountPoint}/{Path}`).
 
 The editor treats **Asset** as the editable value:
 
@@ -141,16 +141,16 @@ Source of truth today is the generated geometry resolver.
 
 Include these known built-in geometry URIs:
 
-- `asset://Generated/BasicShapes/Cube`
-- `asset://Generated/BasicShapes/Sphere`
-- `asset://Generated/BasicShapes/Plane`
-- `asset://Generated/BasicShapes/Cylinder`
+- `asset:///Engine/Generated/BasicShapes/Cube`
+- `asset:///Engine/Generated/BasicShapes/Sphere`
+- `asset:///Engine/Generated/BasicShapes/Plane`
+- `asset:///Engine/Generated/BasicShapes/Cylinder`
 
 Mapping to display path:
 
-- `asset://Generated/...` → `/Engine/...`
+- `asset:///Engine/Generated/...` → `/Engine/...`
 
-Rationale: the UX requirement says group is named `Engine`; internally the authority is currently `Generated`.
+Rationale: the UX requirement says group is named `Engine`; internally the mount point is `Engine` and the path starts with `Generated`.
 
 ### Content Group (Project)
 
@@ -167,7 +167,7 @@ Filtering:
 URI mapping:
 
 - Convert a `GameAsset` into an asset URI under `Content`.
-- The exact mapping must be consistent with how the rest of the editor expects `asset://Content/...` URIs to be formatted.
+- The exact mapping must be consistent with how the rest of the editor expects `asset:///Content/...` URIs to be formatted.
 
 Display path:
 
@@ -175,7 +175,7 @@ Display path:
 
 Open question (must be decided during implementation):
 
-- Whether `asset://Content/...` paths should include extensions or not.
+- Whether `asset:///Content/...` paths should include extensions or not.
 
 ---
 
@@ -378,10 +378,10 @@ Requirements for integration:
 ### 4) Populate Engine group (attachable)
 
 - Add the built-in engine basic shapes (attachable):
-  - `asset://Generated/BasicShapes/Cube`
-  - `asset://Generated/BasicShapes/Sphere`
-  - `asset://Generated/BasicShapes/Plane`
-  - `asset://Generated/BasicShapes/Cylinder`
+  - `asset:///Generated/BasicShapes/Cube`
+  - `asset:///Generated/BasicShapes/Sphere`
+  - `asset:///Generated/BasicShapes/Plane`
+  - `asset:///Generated/BasicShapes/Cylinder`
 
 - Display requirements per item:
   - Thumbnail placeholder (until previews exist)
@@ -393,7 +393,7 @@ Requirements for integration:
 ### 5) Populate Content group (discoverable, not attachable yet)
 
 - Use `AssetsIndexingService` output to enumerate project `AssetType.Mesh` entries.
-- Create URIs in the `asset://Content/...` form and **keep the `.mesh` extension**.
+- Create URIs in the `asset:///Content/...` form and **keep the `.mesh` extension**.
 - Include them under the `Content` group, but mark items:
   - `IsEnabled = false`
   - Optional tooltip/reason text: `Not supported yet` (minimal, no extra UI beyond a tooltip).

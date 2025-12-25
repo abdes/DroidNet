@@ -327,10 +327,10 @@ Recommended default mapping:
 - Authoring mount root is something like: `{ProjectRoot}/Content/`
 - A source file `{ProjectRoot}/Content/Textures/Wood.png` becomes the texture asset:
   - `VirtualPath = /Content/Textures/Wood.otex`
-  - `URI = asset://Content/Textures/Wood.otex`
+  - `URI = asset:///Content/Textures/Wood.otex`
 - A source file `{ProjectRoot}/Content/Geometry/Robot.glb` becomes the scene asset:
   - `VirtualPath = /Content/Geometry/Robot.oscene`
-  - `URI = asset://Content/Geometry/Robot.oscene`
+  - `URI = asset:///Content/Geometry/Robot.oscene`
 
 Virtual paths must satisfy the canonical invariants described in [virtual-paths.md](virtual-paths.md).
 

@@ -108,6 +108,31 @@ public interface IEngineService : IAsyncDisposable
     public OxygenWorld World { get; }
 
     /// <summary>
+    ///     Mounts the project's cooked assets root directory in the engine's virtual path resolver.
+    ///     This allows the engine to resolve virtual paths to actual files on disk within the
+    ///     project's cooked assets folder.
+    /// </summary>
+    /// <param name="path">The absolute path to the project's cooked assets directory.</param>
+    /// <remarks>
+    ///     Allowed only in the following states:
+    ///     <list type="bullet">
+    ///      <item><see cref="EngineServiceState.Running"/></item>
+    ///     </list>
+    /// </remarks>
+    public void MountProjectCookedRoot(string path);
+
+    /// <summary>
+    ///     Unmounts the project's cooked assets root in the engine's virtual path resolver.
+    /// </summary>
+    /// <remarks>
+    ///     Allowed only in the following states:
+    ///     <list type="bullet">
+    ///      <item><see cref="EngineServiceState.Running"/></item>
+    ///     </list>
+    /// </remarks>
+    public void UnmountProjectCookedRoot();
+
+    /// <summary>
     ///     Gets the input bridge instance associated with this engine service. This provides
     ///     managed access to runtime input facilities of the native engine.
     ///     May be null if the engine is not yet initialized.

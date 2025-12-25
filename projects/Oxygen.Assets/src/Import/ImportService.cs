@@ -84,17 +84,21 @@ public sealed class ImportService : IImportService
 
         if (state.Imported.Count == 0)
         {
+            System.Diagnostics.Debug.WriteLine("[ImportService] No assets imported, skipping index build.");
             return;
         }
 
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[ImportService] Building index for {state.Imported.Count} assets.");
             await LooseCookedBuildService
-                .BuildIndexesAsync(state.Files, state.Imported, cancellationToken)
+                .BuildIndexAsync(state.Files, state.Imported, cancellationToken)
                 .ConfigureAwait(false);
+            System.Diagnostics.Debug.WriteLine("[ImportService] Index build succeeded.");
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[ImportService] Index build failed: {ex.Message}");
             state.Diagnostics.Add(
                 ImportDiagnosticSeverity.Error,
                 code: "OXYBUILD_INDEX_FAILED",
