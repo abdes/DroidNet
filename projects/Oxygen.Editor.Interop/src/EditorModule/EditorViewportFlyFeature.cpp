@@ -157,11 +157,28 @@ namespace oxygen::interop::module {
         glm::vec3(0.0f, 0.0f, -1.0f));
 
     if (just_activated) {
-      // Derive yaw/pitch from the current forward vector.
-      // For base forward (0,0,-1), yaw=0. Match the orbit convention.
-      state.yaw_radians = std::atan2(-current_forward.x, -current_forward.z);
-      state.pitch_radians = ClampPitchRadians(params, std::asin(current_forward.y));
+      const glm::vec3 pos = transform.GetLocalPosition().value_or(glm::vec3{});
+      LOG_F(WARNING, "FLY: Activated! Camera pos: ({}, {}, {}), forward: ({}, {}, {})",
+        pos.x, pos.y, pos.z, current_forward.x, current_forward.y, current_forward.z);
+
+      // Extract yaw and pitch from quaternion to match our composition order: pitch_q * yaw_q
+      // Decompose: R = pitch(around X) * yaw(around Z)
+      // Use Euler angle extraction for ZXZ order, but adapted for our axes
+      const auto& q = current_rot;
+
+      // Extract pitch (rotation around X axis)
+      const float sinp = 2.0f * (q.w * q.x + q.y * q.z);
+      const float cosp = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
+      state.pitch_radians = ClampPitchRadians(params, std::atan2(sinp, cosp));
+
+      // Extract yaw (rotation around Z axis)
+      const float siny = 2.0f * (q.w * q.z + q.x * q.y);
+      const float cosy = 1.0f - 2.0f * (q.y * q.y + q.z * q.z);
+      state.yaw_radians = std::atan2(siny, cosy);
+
       state.was_active = true;
+
+      LOG_F(WARNING, "FLY: Initialized - Yaw: {}, Pitch: {}", state.yaw_radians, state.pitch_radians);
     }
 
     const auto mouse_delta =
@@ -169,28 +186,27 @@ namespace oxygen::interop::module {
         "Editor.Mouse.Delta");
     const bool mouse_moved = (std::abs(mouse_delta.x) > 0.0f)
       || (std::abs(mouse_delta.y) > 0.0f);
-    const bool should_apply_mouse_look = !just_activated && mouse_moved;
 
-    if (should_apply_mouse_look) {
+    if (mouse_moved) {
+      LOG_F(WARNING, "FLY: Mouse delta: ({}, {})",
+        mouse_delta.x, mouse_delta.y);
+
+      // Apply mouse look
       state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;
       state.pitch_radians = ClampPitchRadians(params,
         state.pitch_radians + (-mouse_delta.y * params.look_radians_per_pixel));
     }
 
     glm::quat applied_rot = current_rot;
-    if (should_apply_mouse_look) {
+    if (mouse_moved) {
+      // Build rotation directly from yaw/pitch to avoid gimbal lock
       const glm::quat yaw_q = glm::angleAxis(state.yaw_radians, params.up);
       const glm::vec3 right = yaw_q * glm::vec3(1.0f, 0.0f, 0.0f);
       const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
 
-      const glm::vec3 forward =
-        viewport::NormalizeSafe(pitch_q * (yaw_q * glm::vec3(0.0f, 0.0f, -1.0f)),
-          glm::vec3(0.0f, 0.0f, -1.0f));
-
-      const glm::quat new_rot = viewport::LookRotationFromForwardUp(forward,
-        params.up);
-      (void)transform.SetLocalRotation(new_rot);
-      applied_rot = new_rot;
+      // Compose rotations: yaw first, then pitch - no forward vector reconstruction!
+      applied_rot = pitch_q * yaw_q;
+      (void)transform.SetLocalRotation(applied_rot);
     }
 
     const bool w = input_snapshot.IsActionOngoing("Editor.Fly.W");

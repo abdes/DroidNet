@@ -154,16 +154,16 @@ namespace oxygen::interop::module {
       glm::vec3 offset = position - focus_point;
       float radius = std::sqrt(glm::dot(offset, offset));
       if (radius < params.min_radius) {
-        offset = glm::vec3(0.0f, 0.0f, params.min_radius);
+        offset = glm::vec3(0.0f, params.min_radius, 0.0f);
         radius = params.min_radius;
       }
 
-      // yaw: atan2(x, z) for offset = yawRot * (0,0,r)
-      state.yaw_radians = std::atan2(offset.x, offset.z);
+      // yaw: atan2(-x, y) for Z-up
+      state.yaw_radians = std::atan2(-offset.x, offset.y);
 
-      // pitch: defined such that positive pitch rotates camera downward.
-      const float s = std::clamp(offset.y / radius, -1.0f, 1.0f);
-      state.pitch_radians = ClampPitchRadians(params, -std::asin(s));
+      // pitch: asin(z / radius) for Z-up
+      const float s = std::clamp(offset.z / radius, -1.0f, 1.0f);
+      state.pitch_radians = ClampPitchRadians(params, std::asin(s));
 
       state.radius = radius;
       state.was_active = true;
@@ -186,7 +186,7 @@ namespace oxygen::interop::module {
     const glm::vec3 right = yaw_q * glm::vec3(1.0f, 0.0f, 0.0f);
     const glm::quat pitch_q = glm::angleAxis(state.pitch_radians, right);
 
-    const glm::vec3 base_offset(0.0f, 0.0f, std::max(state.radius, params.min_radius));
+    const glm::vec3 base_offset(0.0f, std::max(state.radius, params.min_radius), 0.0f);
     const glm::vec3 offset = pitch_q * (yaw_q * base_offset);
 
     const glm::vec3 new_position = focus_point + offset;
