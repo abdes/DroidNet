@@ -23,6 +23,9 @@
 #include <EditorModule/NodeRegistry.h>
 #include <EditorModule/SurfaceRegistry.h>
 
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/VirtualPathResolver.h>
+
 namespace oxygen::interop::module {
 
   using namespace oxygen;
@@ -169,6 +172,30 @@ namespace oxygen::interop::module {
     DCHECK_NOTNULL_F(registry_);
     DCHECK_NOTNULL_F(view_manager_);
 
+    // Initialize content systems on the engine thread to satisfy thread affinity.
+    if (!asset_loader_) {
+      LOG_F(INFO, "Initializing AssetLoader on engine thread");
+      asset_loader_ = std::make_unique<oxygen::content::AssetLoader>();
+      roots_dirty_ = true;
+    }
+    if (!path_resolver_) {
+      LOG_F(INFO, "Initializing VirtualPathResolver on engine thread");
+      path_resolver_ = std::make_unique<oxygen::content::VirtualPathResolver>();
+      roots_dirty_ = true;
+    }
+
+    if (roots_dirty_) {
+      std::lock_guard lock(roots_mutex_);
+      LOG_F(INFO, "Syncing {} cooked roots to AssetLoader and PathResolver", mounted_roots_.size());
+      asset_loader_->ClearMounts();
+      path_resolver_->ClearMounts();
+      for (const auto& root : mounted_roots_) {
+        asset_loader_->AddLooseCookedRoot(root);
+        path_resolver_->AddLooseCookedRoot(root);
+      }
+      roots_dirty_ = false;
+    }
+
     // Begin frame for the ViewManager: make the transient FrameContext
     // available so FrameStart commands (executed later in this method)
     // can perform immediate registration via ViewManager::CreateViewAsync.
@@ -206,7 +233,11 @@ namespace oxygen::interop::module {
 
     // After surface handling, execute frame-start commands related to views
     // with a strict ordering to avoid race conditions: destroy -> create -> rest.
-    CommandContext cmd_ctx{ .Scene = observer_ptr{scene_.get()} };
+    CommandContext cmd_ctx{
+      .Scene = observer_ptr{scene_.get()},
+      .AssetLoader = observer_ptr{asset_loader_.get()},
+      .PathResolver = observer_ptr{path_resolver_.get()}
+    };
 
     // 1) Destroy view commands first
     command_queue_.DrainIf(
@@ -216,8 +247,15 @@ namespace oxygen::interop::module {
           dynamic_cast<const DestroyViewCommand*>(cmd.get()) != nullptr;
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
-        if (cmd)
-          cmd->Execute(cmd_ctx);
+        if (cmd) {
+          try {
+            cmd->Execute(cmd_ctx);
+          } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception executing DestroyViewCommand: {}", e.what());
+          } catch (...) {
+            LOG_F(ERROR, "Unknown exception executing DestroyViewCommand");
+          }
+        }
       });
 
     // 2) Create view commands next
@@ -228,8 +266,15 @@ namespace oxygen::interop::module {
           dynamic_cast<const CreateViewCommand*>(cmd.get()) != nullptr;
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
-        if (cmd)
-          cmd->Execute(cmd_ctx);
+        if (cmd) {
+          try {
+            cmd->Execute(cmd_ctx);
+          } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception executing CreateViewCommand: {}", e.what());
+          } catch (...) {
+            LOG_F(ERROR, "Unknown exception executing CreateViewCommand");
+          }
+        }
       });
 
     // 3) Run any remaining FrameStart commands
@@ -239,8 +284,15 @@ namespace oxygen::interop::module {
           cmd->GetTargetPhase() == oxygen::core::PhaseId::kFrameStart;
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
-        if (cmd)
-          cmd->Execute(cmd_ctx);
+        if (cmd) {
+          try {
+            cmd->Execute(cmd_ctx);
+          } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception executing FrameStart command: {}", e.what());
+          } catch (...) {
+            LOG_F(ERROR, "Unknown exception executing FrameStart command");
+          }
+        }
       });
 
     context.SetScene(observer_ptr{ scene_.get() });
@@ -401,7 +453,11 @@ namespace oxygen::interop::module {
   auto EditorModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<> {
     // Drain only commands targeting SceneMutation. Leave other commands for
     // their appropriate phases so insertion order is preserved across phases.
-    CommandContext cmd_context{ .Scene = observer_ptr{scene_.get()} };
+    CommandContext cmd_context{
+      .Scene = observer_ptr{scene_.get()},
+      .AssetLoader = observer_ptr{asset_loader_.get()},
+      .PathResolver = observer_ptr{path_resolver_.get()}
+    };
     command_queue_.DrainIf(
       [](const std::unique_ptr<EditorCommand>& cmd) {
         return cmd &&
@@ -409,7 +465,13 @@ namespace oxygen::interop::module {
       },
       [&](std::unique_ptr<EditorCommand>& cmd) {
         if (cmd) {
-          cmd->Execute(cmd_context);
+          try {
+            cmd->Execute(cmd_context);
+          } catch (const std::exception& e) {
+            LOG_F(ERROR, "Exception executing editor command: {}", e.what());
+          } catch (...) {
+            LOG_F(ERROR, "Unknown exception executing editor command");
+          }
         }
       });
 
@@ -641,6 +703,30 @@ namespace oxygen::interop::module {
     auto cmd = std::make_unique<SetViewCameraPresetCommand>(
       view_manager_.get(), view_id, preset);
     command_queue_.Enqueue(std::move(cmd));
+  }
+
+  void EditorModule::AddLooseCookedRoot(std::string_view path) {
+    LOG_F(INFO, "EditorModule::AddLooseCookedRoot: registering root '{}'",
+      std::string(path));
+    try {
+      std::lock_guard lock(roots_mutex_);
+      mounted_roots_.push_back(std::string(path));
+      roots_dirty_ = true;
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Failed to add loose cooked root '{}': {}", std::string(path),
+        e.what());
+    }
+  }
+
+  void EditorModule::ClearCookedRoots() {
+    LOG_F(INFO, "EditorModule::ClearCookedRoots: clearing all mounted roots");
+    try {
+      std::lock_guard lock(roots_mutex_);
+      mounted_roots_.clear();
+      roots_dirty_ = true;
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "Failed to clear cooked roots: {}", e.what());
+    }
   }
 
   void EditorModule::ApplyDestroyScene() {

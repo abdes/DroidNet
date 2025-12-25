@@ -10,6 +10,7 @@
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
     <None Include="$(_ProjectReadmePath)" />
+    <None Include="$(_ProjectReadmePath)" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="AssemblyInfo.cpp" />
@@ -65,9 +66,6 @@
     <ClCompile Include="Commands\ShowViewCommand.cpp">
       <Filter>Commands</Filter>
     </ClCompile>
-    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp">
-      <Filter>Commands</Filter>
-    </ClCompile>
     <ClCompile Include="EditorModule\InputAccumulator.cpp">
       <Filter>EditorModule</Filter>
     </ClCompile>
@@ -103,6 +101,9 @@
     </ClCompile>
     <ClCompile Include="EditorModule\CommandFactory.cpp">
       <Filter>EditorModule</Filter>
+    </ClCompile>
+    <ClCompile Include="Commands\SetGeometryCommand.cpp">
+      <Filter>Commands</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -253,6 +254,9 @@
     </ClInclude>
     <ClInclude Include="EditorModule\ICommandFactory.h">
       <Filter>EditorModule</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetGeometryCommand.h">
+      <Filter>Commands</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

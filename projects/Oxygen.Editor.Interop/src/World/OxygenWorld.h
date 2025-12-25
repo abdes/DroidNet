@@ -57,7 +57,7 @@ namespace Oxygen::Interop::World {
       System::Numerics::Vector3 scale);
 
     // Geometry management
-    void CreateBasicMesh(System::Guid nodeId, String^ meshType);
+    void SetGeometry(System::Guid nodeId, String^ assetUri);
     void DetachGeometry(System::Guid nodeId);
     void SetVisibility(System::Guid nodeId, bool visible);
 
@@ -73,6 +73,10 @@ namespace Oxygen::Interop::World {
       bool preserveWorldTransform);
     void UpdateTransformsForNodes(array<System::Guid>^ nodes);
     void RemoveSceneNodes(array<System::Guid>^ nodes);
+
+    // Asset management
+    void AddLooseCookedRoot(String^ path);
+    void ClearCookedRoots();
 
     // (All APIs are GUID-based; no scene names are accepted)
 
