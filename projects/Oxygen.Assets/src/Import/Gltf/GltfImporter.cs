@@ -18,7 +18,7 @@ namespace Oxygen.Assets.Import.Gltf;
 /// Imports glTF 2.0 sources (<c>.gltf</c>/<c>.glb</c>) and emits one or more cooked geometry assets (<c>.ogeo</c>)
 /// as canonical imported geometry payloads.
 /// </summary>
-public sealed class GltfGeometryImporter : IAssetImporter
+public sealed class GltfImporter : IAssetImporter
 {
     private const string ImporterName = "Oxygen.Import.GltfGeometry";
 
@@ -45,7 +45,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
         var ext = Path.GetExtension(sourcePath);
         if (!ext.Equals(".glb", StringComparison.OrdinalIgnoreCase) && !ext.Equals(".gltf", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException($"{nameof(GltfGeometryImporter)} cannot import '{sourcePath}'.");
+            throw new InvalidOperationException($"{nameof(GltfImporter)} cannot import '{sourcePath}'.");
         }
 
         var meta = await context.Files.GetMetadataAsync(sourcePath, cancellationToken).ConfigureAwait(false);
@@ -329,7 +329,7 @@ public sealed class GltfGeometryImporter : IAssetImporter
     {
         var relativePath = virtualPath.TrimStart('/');
         var importedPath = Path.Combine(AssetPipelineConstants.ImportedFolderName, relativePath);
-        System.Diagnostics.Debug.WriteLine($"[GltfGeometryImporter] Writing imported geometry metadata to {importedPath}");
+        System.Diagnostics.Debug.WriteLine($"[GltfImporter] Writing imported geometry metadata to {importedPath}");
 
         var ms = new MemoryStream();
         await using (ms.ConfigureAwait(false))

@@ -363,7 +363,7 @@ public static partial class Program
         container.Register<ImportPluginRegistration>(Reuse.Transient);
 
         // Register Importers
-        container.Register<IAssetImporter, GltfGeometryImporter>(Reuse.Singleton);
+        container.Register<IAssetImporter, GltfImporter>(Reuse.Singleton);
         container.Register<IAssetImporter, MaterialSourceImporter>(Reuse.Singleton);
 
         // Register ImportService
