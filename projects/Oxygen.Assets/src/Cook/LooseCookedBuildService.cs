@@ -20,6 +20,7 @@ namespace Oxygen.Assets.Cook;
 /// </remarks>
 public sealed class LooseCookedBuildService
 {
+    // TODO: Implement a "Compact" cooked data feature in the editor UI later, to reclaim unreferenced data in the files.
     private const ushort ContentVersion = 1;
 
     private readonly Func<string, IImportFileAccess> fileAccessFactory;
