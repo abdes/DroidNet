@@ -761,6 +761,14 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             this.SwapChainPanel.ReleasePointerCapture(e.Pointer);
         }
 
+        // CRITICAL: Restore keyboard focus after releasing pointer capture
+        // ReleasePointerCapture causes WinUI to stop routing keyboard events!
+        // Must defer focus call to next message loop cycle - immediate Focus() fails.
+        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.High, () =>
+        {
+            _ = this.Focus(FocusState.Keyboard);
+        });
+
         if (!this.TryGetInputTargetVerbose(out var viewModel, out var viewId) || viewModel is null)
         {
             this.DebugInputLog("PointerReleased: no input target");
