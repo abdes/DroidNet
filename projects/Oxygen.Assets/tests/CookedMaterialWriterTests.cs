@@ -29,8 +29,8 @@ public sealed class CookedMaterialWriterTests
                 roughnessFactor: 0.2f,
                 baseColorTexture: null,
                 metallicRoughnessTexture: null),
-            normalTexture: new NormalTextureRef("asset://Content/Textures/N.png", 1.5f),
-            occlusionTexture: new OcclusionTextureRef("asset://Content/Textures/AO.png", 0.9f),
+            normalTexture: new NormalTextureRef("asset:///Content/Textures/N.png", 1.5f),
+            occlusionTexture: new OcclusionTextureRef("asset:///Content/Textures/AO.png", 0.9f),
             alphaMode: MaterialAlphaMode.Mask,
             alphaCutoff: 0.5f,
             doubleSided: true);
@@ -85,8 +85,8 @@ public sealed class CookedMaterialWriterTests
                 "MetallicFactor": 2,
                 "RoughnessFactor": -1
             },
-            "NormalTexture": { "Source": "asset://Content/Textures/N.png", "Scale": -4 },
-            "OcclusionTexture": { "Source": "asset://Content/Textures/AO.png", "Strength": 2 },
+            "NormalTexture": { "Source": "asset:///Content/Textures/N.png", "Scale": -4 },
+            "OcclusionTexture": { "Source": "asset:///Content/Textures/AO.png", "Strength": 2 },
             "AlphaMode": "OPAQUE",
             "DoubleSided": false
         }
@@ -117,7 +117,7 @@ public sealed class CookedMaterialWriterTests
                 baseColorA: 1.0f,
                 metallicFactor: 0.1f,
                 roughnessFactor: 0.9f,
-                baseColorTexture: new MaterialTextureRef("asset://Content/Textures/BaseColor.png"),
+                baseColorTexture: new MaterialTextureRef("asset:///Content/Textures/BaseColor.png"),
                 metallicRoughnessTexture: null),
             normalTexture: null,
             occlusionTexture: null,
@@ -140,7 +140,7 @@ public sealed class CookedMaterialWriterTests
         _ = output.PbrMetallicRoughness.BaseColorR.Should().BeApproximately(0.25f, 0.0001f);
         _ = output.PbrMetallicRoughness.MetallicFactor.Should().BeApproximately(0.1f, 0.0001f);
         _ = output.PbrMetallicRoughness.RoughnessFactor.Should().BeApproximately(0.9f, 0.0001f);
-        _ = output.PbrMetallicRoughness.BaseColorTexture!.Value.Source.Should().Be("asset://Content/Textures/BaseColor.png");
+        _ = output.PbrMetallicRoughness.BaseColorTexture!.Value.Source.Should().Be("asset:///Content/Textures/BaseColor.png");
     }
 
     private static float ReadSingle(byte[] bytes, int offset)

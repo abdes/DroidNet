@@ -19,7 +19,7 @@ public sealed class AssetReferenceTests
     public void Uri_WhenSet_ShouldNotifyPropertyChanged()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset>("asset://OldUri");
+        var reference = new AssetReference<GeometryAsset>("asset:///OldUri");
         var propertyChangedFired = false;
         reference.PropertyChanged += (_, args) =>
         {
@@ -30,7 +30,7 @@ public sealed class AssetReferenceTests
         };
 
         // Act
-        reference.Uri = new("asset://Generated/BasicShapes/Cube");
+        reference.Uri = new("asset:///Engine/Generated/BasicShapes/Cube");
 
         // Assert
         _ = propertyChangedFired.Should().BeTrue();
@@ -40,12 +40,12 @@ public sealed class AssetReferenceTests
     public void Uri_WhenSetToSameValue_ShouldNotNotify()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset>("asset://Test");
+        var reference = new AssetReference<GeometryAsset>("asset:///Test");
         var propertyChangedFireCount = 0;
         reference.PropertyChanged += (_, _) => propertyChangedFireCount++;
 
         // Act
-        reference.Uri = new("asset://Test");
+        reference.Uri = new("asset:///Test");
 
         // Assert
         _ = propertyChangedFireCount.Should().Be(0);
@@ -57,7 +57,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = new("asset://Generated/BasicShapes/Cube"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Cube"),
             Lods = [],
         };
 
@@ -65,7 +65,7 @@ public sealed class AssetReferenceTests
         var reference = new AssetReference<GeometryAsset>(asset.Uri)
         {
             Asset = asset,
-            Uri = new("asset://Generated/BasicShapes/Sphere"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Sphere"),
         };
 
         // Assert
@@ -78,12 +78,12 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = new("asset://Generated/BasicShapes/Cube"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Cube"),
             Lods = [],
         };
 
         // Act
-        var reference = new AssetReference<GeometryAsset>("asset://Generated/BasicShapes/Sphere")
+        var reference = new AssetReference<GeometryAsset>("asset:///Engine/Generated/BasicShapes/Sphere")
         {
             Asset = asset,
             Uri = asset.Uri,
@@ -97,10 +97,10 @@ public sealed class AssetReferenceTests
     public void Asset_WhenSet_ShouldSyncUri()
     {
         // Arrange
-        var reference = new AssetReference<GeometryAsset>("asset://OldUri");
+        var reference = new AssetReference<GeometryAsset>("asset:///OldUri");
         var asset = new GeometryAsset
         {
-            Uri = new("asset://Generated/BasicShapes/Cube"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Cube"),
             Lods = [],
         };
 
@@ -117,7 +117,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = new("asset://Generated/BasicShapes/Cube"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>(asset.Uri) { Asset = asset };
@@ -135,7 +135,7 @@ public sealed class AssetReferenceTests
         // Arrange
         var asset = new GeometryAsset
         {
-            Uri = new("asset://Generated/BasicShapes/Cube"),
+            Uri = new("asset:///Engine/Generated/BasicShapes/Cube"),
             Lods = [],
         };
         var reference = new AssetReference<GeometryAsset>(asset.Uri);

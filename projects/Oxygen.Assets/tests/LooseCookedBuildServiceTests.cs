@@ -48,7 +48,7 @@ public sealed class LooseCookedBuildServiceTests
         _ = imported.Imported.Should().ContainSingle();
 
         var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
-        await build.BuildIndexesAsync("C:/Fake", imported.Imported, CancellationToken.None).ConfigureAwait(false);
+        await build.BuildIndexAsync("C:/Fake", imported.Imported, CancellationToken.None).ConfigureAwait(false);
 
         _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
         var ms = new MemoryStream(indexBytes);

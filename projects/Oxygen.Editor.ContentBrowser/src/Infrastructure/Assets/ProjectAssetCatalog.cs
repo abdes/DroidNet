@@ -50,7 +50,7 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             var rootOptions = new FileSystemAssetCatalogOptions
             {
                 RootFolderPath = project.ProjectInfo.Location,
-                Authority = "project",
+                MountPoint = "project",
             };
             var rootCatalog = new FileSystemAssetCatalog(storage, rootOptions);
             await this.AddCatalogAsync(rootCatalog).ConfigureAwait(false);
@@ -66,7 +66,7 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
                 var mountOptions = new FileSystemAssetCatalogOptions
                 {
                     RootFolderPath = mountRootLocation,
-                    Authority = mount.Name,
+                    MountPoint = mount.Name,
                 };
                 var mountCatalog = new FileSystemAssetCatalog(storage, mountOptions);
                 await this.AddCatalogAsync(mountCatalog).ConfigureAwait(false);
@@ -100,14 +100,14 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             .ToList();
     }
 
-    public async Task AddFolderAsync(Oxygen.Storage.IFolder folder, string authority)
+    public async Task AddFolderAsync(Oxygen.Storage.IFolder folder, string mountPoint)
     {
         var storage = this.projectManager.GetCurrentProjectStorageProvider();
 
         var options = new FileSystemAssetCatalogOptions
         {
             RootFolderPath = folder.Location,
-            Authority = authority,
+            MountPoint = mountPoint,
         };
 
         var catalog = new FileSystemAssetCatalog(storage, options);

@@ -16,7 +16,7 @@ namespace Oxygen.Assets.Catalog;
 /// </list>
 /// </para>
 /// <para>
-/// The catalog decides how to interpret roots (prefix match on authority + path segments is the
+/// The catalog decides how to interpret roots (prefix match on mount point + path segments is the
 /// expected default). Consumers should treat the semantics as "best effort" across providers.
 /// </para>
 /// </remarks>

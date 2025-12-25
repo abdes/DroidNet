@@ -76,7 +76,7 @@ public sealed class FileSystemAssetResolverTests
             await ImportedGeometrySerializer.WriteAsync(stream, importedGeometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        var uri = new Uri($"asset://Content/{relativePath}");
+        var uri = new Uri($"asset:///Content/{relativePath}");
 
         // Act
         var asset = await resolver.ResolveAsync(uri).ConfigureAwait(false);
@@ -121,7 +121,7 @@ public sealed class FileSystemAssetResolverTests
         await File.WriteAllTextAsync(sourcePath, json, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Act
-        var uri = new Uri($"asset://Content/{relativePath}");
+        var uri = new Uri($"asset:///Content/{relativePath}");
         var asset = await resolver.ResolveAsync(uri).ConfigureAwait(false);
 
         // Assert
@@ -139,7 +139,7 @@ public sealed class FileSystemAssetResolverTests
     {
         // Arrange
         var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
-        var uri = new Uri("asset://Content/Missing.omat");
+        var uri = new Uri("asset:///Content/Missing.omat");
 
         // Act
         var asset = await resolver.ResolveAsync(uri).ConfigureAwait(false);
@@ -149,11 +149,11 @@ public sealed class FileSystemAssetResolverTests
     }
 
     [TestMethod]
-    public async Task ResolveAsync_WithInvalidAuthority_ShouldReturnNull()
+    public async Task ResolveAsync_WithInvalidMountPoint_ShouldReturnNull()
     {
         // Arrange
         var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
-        var uri = new Uri("asset://Engine/BasicShapes/Cube.ogeo");
+        var uri = new Uri("asset:///Engine/BasicShapes/Cube.ogeo");
 
         // Act
         var asset = await resolver.ResolveAsync(uri).ConfigureAwait(false);

@@ -59,8 +59,8 @@ Examples:
 | Mount point | Implemented | Typical examples | Implementation |
 |---|:---:|---|---|
 | Generated | ✅ | `asset:///Generated/BasicShapes/Cube` | `GeneratedAssetResolver` — frozen in-memory catalog (Cube/Sphere/Plane/Cylinder + Default material) |
-| Content | ✅ | `asset:///Content/...` | `FileSystemAssetResolver` — configured for "Content" authority, reads from source/imported folders |
-| Engine | ✅ | `asset:///Engine/...` | `FileSystemAssetResolver` — configured for "Engine" authority (in Editor) or `PakAssetResolver` (in Runtime) |
+| Content | ✅ | `asset:///Content/...` | `FileSystemAssetResolver` — configured for "Content" mount point, reads from source/imported folders |
+| Engine | ✅ | `asset:///Engine/...` | `FileSystemAssetResolver` — configured for "Engine" mount point (in Editor) or `PakAssetResolver` (in Runtime) |
 
 ## Built-in generated assets
 
@@ -83,7 +83,7 @@ The resolver for the `Generated` mount point exposes a small, always-available s
 | `SubMesh` | Mesh partition | `Name`, `MaterialIndex` (zero-based material index) |
 | `MaterialAsset` | Minimal material metadata | Placeholder for future shader/texture fields |
 | `AssetReference<T>` | Serializable reference | `Uri` is serialized; `Asset` is runtime-only `[JsonIgnore]`. Setting `Uri` invalidates `Asset` if different; setting `Asset` syncs `Uri`. |
-| `IAssetResolver` | Resolver contract | `CanResolve(string authority)` (case-insensitive) + `ResolveAsync(Uri)` → `Asset?` |
+| `IAssetResolver` | Resolver contract | `CanResolve(string mountPoint)` (case-insensitive) + `ResolveAsync(Uri)` → `Asset?` |
 | `IAssetService` | Orchestrator | Registers resolvers and exposes `LoadAssetAsync<T>(Uri)` for typed loading |
 
 ## Usage examples
@@ -99,7 +99,7 @@ geometryRef.Asset = await assetService.LoadAssetAsync<GeometryAsset>(geometryRef
 Example: set the runtime asset directly — `AssetReference` will synchronize the `Uri` automatically.
 
 ```csharp
-var builtIn = new GeometryAsset { Uri = new Uri("asset://Generated/BasicShapes/Sphere"), Lods = new List<MeshLod>() };
+var builtIn = new GeometryAsset { Uri = new Uri("asset:///Generated/BasicShapes/Sphere"), Lods = new List<MeshLod>() };
 var refToSphere = new AssetReference<GeometryAsset>();
 refToSphere.Asset = builtIn; // refToSphere.Uri is updated to builtIn.Uri
 ```

@@ -120,6 +120,7 @@ public sealed class SystemIoImportFileAccess : IImportFileAccess
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
 
         var fullPath = this.ResolveFullPath(relativePath);
+        System.Diagnostics.Debug.WriteLine($"[SystemIoImportFileAccess] Writing {bytes.Length} bytes to {fullPath}");
         var dir = Path.GetDirectoryName(fullPath);
         if (!string.IsNullOrWhiteSpace(dir))
         {

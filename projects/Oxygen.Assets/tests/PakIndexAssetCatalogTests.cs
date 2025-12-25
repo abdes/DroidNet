@@ -48,14 +48,14 @@ public sealed class PakIndexAssetCatalogTests
         var storage = new NativeStorageProvider(fs);
         using var catalog = new PakIndexAssetCatalog(storage, new PakIndexAssetCatalogOptions
         {
-            Authority = "Engine",
+            MountPoint = "Engine",
             PakFilePath = @"C:\Cooked\Engine.pak",
         });
 
         var results = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/A.png"));
-        results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/B.png"));
+        results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/A.png"));
+        results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/B.png"));
     }
 
     [TestMethod]
@@ -70,7 +70,7 @@ public sealed class PakIndexAssetCatalogTests
         var storage = new NativeStorageProvider(fs);
         using var catalog = new PakIndexAssetCatalog(storage, new PakIndexAssetCatalogOptions
         {
-            Authority = "Engine",
+            MountPoint = "Engine",
             PakFilePath = @"C:\Cooked\Engine.pak",
         });
 
@@ -97,7 +97,7 @@ public sealed class PakIndexAssetCatalogTests
         var storage = new NativeStorageProvider(fs);
         using var catalog = new PakIndexAssetCatalog(storage, new PakIndexAssetCatalogOptions
         {
-            Authority = "Engine",
+            MountPoint = "Engine",
             PakFilePath = @"C:\Cooked\Engine.pak",
         });
 
@@ -135,7 +135,7 @@ public sealed class PakIndexAssetCatalogTests
         var storage = new NativeStorageProvider(fs);
         using var catalog = new PakIndexAssetCatalog(storage, new PakIndexAssetCatalogOptions
         {
-            Authority = "Engine",
+            MountPoint = "Engine",
             PakFilePath = @"C:\Cooked\Engine.pak",
         });
 

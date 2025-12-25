@@ -25,8 +25,8 @@ public sealed class CompositeAssetCatalogTests
         var generated = new GeneratedAssetCatalog();
 
         var extra = new TestCatalog(
-            new AssetRecord(new Uri("asset://Generated/BasicShapes/Cube")), // duplicate
-            new AssetRecord(new Uri("asset://Content/Textures/Wood01")));
+            new AssetRecord(new Uri("asset:///Engine/Generated/BasicShapes/Cube")), // duplicate
+            new AssetRecord(new Uri("asset:///Content/Textures/Wood01")));
 
         var composite = new CompositeAssetCatalog(generated, extra);
 
@@ -35,9 +35,9 @@ public sealed class CompositeAssetCatalogTests
 
         // Assert
         _ = results.Select(r => r.Uri)
-            .Should().Contain(new Uri("asset://Content/Textures/Wood01"));
+            .Should().Contain(new Uri("asset:///Content/Textures/Wood01"));
 
-        _ = results.Count(r => string.Equals(r.Uri.AbsolutePath, "/BasicShapes/Cube", StringComparison.Ordinal))
+        _ = results.Count(r => r.Uri.ToString().Contains("/BasicShapes/Cube", StringComparison.Ordinal))
             .Should().Be(1, "duplicate URIs from multiple providers must be de-duplicated");
     }
 
@@ -52,8 +52,8 @@ public sealed class CompositeAssetCatalogTests
         var received = new List<AssetChange>();
         using var subscription = composite.Changes.Subscribe(received.Add);
 
-        var change1 = new AssetChange(AssetChangeKind.Added, new Uri("asset://Content/A"));
-        var change2 = new AssetChange(AssetChangeKind.Removed, new Uri("asset://Engine/B"));
+        var change1 = new AssetChange(AssetChangeKind.Added, new Uri("asset:///Content/A"));
+        var change2 = new AssetChange(AssetChangeKind.Removed, new Uri("asset:///Engine/B"));
 
         // Act
         a.Emit(change1);

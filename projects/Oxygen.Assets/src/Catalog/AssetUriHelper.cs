@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Core;
+
 namespace Oxygen.Assets.Catalog;
 
 /// <summary>
@@ -12,7 +14,7 @@ public static class AssetUriHelper
     /// <summary>
     /// The URI scheme for assets.
     /// </summary>
-    public const string Scheme = "asset";
+    public const string Scheme = AssetUris.Scheme;
 
     /// <summary>
     /// Creates an asset URI from a mount point and a relative path.
@@ -28,7 +30,7 @@ public static class AssetUriHelper
         var normalizedPath = relativePath.Replace('\\', '/').TrimStart('/');
 
         // Construct path: /MountPoint/RelativePath
-        // We use the path component to store the mount point to support characters that are invalid in a URI Authority (e.g. spaces).
+        // We use the path component to store the mount point to support characters that are invalid in a URI host (e.g. spaces).
         var path = $"{mountPoint}/{normalizedPath}";
 
         // Ensure leading slash to prevent UriBuilder from creating opaque URIs (e.g. asset:path)
@@ -37,11 +39,7 @@ public static class AssetUriHelper
             path = "/" + path;
         }
 
-        var builder = new UriBuilder(Scheme, "")
-        {
-            Path = path
-        };
-        return builder.Uri;
+        return new Uri($"{Scheme}://{path}");
     }
 
     /// <summary>
@@ -56,7 +54,7 @@ public static class AssetUriHelper
             return string.Empty;
         }
 
-        // If Authority is present, use it (backward compatibility)
+        // If the URI has an authority component, use it as the mount point (legacy support for asset://MountPoint/Path)
         if (!string.IsNullOrEmpty(uri.Authority))
         {
             return Uri.UnescapeDataString(uri.Authority);
@@ -88,6 +86,7 @@ public static class AssetUriHelper
 
         if (!string.IsNullOrEmpty(uri.Authority))
         {
+            // Legacy support for asset://MountPoint/Path
             return uri.AbsolutePath.TrimStart('/');
         }
 
@@ -115,9 +114,35 @@ public static class AssetUriHelper
 
         if (!string.IsNullOrEmpty(uri.Authority))
         {
+            // Legacy support for asset://MountPoint/Path
             return "/" + Uri.UnescapeDataString(uri.Authority) + Uri.UnescapeDataString(uri.AbsolutePath);
         }
 
         return Uri.UnescapeDataString(uri.AbsolutePath);
+    }
+
+    /// <summary>
+    /// Gets the path that the engine's virtual path resolver expects.
+    /// </summary>
+    /// <param name="uri">The asset URI.</param>
+    /// <returns>The engine-compatible virtual path.</returns>
+    public static string GetEnginePath(Uri uri)
+    {
+        if (!string.Equals(uri.Scheme, Scheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        var mountPoint = GetMountPoint(uri);
+        if (string.Equals(mountPoint, "Imported", StringComparison.OrdinalIgnoreCase))
+        {
+            // For imported assets, the engine path is the path relative to the 'Imported' mount point,
+            // which is already project-relative.
+            return "/" + GetRelativePath(uri);
+        }
+
+        // For other assets (like procedural ones), return the full URI string
+        // so the engine can handle them by scheme/prefix.
+        return uri.ToString();
     }
 }

@@ -52,7 +52,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     {
         ArgumentNullException.ThrowIfNull(storage);
         ArgumentNullException.ThrowIfNull(options);
-        ArgumentException.ThrowIfNullOrEmpty(options.Authority);
+        ArgumentException.ThrowIfNullOrEmpty(options.MountPoint);
         ArgumentException.ThrowIfNullOrEmpty(options.RootFolderPath);
 
         this.storage = storage;
@@ -138,9 +138,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     }
 
     private static bool IsAllowedDotName(string name)
-        => name.Equals(".cooked", StringComparison.OrdinalIgnoreCase)
-            || name.Equals(".imported", StringComparison.OrdinalIgnoreCase)
-            || name.Equals(".build", StringComparison.OrdinalIgnoreCase);
+        => false;
 
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
@@ -207,7 +205,7 @@ public sealed class FileSystemAssetCatalog : IAssetCatalog, IDisposable
     private Uri MapFilePathToAssetUri(string rootLocation, string fullPath)
     {
         var relative = Path.GetRelativePath(rootLocation, fullPath);
-        return AssetUriHelper.CreateUri(this.options.Authority, relative);
+        return AssetUriHelper.CreateUri(this.options.MountPoint, relative);
     }
 
     private async Task ApplyBatchAsync(IReadOnlyList<FileSystemCatalogEvent> batch)

@@ -22,7 +22,7 @@ public interface IProjectAssetCatalog : IAssetCatalog
     /// Adds a folder to the catalog.
     /// </summary>
     /// <param name="folder">The folder to add.</param>
-    /// <param name="authority">The authority to use for the assets in this folder (e.g. "project", "mount-name").</param>
+    /// <param name="mountPoint">The mount point to use for the assets in this folder (e.g. "project", "mount-name").</param>
     /// <returns>A task that completes when the folder has been added.</returns>
-    Task AddFolderAsync(IFolder folder, string authority);
+    Task AddFolderAsync(IFolder folder, string mountPoint);
 }

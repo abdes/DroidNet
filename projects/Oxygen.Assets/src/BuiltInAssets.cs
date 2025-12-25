@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Assets.Model;
+using Oxygen.Core;
 
 namespace Oxygen.Assets;
 
@@ -15,14 +16,12 @@ namespace Oxygen.Assets;
 /// </remarks>
 internal static class BuiltInAssets
 {
-    private const string BaseUri = "asset:///Generated/";
-
     public static IEnumerable<Asset> Create()
     {
         // Basic shape geometries (1 LOD, 1 SubMesh "Main")
         yield return new GeometryAsset
         {
-            Uri = new($"{BaseUri}BasicShapes/Cube"),
+            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Cube")),
             Lods =
             [
                 new MeshLod
@@ -35,7 +34,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new($"{BaseUri}BasicShapes/Sphere"),
+            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Sphere")),
             Lods =
             [
                 new MeshLod
@@ -48,7 +47,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new($"{BaseUri}BasicShapes/Plane"),
+            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Plane")),
             Lods =
             [
                 new MeshLod
@@ -61,7 +60,7 @@ internal static class BuiltInAssets
 
         yield return new GeometryAsset
         {
-            Uri = new($"{BaseUri}BasicShapes/Cylinder"),
+            Uri = new(AssetUris.BuildGeneratedUri("BasicShapes/Cylinder")),
             Lods =
             [
                 new MeshLod
@@ -75,7 +74,7 @@ internal static class BuiltInAssets
         // Default material
         yield return new MaterialAsset
         {
-            Uri = new($"{BaseUri}Materials/Default"),
+            Uri = new(AssetUris.BuildGeneratedUri("Materials/Default")),
         };
     }
 }

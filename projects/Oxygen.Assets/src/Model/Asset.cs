@@ -19,7 +19,7 @@ public abstract class Asset
     /// </summary>
     /// <value>
     /// The asset URI in the format <c>asset:///{MountPoint}/{Path}</c>.
-    /// For example: <c>asset:///Generated/BasicShapes/Cube</c> or <c>asset:///Content/Models/Hero.geo</c>.
+    /// For example: <c>asset:///Engine/Generated/BasicShapes/Cube</c> or <c>asset:///Content/Models/Hero.geo</c>.
     /// </value>
     public required Uri Uri { get; set; }
 

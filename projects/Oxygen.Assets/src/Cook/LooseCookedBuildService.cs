@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Geometry;
@@ -47,8 +48,8 @@ public sealed class LooseCookedBuildService
     /// <param name="projectRoot">Absolute project root path.</param>
     /// <param name="imported">Imported assets that have corresponding cooked descriptors written.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A task that completes when the indexes have been written.</returns>
-    public async Task BuildIndexesAsync(
+    /// <returns>A task that completes when the index has been written.</returns>
+    public async Task BuildIndexAsync(
         string projectRoot,
         IReadOnlyList<ImportedAsset> imported,
         CancellationToken cancellationToken = default)
@@ -57,10 +58,10 @@ public sealed class LooseCookedBuildService
         ArgumentNullException.ThrowIfNull(imported);
 
         var files = this.fileAccessFactory(projectRoot);
-        await BuildIndexesAsync(files, imported, cancellationToken).ConfigureAwait(false);
+        await BuildIndexAsync(files, imported, cancellationToken).ConfigureAwait(false);
     }
 
-    internal static async Task BuildIndexesAsync(
+    internal static async Task BuildIndexAsync(
         IImportFileAccess files,
         IReadOnlyList<ImportedAsset> imported,
         CancellationToken cancellationToken)
@@ -70,64 +71,93 @@ public sealed class LooseCookedBuildService
 
         cancellationToken.ThrowIfCancellationRequested();
 
+        var indexPath = $"{AssetPipelineConstants.CookedFolderName}/{AssetPipelineConstants.IndexFileName}";
+        var existingAssets = new Dictionary<AssetKey, AssetEntry>();
+        var existingFiles = new Dictionary<string, FileRecord>(StringComparer.Ordinal);
+
+        try
+        {
+            var existingBytes = await files.ReadAllBytesAsync(indexPath, cancellationToken).ConfigureAwait(false);
+            if (existingBytes.Length > 0)
+            {
+                using var ms = new MemoryStream(existingBytes.ToArray());
+                var existingDoc = LooseCookedIndex.Read(ms);
+
+                foreach (var asset in existingDoc.Assets)
+                {
+                    existingAssets[asset.AssetKey] = asset;
+                }
+
+                foreach (var file in existingDoc.Files)
+                {
+                    existingFiles[file.RelativePath] = file;
+                }
+            }
+        }
+        catch (FileNotFoundException)
+        {
+            // Index doesn't exist yet.
+        }
+
+        // Group assets by mount point to organize cooked files on disk.
         var groups = imported
             .GroupBy(static a => GetMountPointFromVirtualPath(a.VirtualPath), StringComparer.Ordinal)
             .OrderBy(static g => g.Key, StringComparer.Ordinal);
 
-        foreach (var group in groups)
-        {
-            await BuildIndexForMountPointAsync(group).ConfigureAwait(false);
-        }
+        var newFileRecords = new List<FileRecord>();
 
-        async Task BuildIndexForMountPointAsync(IGrouping<string, ImportedAsset> group)
+        foreach (var group in groups)
         {
             cancellationToken.ThrowIfCancellationRequested();
 
             var mountPoint = group.Key;
-            var fileRecords = new List<FileRecord>();
-
-            await CookGeometryAsync(files, mountPoint, group, fileRecords, cancellationToken).ConfigureAwait(false);
+            await CookGeometryAsync(files, mountPoint, group, newFileRecords, cancellationToken).ConfigureAwait(false);
             await CookMaterialAsync(files, mountPoint, group, cancellationToken).ConfigureAwait(false);
-            var entries = new List<AssetEntry>();
 
             foreach (var asset in group.OrderBy(static a => a.VirtualPath, StringComparer.Ordinal))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                var descriptorRelativePath = GetDescriptorRelativePath(asset.VirtualPath, mountPoint);
-                var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
+                var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
+                var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
 
                 var bytes = await files.ReadAllBytesAsync(cookedDescriptorPath, cancellationToken).ConfigureAwait(false);
                 var sha256 = SHA256.HashData(bytes.Span);
 
-                entries.Add(
-                    new AssetEntry(
-                        AssetKey: asset.AssetKey,
-                        DescriptorRelativePath: descriptorRelativePath,
-                        VirtualPath: asset.VirtualPath,
-                        AssetType: MapAssetType(asset.AssetType),
-                        DescriptorSize: (ulong)bytes.Length,
-                        DescriptorSha256: sha256));
+                existingAssets[asset.AssetKey] = new AssetEntry(
+                    AssetKey: asset.AssetKey,
+                    DescriptorRelativePath: descriptorRelativePath,
+                    VirtualPath: asset.VirtualPath,
+                    AssetType: MapAssetType(asset.AssetType),
+                    DescriptorSize: (ulong)bytes.Length,
+                    DescriptorSha256: sha256);
             }
-
-            var document = new Document(
-                ContentVersion: ContentVersion,
-                Flags: IndexFeatures.None,
-                Assets: entries,
-                Files: fileRecords);
-
-            byte[] indexBytes;
-            var ms = new MemoryStream();
-            await using (ms.ConfigureAwait(false))
-            {
-                LooseCookedIndex.Write(ms, document);
-                indexBytes = ms.ToArray();
-            }
-
-            await files
-                .WriteAllBytesAsync($".cooked/{mountPoint}/container.index.bin", indexBytes, cancellationToken)
-                .ConfigureAwait(false);
         }
+
+        foreach (var file in newFileRecords)
+        {
+            existingFiles[file.RelativePath] = file;
+        }
+
+        var document = new Document(
+            ContentVersion: ContentVersion,
+            Flags: IndexFeatures.None,
+            Assets: existingAssets.Values.OrderBy(static a => a.VirtualPath, StringComparer.Ordinal).ToList(),
+            Files: existingFiles.Values.OrderBy(static f => f.RelativePath, StringComparer.Ordinal).ToList());
+
+        byte[] indexBytes;
+        var msOut = new MemoryStream();
+        await using (msOut.ConfigureAwait(false))
+        {
+            LooseCookedIndex.Write(msOut, document);
+            indexBytes = msOut.ToArray();
+        }
+
+        System.Diagnostics.Debug.WriteLine($"[LooseCookedBuildService] Writing index with {document.Assets.Count} assets to {indexPath}");
+
+        await files
+            .WriteAllBytesAsync(indexPath, indexBytes, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task CookMaterialAsync(
@@ -150,8 +180,8 @@ public sealed class LooseCookedBuildService
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            var descriptorRelativePath = GetDescriptorRelativePath(asset.VirtualPath, mountPoint);
-            var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
+            var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
+            var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
 
             byte[] cookedBytes;
             var ms = new MemoryStream();
@@ -183,7 +213,76 @@ public sealed class LooseCookedBuildService
             return;
         }
 
+        // Prepare paths
+        const string buffersTableRel = "resources/buffers.table";
+        const string buffersDataRel = "resources/buffers.data";
+        var tablePath = $"{AssetPipelineConstants.CookedFolderName}/{buffersTableRel}";
+        var dataPath = $"{AssetPipelineConstants.CookedFolderName}/{buffersDataRel}";
+
+        // Read existing buffers if they exist
+        byte[] existingTable = [];
+        byte[] existingData = [];
+        try
+        {
+            var t = await files.ReadAllBytesAsync(tablePath, cancellationToken).ConfigureAwait(false);
+            existingTable = t.ToArray();
+            var d = await files.ReadAllBytesAsync(dataPath, cancellationToken).ConfigureAwait(false);
+            existingData = d.ToArray();
+        }
+        catch (FileNotFoundException)
+        {
+            // Ignore
+        }
+
         var cooked = CookBuffers();
+
+        // Merge logic
+        if (existingTable.Length > 0)
+        {
+            // Calculate padding for data alignment (72 bytes)
+            var padding = (72 - (existingData.Length % 72)) % 72;
+            var baseDataOffset = (ulong)(existingData.Length + padding);
+            var baseIndex = (uint)(existingTable.Length / 32); // 32 bytes per desc
+
+            // Strip the first reserved entry (32 bytes) from the new table
+            var newTableSpan = cooked.BuffersTableBytes.Span[32..];
+            var patchedTable = new byte[newTableSpan.Length];
+            newTableSpan.CopyTo(patchedTable);
+
+            // Patch data offsets in the new table
+            for (var i = 0; i < patchedTable.Length; i += 32)
+            {
+                var entry = patchedTable.AsSpan(i, 32);
+                var offset = BinaryPrimitives.ReadUInt64LittleEndian(entry[..8]);
+                offset += baseDataOffset;
+                BinaryPrimitives.WriteUInt64LittleEndian(entry[..8], offset);
+            }
+
+            // Adjust indices
+            var newIndices = new Dictionary<AssetKey, GeometryBufferPair>();
+            foreach (var (key, pair) in cooked.BufferIndices)
+            {
+                // The pair indices are 1-based relative to the new batch (0 is reserved).
+                // We stripped the reserved entry, so index 1 becomes baseIndex.
+                // Global = Base + Local - 1
+                newIndices[key] = new GeometryBufferPair(
+                    VertexBufferIndex: baseIndex + pair.VertexBufferIndex - 1,
+                    IndexBufferIndex: baseIndex + pair.IndexBufferIndex - 1);
+            }
+
+            // Combine data
+            var combinedTable = new byte[existingTable.Length + patchedTable.Length];
+            existingTable.CopyTo(combinedTable, 0);
+            patchedTable.CopyTo(combinedTable, existingTable.Length);
+
+            var combinedData = new byte[existingData.Length + padding + cooked.BuffersDataBytes.Length];
+            existingData.CopyTo(combinedData, 0);
+            // Padding is zero-init
+            cooked.BuffersDataBytes.CopyTo(combinedData.AsMemory(existingData.Length + padding));
+
+            cooked = new CookedBuffersResult(combinedTable, combinedData, newIndices);
+        }
+
         await WriteBuffersAsync(cooked).ConfigureAwait(false);
         await WriteGeometryDescriptorsAsync(cooked).ConfigureAwait(false);
 
@@ -200,13 +299,6 @@ public sealed class LooseCookedBuildService
 
         async Task WriteBuffersAsync(CookedBuffersResult cooked)
         {
-            // Write resources/buffers.*
-            const string buffersTableRel = "resources/buffers.table";
-            const string buffersDataRel = "resources/buffers.data";
-
-            var tablePath = $".cooked/{mountPoint}/{buffersTableRel}";
-            var dataPath = $".cooked/{mountPoint}/{buffersDataRel}";
-
             await files.WriteAllBytesAsync(tablePath, cooked.BuffersTableBytes, cancellationToken).ConfigureAwait(false);
             await files.WriteAllBytesAsync(dataPath, cooked.BuffersDataBytes, cancellationToken).ConfigureAwait(false);
 
@@ -226,8 +318,8 @@ public sealed class LooseCookedBuildService
                     continue;
                 }
 
-                var descriptorRelativePath = GetDescriptorRelativePath(asset.VirtualPath, mountPoint);
-                var cookedDescriptorPath = ".cooked/" + mountPoint + "/" + descriptorRelativePath;
+                var descriptorRelativePath = asset.VirtualPath.TrimStart('/');
+                var cookedDescriptorPath = AssetPipelineConstants.CookedFolderName + "/" + descriptorRelativePath;
 
                 byte[] ogBytes;
                 var ms = new MemoryStream();
@@ -261,21 +353,6 @@ public sealed class LooseCookedBuildService
         return slash < 0
             ? throw new InvalidDataException($"VirtualPath must include mount point and file path: '{virtualPath}'.")
             : virtualPath[1..slash];
-    }
-
-    private static string GetDescriptorRelativePath(string virtualPath, string mountPoint)
-    {
-        // /Content/Materials/Wood.omat => Materials/Wood.omat
-        var prefix = "/" + mountPoint + "/";
-        if (!virtualPath.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            throw new InvalidDataException($"VirtualPath '{virtualPath}' does not belong to mount point '{mountPoint}'.");
-        }
-
-        var relative = virtualPath[prefix.Length..];
-        return string.IsNullOrWhiteSpace(relative)
-            ? throw new InvalidDataException($"VirtualPath '{virtualPath}' does not include a descriptor path.")
-            : relative;
     }
 
     private static byte MapAssetType(string assetType)

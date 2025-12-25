@@ -4,6 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Assets.Catalog;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
@@ -296,12 +297,6 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    ///     Extracts mesh type from a geometry URI.
-    /// </summary>
-    private static string? ExtractMeshTypeFromUri(string? uri)
-        => string.IsNullOrEmpty(uri) ? null : uri.Split('/', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
-
     private Oxygen.Interop.World.OxygenWorld? TryGetWorld()
     {
         try
@@ -451,16 +446,14 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
     /// </summary>
     private void ApplyGeometry(Oxygen.Interop.World.OxygenWorld world, SceneNode node, GeometryComponent geometry)
     {
-        // FIXME: if the asset reference is null, the geometry component should be removed from the node in the engine.
-        if (geometry.Geometry is null)
+        if (geometry.Geometry?.Uri != null)
         {
-            return;
+            var enginePath = AssetUriHelper.GetEnginePath(geometry.Geometry.Uri);
+            world.SetGeometry(node.Id, enginePath);
         }
-
-        var meshType = ExtractMeshTypeFromUri(geometry.Geometry.Uri?.ToString());
-        if (!string.IsNullOrEmpty(meshType))
+        else
         {
-            world.CreateBasicMesh(node.Id, meshType);
+            world.DetachGeometry(node.Id);
         }
     }
 

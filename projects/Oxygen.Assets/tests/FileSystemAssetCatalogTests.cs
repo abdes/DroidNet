@@ -35,15 +35,15 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", Authority = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
             events);
 
         // Act
         var results = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/Wood01.png"));
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Meshes/Hero.geo"));
+        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood01.png"));
+        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Meshes/Hero.geo"));
     }
 
     [TestMethod]
@@ -61,20 +61,20 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", Authority = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
             events);
 
         var scope = new AssetQueryScope(
-            Roots: [new Uri("asset://Content/Textures/")],
+            Roots: [new Uri("asset:///Content/Textures/")],
             Traversal: AssetQueryTraversal.Descendants);
 
         // Act
         var results = await catalog.QueryAsync(new AssetQuery(scope), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/Wood01.png"));
-        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/UI/Button.png"));
-        _ = results.Select(r => r.Uri).Should().NotContain(new Uri("asset://Content/Meshes/Hero.geo"));
+        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood01.png"));
+        _ = results.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/UI/Button.png"));
+        _ = results.Select(r => r.Uri).Should().NotContain(new Uri("asset:///Content/Meshes/Hero.geo"));
     }
 
     [TestMethod]
@@ -89,7 +89,7 @@ public sealed class FileSystemAssetCatalogTests
         using var events = new ManualEventSource();
         using var catalog = new FileSystemAssetCatalog(
             storage,
-            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", Authority = "Content" },
+            new FileSystemAssetCatalogOptions { RootFolderPath = @"C:\Project\Content", MountPoint = "Content" },
             events);
 
         // Prime snapshot
@@ -110,13 +110,13 @@ public sealed class FileSystemAssetCatalogTests
         // Assert
         _ = received.Should().ContainSingle(c => c.Kind == AssetChangeKind.Relocated);
         _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).PreviousUri
-            .Should().Be(new Uri("asset://Content/Textures/Wood01.png"));
+            .Should().Be(new Uri("asset:///Content/Textures/Wood01.png"));
         _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).Uri
-            .Should().Be(new Uri("asset://Content/Textures/Wood02.png"));
+            .Should().Be(new Uri("asset:///Content/Textures/Wood02.png"));
 
         var snapshot = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = snapshot.Select(r => r.Uri).Should().Contain(new Uri("asset://Content/Textures/Wood02.png"));
-        _ = snapshot.Select(r => r.Uri).Should().NotContain(new Uri("asset://Content/Textures/Wood01.png"));
+        _ = snapshot.Select(r => r.Uri).Should().Contain(new Uri("asset:///Content/Textures/Wood02.png"));
+        _ = snapshot.Select(r => r.Uri).Should().NotContain(new Uri("asset:///Content/Textures/Wood01.png"));
     }
 
     private sealed class ManualEventSource : IFileSystemCatalogEventSource

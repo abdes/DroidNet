@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Assets.Model;
+using Oxygen.Core;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.World.Slots;
@@ -17,7 +18,7 @@ namespace Oxygen.Editor.World.Slots;
 /// </remarks>
 public partial class MaterialsSlot : OverrideSlot
 {
-    private AssetReference<MaterialAsset> material = new("asset:///__uninitialized__");
+    private AssetReference<MaterialAsset> material = new($"{AssetUris.Scheme}:///__uninitialized__");
 
     static MaterialsSlot()
     {
