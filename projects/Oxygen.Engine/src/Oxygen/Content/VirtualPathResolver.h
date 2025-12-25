@@ -66,6 +66,9 @@ public:
   */
   OXGN_CNTT_API auto AddPakFile(const std::filesystem::path& pak_path) -> void;
 
+  //! Clear all mounted roots and pak files.
+  OXGN_CNTT_API auto ClearMounts() -> void;
+
   //! Resolve a virtual path to an AssetKey.
   /*!
    The first mounted root (in registration order) that contains the virtual

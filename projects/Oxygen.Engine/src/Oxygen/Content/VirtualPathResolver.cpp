@@ -92,7 +92,9 @@ auto VirtualPathResolver::AddLooseCookedRoot(
     = std::filesystem::weakly_canonical(cooked_root);
   const auto index_path = normalized / "container.index.bin";
 
+  DLOG_F(INFO, "VirtualPathResolver: loading index from {}", index_path.string());
   auto index = internal::LooseCookedIndex::LoadFromFile(index_path);
+  DLOG_F(INFO, "VirtualPathResolver: loaded index with {} assets", index.GetAllAssetKeys().size());
 
   impl_->mounts.emplace_back(Impl::LooseCookedMount {
     .root = std::move(normalized),
@@ -112,6 +114,11 @@ auto VirtualPathResolver::AddPakFile(const std::filesystem::path& pak_path)
     .pak_path = normalized,
     .pak = std::move(pak),
   });
+}
+
+auto VirtualPathResolver::ClearMounts() -> void
+{
+  impl_->mounts.clear();
 }
 
 auto VirtualPathResolver::ResolveAssetKey(

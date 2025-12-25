@@ -16,7 +16,6 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
@@ -43,6 +42,9 @@ public:
 
   OXGN_CNTT_API auto AddLooseCookedRoot(const std::filesystem::path& path)
     -> void;
+
+  //! Clear all mounted roots and pak files.
+  OXGN_CNTT_API auto ClearMounts() -> void;
 
   //=== Dependency Management ===---------------------------------------------//
 
@@ -203,9 +205,7 @@ public:
     auto pak_index = GetPakIndex(pak_file);
     auto resource_type_index
       = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
-    auto key = internal::InternalResourceKey(
-      pak_index, resource_type_index, resource_index);
-    return key.GetRawKey();
+    return PackResourceKey(pak_index, resource_type_index, resource_index);
   }
 
   //! Create a resource key for the current source and resource index.
@@ -225,9 +225,7 @@ public:
     const auto source_index = GetCurrentSourceId();
     auto resource_type_index
       = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
-    auto key = internal::InternalResourceKey(
-      source_index, resource_type_index, resource_index);
-    return key.GetRawKey();
+    return PackResourceKey(source_index, resource_type_index, resource_index);
   }
 
   //! Load or get cached resource from a specific PAK file and resource index
@@ -344,7 +342,7 @@ public:
    not already cached.
 
    The unload function is invoked when the asset or resource is evicted from the
-   cache (i.e. no longer used directly or as a dependency).
+   cache (i.e. not longer used directly or as a dependency).
 
    The target type (specific asset or resource) is automatically deduced from
    the load function's return type. The unload function must satisfy the
@@ -497,6 +495,11 @@ private:
   struct ReleaseVisitGuard;
 
   OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
+
+  // Private helper to pack resource key without exposing internal type in the
+  // public header. Implemented in the .cpp which includes InternalResourceKey.
+  OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
+    uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey;
 
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).

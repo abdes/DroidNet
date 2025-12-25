@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
