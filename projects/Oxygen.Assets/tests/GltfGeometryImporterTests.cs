@@ -28,7 +28,7 @@ public sealed class GltfGeometryImporterTests
         files.AddBytes(sourcePath, CreateBoxWithMaterialGlb());
 
         var registry = new ImporterRegistry();
-        registry.Register(new GltfGeometryImporter());
+        registry.Register(new GltfImporter());
 
         var import = new ImportService(
             registry,
@@ -71,7 +71,7 @@ public sealed class GltfGeometryImporterTests
         files.AddBytes(sourcePath, CreateTriangleGlb());
 
         var registry = new ImporterRegistry();
-        registry.Register(new GltfGeometryImporter());
+        registry.Register(new GltfImporter());
 
         var import = new ImportService(
             registry,
@@ -104,7 +104,7 @@ public sealed class GltfGeometryImporterTests
         files.AddBytes(bufferPath, CreateTriangleBin());
 
         var registry = new ImporterRegistry();
-        registry.Register(new GltfGeometryImporter());
+        registry.Register(new GltfImporter());
 
         var import = new ImportService(
             registry,
@@ -134,7 +134,7 @@ public sealed class GltfGeometryImporterTests
         files.AddBytes(sourcePath, CreateBoxWithMaterialGlb());
 
         var registry = new ImporterRegistry();
-        registry.Register(new GltfGeometryImporter());
+        registry.Register(new GltfImporter());
 
         var import = new ImportService(
             registry,
