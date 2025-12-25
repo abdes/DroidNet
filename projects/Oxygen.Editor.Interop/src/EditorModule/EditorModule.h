@@ -7,9 +7,11 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <atomic>
 #include <chrono>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -27,6 +29,11 @@ namespace oxygen {
   namespace scene {
     class Scene;
   } // namespace scene
+
+  namespace content {
+    class AssetLoader;
+    class VirtualPathResolver;
+  }
 
   // AsyncEngine lives in the root oxygen namespace
   class AsyncEngine;
@@ -147,6 +154,12 @@ namespace oxygen::interop::module {
     //! Set the camera view preset for a specific view.
     void SetViewCameraPreset(ViewId view_id, CameraViewPreset preset);
 
+    //! Adds a loose cooked root to the virtual path resolver.
+    void AddLooseCookedRoot(std::string_view path);
+
+    //! Clears all mounted roots in the virtual path resolver.
+    void ClearCookedRoots();
+
   private:
     struct SubscriptionToken;
 
@@ -170,6 +183,13 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::AsyncEngine> engine_{};
 
     std::shared_ptr<oxygen::scene::Scene> scene_;
+    std::unique_ptr<oxygen::content::AssetLoader> asset_loader_;
+    std::unique_ptr<oxygen::content::VirtualPathResolver> path_resolver_;
+
+    // Roots management for thread-safe AssetLoader initialization
+    std::mutex roots_mutex_;
+    std::vector<std::string> mounted_roots_;
+    std::atomic<bool> roots_dirty_{ false };
 
     std::chrono::steady_clock::time_point last_frame_time_{};
 

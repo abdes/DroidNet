@@ -65,6 +65,9 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/VirtualPathResolver.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/EditorInterface/Api.h>
 #include <Oxygen/Engine/AsyncEngine.h>

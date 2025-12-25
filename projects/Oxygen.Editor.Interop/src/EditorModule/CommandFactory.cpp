@@ -23,7 +23,7 @@
 
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include <Commands/CreateBasicMeshCommand.h>
+#include <Commands/SetGeometryCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
 #include <Commands/RemoveSceneNodeCommand.h>
@@ -66,10 +66,10 @@ namespace Oxygen::Interop::World {
     return new SetLocalTransformCommand(handle, position, rotation, scale);
   }
 
-  CreateBasicMeshCommand*
-    CommandFactory::CreateBasicMesh(oxygen::scene::NodeHandle handle,
-      std::string meshType) {
-    return new CreateBasicMeshCommand(handle, meshType);
+  SetGeometryCommand*
+    CommandFactory::CreateSetGeometry(oxygen::scene::NodeHandle handle,
+      std::string assetUri) {
+    return new SetGeometryCommand(handle, assetUri);
   }
 
   DetachGeometryCommand*

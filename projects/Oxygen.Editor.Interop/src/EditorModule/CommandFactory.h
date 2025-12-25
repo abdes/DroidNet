@@ -23,7 +23,7 @@ class CreateSceneNodeCommand;
 class RemoveSceneNodeCommand;
 class RenameSceneNodeCommand;
 class SetLocalTransformCommand;
-class CreateBasicMeshCommand;
+class SetGeometryCommand;
 class SetVisibilityCommand;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
@@ -55,8 +55,8 @@ namespace Oxygen::Interop::World {
       CreateSetLocalTransform(oxygen::scene::NodeHandle handle, glm::vec3 position,
         glm::quat rotation, glm::vec3 scale);
 
-    virtual oxygen::interop::module::CreateBasicMeshCommand*
-      CreateBasicMesh(oxygen::scene::NodeHandle handle, std::string meshType);
+    virtual oxygen::interop::module::SetGeometryCommand*
+      CreateSetGeometry(oxygen::scene::NodeHandle handle, std::string assetUri);
 
     virtual oxygen::interop::module::DetachGeometryCommand*
       CreateDetachGeometry(oxygen::scene::NodeHandle handle);

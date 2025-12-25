@@ -14,9 +14,6 @@
     <ClCompile Include="AssemblyInfo.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Commands\CreateBasicMeshCommand.cpp">
-      <CompileAsManaged>false</CompileAsManaged>
-    </ClCompile>
     <ClCompile Include="Commands\CreateSceneCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
@@ -24,6 +21,9 @@
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="Commands\HideViewCommand.cpp">
+      <CompileAsManaged>false</CompileAsManaged>
+    </ClCompile>
+    <ClCompile Include="Commands\SetGeometryCommand.cpp">
       <CompileAsManaged>false</CompileAsManaged>
     </ClCompile>
     <ClCompile Include="Commands\SetViewCameraPresetCommand.cpp">
@@ -140,6 +140,7 @@
     <ClInclude Include="Commands\DestroySceneCommand.h" />
     <ClInclude Include="Commands\DetachGeometryCommand.h" />
     <ClInclude Include="Commands\HideViewCommand.h" />
+    <ClInclude Include="Commands\SetGeometryCommand.h" />
     <ClInclude Include="Commands\SetViewCameraPresetCommand.h" />
     <ClInclude Include="Commands\CreateSceneNodeCommand.h" />
     <ClInclude Include="Commands\RemoveSceneNodeCommand.h" />
@@ -276,7 +277,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Content-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -293,7 +294,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Content.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\lib\Oxygen.Renderer.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen\Engine\out\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

@@ -25,7 +25,6 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
-#include <Commands/CreateBasicMeshCommand.h>
 #include <Commands/CreateSceneNodeCommand.h>
 #include <Commands/DetachGeometryCommand.h>
 #include <Commands/RemoveSceneNodeCommand.h>
@@ -33,6 +32,7 @@
 #include <Commands/RenameSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodeCommand.h>
 #include <Commands/ReparentSceneNodesCommand.h>
+#include <Commands/SetGeometryCommand.h>
 #include <Commands/SetLocalTransformCommand.h>
 #include <Commands/SetVisibilityCommand.h>
 #include <Commands/UpdateTransformsForNodesCommand.h>
@@ -347,7 +347,7 @@ namespace Oxygen::Interop::World {
     editor_module->get().Enqueue(std::move(cmd));
   }
 
-  void OxygenWorld::CreateBasicMesh(System::Guid nodeId, String^ meshType) {
+  void OxygenWorld::SetGeometry(System::Guid nodeId, String^ assetUri) {
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine)
       return;
@@ -366,9 +366,9 @@ namespace Oxygen::Interop::World {
       return;
 
     const auto& handle = opt.value();
-    auto native_mesh_type = msclr::interop::marshal_as<std::string>(meshType);
-    auto cmd = std::unique_ptr<CreateBasicMeshCommand>(
-      commandFactory_->CreateBasicMesh(handle, native_mesh_type));
+    auto native_asset_uri = msclr::interop::marshal_as<std::string>(assetUri);
+    auto cmd = std::unique_ptr<SetGeometryCommand>(
+      commandFactory_->CreateSetGeometry(handle, native_asset_uri));
     editor_module->get().Enqueue(std::move(cmd));
   }
 
@@ -540,6 +540,32 @@ namespace Oxygen::Interop::World {
 
   void OxygenWorld::DeselectNode(System::Guid nodeId) {
     // TODO: implement selection state handling (editor-side)
+  }
+
+  void OxygenWorld::AddLooseCookedRoot(String^ path) {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    msclr::interop::marshal_context marshal;
+    auto native_path = marshal.marshal_as<std::string>(path);
+    editor_module->get().AddLooseCookedRoot(native_path);
+  }
+
+  void OxygenWorld::ClearCookedRoots() {
+    auto native_ctx = context_->NativePtr();
+    if (!native_ctx || !native_ctx->engine)
+      return;
+
+    auto editor_module = native_ctx->engine->GetModule<EditorModule>();
+    if (!editor_module)
+      return;
+
+    editor_module->get().ClearCookedRoots();
   }
 
 } // namespace Oxygen::Interop::World

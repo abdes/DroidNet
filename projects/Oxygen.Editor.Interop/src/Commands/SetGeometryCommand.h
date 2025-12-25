@@ -17,18 +17,18 @@
 
 namespace oxygen::interop::module {
 
-  class CreateBasicMeshCommand : public EditorCommand {
+  class SetGeometryCommand : public EditorCommand {
   public:
-    CreateBasicMeshCommand(oxygen::scene::NodeHandle node, std::string meshType)
+    SetGeometryCommand(oxygen::scene::NodeHandle node, std::string assetUri)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation), node_(node),
-      meshType_(std::move(meshType)) {
+      assetUri_(std::move(assetUri)) {
     }
 
     void Execute(CommandContext& context) override;
 
   private:
     oxygen::scene::NodeHandle node_;
-    std::string meshType_;
+    std::string assetUri_;
   };
 
 } // namespace oxygen::interop::module
