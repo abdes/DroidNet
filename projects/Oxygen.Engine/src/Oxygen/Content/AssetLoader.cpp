@@ -13,6 +13,7 @@
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Internal/ContentSource.h>
+#include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
@@ -27,6 +28,17 @@ using oxygen::content::PakFile;
 using oxygen::content::PakResource;
 
 namespace oxygen::content {
+
+// Implement the private helper declared in the header to avoid exposing the
+// internal header in the public API.
+auto AssetLoader::PackResourceKey(uint16_t pak_index,
+  uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey
+{
+  internal::InternalResourceKey key(pak_index, resource_type_index,
+    resource_index);
+  return key.GetRawKey();
+}
+
 struct AssetLoader::Impl final {
   std::vector<std::unique_ptr<internal::IContentSource>> sources;
 
@@ -157,6 +169,15 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
   LOG_F(INFO, "Mounted loose cooked content source: id={} root={}", source_id,
     normalized.string());
+}
+
+auto AssetLoader::ClearMounts() -> void
+{
+  impl_->sources.clear();
+  impl_->source_ids.clear();
+  impl_->source_id_to_index.clear();
+  impl_->next_loose_source_id = kLooseCookedSourceIdBase;
+  impl_->pak_paths.clear();
 }
 
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
