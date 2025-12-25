@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Errors.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
@@ -114,6 +115,9 @@ auto EnsureBufferAndSrv(Graphics& gfx,
   // Note: ResourceRegistry.Replace() handles resource swapping atomically and
   // preserves bindless indices as required for the resize use case.
   try {
+    // Ensure the old buffer is kept alive until the GPU is done with it.
+    gfx.GetDeferredReclaimer().RegisterDeferredRelease(buffer);
+
     registry.Replace(
       *buffer, new_buffer, [&](const graphics::BufferViewDescription&) {
         return std::optional<graphics::BufferViewDescription>(view_desc);
