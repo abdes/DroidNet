@@ -11,19 +11,24 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <shared_mutex>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include <glm/vec2.hpp>
+
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewResolver.h>
+#include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Renderer/PreparedSceneFrame.h>
 #include <Oxygen/Renderer/RenderContext.h>
@@ -46,8 +51,13 @@ class Buffer;
 class CommandRecorder;
 } // namespace oxygen::graphics
 
+namespace oxygen::content {
+  class AssetLoader;
+}
+
 namespace oxygen::data {
 class Mesh;
+class MaterialAsset;
 } // namespace oxygen::data
 
 namespace oxygen::engine {
@@ -65,6 +75,14 @@ namespace sceneprep {
   class ScenePrepState;
   class ScenePrepPipeline;
 } // namespace sceneprep
+
+} // namespace oxygen::engine
+
+namespace oxygen::renderer::resources {
+class TextureBinder;
+} // namespace oxygen::renderer::resources
+
+namespace oxygen::engine {
 
 struct MaterialConstants;
 
@@ -114,6 +132,8 @@ public:
     // Note: PreRender work is performed via OnPreRender; Render work is in
     // kRender. Renderer participates in both via its module hooks.
   }
+
+  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
 
   OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
 
@@ -170,6 +190,46 @@ public:
 
   //! Returns the Graphics system used by this renderer.
   OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<Graphics>;
+
+  //! Override a texture resource with raw RGBA8 pixels.
+  /*!
+   This is a synchronous helper primarily intended for examples and tooling.
+   It keeps shader-visible indices stable by repointing the underlying SRV.
+
+    TODO: This is demo/tooling-only. For production workflows, prefer an
+    authoring pipeline that produces texture assets (or a dedicated runtime
+    streaming system) rather than mutating texture bindings through Renderer.
+
+   @param resource_index Logical texture id referenced by materials.
+   @param width Texture width in pixels.
+   @param height Texture height in pixels.
+   @param rgba8_bytes RGBA8 pixel data (width*height*4 bytes).
+   @param debug_name Friendly name for GPU/debug logging.
+   @return true on success; false otherwise.
+  */
+  OXGN_RNDR_API auto OverrideTexture2DRgba8(
+    data::pak::v1::ResourceIndexT resource_index, std::uint32_t width,
+    std::uint32_t height, std::span<const std::byte> rgba8_bytes,
+    std::string_view debug_name) -> bool;
+
+  //! Override a material's UV transform used by the shader.
+  /*!
+   This is intended for editor and runtime authoring workflows. It updates the
+   shader-visible constants for an already-registered material without
+   rebuilding geometry.
+
+    TODO: Replace this per-material override with a MaterialInstance-based API
+    so per-object overrides do not require cloning MaterialAsset instances and
+    do not affect other objects sharing the same material.
+
+   @param material The material instance to update.
+   @param uv_scale UV scale (tiling). Components must be finite and > 0.
+   @param uv_offset UV offset. Components must be finite.
+   @return true if the material was found and updated; false otherwise.
+  */
+  OXGN_RNDR_API auto OverrideMaterialUvTransform(
+    const data::MaterialAsset& material, glm::vec2 uv_scale,
+    glm::vec2 uv_offset) -> bool;
 
 private:
   //! Build frame data for a specific view (scene prep, culling, draw list).
@@ -237,6 +297,10 @@ private:
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
   std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
+
+  // Texture binding coordinator: manages texture SRV allocation and loading
+  std::unique_ptr<renderer::resources::TextureBinder> texture_binder_;
+  observer_ptr<content::AssetLoader> asset_loader_;
 
   // View resolver and render graph registration (per-view API). Access is
   // coordinated through a shared mutex so registration can occur from UI or

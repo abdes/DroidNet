@@ -21,6 +21,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/Resources/GeometryUploader.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
+#include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Resources/TransformUploader.h>
 #include <Oxygen/Renderer/ScenePrep/Extractors.h>
 #include <Oxygen/Renderer/ScenePrep/RenderItemProto.h>
@@ -68,6 +69,10 @@ using oxygen::scene::SceneNodeFlags;
 
 using namespace oxygen::engine::sceneprep::testing;
 
+namespace oxygen::content {
+class AssetLoader;
+}
+
 namespace {
 
 class EmitPerVisibleSubmeshTest : public ScenePrepTestFixture {
@@ -101,13 +106,24 @@ protected:
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { inline_transfers_.get() });
+    texture_binder_ = std::make_unique<oxygen::renderer::resources::TextureBinder>(
+      observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { staging_provider_.get() },
+      observer_ptr<oxygen::content::AssetLoader> {});
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-        observer_ptr { staging_provider_.get() });
+        observer_ptr { staging_provider_.get() },
+        observer_ptr { texture_binder_.get() });
 
     return std::make_unique<ScenePrepState>(std::move(geom_uploader),
       std::move(transform_uploader), std::move(material_binder));
+  }
+
+  auto TearDown() -> void override
+  {
+    ScenePrepTestFixture::TearDown();
+    texture_binder_.reset();
   }
 
   // Keep auxiliary objects as protected members so they outlive the returned
@@ -117,6 +133,7 @@ protected:
   std::shared_ptr<StagingProvider> staging_provider_;
   std::unique_ptr<oxygen::engine::upload::InlineTransfersCoordinator>
     inline_transfers_;
+  std::unique_ptr<oxygen::renderer::resources::TextureBinder> texture_binder_;
 };
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)

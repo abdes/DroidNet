@@ -87,6 +87,8 @@ set(
   "Resources/GeometryUploader.h"
   "Resources/MaterialBinder.cpp"
   "Resources/MaterialBinder.h"
+  "Resources/TextureBinder.cpp"
+  "Resources/TextureBinder.h"
   "Resources/TransformUploader.cpp"
   "Resources/TransformUploader.h"
   "ScenePrep/Concepts.h"

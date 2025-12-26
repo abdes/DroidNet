@@ -61,6 +61,8 @@ struct MaterialConstants {
     uint roughness_texture_index;
     uint ambient_occlusion_texture_index;
     uint flags;                             // Material flags
+    float2 uv_scale;                        // UV scale (tiling)
+    float2 uv_offset;                       // UV offset
     uint _pad0;                             // Padding for alignment
     uint _pad1;                             // Padding for alignment
 };
@@ -104,6 +106,7 @@ cbuffer DrawIndexConstant : register(b2) {
 struct VSOutput {
     float4 position : SV_POSITION;
     float3 color : COLOR;
+    float2 uv : TEXCOORD0;
     float3 world_normal : NORMAL;
 };
 
@@ -190,6 +193,7 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     float4 proj_pos = mul(projection_matrix, view_pos);
     output.position = proj_pos;
     output.color = vertex.color.rgb;
+    output.uv = vertex.texcoord;
     output.world_normal = n_ws;
     return output;
 }
@@ -225,6 +229,16 @@ float4 PS(VSOutput input) : SV_Target0 {
         MaterialConstants mat = materials[meta.material_handle];
         base_rgb = mat.base_color.rgb;
         base_a   = mat.base_color.a;
+
+        const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
+
+        if (mat.base_color_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            float4 texel = base_tex.Sample(samp, uv);
+            base_rgb *= texel.rgb;
+            base_a   *= texel.a;
+        }
     }
 
     float3 shaded = input.color * base_rgb * lighting * light_color;

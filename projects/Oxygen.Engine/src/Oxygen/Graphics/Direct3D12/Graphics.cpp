@@ -11,6 +11,7 @@
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
@@ -123,6 +124,34 @@ protected:
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
       allocator_->Reserve(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
+
+      // Ensure a default sampler exists for bindless texture sampling.
+      // The current shaders use SamplerDescriptorHeap[0].
+      if (!default_sampler_.IsValid()) {
+        default_sampler_ = allocator_->Allocate(ResourceViewType::kSampler,
+          DescriptorVisibility::kShaderVisible);
+        if (default_sampler_.IsValid()) {
+          D3D12_SAMPLER_DESC sampler_desc {};
+          sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+          sampler_desc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+          sampler_desc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+          sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+          sampler_desc.MipLODBias = 0.0f;
+          sampler_desc.MaxAnisotropy = 1;
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+          sampler_desc.BorderColor[0] = 0.0f;
+          sampler_desc.BorderColor[1] = 0.0f;
+          sampler_desc.BorderColor[2] = 0.0f;
+          sampler_desc.BorderColor[3] = 0.0f;
+          sampler_desc.MinLOD = 0.0f;
+          sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
+
+          device->CreateSampler(&sampler_desc,
+            allocator_->GetCpuHandle(default_sampler_));
+          DLOG_F(2, "Default sampler created at bindless index {}",
+            default_sampler_.GetBindlessHandle().get());
+        }
+      }
     } catch (const std::exception& ex) {
       LOG_F(WARNING, "Failed to eagerly create shader-visible heaps: {}",
         ex.what());
@@ -131,6 +160,7 @@ protected:
 
 private:
   std::unique_ptr<oxygen::graphics::d3d12::DescriptorAllocator> allocator_ {};
+  oxygen::graphics::DescriptorHandle default_sampler_ {};
 };
 
 } // namespace

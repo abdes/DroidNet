@@ -8,9 +8,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <utility>
 
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/Upload/Types.h>
+#include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen::engine::upload {
 
@@ -21,14 +23,13 @@ struct UploadPolicy {
       = 64ULL * 1024ULL * 1024ULL; // 64 MB
   };
   struct AlignmentPolicy {
-    // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT / Vulkan row pitch alignment (bytes)
-    static constexpr Alignment kRowPitchAlignment { 256U };
+    // D3D12_TEXTURE_DATA_PITCH_ALIGNMENT / typical Vulkan row pitch (bytes)
+    Alignment row_pitch_alignment { 256U };
     // D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT (bytes)
-    static constexpr Alignment kPlacementAlignment { 512U };
+    Alignment placement_alignment { 512U };
     // Relaxed buffer copy alignment, although NVIDIA recommends 16 (bytes) for
     // best performance.
-    // TODO: optimize this when data structures are finalized
-    static constexpr Alignment kBufferCopyAlignment { 4U };
+    Alignment buffer_copy_alignment { 4U };
   };
   struct Limits {
     static constexpr uint64_t kSmallArenaBlockMin = 64ULL * 1024ULL; // 64 KB
@@ -42,14 +43,18 @@ struct UploadPolicy {
     bool enable_default_fill = true;
     std::byte filler_value { std::byte { 0 } };
   } filler;
+
+  AlignmentPolicy alignment;
   // Queue key to use for upload command recording/signaling. This value is
   // required and must be provided by the caller (for example Renderer via
   // RendererConfig). Do not default-initialize this field.
   oxygen::graphics::QueueKey upload_queue_key;
 
   // Construct an UploadPolicy with a required upload queue key.
-  explicit UploadPolicy(oxygen::graphics::QueueKey qkey) noexcept
-    : upload_queue_key(std::move(qkey))
+  explicit UploadPolicy(oxygen::graphics::QueueKey qkey,
+    AlignmentPolicy alignment_policy = AlignmentPolicy {}) noexcept
+    : alignment(std::move(alignment_policy))
+    , upload_queue_key(std::move(qkey))
   {
   }
   UploadPolicy() = delete;

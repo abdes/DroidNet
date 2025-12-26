@@ -45,6 +45,7 @@ namespace oxygen::engine::upload {
 struct TextureUploadPlan {
   uint64_t total_bytes { 0 };
   std::vector<oxygen::graphics::TextureUploadRegion> regions;
+  std::vector<std::size_t> source_indices;
 };
 
 //! Upload item mapping a region to the original requests it covers.

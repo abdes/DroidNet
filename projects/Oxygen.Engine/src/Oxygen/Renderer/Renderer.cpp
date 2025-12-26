@@ -13,6 +13,7 @@
 #include <shared_mutex>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
@@ -36,6 +37,8 @@
 #include <Oxygen/Renderer/RenderContextPool.h>
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/Resources/TextureBinder.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
@@ -46,6 +49,7 @@
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -117,9 +121,14 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
       observer_ptr { gfx.get() },
       observer_ptr { inline_staging_provider_.get() },
       observer_ptr { inline_transfers_.get() });
+  auto texture_binder = std::make_unique<renderer::resources::TextureBinder>(
+    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+    observer_ptr { upload_staging_provider_.get() },
+    observer_ptr<content::AssetLoader> { nullptr });
   auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
     observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { upload_staging_provider_.get() });
+    observer_ptr { upload_staging_provider_.get() },
+    observer_ptr { texture_binder.get() });
   auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
     observer_ptr { gfx.get() }, observer_ptr { inline_staging_provider_.get() },
     observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() },
@@ -128,6 +137,7 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
   scene_prep_state_
     = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
       std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
+  texture_binder_ = std::move(texture_binder);
 
   // Initialize scene constants manager for per-view, per-slot Upload heap
   // buffers
@@ -150,6 +160,22 @@ Renderer::~Renderer()
   inline_staging_provider_.reset();
 }
 
+auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
+{
+  DCHECK_NOTNULL_F(engine);
+
+  asset_loader_ = engine->GetAssetLoader();
+  if (!asset_loader_) {
+    LOG_F(WARNING,
+      "AssetLoader disabled; renderer will stay in placeholder texture mode");
+  }
+
+  if (texture_binder_) {
+    texture_binder_->SetAssetLoader(asset_loader_);
+  }
+  return true;
+}
+
 auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
 {
   auto graphics_ptr = gfx_weak_.lock();
@@ -157,6 +183,38 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
     throw std::runtime_error("Graphics expired in Renderer::GetGraphics");
   }
   return graphics_ptr;
+}
+
+auto Renderer::OverrideTexture2DRgba8(
+  data::pak::v1::ResourceIndexT resource_index, const std::uint32_t width,
+  const std::uint32_t height, const std::span<const std::byte> rgba8_bytes,
+  const std::string_view debug_name) -> bool
+{
+  if (!texture_binder_) {
+    return false;
+  }
+
+  std::string name;
+  name.assign(debug_name.begin(), debug_name.end());
+  const char* name_cstr = name.empty() ? "Renderer.OverrideTexture2D" : name.c_str();
+
+  return texture_binder_->OverrideTexture2DRgba8(
+    resource_index, width, height, rgba8_bytes, name_cstr);
+}
+
+auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
+  const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
+{
+  if (!scene_prep_state_) {
+    return false;
+  }
+
+  const auto materials = scene_prep_state_->GetMaterialBinder();
+  if (!materials) {
+    return false;
+  }
+
+  return materials->OverrideUvTransform(material, uv_scale, uv_offset);
 }
 
 auto Renderer::RegisterView(
@@ -424,6 +482,7 @@ auto Renderer::OnFrameEnd(FrameContext& /*context*/) -> void
 {
   LOG_SCOPE_FUNCTION(2);
 
+  texture_binder_->OnFrameEnd();
   DrainPendingViewCleanup("OnFrameEnd");
 }
 
@@ -753,6 +812,7 @@ auto Renderer::OnFrameStart(FrameContext& context) -> void
   inline_transfers_->OnFrameStart(tag, frame_slot);
   uploader_->OnFrameStart(tag, frame_slot);
   // then uploaders and scene constants manager
+  texture_binder_->OnFrameStart();
   scene_const_manager_->OnFrameStart(frame_slot);
   scene_prep_state_->GetTransformUploader()->OnFrameStart(
     tag, frame_sequence, frame_slot);
