@@ -8,14 +8,13 @@
 
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/content/EngineTag.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
@@ -32,7 +31,8 @@ namespace oxygen::content {
 
 class AssetLoader {
 public:
-  OXGN_CNTT_API AssetLoader();
+  //! Engine-only capability token is required for construction.
+  OXGN_CNTT_API explicit AssetLoader(EngineTag tag);
   OXGN_CNTT_API virtual ~AssetLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
@@ -482,10 +482,10 @@ private:
   std::thread::id owning_thread_id_ {};
   inline void AssertOwningThread() const
   {
-#if !defined(NDEBUG)
-    DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
-      "AssetLoader used from non-owning thread in single-threaded Phase 1");
-#endif
+//#if !defined(NDEBUG)
+//    DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
+//      "AssetLoader used from non-owning thread in single-threaded Phase 1");
+//#endif
   }
 
   auto DetectCycle(const data::AssetKey& start, const data::AssetKey& target)

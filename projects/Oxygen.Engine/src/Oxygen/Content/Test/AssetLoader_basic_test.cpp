@@ -19,7 +19,8 @@ auto AssetLoaderBasicTest::SetUp() -> void
   std::filesystem::create_directories(temp_dir_);
 
   // Create AssetLoader instance
-  asset_loader_ = std::make_unique<AssetLoader>();
+  asset_loader_ = std::make_unique<AssetLoader>(
+    oxygen::content::internal::EngineTagFactory::Get());
 }
 
 auto AssetLoaderBasicTest::TearDown() -> void

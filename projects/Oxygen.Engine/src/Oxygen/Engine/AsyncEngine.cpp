@@ -15,6 +15,8 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/content/EngineTag.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -29,6 +31,12 @@
 namespace oxygen::engine::internal {
 auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 } // namespace oxygen::engine::internal
+#endif
+
+#if !defined(OXYGEN_ENGINE_TESTING)
+namespace oxygen::content::internal {
+auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+} // namespace oxygen::content::internal
 #endif
 
 using namespace std::chrono;
@@ -190,6 +198,12 @@ auto AsyncEngine::SubscribeModuleAttached(
 auto AsyncEngine::GetEngineConfig() const noexcept -> const EngineConfig&
 {
   return config_;
+}
+
+auto AsyncEngine::GetAssetLoader() const noexcept
+  -> observer_ptr<content::AssetLoader>
+{
+  return observer_ptr { asset_loader_.get() };
 }
 
 auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
@@ -853,6 +867,14 @@ auto AsyncEngine::PhasePostParallel(FrameContext& context) -> co::Co<>
 auto AsyncEngine::InitializeDetachedServices() -> void
 {
   LOG_F(1, "Initializing detached services (Category D)");
+
+  if (config_.enable_asset_loader) {
+    const auto tag = oxygen::content::internal::EngineTagFactory::Get();
+    asset_loader_ = std::make_unique<content::AssetLoader>(tag);
+    LOG_F(1, "[D] AssetLoader initialized");
+  } else {
+    LOG_F(1, "[D] AssetLoader disabled by config");
+  }
 
   // TODO: Initialize crash dump detection service
   // Set up crash dump monitoring and symbolication service

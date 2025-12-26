@@ -5,15 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <iostream>
+#include <string>
+#include <exception>
+#include <filesystem>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/content/EngineTag.h>
 
 #include "DumpContext.h"
 #include "PakFileDumper.h"
 
-auto ParseCommandLine(int argc, const char* argv[]) -> DumpContext
+namespace oxygen::content::internal {
+
+auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+
+} // namespace oxygen::content::internal
+
+static auto ParseCommandLine(int argc, const char* argv[]) -> DumpContext
 {
   DumpContext ctx;
 
@@ -41,7 +51,7 @@ auto ParseCommandLine(int argc, const char* argv[]) -> DumpContext
   return ctx;
 }
 
-auto PrintUsage(const char* program_name) -> void
+static auto PrintUsage(const char* program_name) -> void
 {
   std::cout << "Usage: " << program_name << " <pakfile> [options]\n";
   std::cout << "\nOptions:\n";
@@ -94,9 +104,11 @@ auto main(int argc, char** argv) -> int
     return 1;
   }
 
+  using oxygen::content::internal::EngineTagFactory;
+
   try {
     PakFile pak(ctx.pak_path);
-    AssetLoader asset_loader;
+    AssetLoader asset_loader(EngineTagFactory::Get());
     asset_loader.AddPakFile(ctx.pak_path);
     PakFileDumper dumper(ctx);
     dumper.Dump(pak, asset_loader);

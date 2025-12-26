@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "DumpContext.h"
 
 namespace oxygen::content {

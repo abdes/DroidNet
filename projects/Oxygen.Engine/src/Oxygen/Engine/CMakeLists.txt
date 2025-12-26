@@ -89,6 +89,7 @@ target_link_libraries(
     oxygen::core
     oxygen::platform
     oxygen::graphics-common
+    oxygen::content
 )
 
 # ------------------------------------------------------------------------------

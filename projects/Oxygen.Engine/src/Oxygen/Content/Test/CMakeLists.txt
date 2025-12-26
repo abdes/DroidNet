@@ -37,6 +37,7 @@ m_gtest_program(
   SOURCES
     "AssetHeaderLoader_test.cpp"
     "AssetLoader_basic_test.cpp"
+    "EngineTagFactory_test_impl.cpp"
     "AssetLoader_deps_test.cpp"
     "AssetLoader_loading_test.cpp"
     "AssetLoader_test.h"
@@ -47,6 +48,11 @@ m_gtest_program(
     "TextureLoader_test.cpp"
     "VirtualPathResolver_test.cpp"
     "Utils/PakUtils.h"
+)
+target_compile_definitions(
+  Oxygen.Content.Loaders.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
 )
 
 # Ensure the Loaders tests run only after PakGen editable install so the

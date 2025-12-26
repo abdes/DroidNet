@@ -118,7 +118,7 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
 
 //=== Basic methods ==========================================================//
 
-AssetLoader::AssetLoader()
+AssetLoader::AssetLoader([[maybe_unused]] EngineTag tag)
   : impl_(std::make_unique<Impl>())
 {
   using serio::FileStream;

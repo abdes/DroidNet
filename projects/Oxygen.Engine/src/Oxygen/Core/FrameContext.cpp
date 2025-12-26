@@ -266,7 +266,7 @@ auto FrameContext::RemoveSurfaceAt(size_t index) noexcept -> bool
   if (index >= surfaces_.size()) {
     return false; // Index out of bounds
   }
-  // Capture pointer of surface being removed for view cleanup
+  // FIXME: Capture pointer of surface being removed for view cleanup
   auto removed_surface_ptr = surfaces_[index].get();
   surfaces_.erase(surfaces_.begin() + static_cast<std::ptrdiff_t>(index));
   // Keep presentable flags in sync

@@ -67,6 +67,9 @@ struct EngineConfig {
   uint32_t target_fps { 0 }; //!< 0 = uncapped
   uint32_t frame_count { 0 }; //!< 0 = unlimited
 
+  //! When true, AsyncEngine will construct the shared AssetLoader service.
+  bool enable_asset_loader { false }; //!< Default false for test suites.
+
   GraphicsConfig graphics; //!< Graphics configuration.
   TimingConfig timing; //!< Frame timing and fixed timestep configuration.
 };

@@ -49,6 +49,7 @@ set(
   "api_export.h"
   "PakFile.h"
   "AssetLoader.h"
+  "EngineTag.h"
   "VirtualPathResolver.h"
   "LooseCookedInspection.h"
   "LoaderContext.h"

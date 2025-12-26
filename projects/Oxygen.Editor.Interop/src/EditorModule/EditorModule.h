@@ -183,7 +183,7 @@ namespace oxygen::interop::module {
     oxygen::observer_ptr<oxygen::AsyncEngine> engine_{};
 
     std::shared_ptr<oxygen::scene::Scene> scene_;
-    std::unique_ptr<oxygen::content::AssetLoader> asset_loader_;
+    oxygen::observer_ptr<oxygen::content::AssetLoader> asset_loader_{};
     std::unique_ptr<oxygen::content::VirtualPathResolver> path_resolver_;
 
     // Roots management for thread-safe AssetLoader initialization
