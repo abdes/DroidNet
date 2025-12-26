@@ -2,11 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Catalog.FileSystem;
+using Oxygen.Assets.Catalog.LooseCooked;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
@@ -35,14 +37,33 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
             return;
         }
 
-        this.isInitialized = true;
-
         if (this.projectManager.CurrentProject is not { } project)
         {
+            Debug.WriteLine("[ProjectAssetCatalog] InitializeAsync skipped: no CurrentProject");
             return;
         }
 
+        await this.lockObj.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            if (this.isInitialized)
+            {
+                return;
+            }
+
+            this.isInitialized = true;
+        }
+        finally
+        {
+            this.lockObj.Release();
+        }
+
+        Debug.WriteLine($"[ProjectAssetCatalog] Initializing for project at '{project.ProjectInfo.Location}'");
+
         var storage = this.projectManager.GetCurrentProjectStorageProvider();
+
+        // Always provide engine-generated assets (e.g. /Engine/Generated/BasicShapes/*) to pickers.
+        await this.AddCatalogAsync(new GeneratedAssetCatalog()).ConfigureAwait(false);
 
         // Index project root
         if (!string.IsNullOrEmpty(project.ProjectInfo.Location))
@@ -70,6 +91,18 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
                 };
                 var mountCatalog = new FileSystemAssetCatalog(storage, mountOptions);
                 await this.AddCatalogAsync(mountCatalog).ConfigureAwait(false);
+
+                // Index cooked outputs for this mount point via the authoritative loose cooked index:
+                //   .cooked/<MountPoint>/container.index.bin
+                // This is what exposes runtime-consumable assets like .ogeo/.omat/.otex/.oscene as canonical asset:/// URIs.
+                var cookedRootLocation = storage.NormalizeRelativeTo(project.ProjectInfo.Location!, $".cooked/{mount.Name}");
+                var cookedOptions = new LooseCookedIndexAssetCatalogOptions
+                {
+                    CookedRootFolderPath = cookedRootLocation,
+                };
+
+                var cookedCatalog = new LooseCookedIndexAssetCatalog(storage, cookedOptions);
+                await this.AddCatalogAsync(cookedCatalog).ConfigureAwait(false);
             }
             catch (Exception)
             {
@@ -80,6 +113,10 @@ public sealed class ProjectAssetCatalog : IProjectAssetCatalog, IDisposable
 
     public async Task<IReadOnlyList<AssetRecord>> QueryAsync(AssetQuery query, CancellationToken cancellationToken = default)
     {
+        // Ensure this catalog is initialized when queried.
+        // This is important because some consumers (property editors) are created before the Content Browser triggers initialization.
+        await this.InitializeAsync().ConfigureAwait(false);
+
         List<IAssetCatalog> currentCatalogs;
         await this.lockObj.WaitAsync(cancellationToken).ConfigureAwait(false);
         try

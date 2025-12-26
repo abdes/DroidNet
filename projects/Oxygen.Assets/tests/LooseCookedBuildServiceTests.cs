@@ -75,6 +75,72 @@ public sealed class LooseCookedBuildServiceTests
         _ = entry.DescriptorSha256.Span.ToArray().Should().Equal(LooseCookedIndex.ComputeSha256(cookedBytes));
     }
 
+    [TestMethod]
+    public async Task BuildIndexesAsync_ShouldReplaceExistingEntryWithSameVirtualPathOnReimport()
+    {
+        const string sourcePath = "Content/Materials/Wood.omat.json";
+
+        const string json = """
+        {
+          "Schema": "oxygen.material.v1",
+          "Type": "PBR",
+          "Name": "Wood"
+        }
+        """;
+
+        var files = new InMemoryImportFileAccess();
+        files.AddUtf8(sourcePath, json);
+
+        var registry = new ImporterRegistry();
+        registry.Register(new MaterialSourceImporter());
+
+        var request = new ImportRequest(
+            ProjectRoot: "C:/Fake",
+            Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
+            Options: new ImportOptions(FailFast: true));
+
+        var import1 = new ImportService(
+            registry,
+            fileAccessFactory: _ => files,
+            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
+
+        var imported1 = await import1.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+        _ = imported1.Succeeded.Should().BeTrue();
+        _ = imported1.Imported.Should().ContainSingle();
+
+        var build = new LooseCookedBuildService(fileAccessFactory: _ => files);
+        await build.BuildIndexAsync("C:/Fake", imported1.Imported, CancellationToken.None).ConfigureAwait(false);
+
+        var import2 = new ImportService(
+            registry,
+            fileAccessFactory: _ => files,
+            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(3, 4)));
+
+        var imported2 = await import2.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+        _ = imported2.Succeeded.Should().BeTrue();
+        _ = imported2.Imported.Should().ContainSingle();
+
+        // The second build should replace the existing entry for the same VirtualPath
+        // rather than producing two entries (which the engine rejects).
+        await build.BuildIndexAsync("C:/Fake", imported2.Imported, CancellationToken.None).ConfigureAwait(false);
+
+        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
+        var ms = new MemoryStream(indexBytes);
+        Document doc;
+        try
+        {
+            doc = LooseCookedIndex.Read(ms);
+        }
+        finally
+        {
+            await ms.DisposeAsync().ConfigureAwait(false);
+        }
+
+        _ = doc.Assets.Should().ContainSingle();
+        _ = doc.Assets[0].VirtualPath.Should().Be("/Content/Materials/Wood.omat");
+        _ = doc.Assets[0].AssetKey.Should().Be(new AssetKey(3, 4));
+    }
+
     private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy
     {
         public AssetKey Key { get; } = key;

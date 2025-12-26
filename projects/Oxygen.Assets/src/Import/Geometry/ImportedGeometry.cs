@@ -2,17 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Runtime.InteropServices;
-
 namespace Oxygen.Assets.Import.Geometry;
 
 /// <summary>
-/// Minimal canonical geometry payload produced by importers and consumed by the loose-cooked build step.
+/// Source metadata for a mesh asset.
+/// Contains structure and bounds, but no vertex data.
 /// </summary>
-[StructLayout(LayoutKind.Sequential)]
 public sealed record ImportedGeometry(
+    string Schema,
     string Name,
-    IReadOnlyList<ImportedVertex> Vertices,
-    IReadOnlyList<uint> Indices,
-    IReadOnlyList<ImportedSubMesh> SubMeshes,
-    ImportedBounds Bounds);
+    string Source,
+    int MeshIndex,
+    ImportedBounds Bounds,
+    IReadOnlyList<ImportedSubMesh> SubMeshes);

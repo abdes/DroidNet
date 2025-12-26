@@ -432,6 +432,9 @@ public partial class ProjectLayoutViewModel(
                     await this.InsertItemAsync(mountedItem, this.projectRoot, this.projectRoot.ChildrenCount).ConfigureAwait(true);
                     await this.ExpandItemAsync(mountedItem).ConfigureAwait(true);
 
+                    // Index the newly mounted folder so it shows up in asset browsing queries.
+                    _ = this.projectAssetCatalog.AddFolderAsync(mountRootFolder, mountedItem.VirtualRootPath.TrimStart('/'));
+
                     this.HasUnsavedChanges = true;
                 }
             }

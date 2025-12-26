@@ -69,7 +69,7 @@ public sealed class GeneratedAssetCatalogTests
 
         // Assert
         _ = results.Should().HaveCount(4);
-        _ = results.Select(r => r.Uri.AbsolutePath).Should().AllSatisfy(p => p.Should().StartWith("/Generated/BasicShapes/"));
+        _ = results.Select(r => r.Uri.AbsolutePath).Should().AllSatisfy(p => p.Should().StartWith("/Engine/Generated/BasicShapes/"));
     }
 
     [TestMethod]

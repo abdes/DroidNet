@@ -71,14 +71,16 @@ public static class CookedMaterialWriter
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(FlagsOffset, 4), ToFlags(material));
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(ShaderStagesOffset, 4), 0);
 
-        WriteSingle(desc.Slice(BaseColorOffset + 0, 4), Clamp01(material.PbrMetallicRoughness.BaseColorR));
-        WriteSingle(desc.Slice(BaseColorOffset + 4, 4), Clamp01(material.PbrMetallicRoughness.BaseColorG));
-        WriteSingle(desc.Slice(BaseColorOffset + 8, 4), Clamp01(material.PbrMetallicRoughness.BaseColorB));
-        WriteSingle(desc.Slice(BaseColorOffset + 12, 4), Clamp01(material.PbrMetallicRoughness.BaseColorA));
+        var pbr = material.PbrMetallicRoughness ?? new MaterialPbrMetallicRoughness(1, 1, 1, 1, 1, 1, null, null);
+
+        WriteSingle(desc.Slice(BaseColorOffset + 0, 4), Clamp01(pbr.BaseColorR));
+        WriteSingle(desc.Slice(BaseColorOffset + 4, 4), Clamp01(pbr.BaseColorG));
+        WriteSingle(desc.Slice(BaseColorOffset + 8, 4), Clamp01(pbr.BaseColorB));
+        WriteSingle(desc.Slice(BaseColorOffset + 12, 4), Clamp01(pbr.BaseColorA));
 
         WriteSingle(desc.Slice(NormalScaleOffset, 4), Math.Max(0.0f, material.NormalTexture?.Scale ?? 1.0f));
-        WriteSingle(desc.Slice(MetalnessOffset, 4), Clamp01(material.PbrMetallicRoughness.MetallicFactor));
-        WriteSingle(desc.Slice(RoughnessOffset, 4), Clamp01(material.PbrMetallicRoughness.RoughnessFactor));
+        WriteSingle(desc.Slice(MetalnessOffset, 4), Clamp01(pbr.MetallicFactor));
+        WriteSingle(desc.Slice(RoughnessOffset, 4), Clamp01(pbr.RoughnessFactor));
         WriteSingle(desc.Slice(AmbientOcclusionOffset, 4), Clamp01(material.OcclusionTexture?.Strength ?? 1.0f));
 
         // MVP: textures are not emitted yet.

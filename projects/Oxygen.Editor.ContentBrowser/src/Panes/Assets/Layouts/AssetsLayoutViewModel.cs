@@ -43,6 +43,12 @@ public abstract class AssetsLayoutViewModel(
     /// </summary>
     public ObservableCollection<GameAsset> Assets { get; } = [];
 
+    /// <summary>
+    /// Forces a refresh of <see cref="Assets"/> by re-querying the catalog and applying the current folder filter.
+    /// Useful when external processes (e.g. import/cook) update the cooked index but filesystem watchers don't emit changes.
+    /// </summary>
+    public Task RefreshAsync() => this.RefreshAssetsAsync();
+
     /// <inheritdoc/>
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {

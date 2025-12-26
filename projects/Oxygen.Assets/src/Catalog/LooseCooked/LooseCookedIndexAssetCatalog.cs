@@ -74,6 +74,14 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
         var normalizedRoot = this.storage.Normalize(options.CookedRootFolderPath);
         var filter = options.WatcherFilter ?? options.IndexFileName;
 
+        // NOTE:
+        // The cooked root folder for a mount point is typically ".cooked/<MountPoint>".
+        // That folder (or even the index file) may not exist yet when this catalog is constructed.
+        // If we only watch when the exact root exists, we can permanently miss later creation of
+        // ".cooked/<MountPoint>/container.index.bin". To avoid that, watch the nearest existing
+        // parent directory (usually the ".cooked" folder) with IncludeSubdirectories enabled.
+        var watchRoot = FindNearestExistingDirectory(normalizedRoot);
+
         if (eventSource is not null)
         {
             this.eventSource = eventSource;
@@ -82,9 +90,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
                 .Where(batch => batch.Count > 0)
                 .Subscribe(batch => _ = this.ReloadAndDiffAsync());
         }
-        else if (Directory.Exists(normalizedRoot))
+        else if (!string.IsNullOrEmpty(watchRoot))
         {
-            this.eventSource = new FileSystemWatcherEventSource(rootPath: normalizedRoot, filter: filter);
+            this.eventSource = new FileSystemWatcherEventSource(rootPath: watchRoot, filter: filter);
             this.eventSubscription = this.eventSource.Events
                 .Buffer(TimeSpan.FromMilliseconds(100))
                 .Where(batch => batch.Count > 0)
@@ -236,6 +244,34 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IDisposable
         {
             _ = this.entriesByUri.TryAdd(kvp.Key, kvp.Value);
         }
+    }
+
+    private static string FindNearestExistingDirectory(string start)
+    {
+        if (string.IsNullOrWhiteSpace(start))
+        {
+            return string.Empty;
+        }
+
+        // Normalize to a directory path (in case the input ends with a separator, this is still fine).
+        var current = start;
+        while (!string.IsNullOrEmpty(current))
+        {
+            if (Directory.Exists(current))
+            {
+                return current;
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (string.IsNullOrEmpty(parent) || string.Equals(parent, current, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        return string.Empty;
     }
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource

@@ -102,6 +102,31 @@ public class GameAsset
     /// <returns>The <see cref="AssetType"/> corresponding to the file extension.</returns>
     public static AssetType GetAssetType(string fileName)
     {
+        var upper = fileName.ToUpperInvariant();
+
+        // Oxygen-native authoring sources use compound extensions like "*.omat.json".
+        // Treat these as their underlying asset types rather than generic JSON.
+        if (upper.EndsWith(".OMAT.JSON", StringComparison.Ordinal))
+        {
+            return AssetType.Material;
+        }
+
+        if (upper.EndsWith(".OGEO.JSON", StringComparison.Ordinal))
+        {
+            return AssetType.Mesh;
+        }
+
+        if (upper.EndsWith(".OSCENE.JSON", StringComparison.Ordinal))
+        {
+            return AssetType.Scene;
+        }
+
+        if (upper.EndsWith(".OTEX.JSON", StringComparison.Ordinal))
+        {
+            // For now, keep textures grouped with images (matches existing behavior for ".otex").
+            return AssetType.Image;
+        }
+
         var extension = Path.GetExtension(fileName).ToUpperInvariant();
         return extension switch
         {

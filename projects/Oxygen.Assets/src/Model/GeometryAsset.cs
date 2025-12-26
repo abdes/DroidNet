@@ -16,11 +16,11 @@ namespace Oxygen.Assets.Model;
 public sealed class GeometryAsset : Asset
 {
     /// <summary>
-    /// Gets or sets the source geometry data.
+    /// Gets or sets the source geometry metadata.
     /// </summary>
     /// <value>
-    /// The imported geometry payload containing vertices, indices, and submesh definitions.
-    /// This is typically populated when resolving assets from source files in the editor.
+    /// The imported geometry metadata containing submesh definitions and bounds.
+    /// Vertex and index data are stored separately in the intermediate cache.
     /// </value>
     public ImportedGeometry? Source { get; set; }
 

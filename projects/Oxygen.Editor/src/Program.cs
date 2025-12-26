@@ -27,6 +27,7 @@ using Microsoft.UI.Xaml.Data;
 using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Gltf;
 using Oxygen.Assets.Import.Materials;
+using Oxygen.Assets.Import.Textures;
 using Oxygen.Core.Services;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
@@ -365,6 +366,7 @@ public static partial class Program
         // Register Importers
         container.Register<IAssetImporter, GltfImporter>(Reuse.Singleton);
         container.Register<IAssetImporter, MaterialSourceImporter>(Reuse.Singleton);
+        container.Register<IAssetImporter, ImageTextureImporter>(Reuse.Singleton);
 
         // Register ImportService
         container.Register<IImportService, ImportService>(Reuse.Singleton);

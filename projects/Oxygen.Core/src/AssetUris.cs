@@ -31,9 +31,9 @@ public static class AssetUris
     public const string ContentMountPoint = "Content";
 
     /// <summary>
-    /// The path prefix for generated basic shapes.
+    /// The path prefix for generated assets.
     /// </summary>
-    public const string GeneratedPath = "Generated/BasicShapes";
+    public const string GeneratedPath = "Generated";
 
     /// <summary>
     /// Builds an engine asset URI.
@@ -50,9 +50,9 @@ public static class AssetUris
     public static string BuildContentUri(string path) => $"{Scheme}:///{ContentMountPoint}/{path.TrimStart('/')}";
 
     /// <summary>
-    /// Builds a URI for a generated basic shape.
+    /// Builds a URI for a generated asset.
     /// </summary>
-    /// <param name="shapeName">The name of the shape (e.g., "Cube").</param>
+    /// <param name="assetPath">The path of the asset relative to the generated root (e.g., "BasicShapes/Cube").</param>
     /// <returns>The full asset URI.</returns>
-    public static string BuildGeneratedUri(string shapeName) => BuildEngineUri($"{GeneratedPath}/{shapeName}");
+    public static string BuildGeneratedUri(string assetPath) => BuildEngineUri($"{GeneratedPath}/{assetPath}");
 }

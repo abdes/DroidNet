@@ -198,7 +198,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
 
     private void RefreshCookedRoots()
     {
-        // Mount the project's cooked assets root in the engine's virtual path resolver.
+        // Mount the project's cooked assets roots (per mount point) in the engine's virtual path resolver.
         // This allows the engine to resolve asset:/// URIs to actual files on disk.
         if (this.projectManager.CurrentProject?.ProjectInfo.Location is null)
         {
@@ -206,36 +206,79 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
             return;
         }
 
-        // Source of Truth: Oxygen.Assets.AssetPipelineConstants
-        const string CookedFolderName = ".cooked";
-        const string IndexFileName = "container.index.bin";
-
         var projectLocation = this.projectManager.CurrentProject.ProjectInfo.Location;
-        var cookedRoot = System.IO.Path.Combine(projectLocation, CookedFolderName);
-        var indexPath = System.IO.Path.Combine(cookedRoot, IndexFileName);
+        // Source of Truth: Oxygen.Assets.AssetPipelineConstants
+        const string cookedFolderName = ".cooked";
+        const string indexFileName = "container.index.bin";
 
-        this.logger.LogInformation("Refreshing cooked roots. Project location: {ProjectLocation}", projectLocation);
+        var cookedBaseRoot = System.IO.Path.Combine(projectLocation, cookedFolderName);
+        this.logger.LogInformation(
+            "Refreshing cooked roots. Project location: {ProjectLocation}, cooked root: {CookedBaseRoot}",
+            projectLocation,
+            cookedBaseRoot);
 
-        if (System.IO.File.Exists(indexPath))
+        // The asset pipeline maintains one loose cooked index per mount point:
+        //   .cooked/<MountPoint>/container.index.bin
+        // so we must mount each mount root separately.
+        this.engineService.UnmountProjectCookedRoot();
+
+        if (!System.IO.Directory.Exists(cookedBaseRoot))
         {
-            this.logger.LogInformation("Mounting project cooked root: {CookedRoot}", cookedRoot);
-            this.engineService.UnmountProjectCookedRoot();
-            this.engineService.MountProjectCookedRoot(cookedRoot);
+            this.logger.LogWarning(
+                "Cooked root directory does not exist: {CookedBaseRoot}. Assets will not be available in the engine.",
+                cookedBaseRoot);
+            return;
         }
-        else
-        {
-            this.logger.LogWarning("Could not find cooked index file at: {IndexPath}. Assets will not be available in the engine.", indexPath);
 
-            // Debug: list files in .cooked if it exists
-            if (System.IO.Directory.Exists(cookedRoot))
+        var mountPoints = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var mount in this.projectManager.CurrentProject.ProjectInfo.AuthoringMounts)
+        {
+            if (!string.IsNullOrWhiteSpace(mount.Name))
             {
-                var files = System.IO.Directory.GetFiles(cookedRoot, "*", System.IO.SearchOption.AllDirectories);
-                this.logger.LogInformation("Files in {CookedRoot}: {Files}", cookedRoot, string.Join(", ", files));
-            }
-            else
-            {
-                this.logger.LogWarning("Cooked root directory does not exist: {CookedRoot}", cookedRoot);
+                _ = mountPoints.Add(mount.Name);
             }
         }
+
+        try
+        {
+            foreach (var dir in System.IO.Directory.GetDirectories(cookedBaseRoot))
+            {
+                var name = System.IO.Path.GetFileName(dir);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    _ = mountPoints.Add(name);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            this.logger.LogWarning(ex, "Failed to enumerate cooked mount point directories under {CookedBaseRoot}.", cookedBaseRoot);
+        }
+
+        var mounted = new List<string>();
+        foreach (var mountPoint in mountPoints.OrderBy(static m => m, StringComparer.Ordinal))
+        {
+            var cookedMountRoot = System.IO.Path.Combine(cookedBaseRoot, mountPoint);
+            var indexPath = System.IO.Path.Combine(cookedMountRoot, indexFileName);
+
+            if (!System.IO.File.Exists(indexPath))
+            {
+                continue;
+            }
+
+            this.engineService.MountProjectCookedRoot(cookedMountRoot);
+            mounted.Add(cookedMountRoot);
+        }
+
+        if (mounted.Count == 0)
+        {
+            this.logger.LogWarning(
+                "No cooked index files found under {CookedBaseRoot} (expected .cooked/<MountPoint>/{IndexFileName}). Assets will not be available in the engine.",
+                cookedBaseRoot,
+                indexFileName);
+            return;
+        }
+
+        this.logger.LogInformation("Mounted {Count} cooked roots: {Mounted}", mounted.Count, string.Join("; ", mounted));
     }
 }

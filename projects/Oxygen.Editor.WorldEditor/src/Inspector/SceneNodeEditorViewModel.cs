@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Assets.Catalog;
-using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
@@ -82,14 +81,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.sceneEngineSync = sceneEngineSync;
         this.assetCatalog = assetCatalog;
 
-        Debug.WriteLine($"[SceneNodeEditorViewModel] Constructor - AssetCatalog is {(this.assetCatalog != null ? "available" : "NULL")}");
-
         // Register GeometryComponent factory with access to AssetCatalog
-        AllPropertyEditorFactories[typeof(GeometryComponent)] = messengerParam =>
-        {
-            Debug.WriteLine($"[SceneNodeEditorViewModel] Creating GeometryViewModel with AssetCatalog: {(assetCatalog != null ? "available" : "NULL")}");
-            return new GeometryViewModel(assetCatalog, messengerParam);
-        };
+        AllPropertyEditorFactories[typeof(GeometryComponent)] = messengerParam => new GeometryViewModel(hosting, assetCatalog, messengerParam!);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
         this.UpdateItemsCollection(this.items);

@@ -15,7 +15,7 @@ namespace Oxygen.Assets.Tests;
 public sealed class MaterialSourceImporterTests
 {
     [TestMethod]
-    public async Task ImportAsync_ShouldWriteCookedOmatAndReturnImportedAsset()
+    public async Task ImportAsync_ShouldReturnImportedAsset()
     {
         const string sourcePath = "Content/Materials/Wood.omat.json";
         const string json = """
@@ -55,10 +55,6 @@ public sealed class MaterialSourceImporterTests
         _ = asset.AssetType.Should().Be("Material");
         _ = asset.VirtualPath.Should().Be("/Content/Materials/Wood.omat");
         _ = asset.AssetKey.Should().Be(identity.FixedKey);
-
-        const string cookedPath = ".cooked/Content/Materials/Wood.omat";
-        _ = files.TryGet(cookedPath, out var cooked).Should().BeTrue();
-        _ = cooked.Should().HaveCount(256);
 
         var expectedHash = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(json));
         _ = asset.Source.SourceHashSha256.Span.ToArray().Should().Equal(expectedHash);
@@ -104,8 +100,6 @@ public sealed class MaterialSourceImporterTests
 
         _ = results.Should().ContainSingle();
         _ = results[0].VirtualPath.Should().Be(virtualPath);
-
-        _ = files.TryGet(".cooked" + virtualPath, out _).Should().BeTrue();
     }
 
     [TestMethod]

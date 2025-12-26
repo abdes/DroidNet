@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using AwesomeAssertions;
 using Oxygen.Assets.Import;
 using Oxygen.Assets.Import.Materials;
@@ -179,6 +180,78 @@ public sealed class ImportServiceTests
         _ = third.Imported.Should().NotBeEmpty();
     }
 
+    [TestMethod]
+    public async Task ImportAsync_WhenFailureOccurs_ShouldRepairIndexFileRecords()
+    {
+        const string sourcePath = "Content/Models/Bad.glb";
+        const string mountPoint = "Content";
+        const string buffersTableRelativePath = "resources/buffers.table";
+        const string indexPath = ".cooked/Content/container.index.bin";
+        const string buffersTablePath = ".cooked/Content/resources/buffers.table";
+
+        var files = new InMemoryImportFileAccess();
+
+        // Seed a stale index file record (wrong size/SHA) to simulate a failed build leaving
+        // cooked resources updated without updating container.index.bin.
+        var oldBytes = new byte[96];
+        RandomNumberGenerator.Fill(oldBytes);
+
+        var newBytes = new byte[160];
+        RandomNumberGenerator.Fill(newBytes);
+        await files.WriteAllBytesAsync(buffersTablePath, newBytes, CancellationToken.None).ConfigureAwait(false);
+
+        var doc = new Document(
+            ContentVersion: 1,
+            Flags: 0,
+            Assets: Array.Empty<AssetEntry>(),
+            Files:
+            [
+                new FileRecord(
+                    Kind: FileKind.BuffersTable,
+                    RelativePath: buffersTableRelativePath,
+                    Size: (ulong)oldBytes.Length,
+                    Sha256: LooseCookedIndex.ComputeSha256(oldBytes)),
+            ]);
+
+        byte[] indexBytes;
+        using (var ms = new MemoryStream())
+        {
+            LooseCookedIndex.Write(ms, doc);
+            indexBytes = ms.ToArray();
+        }
+
+        await files.WriteAllBytesAsync(indexPath, indexBytes, CancellationToken.None).ConfigureAwait(false);
+
+        var registry = new ImporterRegistry();
+        registry.Register(new ThrowingImporter());
+
+        var service = new ImportService(
+            registry,
+            fileAccessFactory: _ => files,
+            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(1, 2)));
+
+        var request = new ImportRequest(
+            ProjectRoot: "C:/Fake",
+            Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: mountPoint)],
+            Options: new ImportOptions(FailFast: false));
+
+        var result = await service.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(d => d.Code == "OXYIMPORT_INPUT_FAILED");
+
+        _ = files.TryGet(indexPath, out var repairedIndexBytes).Should().BeTrue();
+        using var msRepaired = new MemoryStream(repairedIndexBytes);
+        var repairedDoc = LooseCookedIndex.Read(msRepaired);
+
+        var buffersRecord = repairedDoc.Files.Should()
+            .ContainSingle(f => f.RelativePath == buffersTableRelativePath)
+            .Which;
+
+        buffersRecord.Size.Should().Be((ulong)newBytes.Length);
+        buffersRecord.Sha256.ToArray().Should().Equal(SHA256.HashData(newBytes));
+    }
+
     private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy
     {
         public AssetKey Key { get; } = key;
@@ -284,5 +357,25 @@ public sealed class ImportServiceTests
         }
 
         private sealed record Entry(byte[] Bytes, DateTimeOffset LastWriteTimeUtc);
+    }
+
+    private sealed class ThrowingImporter : IAssetImporter
+    {
+        public string Name => "Throwing";
+
+        public int Priority => 0;
+
+        public bool CanImport(ImportProbe probe)
+        {
+            _ = probe;
+            return true;
+        }
+
+        public Task<IReadOnlyList<ImportedAsset>> ImportAsync(ImportContext context, CancellationToken cancellationToken)
+        {
+            _ = context;
+            _ = cancellationToken;
+            throw new InvalidOperationException("Simulated import failure.");
+        }
     }
 }

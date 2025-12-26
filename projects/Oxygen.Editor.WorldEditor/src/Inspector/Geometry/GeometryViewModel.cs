@@ -7,6 +7,8 @@ using System.Collections.ObjectModel;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Messaging;
+using Microsoft.UI.Dispatching;
+using DroidNet.Hosting.WinUI;
 using Oxygen.Assets.Catalog;
 using Oxygen.Core;
 using Oxygen.Editor.World.Messages;
@@ -26,9 +28,12 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 /// </remarks>
 public partial class GeometryViewModel : ComponentPropertyEditor
 {
-    private readonly IAssetCatalog? assetCatalog;
-    private readonly IMessenger? messenger;
+    private readonly IAssetCatalog assetCatalog;
+    private readonly IMessenger messenger;
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
+    private readonly DispatcherQueue dispatcherQueue;
+
+    private IDisposable? assetChangesSubscription;
 
     private ICollection<SceneNode>? selectedItems;
 
@@ -40,21 +45,22 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     /// asset content is not available.</param>
     /// <param name="messenger">Optional messenger used to send notifications such as applied
     /// geometry changes. May be <see langword="null"/>.</param>
-    public GeometryViewModel(IAssetCatalog? assetCatalog = null, IMessenger? messenger = null)
+    public GeometryViewModel(HostingContext hosting, IAssetCatalog assetCatalog, IMessenger messenger)
     {
         this.assetCatalog = assetCatalog;
         this.messenger = messenger;
+        this.dispatcherQueue = hosting.Dispatcher;
 
         var engineItems = new List<AssetPickerItem>
         {
-            CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("Cube"), "/Engine/BasicShapes/Cube"),
-            CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("Sphere"), "/Engine/BasicShapes/Sphere"),
-            CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("Plane"), "/Engine/BasicShapes/Plane"),
-            CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("Cylinder"), "/Engine/BasicShapes/Cylinder"),
-            CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("Cone"), "/Engine/BasicShapes/Cone"),
-            CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("Quad"), "/Engine/BasicShapes/Quad"),
-            CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("Torus"), "/Engine/BasicShapes/Torus"),
-            CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("ArrowGizmo"), "/Engine/BasicShapes/ArrowGizmo"),
+            CreateEngineItem("Cube", AssetUris.BuildGeneratedUri("BasicShapes/Cube"), "/Engine/Generated/BasicShapes/Cube"),
+            CreateEngineItem("Sphere", AssetUris.BuildGeneratedUri("BasicShapes/Sphere"), "/Engine/Generated/BasicShapes/Sphere"),
+            CreateEngineItem("Plane", AssetUris.BuildGeneratedUri("BasicShapes/Plane"), "/Engine/Generated/BasicShapes/Plane"),
+            CreateEngineItem("Cylinder", AssetUris.BuildGeneratedUri("BasicShapes/Cylinder"), "/Engine/Generated/BasicShapes/Cylinder"),
+            CreateEngineItem("Cone", AssetUris.BuildGeneratedUri("BasicShapes/Cone"), "/Engine/Generated/BasicShapes/Cone"),
+            CreateEngineItem("Quad", AssetUris.BuildGeneratedUri("BasicShapes/Quad"), "/Engine/Generated/BasicShapes/Quad"),
+            CreateEngineItem("Torus", AssetUris.BuildGeneratedUri("BasicShapes/Torus"), "/Engine/Generated/BasicShapes/Torus"),
+            CreateEngineItem("ArrowGizmo", AssetUris.BuildGeneratedUri("BasicShapes/ArrowGizmo"), "/Engine/Generated/BasicShapes/ArrowGizmo"),
         };
 
         // Start with Engine group only
@@ -64,92 +70,66 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             new AssetGroup("Content", this.contentItems),
         ];
 
-        // Subscribe to asset changes for mesh assets
-        if (assetCatalog is not null)
+        Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
+
+        // Get initial snapshot and track seen assets to deduplicate replay
+        _ = Task.Run(async () =>
         {
-            Debug.WriteLine("[GeometryViewModel] Subscribing to asset changes for mesh assets");
-
-            // Capture the current synchronization context to ensure updates happen on the UI thread
-            var syncContext = SynchronizationContext.Current;
-
-            // Get initial snapshot and track seen assets to deduplicate replay
-            _ = Task.Run(async () =>
+            try
             {
-                var allAssets = await assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
+                var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
                 var meshAssets = allAssets.Where(a => IsMesh(a.Uri)).ToList();
+
+                Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
 
                 var seenUris = new HashSet<Uri>(meshAssets.Select(a => a.Uri));
 
-                // Populate initial items on the UI thread
-                if (syncContext != null)
-                {
-                    syncContext.Post(_ =>
+                // Populate initial items on the UI thread.
+                this.DispatchOnUi(() =>
                     {
                         foreach (var asset in meshAssets)
                         {
-                            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name}");
+                            Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name} ({asset.Uri})");
                             this.contentItems.Add(CreateContentItem(asset));
                         }
-                    }, null);
-                }
-                else
-                {
-                    // Fallback if no sync context (e.g. unit tests), though ObservableCollection might fail if bound
-                    foreach (var asset in meshAssets)
-                    {
-                        this.contentItems.Add(CreateContentItem(asset));
-                    }
-                }
+                    });
 
-                // Subscribe to future changes, deduplicating replayed items
-                _ = assetCatalog.Changes
+                // Subscribe to future changes, deduplicating replayed items.
+                this.assetChangesSubscription = this.assetCatalog.Changes
                     .Where(n => IsMesh(n.Uri))
                     .Subscribe(
                         notification =>
-                        {
-                            void HandleNotification(object? state)
-                            {
-                                if (notification.Kind == AssetChangeKind.Added)
+                            this.DispatchOnUi(() =>
                                 {
-                                    if (!seenUris.Contains(notification.Uri))
+                                    if (notification.Kind == AssetChangeKind.Added)
                                     {
-                                        Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
-                                        var record = new AssetRecord(notification.Uri);
-                                        this.contentItems.Add(CreateContentItem(record));
-                                        seenUris.Add(notification.Uri);
-                                    }
-                                }
-                                else if (notification.Kind == AssetChangeKind.Removed)
-                                {
-                                    if (seenUris.Contains(notification.Uri))
-                                    {
-                                        Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
-                                        var itemToRemove = this.contentItems.FirstOrDefault(i => i.Uri == notification.Uri);
-                                        if (itemToRemove != null)
+                                        if (seenUris.Add(notification.Uri))
                                         {
-                                            this.contentItems.Remove(itemToRemove);
+                                            Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
+                                            var record = new AssetRecord(notification.Uri);
+                                            this.contentItems.Add(CreateContentItem(record));
                                         }
-                                        seenUris.Remove(notification.Uri);
                                     }
-                                }
-                            }
-
-                            if (syncContext != null)
-                            {
-                                syncContext.Post(HandleNotification, null);
-                            }
-                            else
-                            {
-                                HandleNotification(null);
-                            }
-                        },
-                        ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex.Message}"));
-            });
-        }
-        else
-        {
-            Debug.WriteLine("[GeometryViewModel] No AssetCatalog available!");
-        }
+                                    else if (notification.Kind == AssetChangeKind.Removed)
+                                    {
+                                        if (seenUris.Remove(notification.Uri))
+                                        {
+                                            Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
+                                            var itemToRemove = this.contentItems.FirstOrDefault(i => i.Uri == notification.Uri);
+                                            if (itemToRemove is not null)
+                                            {
+                                                this.contentItems.Remove(itemToRemove);
+                                            }
+                                        }
+                                    }
+                                }),
+                        ex => Debug.WriteLine($"[GeometryViewModel] Error in asset stream: {ex}"));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[GeometryViewModel] Failed to initialize content assets: {ex}");
+            }
+        });
     }
 
     /// <summary>
@@ -267,7 +247,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
         // Send message for undo/redo handling and engine sync
         try
         {
-            _ = (this.messenger as IMessenger)?.Send(new SceneNodeGeometryAppliedMessage(nodes, oldSnapshots, newSnapshots, "Asset"));
+            _ = this.messenger.Send(new SceneNodeGeometryAppliedMessage(nodes, oldSnapshots, newSnapshots, "Asset"));
         }
         catch (Exception ex)
         {
@@ -331,8 +311,33 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
     private static bool IsMesh(Uri uri)
     {
-        var ext = Path.GetExtension(uri.AbsolutePath).ToUpperInvariant();
+        // Asset URIs can include mount points and may have a leading "//" in AbsolutePath.
+        // Use the relative path when possible to make extension detection resilient.
+        var path = AssetUriHelper.GetRelativePath(uri);
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            path = uri.AbsolutePath;
+        }
+
+        var ext = Path.GetExtension(path).ToUpperInvariant();
         return ext is ".MESH" or ".OGEO";
+    }
+
+    private void DispatchOnUi(Action action)
+    {
+        // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
+        _ = this.dispatcherQueue.DispatchAsync(action)
+            .ContinueWith(
+                t =>
+                {
+                    if (t.IsFaulted)
+                    {
+                        Debug.WriteLine($"[GeometryViewModel] UI dispatch failed: {t.Exception}");
+                    }
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
     }
 
     private static AssetPickerItem CreateContentItem(AssetRecord asset)

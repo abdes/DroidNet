@@ -161,9 +161,6 @@ public sealed partial class ContentBrowserViewModel(
             var contentBrowserState = this.childContainer.Resolve<ContentBrowserState>();
             contentBrowserState.PropertyChanged += this.OnContentBrowserStateChanged;
 
-            // Start asset indexing in background now that project is loaded
-            var assetCatalog = this.childContainer.Resolve<IProjectAssetCatalog>();
-            _ = assetCatalog.InitializeAsync();
 
             var initialUrl = "/(left:project//right:" + this.currentAssetsViewPath + ")";
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
@@ -177,7 +174,7 @@ public sealed partial class ContentBrowserViewModel(
         void InitializeChildContainer()
         {
             this.childContainer = container
-                .WithRegistrationsCopy()
+                .CreateChild()
                 .WithMvvm()
                 .WithLocalRouting(
                     RoutesConfig,

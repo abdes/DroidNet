@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using Oxygen.Assets.Cook;
 using Oxygen.Core;
 
 namespace Oxygen.Assets.Import.Materials;
@@ -48,12 +47,6 @@ public sealed class MaterialSourceImporter : IAssetImporter
         }
 
         var virtualPath = DeriveVirtualPath(context.Input);
-        var cookedRelativePath = ".cooked" + virtualPath;
-        var cookedBytes = CookToBytes(material);
-
-        await context.Files
-            .WriteAllBytesAsync(cookedRelativePath, cookedBytes, cancellationToken)
-            .ConfigureAwait(false);
 
         return [CreateImportedAsset(context, sourcePath, virtualPath, jsonBytes, meta.LastWriteTimeUtc, material)];
     }
@@ -92,18 +85,6 @@ public sealed class MaterialSourceImporter : IAssetImporter
         }
     }
 
-    private static ReadOnlyMemory<byte> CookToBytes(MaterialSource material)
-    {
-        byte[] cooked;
-        using (var ms = new MemoryStream())
-        {
-            CookedMaterialWriter.Write(ms, material);
-            cooked = ms.ToArray();
-        }
-
-        return cooked;
-    }
-
     private static ImportedAsset CreateImportedAsset(
         ImportContext context,
         string sourcePath,
@@ -125,6 +106,8 @@ public sealed class MaterialSourceImporter : IAssetImporter
                 SourceHashSha256: sourceHash,
                 LastWriteTimeUtc: lastWriteTimeUtc),
             Dependencies: dependencies,
+            GeneratedSourcePath: sourcePath,
+            IntermediateCachePath: null,
             Payload: material);
     }
 

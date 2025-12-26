@@ -46,18 +46,20 @@ public sealed class FileSystemAssetResolverTests
     public async Task ResolveAsync_WithValidGeometry_ShouldReturnGeometryAsset()
     {
         // Arrange
-        var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
+        var resolver = new FileSystemAssetResolver("Content", this.contentRoot);
         const string modelName = "MyBox";
 
-        // Simulate an imported artifact existing in .imported/Content/Models/MyBox__mesh__0000.ogeo
+        // Simulate a generated source existing in Content/Models/MyBox__mesh__0000.ogeo.json
         var relativePath = $"Models/{modelName}__mesh__0000.ogeo";
-        var importedPath = Path.Combine(this.importedRoot, relativePath);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(importedPath)!);
+        var sourcePath = Path.Combine(this.contentRoot, relativePath + ".json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(sourcePath)!);
 
         var importedGeometry = new ImportedGeometry(
+            "oxygen.geometry.v1",
             "MyBox",
-            [],
-            [],
+            "MyBox.glb",
+            0,
+            new ImportedBounds(Vector3.Zero, Vector3.Zero),
             [
                 new ImportedSubMesh(
                     "SubMesh1",
@@ -67,14 +69,10 @@ public sealed class FileSystemAssetResolverTests
                     0,
                     0,
                     new ImportedBounds(Vector3.Zero, Vector3.Zero)),
-            ],
-            new ImportedBounds(Vector3.Zero, Vector3.Zero));
+            ]);
 
-        var stream = File.Create(importedPath);
-        await using (stream.ConfigureAwait(true))
-        {
-            await ImportedGeometrySerializer.WriteAsync(stream, importedGeometry, this.TestContext.CancellationToken).ConfigureAwait(false);
-        }
+        var jsonBytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(importedGeometry);
+        await File.WriteAllBytesAsync(sourcePath, jsonBytes, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var uri = new Uri($"asset:///Content/{relativePath}");
 
@@ -96,7 +94,7 @@ public sealed class FileSystemAssetResolverTests
     public async Task ResolveAsync_WithValidMaterialSource_ShouldReturnMaterialAsset()
     {
         // Arrange
-        var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
+        var resolver = new FileSystemAssetResolver("Content", this.contentRoot);
         const string materialName = "Wood";
         var relativePath = $"Materials/{materialName}.omat";
         var sourcePath = Path.Combine(this.contentRoot, "Materials", $"{materialName}.omat.json");
@@ -138,7 +136,7 @@ public sealed class FileSystemAssetResolverTests
     public async Task ResolveAsync_WithMissingFile_ShouldReturnNull()
     {
         // Arrange
-        var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
+        var resolver = new FileSystemAssetResolver("Content", this.contentRoot);
         var uri = new Uri("asset:///Content/Missing.omat");
 
         // Act
@@ -152,7 +150,7 @@ public sealed class FileSystemAssetResolverTests
     public async Task ResolveAsync_WithInvalidMountPoint_ShouldReturnNull()
     {
         // Arrange
-        var resolver = new FileSystemAssetResolver("Content", this.contentRoot, this.importedRoot);
+        var resolver = new FileSystemAssetResolver("Content", this.contentRoot);
         var uri = new Uri("asset:///Engine/BasicShapes/Cube.ogeo");
 
         // Act
