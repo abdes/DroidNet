@@ -125,6 +125,7 @@ namespace Oxygen::Interop {
       // We need to configure the engine to be headless (no SDL window)
       if (swapChainPanel != IntPtr::Zero) {
         native_cfg.graphics.headless = true;
+        native_cfg.enable_asset_loader = true;
       }
 
       // Create the native engine context (unique ownership from factory).

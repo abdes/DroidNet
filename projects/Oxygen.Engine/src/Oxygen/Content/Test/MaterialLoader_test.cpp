@@ -14,6 +14,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Content/EngineTag.h>
 
 #include "Mocks/MockStream.h"
 #include "Utils/PakUtils.h"
@@ -58,6 +59,8 @@ auto UnloadTestTextureResource(
 class MockAssetLoader : public oxygen::content::AssetLoader {
 public:
   MockAssetLoader()
+    : oxygen::content::AssetLoader(
+        oxygen::content::internal::EngineTagFactory::Get())
   {
     // Register the test TextureResource loader using named functions
     RegisterLoader(LoadTestTextureResource, UnloadTestTextureResource);

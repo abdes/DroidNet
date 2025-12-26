@@ -12,6 +12,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -22,6 +23,10 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
+
+namespace oxygen::content {
+class AssetLoader;
+}
 
 namespace oxygen::engine {
 class EngineModule;
@@ -131,6 +136,10 @@ public:
 
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept -> const EngineConfig&;
+
+  //! Access the optional AssetLoader service created during initialization.
+  OXGN_NGIN_NDAPI auto GetAssetLoader() const noexcept
+    -> observer_ptr<content::AssetLoader>;
 
   //! Set the engine target frames-per-second at runtime. 0 = uncapped.
   //! Value will be clamped to range [0, 240]. Thread-safety is caller's
@@ -250,6 +259,8 @@ private:
 
   // Module management system
   std::unique_ptr<engine::ModuleManager> module_manager_;
+
+  std::unique_ptr<content::AssetLoader> asset_loader_;
 
   // Time system integration
   time::PhysicalTime frame_start_ts_ {};

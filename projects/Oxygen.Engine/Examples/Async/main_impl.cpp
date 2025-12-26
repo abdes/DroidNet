@@ -304,6 +304,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> void
         .application = { .name = "Async Example", .version = 1u, },
         .target_fps = target_fps,
         .frame_count = frames,
+        .enable_asset_loader = true,
         .timing = {
           .pacing_safety_margin = 250us,
         }

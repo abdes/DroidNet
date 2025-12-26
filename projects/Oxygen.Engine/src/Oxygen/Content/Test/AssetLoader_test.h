@@ -13,6 +13,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/content/EngineTag.h>
 
 namespace oxygen::content::testing {
 

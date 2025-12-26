@@ -210,6 +210,7 @@ public sealed partial class EngineService(HostingContext hostingContext, ILogger
             config.TargetFps = 1; // TODO: remove after editor is stable
             config.Graphics ??= new GraphicsConfigManaged();
             config.Graphics.Headless = true;
+            config.EnableAssetLoader = true;
 
             this.engineContext = this.engineRunner.CreateEngine(config);
             if (this.engineContext?.IsValid != true)

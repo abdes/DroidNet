@@ -130,6 +130,10 @@ namespace oxygen::interop::module {
     // engine modules (renderer) during command recording.
     engine_ = engine;
 
+    asset_loader_ = engine->GetAssetLoader();
+    DCHECK_NOTNULL_F(asset_loader_,
+      "EditorModule requires AssetLoader - set config.enable_asset_loader = true");
+
     // InputSystem is registered by the engine interface layer during the
     // engine startup sequence. In the editor, EditorModule may be registered
     // earlier, so we subscribe and initialize bindings once InputSystem is
@@ -172,12 +176,6 @@ namespace oxygen::interop::module {
     DCHECK_NOTNULL_F(registry_);
     DCHECK_NOTNULL_F(view_manager_);
 
-    // Initialize content systems on the engine thread to satisfy thread affinity.
-    if (!asset_loader_) {
-      LOG_F(INFO, "Initializing AssetLoader on engine thread");
-      asset_loader_ = std::make_unique<oxygen::content::AssetLoader>();
-      roots_dirty_ = true;
-    }
     if (!path_resolver_) {
       LOG_F(INFO, "Initializing VirtualPathResolver on engine thread");
       path_resolver_ = std::make_unique<oxygen::content::VirtualPathResolver>();
@@ -187,10 +185,10 @@ namespace oxygen::interop::module {
     if (roots_dirty_) {
       std::lock_guard lock(roots_mutex_);
       LOG_F(INFO, "Syncing {} cooked roots to AssetLoader and PathResolver", mounted_roots_.size());
-      asset_loader_->ClearMounts();
+      asset_loader_.get()->ClearMounts();
       path_resolver_->ClearMounts();
       for (const auto& root : mounted_roots_) {
-        asset_loader_->AddLooseCookedRoot(root);
+        asset_loader_.get()->AddLooseCookedRoot(root);
         path_resolver_->AddLooseCookedRoot(root);
       }
       roots_dirty_ = false;

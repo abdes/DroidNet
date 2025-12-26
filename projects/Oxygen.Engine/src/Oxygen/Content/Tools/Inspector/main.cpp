@@ -4,25 +4,35 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/LooseCookedInspection.h>
 #include <array>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
+#include <exception>
+#include <memory>
+#include <string_view>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/Fluent/CliBuilder.h>
+#include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Clap/Option.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
+#include <Oxygen/Content/EngineTag.h>
+#include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+
+namespace oxygen::content::internal {
+
+auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
+
+} // namespace oxygen::content::internal
 
 namespace {
 
@@ -156,7 +166,9 @@ auto DumpAssets(
 
 auto ValidateRootOrThrow(const std::filesystem::path& cooked_root) -> void
 {
-  oxygen::content::AssetLoader loader;
+  using oxygen::content::internal::EngineTagFactory;
+
+  oxygen::content::AssetLoader loader(EngineTagFactory::Get());
   loader.AddLooseCookedRoot(cooked_root);
 }
 

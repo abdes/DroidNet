@@ -251,13 +251,15 @@ namespace Oxygen::Interop {
 
     System::UInt32 TargetFps;  // 0 = uncapped
     System::UInt32 FrameCount; // 0 = unlimited / run until exit
+    System::Boolean EnableAssetLoader;
 
     GraphicsConfigManaged^ Graphics; // required logically; allow null -> default
     TimingConfigManaged^ Timing;     // required logically; allow null -> default
 
     EngineConfig()
       : ApplicationName(gcnew System::String("")), ApplicationVersion(0),
-      TargetFps(0), FrameCount(0), Graphics(nullptr), Timing(nullptr) {
+      TargetFps(0), FrameCount(0), EnableAssetLoader(false), Graphics(nullptr),
+      Timing(nullptr) {
     }
 
     static EngineConfig^ FromNative(native::EngineConfig const& n) {
@@ -266,6 +268,7 @@ namespace Oxygen::Interop {
       m->ApplicationVersion = n.application.version;
       m->TargetFps = n.target_fps;
       m->FrameCount = n.frame_count;
+      m->EnableAssetLoader = n.enable_asset_loader;
       m->Graphics = GraphicsConfigManaged::FromNative(n.graphics);
       m->Timing = TimingConfigManaged::FromNative(n.timing);
       return m;
@@ -277,6 +280,7 @@ namespace Oxygen::Interop {
       n.application.version = ApplicationVersion;
       n.target_fps = TargetFps;
       n.frame_count = FrameCount;
+      n.enable_asset_loader = EnableAssetLoader;
       if (Graphics != nullptr) {
         n.graphics = Graphics->ToNative();
       }
