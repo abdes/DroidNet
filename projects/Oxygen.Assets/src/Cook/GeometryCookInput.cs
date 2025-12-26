@@ -7,4 +7,4 @@ using Oxygen.Assets.Persistence.LooseCooked.V1;
 
 namespace Oxygen.Assets.Cook;
 
-public sealed record GeometryCookInput(AssetKey AssetKey, ImportedGeometry Geometry);
+public sealed record GeometryCookInput(AssetKey AssetKey, ImportedGeometry Geometry, GeometryData Data);

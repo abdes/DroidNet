@@ -71,6 +71,10 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
+            // If an import/cook completes, the cooked index may update without reliable file watcher events
+            // (e.g. cooked folder created after watchers were set up). Force a refresh in that case.
+            messenger.Register<AssetsCookedMessage>(this, (_, _) => this.OnAssetsCooked());
+
             // Indexing is started by ContentBrowserViewModel - no need to start here
             this.isInitialized = true;
 
@@ -102,6 +106,8 @@ public partial class AssetsViewModel(
         {
             if (disposing)
             {
+                messenger.UnregisterAll(this);
+
                 // Cleanup event subscriptions
                 contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
                 this.PropertyChanging -= this.OnLayoutViewModelChanging;
@@ -115,6 +121,14 @@ public partial class AssetsViewModel(
             }
 
             this.disposed = true;
+        }
+    }
+
+    private void OnAssetsCooked()
+    {
+        if (this.LayoutViewModel is AssetsLayoutViewModel layout)
+        {
+            _ = layout.RefreshAsync();
         }
     }
 

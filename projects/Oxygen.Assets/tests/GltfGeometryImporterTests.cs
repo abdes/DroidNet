@@ -19,12 +19,14 @@ namespace Oxygen.Assets.Tests;
 [TestClass]
 public sealed class GltfGeometryImporterTests
 {
+    public TestContext TestContext { get; set; }
+
     [TestMethod]
     public async Task ImportAsync_ShouldExtractMaterials_AndCookOmat()
     {
         const string sourcePath = "Content/Geometry/BoxWithMat.glb";
 
-        var files = new InMemoryImportFileAccess();
+        var files = new InMemoryImportFileAccess(this.TestContext);
         files.AddBytes(sourcePath, CreateBoxWithMaterialGlb());
 
         var registry = new ImporterRegistry();
@@ -43,7 +45,9 @@ public sealed class GltfGeometryImporterTests
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = result.Imported.Should().HaveCount(2);
+        _ = result.Imported.Should().HaveCount(3);
+
+        AssertDependencyKinds(result.Imported, sourcePath);
 
         var matAsset = result.Imported.Single(static a => string.Equals(a.AssetType, "Material", StringComparison.Ordinal));
         _ = matAsset.VirtualPath.Should().EndWith(".omat");
@@ -51,6 +55,15 @@ public sealed class GltfGeometryImporterTests
         var matSource = matAsset.Payload.Should().BeOfType<MaterialSource>().Subject;
         _ = matSource.PbrMetallicRoughness.BaseColorR.Should().BeApproximately(1.0f, 0.001f); // Red
         _ = matSource.PbrMetallicRoughness.MetallicFactor.Should().Be(0.8f);
+
+        // Check generated source files (Metadata)
+        _ = files.TryGet("Content/Geometry/BoxWithMat__material__0000.omat.json", out _).Should().BeTrue();
+        _ = files.TryGet("Content/Geometry/BoxWithMat__mesh__0000.ogeo.json", out _).Should().BeTrue();
+        _ = files.TryGet("Content/Geometry/BoxWithMat__scene.oscene.json", out _).Should().BeTrue();
+        _ = files.TryGet("Content/Geometry/BoxWithMat__scene.oscene", out _).Should().BeFalse();
+
+        // Check intermediate files (Binary)
+        _ = files.TryGet(".imported/Content/Geometry/BoxWithMat__mesh__0000.glb", out _).Should().BeTrue();
 
         // Check cooked file existence
         _ = files.TryGet(".cooked" + matAsset.VirtualPath, out var cookedBytes).Should().BeTrue();
@@ -67,7 +80,7 @@ public sealed class GltfGeometryImporterTests
     {
         const string sourcePath = "Content/Geometry/Tri.glb";
 
-        var files = new InMemoryImportFileAccess();
+        var files = new InMemoryImportFileAccess(this.TestContext);
         files.AddBytes(sourcePath, CreateTriangleGlb());
 
         var registry = new ImporterRegistry();
@@ -76,7 +89,7 @@ public sealed class GltfGeometryImporterTests
         var import = new ImportService(
             registry,
             fileAccessFactory: _ => files,
-            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(11, 22)));
+            identityPolicyFactory: static () => new SequenceIdentityPolicy());
 
         var request = new ImportRequest(
             ProjectRoot: "C:/Fake",
@@ -85,7 +98,17 @@ public sealed class GltfGeometryImporterTests
 
         var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
         _ = result.Succeeded.Should().BeTrue();
-        _ = result.Imported.Should().HaveCount(2);
+        _ = result.Imported.Should().HaveCount(3);
+
+        AssertDependencyKinds(result.Imported, sourcePath);
+
+        // Check generated source files (Metadata)
+        _ = files.TryGet("Content/Geometry/Tri__mesh__0000.ogeo.json", out _).Should().BeTrue();
+        _ = files.TryGet("Content/Geometry/Tri__scene.oscene.json", out _).Should().BeTrue();
+        _ = files.TryGet("Content/Geometry/Tri__scene.oscene", out _).Should().BeFalse();
+
+        // Check intermediate files (Binary)
+        _ = files.TryGet(".imported/Content/Geometry/Tri__mesh__0000.glb", out _).Should().BeTrue();
 
         _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
         var doc = ReadIndex(indexBytes);
@@ -99,7 +122,7 @@ public sealed class GltfGeometryImporterTests
         const string sourcePath = "Content/Geometry/Tri.gltf";
         const string bufferPath = "Content/Geometry/buffer0.bin";
 
-        var files = new InMemoryImportFileAccess();
+        var files = new InMemoryImportFileAccess(this.TestContext);
         files.AddBytes(sourcePath, CreateTriangleGltfJson());
         files.AddBytes(bufferPath, CreateTriangleBin());
 
@@ -109,28 +132,38 @@ public sealed class GltfGeometryImporterTests
         var import = new ImportService(
             registry,
             fileAccessFactory: _ => files,
-            identityPolicyFactory: static () => new FixedIdentityPolicy(new AssetKey(11, 22)));
+            identityPolicyFactory: static () => new SequenceIdentityPolicy());
 
         var request = new ImportRequest(
             ProjectRoot: "C:/Fake",
             Inputs: [new ImportInput(SourcePath: sourcePath, MountPoint: "Content")],
             Options: new ImportOptions(FailFast: true));
 
-        var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
-        _ = result.Succeeded.Should().BeTrue();
-        _ = result.Imported.Should().NotBeEmpty();
+        try
+        {
+            var result = await import.ImportAsync(request, CancellationToken.None).ConfigureAwait(false);
+            _ = result.Succeeded.Should().BeTrue();
+            _ = result.Imported.Should().HaveCount(3);
 
-        _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
-        var doc = ReadIndex(indexBytes);
+            AssertDependencyKinds(result.Imported, sourcePath, expectedReferencedResources: [bufferPath]);
 
-        AssertCookedOutputs(files, doc);
+            _ = files.TryGet(".cooked/Content/container.index.bin", out var indexBytes).Should().BeTrue();
+            var doc = ReadIndex(indexBytes);
+
+            AssertCookedOutputs(files, doc);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or IOException or UnauthorizedAccessException)
+        {
+            var keys = string.Join(", ", files.Keys.OrderBy(k => k, StringComparer.Ordinal));
+            throw new InvalidOperationException($"Test failed. Files in memory: {keys}", ex);
+        }
     }
 
     [TestMethod]
     public async Task ImportAsync_ShouldGenerateMaterialSources_WhenEnabled()
     {
         const string sourcePath = "Content/Geometry/Box.glb";
-        var files = new InMemoryImportFileAccess();
+        var files = new InMemoryImportFileAccess(this.TestContext);
         files.AddBytes(sourcePath, CreateBoxWithMaterialGlb());
 
         var registry = new ImporterRegistry();
@@ -182,9 +215,38 @@ public sealed class GltfGeometryImporterTests
         return LooseCookedIndex.Read(ms);
     }
 
+    private static void AssertDependencyKinds(
+        IReadOnlyList<ImportedAsset> imported,
+        string sourcePath,
+        IReadOnlyList<string>? expectedReferencedResources = null)
+    {
+        expectedReferencedResources ??= [];
+
+        foreach (var asset in imported)
+        {
+            _ = asset.Dependencies.Should().NotBeNull();
+
+            var sidecars = asset.Dependencies.Where(static d => d.Kind == ImportedDependencyKind.Sidecar).ToList();
+            _ = sidecars.Should().HaveCount(1);
+            _ = sidecars[0].Path.Should().Be(sourcePath + ".import.json");
+
+            _ = asset.Dependencies.Should().Contain(new ImportedDependency(sourcePath, ImportedDependencyKind.SourceFile));
+
+            _ = asset.GeneratedSourcePath.Should().NotBeNullOrWhiteSpace();
+            _ = asset.Dependencies.Should().Contain(
+                new ImportedDependency(asset.GeneratedSourcePath!, ImportedDependencyKind.SourceFile));
+
+            foreach (var resource in expectedReferencedResources)
+            {
+                _ = asset.Dependencies.Should().Contain(
+                    new ImportedDependency(resource, ImportedDependencyKind.ReferencedResource));
+            }
+        }
+    }
+
     private static void AssertCookedOutputs(InMemoryImportFileAccess files, Document doc)
     {
-        _ = doc.Assets.Should().HaveCount(2);
+        _ = doc.Assets.Should().HaveCount(3);
         var entry = doc.Assets.Single(static a => a.AssetType == 2); // 2 = Geometry
 
         _ = entry.VirtualPath.Should().Be("/Content/Geometry/Tri__mesh__0000.ogeo");
@@ -328,30 +390,30 @@ public sealed class GltfGeometryImporterTests
         }
     }
 
-    private sealed class FixedIdentityPolicy(AssetKey key) : IAssetIdentityPolicy
-    {
-        public AssetKey GetOrCreateAssetKey(string virtualPath, string assetType)
-        {
-            _ = virtualPath;
-            _ = assetType;
-            return key;
-        }
-    }
-
     private sealed class InMemoryImportFileAccess : IImportFileAccess
     {
         private readonly ConcurrentDictionary<string, Entry> files = new(StringComparer.Ordinal);
+        private readonly TestContext testContext;
+
+        public InMemoryImportFileAccess(TestContext testContext)
+        {
+            this.testContext = testContext;
+        }
+
+        public IEnumerable<string> Keys => this.files.Keys;
 
         public void AddBytes(string relativePath, byte[] bytes)
         {
             ArgumentNullException.ThrowIfNull(relativePath);
             ArgumentNullException.ThrowIfNull(bytes);
-            this.files[relativePath] = new Entry(bytes, DateTimeOffset.UtcNow);
+            var key = Normalize(relativePath);
+            this.testContext?.WriteLine($"[InMemoryImportFileAccess] AddBytes: '{key}' ({bytes.Length} bytes)");
+            this.files[key] = new Entry(bytes, DateTimeOffset.UtcNow);
         }
 
         public bool TryGet(string relativePath, out byte[] bytes)
         {
-            if (this.files.TryGetValue(relativePath, out var entry))
+            if (this.files.TryGetValue(Normalize(relativePath), out var entry))
             {
                 bytes = entry.Bytes;
                 return true;
@@ -364,9 +426,10 @@ public sealed class GltfGeometryImporterTests
         public ValueTask<ImportFileMetadata> GetMetadataAsync(string sourcePath, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var key = Normalize(sourcePath);
 
-            return !this.files.TryGetValue(sourcePath, out var entry)
-                ? throw new FileNotFoundException("Missing file.", sourcePath)
+            return !this.files.TryGetValue(key, out var entry)
+                ? throw new FileNotFoundException($"Missing file: {key}", sourcePath)
                 : ValueTask.FromResult(new ImportFileMetadata(
                     ByteLength: entry.Bytes.Length,
                     LastWriteTimeUtc: entry.LastWriteTimeUtc));
@@ -375,10 +438,11 @@ public sealed class GltfGeometryImporterTests
         public ValueTask<ReadOnlyMemory<byte>> ReadHeaderAsync(string sourcePath, int maxBytes, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var key = Normalize(sourcePath);
 
-            if (!this.files.TryGetValue(sourcePath, out var entry))
+            if (!this.files.TryGetValue(key, out var entry))
             {
-                throw new FileNotFoundException("Missing file.", sourcePath);
+                throw new FileNotFoundException($"Missing file: {key}", sourcePath);
             }
 
             var len = Math.Min(maxBytes, entry.Bytes.Length);
@@ -388,18 +452,28 @@ public sealed class GltfGeometryImporterTests
         public ValueTask<ReadOnlyMemory<byte>> ReadAllBytesAsync(string sourcePath, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var key = Normalize(sourcePath);
 
-            return !this.files.TryGetValue(sourcePath, out var entry)
-                ? throw new FileNotFoundException("Missing file.", sourcePath)
-                : ValueTask.FromResult<ReadOnlyMemory<byte>>(entry.Bytes);
+            if (!this.files.TryGetValue(key, out var entry))
+            {
+                this.testContext?.WriteLine($"[InMemoryImportFileAccess] Missing file: '{key}'");
+                this.testContext?.WriteLine($"[InMemoryImportFileAccess] Available keys: {string.Join(", ", this.files.Keys.OrderBy(k => k, StringComparer.Ordinal))}");
+                throw new FileNotFoundException($"Missing file: {key}", sourcePath);
+            }
+
+            return ValueTask.FromResult<ReadOnlyMemory<byte>>(entry.Bytes);
         }
 
         public ValueTask WriteAllBytesAsync(string relativePath, ReadOnlyMemory<byte> bytes, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            this.files[relativePath] = new Entry(bytes.ToArray(), DateTimeOffset.UtcNow);
+            var key = Normalize(relativePath);
+            this.testContext?.WriteLine($"[InMemoryImportFileAccess] WriteAllBytesAsync: '{key}' ({bytes.Length} bytes)");
+            this.files[key] = new Entry(bytes.ToArray(), DateTimeOffset.UtcNow);
             return ValueTask.CompletedTask;
         }
+
+        private static string Normalize(string path) => path.Replace('\\', '/');
 
         private sealed record Entry(byte[] Bytes, DateTimeOffset LastWriteTimeUtc);
     }

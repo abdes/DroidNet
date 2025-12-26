@@ -5,7 +5,6 @@
 using System.Text.Json;
 using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Import.Geometry;
-using Oxygen.Assets.Import.Gltf;
 using Oxygen.Assets.Import.Materials;
 using Oxygen.Assets.Model;
 
@@ -28,8 +27,7 @@ namespace Oxygen.Assets.Resolvers;
 /// </remarks>
 /// <param name="mountPoint">The mount point this resolver handles (e.g. "Content").</param>
 /// <param name="sourceRoot">The root directory for source assets.</param>
-/// <param name="importedRoot">The root directory for imported artifacts.</param>
-public sealed class FileSystemAssetResolver(string mountPoint, string sourceRoot, string importedRoot) : IAssetResolver
+public sealed class FileSystemAssetResolver(string mountPoint, string sourceRoot) : IAssetResolver
 {
     private readonly string mountPoint = mountPoint;
 
@@ -128,32 +126,24 @@ public sealed class FileSystemAssetResolver(string mountPoint, string sourceRoot
 
     private async Task<GeometryAsset?> ResolveGeometryAsync(string relativePath, Uri uri)
     {
-        // The artifact resides in the .imported folder.
-        var importedPath = Path.Combine(importedRoot, relativePath);
+        // The metadata is in the source folder as .ogeo.json
+        var sourcePath = Path.Combine(sourceRoot, relativePath + ".json");
 
-        if (!File.Exists(importedPath))
+        if (!File.Exists(sourcePath))
         {
             return null;
         }
 
         try
         {
-            var stream = File.OpenRead(importedPath);
-            await using (stream.ConfigureAwait(false))
+            var jsonBytes = await File.ReadAllBytesAsync(sourcePath).ConfigureAwait(false);
+            var geometry = JsonSerializer.Deserialize<ImportedGeometry>(jsonBytes, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (geometry != null)
             {
-                var geometry = await ImportedGeometrySerializer.ReadAsync(stream).ConfigureAwait(false);
-                if (geometry != null)
-                {
-                    return MapGeometry(geometry, uri);
-                }
+                return MapGeometry(geometry, uri);
             }
         }
-        catch (JsonException)
-        {
-            // TODO: Log error
-            return null;
-        }
-        catch (IOException)
+        catch (Exception)
         {
             // TODO: Log error
             return null;

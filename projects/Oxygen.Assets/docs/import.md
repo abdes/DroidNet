@@ -33,7 +33,6 @@ Related single-source rules:
 4. [Identity & Metadata](#identity--metadata)
    - [Identity Policy](#deterministic-identity-policy-assetkey--virtualpath)
    - [Sidecar Schema](#sidecar-schema-v1)
-   - [Multi-Asset Sources](#multiple-assets-per-source)
 5. [Implementation](#implementation)
    - [Output Layout](#output-layout-what-import-writes)
    - [MVP Importers](#mvp-importers)
@@ -42,7 +41,8 @@ Related single-source rules:
 6. [Quality & Maturity](#quality--maturity)
    - [Versioning](#versioning-and-reproducibility)
    - [Testing](#testing-strategy-what-to-add-first)
-7. [References](#references)
+7. [Implementation Misalignment Report](#implementation-misalignment-report-2025-12-26)
+8. [References](#references)
 
 ## Foundations
 
@@ -52,7 +52,7 @@ Start with popular formats that are easy to obtain and test from the internet:
 
 | Format | Input Extensions | Output | Notes |
 | -------- | -------- | -------- | -------- |
-| Images | `.png`, `.jpg`, `.jpeg`, `.tga` (later) | Texture descriptor + payload | Via SixLabors.ImageSharp |
+| Images | `.png`, `.jpg`, `.jpeg`, `.tga` | Texture descriptor + payload | Via SixLabors.ImageSharp |
 | glTF 2.0 | `.gltf`, `.glb` | Scene + meshes + materials + textures | Via SharpGLTF.Core |
 
 Deliberately defer for later (still pluggable): FBX, USD, EXR, audio codecs, animation retargeting, complex material graphs.
@@ -65,7 +65,8 @@ Deliberately defer for later (still pluggable): FBX, USD, EXR, audio codecs, ani
 | Deterministic identity | Stable AssetKey ownership and stable VirtualPath to AssetKey mapping |
 | Incremental | Re-import only what changed; don't rebuild everything |
 | Pluggable | Add importers without touching core pipeline |
-| Runtime-compatible | Outputs (loose layout) produced during Import; runtime never reads source formats |
+| **Source-Centric Editor** | The editor reads Source files + Sidecars. Intermediate files are only for caching expensive derived data. |
+| **Cooked for Engine** | Runtime consumes only optimized binary artifacts; it never reads source or intermediate files. |
 | Non-UI | Everything async, cancellation-friendly, emits structured diagnostics |
 
 ### Recommended Libraries (MVP)
@@ -102,7 +103,13 @@ All Oxygen-produced asset files use unambiguous extensions that start with `o`:
 | `.omat` | Material asset descriptor |
 | `.oscene` | Scene asset descriptor (glTF/GLB primary output) |
 
-Rule: Virtual paths and artifact file names use these extensions. Source extensions (`.png`, `.glb`, etc.) remain only in `Content/**`.
+**Rule:** These extensions are used for:
+
+1. **Virtual Paths** (e.g., `/Content/Wood.otex`)
+2. **Cooked Artifacts** (e.g., `.cooked/Content/Wood.otex`)
+3. **Oxygen-Native Source Files** (e.g., `Content/Materials/Red.omat.json`)
+
+Standard source extensions (`.png`, `.glb`) are preserved in `Content/` but map to one of these canonical extensions in the Virtual File System.
 
 ## Project Structure
 
@@ -132,8 +139,9 @@ Example (glTF):
 
 - Source: `Content/Geometry/Cube.glb`
 - Sidecar: `Content/Geometry/Cube.glb.import.json`
-- Imported: `.imported/Content/Geometry/Cube.oscene` + sub-assets
-- Cooked: `.cooked/Content/Geometry/Cube.oscene` + sub-assets
+- Generated Sources: `Content/Geometry/Cube__scene.oscene.json` + sub-assets (`*.omat.json`, `*.otex.json`, `*.ogeo.json`)
+- Intermediate: `.imported/Content/Geometry/Cube__mesh__0000.glb` + extracted textures (`*.png`)
+- Cooked: `.cooked/Content/Geometry/Cube__scene.oscene` + sub-assets (`*.omat`, `*.otex`, `*.ogeo`)
 
 #### Authoring mount points (Project.oxy)
 
@@ -169,8 +177,8 @@ graph LR
 
 Responsibilities:
 
-- `Oxygen.Assets.Import`: What assets does a source file define and what are their stable identities?
-- `Build` (internal): Produce runtime-compatible descriptors/resources and container index
+- `Oxygen.Assets.Import`: Analyzes source files, **generates dependent source files** (if needed), and produces intermediate cache files.
+- `Build` (internal): Reads Source and Intermediate files to produce runtime-compatible binary artifacts.
 - `Cook` (later): Optional optimization/minimization for packaging
 
 ### Public Surface Area (Proposed)
@@ -256,6 +264,12 @@ public enum ImportedDependencyKind
     ReferencedResource,
 }
 ```
+
+Dependency-kind semantics are strict:
+
+- `SourceFile`: any authoring source that import/build depends on (including generated Oxygen-native JSON sources like `*.omat.json`, `*.ogeo.json`, `*.otex.json`, `*.oscene.json`).
+- `Sidecar`: only `<Source>.<ext>.import.json`.
+- `ReferencedResource`: external referenced files (e.g., `.gltf` → `.bin`, external images).
 
 Payload is intentionally `object` at this stage to keep the MVP flexible; in practice we’ll have strongly typed payloads per importer (e.g., `ImportedTexture`, `ImportedGltfScene`).
 
@@ -387,26 +401,18 @@ graph TD
     A["Sidecar (v1)"] --> B["SchemaVersion"]
     A --> C["MountPoint"]
     A --> D["Source<br/>(metadata)"]
-    A --> E["Importer<br/>(name, version, settings)"]
-    A --> F["Outputs[]<br/>(primary + sub-assets)"]
-    A --> G["History<br/>(optional)"]
-    A --> H["Compatibility<br/>(optional)"]
-    F --> F1["AssetKey"]
-    F --> F2["VirtualPath"]
-    F --> F3["AssetReferences[]<br/>(optional)"]
+  A --> E["Importer<br/>(name, type, version, settings)"]
+  A --> F["Outputs[]<br/>(primary + sub-assets)"]
+  A --> G["Incremental<br/>(optional)"]
+  G --> G1["LastImportTimeUtc"]
+  G --> G2["Dependencies[]"]
     style A fill:#b3e5fc,color:#01579b
     style B fill:#c8e6c9,color:#1b5e20
     style C fill:#c8e6c9,color:#1b5e20
     style D fill:#c8e6c9,color:#1b5e20
     style E fill:#c8e6c9,color:#1b5e20
     style F fill:#c8e6c9,color:#1b5e20
-    style G fill:#ffe0b2,color:#e65100
-    style H fill:#ffe0b2,color:#e65100
-    style F1 fill:#c8e6c9,color:#1b5e20
-    style F2 fill:#c8e6c9,color:#1b5e20
-    style F3 fill:#c8e6c9,color:#1b5e20
-    style F4 fill:#c8e6c9,color:#1b5e20
-    style F5 fill:#ffe0b2,color:#e65100
+  style G fill:#ffe0b2,color:#e65100
 ```
 
 Conventions:
@@ -415,6 +421,12 @@ Conventions:
 - Use `SchemaVersion` (number). **Zero ambiguity**: the schema version is an explicit integer field.
 - Use SHA-256 as **lowercase hex** (no `sha256:` prefix) to avoid string parsing ambiguity.
 - Treat `AssetKey` as the only true stable identity for referencing across renames/moves.
+
+Parsing policy (robustness):
+
+- Sidecar JSON parsing is **strict**: unknown/unmapped properties are rejected (`UnmappedMemberHandling = Disallow`).
+- Therefore, adding new fields is **not** “free-form extensibility”; it is a schema change.
+- Schema evolution is handled by updating `SchemaVersion` and updating the reader/writer in lockstep.
 
 Required fields (must exist):
 
@@ -428,10 +440,12 @@ Required fields (must exist):
   - `Sha256` (string, lowercase hex)
   - `ByteLength` (number)
 - `Importer` (object)
-  - `Name` (string) — e.g. `Oxygen.Import.ImageSharpTexture`
+  - `Name` (string) — e.g. `Oxygen.Import.ImageTexture`
+  - `Type` (string, nullable)
+    - Implementation-defined importer type discriminator.
   - `Version` (string) — semantic-ish, e.g. `1.0.0`
   - `Settings` (object)
-    - Importer-specific options (round-trippable JSON).
+    - Importer-specific options (round-trippable JSON). Values are stored as JSON values (not only strings).
     - Any change to `Settings` should be treated as “needs reimport/rebuild”, even if the source hash is unchanged.
 - `Outputs` (array)
   - each output contains:
@@ -439,26 +453,21 @@ Required fields (must exist):
     - `AssetType` (string) — one of: `Texture`, `Geometry`, `Material`, `Scene`
     - `AssetKey` (string) — 32 lowercase hex chars (`{Part0:x16}{Part1:x16}`)
     - `VirtualPath` (string) — e.g. `/Content/Textures/Wood.otex`
-    - `AssetReferences` (array, optional)
-      - The asset-graph edges for multi-output sources and/or sub-assets (this is where dependencies matter most).
-      - Each entry contains:
-        - `AssetKey` (string) — the referenced asset
-        - `Role` (string, optional) — e.g. `AlbedoTexture`, `NormalTexture`, `Material`
 
-Optional fields (recommended, not required for MVP):
+Optional fields (implemented):
 
-- `Outputs[].DisplayName` (string)
-  - Human-facing name; can differ from file name.
-- `Outputs[].Tags` (array of strings)
-  - Source-control-friendly tags for editor search/organization.
-- `History` (object)
-  - `CreatedTimeUtc` (string, ISO 8601)
+- `Incremental` (object)
   - `LastImportTimeUtc` (string, ISO 8601)
-  - `LastImportResult` (string) — e.g. `Success`, `Failed`, `Cancelled`
-  - `LastImportEngineVersion` (string)
-- `Compatibility` (object)
-  - `EngineMinVersion` (string)
-  - `EngineMaxVersion` (string, nullable)
+  - `Dependencies` (array)
+    - Each entry contains:
+      - `RelativePath` (string)
+      - `Kind` (number)
+        - Serialized enum value of `ImportedDependencyKind`.
+      - `LastWriteTimeUtc` (string, ISO 8601)
+      - `Sha256` (string, nullable, lowercase hex)
+      - `ByteLength` (number, nullable)
+
+Note: this document previously listed additional optional blocks (e.g., `History`, `Compatibility`, tagging/display metadata). Those are not part of the implemented v1 sidecar schema. If we want them, they must be added via an explicit schema update (and likely a `SchemaVersion` bump), not by “sprinkling extra fields”.
 
 Example (PNG → `.otex`):
 
@@ -474,6 +483,7 @@ Example (PNG → `.otex`):
   },
   "Importer": {
     "Name": "Oxygen.Import.ImageSharpTexture",
+    "Type": null,
     "Version": "1.0.0",
     "Settings": {
       "ColorSpace": "Srgb"
@@ -484,85 +494,58 @@ Example (PNG → `.otex`):
       "Role": "Primary",
       "AssetType": "Texture",
       "AssetKey": "d4ce92d53f354d658c9d7f4f8b95a2af",
-      "DisplayName": "Wood",
-      "Tags": ["wood", "texture"],
       "VirtualPath": "/Content/Textures/Wood.otex"
     }
-  ],
-  "History": {
-    "CreatedTimeUtc": "2025-12-23T19:05:22Z",
-    "LastImportTimeUtc": "2025-12-23T19:05:22Z",
-    "LastImportResult": "Success",
-    "LastImportEngineVersion": "0.4.0"
-  },
-  "Compatibility": {
-    "EngineMinVersion": "0.4.0",
-    "EngineMaxVersion": null
-  }
+  ]
 }
 ```
 
-### Multiple Assets Per Source
+### Multiple Assets Per Source (Composite Files)
 
-Some sources define multiple assets (a glTF scene may produce:
+Some sources (like glTF/GLB) are **Composite Files** that define multiple assets (Scenes, Meshes, Materials, Textures).
 
-- a scene descriptor asset,
-- multiple mesh assets,
-- multiple material assets,
-- texture assets for embedded images).
+#### Strategy: Side-Effect Source Generation
 
-Policy (solid recommendation): **single folder, deterministic file names, no ambiguity**.
+To make these internal assets editable and visible in the Project view, the Importer **generates dependent source files** in the `Content/` folder during import.
 
-1) Primary output
+**Rules for Generated Sources:**
 
-- The primary asset is derived from the source file name and uses the canonical Oxygen extension for the importer.
-  - Example: `Robot.glb` → `/Content/Geometry/Robot.oscene`
+1. **No Independent Sidecars:** Generated sources (e.g., extracted materials) do **not** have their own `.import.json` sidecars. Their Identity (AssetKey) and Import Settings are managed by the **Parent Source's** sidecar (e.g., `Box.glb.import.json`).
+2. **Editable Metadata:** The generated source files (e.g., `.omat.json`, `.otex.json`) contain the asset's editable properties. The Editor modifies these files directly.
+3. **Heavy Data Separation:**
+   - **Metadata** goes to `Content/` (Generated Source).
+   - **Binary Data** (pixel buffers, vertex buffers) goes to `.imported/` (Intermediate).
 
-1) Sub-assets (multi-output)
+#### Example: Importing `Box.glb`
 
-- Sub-assets are placed in the **same virtual directory** as the primary output.
-- Sub-asset file names are derived from:
-  - the source stem (e.g. `Robot`)
-  - a stable kind tag (`mesh`, `mat`, `tex`)
-  - a stable numeric index from the source (`0000`, `0001`, …)
-  - an optional sanitized display name (for readability)
+Input: `Content/Geometry/Box.glb`
 
-Canonical pattern:
+**1. Generated Sources (in `Content/Geometry/`)**
 
-- `{Stem}__{kind}__{Index4}.{oext}`
+- `Box__scene.oscene.json` (The Scene definition)
+- `Box__material__0000.omat.json` (The Material properties)
+- `Box__texture__0000.otex.json` (Texture metadata)
+- `Box__mesh__0000.ogeo.json` (Mesh metadata: slots, bounds, stats)
 
-Rules:
+**2. Intermediate Artifacts (in `.imported/Content/Geometry/`)**
 
-- `Stem` is the source file name without extension.
-- `Index4` is a zero-based index padded to 4 digits.
-- `oext` is one of the canonical Oxygen extensions listed above.
+- `Box__texture__0000.png` (Extracted Image, format preserved from GLB)
+- `Box__mesh__0000.glb` (Extracted Geometry, standard container)
 
-Stability rule (important): once a sub-asset has a `VirtualPath` assigned and persisted in the sidecar, it is treated as
-authoritative and **must not be recomputed** from display names on reimport. Display names can change without renaming
-assets.
+**3. Parent Sidecar (`Content/Geometry/Box.glb.import.json`)**
 
-Examples (glTF):
+- Stores the AssetKeys for *all* the above.
+- Maps the internal GLB indices to these generated files.
 
-- Primary scene: `/Content/Geometry/Robot.oscene`
-- Mesh 0: `/Content/Geometry/Robot__mesh__0000.ogeo`
-- Material 1: `/Content/Geometry/Robot__mat__0001.omat`
-- Image 2: `/Content/Geometry/Robot__tex__0002.otex`
+#### Summary of Artifact Locations
 
-Why this works:
-
-- Deterministic and collision-resistant
-- Stable across reimport as long as the source’s ordering for those items is stable
-- No extra folders required (keeps “same relative path” promise)
-
-### Deriving output paths (keep sidecar DTOs simple)
-
-To avoid ambiguity and deserialization conflicts, the sidecar **does not store physical output paths**.
-Given an output `VirtualPath` of the form `/{MountPoint}/{Path}`:
-
-- Imported artifact project-relative path: `.imported/{MountPoint}/{Path}`
-- Cooked artifact project-relative path: `.cooked/{MountPoint}/{Path}`
-
-These are deterministic and derived everywhere.
+| Asset Type | Source Location (`Content/`) | Sidecar? | Intermediate (`.imported/`) | Cooked (`.cooked/`) |
+| :--- | :--- | :--- | :--- | :--- |
+| Composite | `Box.glb` | **Yes** | None (usually) | None (container only) |
+| Extracted Scene | `Box__scene.oscene.json` (Generated) | No | None | `Box__scene.oscene` (Binary) |
+| Extracted Mat | `Box__material__0000.omat.json` (Generated) | No | None | `Box__material__0000.omat` (Binary) |
+| Extracted Tex | `Box__texture__0000.otex.json` (Generated) | No | `Box__texture__0000.png` (Extracted Image) | `Box__texture__0000.otex` (Binary) |
+| Extracted Mesh | `Box__mesh__0000.ogeo.json` (Generated) | No | `Box__mesh__0000.glb` (Extracted Geometry) | `Box__mesh__0000.ogeo` (Binary) |
 
 ## Implementation
 
@@ -572,30 +555,98 @@ Import produces two output directories, both in loose layout:
 
 | Output Directory | Purpose | Lifecycle | Path Example |
 | -------- | -------- | -------- | -------- |
-| `.imported/<MountPoint>/**` | Editor-native, disposable | Wipe and regenerate anytime | `.imported/Content/Geometry/Cube.oscene` |
-| `.cooked/<MountPoint>/**` | Runtime-ready, canonical | PIE/runtime mount truth | `.cooked/Content/Geometry/Cube.oscene` |
+| `.imported/<MountPoint>/**` | **Editor Cache / Metadata** | Wipe and regenerate anytime | `.imported/Content/Geometry/Box__texture__0000.png` |
+| `.cooked/<MountPoint>/**` | **Runtime Binary** | PIE/runtime mount truth | `.cooked/Content/Geometry/Box__scene.oscene` |
+
+**1. Source Files (`Content/**`)**
+
+The primary truth for the Editor. Can be external formats (`.png`, `.glb`) or Oxygen-native JSON (`.omat.json`).
+
+- *Note:* Importers may optionally **generate new source files** (e.g., extracting a material from a GLB to `Content/Materials/Red.omat.json`) to allow independent editing.
+
+**2. Intermediate Files (`.imported/**`)**
+
+Optional, editor-readable cache.
+
+- Contains derived data that is expensive to compute or parse (e.g., a JSON Scene Graph extracted from a binary GLB, texture histograms, or thumbnails).
+- If the Source file + Sidecar is sufficient for the editor (e.g., a simple `.omat.json`), no intermediate file is needed.
+- **Format:** Typically JSON or standard media formats, optimized for Editor consumption.
+
+**3. Cooked Files (`.cooked/**`)**
+
+Binary, engine-ready assets.
+
+- Produced by the **Build** step from Source (and optionally Intermediate) data.
+- Format: Binary headers + GPU-ready data (as defined in `runtime-formats.md`).
 
 The build step:
 
+- Reads Source/Intermediate data
 - Generates `container.index.bin` under `.cooked/<MountPoint>/`
 - Produces any runtime resources/tables
-- Both directories use `.otex`, `.ogeo`, `.omat`, `.oscene` extensions
+- Both directories use `.otex`, `.ogeo`, `.omat`, `.oscene` extensions (but different content formats)
 
 ### MVP Importers
 
-### 1) Texture importer (PNG/JPEG)
+### 1) Texture importer (PNG/JPEG/TGA)
 
 Responsibilities:
 
 - Decode image → canonical pixels + metadata
 - Create/update a single texture asset at `VirtualPath`
-- Produce dependencies: the source image file
+
+Selection (MVP):
+
+- Supports `.png`, `.jpg`, `.jpeg`, `.tga` by extension.
+
+VirtualPath (texture asset):
+
+- Output `VirtualPath` must be a canonical absolute virtual path.
+- If `ImportInput.VirtualPath` is provided:
+  - Use it after validation (`VirtualPath.IsCanonicalAbsolute`).
+  - It must end with `.otex`.
+- Otherwise derive it from `ImportInput.SourcePath`:
+  - Replace the source extension with `.otex` and prefix with `/`.
+  - Example: `Content/Textures/Wood.tga` → `/Content/Textures/Wood.otex`.
+
+What import generates (standalone image source):
+
+- Sidecar (identity + incremental): `Content/Textures/Wood.<ext>.import.json`
+- Generated texture authoring source (editable metadata): `Content/Textures/Wood.otex.json`
+- Intermediate payload snapshot (deterministic): `.imported/Content/Textures/Wood.<ext>`
+- Cooked per-asset descriptor: `.cooked/Content/Textures/Wood.otex`
+- Cooked per-mount aggregate resources:
+  - `.cooked/Content/resources/textures.table`
+  - `.cooked/Content/resources/textures.data`
+
+Dependencies (canonical):
+
+- `SourceFile`: the image (`Content/.../Wood.<ext>`) and the authoring source (`Content/.../Wood.otex.json`)
+- `Sidecar`: `Content/.../Wood.<ext>.import.json`
+
+Texture authoring source (`*.otex.json`) (MVP essentials):
+
+- Required fields include: `Schema`, `SourceImage`, `ColorSpace`, `TextureType`, `MipPolicy`, `RuntimeFormat`.
+- Tool-owned convenience block: `Imported.{Width,Height}`.
+
+Cooked outputs / merge semantics:
+
+- The `resources/textures.*` pair is a per-mount aggregate; cooking a single texture must preserve existing entries.
+- The build/cook step performs a read–merge–rewrite of `.table` + `.data`.
+- The per-asset `.otex` descriptor references the merged table index.
+
+Current limitations (explicit):
+
+- Texture types: `Texture2D` only.
+- Compression: `None` only.
+- Runtime format: currently limited to uncompressed RGBA8 (sRGB vs linear selected via `ColorSpace`).
 
 Implementation notes:
 
-- Use ImageSharp to decode.
-- Normalize color space metadata (sRGB vs linear) via options.
-- Don’t over-optimize: the initial Build step can store raw RGBA8 (or a simple uncompressed format) if needed.
+- Decode using the project’s chosen image decoding backend (implementation detail) and reject unsupported/corrupt inputs with actionable diagnostics.
+- Normalize color space intent via importer settings (e.g., “treat as sRGB” vs “treat as linear”) stored in the source’s sidecar under `Importer.Settings`.
+- Keep the MVP build format simple and deterministic (e.g., raw RGBA8 or an uncompressed canonical format), deferring compression/transcoding to later.
+- The standalone image workflow uses a generated Oxygen-native authoring source (`*.otex.json`) as the editor-facing build settings surface.
 
 ### 2) glTF importer (GLB/GLTF)
 
@@ -606,7 +657,9 @@ Responsibilities:
   - node transforms / scene graph (at least enough for future)
   - materials (PBR metallic-roughness subset)
   - referenced images (embedded or external)
-- Emit multiple ImportedAssets with deterministic sub-asset virtual paths.
+- **Generate dependent source files** (e.g., `.omat.json`, `.otex.json`, `.ogeo.json`) for extracted assets.
+- **Write intermediate cache files** (e.g., `.png` for textures, `.glb` for meshes).
+- Emit multiple `ImportedAsset` records with deterministic sub-asset virtual paths.
 
 Implementation notes:
 
@@ -663,6 +716,93 @@ Recommended test coverage:
 | Unit tests: Identity policy | AssetKey stability, sub-asset naming | Stable AssetKey across reimport; stable sub-asset naming for glTF |
 | Unit tests: Importer selection | Extension and magic sniffing | Correct importer chosen by signature; priority handling for overlaps |
 | Integration tests (mock filesystem) | PNG import, GLB import, determinism | Small PNG → expected artifacts; small GLB → deterministic virtual paths and container index |
+
+## Implementation Misalignment Report (2025-12-26)
+
+This section documents **all known misalignments** between this design document and the current implementation in `Oxygen.Assets` as of 2025-12-26.
+
+For each misalignment:
+
+- **Impact** describes what breaks or becomes unreliable.
+- **Recommendation** is an expert call on whether to **update the design** or **fix the implementation**.
+
+### 1) Sidecar importer settings are not actually read from the sidecar schema
+
+#### Design expectation
+
+- Sidecar schema stores importer identity + settings under `Importer.{Name,Version,Settings}`.
+- Incremental decisions should treat changes to `Importer.Settings` as “needs reimport/rebuild”.
+
+#### Implementation status
+
+- `SidecarAssetIdentityPolicy` writes a sidecar with shape `Importer: { Name, Type, Version, Settings }` and additional `Incremental` data:
+  - [../src/Import/SidecarAssetIdentityPolicy.cs](../src/Import/SidecarAssetIdentityPolicy.cs)
+- `ImportSettingsHelper` attempts to read a different JSON shape: a top-level `Settings` dictionary:
+  - [../src/Import/ImportSettingsHelper.cs](../src/Import/ImportSettingsHelper.cs)
+
+#### Impact
+
+- Importer settings authored in sidecars (per this design) will not influence importer behavior.
+- Import behavior becomes confusing/non-deterministic from a user perspective (“I changed settings in sidecar but nothing changed”).
+- It undermines the incremental reimport policy described in this document (because settings changes may not propagate as intended).
+
+#### Recommendation — Fix implementation
+
+- Update `ImportSettingsHelper` to read from the *actual* sidecar schema (`Importer.Settings`) rather than a separate, incompatible schema.
+- Keep `Importer.Settings` round-trippable JSON (as it is today) and treat any changes as “needs reimport”.
+
+##### Recommendation addendum — Refactor settings serialization (source-generated System.Text.Json)
+
+- Replace the “settings as a free-form dictionary” approach with **typed settings models** per importer, serialized/deserialized via **source-generated `System.Text.Json` contexts**.
+- Make the sidecar schema the **single canonical settings store** and ensure the read/write path is symmetric:
+  - Write: `SidecarAssetIdentityPolicy` persists `Importer.Settings`.
+  - Read: `ImportSettingsHelper` (or its replacement) reads `Importer.Settings` into the importer’s typed settings model.
+- Preserve forward evolution by versioning settings:
+  - Keep `Importer.Version` as the importer identity version.
+  - Add an importer-specific `SettingsVersion` *inside* `Importer.Settings` (or enforce that the importer’s version implies the settings shape).
+- Enforce validation at the importer boundary:
+  - Unknown/unsupported settings should produce diagnostics and fall back to defaults (rather than being silently ignored).
+  - Invalid values should be rejected with actionable diagnostics.
+- UI support: each importer should expose a structured settings description (categories/groups/fields + defaults) so the editor can render “General settings” and importer-specific settings without hard-coded key strings.
+
+##### Design note
+
+- If we want to support additional user-authored settings beyond an importer’s own settings, define them explicitly in this document with a single canonical JSON location (rather than introducing a second, incompatible schema).
+
+### 2) glTF importer does not honor `ImportInput.VirtualPath` for primary output
+
+#### Design expectation
+
+- The system derives a canonical virtual path unless one is explicitly provided via `ImportInput.VirtualPath`.
+- For glTF sources, the primary output is conceptually the scene: `/Content/Geometry/Robot.oscene` (example in this doc).
+
+#### Implementation status
+
+- `GltfImporter` generates deterministic output names based on `{stem}__scene`, `{stem}__mesh__0000`, `{stem}__material__0000`, `{stem}__texture__0000` and does not consult `ImportInput.VirtualPath`:
+  - [../src/Import/Gltf/GltfImporter.cs](../src/Import/Gltf/GltfImporter.cs)
+
+#### Impact
+
+- Editor callers cannot override the virtual path for the “primary” scene output, even though the public API suggests they can.
+- The design’s “default mapping” example (`Robot.glb` → `/Content/Geometry/Robot.oscene`) is not what the current importer produces.
+
+#### Recommendation — Update design + fix implementation (preferred)
+
+`ImportInput.VirtualPath` is a single-string override that fits **single-output** sources well, but it does not scale cleanly to **composite** sources (GLB/GLTF) that produce multiple asset types.
+
+- Update the design to introduce a first-class **Composite Output Destination Layout** for composite importers.
+  - The caller (editor UI) specifies destination paths **per output kind** (scene/material/texture/geometry/animation, etc.).
+  - Destinations are expressed as project-relative directories (or virtual directories) under the chosen `MountPoint`.
+  - The importer applies a deterministic naming policy within each destination, keeping identity stable across reimport.
+- In that model, treat `ImportInput.VirtualPath` as:
+  - applicable to single-output importers (e.g., standalone PNG → `.otex`), and/or
+  - an override for *only* the composite source’s primary output (scene) when explicitly desired.
+- Fix the glTF importer implementation to honor the composite destination layout:
+  - generated sources (`*.omat.json`, `*.otex.json`, `*.ogeo.json`, `*.oscene.json`) land under the configured destination roots
+  - intermediate caches (`.imported/**`) follow the same relative layout for traceability
+  - sub-asset virtual paths remain deterministic and stable, but are no longer forced to share a single “primary-name prefix”
+
+This keeps the public API honest (callers can control placement), avoids ad-hoc path hacks, and matches the long-term editor UX where users configure “where scenes go vs where textures go”.
 
 ## References
 

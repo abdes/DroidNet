@@ -72,9 +72,57 @@ public sealed class ImportService : IImportService
         cancellationToken.ThrowIfCancellationRequested();
 
         var state = this.CreateState(request);
-        await this.ProcessInputsAsync(state, cancellationToken).ConfigureAwait(false);
 
-        await BuildAsync(state, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await this.ProcessInputsAsync(state, cancellationToken).ConfigureAwait(false);
+            await BuildAsync(state, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Best-effort import: convert unexpected pipeline failures into diagnostics when FailFast is false.
+            state.HadFailure = true;
+            state.Diagnostics.Add(
+                ImportDiagnosticSeverity.Error,
+                code: "OXYIMPORT_PIPELINE_FAILED",
+                message: ex.Message,
+                sourcePath: null);
+
+            if (state.Request.Options.FailFast)
+            {
+                throw;
+            }
+        }
+        finally
+        {
+            // Keep cooked roots mountable even after partial failures by repairing file records.
+            if (!cancellationToken.IsCancellationRequested && state.HadFailure)
+            {
+                try
+                {
+                    var mountPoints = state.Request.Inputs
+                        .Select(static i => i.MountPoint)
+                        .Where(static m => !string.IsNullOrWhiteSpace(m));
+
+                    await LooseCookedBuildService
+                        .RepairIndexFileRecordsAsync(state.Files, mountPoints!, cancellationToken)
+                        .ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    // Respect cancellation.
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[ImportService] Index repair failed: {ex.Message}");
+                }
+            }
+        }
+
         return state.ToResult();
     }
 
@@ -99,6 +147,7 @@ public sealed class ImportService : IImportService
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[ImportService] Index build failed: {ex.Message}");
+            state.HadFailure = true;
             state.Diagnostics.Add(
                 ImportDiagnosticSeverity.Error,
                 code: "OXYBUILD_INDEX_FAILED",
@@ -228,12 +277,30 @@ public sealed class ImportService : IImportService
             return true;
         }
 
-        var assets = await RunImporterAsync(state, input, importer, identity, cancellationToken).ConfigureAwait(false);
-        state.Imported.AddRange(assets);
-        state.AnyImported = state.AnyImported || assets.Count > 0;
-        state.Completed++;
+        try
+        {
+            var assets = await RunImporterAsync(state, input, importer, identity, cancellationToken).ConfigureAwait(false);
+            state.Imported.AddRange(assets);
+            state.AnyImported = state.AnyImported || assets.Count > 0;
+            state.Completed++;
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            state.HadFailure = true;
+            state.Diagnostics.Add(
+                ImportDiagnosticSeverity.Error,
+                code: "OXYIMPORT_INPUT_FAILED",
+                message: ex.Message,
+                sourcePath: input.SourcePath);
 
-        return true;
+            state.Completed++;
+            return !state.Request.Options.FailFast;
+        }
     }
 
     private ImportState CreateState(ImportRequest request)
@@ -302,6 +369,8 @@ public sealed class ImportService : IImportService
         public List<ImportedAsset> UpToDateImported { get; }
 
         public bool AnyImported { get; set; }
+
+        public bool HadFailure { get; set; }
 
         public int Total { get; }
 

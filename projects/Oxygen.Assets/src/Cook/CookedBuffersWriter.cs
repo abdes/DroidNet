@@ -38,10 +38,12 @@ public static class CookedBuffersWriter
             }
 
             var assetKey = item.AssetKey;
+            Console.WriteLine($"[CookedBuffersWriter] Processing key: {assetKey}");
             var geometry = item.Geometry;
+            var data = item.Data;
 
             var vertexIndex = (uint)tableEntries.Count;
-            var vertexBytes = SerializeVertices(geometry.Vertices);
+            var vertexBytes = SerializeVertices(data.Vertices);
             var vertexOffset = AppendAligned(dataStream, vertexBytes, alignment: 72);
             tableEntries.Add(MakeBufferDesc(
                 dataOffset: vertexOffset,
@@ -51,7 +53,7 @@ public static class CookedBuffersWriter
                 elementFormat: 0));
 
             var indexIndex = (uint)tableEntries.Count;
-            var indexBytes = SerializeUInt32(geometry.Indices);
+            var indexBytes = SerializeUInt32(data.Indices);
             var indexOffset = AppendAligned(dataStream, indexBytes, alignment: 4);
             tableEntries.Add(MakeBufferDesc(
                 dataOffset: indexOffset,

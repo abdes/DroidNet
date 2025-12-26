@@ -8,7 +8,6 @@ using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text;
-using Oxygen.Assets.Catalog;
 using Oxygen.Assets.Catalog.FileSystem;
 using Oxygen.Assets.Persistence.LooseCooked.V1;
 using Oxygen.Assets.Persistence.Pak.V1;
