@@ -173,15 +173,14 @@ void Platform::UnregisterWindowAboutToBeDestroyedHandler(size_t token)
 
 auto Platform::Compose(const PlatformConfig& config) -> void
 {
-  AddComponent<AsyncOps>(config);
-  AddComponent<InputEvents>();
-
   if (config.headless) {
-    LOG_F(INFO, "Platform is headless -> no input, no window");
-    return;
+    LOG_F(INFO, "Platform is headless, no window and passive event pump");
   }
+
+  AddComponent<AsyncOps>(config);
   AddComponent<EventPump>();
   AddComponent<WindowManager>();
+  AddComponent<InputEvents>();
 }
 
 auto Platform::GetInputSlotForKey(const platform::Key key)

@@ -41,3 +41,4 @@
 #define OXGN_COM_API __declspec(dllexport)
 #define OXGN_COM_API __declspec(dllimport)
 #define OXGN_COM_API __attribute__((visibility("default")))
+#define OXGN_PLAT_NDAPI [[nodiscard]] OXGN_PLAT_API

@@ -7,21 +7,28 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <concepts>
 #include <functional>
 #include <memory>
+#include <system_error>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
 
+#include <asio/io_context.hpp>
 #include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
@@ -30,11 +37,12 @@
 #include <Oxygen/OxCo/ParkingLot.h>
 #include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Platform/api_export.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Platform/api_export.h>
 
 namespace oxygen {
 
@@ -173,7 +181,7 @@ namespace platform {
 
   class InputEvents final : public Component {
     OXYGEN_COMPONENT(InputEvents)
-    OXYGEN_COMPONENT_REQUIRES(AsyncOps)
+    OXYGEN_COMPONENT_REQUIRES(AsyncOps, EventPump)
   public:
     //! The maximum number of events buffered in the input events channel before
     //! it starts blocking on writes.
@@ -362,6 +370,7 @@ public:
       std::invoke_result_t<Callable, const platform::PlatformEvent&>>
   void RegisterEventFilter(Callable&& filter)
   {
+    CHECK_F(!event_filter_, "only one platform event filter is supported");
     // Erase the callable into a std::function<void(platform::PlatformEvent&)>
     event_filter_ = std::function<void(const platform::PlatformEvent&)>(
       std::forward<Callable>(filter));
