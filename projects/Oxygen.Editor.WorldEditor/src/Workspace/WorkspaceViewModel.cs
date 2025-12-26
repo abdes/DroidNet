@@ -183,7 +183,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, IRecipient<
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//se:se;right;w=300//props:props;bottom=se//cb:cb;bottom;h=300//log:log;with=cb)");
+            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=400//log:log;with=cb)");
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
