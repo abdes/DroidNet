@@ -52,6 +52,17 @@ auto IsCopyQueue(const oxygen::observer_ptr<CommandQueue>& queue) -> bool
   return queue && queue->GetQueueRole() == QueueRole::kTransfer;
 }
 
+auto CanImplicitlyPromoteFromCommon(const ResourceStates initial_state) -> bool
+{
+  // In this engine, many textures default to kUndefined, which maps to
+  // D3D12_RESOURCE_STATE_COMMON at creation time. For copy/transfer queues,
+  // D3D12 expects resources to begin in COMMON and relies on implicit
+  // promotion/decay rules.
+  return initial_state == ResourceStates::kUnknown
+    || initial_state == ResourceStates::kUndefined
+    || initial_state == ResourceStates::kCommon;
+}
+
 // Maps a BufferUsage bitset to the preferred steady ResourceStates for
 // buffers after upload. Defaults to kCommon when no specific usage is set.
 auto UsageToTargetState(BufferUsage usage) -> ResourceStates
@@ -72,10 +83,176 @@ auto UsageToTargetState(BufferUsage usage) -> ResourceStates
   return ResourceStates::kCommon;
 }
 
+inline auto BlocksX(const oxygen::graphics::detail::FormatInfo& info,
+  const uint32_t width_texels) -> uint32_t
+{
+  return (width_texels + info.block_size - 1U) / info.block_size;
+}
+
+inline auto BlocksY(const oxygen::graphics::detail::FormatInfo& info,
+  const uint32_t height_texels) -> uint32_t
+{
+  return (height_texels + info.block_size - 1U) / info.block_size;
+}
+
+inline auto RowCopyBytes(const oxygen::graphics::detail::FormatInfo& info,
+  const uint32_t width_texels) -> uint64_t
+{
+  return static_cast<uint64_t>(BlocksX(info, width_texels))
+    * static_cast<uint64_t>(info.bytes_per_block);
+}
+
+auto PackTexture2DToStaging(const UploadPolicy& policy,
+  const oxygen::graphics::detail::FormatInfo& info, const TextureUploadPlan& plan,
+  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
+{
+  const auto& fp = policy.filler;
+  if (fp.enable_default_fill) {
+    std::memset(dst_staging, static_cast<int>(fp.filler_value),
+      plan.total_bytes);
+  }
+
+  if (plan.regions.size() != plan.source_indices.size()) {
+    return false;
+  }
+
+  for (std::size_t i = 0; i < plan.regions.size(); ++i) {
+    const auto& region = plan.regions[i];
+    const auto src_index = plan.source_indices[i];
+    if (src_index >= src.subresources.size()) {
+      return false;
+    }
+    const auto& s = src.subresources[src_index];
+    if (s.row_pitch == 0U || s.slice_pitch == 0U) {
+      return false;
+    }
+
+    const auto width = region.dst_slice.width;
+    const auto height = region.dst_slice.height;
+    const auto copy_bytes_per_row = RowCopyBytes(info, width);
+    const auto rows = BlocksY(info, height);
+
+    const uint64_t required_src_bytes =
+      (rows == 0U) ? 0ULL
+                  : (static_cast<uint64_t>(rows - 1U)
+                      * static_cast<uint64_t>(s.row_pitch))
+        + copy_bytes_per_row;
+    if (s.bytes.size() < required_src_bytes) {
+      return false;
+    }
+    if (s.row_pitch < copy_bytes_per_row) {
+      return false;
+    }
+
+    const uint64_t required_dst_bytes =
+      (rows == 0U) ? 0ULL
+                  : (static_cast<uint64_t>(rows - 1U)
+                      * static_cast<uint64_t>(region.buffer_row_pitch))
+        + copy_bytes_per_row;
+    if (region.buffer_offset + required_dst_bytes > plan.total_bytes) {
+      return false;
+    }
+
+    for (uint32_t row = 0; row < rows; ++row) {
+      const auto src_off = static_cast<uint64_t>(row)
+        * static_cast<uint64_t>(s.row_pitch);
+      const auto dst_off = region.buffer_offset
+        + static_cast<uint64_t>(row)
+          * static_cast<uint64_t>(region.buffer_row_pitch);
+      std::memcpy(dst_staging + dst_off,
+        s.bytes.data() + static_cast<std::size_t>(src_off),
+        static_cast<std::size_t>(copy_bytes_per_row));
+    }
+  }
+
+  return true;
+}
+
+auto PackTexture3DToStaging(const UploadPolicy& policy,
+  const oxygen::graphics::detail::FormatInfo& info, const TextureUploadPlan& plan,
+  const UploadTextureSourceView& src, std::byte* dst_staging) -> bool
+{
+  const auto& fp = policy.filler;
+  if (fp.enable_default_fill) {
+    std::memset(dst_staging, static_cast<int>(fp.filler_value),
+      plan.total_bytes);
+  }
+
+  if (plan.regions.size() != plan.source_indices.size()) {
+    return false;
+  }
+
+  for (std::size_t i = 0; i < plan.regions.size(); ++i) {
+    const auto& region = plan.regions[i];
+    const auto src_index = plan.source_indices[i];
+    if (src_index >= src.subresources.size()) {
+      return false;
+    }
+    const auto& s = src.subresources[src_index];
+    if (s.row_pitch == 0U || s.slice_pitch == 0U) {
+      return false;
+    }
+
+    const auto width = region.dst_slice.width;
+    const auto height = region.dst_slice.height;
+    const auto depth = region.dst_slice.depth;
+    const auto copy_bytes_per_row = RowCopyBytes(info, width);
+    const auto rows = BlocksY(info, height);
+
+    if (s.row_pitch < copy_bytes_per_row) {
+      return false;
+    }
+
+    const uint64_t required_src_bytes =
+      (depth == 0U || rows == 0U)
+        ? 0ULL
+        : (static_cast<uint64_t>(depth - 1U)
+            * static_cast<uint64_t>(s.slice_pitch))
+          + (static_cast<uint64_t>(rows - 1U)
+              * static_cast<uint64_t>(s.row_pitch))
+          + copy_bytes_per_row;
+    if (s.bytes.size() < required_src_bytes) {
+      return false;
+    }
+
+    const uint64_t required_dst_bytes =
+      (depth == 0U || rows == 0U)
+        ? 0ULL
+        : (static_cast<uint64_t>(depth - 1U)
+            * static_cast<uint64_t>(region.buffer_slice_pitch))
+          + (static_cast<uint64_t>(rows - 1U)
+              * static_cast<uint64_t>(region.buffer_row_pitch))
+          + copy_bytes_per_row;
+    if (region.buffer_offset + required_dst_bytes > plan.total_bytes) {
+      return false;
+    }
+
+    for (uint32_t z = 0; z < depth; ++z) {
+      const auto src_slice_off =
+        static_cast<uint64_t>(z) * static_cast<uint64_t>(s.slice_pitch);
+      const auto dst_slice_off = region.buffer_offset
+        + static_cast<uint64_t>(z)
+          * static_cast<uint64_t>(region.buffer_slice_pitch);
+      for (uint32_t row = 0; row < rows; ++row) {
+        const auto src_off = src_slice_off + static_cast<uint64_t>(row)
+          * static_cast<uint64_t>(s.row_pitch);
+        const auto dst_off = dst_slice_off + static_cast<uint64_t>(row)
+          * static_cast<uint64_t>(region.buffer_row_pitch);
+        std::memcpy(dst_staging + dst_off,
+          s.bytes.data() + static_cast<std::size_t>(src_off),
+          static_cast<std::size_t>(copy_bytes_per_row));
+      }
+    }
+  }
+
+  return true;
+}
+
 // Minimal synchronous Submit: buffer uploads only.
 // Follows Renderer.cpp pattern and uses SingleQueueStrategy for now.
 auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
-  UploadTracker& tracker, StagingProvider& provider, const QueueKey& queue_key)
+  const UploadPolicy& policy, UploadTracker& tracker, StagingProvider& provider,
+  const QueueKey& queue_key)
   -> std::expected<UploadTicket, UploadError>
 {
   const auto& desc = std::get<UploadBufferDesc>(req.desc);
@@ -91,26 +268,32 @@ auto SubmitBuffer(oxygen::Graphics& gfx, const UploadRequest& req,
   }
   auto staging = std::move(*staging_exp);
 
-  // Fill staging from the provided data view or producer
+  // Fill staging from the provided data view or producer.
+  const auto& fp = policy.filler;
+  if (fp.enable_default_fill) {
+    std::memset(
+      staging.Ptr(), static_cast<int>(fp.filler_value), static_cast<size_t>(size));
+  }
+
   if (std::holds_alternative<UploadDataView>(req.data)) {
     auto view = std::get<UploadDataView>(req.data);
-    auto to_copy = std::min<uint64_t>(size, view.bytes.size());
+    const auto to_copy = std::min<uint64_t>(size, view.bytes.size());
     if (to_copy > 0) {
-      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
+      std::memcpy(staging.Ptr(), view.bytes.data(), static_cast<size_t>(to_copy));
+    }
+  } else if (std::holds_alternative<UploadProducer>(req.data)) {
+    auto& producer
+      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    if (!producer) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+    std::span<std::byte> dst(staging.Ptr(), size);
+    if (!producer(dst)) {
+      return tracker.RegisterFailedImmediate(
+        req.debug_name, UploadError::kProducerFailed);
     }
   } else {
-    auto& producer
-      = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-        std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-          req.data));
-    if (producer) {
-      std::span<std::byte> dst(staging.Ptr(), size);
-      if (!producer(dst)) {
-        // Producer failed: return immediate failed ticket
-        return tracker.RegisterFailedImmediate(
-          req.debug_name, UploadError::kProducerFailed);
-      }
-    }
+    return std::unexpected(UploadError::kInvalidRequest);
   }
 
   // Record copy
@@ -171,25 +354,38 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   }
   auto staging = std::move(*staging_exp);
 
-  // Fill staging
-  if (std::holds_alternative<UploadDataView>(req.data)) {
-    auto view = std::get<UploadDataView>(req.data);
-    const auto to_copy = std::min<uint64_t>(total_bytes, view.bytes.size());
-    if (to_copy > 0) {
-      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
+  const auto info = oxygen::graphics::detail::GetFormatInfo(
+    tdesc.dst->GetDescriptor().format);
+  if (info.bytes_per_block == 0 || info.block_size == 0) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  // Fill staging.
+  const auto& fp = policy.filler;
+  if (fp.enable_default_fill) {
+    std::memset(staging.Ptr(), static_cast<int>(fp.filler_value), total_bytes);
+  }
+
+  if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
+    const auto& src_view = std::get<UploadTextureSourceView>(req.data);
+    if (!PackTexture2DToStaging(policy, info, plan, src_view,
+          reinterpret_cast<std::byte*>(staging.Ptr()))) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+  } else if (std::holds_alternative<UploadProducer>(req.data)) {
+    auto& producer
+      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    if (!producer) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+    std::span<std::byte> dst(
+      reinterpret_cast<std::byte*>(staging.Ptr()), total_bytes);
+    if (!producer(dst)) {
+      return tracker.RegisterFailedImmediate(
+        req.debug_name, UploadError::kProducerFailed);
     }
   } else {
-    auto& producer
-      = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-        std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-          req.data));
-    if (producer) {
-      std::span<std::byte> dst(staging.Ptr(), total_bytes);
-      if (!producer(dst)) {
-        return tracker.RegisterFailedImmediate(
-          req.debug_name, UploadError::kProducerFailed);
-      }
-    }
+    return std::unexpected(UploadError::kInvalidRequest);
   }
 
   // Build upload region(s) from plan; adjust offsets by staging.offset.
@@ -205,12 +401,31 @@ auto SubmitTexture2D(oxygen::Graphics& gfx, const UploadRequest& req,
   auto queue = gfx.GetCommandQueue(key);
   const bool is_copy_queue = IsCopyQueue(queue);
 
-  // For copy queues, use keep_initial_state=true to auto-restore to kCommon.
-  // For graphics queues, manage state transitions explicitly.
+  // Track the destination texture using its declared initial state when
+  // available. This avoids issuing barriers with an incorrect StateBefore.
+  const auto dst_initial_state = tdesc.dst->GetDescriptor().initial_state;
+  const auto tracking_initial_state
+    = (dst_initial_state == ResourceStates::kUnknown
+        || dst_initial_state == ResourceStates::kUndefined)
+    ? ResourceStates::kCommon
+    : dst_initial_state;
+
+  // On copy/transfer queues, resources in COMMON can be implicitly promoted
+  // for copy operations and decay back to COMMON after execution. Avoiding
+  // explicit COPY_DEST transitions here prevents DX12 debug-layer complaints
+  // when the runtime relies on implicit promotion for CopyTextureRegion.
+  const bool use_implicit_promotion
+    = is_copy_queue && CanImplicitlyPromoteFromCommon(tracking_initial_state);
+
+  // For copy queues, keep_initial_state=true restores the tracked state when
+  // the command list closes. For graphics queues, manage transitions
+  // explicitly.
   recorder->BeginTrackingResourceState(
-    *tdesc.dst, ResourceStates::kCommon, is_copy_queue);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
-  recorder->FlushBarriers();
+    *tdesc.dst, tracking_initial_state, is_copy_queue);
+  if (!use_implicit_promotion) {
+    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+  }
   recorder->CopyBufferToTexture(
     staging.Buffer(), std::span { regions }, *tdesc.dst);
 
@@ -245,24 +460,37 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   }
   auto staging = std::move(*staging_exp);
 
-  if (std::holds_alternative<UploadDataView>(req.data)) {
-    auto view = std::get<UploadDataView>(req.data);
-    const auto to_copy = std::min<uint64_t>(total_bytes, view.bytes.size());
-    if (to_copy > 0) {
-      std::memcpy(staging.Ptr(), view.bytes.data(), to_copy);
+  const auto info = oxygen::graphics::detail::GetFormatInfo(
+    tdesc.dst->GetDescriptor().format);
+  if (info.bytes_per_block == 0 || info.block_size == 0) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+
+  const auto& fp = policy.filler;
+  if (fp.enable_default_fill) {
+    std::memset(staging.Ptr(), static_cast<int>(fp.filler_value), total_bytes);
+  }
+
+  if (std::holds_alternative<UploadTextureSourceView>(req.data)) {
+    const auto& src_view = std::get<UploadTextureSourceView>(req.data);
+    if (!PackTexture3DToStaging(policy, info, plan, src_view,
+          reinterpret_cast<std::byte*>(staging.Ptr()))) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+  } else if (std::holds_alternative<UploadProducer>(req.data)) {
+    auto& producer
+      = const_cast<UploadProducer&>(std::get<UploadProducer>(req.data));
+    if (!producer) {
+      return std::unexpected(UploadError::kInvalidRequest);
+    }
+    std::span<std::byte> dst(
+      reinterpret_cast<std::byte*>(staging.Ptr()), total_bytes);
+    if (!producer(dst)) {
+      return tracker.RegisterFailedImmediate(
+        req.debug_name, UploadError::kProducerFailed);
     }
   } else {
-    auto& producer
-      = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-        std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-          req.data));
-    if (producer) {
-      std::span<std::byte> dst(staging.Ptr(), total_bytes);
-      if (!producer(dst)) {
-        return tracker.RegisterFailedImmediate(
-          req.debug_name, UploadError::kProducerFailed);
-      }
-    }
+    return std::unexpected(UploadError::kInvalidRequest);
   }
 
   std::vector<TextureUploadRegion> regions = plan.regions;
@@ -276,12 +504,21 @@ auto SubmitTexture3D(oxygen::Graphics& gfx, const UploadRequest& req,
   auto queue = gfx.GetCommandQueue(key);
   const bool is_copy_queue = IsCopyQueue(queue);
 
-  // For copy queues, use keep_initial_state=true to auto-restore to kCommon.
-  // For graphics queues, manage state transitions explicitly.
+  const auto dst_initial_state = tdesc.dst->GetDescriptor().initial_state;
+  const auto tracking_initial_state
+    = (dst_initial_state == ResourceStates::kUnknown
+        || dst_initial_state == ResourceStates::kUndefined)
+    ? ResourceStates::kCommon
+    : dst_initial_state;
+  const bool use_implicit_promotion
+    = is_copy_queue && CanImplicitlyPromoteFromCommon(tracking_initial_state);
+
   recorder->BeginTrackingResourceState(
-    *tdesc.dst, ResourceStates::kCommon, is_copy_queue);
-  recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
-  recorder->FlushBarriers();
+    *tdesc.dst, tracking_initial_state, is_copy_queue);
+  if (!use_implicit_promotion) {
+    recorder->RequireResourceState(*tdesc.dst, ResourceStates::kCopyDest);
+    recorder->FlushBarriers();
+  }
   recorder->CopyBufferToTexture(
     staging.Buffer(), std::span { regions }, *tdesc.dst);
 
@@ -328,7 +565,7 @@ auto UploadCoordinator::Submit(const UploadRequest& req,
   switch (req.kind) {
   case UploadKind::kBuffer:
     return SubmitBuffer(
-      *gfx_, req, tracker_, provider, policy_.upload_queue_key);
+      *gfx_, req, policy_, tracker_, provider, policy_.upload_queue_key);
   case UploadKind::kTexture2D:
     return SubmitTexture2D(*gfx_, req, policy_, tracker_, provider);
   case UploadKind::kTexture3D:
@@ -579,9 +816,7 @@ auto UploadCoordinator::FillStagingForPlan(const BufferUploadPlan& plan,
       }
     } else {
       auto& producer
-        = const_cast<std::move_only_function<bool(std::span<std::byte>)>&>(
-          std::get<std::move_only_function<bool(std::span<std::byte>)>>(
-            r.data));
+        = const_cast<UploadProducer&>(std::get<UploadProducer>(r.data));
       std::span<std::byte> dst(allocation.Ptr() + reg.src_offset, reg.size);
       if (!producer && fp.enable_default_fill) {
         std::memset(dst.data(), static_cast<int>(fp.filler_value), dst.size());

@@ -116,13 +116,45 @@ struct UploadSubresource {
   // Box in texels; width/height/depth of 0 means full subresource.
   uint32_t x { 0 }, y { 0 }, z { 0 };
   uint32_t width { 0 }, height { 0 }, depth { 0 };
-  uint32_t row_pitch { 0 };
-  uint32_t slice_pitch { 0 };
 };
 
 struct UploadDataView {
   std::span<const std::byte> bytes {};
 };
+
+//! Source texel data view for texture uploads.
+/*!
+ Defines the source layout for one texture subresource or one boxed region.
+ The data provided is interpreted as starting at the region origin (x=y=z=0
+ in the source view) and is copied into staging using the destination layout
+ computed by the upload planner.
+
+ The caller may provide either tightly-packed rows (row_pitch ==
+ bytes_per_row) or pitched rows (row_pitch > bytes_per_row). For 2D uploads,
+ slice_pitch is typically row_pitch * num_rows.
+*/
+struct UploadTextureSourceSubresource {
+  std::span<const std::byte> bytes {};
+  uint32_t row_pitch { 0 };
+  uint32_t slice_pitch { 0 };
+};
+
+//! Collection of source views for a texture upload request.
+/*!
+ The number and ordering of source subresources must match the upload
+ request's subresource list after validation and sorting performed by the
+ planner. The planner returns a mapping that associates planned regions with
+ their corresponding source subresource indices.
+*/
+struct UploadTextureSourceView {
+  std::vector<UploadTextureSourceSubresource> subresources {};
+};
+
+#if defined(__cpp_lib_move_only_function) && (__cpp_lib_move_only_function >= 202110L)
+using UploadProducer = std::move_only_function<bool(std::span<std::byte>)>;
+#else
+using UploadProducer = std::function<bool(std::span<std::byte>)>;
+#endif
 
 struct UploadRequest {
   UploadKind kind { UploadKind::kBuffer };
@@ -132,10 +164,9 @@ struct UploadRequest {
   std::variant<UploadBufferDesc, UploadTextureDesc> desc;
   std::vector<UploadSubresource> subresources {};
 
-  // Either a view or a producer; implementation will support both paths.
-  std::variant<UploadDataView,
-    std::move_only_function<bool(std::span<std::byte>)>>
-    data;
+  // For buffers: UploadDataView or UploadProducer.
+  // For textures: UploadTextureSourceView or UploadProducer.
+  std::variant<UploadDataView, UploadTextureSourceView, UploadProducer> data;
 };
 
 //! Represents a valid GPU upload operation that can be tracked for completion.

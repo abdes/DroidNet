@@ -34,10 +34,13 @@
    (including the null terminator) and padded with null bytes.
  - All indices are 0-based. Except when explicitly stated otherwise, `0` is a
    valid index.
- - Resource index value `0` is a sentinel: if a resource category defines a
-   fallback, index `0` refers to that fallback resource; otherwise it denotes
-   an absent / not-assigned reference (see `kFallbackResourceIndex` and
-   `kNoResourceIndex`).
+ - Resource index value `0` is reserved: if a resource category defines a
+   fallback, index `0` refers to that fallback resource. In that case, packers
+   MUST populate index `0` with the fallback asset (not a hole). For textures,
+   this means the texture resource table entry `0` always exists and points to
+   the fallback texture.
+   If a category has no fallback concept, `0` denotes an absent / not-assigned
+   reference (see `kFallbackResourceIndex` and `kNoResourceIndex`).
  - All hashes for content integrity are 32-bit CRC32 values for corruption
    detection and performance (standard IEEE polynomial 0x04C11DB7, initial
    value 0xFFFFFFFF, reflected input/output, final XOR 0xFFFFFFFF).
@@ -72,6 +75,10 @@ constexpr size_t kMaxNameSize = 64;
 //! Resource index indicating explicit fallback to default resource.
 //! When a resource *type* defines an engine/tool-provided fallback asset,
 //! references using this value (0) resolve to that fallback.
+//!
+//! Contract: When a fallback exists, packers MUST store the fallback asset at
+//! index 0 of the corresponding resource table. For textures, index 0 must be
+//! populated with the fallback texture.
 constexpr ResourceIndexT kFallbackResourceIndex = 0;
 
 //! Resource index indicating "no resource assigned" for types that have no
@@ -128,8 +135,9 @@ static_assert(sizeof(ResourceRegion) == 16);
  efficiency for the regions.
 
  @note All resource tables are indexed with a `ResourceIndexT` index, with `0`
- reserved for the fallback resource. When no fallback resource is logically
- possible, `0` means absent/invalid.
+ reserved for the fallback resource when a fallback exists. In that case,
+ packers MUST populate index `0` with the fallback entry. When no fallback
+ resource is logically possible, `0` means absent/invalid.
 
  @see ResourceRegion, PakFooter
 */

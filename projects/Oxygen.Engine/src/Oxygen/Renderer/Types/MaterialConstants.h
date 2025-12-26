@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Renderer/api_export.h>
@@ -46,6 +47,8 @@ struct MaterialConstants {
   uint32_t roughness_texture_index { 0 };
   uint32_t ambient_occlusion_texture_index { 0 };
   uint32_t flags { 0 };
+  glm::vec2 uv_scale { 1.0F, 1.0F };
+  glm::vec2 uv_offset { 0.0F, 0.0F };
   uint32_t _pad0 { 0 };
   uint32_t _pad1 { 0 };
 };

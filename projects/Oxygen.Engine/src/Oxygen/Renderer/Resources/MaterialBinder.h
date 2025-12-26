@@ -28,6 +28,8 @@
 
 namespace oxygen::renderer::resources {
 
+class TextureBinder;
+
 //! Manages GPU material resources with deduplication and bindless access.
 /*!
  MaterialBinder provides a modern, handle-based API for managing material
@@ -121,7 +123,8 @@ public:
   */
   OXGN_RNDR_API MaterialBinder(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
-    observer_ptr<engine::upload::StagingProvider> provider);
+    observer_ptr<engine::upload::StagingProvider> provider,
+    observer_ptr<TextureBinder> texture_binder);
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialBinder)
   OXYGEN_MAKE_NON_MOVABLE(MaterialBinder)
@@ -199,6 +202,26 @@ public:
   //! calls. Safe to call multiple times per frame - internally optimized.
   OXGN_RNDR_API auto EnsureFrameResources() -> void;
 
+  //! Overrides UV scale/offset for an existing material instance.
+  /*!
+   Updates the shader-visible UV transform for a material already registered
+   with this binder.
+
+   This is intended for editor/runtime authoring workflows where interactive
+   parameter tweaks must not require rebuilding geometry.
+
+    TODO: This is a stopgap for examples and editor prototyping. Prefer a
+    MaterialInstance system where overrides are attached to a per-object (or
+    per-instance) material wrapper rather than mutating a shared MaterialAsset.
+
+   @param material Material asset instance whose constants should be updated.
+   @param uv_scale UV scale (tiling). Components must be finite and > 0.
+   @param uv_offset UV offset. Components must be finite.
+   @return true if the material was found and updated; false otherwise.
+  */
+  OXGN_RNDR_API auto OverrideUvTransform(const data::MaterialAsset& material,
+    glm::vec2 uv_scale, glm::vec2 uv_offset) -> bool;
+
   //! Returns the bindless descriptor heap index for the materials SRV.
   //! REQUIRES: EnsureFrameResources() must have been called this frame.
   [[nodiscard]] OXGN_RNDR_API auto GetMaterialsSrvIndex() const
@@ -215,6 +238,8 @@ private:
 
   // Deduplication and state
   std::unordered_map<std::uint64_t, MaterialCacheEntry> material_key_to_handle_;
+  std::unordered_map<const data::MaterialAsset*, std::uint32_t>
+    material_ptr_to_index_;
   std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
   std::vector<engine::MaterialConstants> material_constants_;
   std::vector<std::uint32_t> dirty_epoch_;
@@ -240,6 +265,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<TextureBinder> texture_binder_;
 
   // Atlas-based material storage (Phase 1+)
   std::unique_ptr<engine::upload::AtlasBuffer> materials_atlas_;

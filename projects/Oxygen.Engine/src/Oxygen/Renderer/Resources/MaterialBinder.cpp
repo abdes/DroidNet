@@ -24,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
+#include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
@@ -122,7 +123,8 @@ auto MakeMaterialKey(const oxygen::data::MaterialAsset& material) noexcept
 
 //! Serialize MaterialAsset data into MaterialConstants format.
 auto SerializeMaterialConstants(
-  const oxygen::data::MaterialAsset& material) noexcept
+  const oxygen::data::MaterialAsset& material,
+  oxygen::renderer::resources::TextureBinder& texture_binder) noexcept
   -> oxygen::engine::MaterialConstants
 {
   oxygen::engine::MaterialConstants constants;
@@ -138,16 +140,25 @@ auto SerializeMaterialConstants(
   constants.normal_scale = material.GetNormalScale();
   constants.ambient_occlusion = material.GetAmbientOcclusion();
 
-  // Copy texture indices
-  constants.base_color_texture_index = material.GetBaseColorTexture();
-  constants.normal_texture_index = material.GetNormalTexture();
-  constants.metallic_texture_index = material.GetMetallicTexture();
-  constants.roughness_texture_index = material.GetRoughnessTexture();
+  // Resolve texture resource indices to SRV indices via TextureBinder
+  constants.base_color_texture_index
+    = texture_binder.GetOrAllocate(material.GetBaseColorTexture()).get();
+  constants.normal_texture_index
+    = texture_binder.GetOrAllocate(material.GetNormalTexture()).get();
+  constants.metallic_texture_index
+    = texture_binder.GetOrAllocate(material.GetMetallicTexture()).get();
+  constants.roughness_texture_index
+    = texture_binder.GetOrAllocate(material.GetRoughnessTexture()).get();
   constants.ambient_occlusion_texture_index
-    = material.GetAmbientOcclusionTexture();
+    = texture_binder.GetOrAllocate(material.GetAmbientOcclusionTexture()).get();
 
   // Copy flags
   constants.flags = material.GetFlags();
+
+  // Default UV transform (identity). Runtime/editor can override via
+  // MaterialBinder::OverrideUvTransform.
+  constants.uv_scale = { 1.0F, 1.0F };
+  constants.uv_offset = { 0.0F, 0.0F };
 
   // Padding fields are already initialized to 0
   constants._pad0 = 0;
@@ -162,14 +173,17 @@ namespace oxygen::renderer::resources {
 
 MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
   observer_ptr<engine::upload::UploadCoordinator> uploader,
-  observer_ptr<engine::upload::StagingProvider> provider)
+  observer_ptr<engine::upload::StagingProvider> provider,
+  observer_ptr<TextureBinder> texture_binder)
   : gfx_(std::move(gfx))
   , uploader_(std::move(uploader))
   , staging_provider_(std::move(provider))
+  , texture_binder_(std::move(texture_binder))
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
+  DCHECK_NOTNULL_F(texture_binder_, "TextureBinder cannot be null");
 
   // Prepare atlas buffer for material constants storage
   materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
@@ -271,8 +285,14 @@ auto MaterialBinder::GetOrAllocate(
     // Hash collision or changed value - treat as same logical material whose
     // value changed; update in-place to keep handle stable and mark dirty.
     // This is NOT a cache hit since the material content changed.
+    const auto* old_ptr = materials_[idx].get();
     materials_[idx] = material;
-    material_constants_[idx] = SerializeMaterialConstants(*material);
+    if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
+      && material_ptr_to_index_[old_ptr] == static_cast<std::uint32_t>(idx)) {
+      material_ptr_to_index_.erase(old_ptr);
+    }
+    material_ptr_to_index_[material.get()] = static_cast<std::uint32_t>(idx);
+    material_constants_[idx] = SerializeMaterialConstants(*material, *texture_binder_);
     if (idx >= dirty_epoch_.size()) {
       dirty_epoch_.resize(idx + 1U, 0U);
     }
@@ -297,15 +317,22 @@ auto MaterialBinder::GetOrAllocate(
   if (is_new_logical) {
     // Append new entries
     materials_.push_back(material);
-    material_constants_.push_back(SerializeMaterialConstants(*material));
+    material_constants_.push_back(SerializeMaterialConstants(*material, *texture_binder_));
     dirty_epoch_.push_back(current_epoch_);
     index = static_cast<std::uint32_t>(materials_.size() - 1);
+    material_ptr_to_index_[material.get()] = index;
     ++total_allocations_; // Track logical allocation of new material
   } else {
     // Reuse existing slot in this frame by order; mark dirty and update.
     index = frame_write_count_;
+    const auto* old_ptr = materials_[index].get();
     materials_[index] = material;
-    material_constants_[index] = SerializeMaterialConstants(*material);
+    if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
+      && material_ptr_to_index_[old_ptr] == index) {
+      material_ptr_to_index_.erase(old_ptr);
+    }
+    material_ptr_to_index_[material.get()] = index;
+    material_constants_[index] = SerializeMaterialConstants(*material, *texture_binder_);
     if (index >= dirty_epoch_.size()) {
       dirty_epoch_.resize(index + 1U, 0U);
     }
@@ -390,14 +417,71 @@ auto MaterialBinder::Update(engine::sceneprep::MaterialHandle handle,
     return; // Same material, no update needed
   }
 
+  const auto* old_ptr = materials_[idx].get();
   materials_[idx] = material;
-  material_constants_[idx] = SerializeMaterialConstants(*material);
+  if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
+    && material_ptr_to_index_[old_ptr] == static_cast<std::uint32_t>(idx)) {
+    material_ptr_to_index_.erase(old_ptr);
+  }
+  material_ptr_to_index_[material.get()] = static_cast<std::uint32_t>(idx);
+  material_constants_[idx] = SerializeMaterialConstants(*material, *texture_binder_);
 
   // Mark dirty for this frame
   if (dirty_epoch_[idx] != current_epoch_) {
     dirty_epoch_[idx] = current_epoch_;
     dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
   }
+}
+
+auto MaterialBinder::OverrideUvTransform(const data::MaterialAsset& material,
+  const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
+{
+  // TODO: Replace this shared-material mutation with MaterialInstance
+  // support (or per-draw instance constants) so per-object UV overrides do not
+  // affect other objects that share the same MaterialAsset.
+
+  const auto ValidateScale = [](const glm::vec2 v) -> bool {
+    return std::isfinite(v.x) && std::isfinite(v.y) && v.x > 0.0F && v.y > 0.0F;
+  };
+  const auto ValidateOffset = [](const glm::vec2 v) -> bool {
+    return std::isfinite(v.x) && std::isfinite(v.y);
+  };
+
+  if (!ValidateScale(uv_scale) || !ValidateOffset(uv_offset)) {
+    LOG_F(WARNING,
+      "OverrideUvTransform: invalid values (scale=({},{}), offset=({},{}))",
+      uv_scale.x, uv_scale.y, uv_offset.x, uv_offset.y);
+    return false;
+  }
+
+  const auto it = material_ptr_to_index_.find(&material);
+  if (it == material_ptr_to_index_.end()) {
+    return false;
+  }
+
+  const auto idx = static_cast<std::size_t>(it->second);
+  if (idx >= material_constants_.size()) {
+    return false;
+  }
+
+  auto& constants = material_constants_[idx];
+  constants.uv_scale = uv_scale;
+  constants.uv_offset = uv_offset;
+
+  if (idx >= dirty_epoch_.size()) {
+    dirty_epoch_.resize(idx + 1U, 0U);
+  }
+  dirty_epoch_[idx] = current_epoch_;
+  if (std::find(dirty_indices_.begin(), dirty_indices_.end(),
+        static_cast<std::uint32_t>(idx))
+    == dirty_indices_.end()) {
+    dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
+  }
+
+  // If frame resources were already uploaded this frame, the new UV values will
+  // be visible next frame unless EnsureFrameResources is called again.
+  uploaded_this_frame_ = false;
+  return true;
 }
 
 auto MaterialBinder::IsValidHandle(

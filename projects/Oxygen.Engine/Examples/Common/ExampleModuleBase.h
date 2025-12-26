@@ -53,14 +53,14 @@ public:
   // lifecycle owner. Derived classes should rely on the base
   // OnAttached behaviour instead of calling an explicit install helper.
 
+protected:
   //! Hook: allow derived examples to customize window properties. Default
   //! implementation returns reasonable defaults. Derived classes should
   //! override to tune title, size, flags.
   virtual auto BuildDefaultWindowProperties() const
     -> platform::window::Properties;
 
-protected:
-  auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
+    auto MarkSurfacePresentable(engine::FrameContext& context) -> void;
 
   //! Hook: clear backbuffer references before resize. Each example must
   //! implement this to clear any texture references that point to the

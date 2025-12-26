@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 
 using namespace oxygen::graphics;
@@ -13,7 +14,6 @@ namespace oxygen::engine::upload {
 
 auto DefaultUploadPolicy() -> UploadPolicy
 {
-  // Provide a sensible default upload queue key.
   return UploadPolicy { SingleQueueStrategy().KeyFor(QueueRole::kTransfer) };
 }
 
