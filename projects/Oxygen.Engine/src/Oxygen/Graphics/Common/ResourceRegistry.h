@@ -626,6 +626,9 @@ public:
       .view_desc_hash = key_hash,
     };
     view_cache_[new_cache_key] = std::move(cache_entry);
+    // Diagnostic: log repointing for runtime validation of descriptor updates
+    DLOG_F(2, "ResourceRegistry::UpdateView: repointed index {} to {}", index,
+      new_res_obj);
     return true;
   }
 

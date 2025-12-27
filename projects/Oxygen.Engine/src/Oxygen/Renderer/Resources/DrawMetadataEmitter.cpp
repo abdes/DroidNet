@@ -172,7 +172,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
 
     // Stable material handle
     // Resolve material handle via MaterialBinder if available
-    if (material_binder_ && item.material) {
+    if (material_binder_ && item.material.asset) {
       const auto stable_handle = material_binder_->GetOrAllocate(item.material);
       dm.material_handle = stable_handle.get();
     }
@@ -182,7 +182,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.transform_index = handle.get();
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
-    dm.flags = ClassifyMaterialPassMask(item.material.get());
+    dm.flags = ClassifyMaterialPassMask(item.material.asset.get());
     DCHECK_F(handle != oxygen::engine::sceneprep::kInvalidTransformHandle,
       "Invalid transform handle while emitting");
     DCHECK_F(!dm.flags.IsEmpty(), "flags cannot be empty after assignment");

@@ -14,8 +14,8 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <optional>
 #include <unordered_map>
@@ -205,10 +205,12 @@ public:
   }
 
   // No-op copy texture for tests (satisfies abstract interface)
-  auto CopyTexture(const Texture& /*src*/, const graphics::TextureSlice& /*src_slice*/,
-    const graphics::TextureSubResourceSet& /*src_subresources*/, Texture& /*dst*/,
-    const graphics::TextureSlice& /*dst_slice*/,
-    const graphics::TextureSubResourceSet& /*dst_subresources*/) -> void override
+  auto CopyTexture(const Texture& /*src*/,
+    const graphics::TextureSlice& /*src_slice*/,
+    const graphics::TextureSubResourceSet& /*src_subresources*/,
+    Texture& /*dst*/, const graphics::TextureSlice& /*dst_slice*/,
+    const graphics::TextureSubResourceSet& /*dst_subresources*/)
+    -> void override
   {
   }
 
@@ -384,28 +386,29 @@ public:
         oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
         -> oxygen::graphics::NativeView override
       {
-        return {};
+        // Use the texture object's address as a stable unique view handle.
+        return oxygen::graphics::NativeView(this, Texture::ClassTypeId());
       }
       [[nodiscard]] auto CreateUnorderedAccessView(
         const oxygen::graphics::DescriptorHandle&, oxygen::Format,
         oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
         -> oxygen::graphics::NativeView override
       {
-        return {};
+        return oxygen::graphics::NativeView(this, Texture::ClassTypeId());
       }
       [[nodiscard]] auto CreateRenderTargetView(
         const oxygen::graphics::DescriptorHandle&, oxygen::Format,
         oxygen::graphics::TextureSubResourceSet) const
         -> oxygen::graphics::NativeView override
       {
-        return {};
+        return oxygen::graphics::NativeView(this, Texture::ClassTypeId());
       }
       [[nodiscard]] auto CreateDepthStencilView(
         const oxygen::graphics::DescriptorHandle&, oxygen::Format,
         oxygen::graphics::TextureSubResourceSet, bool) const
         -> oxygen::graphics::NativeView override
       {
-        return {};
+        return oxygen::graphics::NativeView(this, Texture::ClassTypeId());
       }
 
     private:

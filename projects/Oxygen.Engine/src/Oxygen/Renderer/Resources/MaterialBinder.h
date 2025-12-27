@@ -19,6 +19,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/AtlasBuffer.h>
@@ -163,7 +164,7 @@ public:
    @see Update, IsValidHandle
    */
   OXGN_RNDR_API auto GetOrAllocate(
-    std::shared_ptr<const data::MaterialAsset> material)
+    const oxygen::engine::sceneprep::MaterialRef& material)
     -> engine::sceneprep::MaterialHandle;
 
   //! Update an existing material handle with new material data.
@@ -186,11 +187,11 @@ public:
     std::shared_ptr<const data::MaterialAsset> material) -> void;
 
   //! Check if a handle is valid.
-  [[nodiscard]] auto IsValidHandle(
+  [[nodiscard]] OXGN_RNDR_API auto IsValidHandle(
     engine::sceneprep::MaterialHandle handle) const -> bool;
 
   //! Get read-only access to all material constants.
-  [[nodiscard]] auto GetMaterialConstants() const noexcept
+  [[nodiscard]] OXGN_RNDR_API auto GetMaterialConstants() const noexcept
     -> std::span<const engine::MaterialConstants>;
 
   //! Get indices of materials that changed this frame.

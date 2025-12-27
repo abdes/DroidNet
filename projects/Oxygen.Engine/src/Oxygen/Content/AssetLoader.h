@@ -6,15 +6,17 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <span>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/content/EngineTag.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/api_export.h>
@@ -22,17 +24,63 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/LiveObject.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
 #include <Oxygen/data/AssetKey.h>
 #include <Oxygen/data/GeometryAsset.h>
 #include <Oxygen/data/MaterialAsset.h>
+#include <span>
 
 namespace oxygen::content {
 
-class AssetLoader {
+//! Configuration and tuning parameters for AssetLoader.
+/*!
+ Provides construction-time configuration for AssetLoader. This keeps the
+ runtime API surface minimal while allowing the engine to inject platform
+ services (e.g. an async thread pool) and tune loader behavior.
+
+ @note All fields are optional; unspecified fields use default behavior.
+*/
+struct AssetLoaderConfig final {
+  //! Thread pool used for coroutine-based async load tasks.
+  /*!
+   When set, AssetLoader will schedule blocking IO and CPU decode work on
+   this pool.
+
+   @note If unset, some APIs will fall back to synchronous behavior on the
+   caller thread.
+  */
+  observer_ptr<co::ThreadPool> thread_pool {};
+
+  //! Enforce that offline loads must not perform GPU work.
+  /*!
+   When true, AssetLoader propagates a strict offline policy to loader
+   functions via LoaderContext. Loaders can use this to DCHECK or avoid any GPU
+   side effects when `context.offline` is true.
+
+   @note Defaults to false (online) for backward-compatible behavior.
+  */
+  bool enforce_offline_no_gpu_work { false };
+};
+
+class AssetLoader : public oxygen::co::LiveObject {
 public:
+  //! LiveObject contract
+  [[nodiscard]] OXGN_CNTT_API auto ActivateAsync(co::TaskStarted<> started = {})
+    -> co::Co<> override;
+
+  OXGN_CNTT_API void Run() override;
+
+  OXGN_CNTT_API void Stop() override;
+
+  [[nodiscard]] OXGN_CNTT_API auto IsRunning() const -> bool override;
+
   //! Engine-only capability token is required for construction.
-  OXGN_CNTT_API explicit AssetLoader(EngineTag tag);
+  OXGN_CNTT_API explicit AssetLoader(
+    EngineTag tag, AssetLoaderConfig config = {});
   OXGN_CNTT_API virtual ~AssetLoader();
 
   OXYGEN_MAKE_NON_COPYABLE(AssetLoader)
@@ -279,6 +327,47 @@ public:
   auto LoadResource(data::pak::ResourceIndexT resource_index,
     bool offline = false) -> std::shared_ptr<T>;
 
+  //! Load or get cached resource by source-aware ResourceKey.
+  template <PakResource T>
+  auto LoadResourceByKey(ResourceKey key, bool offline = false)
+    -> std::shared_ptr<T>;
+
+  //! Coroutine-based resource load by source-aware ResourceKey.
+  template <PakResource T>
+  auto LoadResourceAsync(ResourceKey key, bool offline = false)
+    -> co::Co<std::shared_ptr<T>>;
+
+  //! Coroutine-based convenience for texture loads.
+  /*!
+    Async-only API: returns the CPU-side decoded `TextureResource` on
+    completion (or `nullptr` on failure). Implementations must not perform
+    GPU work; GPU creation and upload belongs to the renderer.
+  */
+  OXGN_CNTT_API auto LoadTextureAsync(ResourceKey key, bool offline = false)
+    -> co::Co<std::shared_ptr<data::TextureResource>>;
+
+  //! Coroutine-based convenience for decoding a texture from an in-memory
+  //! byte buffer. The loader must not perform GPU work; it returns a
+  //! CPU-side `data::TextureResource` on success or `nullptr` on failure.
+  OXGN_CNTT_API auto LoadTextureFromBufferAsync(
+    ResourceKey key, std::span<const uint8_t> bytes, bool offline = false)
+    -> co::Co<std::shared_ptr<data::TextureResource>>;
+
+  //! Convenience: schedule a texture-from-buffer load on the loader nursery
+  //! and invoke `on_complete` on the engine thread when the CPU-side payload
+  //! is ready. Deprecated in favor of awaiting the coroutine directly.
+  OXGN_CNTT_API void StartLoadTextureFromBuffer(ResourceKey key,
+    std::span<const uint8_t> bytes,
+    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete);
+
+  //! Convenience: schedule a texture load on the loader nursery and invoke
+  //! `on_complete` on the engine thread when the CPU-side payload is ready.
+  /*! Deprecated: prefer co_awaiting `LoadTextureAsync` directly when
+      possible. This helper simply starts a coroutine inside the loader's
+      nursery and will invoke the callback when complete. */
+  OXGN_CNTT_API void StartLoadTexture(ResourceKey key,
+    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete);
+
   //! Get cached resource without loading
   /*!
    Returns a resource if it's already loaded in the cache, without triggering
@@ -334,6 +423,23 @@ public:
   */
   OXGN_CNTT_API auto ReleaseResource(ResourceKey key, bool offline = false)
     -> bool;
+
+  //! Mint a synthetic, texture-typed ResourceKey suitable for buffer-driven
+  //! loads.
+  /*!
+   The returned key is validly encoded for `TextureResource` but does not refer
+   to any mounted content source.
+
+   This enables workflows where the application provides cooked bytes (or raw
+   image bytes) directly and the renderer treats the identity as an opaque
+   `ResourceKey`.
+
+   @return A new unique ResourceKey for a texture.
+
+   @note Only AssetLoader is permitted to construct ResourceKeys. Callers must
+         treat the key as opaque.
+  */
+  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticTextureKey() -> ResourceKey;
 
   //! Register a load and unload functions for assets or resources (unified
   //! interface)
@@ -429,6 +535,10 @@ private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
 
+  // Nursery pointer for LiveObject activation. Set by
+  // ActivateAsync/OpenNursery.
+  co::Nursery* nursery_ {};
+
   //=== Dependency Tracking ===-----------------------------------------------//
 
   // Asset-to-asset dependencies: dependent_asset -> set of dependency_assets
@@ -482,10 +592,11 @@ private:
   std::thread::id owning_thread_id_ {};
   inline void AssertOwningThread() const
   {
-//#if !defined(NDEBUG)
-//    DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
-//      "AssetLoader used from non-owning thread in single-threaded Phase 1");
-//#endif
+    // #if !defined(NDEBUG)
+    //     DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
+    //       "AssetLoader used from non-owning thread in single-threaded Phase
+    //       1");
+    // #endif
   }
 
   auto DetectCycle(const data::AssetKey& start, const data::AssetKey& target)
@@ -496,10 +607,19 @@ private:
 
   OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
 
+  OXGN_CNTT_NDAPI auto LoadResourceByKeyErased(
+    TypeId type_id, ResourceKey key, bool offline) -> std::shared_ptr<void>;
+
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
   OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
     uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey;
+
+  observer_ptr<co::ThreadPool> thread_pool_ {};
+
+  bool enforce_offline_no_gpu_work_ { false };
+
+  std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
 
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).
@@ -542,5 +662,13 @@ template OXGN_CNTT_API auto AssetLoader::LoadResource<data::TextureResource>(
 template OXGN_CNTT_API auto AssetLoader::LoadResource<data::BufferResource>(
   const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
   -> std::shared_ptr<data::BufferResource>;
+
+template OXGN_CNTT_API auto
+AssetLoader::LoadResourceByKey<data::TextureResource>(ResourceKey, bool)
+  -> std::shared_ptr<data::TextureResource>;
+
+template OXGN_CNTT_API auto
+AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey, bool)
+  -> co::Co<std::shared_ptr<data::TextureResource>>;
 
 } // namespace oxygen::content

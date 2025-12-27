@@ -13,6 +13,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
 #include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
@@ -29,7 +30,9 @@ struct RenderItemData {
 
   // Asset references (immutable, shareable)
   std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
-  std::shared_ptr<const oxygen::data::MaterialAsset> material;
+  // Renderer-facing material reference that carries source-aware texture keys
+  // (opaque `content::ResourceKey`) alongside the material data.
+  sceneprep::MaterialRef material;
   // Stable registry handle (preferred going forward). Populated during
   // emission; pointer retained temporarily for transition (will migrate
   // downstream users to handle-based access / bindless indirection).

@@ -36,7 +36,7 @@ namespace oxygen::content::loaders {
 inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
   const PakFile* source_pak, const data::AssetKey& current_asset_key,
   const data::pak::MaterialAssetDesc& desc, bool offline, bool parse_only)
-  -> void
+  -> std::vector<oxygen::content::ResourceKey>
 {
   using data::TextureResource;
   using data::pak::kNoResourceIndex;
@@ -106,6 +106,7 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
     for (const auto& texture_resource_key : loaded_texture_keys) {
       loader.AddResourceDependency(current_asset_key, texture_resource_key);
     }
+    return loaded_texture_keys;
   } catch (...) {
     // Error: guards will automatically clean up resources
     LOG_F(ERROR,
@@ -263,12 +264,14 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
-  LoadAndRegisterMaterialTextureDependencies(loader, context.source_pak,
-    context.current_asset_key, desc, context.offline, context.parse_only);
+  auto texture_keys
+    = LoadAndRegisterMaterialTextureDependencies(loader, context.source_pak,
+      context.current_asset_key, desc, context.offline, context.parse_only);
 
-  // Create the material asset with the loaded shader references
-  auto material_asset
-    = std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
+  // Create the material asset with the loaded shader references and runtime
+  // per-slot texture resource keys produced during loading.
+  auto material_asset = std::make_unique<data::MaterialAsset>(
+    desc, std::move(shader_refs), std::move(texture_keys));
 
   return material_asset;
 }

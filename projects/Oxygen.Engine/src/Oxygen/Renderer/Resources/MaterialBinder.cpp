@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
+#include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
@@ -79,11 +80,12 @@ namespace {
 }
 
 //! Create a content-based hash key for material deduplication.
-auto MakeMaterialKey(const oxygen::data::MaterialAsset& material) noexcept
+auto MakeMaterialKey(
+  const oxygen::engine::sceneprep::MaterialRef& material) noexcept
   -> std::uint64_t
 {
   // Hash based on key material properties for deduplication
-  const auto base_color = material.GetBaseColor();
+  const auto base_color = material.asset->GetBaseColor();
   std::uint64_t hash = 0;
 
   // Hash base color components (quantized for stability)
@@ -97,22 +99,25 @@ auto MakeMaterialKey(const oxygen::data::MaterialAsset& material) noexcept
 
   // Hash scalar properties (quantized)
   constexpr float scalar_scale = 1024.0f;
-  const auto metalness_q = static_cast<std::uint32_t>(
-                             std::round(material.GetMetalness() * scalar_scale))
+  const auto metalness_q = static_cast<std::uint32_t>(std::round(
+                             material.asset->GetMetalness() * scalar_scale))
     & 0xFFFF;
-  const auto roughness_q = static_cast<std::uint32_t>(
-                             std::round(material.GetRoughness() * scalar_scale))
+  const auto roughness_q = static_cast<std::uint32_t>(std::round(
+                             material.asset->GetRoughness() * scalar_scale))
     & 0xFFFF;
 
   hash ^= (static_cast<std::uint64_t>(metalness_q) << 32)
     | (static_cast<std::uint64_t>(roughness_q) << 48);
 
   // Hash texture indices
-  hash ^= material.GetBaseColorTexture();
-  hash ^= static_cast<std::uint64_t>(material.GetNormalTexture()) << 8;
-  hash ^= static_cast<std::uint64_t>(material.GetMetallicTexture()) << 16;
-  hash ^= static_cast<std::uint64_t>(material.GetRoughnessTexture()) << 24;
-  hash ^= static_cast<std::uint64_t>(material.GetAmbientOcclusionTexture())
+  hash ^= material.asset->GetBaseColorTexture();
+  hash ^= static_cast<std::uint64_t>(material.asset->GetNormalTexture()) << 8;
+  hash ^= static_cast<std::uint64_t>(material.asset->GetMetallicTexture())
+    << 16;
+  hash ^= static_cast<std::uint64_t>(material.asset->GetRoughnessTexture())
+    << 24;
+  hash
+    ^= static_cast<std::uint64_t>(material.asset->GetAmbientOcclusionTexture())
     << 32;
 
   // Hash flags
@@ -123,34 +128,42 @@ auto MakeMaterialKey(const oxygen::data::MaterialAsset& material) noexcept
 
 //! Serialize MaterialAsset data into MaterialConstants format.
 auto SerializeMaterialConstants(
-  const oxygen::data::MaterialAsset& material,
+  const oxygen::engine::sceneprep::MaterialRef& material,
   oxygen::renderer::resources::TextureBinder& texture_binder) noexcept
   -> oxygen::engine::MaterialConstants
 {
   oxygen::engine::MaterialConstants constants;
 
   // Copy base color
-  const auto base_color = material.GetBaseColor();
+  const auto base_color = material.asset->GetBaseColor();
   constants.base_color
     = { base_color[0], base_color[1], base_color[2], base_color[3] };
 
   // Copy scalar properties
-  constants.metalness = material.GetMetalness();
-  constants.roughness = material.GetRoughness();
-  constants.normal_scale = material.GetNormalScale();
-  constants.ambient_occlusion = material.GetAmbientOcclusion();
+  constants.metalness = material.asset->GetMetalness();
+  constants.roughness = material.asset->GetRoughness();
+  constants.normal_scale = material.asset->GetNormalScale();
+  constants.ambient_occlusion = material.asset->GetAmbientOcclusion();
 
-  // Resolve texture resource indices to SRV indices via TextureBinder
+  // Resolve texture resource keys to SRV indices via TextureBinder
   constants.base_color_texture_index
-    = texture_binder.GetOrAllocate(material.GetBaseColorTexture()).get();
+    = texture_binder.GetOrAllocate(material.GetBaseColorTextureKey()).get();
   constants.normal_texture_index
-    = texture_binder.GetOrAllocate(material.GetNormalTexture()).get();
+    = texture_binder.GetOrAllocate(material.GetNormalTextureKey()).get();
   constants.metallic_texture_index
-    = texture_binder.GetOrAllocate(material.GetMetallicTexture()).get();
+    = texture_binder.GetOrAllocate(material.GetMetallicTextureKey()).get();
   constants.roughness_texture_index
-    = texture_binder.GetOrAllocate(material.GetRoughnessTexture()).get();
+    = texture_binder.GetOrAllocate(material.GetRoughnessTextureKey()).get();
   constants.ambient_occlusion_texture_index
-    = texture_binder.GetOrAllocate(material.GetAmbientOcclusionTexture()).get();
+    = texture_binder.GetOrAllocate(material.GetAmbientOcclusionTextureKey())
+        .get();
+
+  LOG_F(INFO,
+    "MaterialBinder: resolved texture SRV indices (base={}, normal={}, "
+    "metal={}, roughness={}, ao={})",
+    constants.base_color_texture_index, constants.normal_texture_index,
+    constants.metallic_texture_index, constants.roughness_texture_index,
+    constants.ambient_occlusion_texture_index);
 
   // Copy flags
   constants.flags = material.GetFlags();
@@ -244,24 +257,24 @@ auto MaterialBinder::OnFrameStart(
 }
 
 auto MaterialBinder::GetOrAllocate(
-  std::shared_ptr<const data::MaterialAsset> material)
+  const oxygen::engine::sceneprep::MaterialRef& material)
   -> engine::sceneprep::MaterialHandle
 {
   ++total_calls_;
 
   // Handle null materials - return invalid handle that will fail IsValidHandle
-  if (!material) {
+  if (!material.asset) {
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
   // Validate material
   std::string error_msg;
-  if (!ValidateMaterial(*material, error_msg)) {
+  if (!ValidateMaterial(*material.asset, error_msg)) {
     LOG_F(ERROR, "Material validation failed: {}", error_msg);
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  const auto key = MakeMaterialKey(*material);
+  const auto key = MakeMaterialKey(material);
 
   if (const auto it = material_key_to_handle_.find(key);
     it != material_key_to_handle_.end()) {
@@ -270,7 +283,8 @@ auto MaterialBinder::GetOrAllocate(
     const auto& entry = it->second;
     const auto cached_handle = entry.handle;
     const auto idx = entry.index;
-    if (idx < materials_.size() && materials_[idx].get() == material.get()) {
+    if (idx < materials_.size()
+      && materials_[idx].get() == material.asset.get()) {
       // Same material, cache hit - only count when actually reusing existing
       // storage
       ++cache_hits_;
@@ -286,13 +300,15 @@ auto MaterialBinder::GetOrAllocate(
     // value changed; update in-place to keep handle stable and mark dirty.
     // This is NOT a cache hit since the material content changed.
     const auto* old_ptr = materials_[idx].get();
-    materials_[idx] = material;
+    materials_[idx] = material.asset;
     if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
       && material_ptr_to_index_[old_ptr] == static_cast<std::uint32_t>(idx)) {
       material_ptr_to_index_.erase(old_ptr);
     }
-    material_ptr_to_index_[material.get()] = static_cast<std::uint32_t>(idx);
-    material_constants_[idx] = SerializeMaterialConstants(*material, *texture_binder_);
+    material_ptr_to_index_[material.asset.get()]
+      = static_cast<std::uint32_t>(idx);
+    material_constants_[idx]
+      = SerializeMaterialConstants(material, *texture_binder_);
     if (idx >= dirty_epoch_.size()) {
       dirty_epoch_.resize(idx + 1U, 0U);
     }
@@ -316,23 +332,25 @@ auto MaterialBinder::GetOrAllocate(
 
   if (is_new_logical) {
     // Append new entries
-    materials_.push_back(material);
-    material_constants_.push_back(SerializeMaterialConstants(*material, *texture_binder_));
+    materials_.push_back(material.asset);
+    material_constants_.push_back(
+      SerializeMaterialConstants(material, *texture_binder_));
     dirty_epoch_.push_back(current_epoch_);
     index = static_cast<std::uint32_t>(materials_.size() - 1);
-    material_ptr_to_index_[material.get()] = index;
+    material_ptr_to_index_[material.asset.get()] = index;
     ++total_allocations_; // Track logical allocation of new material
   } else {
     // Reuse existing slot in this frame by order; mark dirty and update.
     index = frame_write_count_;
     const auto* old_ptr = materials_[index].get();
-    materials_[index] = material;
+    materials_[index] = material.asset;
     if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
       && material_ptr_to_index_[old_ptr] == index) {
       material_ptr_to_index_.erase(old_ptr);
     }
-    material_ptr_to_index_[material.get()] = index;
-    material_constants_[index] = SerializeMaterialConstants(*material, *texture_binder_);
+    material_ptr_to_index_[material.asset.get()] = index;
+    material_constants_[index]
+      = SerializeMaterialConstants(material, *texture_binder_);
     if (index >= dirty_epoch_.size()) {
       dirty_epoch_.resize(index + 1U, 0U);
     }
@@ -424,7 +442,11 @@ auto MaterialBinder::Update(engine::sceneprep::MaterialHandle handle,
     material_ptr_to_index_.erase(old_ptr);
   }
   material_ptr_to_index_[material.get()] = static_cast<std::uint32_t>(idx);
-  material_constants_[idx] = SerializeMaterialConstants(*material, *texture_binder_);
+  // Use MaterialRef wrapper to serialize constants (contains opaque
+  // ResourceKeys)
+  engine::sceneprep::MaterialRef mat_ref { std::move(material) };
+  material_constants_[idx]
+    = SerializeMaterialConstants(mat_ref, *texture_binder_);
 
   // Mark dirty for this frame
   if (dirty_epoch_[idx] != current_epoch_) {

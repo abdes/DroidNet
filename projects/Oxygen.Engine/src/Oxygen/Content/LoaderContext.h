@@ -56,6 +56,14 @@ struct LoaderContext {
   //! Whether loading is performed in offline mode
   bool offline { false };
 
+  //! Whether offline mode must not perform GPU side effects.
+  /*!
+   When true and `offline` is true, loader implementations must treat offline
+   mode as a strict contract: do not create, upload, or otherwise touch GPU
+   resources.
+  */
+  bool enforce_offline_no_gpu_work { false };
+
   //! Source PAK file from which the asset/resource is being loaded. Guaranteed
   //! to be valid during a load operation.
   const PakFile* source_pak { nullptr };

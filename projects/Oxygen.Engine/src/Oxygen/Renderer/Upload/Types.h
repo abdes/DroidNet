@@ -78,6 +78,8 @@ using TicketId = NamedType<uint64_t, struct TicketIdTag,
   Printable,
   Hashable>; // clang-format on
 
+inline auto to_string(TicketId const& t) { return std::to_string(t.get()); }
+
 using Priority = NamedType<int, struct PriorityTag,
   // clang-format off
   DefaultInitialized,
@@ -150,7 +152,8 @@ struct UploadTextureSourceView {
   std::vector<UploadTextureSourceSubresource> subresources {};
 };
 
-#if defined(__cpp_lib_move_only_function) && (__cpp_lib_move_only_function >= 202110L)
+#if defined(__cpp_lib_move_only_function)                                      \
+  && (__cpp_lib_move_only_function >= 202110L)
 using UploadProducer = std::move_only_function<bool(std::span<std::byte>)>;
 #else
 using UploadProducer = std::function<bool(std::span<std::byte>)>;

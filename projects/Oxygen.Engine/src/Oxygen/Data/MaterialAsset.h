@@ -18,6 +18,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/TypedObject.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -66,10 +67,12 @@ class MaterialAsset : public Asset {
   OXYGEN_TYPED(MaterialAsset)
 
 public:
-  explicit MaterialAsset(
-    pak::MaterialAssetDesc desc, std::vector<ShaderReference> shader_refs = {})
+  explicit MaterialAsset(pak::MaterialAssetDesc desc,
+    std::vector<ShaderReference> shader_refs = {},
+    std::vector<oxygen::content::ResourceKey> texture_resource_keys = {})
     : desc_(std::move(desc))
     , shader_refs_(std::move(shader_refs))
+    , texture_resource_keys_(std::move(texture_resource_keys))
   {
   }
 
@@ -176,6 +179,57 @@ public:
 private:
   pak::MaterialAssetDesc desc_ {};
   std::vector<ShaderReference> shader_refs_ {};
+  // Runtime-only: per-slot source-aware resource keys produced by loader.
+  // Order matches getters: base_color, normal, metallic, roughness,
+  // ambient_occlusion
+  std::vector<oxygen::content::ResourceKey> texture_resource_keys_ {};
+
+public:
+  //! Runtime accessor for source-aware ResourceKey for base color texture.
+  [[nodiscard]] auto GetBaseColorTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 0) {
+      return texture_resource_keys_[0];
+    }
+    return static_cast<oxygen::content::ResourceKey>(0);
+  }
+
+  [[nodiscard]] auto GetNormalTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 1) {
+      return texture_resource_keys_[1];
+    }
+    return static_cast<oxygen::content::ResourceKey>(0);
+  }
+
+  [[nodiscard]] auto GetMetallicTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 2) {
+      return texture_resource_keys_[2];
+    }
+    return static_cast<oxygen::content::ResourceKey>(0);
+  }
+
+  [[nodiscard]] auto GetRoughnessTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 3) {
+      return texture_resource_keys_[3];
+    }
+    return static_cast<oxygen::content::ResourceKey>(0);
+  }
+
+  [[nodiscard]] auto GetAmbientOcclusionTextureKey() const noexcept
+    -> oxygen::content::ResourceKey
+  {
+    if (texture_resource_keys_.size() > 4) {
+      return texture_resource_keys_[4];
+    }
+    return static_cast<oxygen::content::ResourceKey>(0);
+  }
 };
 
 } // namespace oxygen::data

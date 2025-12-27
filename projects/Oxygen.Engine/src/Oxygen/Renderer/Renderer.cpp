@@ -21,9 +21,11 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -38,7 +40,6 @@
 #include <Oxygen/Renderer/Renderer.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
@@ -49,7 +50,6 @@
 #include <Oxygen/Renderer/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Engine/AsyncEngine.h>
 
 // Implementation of RendererTagFactory. Provides access to RendererTag
 // capability tokens, only from the engine core. When building tests, allow
@@ -113,32 +113,6 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config)
     = uploader_->CreateRingBufferStaging(frame::kFramesInFlight, 16, 0.5f);
   inline_transfers_->RegisterProvider(inline_staging_provider_);
 
-  auto geom_uploader = std::make_unique<renderer::resources::GeometryUploader>(
-    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { upload_staging_provider_.get() });
-  auto xform_uploader
-    = std::make_unique<renderer::resources::TransformUploader>(
-      observer_ptr { gfx.get() },
-      observer_ptr { inline_staging_provider_.get() },
-      observer_ptr { inline_transfers_.get() });
-  auto texture_binder = std::make_unique<renderer::resources::TextureBinder>(
-    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { upload_staging_provider_.get() },
-    observer_ptr<content::AssetLoader> { nullptr });
-  auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
-    observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { upload_staging_provider_.get() },
-    observer_ptr { texture_binder.get() });
-  auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
-    observer_ptr { gfx.get() }, observer_ptr { inline_staging_provider_.get() },
-    observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() },
-    observer_ptr { inline_transfers_.get() });
-
-  scene_prep_state_
-    = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
-      std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
-  texture_binder_ = std::move(texture_binder);
-
   // Initialize scene constants manager for per-view, per-slot Upload heap
   // buffers
   scene_const_manager_ = std::make_unique<internal::SceneConstantsManager>(
@@ -166,12 +140,46 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
 
   asset_loader_ = engine->GetAssetLoader();
   if (!asset_loader_) {
-    LOG_F(WARNING,
-      "AssetLoader disabled; renderer will stay in placeholder texture mode");
+    LOG_F(ERROR, "AssetLoader unavailable; cannot initialize TextureBinder");
+    return false;
   }
 
-  if (texture_binder_) {
-    texture_binder_->SetAssetLoader(asset_loader_);
+  if (!scene_prep_state_) {
+    auto gfx = gfx_weak_.lock();
+    if (!gfx) {
+      LOG_F(ERROR, "Graphics expired during Renderer::OnAttached");
+      return false;
+    }
+
+    auto geom_uploader
+      = std::make_unique<renderer::resources::GeometryUploader>(
+        observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+        observer_ptr { upload_staging_provider_.get() });
+    auto xform_uploader
+      = std::make_unique<renderer::resources::TransformUploader>(
+        observer_ptr { gfx.get() },
+        observer_ptr { inline_staging_provider_.get() },
+        observer_ptr { inline_transfers_.get() });
+
+    auto texture_binder = std::make_unique<renderer::resources::TextureBinder>(
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { upload_staging_provider_.get() }, asset_loader_);
+
+    auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
+      observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
+      observer_ptr { upload_staging_provider_.get() },
+      observer_ptr { texture_binder.get() });
+
+    auto emitter = std::make_unique<renderer::resources::DrawMetadataEmitter>(
+      observer_ptr { gfx.get() },
+      observer_ptr { inline_staging_provider_.get() },
+      observer_ptr { geom_uploader.get() }, observer_ptr { mat_binder.get() },
+      observer_ptr { inline_transfers_.get() });
+
+    scene_prep_state_
+      = std::make_unique<sceneprep::ScenePrepState>(std::move(geom_uploader),
+        std::move(xform_uploader), std::move(mat_binder), std::move(emitter));
+    texture_binder_ = std::move(texture_binder);
   }
   return true;
 }
@@ -183,23 +191,6 @@ auto Renderer::GetGraphics() -> std::shared_ptr<Graphics>
     throw std::runtime_error("Graphics expired in Renderer::GetGraphics");
   }
   return graphics_ptr;
-}
-
-auto Renderer::OverrideTexture2DRgba8(
-  data::pak::v1::ResourceIndexT resource_index, const std::uint32_t width,
-  const std::uint32_t height, const std::span<const std::byte> rgba8_bytes,
-  const std::string_view debug_name) -> bool
-{
-  if (!texture_binder_) {
-    return false;
-  }
-
-  std::string name;
-  name.assign(debug_name.begin(), debug_name.end());
-  const char* name_cstr = name.empty() ? "Renderer.OverrideTexture2D" : name.c_str();
-
-  return texture_binder_->OverrideTexture2DRgba8(
-    resource_index, width, height, rgba8_bytes, name_cstr);
 }
 
 auto Renderer::OverrideMaterialUvTransform(const data::MaterialAsset& material,
@@ -802,6 +793,12 @@ auto Renderer::UpdateSceneConstantsFromView(const ResolvedView& view) -> void
 auto Renderer::OnFrameStart(FrameContext& context) -> void
 {
   DLOG_SCOPE_FUNCTION(2);
+
+  if (!scene_prep_state_ || !texture_binder_) {
+    LOG_F(
+      ERROR, "Renderer OnFrameStart called before OnAttached initialization");
+    return;
+  }
 
   auto tag = oxygen::renderer::internal::RendererTagFactory::Get();
   auto frame_slot = context.GetFrameSlot();
