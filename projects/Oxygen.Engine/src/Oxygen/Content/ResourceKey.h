@@ -7,7 +7,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content {
@@ -20,6 +22,20 @@ namespace oxygen::content {
 
  @see AssetLoader::MakeResourceKey
 */
-using ResourceKey = uint64_t;
+using ResourceKey = oxygen::NamedType<uint64_t, struct ResourceKeyTag,
+  // clang-format off
+	oxygen::DefaultInitialized,
+	oxygen::Comparable,
+	oxygen::Hashable,
+	oxygen::Printable
+  // clang-format on
+  >;
+
+//! Convert a ResourceKey to string for logging.
+inline auto to_string(const ResourceKey& key) -> std::string
+{
+  const auto u_key = key.get();
+  return "ResourceKey{" + std::to_string(u_key) + "}";
+}
 
 } // namespace oxygen::content

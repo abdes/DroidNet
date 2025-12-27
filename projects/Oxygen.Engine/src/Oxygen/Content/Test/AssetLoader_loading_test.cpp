@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
@@ -237,8 +238,8 @@ auto WriteLooseCookedMaterialWithTexture(
   // Arrange: write material descriptor referencing texture index 1
   MaterialAssetDesc material_desc {};
   material_desc.header.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
-  std::strncpy(material_desc.header.name, "TestMaterial",
-    sizeof(material_desc.header.name));
+  std::snprintf(material_desc.header.name, sizeof(material_desc.header.name),
+    "%s", "TestMaterial");
   material_desc.header.version = 1;
   material_desc.header.streaming_priority = 0;
   material_desc.header.content_hash = 0;

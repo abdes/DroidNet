@@ -57,7 +57,7 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_ZeroKey_ReturnsPlaceholder)
   const auto before = AllocatedSrvCount();
 
   // Act
-  const auto idx = Binder().GetOrAllocate(static_cast<ResourceKey>(0));
+  const auto idx = Binder().GetOrAllocate(ResourceKey { 0 });
 
   // Assert
   EXPECT_NE(idx, Binder().GetErrorTextureIndex());

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstring>
 #include <limits>
 #include <unordered_map>
 
@@ -18,11 +19,11 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <cstring>
 
 using oxygen::content::AssetLoader;
 using oxygen::content::LoaderContext;
@@ -116,8 +117,12 @@ namespace {
 auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
   uint64_t& actual_key_hash, oxygen::TypeId& type_id) -> bool
 {
+  using oxygen::content::ResourceKey;
+  using oxygen::content::internal::InternalResourceKey;
+
   CHECK_EQ_F(expected_key_hash, actual_key_hash);
-  oxygen::content::internal::InternalResourceKey internal_key(actual_key_hash);
+  ResourceKey actual_key_hash_rc(actual_key_hash);
+  InternalResourceKey internal_key(actual_key_hash_rc);
   const uint16_t resource_type_index = internal_key.GetResourceTypeIndex();
   const auto class_type_id = GetResourceTypeIdByIndex(resource_type_index);
   CHECK_EQ_F(type_id, class_type_id);
@@ -506,7 +511,7 @@ auto AssetLoader::AddResourceDependency(
   resource_dependencies_[dependent].insert(resource_key);
 
   // Touch the dependency resource in the cache to increment its reference count
-  content_cache_.Touch(resource_key);
+  content_cache_.Touch(resource_key.get());
 }
 
 //=== Asset Loading Implementations ==========================================//
@@ -645,7 +650,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key, bool offline)
   auto res_dep_it = resource_dependencies_.find(key);
   if (res_dep_it != resource_dependencies_.end()) {
     for (const auto& res_key : res_dep_it->second) {
-      content_cache_.CheckIn(res_key);
+      content_cache_.CheckIn(res_key.get());
     }
     resource_dependencies_.erase(res_dep_it);
   }
@@ -944,6 +949,5 @@ auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 
 auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
 {
-  const internal::InternalResourceKey internal_key(key);
-  return std::hash<internal::InternalResourceKey> {}(internal_key);
+  return std::hash<ResourceKey> {}(key);
 }
