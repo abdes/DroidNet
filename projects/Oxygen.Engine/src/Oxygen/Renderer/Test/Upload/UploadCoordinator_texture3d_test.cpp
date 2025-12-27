@@ -75,8 +75,10 @@ NOLINT_TEST_F(
       .format = oxygen::Format::kRGBA8UNorm,
     },
     .subresources = {},
-    .data = UploadDataView {
-      .bytes = std::span<const std::byte>(data.data(), data.size()),
+    .data = oxygen::engine::upload::UploadTextureSourceView {
+      .subresources = std::vector<oxygen::engine::upload::UploadTextureSourceSubresource> {
+        { std::span<const std::byte>(data.data(), data.size()), static_cast<uint32_t>(row_pitch), static_cast<uint32_t>(slice_pitch) }
+      },
     },
   };
 
@@ -84,7 +86,10 @@ NOLINT_TEST_F(
 
   // Act
   auto ticket_result = uploader.Submit(req, Staging());
-  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  if (!ticket_result.has_value()) {
+    FAIL() << "Submit failed: error="
+           << static_cast<int>(ticket_result.error());
+  }
   const auto ticket = ticket_result.value();
 
   // Assert

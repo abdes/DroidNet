@@ -180,12 +180,12 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferPlan_PackingAndAlignment)
   const auto& it0 = plan.uploads[0];
   const auto& it1 = plan.uploads[1];
 
-  // src offsets must be aligned to policy (kBufferCopyAlignment = 512)
+  // src offsets must be aligned to policy (buffer_copy_alignment)
   EXPECT_EQ(it0.region.src_offset
-      % UploadPolicy::AlignmentPolicy::kBufferCopyAlignment.get(),
+      % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
     0u);
   EXPECT_EQ(it1.region.src_offset
-      % UploadPolicy::AlignmentPolicy::kBufferCopyAlignment.get(),
+      % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
     0u);
 
   // Regions preserve dst offsets and sizes
@@ -220,7 +220,8 @@ NOLINT_TEST_F(UploadPlannerBufferTest, BufferOptimize_CoalesceContiguous)
 
   // Assert
   ASSERT_TRUE(opt.has_value());
-  const auto& [uploads, total_bytes] = opt.value();
+  const auto& optimized = opt.value();
+  const auto& uploads = optimized.uploads;
 
   // Expect coalesced into single upload
   ASSERT_EQ(uploads.size(), 1u);
@@ -573,7 +574,7 @@ NOLINT_TEST_F(
 
   // But src_offset must respect staging alignment policy
   EXPECT_EQ(plan->uploads[0].region.src_offset
-      % UploadPolicy::AlignmentPolicy::kBufferCopyAlignment.get(),
+      % UploadPolicy(UploadQueueKey()).alignment.buffer_copy_alignment.get(),
     0u);
 }
 

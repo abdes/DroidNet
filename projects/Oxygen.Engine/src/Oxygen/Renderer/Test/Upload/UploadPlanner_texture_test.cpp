@@ -103,7 +103,9 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_Full)
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& [total_bytes, regions] = exp_plan.value();
+  const auto plan = exp_plan.value();
+  const auto& total_bytes = plan.total_bytes;
+  const auto& regions = plan.regions;
   ASSERT_EQ(regions.size(), 1u);
   const auto& r = regions[0];
   EXPECT_EQ(r.buffer_offset, 0u);
@@ -129,14 +131,14 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_TwoMips)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  std::vector subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 1, .array_slice = 0 },
+  std::vector<oxygen::engine::upload::UploadSubresource> subs = {
+    { 0u, 0u },
+    { 1u, 0u },
   };
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
+  const auto plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 2u);
   const auto& r0 = plan.regions[0];
   EXPECT_EQ(r0.buffer_offset, 0u);
@@ -171,7 +173,7 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_BC3_Full)
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& plan = exp_plan.value();
+  const auto plan = exp_plan.value();
   ASSERT_EQ(plan.regions.size(), 1u);
   const auto& r = plan.regions[0];
   // blocks_x = 128/4 = 32 -> row = 32 * 16 = 512 (already 256 aligned)
@@ -199,15 +201,8 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_PartialRegion)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  std::vector subs {
-    UploadSubresource { .mip = 0,
-      .array_slice = 0,
-      .x = 10,
-      .y = 5,
-      .z = 0,
-      .width = 50,
-      .height = 20,
-      .depth = 1 },
+  std::vector<oxygen::engine::upload::UploadSubresource> subs = {
+    { 0u, 0u, 10u, 5u, 0u, 50u, 20u, 1u },
   };
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
@@ -241,14 +236,16 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture2D_ArrayTwoSlices)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  std::vector subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 0, .array_slice = 1 },
+  std::vector<oxygen::engine::upload::UploadSubresource> subs = {
+    { 0u, 0u },
+    { 0u, 1u },
   };
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& [total_bytes, regions] = exp_plan.value();
+  const auto plan = exp_plan.value();
+  const auto& total_bytes = plan.total_bytes;
+  const auto& regions = plan.regions;
   ASSERT_EQ(regions.size(), 2u);
   const auto& r0 = regions[0];
   const auto& r1 = regions[1];
@@ -280,7 +277,9 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture3D_Full)
   const auto exp_plan
     = UploadPlanner::PlanTexture3D(req, {}, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& [total_bytes, regions] = exp_plan.value();
+  const auto plan = exp_plan.value();
+  const auto& total_bytes = plan.total_bytes;
+  const auto& regions = plan.regions;
   ASSERT_EQ(regions.size(), 1u);
   const auto& r = regions[0];
   // RGBA8: row = 32*4=128 -> align 256; slice = 256*16=4096; total = 4096*8
@@ -307,15 +306,8 @@ NOLINT_TEST_F(UploadPlannerTextureTest, Texture3D_PartialRegion)
   req.height = td.height;
   req.depth = td.depth;
   req.format = td.format;
-  std::vector subs {
-    UploadSubresource { .mip = 0,
-      .array_slice = 0,
-      .x = 4,
-      .y = 2,
-      .z = 3,
-      .width = 17,
-      .height = 9,
-      .depth = 5 },
+  std::vector<oxygen::engine::upload::UploadSubresource> subs = {
+    { 0u, 0u, 4u, 2u, 3u, 17u, 9u, 5u },
   };
   const auto exp_plan
     = UploadPlanner::PlanTexture3D(req, subs, UploadPolicy(UploadQueueKey()));
@@ -353,14 +345,16 @@ NOLINT_TEST_F(UploadPlannerTextureTest, TextureCube_TwoFaces)
   req.height = td.height;
   req.depth = 1;
   req.format = td.format;
-  std::vector subs {
-    UploadSubresource { .mip = 0, .array_slice = 0 },
-    UploadSubresource { .mip = 0, .array_slice = 3 },
+  std::vector<oxygen::engine::upload::UploadSubresource> subs = {
+    { 0u, 0u },
+    { 0u, 3u },
   };
   const auto exp_plan
     = UploadPlanner::PlanTexture2D(req, subs, UploadPolicy(UploadQueueKey()));
   ASSERT_TRUE(exp_plan.has_value());
-  const auto& [total_bytes, regions] = exp_plan.value();
+  const auto plan = exp_plan.value();
+  const auto& total_bytes = plan.total_bytes;
+  const auto& regions = plan.regions;
   ASSERT_EQ(regions.size(), 2u);
   const auto& r0 = regions[0];
   const auto& r1 = regions[1];

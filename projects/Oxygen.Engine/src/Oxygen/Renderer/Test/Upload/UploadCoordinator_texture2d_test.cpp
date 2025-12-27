@@ -34,6 +34,8 @@ using oxygen::engine::upload::UploadDataView;
 using oxygen::engine::upload::UploadKind;
 using oxygen::engine::upload::UploadRequest;
 using oxygen::engine::upload::UploadTextureDesc;
+using oxygen::engine::upload::UploadTextureSourceSubresource;
+using oxygen::engine::upload::UploadTextureSourceView;
 using oxygen::engine::upload::testing::UploadCoordinatorTest;
 using oxygen::graphics::QueueKey;
 using oxygen::graphics::TextureDesc;
@@ -76,8 +78,10 @@ NOLINT_TEST_F(
       .format = oxygen::Format::kRGBA8UNorm,
     },
     .subresources = {},
-    .data = UploadDataView {
-      .bytes = std::span<const std::byte>(data.data(), data.size()),
+    .data = UploadTextureSourceView {
+      .subresources = std::vector<UploadTextureSourceSubresource> {
+        { std::span<const std::byte>(data.data(), data.size()), static_cast<uint32_t>(512), static_cast<uint32_t>(32768) }
+      },
     },
   };
 
@@ -85,7 +89,10 @@ NOLINT_TEST_F(
 
   // Act
   auto ticket_result = uploader.Submit(req, Staging());
-  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  if (!ticket_result.has_value()) {
+    FAIL() << "Submit failed: error="
+           << static_cast<int>(ticket_result.error());
+  }
   const auto ticket = ticket_result.value();
 
   // Assert
@@ -154,12 +161,15 @@ NOLINT_TEST_F(
       .depth = 1,
       .format = oxygen::Format::kRGBA8UNorm,
     },
-    .subresources = {
-      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, .row_pitch = 0, .slice_pitch = 0, },
-      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0, .row_pitch = 0, .slice_pitch = 0, },
+    .subresources = std::vector<oxygen::engine::upload::UploadSubresource> {
+      { .mip = 0, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
+      { .mip = 1, .array_slice = 0, .x = 0, .y = 0, .z = 0, .width = 0, .height = 0, .depth = 0 },
     },
-    .data = UploadDataView {
-      .bytes = std::span<const std::byte>(data.data(), data.size()),
+    .data = UploadTextureSourceView {
+      .subresources = std::vector<UploadTextureSourceSubresource> {
+        { std::span<const std::byte>(data.data(), static_cast<std::size_t>(8192)), static_cast<uint32_t>(256), static_cast<uint32_t>(8192) },
+        { std::span<const std::byte>(data.data() + 8192, static_cast<std::size_t>(4096)), static_cast<uint32_t>(256), static_cast<uint32_t>(4096) },
+      },
     },
   };
 
@@ -167,7 +177,10 @@ NOLINT_TEST_F(
 
   // Act
   auto ticket_result = uploader.Submit(req, Staging());
-  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  if (!ticket_result.has_value()) {
+    FAIL() << "Submit failed: error="
+           << static_cast<int>(ticket_result.error());
+  }
   const auto ticket = ticket_result.value();
 
   // Assert
