@@ -7,13 +7,15 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <memory>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -99,6 +101,8 @@ private:
 
   TextureIndexMode texture_index_mode_ { TextureIndexMode::kForcedError };
   std::uint32_t custom_texture_resource_index_ { 0U };
+  oxygen::content::ResourceKey custom_texture_key_ { 0U };
+  oxygen::content::ResourceKey forced_error_key_ { 0U };
   glm::vec2 uv_scale_ { 1.0f, 1.0f };
   glm::vec2 uv_offset_ { 0.0f, 0.0f };
   bool cube_needs_rebuild_ { true };

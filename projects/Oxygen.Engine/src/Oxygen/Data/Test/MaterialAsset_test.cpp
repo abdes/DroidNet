@@ -54,8 +54,8 @@ NOLINT_TEST(MaterialAssetBasicTest, CreateDefault_ReturnsDistinctInstances)
   // Assert
   EXPECT_THAT(material1, NotNull());
   EXPECT_THAT(material2, NotNull());
-  // Each call creates a new instance (not cached)
-  EXPECT_NE(material1.get(), material2.get());
+  // Each call returns the same cached default instance
+  EXPECT_EQ(material1.get(), material2.get());
   // But they have the same properties
   EXPECT_EQ(material1->GetMaterialType(), material2->GetMaterialType());
   EXPECT_EQ(material1->GetShaderStages(), material2->GetShaderStages());

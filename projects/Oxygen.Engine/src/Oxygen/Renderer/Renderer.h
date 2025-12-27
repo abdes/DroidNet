@@ -11,8 +11,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <span>
 #include <shared_mutex>
+#include <span>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -52,7 +52,7 @@ class CommandRecorder;
 } // namespace oxygen::graphics
 
 namespace oxygen::content {
-  class AssetLoader;
+class AssetLoader;
 }
 
 namespace oxygen::data {
@@ -79,6 +79,8 @@ namespace sceneprep {
 } // namespace oxygen::engine
 
 namespace oxygen::renderer::resources {
+class GeometryUploader;
+class TransformUploader;
 class TextureBinder;
 } // namespace oxygen::renderer::resources
 
@@ -133,7 +135,8 @@ public:
     // kRender. Renderer participates in both via its module hooks.
   }
 
-  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool override;
+  OXGN_RNDR_NDAPI auto OnAttached(observer_ptr<AsyncEngine> engine) noexcept
+    -> bool override;
 
   OXGN_RNDR_NDAPI auto OnFrameStart(FrameContext& context) -> void override;
 
@@ -190,27 +193,6 @@ public:
 
   //! Returns the Graphics system used by this renderer.
   OXGN_RNDR_API auto GetGraphics() -> std::shared_ptr<Graphics>;
-
-  //! Override a texture resource with raw RGBA8 pixels.
-  /*!
-   This is a synchronous helper primarily intended for examples and tooling.
-   It keeps shader-visible indices stable by repointing the underlying SRV.
-
-    TODO: This is demo/tooling-only. For production workflows, prefer an
-    authoring pipeline that produces texture assets (or a dedicated runtime
-    streaming system) rather than mutating texture bindings through Renderer.
-
-   @param resource_index Logical texture id referenced by materials.
-   @param width Texture width in pixels.
-   @param height Texture height in pixels.
-   @param rgba8_bytes RGBA8 pixel data (width*height*4 bytes).
-   @param debug_name Friendly name for GPU/debug logging.
-   @return true on success; false otherwise.
-  */
-  OXGN_RNDR_API auto OverrideTexture2DRgba8(
-    data::pak::v1::ResourceIndexT resource_index, std::uint32_t width,
-    std::uint32_t height, std::span<const std::byte> rgba8_bytes,
-    std::string_view debug_name) -> bool;
 
   //! Override a material's UV transform used by the shader.
   /*!

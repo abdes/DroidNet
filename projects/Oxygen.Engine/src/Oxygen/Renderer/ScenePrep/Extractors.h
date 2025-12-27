@@ -293,12 +293,13 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
     };
 
     auto mat_ptr = resolve_material();
-    const auto mat_handle = state.GetMaterialBinder()->GetOrAllocate(mat_ptr);
+    sceneprep::MaterialRef mat_ref { std::move(mat_ptr) };
+    const auto mat_handle = state.GetMaterialBinder()->GetOrAllocate(mat_ref);
     state.CollectItem(RenderItemData {
       .lod_index = lod,
       .submesh_index = index,
       .geometry = item.Geometry(),
-      .material = std::move(mat_ptr),
+      .material = std::move(mat_ref),
       .material_handle = mat_handle,
       .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),
       .transform_handle = item.GetTransformHandle(),

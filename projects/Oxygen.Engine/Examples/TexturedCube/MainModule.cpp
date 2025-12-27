@@ -11,9 +11,11 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <imgui.h>
 
@@ -22,6 +24,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -41,9 +46,9 @@
 #include <Oxygen/Scene/Camera/Perspective.h>
 
 #if defined(OXYGEN_WINDOWS)
-#  include <windows.h>
 #  include <shobjidl_core.h>
 #  include <wincodec.h>
+#  include <windows.h>
 #  include <wrl/client.h>
 #endif
 
@@ -85,8 +90,8 @@ auto TryBrowseForPngFile(std::string& out_utf8_path) -> bool
   ScopedCoInitialize com;
 
   Microsoft::WRL::ComPtr<IFileOpenDialog> dlg;
-  const HRESULT hr = CoCreateInstance(CLSID_FileOpenDialog, nullptr,
-    CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
+  const HRESULT hr = CoCreateInstance(
+    CLSID_FileOpenDialog, nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&dlg));
   if (FAILED(hr) || !dlg) {
     return false;
   }
@@ -205,8 +210,8 @@ auto DecodePngRgba8Wic(const std::filesystem::path& file_path,
 #endif
 
 auto MakeLookRotationFromPosition(const glm::vec3& position,
-  const glm::vec3& target,
-  const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F }) -> glm::quat
+  const glm::vec3& target, const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F })
+  -> glm::quat
 {
   const auto forward_raw = target - position;
   const float forward_len2 = glm::dot(forward_raw, forward_raw);
@@ -246,9 +251,9 @@ auto ResolveBaseColorTextureResourceIndex(
   }
 }
 
-auto MakeCubeMaterial(const char* name,
-  const glm::vec4& rgba,
+auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   oxygen::data::pak::v1::ResourceIndexT base_color_texture_resource_index,
+  oxygen::content::ResourceKey base_color_texture_key,
   oxygen::data::MaterialDomain domain = oxygen::data::MaterialDomain::kOpaque)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
@@ -280,6 +285,16 @@ auto MakeCubeMaterial(const char* name,
 
   desc.base_color_texture = base_color_texture_resource_index;
 
+  // Runtime: when a ResourceKey is provided, bind it to the material's base
+  // color texture slot (opaque to the renderer).
+  if (base_color_texture_key != static_cast<oxygen::content::ResourceKey>(0)) {
+    std::vector<oxygen::content::ResourceKey> texture_keys;
+    texture_keys.push_back(base_color_texture_key);
+    return std::make_shared<const MaterialAsset>(
+      desc, std::vector<ShaderReference> {}, std::move(texture_keys));
+  }
+
+  // Default: no runtime texture keys (use fallback/placeholder behavior).
   return std::make_shared<const MaterialAsset>(
     desc, std::vector<ShaderReference> {});
 }
@@ -301,19 +316,19 @@ auto BuildCubeGeometry(
 
   std::vector<Vertex> vertices = cube_data->first;
 
-  auto mesh = MeshBuilder(0, "CubeLOD0")
-                .WithVertices(vertices)
-                .WithIndices(cube_data->second)
-                .BeginSubMesh("full", material)
-                .WithMeshView(MeshViewDesc {
-                  .first_index = 0,
-                  .index_count
-                    = static_cast<uint32_t>(cube_data->second.size()),
-                  .first_vertex = 0,
-                  .vertex_count = static_cast<uint32_t>(vertices.size()),
-                })
-                .EndSubMesh()
-                .Build();
+  auto mesh
+    = MeshBuilder(0, "CubeLOD0")
+        .WithVertices(vertices)
+        .WithIndices(cube_data->second)
+        .BeginSubMesh("full", material)
+        .WithMeshView(MeshViewDesc {
+          .first_index = 0,
+          .index_count = static_cast<uint32_t>(cube_data->second.size()),
+          .first_vertex = 0,
+          .vertex_count = static_cast<uint32_t>(vertices.size()),
+        })
+        .EndSubMesh()
+        .Build();
 
   GeometryAssetDesc geo_desc {};
   geo_desc.lod_count = 1;
@@ -415,43 +430,100 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     if (png_path.empty()) {
       png_status_message_ = "No PNG path provided";
     } else {
-#if defined(OXYGEN_WINDOWS)
-      std::vector<std::byte> rgba8;
-      std::uint32_t width = 0;
-      std::uint32_t height = 0;
-      std::string err;
-      const bool decoded
-        = DecodePngRgba8Wic(png_path, rgba8, width, height, err);
-      if (!decoded) {
-        png_status_message_ = err.empty() ? "PNG decode failed" : err;
+      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      if (!asset_loader) {
+        png_status_message_ = "AssetLoader unavailable";
       } else {
-        png_last_width_ = static_cast<int>(width);
-        png_last_height_ = static_cast<int>(height);
+#if !defined(OXYGEN_WINDOWS)
+        png_status_message_ = "PNG loading only supported on Windows";
+#else
+        std::vector<std::byte> rgba8;
+        std::uint32_t width = 0;
+        std::uint32_t height = 0;
+        std::string decode_error;
+        if (!DecodePngRgba8Wic(png_path, rgba8, width, height, decode_error)) {
+          png_status_message_
+            = decode_error.empty() ? "PNG decode failed" : decode_error;
+        } else {
+          // Use a fresh key each time so the renderer doesn't keep an older
+          // bindless entry for the same key.
+          custom_texture_key_ = asset_loader->MintSyntheticTextureKey();
 
-        if (custom_texture_resource_index_ == 0U) {
-          custom_texture_resource_index_ = 1U;
-        }
-
-        if (auto* renderer = ResolveRenderer(); renderer) {
-          const std::span<const std::byte> bytes { rgba8.data(), rgba8.size() };
-          const bool ok = renderer->OverrideTexture2DRgba8(
-            static_cast<oxygen::data::pak::v1::ResourceIndexT>(
-              custom_texture_resource_index_),
-            width, height, bytes, "TexturedCube.PNG");
-          if (!ok) {
-            png_status_message_ = "Texture upload/override failed";
+          // Keep a non-zero resource index for the material-side demo path.
+          if (custom_texture_resource_index_ == 0U) {
+            custom_texture_resource_index_ = 1U;
           } else {
+            ++custom_texture_resource_index_;
+          }
+
+          using oxygen::data::pak::v1::TextureResourceDesc;
+
+          const auto AlignUp = [](const std::size_t value,
+                                 const std::size_t alignment) -> std::size_t {
+            if (alignment == 0U) {
+              return value;
+            }
+            const auto mask = alignment - 1U;
+            return (value + mask) & ~mask;
+          };
+
+          // TextureBinder expects cooked texture data to be row-pitch aligned
+          // to 256 bytes when the resource advertises alignment=256.
+          constexpr std::size_t kRowPitchAlignment = 256U;
+          constexpr std::size_t kBytesPerPixel = 4U; // RGBA8
+          const std::size_t bytes_per_row
+            = static_cast<std::size_t>(width) * kBytesPerPixel;
+          const std::size_t row_pitch
+            = AlignUp(bytes_per_row, kRowPitchAlignment);
+          const std::size_t padded_size
+            = row_pitch * static_cast<std::size_t>(height);
+
+          std::vector<std::byte> rgba8_padded;
+          rgba8_padded.resize(padded_size);
+          for (std::uint32_t y = 0; y < height; ++y) {
+            const auto dst_offset = static_cast<std::size_t>(y) * row_pitch;
+            const auto src_offset = static_cast<std::size_t>(y) * bytes_per_row;
+            std::memcpy(rgba8_padded.data() + dst_offset,
+              rgba8.data() + src_offset, bytes_per_row);
+          }
+
+          TextureResourceDesc desc {};
+          desc.data_offset = static_cast<oxygen::data::pak::v1::OffsetT>(
+            sizeof(TextureResourceDesc));
+          desc.size_bytes = static_cast<oxygen::data::pak::v1::DataBlobSizeT>(
+            rgba8_padded.size());
+          desc.texture_type
+            = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D);
+          desc.compression_type = 0;
+          desc.width = width;
+          desc.height = height;
+          desc.depth = 1;
+          desc.array_layers = 1;
+          desc.mip_levels = 1;
+          desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
+          desc.alignment = 256;
+
+          std::vector<std::uint8_t> packed;
+          packed.resize(sizeof(TextureResourceDesc) + rgba8_padded.size());
+          std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
+          std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+            rgba8_padded.data(), rgba8_padded.size());
+
+          auto tex = co_await asset_loader->LoadTextureFromBufferAsync(
+            custom_texture_key_,
+            std::span<const std::uint8_t>(packed.data(), packed.size()), false);
+          if (!tex) {
+            png_status_message_ = "Texture buffer decode failed";
+          } else {
+            png_last_width_ = static_cast<int>(tex->GetWidth());
+            png_last_height_ = static_cast<int>(tex->GetHeight());
             png_status_message_ = "Loaded";
             texture_index_mode_ = TextureIndexMode::kCustom;
             cube_needs_rebuild_ = true;
           }
-        } else {
-          png_status_message_ = "Renderer unavailable";
         }
-      }
-#else
-      png_status_message_ = "PNG loading only implemented on Windows";
 #endif
+      }
     }
   }
 
@@ -459,8 +531,30 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     const auto res_index = ResolveBaseColorTextureResourceIndex(
       texture_index_mode_, custom_texture_resource_index_);
 
+    // Ensure we have a valid (type-encoded) key for forced-error mode without
+    // relying on magic invalid key values.
+    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    if (texture_index_mode_ == TextureIndexMode::kForcedError
+      && forced_error_key_ == static_cast<oxygen::content::ResourceKey>(0)
+      && asset_loader) {
+      forced_error_key_ = asset_loader->MintSyntheticTextureKey();
+    }
+
+    const auto base_color_key = [&]() -> oxygen::content::ResourceKey {
+      using enum TextureIndexMode;
+      switch (texture_index_mode_) {
+      case kCustom:
+        return custom_texture_key_;
+      case kForcedError:
+        return forced_error_key_;
+      case kFallback:
+      default:
+        return static_cast<oxygen::content::ResourceKey>(0);
+      }
+    }();
+
     cube_material_ = MakeCubeMaterial(
-      "CubeMat", { 1.0f, 1.0f, 1.0f, 1.0f }, res_index);
+      "CubeMat", { 1.0f, 1.0f, 1.0f, 1.0f }, res_index, base_color_key);
 
     auto cube_geo = BuildCubeGeometry(cube_material_, uv_scale_, uv_offset_);
     if (cube_geo) {
@@ -543,7 +637,8 @@ auto MainModule::OnPreRender(engine::FrameContext& context) -> co::Co<>
   if (auto rg = GetRenderGraph(); rg) {
     rg->SetupRenderPasses();
 
-    if (auto shader_pass_config = rg->GetShaderPassConfig(); shader_pass_config) {
+    if (auto shader_pass_config = rg->GetShaderPassConfig();
+      shader_pass_config) {
       shader_pass_config->clear_color
         = graphics::Color { 0.08F, 0.08F, 0.10F, 1.0F };
       shader_pass_config->debug_name = "ShaderPass";
@@ -696,15 +791,18 @@ auto MainModule::ApplyOrbitAndZoom() -> void
 
   // Zoom via mouse wheel actions
   if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
-    orbit_distance_ = (std::max)(orbit_distance_ - zoom_step_, min_cam_distance_);
+    orbit_distance_
+      = (std::max)(orbit_distance_ - zoom_step_, min_cam_distance_);
   }
   if (zoom_out_action_ && zoom_out_action_->WasTriggeredThisFrame()) {
-    orbit_distance_ = (std::min)(orbit_distance_ + zoom_step_, max_cam_distance_);
+    orbit_distance_
+      = (std::min)(orbit_distance_ + zoom_step_, max_cam_distance_);
   }
 
   // Orbit via MouseXY deltas for this frame
-  if (orbit_action_ && orbit_action_->GetValueType()
-    == oxygen::input::ActionValueType::kAxis2D) {
+  if (orbit_action_
+    && orbit_action_->GetValueType()
+      == oxygen::input::ActionValueType::kAxis2D) {
     glm::vec2 orbit_delta(0.0f);
     for (const auto& tr : orbit_action_->GetFrameTransitions()) {
       const auto& v = tr.value_at_transition.GetAs<oxygen::Axis2D>();
@@ -740,8 +838,8 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   ImGui::SetNextWindowPos(ImVec2(20, 20), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowSize(ImVec2(420, 200), ImGuiCond_FirstUseEver);
 
-  if (!ImGui::Begin("Textured Cube Debug", nullptr,
-        ImGuiWindowFlags_AlwaysAutoResize)) {
+  if (!ImGui::Begin(
+        "Textured Cube Debug", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
     ImGui::End();
     return;
   }
@@ -831,8 +929,10 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   if (ImGui::DragFloat2("UV offset", uv_offset, 0.01f, kUvOffsetMin,
         kUvOffsetMax, "%.3f", ImGuiSliderFlags_AlwaysClamp)) {
     const glm::vec2 new_offset {
-      std::clamp(SanitizeFinite(uv_offset[0], 0.0f), kUvOffsetMin, kUvOffsetMax),
-      std::clamp(SanitizeFinite(uv_offset[1], 0.0f), kUvOffsetMin, kUvOffsetMax),
+      std::clamp(
+        SanitizeFinite(uv_offset[0], 0.0f), kUvOffsetMin, kUvOffsetMax),
+      std::clamp(
+        SanitizeFinite(uv_offset[1], 0.0f), kUvOffsetMin, kUvOffsetMax),
     };
     if (new_offset != uv_offset_) {
       uv_offset_ = new_offset;

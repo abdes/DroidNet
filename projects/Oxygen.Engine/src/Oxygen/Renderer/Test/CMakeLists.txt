@@ -122,3 +122,34 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )
+
+# TextureBinder unit tests (no backend dependency)
+m_gtest_program(
+  TextureBinder
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/TextureBinderTest.cpp"
+    "Resources/TextureBinderTest.h"
+    "Resources/TextureBinder_test.cpp"
+    "Resources/TextureBinderUploadFailure_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.TextureBinder.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
+# MaterialBinder contract tests (backend-free)
+m_gtest_program(
+  MaterialBinder
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/MaterialBinderTest.cpp"
+    "Resources/MaterialBinderTest.h"
+    "Resources/MaterialBinder_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.MaterialBinder.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

@@ -274,6 +274,9 @@ auto CommandRecorder::SetupDescriptorTables(
       // Bind the single unbounded SRV descriptor table
       // The shader uses ResourceDescriptorHeap to access all resources by
       // global index
+      DLOG_F(4,
+        "recorder: binding SRV heap gpu_handle.ptr={} for command list: {}",
+        heap_info.gpu_handle.ptr, GetConcreteCommandList().GetName());
       set_table(kRootIndex_UnboundedSRV_Table, heap_info.gpu_handle);
 
     } else if (heap_info.heap_type == D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER) {

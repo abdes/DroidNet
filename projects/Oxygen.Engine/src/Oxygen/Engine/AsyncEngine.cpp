@@ -12,17 +12,17 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
-#include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/content/EngineTag.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/content/EngineTag.h>
 
 // Implementation of EngineTagFactory. Provides access to EngineTag capability
 // tokens, only from the engine core. When building tests, allow tests to
@@ -95,6 +95,13 @@ auto AsyncEngine::Run() -> void
     nursery_, "Nursery must be opened via ActivateAsync before Run");
 
   nursery_->Start([this]() -> co::Co<> {
+    // Ensure AssetLoader is activated (its own nursery opened) before the
+    // frame loop starts so other subsystems can rely on it.
+    if (asset_loader_) {
+      co_await nursery_->Start(
+        &oxygen::content::AssetLoader::ActivateAsync, asset_loader_.get());
+    }
+
     co_await FrameLoop();
     co_await Shutdown();
 
@@ -870,10 +877,14 @@ auto AsyncEngine::InitializeDetachedServices() -> void
 
   if (config_.enable_asset_loader) {
     const auto tag = oxygen::content::internal::EngineTagFactory::Get();
-    asset_loader_ = std::make_unique<content::AssetLoader>(tag);
-    LOG_F(1, "[D] AssetLoader initialized");
+    content::AssetLoaderConfig asset_loader_cfg {
+      .thread_pool = observer_ptr<co::ThreadPool> { &platform_->Threads() },
+    };
+    asset_loader_
+      = std::make_unique<content::AssetLoader>(tag, asset_loader_cfg);
+    LOG_F(INFO, "[D] AssetLoader initialized");
   } else {
-    LOG_F(1, "[D] AssetLoader disabled by config");
+    LOG_F(INFO, "[D] AssetLoader disabled by config");
   }
 
   // TODO: Initialize crash dump detection service

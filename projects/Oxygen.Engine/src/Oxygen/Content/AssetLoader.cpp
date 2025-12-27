@@ -20,6 +20,9 @@
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
+#include <cstring>
 
 using oxygen::content::AssetLoader;
 using oxygen::content::LoaderContext;
@@ -29,13 +32,19 @@ using oxygen::content::PakResource;
 
 namespace oxygen::content {
 
+namespace {
+  // Reserved source id for synthetic keys. This id must not collide with
+  // mounted PAK indices (0..N) or loose cooked sources (0x8000..).
+  constexpr uint16_t kSyntheticSourceId = 0xFFFF;
+} // namespace
+
 // Implement the private helper declared in the header to avoid exposing the
 // internal header in the public API.
 auto AssetLoader::PackResourceKey(uint16_t pak_index,
   uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey
 {
-  internal::InternalResourceKey key(pak_index, resource_type_index,
-    resource_index);
+  internal::InternalResourceKey key(
+    pak_index, resource_type_index, resource_index);
   return key.GetRawKey();
 }
 
@@ -118,7 +127,8 @@ auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
 
 //=== Basic methods ==========================================================//
 
-AssetLoader::AssetLoader([[maybe_unused]] EngineTag tag)
+AssetLoader::AssetLoader(
+  [[maybe_unused]] EngineTag tag, const AssetLoaderConfig config)
   : impl_(std::make_unique<Impl>())
 {
   using serio::FileStream;
@@ -126,6 +136,9 @@ AssetLoader::AssetLoader([[maybe_unused]] EngineTag tag)
   LOG_SCOPE_FUNCTION(INFO);
 
   owning_thread_id_ = std::this_thread::get_id();
+
+  thread_pool_ = config.thread_pool;
+  enforce_offline_no_gpu_work_ = config.enforce_offline_no_gpu_work;
 
   // Register asset loaders
   RegisterLoader(loaders::LoadGeometryAsset, loaders::UnloadGeometryAsset);
@@ -137,6 +150,26 @@ AssetLoader::AssetLoader([[maybe_unused]] EngineTag tag)
 }
 
 AssetLoader::~AssetLoader() = default;
+
+// LiveObject activation: open the nursery used by the AssetLoader
+auto AssetLoader::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
+{
+  return co::OpenNursery(nursery_, std::move(started));
+}
+
+void AssetLoader::Run()
+{
+  // Optional: start background supervision tasks here via nursery_->Start(...)
+}
+
+void AssetLoader::Stop()
+{
+  if (nursery_) {
+    nursery_->Cancel();
+  }
+}
+
+auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
@@ -178,6 +211,216 @@ auto AssetLoader::ClearMounts() -> void
   impl_->source_id_to_index.clear();
   impl_->next_loose_source_id = kLooseCookedSourceIdBase;
   impl_->pak_paths.clear();
+}
+
+auto AssetLoader::LoadTextureAsync(ResourceKey key, bool offline)
+  -> co::Co<std::shared_ptr<data::TextureResource>>
+{
+  // If the loader hasn't been activated (no nursery), run the load
+  // synchronously on the calling thread as a best-effort fallback. This keeps
+  // behavior simple and predictable for callers that accidentally call the
+  // API too early.
+  if (!nursery_) {
+    co_return LoadResourceByKey<data::TextureResource>(key, offline);
+  }
+
+  // Otherwise run the potentially blocking read on the configured thread
+  // pool and return the decoded CPU-side TextureResource.
+  auto res = co_await LoadResourceAsync<data::TextureResource>(key, offline);
+  co_return res;
+}
+
+// Helper: create an AnyReader backed by an in-memory buffer. This owns the
+// backing storage and implements the AnyReader interface by delegating to
+// a concrete Reader<MemoryStream>.
+namespace {
+class MemoryAnyReader final : public oxygen::serio::AnyReader {
+public:
+  explicit MemoryAnyReader(std::span<const uint8_t> data)
+  {
+    data_.resize(data.size());
+    if (!data_.empty()) {
+      std::memcpy(data_.data(), data.data(), data.size());
+    }
+    // Create a MemoryStream over the owned std::vector<std::byte>
+    stream_
+      = std::make_unique<oxygen::serio::MemoryStream>(std::span<std::byte>(
+        reinterpret_cast<std::byte*>(data_.data()), data_.size()));
+    reader_
+      = std::make_unique<oxygen::serio::Reader<oxygen::serio::MemoryStream>>(
+        *stream_);
+  }
+
+  ~MemoryAnyReader() override = default;
+
+  auto ReadBlob(size_t size) noexcept
+    -> oxygen::Result<std::vector<std::byte>> override
+  {
+    return reader_->ReadBlob(size);
+  }
+
+  auto ReadBlobInto(std::span<std::byte> buffer) noexcept
+    -> oxygen::Result<void> override
+  {
+    return reader_->ReadBlobInto(buffer);
+  }
+
+  auto Position() noexcept -> oxygen::Result<size_t> override
+  {
+    return reader_->Position();
+  }
+
+  auto AlignTo(size_t alignment) noexcept -> oxygen::Result<void> override
+  {
+    return reader_->AlignTo(alignment);
+  }
+
+  auto ScopedAlignment(uint16_t alignment) noexcept(false)
+    -> oxygen::serio::AlignmentGuard override
+  {
+    return reader_->ScopedAlignment(alignment);
+  }
+
+  auto Forward(size_t num_bytes) noexcept -> oxygen::Result<void> override
+  {
+    return reader_->Forward(num_bytes);
+  }
+
+  auto Seek(size_t pos) noexcept -> oxygen::Result<void> override
+  {
+    return reader_->Seek(pos);
+  }
+
+private:
+  std::vector<std::byte> data_;
+  std::unique_ptr<oxygen::serio::MemoryStream> stream_;
+  std::unique_ptr<oxygen::serio::Reader<oxygen::serio::MemoryStream>> reader_;
+};
+} // namespace
+
+auto AssetLoader::LoadTextureFromBufferAsync(
+  ResourceKey key, std::span<const uint8_t> bytes, bool offline)
+  -> co::Co<std::shared_ptr<data::TextureResource>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadTextureFromBufferAsync");
+  DLOG_F(2, "key     : {}", key);
+  DLOG_F(2, "bytes   : {}", bytes.size());
+  DLOG_F(2, "offline : {}", offline);
+
+  auto decode_fn
+    = [this, key, bytes, offline]() -> std::shared_ptr<data::TextureResource> {
+    DLOG_SCOPE_F(2, "AssetLoader DecodeTextureFromBuffer");
+    // Find texture resource loader
+    auto it = resource_loaders_.find(data::TextureResource::ClassTypeId());
+    if (it == resource_loaders_.end()) {
+      LOG_F(ERROR, "No texture resource loader registered");
+      return nullptr;
+    }
+
+    // Build a LoaderContext that supplies the texture data via an AnyReader.
+    // Create the reader first, then use aggregate initialization to keep the
+    // original style while avoiding any sequencing issues by ensuring the
+    // reader object exists prior to forming the context.
+    auto tex_reader = std::make_unique<MemoryAnyReader>(bytes);
+
+    LoaderContext context {
+      .asset_loader = this,
+      .current_asset_key = {},
+      .desc_reader = tex_reader.get(),
+      .data_readers = std::make_tuple(nullptr, tex_reader.get()),
+      .offline = offline,
+      .enforce_offline_no_gpu_work = enforce_offline_no_gpu_work_,
+      .source_pak = nullptr,
+    };
+
+    // Call the registered loader (type-erased)
+    auto void_ptr = it->second(context);
+    auto typed = std::static_pointer_cast<data::TextureResource>(void_ptr);
+    if (!typed) {
+      return nullptr;
+    }
+
+    // Cache result under the provided ResourceKey
+    const auto key_hash = HashResourceKey(key);
+    content_cache_.Store(key_hash, typed);
+    return typed;
+  };
+
+  if (!nursery_) {
+    LOG_F(2, "fallback sync (no nursery)");
+    co_return decode_fn();
+  }
+
+  if (!thread_pool_) {
+    LOG_F(2, "fallback sync (no thread pool)");
+    co_return decode_fn();
+  }
+
+  LOG_F(2, "scheduling on thread pool");
+  auto res = co_await thread_pool_->Run(decode_fn);
+  co_return res;
+}
+
+void AssetLoader::StartLoadTextureFromBuffer(ResourceKey key,
+  std::span<const uint8_t> bytes,
+  std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+{
+  if (!nursery_) {
+    LOG_F(WARNING,
+      "AssetLoader::StartLoadTextureFromBuffer called before ActivateAsync");
+    // Synchronous fallback: perform decode on calling thread (same logic as
+    // the async path) and invoke callback immediately.
+    auto it = resource_loaders_.find(data::TextureResource::ClassTypeId());
+    if (it == resource_loaders_.end()) {
+      on_complete(nullptr);
+      return;
+    }
+    auto tex_reader = std::make_unique<MemoryAnyReader>(bytes);
+    LoaderContext context {};
+    context.asset_loader = this;
+    context.current_asset_key = {};
+    context.desc_reader = tex_reader.get();
+    context.data_readers = std::make_tuple(nullptr, tex_reader.get());
+    context.offline = false;
+    context.enforce_offline_no_gpu_work = enforce_offline_no_gpu_work_;
+    context.source_pak = nullptr;
+
+    auto void_ptr = it->second(context);
+    auto typed = std::static_pointer_cast<data::TextureResource>(void_ptr);
+    if (typed) {
+      const auto key_hash = HashResourceKey(key);
+      content_cache_.Store(key_hash, typed);
+    }
+    on_complete(std::move(typed));
+    return;
+  }
+
+  nursery_->Start(
+    [this, key, bytes = std::vector<uint8_t>(bytes.begin(), bytes.end()),
+      on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+      std::span<const uint8_t> span(bytes.data(), bytes.size());
+      auto res = co_await LoadTextureFromBufferAsync(key, span, false);
+      on_complete(std::move(res));
+      co_return;
+    });
+}
+
+void AssetLoader::StartLoadTexture(ResourceKey key,
+  std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+{
+  if (!nursery_) {
+    LOG_F(WARNING, "AssetLoader::StartLoadTexture called before ActivateAsync");
+    auto res = LoadResourceByKey<data::TextureResource>(key, false);
+    on_complete(std::move(res));
+    return;
+  }
+
+  nursery_->Start(
+    [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+      auto res = co_await LoadTextureAsync(key, false);
+      on_complete(std::move(res));
+      co_return;
+    });
 }
 
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
@@ -321,6 +564,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key, bool offline)
       .desc_reader = desc_reader.get(),
       .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
       .offline = offline,
+      .enforce_offline_no_gpu_work = enforce_offline_no_gpu_work_,
       .source_pak = source_pak,
     };
 
@@ -494,6 +738,7 @@ auto AssetLoader::LoadResource(
     .desc_reader = table_reader.get(),
     .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
     .offline = offline,
+    .enforce_offline_no_gpu_work = enforce_offline_no_gpu_work_,
     .source_pak = source_pak,
   };
 
@@ -509,6 +754,59 @@ auto AssetLoader::LoadResource(
     return typed;
   }
   return nullptr;
+}
+
+auto AssetLoader::LoadResourceByKeyErased(
+  TypeId type_id, const oxygen::content::ResourceKey key, const bool offline)
+  -> std::shared_ptr<void>
+{
+  if (type_id == data::BufferResource::ClassTypeId()) {
+    return LoadResourceByKey<data::BufferResource>(key, offline);
+  }
+  if (type_id == data::TextureResource::ClassTypeId()) {
+    return LoadResourceByKey<data::TextureResource>(key, offline);
+  }
+  LOG_F(ERROR, "Unsupported resource type id for by-key load: {}", type_id);
+  return nullptr;
+}
+
+template <PakResource T>
+auto AssetLoader::LoadResourceByKey(const oxygen::content::ResourceKey key,
+  const bool offline) -> std::shared_ptr<T>
+{
+  const internal::InternalResourceKey internal_key(key);
+  const auto expected_type_index
+    = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
+  if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+    LOG_F(ERROR,
+      "ResourceKey type mismatch for {}: key_type={} expected_type={}",
+      T::ClassTypeNamePretty(), internal_key.GetResourceTypeIndex(),
+      expected_type_index);
+    return nullptr;
+  }
+
+  ScopedCurrentSourceId source_guard(internal_key.GetPakIndex());
+  return LoadResource<T>(internal_key.GetResourceIndex(), offline);
+}
+
+template <PakResource T>
+auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key,
+  const bool offline) -> co::Co<std::shared_ptr<T>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadResourceAsync");
+  DLOG_F(2, "type    : {}", T::ClassTypeNamePretty());
+  DLOG_F(2, "key     : {}", key);
+  DLOG_F(2, "offline : {}", offline);
+
+  if (!thread_pool_) {
+    LOG_F(2, "fallback sync (no thread pool)");
+    co_return LoadResourceByKey<T>(key, offline);
+  }
+
+  LOG_F(2, "scheduling on thread pool");
+  auto result = co_await thread_pool_->Run(
+    [this, key, offline]() { return LoadResourceByKey<T>(key, offline); });
+  co_return result;
 }
 
 void oxygen::content::AssetLoader::UnloadObject(
@@ -554,6 +852,16 @@ auto AssetLoader::GetPakIndex(const PakFile& pak) const -> uint16_t
 
   LOG_F(ERROR, "PAK file not found in AssetLoader collection (by path)");
   throw std::runtime_error("PAK file not found in AssetLoader collection");
+}
+
+auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey
+{
+  const uint32_t synthetic_index
+    = next_synthetic_texture_index_.fetch_add(1, std::memory_order_relaxed);
+  const auto resource_type_index = static_cast<uint16_t>(
+    IndexOf<data::TextureResource, ResourceTypeList>::value);
+  return PackResourceKey(
+    kSyntheticSourceId, resource_type_index, synthetic_index);
 }
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
@@ -616,6 +924,16 @@ template OXGN_CNTT_API auto
 AssetLoader::LoadResource<oxygen::data::TextureResource>(
   data::pak::ResourceIndexT resource_index, bool)
   -> std::shared_ptr<data::TextureResource>;
+
+template OXGN_CNTT_API auto
+AssetLoader::LoadResourceByKey<oxygen::data::TextureResource>(
+  oxygen::content::ResourceKey, bool)
+  -> std::shared_ptr<oxygen::data::TextureResource>;
+
+template OXGN_CNTT_API auto
+AssetLoader::LoadResourceAsync<oxygen::data::TextureResource>(
+  oxygen::content::ResourceKey, bool)
+  -> oxygen::co::Co<std::shared_ptr<oxygen::data::TextureResource>>;
 
 //=== Hash Key Generation ====================================================//
 

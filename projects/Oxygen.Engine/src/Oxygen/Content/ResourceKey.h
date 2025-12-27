@@ -8,6 +8,8 @@
 
 #include <cstdint>
 
+#include <Oxygen/Data/PakFormat.h>
+
 namespace oxygen::content {
 
 //! Unique identifier for a cached resource.
