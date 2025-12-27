@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <memory>
-#include <cstdint>
-#include <span>
 #include <array>
+#include <cstdint>
+#include <memory>
+#include <span>
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -28,7 +28,8 @@ struct MaterialRef {
 
   [[nodiscard]] auto GetMaterialDomain() const -> oxygen::data::MaterialDomain
   {
-    return asset ? asset->GetMaterialDomain() : oxygen::data::MaterialDomain::kOpaque;
+    return asset ? asset->GetMaterialDomain()
+                 : oxygen::data::MaterialDomain::kOpaque;
   }
 
   [[nodiscard]] auto GetBaseColor() const -> std::span<const float, 4>
@@ -36,7 +37,8 @@ struct MaterialRef {
     if (asset) {
       return asset->GetBaseColor();
     }
-    static const std::array<float, 4> kDefaultBaseColor { 0.0F, 0.0F, 0.0F, 1.0F };
+    static const std::array<float, 4> kDefaultBaseColor { 0.0F, 0.0F, 0.0F,
+      1.0F };
     return std::span<const float, 4>(kDefaultBaseColor);
   }
 
@@ -63,31 +65,35 @@ struct MaterialRef {
   [[nodiscard]] auto GetBaseColorTextureKey() const
     -> oxygen::content::ResourceKey
   {
-    return asset ? asset->GetBaseColorTextureKey() : 0;
+    return asset ? asset->GetBaseColorTextureKey()
+                 : oxygen::content::ResourceKey {};
   }
 
-  [[nodiscard]] auto GetNormalTextureKey() const
-    -> oxygen::content::ResourceKey
+  [[nodiscard]] auto GetNormalTextureKey() const -> oxygen::content::ResourceKey
   {
-    return asset ? asset->GetNormalTextureKey() : 0;
+    return asset ? asset->GetNormalTextureKey()
+                 : oxygen::content::ResourceKey {};
   }
 
   [[nodiscard]] auto GetMetallicTextureKey() const
     -> oxygen::content::ResourceKey
   {
-    return asset ? asset->GetMetallicTextureKey() : 0;
+    return asset ? asset->GetMetallicTextureKey()
+                 : oxygen::content::ResourceKey {};
   }
 
   [[nodiscard]] auto GetRoughnessTextureKey() const
     -> oxygen::content::ResourceKey
   {
-    return asset ? asset->GetRoughnessTextureKey() : 0;
+    return asset ? asset->GetRoughnessTextureKey()
+                 : oxygen::content::ResourceKey {};
   }
 
   [[nodiscard]] auto GetAmbientOcclusionTextureKey() const
     -> oxygen::content::ResourceKey
   {
-    return asset ? asset->GetAmbientOcclusionTextureKey() : 0;
+    return asset ? asset->GetAmbientOcclusionTextureKey()
+                 : oxygen::content::ResourceKey {};
   }
 };
 

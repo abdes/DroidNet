@@ -50,8 +50,8 @@ public:
   }
 
   //! Construct from raw 64-bit key value
-  explicit constexpr InternalResourceKey(const uint64_t raw_key) noexcept
-    : key_(raw_key)
+  explicit constexpr InternalResourceKey(const ResourceKey raw_key) noexcept
+    : key_(raw_key.get())
   {
   }
 
@@ -83,7 +83,7 @@ public:
   //! Get the raw 64-bit key value
   [[nodiscard]] constexpr auto GetRawKey() const noexcept -> ResourceKey
   {
-    return static_cast<ResourceKey>(key_);
+    return ResourceKey(key_);
   }
 
   //! Equality comparison
@@ -127,6 +127,6 @@ template <> struct std::hash<oxygen::content::internal::InternalResourceKey> {
     const oxygen::content::internal::InternalResourceKey& key) const noexcept
     -> size_t
   {
-    return key.GetRawKey();
+    return std::hash<uint64_t> {}(key.GetRawKey().get());
   }
 };

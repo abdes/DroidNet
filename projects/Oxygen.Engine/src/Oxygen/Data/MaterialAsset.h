@@ -192,7 +192,7 @@ public:
     if (texture_resource_keys_.size() > 0) {
       return texture_resource_keys_[0];
     }
-    return static_cast<oxygen::content::ResourceKey>(0);
+    return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetNormalTextureKey() const noexcept
@@ -201,7 +201,7 @@ public:
     if (texture_resource_keys_.size() > 1) {
       return texture_resource_keys_[1];
     }
-    return static_cast<oxygen::content::ResourceKey>(0);
+    return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetMetallicTextureKey() const noexcept
@@ -210,7 +210,7 @@ public:
     if (texture_resource_keys_.size() > 2) {
       return texture_resource_keys_[2];
     }
-    return static_cast<oxygen::content::ResourceKey>(0);
+    return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetRoughnessTextureKey() const noexcept
@@ -219,7 +219,7 @@ public:
     if (texture_resource_keys_.size() > 3) {
       return texture_resource_keys_[3];
     }
-    return static_cast<oxygen::content::ResourceKey>(0);
+    return oxygen::content::ResourceKey { 0 };
   }
 
   [[nodiscard]] auto GetAmbientOcclusionTextureKey() const noexcept
@@ -228,7 +228,7 @@ public:
     if (texture_resource_keys_.size() > 4) {
       return texture_resource_keys_[4];
     }
-    return static_cast<oxygen::content::ResourceKey>(0);
+    return oxygen::content::ResourceKey { 0 };
   }
 };
 
