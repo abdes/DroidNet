@@ -30,7 +30,7 @@ inline auto LoadTextureResource(LoaderContext context)
   -> std::unique_ptr<data::TextureResource>
 {
   LOG_SCOPE_F(1, "Load Texture Resource");
-  LOG_F(2, "offline mode     : {}", context.offline ? "yes" : "no");
+  LOG_F(2, "offline mode     : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
@@ -155,11 +155,8 @@ static_assert(oxygen::content::LoadFunction<decltype(LoadTextureResource)>);
 //! Unload function for TextureResource.
 inline auto UnloadTextureResource(
   const std::shared_ptr<data::TextureResource>& /*resource*/,
-  AssetLoader& /*loader*/, const bool offline) noexcept -> void
+  AssetLoader& /*loader*/) noexcept -> void
 {
-  if (offline) {
-    return;
-  }
   // TODO: cleanup GPU resources for the texture.
   (void)0; // Placeholder for future GPU resource cleanup
 }

@@ -76,8 +76,6 @@ concept LoadFunction = LoadFunctionForStream<F>;
      null if the resource was never loaded.
    - `loader`: Reference to the AssetLoader managing the resource. Used for
      dependency cleanup or resource deregistration.
-   - `offline`: Indicates whether the engine is running in offline mode (no GPU
-     resources). If true, skip GPU resource cleanup.
    - The function must handle all errors locally and only throw for exceptional
      situations that cannot be handled internally.
 
@@ -89,12 +87,11 @@ concept LoadFunction = LoadFunctionForStream<F>;
 
  @param resource Shared pointer to resource for unload function
  @param loader AssetLoader reference for unload function
- @param offline Boolean indicating offline mode for unload function
 */
 template <typename F, typename T>
-concept UnloadFunction = requires(
-  F f, std::shared_ptr<T> resource, AssetLoader& loader, bool offline) {
-  { f(resource, loader, offline) } -> std::same_as<void>;
-};
+concept UnloadFunction
+  = requires(F f, std::shared_ptr<T> resource, AssetLoader& loader) {
+      { f(resource, loader) } -> std::same_as<void>;
+    };
 
 } // namespace oxygen::content

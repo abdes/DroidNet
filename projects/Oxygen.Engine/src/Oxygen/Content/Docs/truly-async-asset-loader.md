@@ -10,6 +10,64 @@ This is a design document only. No code changes are introduced here.
 
 ---
 
+## Tasks (keep updated at all time during implementation)
+
+Rules of the implementation:
+
+- User executes the build on demand, AI assistant never attempts to build.
+- Prefer to use vscode tool get_errors to check compiler errors.
+- NEVER leave dead code behind, eradicate it with a nuclear bomb.
+- User is not interested in backward compat and stuff to leave behind in case there is some hidden unauthorized code using it.
+- Compiler is your best friend. Break it to make it better, then let the compiler tell you where is the bad stuff, and fix it.
+- DO NOT waste my time, if you do not know where somthing is, ask. If you do not know how to do something, ask.
+- NEVER EVER take a shortcut or cheat your way through. ASK!
+
+1. [X] Convert `ResourceKey` from `uint64_t` alias to `oxygen::NamedType` with `to_string(ResourceKey)`.
+2. [X] Add internal `SourceToken` strong type and mint tokens at mount time.
+3. [X] Define internal `ResourceRef` (container-relative dependency reference) and owning-thread binding rules.
+4. [X] Ensure loader activation/nursery lifecycle is required; fail fast if async loads are called before activation.
+5. [X] Enforce “no per-call offline”: derive all policy from `AssetLoaderConfig`/loader instance.
+6. [X] Keep dependency graph identity-only (`AssetKey`/`ResourceKey`) and forbid storing locators/paths/readers in deps.
+
+### Phase 1: migrate ONE dependency-heavy asset loader end-to-end
+
+1. [ ] Choose the first async-only asset to migrate: `MaterialAsset` (depends on texture resources).
+2. [ ] Implement an internal dependency collector for decode steps (assets: `AssetKey`, resources: `ResourceKey`/`ResourceRef`).
+3. [ ] Implement the internal async pipeline split for `MaterialAsset` only: Resolve (owning) -> Read (pool) -> Decode (pool) -> Publish (owning).
+4. [ ] Implement “resolve identity to access handle” for assets needed by `MaterialAsset` (key -> source + locator).
+5. [ ] Implement “resolve identity to access handle” for resources needed by `MaterialAsset` (key -> source + table/data region references).
+6. [ ] Refactor ONLY `MaterialAsset` loader to be pure decode (no nested loads, no AssetLoader callbacks).
+7. [ ] Implement owning-thread Publish for `MaterialAsset` that:
+    - stores the decoded asset in the cache
+    - binds `ResourceRef` to `ResourceKey`
+    - applies dependency edges via `AddResourceDependency`
+8. [ ] Add `StartLoadAsset<T>` wrapper (or `StartLoadMaterialAsset`) that starts the coroutine and invokes callback on owning thread.
+9. [ ] Add unit tests for `MaterialAsset` async load + dependency collection + owning-thread publish correctness.
+
+### Phase 2: scale out + delete legacy
+
+1. [ ] Implement in-flight deduplication map keyed by `data::AssetKey` for assets.
+2. [ ] Implement in-flight deduplication map keyed by `ResourceKey` for resources.
+3. [ ] Add cancellation plumbing so `Stop()` cancels in-flight work promptly.
+4. [ ] Make cancelled awaitables complete exceptionally with `OperationCancelledException`.
+5. [ ] Add `StartLoadResource<T>` wrapper that starts the coroutine and invokes callback on owning thread.
+6. [ ] Add `StartLoadResourceFromBuffer<T>` wrapper that starts the coroutine and invokes callback on owning thread.
+7. [ ] Implement buffer-provided decode path using `ResourceCookedData<T>` and cache under the provided/minted `ResourceKey`.
+8. [ ] Ensure buffer-provided loads are treated as ad hoc inputs (not a mount/enumerable source).
+9. [ ] Keep `serio::AnyReader` as the decode interface; wrap owned buffers in memory-backed readers as needed.
+10. [ ] Ensure `internal::IContentSource` remains the single seam for PAK vs loose cooked byte access.
+11. [ ] Extend content sources with minimal range-read helpers (optional) without introducing a new async I/O framework.
+12. [ ] Update cache hashing and lookup code to work with strong `ResourceKey`.
+13. [ ] Update all call sites (renderer/tools/tests) that assumed `ResourceKey` was an integer.
+14. [ ] Migrate remaining asset loaders (e.g. `GeometryAsset`) to pure decode + async pipeline.
+15. [ ] Migrate remaining resource loaders to pure decode where required (no AssetLoader callbacks).
+16. [ ] Remove all synchronous public load APIs (assets and resources) in favor of async-only awaitables.
+17. [ ] Update examples/demos to use async-only APIs and `StartLoad*` bridges where needed.
+18. [ ] Audit and remove any remaining “range-based source id” assumptions; always resolve via loader registry.
+19. [ ] Document migration notes for removed/renamed APIs and required call-site changes.
+
+---
+
 ## Goals
 
 - The runtime-facing loader is **async-first**: loading MUST NOT block the

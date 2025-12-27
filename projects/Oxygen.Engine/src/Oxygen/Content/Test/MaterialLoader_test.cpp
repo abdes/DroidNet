@@ -48,7 +48,7 @@ auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
 //! Test unloader function for TextureResource
 auto UnloadTestTextureResource(
   std::shared_ptr<oxygen::data::TextureResource> /*resource*/,
-  oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) -> void
+  oxygen::content::AssetLoader& /*loader*/) -> void
 {
   // Simple unloader - nothing to do for test resources
 }
@@ -112,7 +112,7 @@ protected:
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
-      .offline = true,
+      .work_offline = true,
       .source_pak
       = nullptr, // No PAK file - dependency registration will be skipped
       .parse_only = true,
@@ -150,7 +150,7 @@ protected:
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
-      .offline = true,
+      .work_offline = true,
       .source_pak = dummy_pak, // Provide mock PAK file for dependency tests
     };
   }

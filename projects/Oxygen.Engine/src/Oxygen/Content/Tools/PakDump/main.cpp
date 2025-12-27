@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
-#include <string>
 #include <exception>
 #include <filesystem>
+#include <iostream>
+#include <string>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -108,7 +108,8 @@ auto main(int argc, char** argv) -> int
 
   try {
     PakFile pak(ctx.pak_path);
-    AssetLoader asset_loader(EngineTagFactory::Get());
+    AssetLoaderConfig loader_config { .work_offline = true };
+    AssetLoader asset_loader(EngineTagFactory::Get(), loader_config);
     asset_loader.AddPakFile(ctx.pak_path);
     PakFileDumper dumper(ctx);
     dumper.Dump(pak, asset_loader);

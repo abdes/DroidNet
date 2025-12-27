@@ -511,7 +511,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
           auto tex = co_await asset_loader->LoadTextureFromBufferAsync(
             custom_texture_key_,
-            std::span<const std::uint8_t>(packed.data(), packed.size()), false);
+            std::span<const std::uint8_t>(packed.data(), packed.size()));
           if (!tex) {
             png_status_message_ = "Texture buffer decode failed";
           } else {

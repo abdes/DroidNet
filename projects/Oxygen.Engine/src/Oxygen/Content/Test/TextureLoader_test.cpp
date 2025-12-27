@@ -52,7 +52,7 @@ protected:
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
-      .offline = false,
+      .work_offline = false,
     };
   }
 

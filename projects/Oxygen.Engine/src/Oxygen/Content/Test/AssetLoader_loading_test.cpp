@@ -401,8 +401,7 @@ NOLINT_TEST_F(
   const auto material_key = CreateTestAssetKey("test_material");
 
   // Act
-  const auto material
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
 
   // Assert
   EXPECT_THAT(material, NotNull());
@@ -423,8 +422,7 @@ NOLINT_TEST_F(
   const auto geometry_key = CreateTestAssetKey("test_geometry");
 
   // Act
-  const auto geometry
-    = asset_loader_->LoadAsset<GeometryAsset>(geometry_key, false);
+  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
 
   // Assert
   EXPECT_THAT(geometry, NotNull());
@@ -446,8 +444,7 @@ NOLINT_TEST_F(
   asset_loader_->AddLooseCookedRoot(cooked_root);
 
   // Act
-  const auto material
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
 
   // Assert
   EXPECT_THAT(material, NotNull());
@@ -484,9 +481,9 @@ NOLINT_TEST_F(
 
   // Act
   const auto material_a
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key_a, false);
+    = asset_loader_->LoadAsset<MaterialAsset>(material_key_a);
   const auto material_b
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key_b, false);
+    = asset_loader_->LoadAsset<MaterialAsset>(material_key_b);
 
   // Assert
   EXPECT_THAT(material_a, NotNull());
@@ -541,8 +538,7 @@ NOLINT_TEST_F(
   const auto geometry_key = CreateTestAssetKey("complex_geometry");
 
   // Act
-  const auto geometry
-    = asset_loader_->LoadAsset<GeometryAsset>(geometry_key, false);
+  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
 
   // Assert
   EXPECT_THAT(geometry, NotNull());
@@ -582,8 +578,7 @@ NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAsset_NonExistent_ReturnsNull)
   const auto non_existent_key = CreateTestAssetKey("non_existent_asset");
 
   // Act
-  const auto result
-    = asset_loader_->LoadAsset<MaterialAsset>(non_existent_key, false);
+  const auto result = asset_loader_->LoadAsset<MaterialAsset>(non_existent_key);
 
   // Assert
   EXPECT_THAT(result, IsNull());
@@ -604,10 +599,8 @@ NOLINT_TEST_F(
   const auto material_key = CreateTestAssetKey("test_material");
 
   // Act
-  const auto material1
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
-  const auto material2
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material1 = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  const auto material2 = asset_loader_->LoadAsset<MaterialAsset>(material_key);
 
   // Assert
   EXPECT_THAT(material1, NotNull());
@@ -634,8 +627,7 @@ NOLINT_TEST_F(
   const auto material_key = CreateTestAssetKey("test_material");
 
   // Act
-  const auto material
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
 
   // Assert
   EXPECT_THAT(material, NotNull());

@@ -283,7 +283,7 @@ public:
   ~ResourceCleanupGuard()
   {
     if (!disabled_ && loader_)
-      loader_->ReleaseResource(key_, true);
+      loader_->ReleaseResource(key_);
   }
   void disable() { disabled_ = true; }
 };
