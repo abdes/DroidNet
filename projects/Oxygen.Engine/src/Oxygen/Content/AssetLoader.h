@@ -26,15 +26,19 @@
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
 #include <Oxygen/data/AssetKey.h>
 #include <Oxygen/data/GeometryAsset.h>
 #include <Oxygen/data/MaterialAsset.h>
-#include <span>
 
 namespace oxygen::content {
+
+namespace internal {
+  struct ResourceRef;
+} // namespace internal
 
 //! Configuration and tuning parameters for AssetLoader.
 /*!
@@ -50,20 +54,20 @@ struct AssetLoaderConfig final {
    When set, AssetLoader will schedule blocking IO and CPU decode work on
    this pool.
 
-   @note If unset, some APIs will fall back to synchronous behavior on the
-   caller thread.
+     @note Async load APIs require a thread pool. If unset, async loads fail
+       fast rather than falling back to synchronous work.
   */
   observer_ptr<co::ThreadPool> thread_pool {};
 
   //! Enforce that offline loads must not perform GPU work.
   /*!
    When true, AssetLoader propagates a strict offline policy to loader
-   functions via LoaderContext. Loaders can use this to DCHECK or avoid any GPU
+   functions via LoaderContext. Loaders must honor this by avoiding any GPU
    side effects when `context.offline` is true.
 
-   @note Defaults to false (online) for backward-compatible behavior.
+   @note Defaults to false (online).
   */
-  bool enforce_offline_no_gpu_work { false };
+  bool work_offline { false };
 };
 
 class AssetLoader : public oxygen::co::LiveObject {
@@ -137,7 +141,6 @@ public:
 
    @tparam T The asset type (must satisfy IsTyped)
    @param key The asset key to load
-   @param offline Whether to load in offline mode (no GPU side effects)
    @return Shared pointer to the asset, or nullptr if not found
 
    ### Performance Characteristics
@@ -149,8 +152,7 @@ public:
    @see GetAsset, HasAsset, ReleaseAsset
   */
   template <IsTyped T>
-  auto LoadAsset(const data::AssetKey& key, bool offline = false)
-    -> std::shared_ptr<T>;
+  auto LoadAsset(const data::AssetKey& key) -> std::shared_ptr<T>;
 
   //! Get cached asset without loading
   /*!
@@ -204,7 +206,6 @@ public:
    or as a dependency, by any part of the system.
 
    @param key The asset key to release
-   @param offline Whether to release in offline mode (no GPU side effects)
    @return True if this call caused the asset to be fully evicted from the
    cache, false if the asset is still present or was not present.
 
@@ -212,8 +213,7 @@ public:
    eviction is determined individually by reference counts and dependents.
    @see LoadAsset, HasAsset, ReleaseResource
   */
-  OXGN_CNTT_API auto ReleaseAsset(
-    const data::AssetKey& key, bool offline = false) -> bool;
+  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool;
 
   //=== Resource Loading =====================================================//
 
@@ -285,7 +285,6 @@ public:
    @tparam T The resource type (must satisfy PakResource concept)
    @param pak The PAK file containing the resource
    @param resource_index The index of the resource within the PAK file
-   @param offline Whether to load in offline mode (no GPU side effects)
    @return Shared pointer to the resource, or nullptr if not found
 
    ### Performance Characteristics
@@ -294,22 +293,13 @@ public:
    - Memory: Shared resources cached with reference counting
    - Optimization: Multiple requests return the same cached instance
 
-   ### Usage Examples
-
-   ```cpp
-   // In a loader (GeometryLoader example):
-   auto vertex_buffer = context.asset_loader->LoadResource<BufferResource>(
-     desc.vertex_buffer_key, context. offline);
-   ```
-
    @note Automatically increments reference count for shared resources
    @warning Returns nullptr if ResourceKey is invalid or resource not found
    @see GetResource, HasResource, ReleaseResource
   */
   template <PakResource T>
   auto LoadResource(const PakFile& pak,
-    data::pak::ResourceIndexT resource_index, bool offline = false)
-    -> std::shared_ptr<T>;
+    data::pak::ResourceIndexT resource_index) -> std::shared_ptr<T>;
 
   //! Load or get cached resource from the current content source.
   /*!
@@ -318,24 +308,21 @@ public:
 
    @tparam T The resource type (must satisfy PakResource concept)
    @param resource_index The index of the resource within the current source
-   @param offline Whether to load in offline mode (no GPU side effects)
    @return Shared pointer to the resource, or nullptr if not found
 
    @warning Calling this outside of a load operation is invalid.
   */
   template <PakResource T>
-  auto LoadResource(data::pak::ResourceIndexT resource_index,
-    bool offline = false) -> std::shared_ptr<T>;
+  auto LoadResource(data::pak::ResourceIndexT resource_index)
+    -> std::shared_ptr<T>;
 
   //! Load or get cached resource by source-aware ResourceKey.
   template <PakResource T>
-  auto LoadResourceByKey(ResourceKey key, bool offline = false)
-    -> std::shared_ptr<T>;
+  auto LoadResourceByKey(ResourceKey key) -> std::shared_ptr<T>;
 
   //! Coroutine-based resource load by source-aware ResourceKey.
   template <PakResource T>
-  auto LoadResourceAsync(ResourceKey key, bool offline = false)
-    -> co::Co<std::shared_ptr<T>>;
+  auto LoadResourceAsync(ResourceKey key) -> co::Co<std::shared_ptr<T>>;
 
   //! Coroutine-based convenience for texture loads.
   /*!
@@ -343,14 +330,14 @@ public:
     completion (or `nullptr` on failure). Implementations must not perform
     GPU work; GPU creation and upload belongs to the renderer.
   */
-  OXGN_CNTT_API auto LoadTextureAsync(ResourceKey key, bool offline = false)
+  OXGN_CNTT_API auto LoadTextureAsync(ResourceKey key)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
 
   //! Coroutine-based convenience for decoding a texture from an in-memory
   //! byte buffer. The loader must not perform GPU work; it returns a
   //! CPU-side `data::TextureResource` on success or `nullptr` on failure.
   OXGN_CNTT_API auto LoadTextureFromBufferAsync(
-    ResourceKey key, std::span<const uint8_t> bytes, bool offline = false)
+    ResourceKey key, std::span<const uint8_t> bytes)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
 
   //! Convenience: schedule a texture-from-buffer load on the loader nursery
@@ -414,15 +401,13 @@ public:
    evicted (and return true) when all users and dependents have released it.
 
    @param key The resource key identifying the resource.
-   @param offline Whether to release in offline mode (no GPU side effects)
    @return True if this call caused the resource to be fully evicted from the
    cache, false if the resource is still present or was not present.
 
    @note This method is idempotent: repeated calls after eviction return false.
    @see LoadResource, HasResource, ReleaseAsset, AnyCache
   */
-  OXGN_CNTT_API auto ReleaseResource(ResourceKey key, bool offline = false)
-    -> bool;
+  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool;
 
   //! Mint a synthetic, texture-typed ResourceKey suitable for buffer-driven
   //! loads.
@@ -490,7 +475,7 @@ public:
     // Store type-erased unload function
     UnloadFnErased unloader_erased
       = [unload_fn = std::forward<UF>(unload_fn)](
-          std::shared_ptr<void> asset, AssetLoader& loader, bool offline) {
+          std::shared_ptr<void> asset, AssetLoader& loader) {
           auto typed = std::static_pointer_cast<T>(asset);
           // Unloader Contract (Phase 1):
           // - Invoked only when cache refcount reaches zero (object eviction).
@@ -501,7 +486,7 @@ public:
           // - Should perform minimal CPU work; defer heavy operations to async
           //   mechanisms in later phases.
           // - Exceptions must not escape (log and swallow if any occur).
-          unload_fn(typed, loader, offline);
+          unload_fn(typed, loader);
         };
     AddTypeErasedUnloader(type_id, type_name, std::move(unloader_erased));
 
@@ -541,6 +526,11 @@ private:
 
   //=== Dependency Tracking ===-----------------------------------------------//
 
+  // Dependency graph storage is identity-only by design.
+  //
+  // This graph MUST NOT store access state such as locators, paths, streams, or
+  // readers. Resolution from identity to access is a separate concern.
+
   // Asset-to-asset dependencies: dependent_asset -> set of dependency_assets
   std::unordered_map<data::AssetKey, std::unordered_set<data::AssetKey>>
     asset_dependencies_;
@@ -551,7 +541,7 @@ private:
 
   //! Helper method for the recursive descent of asset dependencies when
   //! releasing assets.
-  auto ReleaseAssetTree(const data::AssetKey& key, bool offline) -> void;
+  auto ReleaseAssetTree(const data::AssetKey& key) -> void;
 
   //=== Unified Content Cache ===---------------------------------------------//
 
@@ -570,14 +560,13 @@ private:
 
   // Type-erased unload function signature
   using UnloadFnErased
-    = std::function<void(std::shared_ptr<void>, AssetLoader&, bool)>;
+    = std::function<void(std::shared_ptr<void>, AssetLoader&)>;
 
   std::unordered_map<TypeId, LoadFnErased> asset_loaders_;
   std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
   std::unordered_map<TypeId, UnloadFnErased> unloaders_;
 
-  void UnloadObject(
-    oxygen::TypeId& type_id, std::shared_ptr<void>& value, bool offline);
+  void UnloadObject(oxygen::TypeId& type_id, std::shared_ptr<void>& value);
 
   OXGN_CNTT_API auto AddTypeErasedAssetLoader(
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
@@ -607,17 +596,26 @@ private:
 
   OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
 
-  OXGN_CNTT_NDAPI auto LoadResourceByKeyErased(
-    TypeId type_id, ResourceKey key, bool offline) -> std::shared_ptr<void>;
+  OXGN_CNTT_NDAPI auto LoadResourceByKeyErased(TypeId type_id, ResourceKey key)
+    -> std::shared_ptr<void>;
+
+  template <PakResource T>
+  auto LoadResourceUncached(uint16_t source_id,
+    data::pak::ResourceIndexT resource_index) -> std::shared_ptr<T>;
 
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
   OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
     uint16_t resource_type_index, uint32_t resource_index) -> ResourceKey;
 
+  // Bind an internal container-relative resource reference into an opaque
+  // ResourceKey. Owning-thread only.
+  OXGN_CNTT_NDAPI auto BindResourceRefToKey(const internal::ResourceRef& ref)
+    -> ResourceKey;
+
   observer_ptr<co::ThreadPool> thread_pool_ {};
 
-  bool enforce_offline_no_gpu_work_ { false };
+  bool work_offline_ { false };
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
 
@@ -646,29 +644,27 @@ private:
 //-- Known Asset Types --
 
 template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::GeometryAsset>(
-  const data::AssetKey& key, bool offline)
-  -> std::shared_ptr<data::GeometryAsset>;
+  const data::AssetKey& key) -> std::shared_ptr<data::GeometryAsset>;
 
 template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::MaterialAsset>(
-  const data::AssetKey& key, bool offline)
-  -> std::shared_ptr<data::MaterialAsset>;
+  const data::AssetKey& key) -> std::shared_ptr<data::MaterialAsset>;
 
 //-- Known Resource Types --
 
 template OXGN_CNTT_API auto AssetLoader::LoadResource<data::TextureResource>(
-  const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
+  const PakFile& pak, data::pak::ResourceIndexT resource_index)
   -> std::shared_ptr<data::TextureResource>;
 
 template OXGN_CNTT_API auto AssetLoader::LoadResource<data::BufferResource>(
-  const PakFile& pak, data::pak::ResourceIndexT resource_index, bool)
+  const PakFile& pak, data::pak::ResourceIndexT resource_index)
   -> std::shared_ptr<data::BufferResource>;
 
 template OXGN_CNTT_API auto
-AssetLoader::LoadResourceByKey<data::TextureResource>(ResourceKey, bool)
-  -> std::shared_ptr<data::TextureResource>;
+  AssetLoader::LoadResourceByKey<data::TextureResource>(ResourceKey)
+    -> std::shared_ptr<data::TextureResource>;
 
 template OXGN_CNTT_API auto
-AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey, bool)
-  -> co::Co<std::shared_ptr<data::TextureResource>>;
+  AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey)
+    -> co::Co<std::shared_ptr<data::TextureResource>>;
 
 } // namespace oxygen::content

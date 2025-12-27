@@ -35,7 +35,7 @@ namespace oxygen::content::loaders {
  */
 inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
   const PakFile* source_pak, const data::AssetKey& current_asset_key,
-  const data::pak::MaterialAssetDesc& desc, bool offline, bool parse_only)
+  const data::pak::MaterialAssetDesc& desc, bool parse_only)
   -> std::vector<oxygen::content::ResourceKey>
 {
   using data::TextureResource;
@@ -48,50 +48,49 @@ inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
   std::vector<ResourceCleanupGuard> texture_guards;
 
   // Helper to load and register a texture dependency
-  auto load_texture
-    = [&](ResourceIndexT texture_index, const char* texture_name) {
-        if (texture_index == kNoResourceIndex) {
-          return; // No texture assigned
-        }
+  auto load_texture = [&](ResourceIndexT texture_index,
+                        const char* texture_name) {
+    if (texture_index == kNoResourceIndex) {
+      return; // No texture assigned
+    }
 
-        if (parse_only) {
-          return;
-        }
+    if (parse_only) {
+      return;
+    }
 
-        LOG_F(2, "Loading texture dependency: {}_texture = {}", texture_name,
-          texture_index);
+    LOG_F(2, "Loading texture dependency: {}_texture = {}", texture_name,
+      texture_index);
 
-        ResourceKey texture_resource_key {};
-        std::shared_ptr<TextureResource> texture_resource;
+    ResourceKey texture_resource_key {};
+    std::shared_ptr<TextureResource> texture_resource;
 
-        if (source_pak) {
-          texture_resource_key = loader.MakeResourceKey<TextureResource>(
-            *source_pak, texture_index);
-          texture_resource = loader.LoadResource<TextureResource>(
-            *source_pak, texture_index, offline);
-        } else {
-          texture_resource_key
-            = loader.MakeResourceKey<TextureResource>(texture_index);
-          texture_resource
-            = loader.LoadResource<TextureResource>(texture_index, offline);
-        }
+    if (source_pak) {
+      texture_resource_key
+        = loader.MakeResourceKey<TextureResource>(*source_pak, texture_index);
+      texture_resource
+        = loader.LoadResource<TextureResource>(*source_pak, texture_index);
+    } else {
+      texture_resource_key
+        = loader.MakeResourceKey<TextureResource>(texture_index);
+      texture_resource = loader.LoadResource<TextureResource>(texture_index);
+    }
 
-        if (!texture_resource) {
-          LOG_F(ERROR, "-failed- to load texture resource: {}_texture = {}",
-            texture_name, texture_index);
-          throw std::runtime_error(
-            fmt::format("Failed to load texture resource: {}_texture = {}",
-              texture_name, texture_index));
-        }
+    if (!texture_resource) {
+      LOG_F(ERROR, "-failed- to load texture resource: {}_texture = {}",
+        texture_name, texture_index);
+      throw std::runtime_error(
+        fmt::format("Failed to load texture resource: {}_texture = {}",
+          texture_name, texture_index));
+    }
 
-        LOG_F(2, "Loaded texture resource: {}_texture ({} bytes)", texture_name,
-          texture_resource->GetDataSize());
+    LOG_F(2, "Loaded texture resource: {}_texture ({} bytes)", texture_name,
+      texture_resource->GetDataSize());
 
-        // Track the resource for dependency registration and ensure we release
-        // the temporary checkout if anything goes wrong later.
-        loaded_texture_keys.push_back(texture_resource_key);
-        texture_guards.emplace_back(loader, texture_resource_key);
-      };
+    // Track the resource for dependency registration and ensure we release
+    // the temporary checkout if anything goes wrong later.
+    loaded_texture_keys.push_back(texture_resource_key);
+    texture_guards.emplace_back(loader, texture_resource_key);
+  };
 
   try {
     // Load and register dependencies for all texture slots
@@ -120,7 +119,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   -> std::unique_ptr<data::MaterialAsset>
 {
   LOG_SCOPE_FUNCTION(INFO);
-  LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
+  LOG_F(2, "offline mode   : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
@@ -264,9 +263,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
-  auto texture_keys
-    = LoadAndRegisterMaterialTextureDependencies(loader, context.source_pak,
-      context.current_asset_key, desc, context.offline, context.parse_only);
+  auto texture_keys = LoadAndRegisterMaterialTextureDependencies(loader,
+    context.source_pak, context.current_asset_key, desc, context.work_offline);
 
   // Create the material asset with the loaded shader references and runtime
   // per-slot texture resource keys produced during loading.
@@ -280,7 +278,7 @@ static_assert(oxygen::content::LoadFunction<decltype(LoadMaterialAsset)>);
 
 //! Unload function for MaterialAsset.
 inline auto UnloadMaterialAsset(std::shared_ptr<data::MaterialAsset> /*asset*/,
-  AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
+  AssetLoader& /*loader*/) noexcept -> void
 {
   // Nothing to do for a material asset, its dependency resources will do the
   // work when unloaded.

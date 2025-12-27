@@ -42,8 +42,7 @@ NOLINT_TEST_F(
   const auto material_key = CreateTestAssetKey("textured_material");
 
   // Act
-  const auto material
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
 
   // Assert
   EXPECT_THAT(material, NotNull());
@@ -76,8 +75,7 @@ NOLINT_TEST_F(
   const auto geometry_key = CreateTestAssetKey("buffered_geometry");
 
   // Act
-  const auto geometry
-    = asset_loader_->LoadAsset<GeometryAsset>(geometry_key, false);
+  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
 
   // Assert
   EXPECT_THAT(geometry, NotNull());
@@ -165,14 +163,14 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_DependencyBeforeDependent)
   // We cannot directly observe eviction order without real loads; this test
   // exercises that no crash occurs and ReleaseAsset returns true for both after
   // manual loads absent. Act
-  asset_loader_->ReleaseAsset(key_a, false);
+  asset_loader_->ReleaseAsset(key_a);
   // Asset B released by cascade; releasing B again should be harmless
-  asset_loader_->ReleaseAsset(key_b, false);
+  asset_loader_->ReleaseAsset(key_b);
 
   // Assert (idempotence): releasing again returns true (already gone or
   // successfully evicted)
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a, false));
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b, false));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b));
 }
 
 #if !defined(NDEBUG)
@@ -196,14 +194,14 @@ NOLINT_TEST_F(
     key_c, [&](const AssetKey&) { ++dependents_of_c; });
   EXPECT_EQ(dependents_of_c, 2);
 
-  asset_loader_->ReleaseAsset(key_a, false);
+  asset_loader_->ReleaseAsset(key_a);
 
   dependents_of_c = 0;
   asset_loader_->ForEachDependent(
     key_c, [&](const AssetKey&) { ++dependents_of_c; });
   EXPECT_EQ(dependents_of_c, 1);
 
-  asset_loader_->ReleaseAsset(key_b, false);
+  asset_loader_->ReleaseAsset(key_b);
 
   dependents_of_c = 0;
   asset_loader_->ForEachDependent(
@@ -211,8 +209,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(dependents_of_c, 0);
 
   // Release again (idempotence)
-  asset_loader_->ReleaseAsset(key_a, false);
-  asset_loader_->ReleaseAsset(key_b, false);
+  asset_loader_->ReleaseAsset(key_a);
+  asset_loader_->ReleaseAsset(key_b);
 }
 #endif // !NDEBUG
 
@@ -233,22 +231,22 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_ResourcesBeforeAssets)
   // Wrap unloaders so we can observe actual eviction/unload order.
   asset_loader_->RegisterLoader(oxygen::content::loaders::LoadBufferResource,
     [&unload_events](std::shared_ptr<BufferResource> /*resource*/,
-      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      oxygen::content::AssetLoader& /*loader*/) noexcept {
       unload_events.emplace_back("BufferResource");
     });
 
   asset_loader_->RegisterLoader(oxygen::content::loaders::LoadGeometryAsset,
     [&unload_events](std::shared_ptr<GeometryAsset> /*asset*/,
-      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      oxygen::content::AssetLoader& /*loader*/) noexcept {
       unload_events.emplace_back("GeometryAsset");
     });
 
   const auto geom_key = CreateTestAssetKey("buffered_geometry");
-  const auto geom = asset_loader_->LoadAsset<GeometryAsset>(geom_key, false);
+  const auto geom = asset_loader_->LoadAsset<GeometryAsset>(geom_key);
   ASSERT_THAT(geom, NotNull());
 
   //! Act
-  const auto first_release = asset_loader_->ReleaseAsset(geom_key, false);
+  const auto first_release = asset_loader_->ReleaseAsset(geom_key);
 
   //! Assert
   EXPECT_TRUE(first_release);
@@ -267,7 +265,7 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_ResourcesBeforeAssets)
   }
 
   // Idempotence
-  const auto second_release = asset_loader_->ReleaseAsset(geom_key, false);
+  const auto second_release = asset_loader_->ReleaseAsset(geom_key);
   EXPECT_TRUE(second_release);
 }
 
@@ -287,23 +285,22 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, ReleaseOrder_TexturesBeforeMaterial)
 
   asset_loader_->RegisterLoader(oxygen::content::loaders::LoadTextureResource,
     [&unload_events](std::shared_ptr<TextureResource> /*resource*/,
-      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      oxygen::content::AssetLoader& /*loader*/) noexcept {
       unload_events.emplace_back("TextureResource");
     });
 
   asset_loader_->RegisterLoader(oxygen::content::loaders::LoadMaterialAsset,
     [&unload_events](std::shared_ptr<MaterialAsset> /*asset*/,
-      oxygen::content::AssetLoader& /*loader*/, bool /*offline*/) noexcept {
+      oxygen::content::AssetLoader& /*loader*/) noexcept {
       unload_events.emplace_back("MaterialAsset");
     });
 
   const auto material_key = CreateTestAssetKey("textured_material");
-  const auto material
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key, false);
+  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
   ASSERT_THAT(material, NotNull());
 
   // Act
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(material_key, false));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(material_key));
 
   // Assert
   const auto first_material_it

@@ -69,6 +69,8 @@ set(
   "Internal/LooseCookedIndex.cpp"
   "Internal/InternalResourceKey.h"
   "Internal/LooseCookedIndexLoad.h"
+  "Internal/ResourceRef.h"
+  "Internal/SourceToken.h"
   "Loaders/BufferLoader.h"
   "Loaders/GeometryLoader.h"
   "Loaders/MaterialLoader.h"

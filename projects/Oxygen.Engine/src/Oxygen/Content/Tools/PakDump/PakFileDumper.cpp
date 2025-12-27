@@ -117,7 +117,7 @@ auto ReadPakFooter(const std::filesystem::path& pak_path)
   }
 
   file.seekg(file_size - static_cast<std::streamoff>(sizeof(PakFooter)));
-  PakFooter footer{};
+  PakFooter footer {};
   file.read(reinterpret_cast<char*>(&footer), sizeof(footer));
   if (!file) {
     return std::nullopt;
@@ -444,7 +444,7 @@ public:
         ++i) {
         try {
           auto buffer_resource = asset_loader.LoadResource<BufferResource>(
-            pak, static_cast<uint32_t>(i), true);
+            pak, static_cast<uint32_t>(i));
           if (buffer_resource) {
             std::cout << "      [" << i << "] Buffer Resource:\n";
             Field(
@@ -511,7 +511,7 @@ public:
         ++i) {
         try {
           auto texture_resource = asset_loader.LoadResource<TextureResource>(
-            pak, static_cast<uint32_t>(i), true);
+            pak, static_cast<uint32_t>(i));
           if (texture_resource) {
             std::cout << "      [" << i << "] Texture Resource:\n";
             Field(

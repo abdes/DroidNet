@@ -25,7 +25,7 @@ inline auto LoadBufferResource(LoaderContext context)
   -> std::unique_ptr<data::BufferResource>
 {
   LOG_SCOPE_F(1, "Load Buffer Resource");
-  LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
+  LOG_F(2, "offline mode   : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
@@ -77,12 +77,8 @@ static_assert(oxygen::content::LoadFunction<decltype(LoadBufferResource)>);
 
 //! Unload function for BufferResource.
 inline auto UnloadBufferResource(
-  std::shared_ptr<data::BufferResource> /*resource*/, AssetLoader& /*loader*/,
-  bool offline) noexcept -> void
+  std::shared_ptr<data::BufferResource> /*resource*/, AssetLoader& /*loader*/) noexcept -> void
 {
-  if (offline) {
-    return;
-  }
   // TODO: cleanup GPU resources for the buffer.
   (void)0; // Placeholder for future GPU resource cleanup
 }

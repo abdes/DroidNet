@@ -110,7 +110,7 @@ namespace detail {
     if (info.vertex_buffer != 0) {
       vertex_buffer_resource
         = context.asset_loader->LoadResource<data::BufferResource>(
-          info.vertex_buffer, context.offline);
+          info.vertex_buffer);
       if (!vertex_buffer_resource) {
         LOG_F(ERROR, "-failed- to load vertex buffer resource: index = {}",
           info.vertex_buffer);
@@ -127,7 +127,7 @@ namespace detail {
     if (info.index_buffer != 0) {
       index_buffer_resource
         = context.asset_loader->LoadResource<data::BufferResource>(
-          info.index_buffer, context.offline);
+          info.index_buffer);
       if (!index_buffer_resource) {
         LOG_F(ERROR, "-failed- to load index buffer resource: index = {}",
           info.index_buffer);
@@ -272,7 +272,7 @@ namespace detail {
 inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(INFO, "Mesh");
-  LOG_F(2, "offline mode    : {}", context.offline ? "yes" : "no");
+  LOG_F(2, "offline mode    : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
@@ -370,7 +370,7 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
 
       // Attempt to load the actual material asset referenced by the submesh
       material = context.asset_loader->LoadAsset<MaterialAsset>(
-        sm_desc.material_asset_key, context.offline);
+        sm_desc.material_asset_key);
 
       // Restore reader position after material loading
       if (saved_position.has_value()) {
@@ -446,7 +446,7 @@ auto LoadGeometryAsset(LoaderContext context)
   auto lod_count_result = reader.ReadInto<uint32_t>(desc.lod_count);
   detail::CheckResult(lod_count_result, "g.lod_count");
   LOG_F(2, "LOD count      : {}", desc.lod_count);
-  LOG_F(2, "offline mode   : {}", context.offline ? "yes" : "no");
+  LOG_F(2, "offline mode   : {}", context.work_offline ? "yes" : "no");
 
   // bounding_box_min
   detail::ReadBoundingBox(reader, desc.bounding_box_min, "g.bounding_box_min");
@@ -477,7 +477,7 @@ static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);
 
 //! Unload function for GeometryAsset.
 inline auto UnloadGeometryAsset(std::shared_ptr<data::GeometryAsset> /*asset*/,
-  AssetLoader& /*loader*/, bool /*offline*/) noexcept -> void
+  AssetLoader& /*loader*/) noexcept -> void
 {
   // Nothing to do for a geometry asset, its dependency resources will do the
   // work when unloaded.
