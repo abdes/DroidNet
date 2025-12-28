@@ -33,6 +33,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
+#include <Oxygen/Renderer/Test/Resources/TextureBinderTest.h>
 #include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
 #include <Oxygen/Renderer/Test/Sceneprep/ScenePrepTestFixture.h>
 
@@ -106,11 +107,14 @@ protected:
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { inline_transfers_.get() });
+    texture_loader_ = std::make_unique<
+      oxygen::renderer::testing::FakeTextureResourceLoader>();
     texture_binder_
       = std::make_unique<oxygen::renderer::resources::TextureBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { uploader_.get() },
-        observer_ptr<oxygen::content::TextureResourceLoader> {});
+        observer_ptr<oxygen::content::TextureResourceLoader> {
+          texture_loader_.get() });
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
@@ -125,6 +129,7 @@ protected:
   {
     ScenePrepTestFixture::TearDown();
     texture_binder_.reset();
+    texture_loader_.reset();
   }
 
   // Keep auxiliary objects as protected members so they outlive the returned
@@ -135,6 +140,8 @@ protected:
   std::unique_ptr<oxygen::engine::upload::InlineTransfersCoordinator>
     inline_transfers_;
   std::unique_ptr<oxygen::renderer::resources::TextureBinder> texture_binder_;
+  std::unique_ptr<oxygen::renderer::testing::FakeTextureResourceLoader>
+    texture_loader_;
 };
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)
