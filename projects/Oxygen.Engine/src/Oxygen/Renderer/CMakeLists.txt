@@ -70,10 +70,6 @@ set(
 )
 set(
   OXYGEN_RENDERER_PRIVATE_SOURCES
-  "PreparedSceneFrame.cpp"
-  "RenderContextPool.h"
-  "Renderer.cpp"
-  "SceneCameraViewResolver.cpp"
   "Internal/RenderScope.h"
   "Internal/SceneConstantsManager.cpp"
   "Internal/SceneConstantsManager.h"
@@ -81,6 +77,9 @@ set(
   "Passes/RenderPass.cpp"
   "Passes/ShaderPass.cpp"
   "Passes/TransparentPass.cpp"
+  "PreparedSceneFrame.cpp"
+  "RenderContextPool.h"
+  "Renderer.cpp"
   "Resources/DrawMetadataEmitter.cpp"
   "Resources/DrawMetadataEmitter.h"
   "Resources/GeometryUploader.cpp"
@@ -91,9 +90,11 @@ set(
   "Resources/TextureBinder.h"
   "Resources/TransformUploader.cpp"
   "Resources/TransformUploader.h"
+  "SceneCameraViewResolver.cpp"
   "ScenePrep/Concepts.h"
   "ScenePrep/Extractors.h"
   "ScenePrep/Finalizers.h"
+  "ScenePrep/Handles.h"
   "ScenePrep/RenderItemData.h"
   "ScenePrep/RenderItemProto.h"
   "ScenePrep/ScenePrepContext.h"

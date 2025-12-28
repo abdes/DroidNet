@@ -176,6 +176,20 @@ public:
   OXGN_DATA_NDAPI static auto CreateDebug()
     -> std::shared_ptr<const MaterialAsset>;
 
+  //! Set runtime-only per-slot texture resource keys.
+  /*!
+   This is used by async publish code to fill the source-aware `ResourceKey`
+   values after worker-thread decode.
+
+   @param texture_resource_keys Per-slot texture keys in the order:
+     base_color, normal, metallic, roughness, ambient_occlusion.
+  */
+  auto SetTextureResourceKeys(
+    std::vector<oxygen::content::ResourceKey> texture_resource_keys) -> void
+  {
+    texture_resource_keys_ = std::move(texture_resource_keys);
+  }
+
 private:
   pak::MaterialAssetDesc desc_ {};
   std::vector<ShaderReference> shader_refs_ {};

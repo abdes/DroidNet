@@ -859,11 +859,10 @@ public:
     std::optional<std::string> source_key = std::nullopt) noexcept -> void;
 
   //! Check if any errors have been reported this frame.
-  OXGN_CORE_NDAPI [[nodiscard]] auto HasErrors() const noexcept -> bool;
+  OXGN_CORE_NDAPI auto HasErrors() const noexcept -> bool;
 
   //! Get a thread-safe copy of all reported errors.
-  OXGN_CORE_NDAPI [[nodiscard]] auto GetErrors() const noexcept
-    -> std::vector<FrameError>;
+  OXGN_CORE_NDAPI auto GetErrors() const noexcept -> std::vector<FrameError>;
 
   //! Clear errors from a specific typed module source.
   template <IsTyped SourceType> auto ClearErrorsFromSource() noexcept -> void

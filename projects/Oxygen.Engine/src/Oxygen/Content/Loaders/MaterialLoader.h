@@ -9,7 +9,8 @@
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -18,101 +19,6 @@
 #include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content::loaders {
-
-//! Load and register texture dependencies for a material asset with the asset
-//! loader.
-/*!
- Loads texture resources referenced by the material asset and registers them
- as dependencies. Uses proper error handling and resource cleanup patterns
- following the GeometryLoader approach.
-
- @param loader The asset loader to register dependencies with
- @param source_pak Optional PAK file containing the texture resources
- @param current_asset_key The asset key of the material being loaded
- @param desc The material asset descriptor containing dependency information
- @param offline Whether to load in offline mode (no GPU side effects)
- @param parse_only Whether to skip dependency loading/registration
- */
-inline auto LoadAndRegisterMaterialTextureDependencies(AssetLoader& loader,
-  const PakFile* source_pak, const data::AssetKey& current_asset_key,
-  const data::pak::MaterialAssetDesc& desc, bool parse_only)
-  -> std::vector<oxygen::content::ResourceKey>
-{
-  using data::TextureResource;
-  using data::pak::kNoResourceIndex;
-  using data::pak::ResourceIndexT;
-
-  // Track loaded resources for cleanup on error, and register dependencies
-  // only after all loads succeed.
-  std::vector<ResourceKey> loaded_texture_keys;
-  std::vector<ResourceCleanupGuard> texture_guards;
-
-  // Helper to load and register a texture dependency
-  auto load_texture = [&](ResourceIndexT texture_index,
-                        const char* texture_name) {
-    if (texture_index == kNoResourceIndex) {
-      return; // No texture assigned
-    }
-
-    if (parse_only) {
-      return;
-    }
-
-    LOG_F(2, "Loading texture dependency: {}_texture = {}", texture_name,
-      texture_index);
-
-    ResourceKey texture_resource_key {};
-    std::shared_ptr<TextureResource> texture_resource;
-
-    if (source_pak) {
-      texture_resource_key
-        = loader.MakeResourceKey<TextureResource>(*source_pak, texture_index);
-      texture_resource
-        = loader.LoadResource<TextureResource>(*source_pak, texture_index);
-    } else {
-      texture_resource_key
-        = loader.MakeResourceKey<TextureResource>(texture_index);
-      texture_resource = loader.LoadResource<TextureResource>(texture_index);
-    }
-
-    if (!texture_resource) {
-      LOG_F(ERROR, "-failed- to load texture resource: {}_texture = {}",
-        texture_name, texture_index);
-      throw std::runtime_error(
-        fmt::format("Failed to load texture resource: {}_texture = {}",
-          texture_name, texture_index));
-    }
-
-    LOG_F(2, "Loaded texture resource: {}_texture ({} bytes)", texture_name,
-      texture_resource->GetDataSize());
-
-    // Track the resource for dependency registration and ensure we release
-    // the temporary checkout if anything goes wrong later.
-    loaded_texture_keys.push_back(texture_resource_key);
-    texture_guards.emplace_back(loader, texture_resource_key);
-  };
-
-  try {
-    // Load and register dependencies for all texture slots
-    load_texture(desc.base_color_texture, "base_color");
-    load_texture(desc.normal_texture, "normal");
-    load_texture(desc.metallic_texture, "metallic");
-    load_texture(desc.roughness_texture, "roughness");
-    load_texture(desc.ambient_occlusion_texture, "ambient_occlusion");
-
-    // Success: register dependencies. The guards remain enabled so they drop
-    // the temporary load checkout, leaving only the dependency hold.
-    for (const auto& texture_resource_key : loaded_texture_keys) {
-      loader.AddResourceDependency(current_asset_key, texture_resource_key);
-    }
-    return loaded_texture_keys;
-  } catch (...) {
-    // Error: guards will automatically clean up resources
-    LOG_F(ERROR,
-      "Failed to load material texture dependencies, cleaning up resources");
-    throw;
-  }
-}
 
 //! Loader for material assets.
 inline auto LoadMaterialAsset(LoaderContext context)
@@ -123,8 +29,6 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
-  auto& loader
-    = *context.asset_loader; // Asset loaders always have non-null asset_loader
 
   using data::ShaderReference;
   using data::pak::kMaxNameSize;
@@ -263,28 +167,45 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   }
 
-  auto texture_keys = LoadAndRegisterMaterialTextureDependencies(loader,
-    context.source_pak, context.current_asset_key, desc, context.work_offline);
+  if (!context.parse_only && !context.dependency_collector) {
+    throw std::runtime_error(
+      "MaterialAsset loader requires a dependency collector; sync dependency "
+      "loads are not supported");
+  }
+
+  if (!context.parse_only) {
+    using data::TextureResource;
+    using data::pak::kNoResourceIndex;
+    using data::pak::ResourceIndexT;
+
+    auto collect_texture_ref = [&](const ResourceIndexT texture_index) {
+      if (texture_index == kNoResourceIndex) {
+        return;
+      }
+
+      internal::ResourceRef ref {
+        .source = context.source_token,
+        .resource_type_id = TextureResource::ClassTypeId(),
+        .resource_index = texture_index,
+      };
+      context.dependency_collector->AddResourceDependency(ref);
+    };
+
+    collect_texture_ref(desc.base_color_texture);
+    collect_texture_ref(desc.normal_texture);
+    collect_texture_ref(desc.metallic_texture);
+    collect_texture_ref(desc.roughness_texture);
+    collect_texture_ref(desc.ambient_occlusion_texture);
+  }
 
   // Create the material asset with the loaded shader references and runtime
   // per-slot texture resource keys produced during loading.
-  auto material_asset = std::make_unique<data::MaterialAsset>(
-    desc, std::move(shader_refs), std::move(texture_keys));
+  auto material_asset
+    = std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
 
   return material_asset;
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadMaterialAsset)>);
-
-//! Unload function for MaterialAsset.
-inline auto UnloadMaterialAsset(std::shared_ptr<data::MaterialAsset> /*asset*/,
-  AssetLoader& /*loader*/) noexcept -> void
-{
-  // Nothing to do for a material asset, its dependency resources will do the
-  // work when unloaded.
-}
-
-static_assert(oxygen::content::UnloadFunction<decltype(UnloadMaterialAsset),
-  data::MaterialAsset>);
 
 } // namespace oxygen::content::loaders

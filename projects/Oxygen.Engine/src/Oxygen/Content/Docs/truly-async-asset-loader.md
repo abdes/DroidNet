@@ -31,40 +31,128 @@ Rules of the implementation:
 
 ### Phase 1: migrate ONE dependency-heavy asset loader end-to-end
 
-1. [ ] Choose the first async-only asset to migrate: `MaterialAsset` (depends on texture resources).
-2. [ ] Implement an internal dependency collector for decode steps (assets: `AssetKey`, resources: `ResourceKey`/`ResourceRef`).
-3. [ ] Implement the internal async pipeline split for `MaterialAsset` only: Resolve (owning) -> Read (pool) -> Decode (pool) -> Publish (owning).
-4. [ ] Implement “resolve identity to access handle” for assets needed by `MaterialAsset` (key -> source + locator).
-5. [ ] Implement “resolve identity to access handle” for resources needed by `MaterialAsset` (key -> source + table/data region references).
-6. [ ] Refactor ONLY `MaterialAsset` loader to be pure decode (no nested loads, no AssetLoader callbacks).
-7. [ ] Implement owning-thread Publish for `MaterialAsset` that:
+1. [X] Choose the first async-only asset to migrate: `MaterialAsset` (depends on texture resources).
+2. [X] Implement an internal dependency collector for decode steps (assets: `AssetKey`, resources: `ResourceKey`/`ResourceRef`).
+3. [X] Implement the internal async pipeline split for `MaterialAsset` only:
+   Resolve + open readers (owning) -> Decode (pool) -> Publish (owning).
+4. [X] Implement “resolve identity to access handle” for assets needed by `MaterialAsset` (key -> source + locator).
+5. [X] Implement “resolve identity to access handle” for resources needed by `MaterialAsset` (key -> source + table/data region references).
+6. [ ] Refactor ONLY `MaterialAsset` loader to be *unconditionally* pure decode
+   (no nested loads, no AssetLoader callbacks).
+   - Current state: async decode path is pure (deps are collected via `DependencyCollector`),
+     but the loader still contains a legacy branch that synchronously loads textures
+     and registers dependencies.
+   - Completion criteria: the legacy sync branch is deleted (not merely unused).
+7. [X] Implement owning-thread Publish for `MaterialAsset` that:
     - stores the decoded asset in the cache
-    - binds `ResourceRef` to `ResourceKey`
+    - binds `ResourceRef` to `ResourceKey` (when `ResourceRef` is used)
     - applies dependency edges via `AddResourceDependency`
-8. [ ] Add `StartLoadAsset<T>` wrapper (or `StartLoadMaterialAsset`) that starts the coroutine and invokes callback on owning thread.
-9. [ ] Add unit tests for `MaterialAsset` async load + dependency collection + owning-thread publish correctness.
+8. [X] Add `StartLoadAsset<T>` wrapper (or `StartLoadMaterialAsset`) that starts the coroutine and invokes callback on owning thread.
+9. [X] Add unit tests for `MaterialAsset` async load + dependency collection + owning-thread publish correctness.
+
+#### Implementation status (tracked, not normative)
+
+As of the current repo state:
+
+- Async orchestration exists for `data::MaterialAsset` and `data::GeometryAsset`.
+- `internal::IContentSource` exists and is used for both PAK and loose cooked.
+- Resource loaders (`BufferResource`, `TextureResource`) are pure decode.
+- **Still present (non-compliant with this design’s end-state):** synchronous public load APIs
+  (`LoadAsset<T>`, `LoadResourceByKey<T>`), plus legacy loader branches that do synchronous
+  nested loads / owning-thread dependency mutations.
 
 ### Phase 2: scale out + delete legacy
 
-1. [ ] Implement in-flight deduplication map keyed by `data::AssetKey` for assets.
-2. [ ] Implement in-flight deduplication map keyed by `ResourceKey` for resources.
-3. [ ] Add cancellation plumbing so `Stop()` cancels in-flight work promptly.
-4. [ ] Make cancelled awaitables complete exceptionally with `OperationCancelledException`.
-5. [ ] Add `StartLoadResource<T>` wrapper that starts the coroutine and invokes callback on owning thread.
-6. [ ] Add `StartLoadResourceFromBuffer<T>` wrapper that starts the coroutine and invokes callback on owning thread.
-7. [ ] Implement buffer-provided decode path using `ResourceCookedData<T>` and cache under the provided/minted `ResourceKey`.
-8. [ ] Ensure buffer-provided loads are treated as ad hoc inputs (not a mount/enumerable source).
-9. [ ] Keep `serio::AnyReader` as the decode interface; wrap owned buffers in memory-backed readers as needed.
-10. [ ] Ensure `internal::IContentSource` remains the single seam for PAK vs loose cooked byte access.
+1. [X] Implement in-flight deduplication map keyed by `data::AssetKey` for assets.
+2. [X] Implement in-flight deduplication map keyed by `ResourceKey` for resources.
+3. [X] Add cancellation plumbing so `Stop()` cancels in-flight work promptly.
+4. [X] Make cancelled awaitables complete exceptionally with `OperationCancelledException`.
+5. [X] Add `StartLoadResource<T>` wrapper that starts the coroutine and invokes callback on owning thread.
+6. [X] Add `StartLoadResourceFromBuffer<T>` wrapper that starts the coroutine and invokes callback on owning thread.
+7. [X] Implement buffer-provided decode path using `ResourceCookedData<T>` and cache under the provided/minted `ResourceKey`.
+8. [X] Ensure buffer-provided loads are treated as ad hoc inputs (not a mount/enumerable source).
+9. [X] Keep `serio::AnyReader` as the decode interface; wrap owned buffers in memory-backed readers as needed.
+10. [X] Ensure `internal::IContentSource` remains the single seam for PAK vs loose cooked byte access.
 11. [ ] Extend content sources with minimal range-read helpers (optional) without introducing a new async I/O framework.
-12. [ ] Update cache hashing and lookup code to work with strong `ResourceKey`.
-13. [ ] Update all call sites (renderer/tools/tests) that assumed `ResourceKey` was an integer.
-14. [ ] Migrate remaining asset loaders (e.g. `GeometryAsset`) to pure decode + async pipeline.
-15. [ ] Migrate remaining resource loaders to pure decode where required (no AssetLoader callbacks).
-16. [ ] Remove all synchronous public load APIs (assets and resources) in favor of async-only awaitables.
-17. [ ] Update examples/demos to use async-only APIs and `StartLoad*` bridges where needed.
-18. [ ] Audit and remove any remaining “range-based source id” assumptions; always resolve via loader registry.
-19. [ ] Document migration notes for removed/renamed APIs and required call-site changes.
+12. [ ] Migrate remaining asset loaders (e.g. `GeometryAsset`) to *unconditionally* pure decode + async pipeline.
+
+    - Current state: `LoadAssetAsync<data::GeometryAsset>` exists and tests cover it,
+        but the loader still has legacy sync branches (nested asset loads, sync resource loads).
+    - Completion criteria: asset decode never calls `AssetLoader` (even conditionally);
+        orchestration owns all dependency loads and publish.
+
+13. [X] Migrate remaining resource loaders to pure decode where required (no AssetLoader callbacks).
+
+    - Current state: `BufferResource` and `TextureResource` loaders decode from readers only.
+
+14. [ ] Remove all synchronous public load APIs (assets and resources) in favor of async-only awaitables.
+
+    - [ ] Delete `AssetLoader::LoadAsset<T>` (sync) and all internal call sites.
+    - [ ] Delete `AssetLoader::LoadResourceByKey<T>` (sync) and all internal call sites.
+    - [ ] Delete synchronous “loader-only” helpers that rely on thread-local current source id
+          (e.g. `MakeResourceKey<T>(index)` style flows) once no longer needed.
+    - [ ] Ensure all dependency graph mutation happens only in owning-thread Publish,
+          never inside worker-thread decode.
+
+15. [ ] Make the public API consistent and non-redundant.
+
+    - [ ] Remove texture-specific convenience wrappers (`LoadTextureAsync`, `StartLoadTexture*`,
+          `LoadTextureFromBufferAsync`, `StartLoadTextureFromBuffer`) in favor of
+          `LoadResourceAsync<TextureResource>` + `StartLoadResource<TextureResource>`.
+    - [ ] Ensure there is exactly one async surface per operation:
+          awaitable (`LoadAssetAsync` / `LoadResourceAsync`) + callback bridge (`StartLoadAsset` / `StartLoadResource`).
+
+16. [ ] Update tests/examples/demos to use async-only APIs and `StartLoad*` bridges where needed.
+
+    - [ ] Rewrite Content unit tests that call sync `LoadAsset<T>` to use `LoadAssetAsync<T>`.
+    - [ ] Remove any tests that validate hard-coded source id ranges (e.g. `0x8000` for loose cooked).
+    - [ ] Update Renderer-side callers to request CPU resources via async-only APIs.
+
+17. [ ] Audit and remove any remaining “range-based source id” assumptions; always resolve via loader registry.
+
+    - [ ] Eliminate `ResourceKey` bit-fiddling outside Content (no masking/shifting in renderer/tooling).
+    - [ ] Treat embedded source id as opaque everywhere except inside Content’s resolver/binder.
+
+18. [ ] Document migration notes for removed/renamed APIs and required call-site changes.
+
+### Phase 3: renderer-side residency for geometry buffers (BufferBinder + GeometryUploader refactor)
+
+1. [ ] Define `BufferBinder` in the renderer with an API shape aligned to `TextureBinder`.
+
+    - [ ] `OnFrameStart()` / `OnFrameEnd()` lifecycle.
+    - [ ] `GetOrAllocate(content::ResourceKey)` returns a stable shader-visible SRV index (immediately usable).
+    - [ ] Placeholder-to-final swap semantics for buffers (and a clear failure policy).
+
+2. [ ] Make `BufferBinder` the single GPU residency manager for `data::BufferResource`.
+
+    - [ ] Initiate CPU-side loads via `content::AssetLoader::StartLoadResource<data::BufferResource>`.
+    - [ ] Upload to GPU via `UploadCoordinator` (same core flow as `TextureBinder`).
+    - [ ] Own and recycle descriptor heap entries for buffer SRVs.
+
+3. [ ] Drive buffer residency from Content cache lifetime.
+
+    - [ ] Subscribe to BufferResource cache eviction (or equivalent AssetLoader-owned release signal).
+    - [ ] On eviction, release GPU buffers/descriptor entries owned by `BufferBinder`.
+    - [ ] Enforce thread/ordering rules: GPU releases must occur on the renderer/graphics owning thread.
+
+4. [ ] Refactor `GeometryUploader` to *use* `BufferBinder` rather than owning geometry buffer residency.
+
+    - [ ] Replace mesh-hash-based GPU buffer deduplication with `ResourceKey`-based identity.
+    - [ ] Keep (or replace) any remaining per-frame bookkeeping, but remove long-lived GPU buffer ownership.
+    - [ ] Provide the same public output: stable shader-visible indices for vertex+index buffers.
+
+5. [ ] Ensure `GeometryAsset`/mesh runtime data model aligns with binder-driven residency.
+
+    - [ ] If procedural meshes still exist at runtime, define how they mint `ResourceKey`s and feed
+          buffer payloads through `LoadResourceFromBufferAsync` (ad hoc inputs) so the binder can manage them.
+
+6. [ ] Update scene prep / draw metadata emission to use the refactored geometry path.
+7. [ ] Add renderer unit tests mirroring `TextureBinder` coverage.
+
+    - [ ] Placeholder allocation is immediate and stable.
+    - [ ] Async completion swaps SRV to final buffer.
+    - [ ] Eviction/unload tears down GPU residency.
+    - [ ] No `ResourceKey` decoding assumptions leak into renderer code.
 
 ---
 

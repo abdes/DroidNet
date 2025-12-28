@@ -21,7 +21,7 @@ namespace oxygen {
 //! Strong type representing an index into a bindless heap, managed by an engine
 //! descriptor allocator.
 /*!
- The underlying index cannot be assumed to be unique ouside of its corresponding
+ The underlying index cannot be assumed to be unique outside its corresponding
  `heap`, and the interpretation of `heap` is allocator specific.
 
  This is not to be confused with a GPU/CPU descriptor address, or a
@@ -59,7 +59,7 @@ using ShaderVisibleIndex = NamedType<uint32_t, struct ShaderVisibleIndexTag,
 //! Strong type representing a count of bindless items (descriptors, indices,
 //! etc.).
 /*!
- This strong type is particulalry useful to disambiguate size/count parameters
+ This strong type is particularly useful to disambiguate size/count parameters
  and return types from indices or capacity. Its underlying type is the same as
  `BindlessHeapIndex` to guarantee consistent bounds and semantics.
 

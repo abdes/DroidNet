@@ -86,12 +86,20 @@ MeshView::MeshView(const Mesh& mesh, pak::MeshViewDesc desc) noexcept
   // Enforce design constraints
   CHECK_F(desc_.vertex_count > 0, "MeshView must have at least one vertex");
   CHECK_F(desc_.index_count > 0, "MeshView must have at least one index");
-  CHECK_F(desc_.first_vertex + desc_.vertex_count <= mesh.Vertices().size(),
-    "MeshView vertex range exceeds mesh vertex count");
-  const auto ib = mesh.IndexBuffer();
-  if (!ib.Empty()) {
-    CHECK_F(desc_.first_index + desc_.index_count <= ib.Count(),
-      "MeshView index range exceeds mesh index count");
+
+  // Truly-async decode may construct meshes before buffer resources are bound.
+  // In that case, defer range validation until publish-time binding.
+  const auto vertices = mesh.Vertices();
+  const bool defer_validation
+    = mesh.Descriptor().has_value() && vertices.empty();
+  if (!defer_validation) {
+    CHECK_F(desc_.first_vertex + desc_.vertex_count <= vertices.size(),
+      "MeshView vertex range exceeds mesh vertex count");
+    const auto ib = mesh.IndexBuffer();
+    if (!ib.Empty()) {
+      CHECK_F(desc_.first_index + desc_.index_count <= ib.Count(),
+        "MeshView index range exceeds mesh index count");
+    }
   }
 }
 
@@ -140,13 +148,14 @@ Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
 {
   auto& referenced_storage
     = std::get<detail::ReferencedBufferStorage>(buffer_storage_);
-  CHECK_NOTNULL_F(referenced_storage.vertex_buffer_resource,
-    "Referenced mesh must have a vertex buffer resource");
-  // Index buffer is optional for some mesh types
-
-  auto vertices = referenced_storage.GetVertices();
-  CHECK_F(!vertices.empty(), "Mesh must have at least one vertex");
-  ComputeBounds();
+  // Allow deferred binding for truly-async loads: during decode we may create
+  // a referenced mesh without its buffer resources bound yet. Bounds will be
+  // computed when the descriptor is set or when buffers are later bound.
+  if (referenced_storage.vertex_buffer_resource) {
+    auto vertices = referenced_storage.GetVertices();
+    CHECK_F(!vertices.empty(), "Mesh must have at least one vertex");
+    ComputeBounds();
+  }
 }
 
 //! Computes bounding box and sphere - the single source of truth.
@@ -258,8 +267,8 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
       new Mesh(lod_, std::move(vertices_), std::move(indices_)));
   } else {
     // Use referenced storage constructor (asset meshes)
-    CHECK_NOTNULL_F(vertex_buffer_resource_,
-      "Referenced mesh must have vertex buffer resource");
+    // Allow deferred binding for truly-async loads (buffers may be attached at
+    // publish time).
     // If an index buffer is present, validate element stride alignment.
     if (index_buffer_resource_) {
       const auto stride = index_buffer_resource_->GetElementStride();

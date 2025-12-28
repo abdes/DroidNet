@@ -14,11 +14,14 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -27,6 +30,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/LiveObject.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/content/EngineTag.h>
 #include <Oxygen/content/ResourceKey.h>
@@ -38,7 +42,26 @@ namespace oxygen::content {
 
 namespace internal {
   struct ResourceRef;
+  struct DependencyCollector;
 } // namespace internal
+
+//! Cooked bytes input for decoding a resource from an in-memory buffer.
+/*!
+ Provides a typed wrapper over a cooked byte payload plus the `ResourceKey`
+ identity under which the decoded result will be cached.
+
+ Buffer-provided loads are treated as *ad hoc inputs*: they do not require a
+ mounted content source and are not enumerable through the loader.
+
+ @tparam T The resource type (must satisfy PakResource).
+*/
+template <PakResource T> struct ResourceCookedData final {
+  //! Cache identity for the decoded resource.
+  ResourceKey key {};
+
+  //! Cooked bytes required to decode `T`.
+  std::span<const uint8_t> bytes {};
+};
 
 //! Configuration and tuning parameters for AssetLoader.
 /*!
@@ -63,14 +86,15 @@ struct AssetLoaderConfig final {
   /*!
    When true, AssetLoader propagates a strict offline policy to loader
    functions via LoaderContext. Loaders must honor this by avoiding any GPU
-   side effects when `context.offline` is true.
+    side effects when `context.work_offline` is true.
 
    @note Defaults to false (online).
   */
   bool work_offline { false };
 };
 
-class AssetLoader : public oxygen::co::LiveObject {
+class AssetLoader : public oxygen::co::LiveObject,
+                    public TextureResourceLoader {
 public:
   //! LiveObject contract
   [[nodiscard]] OXGN_CNTT_API auto ActivateAsync(co::TaskStarted<> started = {})
@@ -153,6 +177,65 @@ public:
   */
   template <IsTyped T>
   auto LoadAsset(const data::AssetKey& key) -> std::shared_ptr<T>;
+
+  //! Coroutine-based asset load by AssetKey.
+  /*!
+   Async-only API for assets.
+
+   @tparam T The asset type (must satisfy IsTyped)
+   @param key The asset key to load
+   @return Shared pointer to the asset, or nullptr if not found
+
+  @warning Not all asset types are migrated to async yet. Currently,
+  `data::MaterialAsset` and `data::GeometryAsset` are supported.
+  */
+  template <IsTyped T>
+  auto LoadAssetAsync(const data::AssetKey& key) -> co::Co<std::shared_ptr<T>>
+  {
+    if constexpr (std::is_same_v<T, data::MaterialAsset>) {
+      co_return co_await LoadMaterialAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::GeometryAsset>) {
+      co_return co_await LoadGeometryAssetAsyncImpl(key);
+    } else {
+      throw std::runtime_error(
+        "LoadAssetAsync<T> is not implemented for this asset type yet");
+    }
+  }
+
+  //! Start an async asset load and invoke a callback on completion.
+  /*!
+   This is the callback bridge for non-coroutine callers.
+
+   @tparam T The asset type (must satisfy IsTyped)
+   @param key The asset key to load
+   @param on_complete Callback invoked on the owning thread with the loaded
+     asset (or nullptr on failure).
+  */
+  template <IsTyped T>
+  void StartLoadAsset(const data::AssetKey& key,
+    std::function<void(std::shared_ptr<T>)> on_complete)
+  {
+    if (!nursery_) {
+      throw std::runtime_error(
+        "AssetLoader must be activated before StartLoadAsset");
+    }
+    if (!thread_pool_) {
+      throw std::runtime_error(
+        "AssetLoader requires a thread pool for StartLoadAsset");
+    }
+
+    nursery_->Start(
+      [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        try {
+          auto res = co_await LoadAssetAsync<T>(key);
+          on_complete(std::move(res));
+        } catch (const std::exception& e) {
+          LOG_F(ERROR, "StartLoadAsset failed: {}", e.what());
+          on_complete(nullptr);
+        }
+        co_return;
+      });
+  }
 
   //! Get cached asset without loading
   /*!
@@ -340,6 +423,26 @@ public:
     ResourceKey key, std::span<const uint8_t> bytes)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
 
+  //! Coroutine-based resource decode from an in-memory cooked byte buffer.
+  /*!
+   This API is intended for tests/demos/tooling where the caller provides the
+   cooked payload directly.
+
+   @tparam T The resource type (must satisfy PakResource).
+   @param cooked Buffer-provided cooked payload plus cache identity.
+   @return Shared pointer to the decoded resource, or nullptr on failure.
+
+   @note The bytes are treated as an input only; this does not mount a source.
+  */
+  template <PakResource T>
+  auto LoadResourceFromBufferAsync(ResourceCookedData<T> cooked)
+    -> co::Co<std::shared_ptr<T>>
+  {
+    auto decoded = co_await LoadResourceFromBufferAsyncErased(
+      T::ClassTypeId(), cooked.key, cooked.bytes);
+    co_return std::static_pointer_cast<T>(std::move(decoded));
+  }
+
   //! Convenience: schedule a texture-from-buffer load on the loader nursery
   //! and invoke `on_complete` on the engine thread when the CPU-side payload
   //! is ready. Deprecated in favor of awaiting the coroutine directly.
@@ -353,7 +456,84 @@ public:
       possible. This helper simply starts a coroutine inside the loader's
       nursery and will invoke the callback when complete. */
   OXGN_CNTT_API void StartLoadTexture(ResourceKey key,
-    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete);
+    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+    override;
+
+  //! Start an async resource load and invoke a callback on completion.
+  /*!
+   This is the callback bridge for non-coroutine callers.
+
+   @tparam T The resource type (must satisfy PakResource)
+   @param key The resource key to load
+   @param on_complete Callback invoked on the owning thread with the loaded
+     resource (or nullptr on failure).
+  */
+  template <PakResource T>
+  void StartLoadResource(
+    ResourceKey key, std::function<void(std::shared_ptr<T>)> on_complete)
+  {
+    if (!nursery_) {
+      throw std::runtime_error(
+        "AssetLoader must be activated before StartLoadResource");
+    }
+    if (!thread_pool_) {
+      throw std::runtime_error(
+        "AssetLoader requires a thread pool for StartLoadResource");
+    }
+
+    nursery_->Start(
+      [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        try {
+          auto res = co_await LoadResourceAsync<T>(key);
+          on_complete(std::move(res));
+        } catch (const std::exception& e) {
+          LOG_F(ERROR, "StartLoadResource failed: {}", e.what());
+          on_complete(nullptr);
+        }
+        co_return;
+      });
+  }
+
+  //! Start a buffer-provided resource decode and invoke a callback.
+  /*!
+   This is the callback bridge for non-coroutine callers.
+
+   @tparam T The resource type (must satisfy PakResource).
+   @param cooked Buffer-provided cooked payload plus cache identity.
+   @param on_complete Callback invoked on the owning thread with the decoded
+     resource (or nullptr on failure).
+  */
+  template <PakResource T>
+  void StartLoadResourceFromBuffer(ResourceCookedData<T> cooked,
+    std::function<void(std::shared_ptr<T>)> on_complete)
+  {
+    if (!nursery_) {
+      throw std::runtime_error(
+        "AssetLoader must be activated before StartLoadResourceFromBuffer");
+    }
+    if (!thread_pool_) {
+      throw std::runtime_error(
+        "AssetLoader requires a thread pool for StartLoadResourceFromBuffer");
+    }
+
+    nursery_->Start(
+      [this, key = cooked.key,
+        bytes = std::vector<uint8_t>(cooked.bytes.begin(), cooked.bytes.end()),
+        on_complete = std::move(on_complete)]() mutable -> co::Co<> {
+        try {
+          std::span<const uint8_t> span(bytes.data(), bytes.size());
+          auto res = co_await LoadResourceFromBufferAsync<T>({
+            .key = key,
+            .bytes = span,
+          });
+          on_complete(std::move(res));
+        } catch (const std::exception& e) {
+          LOG_F(ERROR, "StartLoadResourceFromBuffer failed: {}", e.what());
+          on_complete(nullptr);
+        }
+        co_return;
+      });
+  }
 
   //! Get cached resource without loading
   /*!
@@ -424,71 +604,45 @@ public:
    @note Only AssetLoader is permitted to construct ResourceKeys. Callers must
          treat the key as opaque.
   */
-  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticTextureKey() -> ResourceKey;
+  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticTextureKey()
+    -> ResourceKey override;
 
-  //! Register a load and unload functions for assets or resources (unified
-  //! interface)
+  //! Register a load function for assets or resources (unified interface)
   /*!
    The load function is invoked when an asset or resource is requested and is
    not already cached.
 
-   The unload function is invoked when the asset or resource is evicted from the
-   cache (i.e. not longer used directly or as a dependency).
-
    The target type (specific asset or resource) is automatically deduced from
-   the load function's return type. The unload function must satisfy the
-   `UnloadFunction` concept with the target type.
+   the load function's return type.
 
    @tparam LF The load function type (must satisfy LoadFunction)
-   @tparam UF The unload function type (must satisfy UnloadFunction, where T is
    the type deduced from the load function's return type).
    @param load_fn The load function to register
-   @param unload_fn The unload function to register
 
    ### Usage Examples
 
    ```cpp
    // Register asset loaders - type inferred from function signature
-   asset_loader.RegisterLoader(LoadGeometryAsset, UnloadGeometryAsset);
-   asset_loader.RegisterLoader(LoadMaterialAsset, UnloadMaterialAsset);
+   asset_loader.RegisterLoader(LoadGeometryAsset);
+   asset_loader.RegisterLoader(LoadMaterialAsset);
 
    // Register resource loaders - type inferred from function signature
-   asset_loader.RegisterLoader(LoadBufferResource, UnloadBufferResource);
-   asset_loader.RegisterLoader(LoadTextureResource, UnloadTextureResource);
+   asset_loader.RegisterLoader(LoadBufferResource);
+   asset_loader.RegisterLoader(LoadTextureResource);
    ```
 
    @note Only one load/unload function pair per type is supported.
    @see LoadAsset, LoadResource
   */
-  template <LoadFunction LF, typename UF>
-  auto RegisterLoader(LF&& load_fn, UF&& unload_fn) -> void
+  template <LoadFunction LF> auto RegisterLoader(LF&& load_fn) -> void
   {
     // Infer the type from the loader function signature
     using LoaderPtr = decltype(load_fn(std::declval<LoaderContext>()));
     using T = std::remove_pointer_t<typename LoaderPtr::element_type>;
     static_assert(IsTyped<T>, "T must satisfy the `IsTyped` concept");
-    static_assert(UnloadFunction<UF, T>);
 
     auto type_id = T::ClassTypeId();
     auto type_name = T::ClassTypeNamePretty();
-
-    // Store type-erased unload function
-    UnloadFnErased unloader_erased
-      = [unload_fn = std::forward<UF>(unload_fn)](
-          std::shared_ptr<void> asset, AssetLoader& loader) {
-          auto typed = std::static_pointer_cast<T>(asset);
-          // Unloader Contract (Phase 1):
-          // - Invoked only when cache refcount reaches zero (object eviction).
-          // - Ordering: all resource dependencies released, asset dependencies
-          //   recursively released, then this unloader executes.
-          // - Must not trigger new asset/resource loads; doing so risks
-          //   re-entrancy (future debug guard may enforce).
-          // - Should perform minimal CPU work; defer heavy operations to async
-          //   mechanisms in later phases.
-          // - Exceptions must not escape (log and swallow if any occur).
-          unload_fn(typed, loader);
-        };
-    AddTypeErasedUnloader(type_id, type_name, std::move(unloader_erased));
 
     if constexpr (PakResource<T>) {
       // Resource loader path
@@ -517,6 +671,25 @@ protected:
     -> uint16_t;
 
 private:
+  struct DecodedAssetAsyncResult final {
+    uint16_t source_id {};
+    std::shared_ptr<void> asset;
+    std::shared_ptr<internal::DependencyCollector> dependency_collector;
+  };
+
+  OXGN_CNTT_API auto DecodeAssetAsyncErasedImpl(TypeId type_id,
+    const data::AssetKey& key) -> co::Co<DecodedAssetAsyncResult>;
+
+  OXGN_CNTT_API auto LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
+    -> co::Co<std::shared_ptr<data::MaterialAsset>>;
+
+  OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
+    -> co::Co<std::shared_ptr<data::GeometryAsset>>;
+
+  OXGN_CNTT_API auto LoadResourceFromBufferAsyncErased(
+    TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
+    -> co::Co<std::shared_ptr<void>>;
+
   struct Impl;
   std::unique_ptr<Impl> impl_;
 
@@ -564,18 +737,14 @@ private:
 
   std::unordered_map<TypeId, LoadFnErased> asset_loaders_;
   std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
-  std::unordered_map<TypeId, UnloadFnErased> unloaders_;
 
-  void UnloadObject(oxygen::TypeId& type_id, std::shared_ptr<void>& value);
+  void UnloadObject(uint64_t cache_key, const oxygen::TypeId& type_id);
 
   OXGN_CNTT_API auto AddTypeErasedAssetLoader(
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   OXGN_CNTT_API auto AddTypeErasedResourceLoader(
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
-
-  OXGN_CNTT_API auto AddTypeErasedUnloader(TypeId type_id,
-    std::string_view type_name, UnloadFnErased&& unloader) -> void;
 
   // Thread ownership for single-thread phase 1 policy.
   std::thread::id owning_thread_id_ {};
@@ -603,6 +772,39 @@ private:
   auto LoadResourceUncached(uint16_t source_id,
     data::pak::ResourceIndexT resource_index) -> std::shared_ptr<T>;
 
+  template <typename ResourceT>
+  auto PublishResourceDependenciesAsync(
+    const data::AssetKey& dependent_asset_key,
+    const internal::DependencyCollector& collector) -> co::Co<>;
+
+  struct LoadedGeometryBuffer final {
+    ResourceKey key {};
+    std::shared_ptr<data::BufferResource> resource;
+  };
+
+  using LoadedGeometryBuffersByIndex
+    = std::unordered_map<uint32_t, LoadedGeometryBuffer>;
+
+  using LoadedGeometryMaterialsByKey
+    = std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>;
+
+  auto LoadGeometryBufferDependenciesAsync(
+    const internal::DependencyCollector& collector)
+    -> co::Co<LoadedGeometryBuffersByIndex>;
+
+  auto LoadGeometryMaterialDependenciesAsync(
+    const internal::DependencyCollector& collector)
+    -> co::Co<LoadedGeometryMaterialsByKey>;
+
+  auto BindGeometryRuntimePointers(data::GeometryAsset& asset,
+    const LoadedGeometryBuffersByIndex& buffers_by_index,
+    const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
+
+  auto PublishGeometryDependencyEdgesAndRelease(
+    const data::AssetKey& dependent_asset_key,
+    const LoadedGeometryBuffersByIndex& buffers_by_index,
+    const LoadedGeometryMaterialsByKey& materials_by_key) -> void;
+
   // Private helper to pack resource key without exposing internal type in the
   // public header. Implemented in the .cpp which includes InternalResourceKey.
   OXGN_CNTT_API static auto PackResourceKey(uint16_t pak_index,
@@ -616,6 +818,25 @@ private:
   observer_ptr<co::ThreadPool> thread_pool_ {};
 
   bool work_offline_ { false };
+
+  //=== In-flight Deduplication (Phase 2) ===--------------------------------//
+
+  // Maps are owning-thread only.
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::MaterialAsset>>>>
+    in_flight_material_assets_;
+
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::GeometryAsset>>>>
+    in_flight_geometry_assets_;
+
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::TextureResource>>>>
+    in_flight_textures_;
+
+  std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::BufferResource>>>>
+    in_flight_buffers_;
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
 
@@ -648,6 +869,12 @@ template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::GeometryAsset>(
 
 template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::MaterialAsset>(
   const data::AssetKey& key) -> std::shared_ptr<data::MaterialAsset>;
+
+template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::MaterialAsset>(
+  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::MaterialAsset>>;
+
+template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::GeometryAsset>(
+  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
 //-- Known Resource Types --
 

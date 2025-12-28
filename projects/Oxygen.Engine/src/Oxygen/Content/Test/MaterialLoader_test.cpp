@@ -45,14 +45,6 @@ auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
     std::move(desc), std::move(data));
 }
 
-//! Test unloader function for TextureResource
-auto UnloadTestTextureResource(
-  std::shared_ptr<oxygen::data::TextureResource> /*resource*/,
-  oxygen::content::AssetLoader& /*loader*/) -> void
-{
-  // Simple unloader - nothing to do for test resources
-}
-
 //=== Mock AssetLoader ===----------------------------------------------------//
 
 //! Mock AssetLoader for comprehensive testing with PAK file dependency support.
@@ -63,7 +55,7 @@ public:
         oxygen::content::internal::EngineTagFactory::Get())
   {
     // Register the test TextureResource loader using named functions
-    RegisterLoader(LoadTestTextureResource, UnloadTestTextureResource);
+    RegisterLoader(LoadTestTextureResource);
   }
 
   MOCK_METHOD(void, AddAssetDependency,

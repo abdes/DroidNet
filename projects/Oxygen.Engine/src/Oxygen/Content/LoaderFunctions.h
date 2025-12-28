@@ -57,41 +57,8 @@ concept LoadFunctionForStream = requires(F f, LoaderContext context) {
  @param context LoaderContext for the load function (see above)
  @param resource Shared pointer to resource for unload function
  @param loader AssetLoader reference for unload function
- @param offline Boolean indicating offline mode for unload function
 */
 template <typename F>
 concept LoadFunction = LoadFunctionForStream<F>;
-
-//! Concept for asset/resource unload functions used with AssetLoader.
-/*!
- Unload functions are registered as cleanup handlers for a specific asset or
- resource type `T`. They are called when an asset/resource is evicted from the
- cache or explicitly unloaded.
-
- ### How Unload Functions Are Called
-
- - Signature: `void UnloadFunc(std::shared_ptr<T> resource, AssetLoader& loader,
-   bool offline)`
-   - `resource`: Shared pointer to the asset/resource to be cleaned up. May be
-     null if the resource was never loaded.
-   - `loader`: Reference to the AssetLoader managing the resource. Used for
-     dependency cleanup or resource deregistration.
-   - The function must handle all errors locally and only throw for exceptional
-     situations that cannot be handled internally.
-
- ### Unload Function Requirements
-
- - Must be callable as `void(std::shared_ptr<T>, AssetLoader&, bool)`.
- - Must not return a value.
- - Must handle all errors locally and only throw for exceptional situations.
-
- @param resource Shared pointer to resource for unload function
- @param loader AssetLoader reference for unload function
-*/
-template <typename F, typename T>
-concept UnloadFunction
-  = requires(F f, std::shared_ptr<T> resource, AssetLoader& loader) {
-      { f(resource, loader) } -> std::same_as<void>;
-    };
 
 } // namespace oxygen::content

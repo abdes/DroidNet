@@ -8,12 +8,14 @@
 #include <cstring>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Internal/ContentSource.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Internal/SourceToken.h>
@@ -135,17 +137,11 @@ namespace {
 // type_id: type id reference for validation
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 auto SanityCheckResourceEviction(const uint64_t expected_key_hash,
-  uint64_t& actual_key_hash, oxygen::TypeId& type_id) -> bool
+  const uint64_t actual_key_hash, const oxygen::TypeId expected_type_id,
+  const oxygen::TypeId actual_type_id) -> bool
 {
-  using oxygen::content::ResourceKey;
-  using oxygen::content::internal::InternalResourceKey;
-
   CHECK_EQ_F(expected_key_hash, actual_key_hash);
-  ResourceKey actual_key_hash_rc(actual_key_hash);
-  InternalResourceKey internal_key(actual_key_hash_rc);
-  const uint16_t resource_type_index = internal_key.GetResourceTypeIndex();
-  const auto class_type_id = GetResourceTypeIdByIndex(resource_type_index);
-  CHECK_EQ_F(type_id, class_type_id);
+  CHECK_EQ_F(expected_type_id, actual_type_id);
   return true;
 }
 } // namespace
@@ -166,12 +162,12 @@ AssetLoader::AssetLoader(
   work_offline_ = config.work_offline;
 
   // Register asset loaders
-  RegisterLoader(loaders::LoadGeometryAsset, loaders::UnloadGeometryAsset);
-  RegisterLoader(loaders::LoadMaterialAsset, loaders::UnloadMaterialAsset);
+  RegisterLoader(loaders::LoadGeometryAsset);
+  RegisterLoader(loaders::LoadMaterialAsset);
 
   // Register resource loaders
-  RegisterLoader(loaders::LoadBufferResource, loaders::UnloadBufferResource);
-  RegisterLoader(loaders::LoadTextureResource, loaders::UnloadTextureResource);
+  RegisterLoader(loaders::LoadBufferResource);
+  RegisterLoader(loaders::LoadTextureResource);
 }
 
 AssetLoader::~AssetLoader() = default;
@@ -192,6 +188,13 @@ void AssetLoader::Stop()
   if (nursery_) {
     nursery_->Cancel();
   }
+
+  // Prevent new joiners from attaching to cancelled shared operations.
+  // The per-operation erase guards tolerate the entry already being absent.
+  in_flight_material_assets_.clear();
+  in_flight_geometry_assets_.clear();
+  in_flight_textures_.clear();
+  in_flight_buffers_.clear();
 }
 
 auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
@@ -354,86 +357,116 @@ auto AssetLoader::LoadTextureFromBufferAsync(
   ResourceKey key, std::span<const uint8_t> bytes)
   -> co::Co<std::shared_ptr<data::TextureResource>>
 {
-  DLOG_SCOPE_F(2, "AssetLoader LoadTextureFromBufferAsync");
+  auto decoded = co_await LoadResourceFromBufferAsyncErased(
+    data::TextureResource::ClassTypeId(), key, bytes);
+  co_return std::static_pointer_cast<data::TextureResource>(std::move(decoded));
+}
+
+auto AssetLoader::LoadResourceFromBufferAsyncErased(
+  const TypeId type_id, const ResourceKey key, std::span<const uint8_t> bytes)
+  -> co::Co<std::shared_ptr<void>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadResourceFromBufferAsync");
+  DLOG_F(2, "type_id : {}", type_id);
   DLOG_F(2, "key     : {}", key);
   DLOG_F(2, "bytes   : {}", bytes.size());
   DLOG_F(2, "offline : {}", work_offline_);
 
+  AssertOwningThread();
+
   if (!nursery_) {
     throw std::runtime_error("AssetLoader must be activated before async loads "
-                             "(LoadTextureFromBufferAsync)");
+                             "(LoadResourceFromBufferAsyncErased)");
   }
   if (!thread_pool_) {
     throw std::runtime_error(
       "AssetLoader requires a thread pool for async loads "
-      "(LoadTextureFromBufferAsync)");
+      "(LoadResourceFromBufferAsyncErased)");
   }
 
-  auto decode_fn = [this, bytes]() -> std::shared_ptr<data::TextureResource> {
-    DLOG_SCOPE_F(2, "AssetLoader DecodeTextureFromBuffer");
-    // Find texture resource loader
-    auto it = resource_loaders_.find(data::TextureResource::ClassTypeId());
+  const auto key_hash = HashResourceKey(key);
+  if (type_id == data::TextureResource::ClassTypeId()) {
+    if (auto cached
+      = content_cache_.CheckOut<data::TextureResource>(key_hash)) {
+      co_return cached;
+    }
+  } else if (type_id == data::BufferResource::ClassTypeId()) {
+    if (auto cached = content_cache_.CheckOut<data::BufferResource>(key_hash)) {
+      co_return cached;
+    }
+  } else {
+    throw std::runtime_error(
+      "LoadResourceFromBufferAsync is not implemented for this resource type");
+  }
+
+  // Copy bytes eagerly to ensure the payload outlives thread-pool execution.
+  std::vector<uint8_t> owned_bytes(bytes.begin(), bytes.end());
+
+  auto decode_fn =
+    [this, type_id,
+      owned_bytes = std::move(owned_bytes)]() mutable -> std::shared_ptr<void> {
+    DLOG_SCOPE_F(2, "AssetLoader DecodeResourceFromBuffer");
+
+    auto it = resource_loaders_.find(type_id);
     if (it == resource_loaders_.end()) {
-      LOG_F(ERROR, "No texture resource loader registered");
+      LOG_F(ERROR, "No resource loader registered for type_id={}", type_id);
       return nullptr;
     }
 
-    // Build a LoaderContext that supplies the texture data via an AnyReader.
-    // Create the reader first, then use aggregate initialization to keep the
-    // original style while avoiding any sequencing issues by ensuring the
-    // reader object exists prior to forming the context.
-    auto tex_reader = std::make_unique<MemoryAnyReader>(bytes);
+    std::span<const uint8_t> span(owned_bytes.data(), owned_bytes.size());
+    auto reader = std::make_unique<MemoryAnyReader>(span);
 
     LoaderContext context {
       .asset_loader = this,
       .current_asset_key = {},
-      .desc_reader = tex_reader.get(),
-      .data_readers = std::make_tuple(nullptr, tex_reader.get()),
+      .desc_reader = reader.get(),
+      .data_readers = std::make_tuple(reader.get(), reader.get()),
       .work_offline = work_offline_,
       .source_pak = nullptr,
     };
 
-    // Call the registered loader (type-erased)
-    auto void_ptr = it->second(context);
-    auto typed = std::static_pointer_cast<data::TextureResource>(void_ptr);
-    if (!typed) {
-      return nullptr;
-    }
-    return typed;
+    return it->second(context);
   };
 
-  LOG_F(2, "scheduling on thread pool");
-  auto res = co_await thread_pool_->Run(decode_fn);
-  AssertOwningThread();
-  if (res) {
-    const auto key_hash = HashResourceKey(key);
-    content_cache_.Store(key_hash, res);
+  try {
+    LOG_F(2, "scheduling on thread pool");
+    auto decoded = co_await thread_pool_->Run(std::move(decode_fn));
+    AssertOwningThread();
+    if (!decoded) {
+      co_return nullptr;
+    }
+
+    if (type_id == data::TextureResource::ClassTypeId()) {
+      auto typed = std::static_pointer_cast<data::TextureResource>(decoded);
+      if (!typed
+        || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded resource type mismatch (buffer): expected {}",
+          data::TextureResource::ClassTypeNamePretty());
+        co_return nullptr;
+      }
+      content_cache_.Store(key_hash, typed);
+    } else if (type_id == data::BufferResource::ClassTypeId()) {
+      auto typed = std::static_pointer_cast<data::BufferResource>(decoded);
+      if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded resource type mismatch (buffer): expected {}",
+          data::BufferResource::ClassTypeNamePretty());
+        co_return nullptr;
+      }
+      content_cache_.Store(key_hash, typed);
+    }
+
+    co_return decoded;
+  } catch (const co::TaskCancelledException& e) {
+    throw OperationCancelledException(e.what());
   }
-  co_return res;
 }
 
 void AssetLoader::StartLoadTextureFromBuffer(ResourceKey key,
   std::span<const uint8_t> bytes,
   std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
 {
-  if (!nursery_) {
-    throw std::runtime_error(
-      "AssetLoader must be activated before StartLoadTextureFromBuffer");
-  }
-
-  if (!thread_pool_) {
-    throw std::runtime_error(
-      "AssetLoader requires a thread pool for StartLoadTextureFromBuffer");
-  }
-
-  nursery_->Start(
-    [this, key, bytes = std::vector<uint8_t>(bytes.begin(), bytes.end()),
-      on_complete = std::move(on_complete)]() mutable -> co::Co<> {
-      std::span<const uint8_t> span(bytes.data(), bytes.size());
-      auto res = co_await LoadTextureFromBufferAsync(key, span);
-      on_complete(std::move(res));
-      co_return;
-    });
+  StartLoadResourceFromBuffer<data::TextureResource>(
+    { .key = key, .bytes = bytes }, std::move(on_complete));
 }
 
 void AssetLoader::StartLoadTexture(ResourceKey key,
@@ -483,18 +516,6 @@ auto AssetLoader::AddTypeErasedResourceLoader(const TypeId type_id,
   }
 }
 
-auto AssetLoader::AddTypeErasedUnloader(const TypeId type_id,
-  const std::string_view type_name, UnloadFnErased&& unloader) -> void
-{
-  auto [it, inserted] = unloaders_.insert_or_assign(
-    type_id, std::forward<UnloadFnErased>(unloader));
-  if (!inserted) {
-    LOG_F(WARNING, "Replacing unloader for type: {}/{}", type_id, type_name);
-  } else {
-    LOG_F(INFO, "Registered unloader for type: {}/{}", type_id, type_name);
-  }
-}
-
 //=== Dependency management ==================================================//
 
 auto AssetLoader::AddAssetDependency(
@@ -540,7 +561,7 @@ auto AssetLoader::AddResourceDependency(
   resource_dependencies_[dependent].insert(resource_key);
 
   // Touch the dependency resource in the cache to increment its reference count
-  content_cache_.Touch(resource_key.get());
+  content_cache_.Touch(HashResourceKey(resource_key));
 }
 
 //=== Asset Loading Implementations ==========================================//
@@ -575,6 +596,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key)
     }
 
     const auto source_id = impl_->source_ids.at(source_index);
+    const auto source_token = impl_->source_tokens.at(source_index);
     ScopedCurrentSourceId source_guard(source_id);
 
     auto desc_reader = source.CreateAssetDescriptorReader(*locator_opt);
@@ -595,6 +617,7 @@ auto AssetLoader::LoadAsset(const oxygen::data::AssetKey& key)
     LoaderContext context {
       .asset_loader = this,
       .current_asset_key = key,
+      .source_token = source_token,
       .desc_reader = desc_reader.get(),
       .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
       .work_offline = work_offline_,
@@ -638,7 +661,6 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
     = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
                                   std::shared_ptr<void> value, TypeId type_id) {
         LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
-        UnloadObject(type_id, value);
       });
 
   // Recursively release (check in) the asset and all its dependencies.
@@ -677,7 +699,7 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
   auto res_dep_it = resource_dependencies_.find(key);
   if (res_dep_it != resource_dependencies_.end()) {
     for (const auto& res_key : res_dep_it->second) {
-      content_cache_.CheckIn(res_key.get());
+      content_cache_.CheckIn(HashResourceKey(res_key));
     }
     resource_dependencies_.erase(res_dep_it);
   }
@@ -691,6 +713,520 @@ auto AssetLoader::ReleaseAssetTree(const data::AssetKey& key) -> void
   }
   // Release the asset itself
   content_cache_.CheckIn(HashAssetKey(key));
+}
+
+template <typename ResourceT>
+auto AssetLoader::PublishResourceDependenciesAsync(
+  const data::AssetKey& dependent_asset_key,
+  const internal::DependencyCollector& collector) -> co::Co<>
+{
+  AssertOwningThread();
+
+  const auto expected_type_id = ResourceT::ClassTypeId();
+
+  std::unordered_set<uint64_t> seen_key_hashes;
+  seen_key_hashes.reserve(collector.ResourceRefDependencies().size()
+    + collector.ResourceKeyDependencies().size());
+
+  for (const auto& ref : collector.ResourceRefDependencies()) {
+    if (ref.resource_type_id != expected_type_id) {
+      continue;
+    }
+    const auto dep_key = BindResourceRefToKey(ref);
+    const auto dep_key_hash = HashResourceKey(dep_key);
+    if (!seen_key_hashes.insert(dep_key_hash).second) {
+      continue;
+    }
+
+    auto res = co_await LoadResourceAsync<ResourceT>(dep_key);
+    if (!res) {
+      continue;
+    }
+
+    AddResourceDependency(dependent_asset_key, dep_key);
+    (void)ReleaseResource(dep_key);
+  }
+
+  for (const auto& dep_key : collector.ResourceKeyDependencies()) {
+    {
+      const internal::InternalResourceKey internal_key(dep_key);
+      const auto expected_type_index
+        = static_cast<uint16_t>(IndexOf<ResourceT, ResourceTypeList>::value);
+      if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+        continue;
+      }
+    }
+
+    const auto dep_key_hash = HashResourceKey(dep_key);
+    if (!seen_key_hashes.insert(dep_key_hash).second) {
+      continue;
+    }
+
+    auto res = co_await LoadResourceAsync<ResourceT>(dep_key);
+    if (!res) {
+      continue;
+    }
+
+    AddResourceDependency(dependent_asset_key, dep_key);
+    (void)ReleaseResource(dep_key);
+  }
+
+  co_return;
+}
+
+auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
+  const data::AssetKey& key) -> co::Co<DecodedAssetAsyncResult>
+{
+  AssertOwningThread();
+
+  if (!nursery_) {
+    throw std::runtime_error(
+      "AssetLoader must be activated before async loads (LoadAssetAsync)");
+  }
+  if (!thread_pool_) {
+    throw std::runtime_error(
+      "AssetLoader requires a thread pool for async loads (LoadAssetAsync)");
+  }
+
+  // Resolve on owning thread: choose source and create independent readers.
+  uint16_t source_id = 0;
+  internal::SourceToken source_token {};
+  std::unique_ptr<serio::AnyReader> desc_reader;
+  std::unique_ptr<serio::AnyReader> buf_reader;
+  std::unique_ptr<serio::AnyReader> tex_reader;
+  const PakFile* source_pak = nullptr;
+
+  bool found = false;
+  for (size_t source_index = 0; source_index < impl_->sources.size();
+    ++source_index) {
+    const auto& source = *impl_->sources[source_index];
+    const auto locator_opt = source.FindAsset(key);
+    if (!locator_opt) {
+      continue;
+    }
+
+    source_id = impl_->source_ids.at(source_index);
+    source_token = impl_->source_tokens.at(source_index);
+    desc_reader = source.CreateAssetDescriptorReader(*locator_opt);
+    if (!desc_reader) {
+      continue;
+    }
+
+    buf_reader = source.CreateBufferDataReader();
+    tex_reader = source.CreateTextureDataReader();
+
+    if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+      const auto* pak_source
+        = static_cast<const internal::PakFileSource*>(&source);
+      source_pak = &pak_source->Pak();
+    }
+
+    found = true;
+    break;
+  }
+
+  if (!found) {
+    LOG_F(WARNING, "Asset not found (async): key={} type_id={}",
+      nostd::to_string(key).c_str(), type_id);
+    co_return {
+      .source_id = 0, .asset = nullptr, .dependency_collector = nullptr
+    };
+  }
+
+  auto collector = std::make_shared<internal::DependencyCollector>();
+
+  LOG_F(2, "scheduling asset decode on thread pool: type_id={}", type_id);
+  auto decoded = co_await thread_pool_->Run(
+    [this, key, type_id, source_id, source_pak, collector,
+      desc_reader = std::move(desc_reader), buf_reader = std::move(buf_reader),
+      tex_reader = std::move(tex_reader),
+      source_token]() mutable -> std::shared_ptr<void> {
+      ScopedCurrentSourceId source_guard(source_id);
+
+      LoaderContext context {
+        .asset_loader = this,
+        .current_asset_key = key,
+        .source_token = source_token,
+        .desc_reader = desc_reader.get(),
+        .data_readers = std::make_tuple(buf_reader.get(), tex_reader.get()),
+        .work_offline = work_offline_,
+        .dependency_collector = collector,
+        .source_pak = source_pak,
+        .parse_only = false,
+      };
+
+      auto loader_it = asset_loaders_.find(type_id);
+      if (loader_it == asset_loaders_.end()) {
+        LOG_F(ERROR, "No loader registered for asset type id: {}", type_id);
+        return nullptr;
+      }
+
+      return loader_it->second(context);
+    });
+
+  AssertOwningThread();
+  co_return { .source_id = source_id,
+    .asset = std::move(decoded),
+    .dependency_collector = std::move(collector) };
+}
+
+auto AssetLoader::LoadMaterialAssetAsyncImpl(const data::AssetKey& key)
+  -> co::Co<std::shared_ptr<data::MaterialAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadMaterialAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  const auto hash_key = HashAssetKey(key);
+  if (auto cached = content_cache_.CheckOut<data::MaterialAsset>(hash_key)) {
+    co_return cached;
+  }
+
+  if (auto it = in_flight_material_assets_.find(hash_key);
+    it != in_flight_material_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op
+    = [this, key, hash_key]() -> co::Co<std::shared_ptr<data::MaterialAsset>> {
+    struct EraseOnExit final {
+      AssetLoader* loader;
+      uint64_t key_hash;
+      ~EraseOnExit() noexcept
+      {
+        loader->in_flight_material_assets_.erase(key_hash);
+      }
+    } erase { this, hash_key };
+
+    try {
+      if (auto cached
+        = content_cache_.CheckOut<data::MaterialAsset>(hash_key)) {
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::MaterialAsset::ClassTypeId(), key);
+      auto decoded
+        = std::static_pointer_cast<data::MaterialAsset>(decoded_result.asset);
+      if (!decoded
+        || decoded->GetTypeId() != data::MaterialAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::MaterialAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+      if (!decoded_result.dependency_collector) {
+        LOG_F(ERROR, "Missing dependency collector for decoded material asset");
+        co_return nullptr;
+      }
+
+      // Publish (owning thread): store asset, then ensure resource dependencies
+      // are loaded and held via dependency edges.
+      {
+        using data::pak::kNoResourceIndex;
+        using data::pak::ResourceIndexT;
+
+        const auto texture_type_index = static_cast<uint16_t>(
+          IndexOf<data::TextureResource, ResourceTypeList>::value);
+
+        auto make_texture_key = [&](const ResourceIndexT texture_index) {
+          if (texture_index == kNoResourceIndex) {
+            return ResourceKey { 0 };
+          }
+          return PackResourceKey(
+            decoded_result.source_id, texture_type_index, texture_index);
+        };
+
+        std::vector<ResourceKey> texture_keys;
+        texture_keys.reserve(5);
+        texture_keys.push_back(
+          make_texture_key(decoded->GetBaseColorTexture()));
+        texture_keys.push_back(make_texture_key(decoded->GetNormalTexture()));
+        texture_keys.push_back(make_texture_key(decoded->GetMetallicTexture()));
+        texture_keys.push_back(
+          make_texture_key(decoded->GetRoughnessTexture()));
+        texture_keys.push_back(
+          make_texture_key(decoded->GetAmbientOcclusionTexture()));
+        decoded->SetTextureResourceKeys(std::move(texture_keys));
+      }
+
+      content_cache_.Store(hash_key, decoded);
+
+      co_await PublishResourceDependenciesAsync<data::TextureResource>(
+        key, *decoded_result.dependency_collector);
+
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_material_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
+auto AssetLoader::LoadGeometryBufferDependenciesAsync(
+  const internal::DependencyCollector& collector)
+  -> co::Co<LoadedGeometryBuffersByIndex>
+{
+  AssertOwningThread();
+
+  using data::BufferResource;
+
+  LoadedGeometryBuffersByIndex loaded_buffers_by_index;
+  std::unordered_set<uint64_t> seen_resource_hashes;
+  seen_resource_hashes.reserve(collector.ResourceRefDependencies().size()
+    + collector.ResourceKeyDependencies().size());
+
+  for (const auto& ref : collector.ResourceRefDependencies()) {
+    if (ref.resource_type_id != BufferResource::ClassTypeId()) {
+      continue;
+    }
+
+    const auto dep_key = BindResourceRefToKey(ref);
+    const auto dep_hash = HashResourceKey(dep_key);
+    if (!seen_resource_hashes.insert(dep_hash).second) {
+      continue;
+    }
+
+    auto res = co_await LoadResourceAsync<BufferResource>(dep_key);
+    if (!res) {
+      continue;
+    }
+
+    loaded_buffers_by_index.insert_or_assign(
+      static_cast<uint32_t>(ref.resource_index),
+      LoadedGeometryBuffer { .key = dep_key, .resource = std::move(res) });
+  }
+
+  for (const auto& dep_key : collector.ResourceKeyDependencies()) {
+    const internal::InternalResourceKey internal_key(dep_key);
+    const auto expected_type_index
+      = static_cast<uint16_t>(IndexOf<BufferResource, ResourceTypeList>::value);
+    if (internal_key.GetResourceTypeIndex() != expected_type_index) {
+      continue;
+    }
+
+    const auto dep_hash = HashResourceKey(dep_key);
+    if (!seen_resource_hashes.insert(dep_hash).second) {
+      continue;
+    }
+
+    auto res = co_await LoadResourceAsync<BufferResource>(dep_key);
+    if (!res) {
+      continue;
+    }
+
+    loaded_buffers_by_index.insert_or_assign(
+      static_cast<uint32_t>(internal_key.GetResourceIndex()),
+      LoadedGeometryBuffer { .key = dep_key, .resource = std::move(res) });
+  }
+
+  co_return loaded_buffers_by_index;
+}
+
+auto AssetLoader::LoadGeometryMaterialDependenciesAsync(
+  const internal::DependencyCollector& collector)
+  -> co::Co<LoadedGeometryMaterialsByKey>
+{
+  AssertOwningThread();
+
+  using data::MaterialAsset;
+
+  LoadedGeometryMaterialsByKey loaded_materials;
+  std::unordered_set<uint64_t> seen_asset_hashes;
+  seen_asset_hashes.reserve(collector.AssetDependencies().size());
+
+  for (const auto& dep_asset_key : collector.AssetDependencies()) {
+    const auto dep_hash = HashAssetKey(dep_asset_key);
+    if (!seen_asset_hashes.insert(dep_hash).second) {
+      continue;
+    }
+
+    auto asset = co_await LoadMaterialAssetAsyncImpl(dep_asset_key);
+    if (!asset) {
+      continue;
+    }
+
+    loaded_materials.insert_or_assign(dep_asset_key, std::move(asset));
+  }
+
+  co_return loaded_materials;
+}
+
+auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
+  const LoadedGeometryBuffersByIndex& buffers_by_index,
+  const LoadedGeometryMaterialsByKey& materials_by_key) -> void
+{
+  AssertOwningThread();
+
+  using data::BufferResource;
+  using data::MaterialAsset;
+  using data::MeshType;
+
+  for (const auto& mesh_ptr : asset.Meshes()) {
+    if (!mesh_ptr) {
+      continue;
+    }
+
+    auto& mesh = *mesh_ptr;
+    const auto& mesh_desc_opt = mesh.Descriptor();
+    if (mesh_desc_opt
+      && mesh_desc_opt->mesh_type
+        == static_cast<uint8_t>(MeshType::kStandard)) {
+      const auto& info = mesh_desc_opt->info.standard;
+
+      const auto vb_it
+        = buffers_by_index.find(static_cast<uint32_t>(info.vertex_buffer));
+      const auto ib_it
+        = buffers_by_index.find(static_cast<uint32_t>(info.index_buffer));
+
+      std::shared_ptr<BufferResource> vb;
+      if (vb_it != buffers_by_index.end()) {
+        vb = vb_it->second.resource;
+      }
+
+      std::shared_ptr<BufferResource> ib;
+      if (ib_it != buffers_by_index.end()) {
+        ib = ib_it->second.resource;
+      }
+
+      mesh.SetBufferResources(std::move(vb), std::move(ib));
+    }
+
+    const auto submeshes = mesh.SubMeshes();
+    for (size_t i = 0; i < submeshes.size(); ++i) {
+      const auto& sm_desc_opt = submeshes[i].Descriptor();
+      if (!sm_desc_opt) {
+        continue;
+      }
+
+      const auto mat_key = sm_desc_opt->material_asset_key;
+      if (mat_key == data::AssetKey {}) {
+        continue;
+      }
+
+      auto mat_it = materials_by_key.find(mat_key);
+      if (mat_it == materials_by_key.end() || !mat_it->second) {
+        mesh.SetSubMeshMaterial(i, MaterialAsset::CreateDefault());
+        continue;
+      }
+
+      mesh.SetSubMeshMaterial(i, mat_it->second);
+    }
+  }
+}
+
+auto AssetLoader::PublishGeometryDependencyEdgesAndRelease(
+  const data::AssetKey& dependent_asset_key,
+  const LoadedGeometryBuffersByIndex& buffers_by_index,
+  const LoadedGeometryMaterialsByKey& materials_by_key) -> void
+{
+  AssertOwningThread();
+
+  for (const auto& [resource_index, loaded] : buffers_by_index) {
+    (void)resource_index;
+    if (!loaded.resource) {
+      continue;
+    }
+    AddResourceDependency(dependent_asset_key, loaded.key);
+    (void)ReleaseResource(loaded.key);
+  }
+
+  for (const auto& [dep_key, dep_asset] : materials_by_key) {
+    if (!dep_asset) {
+      continue;
+    }
+    AddAssetDependency(dependent_asset_key, dep_key);
+    content_cache_.CheckIn(HashAssetKey(dep_key));
+  }
+}
+
+auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
+  -> co::Co<std::shared_ptr<data::GeometryAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadGeometryAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  const auto hash_key = HashAssetKey(key);
+  if (auto cached = content_cache_.CheckOut<data::GeometryAsset>(hash_key)) {
+    co_return cached;
+  }
+
+  if (auto it = in_flight_geometry_assets_.find(hash_key);
+    it != in_flight_geometry_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op
+    = [this, key, hash_key]() -> co::Co<std::shared_ptr<data::GeometryAsset>> {
+    struct EraseOnExit final {
+      AssetLoader* loader;
+      uint64_t key_hash;
+      ~EraseOnExit() noexcept
+      {
+        loader->in_flight_geometry_assets_.erase(key_hash);
+      }
+    } erase { this, hash_key };
+
+    try {
+      if (auto cached
+        = content_cache_.CheckOut<data::GeometryAsset>(hash_key)) {
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::GeometryAsset::ClassTypeId(), key);
+      auto decoded
+        = std::static_pointer_cast<data::GeometryAsset>(decoded_result.asset);
+      if (!decoded
+        || decoded->GetTypeId() != data::GeometryAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::GeometryAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+      if (!decoded_result.dependency_collector) {
+        LOG_F(ERROR, "Missing dependency collector for decoded geometry asset");
+        co_return nullptr;
+      }
+
+      // Publish (owning thread), mirroring the Material pipeline:
+      // 1) Load dependencies using DependencyCollector (single source).
+      // 2) Bind runtime-only pointers into the decoded object graph.
+      // 3) Store the fully published asset.
+      // 4) Register dependency edges + release temporary checkouts.
+      const auto& collector = *decoded_result.dependency_collector;
+
+      const auto loaded_buffers_by_index
+        = co_await LoadGeometryBufferDependenciesAsync(collector);
+      const auto loaded_materials
+        = co_await LoadGeometryMaterialDependenciesAsync(collector);
+
+      BindGeometryRuntimePointers(
+        *decoded, loaded_buffers_by_index, loaded_materials);
+
+      // Store the fully published asset.
+      content_cache_.Store(hash_key, decoded);
+
+      PublishGeometryDependencyEdgesAndRelease(
+        key, loaded_buffers_by_index, loaded_materials);
+
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_geometry_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
 }
 
 //=== Resource Loading  ======================================================//
@@ -862,61 +1398,277 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
     co_return nullptr;
   }
 
-  const auto key_hash
-    = std::hash<internal::InternalResourceKey> {}(internal_key);
+  const auto key_hash = HashResourceKey(key);
   if (auto cached = content_cache_.CheckOut<T>(key_hash)) {
     co_return cached;
   }
 
-  const uint16_t source_id = internal_key.GetPakIndex();
-  const auto resource_index = internal_key.GetResourceIndex();
+  if constexpr (std::same_as<T, data::TextureResource>) {
+    if (auto it = in_flight_textures_.find(key_hash);
+      it != in_flight_textures_.end()) {
+      co_return co_await it->second;
+    }
 
-  LOG_F(2, "scheduling decode on thread pool");
-  auto decoded
-    = co_await thread_pool_->Run([this, source_id, resource_index]() {
-        return LoadResourceUncached<T>(source_id, resource_index);
-      });
+    auto op = [this, key,
+                key_hash]() -> co::Co<std::shared_ptr<data::TextureResource>> {
+      struct EraseOnExit final {
+        AssetLoader* loader;
+        uint64_t key_hash;
+        ~EraseOnExit() noexcept { loader->in_flight_textures_.erase(key_hash); }
+      } erase { this, key_hash };
 
-  AssertOwningThread();
-  if (!decoded) {
+      try {
+        if (auto cached
+          = content_cache_.CheckOut<data::TextureResource>(key_hash)) {
+          co_return cached;
+        }
+
+        const internal::InternalResourceKey internal_key(key);
+        const uint16_t source_id = internal_key.GetPakIndex();
+        const auto resource_index = internal_key.GetResourceIndex();
+
+        // Resolve on owning thread: choose source, open independent readers,
+        // and position the descriptor reader to the resource.
+        struct PreparedDecode final {
+          LoadFnErased loader;
+          std::unique_ptr<serio::AnyReader> desc_reader;
+          std::unique_ptr<serio::AnyReader> buf_reader;
+          std::unique_ptr<serio::AnyReader> tex_reader;
+          const PakFile* source_pak = nullptr;
+        } prepared;
+
+        {
+          const auto source_it = impl_->source_id_to_index.find(source_id);
+          if (source_it == impl_->source_id_to_index.end()) {
+            co_return nullptr;
+          }
+          const auto& source = *impl_->sources.at(source_it->second);
+
+          if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+            const auto* pak_source
+              = static_cast<const internal::PakFileSource*>(&source);
+            prepared.source_pak = &pak_source->Pak();
+          }
+
+          const auto* resource_table = source.GetTextureTable();
+          prepared.desc_reader = source.CreateTextureTableReader();
+          if (!resource_table || !prepared.desc_reader) {
+            co_return nullptr;
+          }
+
+          const auto offset = resource_table->GetResourceOffset(resource_index);
+          if (!offset) {
+            co_return nullptr;
+          }
+          if (auto seek_res = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+            !seek_res) {
+            co_return nullptr;
+          }
+
+          prepared.buf_reader = source.CreateBufferDataReader();
+          prepared.tex_reader = source.CreateTextureDataReader();
+
+          auto loader_it = resource_loaders_.find(data::TextureResource::ClassTypeId());
+          if (loader_it == resource_loaders_.end()) {
+            LOG_F(ERROR, "No loader registered for resource type id: {}",
+              data::TextureResource::ClassTypeId());
+            co_return nullptr;
+          }
+          prepared.loader = loader_it->second;
+        }
+
+        LOG_F(2, "scheduling texture decode on thread pool");
+        auto decoded = co_await thread_pool_->Run(
+          [this, source_id, prepared = std::move(prepared)]() mutable {
+            ScopedCurrentSourceId source_guard(source_id);
+
+            LoaderContext context {
+              .asset_loader = this,
+              .current_asset_key = {},
+              .desc_reader = prepared.desc_reader.get(),
+              .data_readers
+              = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .work_offline = work_offline_,
+              .source_pak = prepared.source_pak,
+            };
+
+            auto void_ptr = prepared.loader(context);
+            auto typed = std::static_pointer_cast<data::TextureResource>(void_ptr);
+            if (!typed || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
+              return std::shared_ptr<data::TextureResource> {};
+            }
+            return typed;
+          });
+
+        AssertOwningThread();
+        if (!decoded) {
+          co_return nullptr;
+        }
+
+        content_cache_.Store(key_hash, decoded);
+        co_return decoded;
+      } catch (const co::TaskCancelledException& e) {
+        throw OperationCancelledException(e.what());
+      }
+    }();
+
+    co::Shared shared(std::move(op));
+    in_flight_textures_.insert_or_assign(key_hash, shared);
+    co_return co_await shared;
+  } else if constexpr (std::same_as<T, data::BufferResource>) {
+    if (auto it = in_flight_buffers_.find(key_hash);
+      it != in_flight_buffers_.end()) {
+      co_return co_await it->second;
+    }
+
+    auto op = [this, key,
+                key_hash]() -> co::Co<std::shared_ptr<data::BufferResource>> {
+      struct EraseOnExit final {
+        AssetLoader* loader;
+        uint64_t key_hash;
+        ~EraseOnExit() noexcept { loader->in_flight_buffers_.erase(key_hash); }
+      } erase { this, key_hash };
+
+      try {
+        if (auto cached
+          = content_cache_.CheckOut<data::BufferResource>(key_hash)) {
+          co_return cached;
+        }
+
+        const internal::InternalResourceKey internal_key(key);
+        const uint16_t source_id = internal_key.GetPakIndex();
+        const auto resource_index = internal_key.GetResourceIndex();
+
+        // Resolve on owning thread: choose source, open independent readers,
+        // and position the descriptor reader to the resource.
+        struct PreparedDecode final {
+          LoadFnErased loader;
+          std::unique_ptr<serio::AnyReader> desc_reader;
+          std::unique_ptr<serio::AnyReader> buf_reader;
+          std::unique_ptr<serio::AnyReader> tex_reader;
+          const PakFile* source_pak = nullptr;
+        } prepared;
+
+        {
+          const auto source_it = impl_->source_id_to_index.find(source_id);
+          if (source_it == impl_->source_id_to_index.end()) {
+            co_return nullptr;
+          }
+          const auto& source = *impl_->sources.at(source_it->second);
+
+          if (source.GetTypeId() == internal::PakFileSource::ClassTypeId()) {
+            const auto* pak_source
+              = static_cast<const internal::PakFileSource*>(&source);
+            prepared.source_pak = &pak_source->Pak();
+          }
+
+          const auto* resource_table = source.GetBufferTable();
+          prepared.desc_reader = source.CreateBufferTableReader();
+          if (!resource_table || !prepared.desc_reader) {
+            co_return nullptr;
+          }
+
+          const auto offset = resource_table->GetResourceOffset(resource_index);
+          if (!offset) {
+            co_return nullptr;
+          }
+          if (auto seek_res = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+            !seek_res) {
+            co_return nullptr;
+          }
+
+          prepared.buf_reader = source.CreateBufferDataReader();
+          prepared.tex_reader = source.CreateTextureDataReader();
+
+          auto loader_it = resource_loaders_.find(data::BufferResource::ClassTypeId());
+          if (loader_it == resource_loaders_.end()) {
+            LOG_F(ERROR, "No loader registered for resource type id: {}",
+              data::BufferResource::ClassTypeId());
+            co_return nullptr;
+          }
+          prepared.loader = loader_it->second;
+        }
+
+        LOG_F(2, "scheduling buffer decode on thread pool");
+        auto decoded = co_await thread_pool_->Run(
+          [this, source_id, prepared = std::move(prepared)]() mutable {
+            ScopedCurrentSourceId source_guard(source_id);
+
+            LoaderContext context {
+              .asset_loader = this,
+              .current_asset_key = {},
+              .desc_reader = prepared.desc_reader.get(),
+              .data_readers
+              = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .work_offline = work_offline_,
+              .source_pak = prepared.source_pak,
+            };
+
+            auto void_ptr = prepared.loader(context);
+            auto typed = std::static_pointer_cast<data::BufferResource>(void_ptr);
+            if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
+              return std::shared_ptr<data::BufferResource> {};
+            }
+            return typed;
+          });
+
+        AssertOwningThread();
+        if (!decoded) {
+          co_return nullptr;
+        }
+
+        content_cache_.Store(key_hash, decoded);
+        co_return decoded;
+      } catch (const co::TaskCancelledException& e) {
+        throw OperationCancelledException(e.what());
+      }
+    }();
+
+    co::Shared shared(std::move(op));
+    in_flight_buffers_.insert_or_assign(key_hash, shared);
+    co_return co_await shared;
+  } else {
+    static_assert(std::same_as<T, data::TextureResource>
+        || std::same_as<T, data::BufferResource>,
+      "Unsupported resource type for LoadResourceAsync");
     co_return nullptr;
   }
-
-  content_cache_.Store(key_hash, decoded);
-  co_return decoded;
 }
 
 void oxygen::content::AssetLoader::UnloadObject(
-  oxygen::TypeId& type_id, std::shared_ptr<void>& value)
+  uint64_t cache_key, const oxygen::TypeId& type_id)
 {
   if (work_offline_) {
     LOG_F(2, "Skipping unload of type {} due to offline mode", type_id);
     return;
   }
-  // Invoke the resource unload function
-  auto unload_it = unloaders_.find(type_id);
-  if (unload_it != unloaders_.end()) {
-    unload_it->second(value, *this);
-  } else {
-    LOG_F(WARNING, "No unload function registered for type: {}", type_id);
-  }
+
+  // TODO: invoke registered eviction handlers for the resource type
+  // Find the eviction handler by type_id (map)
+  // Find the ResourceKey from the cache_key (map)
 }
 
 auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
 {
   AssertOwningThread();
   const auto key_hash = HashResourceKey(key);
+  const internal::InternalResourceKey internal_key(key);
+  const auto expected_type_id
+    = GetResourceTypeIdByIndex(internal_key.GetResourceTypeIndex());
 
   // The resource should always be checked in on release. Whether it remains in
   // the cache or gets evicted is dependent on the eviction policy.
-  auto guard
-    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
-                                  std::shared_ptr<void> value, TypeId type_id) {
-        DCHECK_F(SanityCheckResourceEviction(key_hash, cache_key, type_id));
-        LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
-        UnloadObject(type_id, value);
-      });
-  content_cache_.CheckIn(HashResourceKey(key));
+  auto guard = content_cache_.OnEviction(
+    [&](const uint64_t cache_key, std::shared_ptr<void> value,
+      const TypeId type_id) {
+      DCHECK_F(SanityCheckResourceEviction(
+        key_hash, cache_key, expected_type_id, type_id));
+      LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
+
+      // TODO: find the
+      UnloadObject(cache_key, type_id);
+    });
+  content_cache_.CheckIn(key_hash);
   return !content_cache_.Contains(key_hash);
 }
 

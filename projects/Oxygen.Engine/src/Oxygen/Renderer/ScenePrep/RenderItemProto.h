@@ -14,7 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>

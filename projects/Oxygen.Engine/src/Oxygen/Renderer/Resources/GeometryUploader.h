@@ -18,7 +18,7 @@
 #include <Oxygen/Core/Types/Epoch.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
+#include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>

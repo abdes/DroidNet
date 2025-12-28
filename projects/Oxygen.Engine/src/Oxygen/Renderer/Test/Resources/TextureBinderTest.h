@@ -8,27 +8,99 @@
 
 #include <cstdint>
 #include <memory>
+#include <span>
+#include <stdexcept>
+#include <unordered_map>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/TextureResourceLoader.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
+#include <Oxygen/Renderer/Test/Resources/TextureBinderTestPayloads.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/Upload/UploadPolicy.h>
 
 namespace oxygen::renderer::testing {
 
+//! Deterministic fake for callback-based texture loads.
+/*!
+ This fake avoids OxCo activation requirements by completing loads
+ synchronously on the calling thread.
+*/
+class FakeTextureResourceLoader final : public content::TextureResourceLoader {
+public:
+  FakeTextureResourceLoader() = default;
+  ~FakeTextureResourceLoader() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(FakeTextureResourceLoader)
+  OXYGEN_DEFAULT_MOVABLE(FakeTextureResourceLoader)
+
+  void StartLoadTexture(content::ResourceKey key,
+    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+    override
+  {
+    const auto it = results_.find(key);
+    if (it == results_.end()) {
+      on_complete(nullptr);
+      return;
+    }
+    on_complete(it->second);
+  }
+
+  [[nodiscard]] auto MintSyntheticTextureKey() -> content::ResourceKey override
+  {
+    return content::ResourceKey { next_key_++ };
+  }
+
+  auto SetTexture(content::ResourceKey key,
+    std::shared_ptr<data::TextureResource> texture) -> void
+  {
+    results_.insert_or_assign(key, std::move(texture));
+  }
+
+  auto SetLoadFailure(content::ResourceKey key) -> void
+  {
+    results_.insert_or_assign(key, nullptr);
+  }
+
+  [[nodiscard]] auto PreloadCookedTexture(std::span<const std::uint8_t> payload)
+    -> content::ResourceKey
+  {
+    const auto key = MintSyntheticTextureKey();
+    PreloadCookedTexture(key, payload);
+    return key;
+  }
+
+  auto PreloadCookedTexture(
+    content::ResourceKey key, std::span<const std::uint8_t> payload) -> void
+  {
+    const auto decoded = DecodeCookedTexturePayload(payload);
+    if (decoded == nullptr) {
+      throw std::runtime_error("DecodeCookedTexturePayload failed");
+    }
+    SetTexture(key, decoded);
+  }
+
+private:
+  std::unordered_map<content::ResourceKey,
+    std::shared_ptr<data::TextureResource>>
+    results_;
+
+  std::uint64_t next_key_ { 1U };
+};
+
 //! Test harness for TextureBinder unit tests.
 /*! Provides a minimal renderer upload environment (FakeGraphics + real
     UploadCoordinator + staging provider) without depending on the
     UploadCoordinator test suite.
 
-    The harness also owns an AssetLoader instance and constructs a TextureBinder
-    ready for tests.
+    The harness also owns a fake TextureResourceLoader and constructs a
+    TextureBinder ready for tests.
 */
 class TextureBinderTest : public ::testing::Test {
 protected:
@@ -54,9 +126,9 @@ protected:
     return *staging_provider_;
   }
 
-  [[nodiscard]] auto AssetLoaderRef() -> content::AssetLoader&
+  [[nodiscard]] auto Loader() -> FakeTextureResourceLoader&
   {
-    return *asset_loader_;
+    return *texture_loader_;
   }
 
   [[nodiscard]] auto Binder() -> resources::TextureBinder&
@@ -70,7 +142,7 @@ private:
   std::shared_ptr<renderer::testing::FakeGraphics> gfx_;
   std::unique_ptr<engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
-  std::unique_ptr<content::AssetLoader> asset_loader_;
+  std::unique_ptr<FakeTextureResourceLoader> texture_loader_;
   std::unique_ptr<resources::TextureBinder> texture_binder_;
 };
 

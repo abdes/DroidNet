@@ -6,25 +6,32 @@
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
-#include <optional>
-#include <span>
-#include <unordered_map>
-#include <vector>
+
+#if defined(OXYGEN_ENGINE_TESTING)
+#  include <optional>
+#endif
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Renderer/Upload/StagingProvider.h>
-#include <Oxygen/Renderer/Upload/Types.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+#include <Oxygen/Renderer/Resources/ITextureBinder.h>
 #include <Oxygen/Renderer/api_export.h>
+
+namespace oxygen {
+class Graphics;
+} // namespace oxygen
+
+namespace oxygen::engine::upload {
+class StagingProvider;
+class UploadCoordinator;
+} // namespace oxygen::engine::upload
+
+namespace oxygen::graphics {
+class Texture;
+} // namespace oxygen::graphics
 
 namespace oxygen::data {
 class TextureResource;
@@ -35,51 +42,68 @@ namespace oxygen::renderer::resources {
 //! Manages texture binding to shader-visible descriptor heap indices.
 /*!
  TextureBinder provides runtime texture loading and binding for PBR material
- rendering, enabling materials to reference textures that can be sampled in
- shaders. Textures can be loaded from PAK files or loose cooked filesystem.
+ rendering. It allows materials to reference textures that may be loaded from
+ PAK files, loose cooked files, or in-memory buffers, via the `AssetLoader`
+ abstraction.
 
- ## Key Features:
+ ### Primary behaviors
 
- - **Storage-agnostic**: Works with PAK files or loose cooked files via
-   AssetLoader abstraction
- - **Stable SRV indices**: Same resource index always returns same SRV index
- - **Placeholder-to-final swap**: Immediate response with placeholder, async
-   load and seamless replacement
- - **Error handling**: Magenta/black checkerboard for loading failures
- - **Deduplication**: Resource index-based identity ensures efficient GPU
-   memory usage
+ - **Stable SRV indices**: `GetOrAllocate()` returns a stable shader-visible SRV
+   index immediately. The SRV index is the value materials use in shaders and
+   must remain stable for the lifetime of the entry.
+ - **Descriptor repointing model**: The implementation separates the shader
+   visible SRV index from the descriptor backing that index. When a per-entry
+   descriptor exists, the binder may `UpdateView` on that descriptor to point it
+   at a new `Texture` while keeping the same SRV index. This enables transparent
+   replacement of placeholder textures with final textures.
 
- ## Lifecycle:
+ ### Placeholder / error strategy
 
- 1. `OnFrameStart()` called once per frame before any operations
- 2. `GetOrAllocate()` called during material serialization
- 3. Returns stable SRV index immediately (may reference placeholder)
- 4. Async texture loading and upload occurs in background
- 5. `OnFrameEnd()` called at end of frame for cleanup
+ The binder uses three distinct cases by design:
+ - **Global placeholder (fast fallback)**: a single shared placeholder created
+   in the constructor and used for the hot fast-path (e.g., opaque ResourceKey
+   `0`). This path does not allocate per-entry descriptors and therefore cannot
+   be transparently repointed per-entry.
+ - **Per-entry placeholder (temporary, re-pointable)**: on normal allocation the
+   binder creates a per-entry placeholder texture and a descriptor view for that
+   entry. When the real texture finishes uploading the binder updates the
+   entry's descriptor to reference the final texture. The SRV index returned to
+   callers remains unchanged while the descriptor is repointed.
+ - **Shared error texture (single sink)**: a single magenta/black error texture
+   is created once and reused for all failures. Entries may be repointed to this
+   shared error texture; the error texture itself is not recreated per-entry.
 
- ## Index Semantics:
+ These choices balance hot-path performance, predictable SRV indices, and
+ transparent in-place replacement when desired.
 
- - Resource index `0` is VALID and reserved for the fallback texture.
-   The asset pipeline/packer must store the fallback texture at index `0`.
-   The runtime may special-case this index as a fast fallback path.
- - Only `kInvalidBindlessIndex` (0xFFFFFFFF) indicates invalid index
- - `GetOrAllocate()` returns stable SRV index immediately
+ ### Failure policies
 
+ The binder supports distinct failure behaviors (see `FailurePolicy`) such as
+ binding the shared error texture immediately or keeping the per-entry
+ placeholder bound when upload submission failed.
+
+ ### Lifecycle (concise)
+
+ 1. `OnFrameStart()` — begin frame; drain upload completions.
+ 2. `GetOrAllocate()` — return stable SRV index, create per-entry state when
+    appropriate, and initiate async load.
+ 3. Async upload completes — descriptor is updated or repointed; entry state
+    transitions accordingly.
+
+ @note Resource key `ResourceKey::kPlaceholder` is a valid, reserved fallback
+   index used by the asset pipeline and fast-path code.
  @see MaterialBinder for integration example
  @see ResourceRegistry for stable index pattern
 */
-class TextureBinder {
+class TextureBinder : public ITextureBinder {
 public:
-  /*!
-   @param gfx Graphics backend (must outlive TextureBinder)
-   @param uploader Upload coordinator for async texture uploads
-   @param staging_provider Staging provider used for placeholder uploads
-   @param asset_loader Asset loading interface for texture resources
-  */
+  using ProviderT = engine::upload::StagingProvider;
+  using CoordinatorT = engine::upload::UploadCoordinator;
+
   OXGN_RNDR_API TextureBinder(observer_ptr<Graphics> gfx,
-    observer_ptr<engine::upload::UploadCoordinator> uploader,
-    observer_ptr<engine::upload::StagingProvider> staging_provider,
-    observer_ptr<content::AssetLoader> asset_loader);
+    observer_ptr<ProviderT> staging_provider,
+    observer_ptr<CoordinatorT> uploader,
+    observer_ptr<content::TextureResourceLoader> texture_loader);
 
   OXYGEN_MAKE_NON_COPYABLE(TextureBinder)
   OXYGEN_MAKE_NON_MOVABLE(TextureBinder)
@@ -97,67 +121,16 @@ public:
    Returns existing SRV index if resource was previously allocated, otherwise
    creates a new entry with placeholder texture and initiates async loading.
 
-   @param resource_index Texture resource index from asset system
+   @param resource_key Texture resource key from asset system
    @return Stable SRV index usable in shaders
 
-   ### Performance Characteristics
-
-   - Time Complexity: O(1) for hash lookup
-   - Memory: Allocates descriptor and placeholder on first call
-   - Async: Actual texture loading occurs asynchronously
-
-   ### Usage Examples
-
-   ```cpp
-   auto srv_index =
-   texture_binder.GetOrAllocate(material.GetBaseColorTexture());
-   // srv_index is immediately usable (references placeholder if loading)
-   ```
-
-   @note Same resource_index always returns same SRV index
-     @note Resource index `0` is reserved for the fallback texture and may be
-       special-cased by the runtime (currently returns the placeholder).
+   @note Same resource key always returns same SRV index
+   @note Resource keys `ResourceKey::kFallback` and `ResourceKey::kPlaceholder`
+    are reserved for the fallback and placeholder textures.
    @see GetErrorTextureIndex
   */
-  //! Get or allocate by opaque content::ResourceKey (source-aware key)
-  /*!
-    The renderer MUST use the opaque `content::ResourceKey` form only.
-    Index-based allocation paths are removed to prevent duplicate allocations
-    and ensure a single authoritative CPU-side loader (`AssetLoader`).
-  */
-  OXGN_RNDR_API auto GetOrAllocate(content::ResourceKey resource_key)
-    -> ShaderVisibleIndex;
-
-#if defined(OXYGEN_ENGINE_TESTING)
-  struct DebugEntrySnapshot {
-    std::shared_ptr<graphics::Texture> texture;
-    std::shared_ptr<graphics::Texture> placeholder_texture;
-    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
-    bool is_placeholder { false };
-    bool load_failed { false };
-    std::optional<std::uint64_t> pending_fence;
-  };
-
-  [[nodiscard]] auto DebugGetEntry(content::ResourceKey key) const
-    -> std::optional<DebugEntrySnapshot>
-  {
-    const auto it = texture_map_.find(key);
-    if (it == texture_map_.end()) {
-      return std::nullopt;
-    }
-
-    DebugEntrySnapshot snapshot;
-    snapshot.texture = it->second.texture;
-    snapshot.placeholder_texture = it->second.placeholder_texture;
-    snapshot.descriptor_index = it->second.descriptor_index;
-    snapshot.is_placeholder = it->second.is_placeholder;
-    snapshot.load_failed = it->second.load_failed;
-    if (it->second.pending_ticket.has_value()) {
-      snapshot.pending_fence = it->second.pending_ticket->fence.get();
-    }
-    return snapshot;
-  }
-#endif
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetOrAllocate(
+    const content::ResourceKey& resource_key) -> ShaderVisibleIndex override;
 
   //! Get error-indicator texture SRV index for loading failures.
   /*!
@@ -166,73 +139,12 @@ public:
 
    @return SRV index for error-indicator texture
   */
-  [[nodiscard]] OXGN_RNDR_API auto GetErrorTextureIndex() const
-    -> ShaderVisibleIndex;
+  [[nodiscard]] OXGN_RNDR_NDAPI auto GetErrorTextureIndex() const
+    -> ShaderVisibleIndex override;
 
 private:
-  enum class FailurePolicy {
-    kBindErrorTexture,
-    kKeepPlaceholderBound,
-  };
-
-  struct TextureEntry {
-    std::shared_ptr<graphics::Texture> texture;
-    std::shared_ptr<graphics::Texture> placeholder_texture;
-    ShaderVisibleIndex srv_index;
-    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
-    bool is_placeholder { true };
-    bool load_failed { false };
-    std::optional<oxygen::engine::upload::UploadTicket> pending_ticket;
-    std::optional<graphics::TextureViewDescription> pending_view_desc;
-    // Optional source-aware resource key when available. Kept opaque to
-    // renderer public headers; used to request loads from AssetLoader.
-    std::optional<oxygen::content::ResourceKey> resource_key;
-  };
-
-  auto CreatePlaceholderTexture() -> std::shared_ptr<graphics::Texture>;
-  auto CreateErrorTexture() -> std::shared_ptr<graphics::Texture>;
-  auto InitiateAsyncLoad(content::ResourceKey resource_key, TextureEntry& entry)
-    -> void;
-
-  auto OnTextureResourceLoaded(content::ResourceKey resource_key,
-    std::shared_ptr<data::TextureResource> tex_res) -> void;
-
-  auto HandleLoadFailure(content::ResourceKey resource_key, TextureEntry& entry,
-    FailurePolicy policy,
-    std::shared_ptr<graphics::Texture>&& texture_to_release) -> void;
-
-  auto TryRepointEntryToErrorTexture(
-    content::ResourceKey resource_key, TextureEntry& entry) -> bool;
-
-  auto ReleaseEntryPlaceholderIfOwned(TextureEntry& entry) -> void;
-
-  auto FindEntryOrLog(content::ResourceKey resource_key) -> TextureEntry*;
-
-  auto SubmitTextureUpload(content::ResourceKey resource_key,
-    TextureEntry& entry, const graphics::TextureDesc& desc,
-    std::shared_ptr<graphics::Texture>&& new_texture,
-    std::vector<oxygen::engine::upload::UploadSubresource>&& dst_subresources,
-    oxygen::engine::upload::UploadTextureSourceView&& src_view,
-    std::size_t trailing_bytes) -> void;
-
-  observer_ptr<Graphics> gfx_;
-  observer_ptr<engine::upload::UploadCoordinator> uploader_;
-  observer_ptr<engine::upload::StagingProvider> staging_provider_;
-  observer_ptr<content::AssetLoader> asset_loader_;
-
-  std::unordered_map<content::ResourceKey, TextureEntry> texture_map_;
-
-  std::shared_ptr<graphics::Texture> placeholder_texture_;
-  ShaderVisibleIndex placeholder_texture_index_ { kInvalidShaderVisibleIndex };
-  std::shared_ptr<graphics::Texture> error_texture_;
-  ShaderVisibleIndex error_texture_index_ { kInvalidShaderVisibleIndex };
-
-  std::uint64_t total_requests_ { 0U };
-  std::uint64_t cache_hits_ { 0U };
-  std::uint64_t load_failures_ { 0U };
-
-  auto SubmitTextureData(const std::shared_ptr<graphics::Texture>& texture,
-    const std::span<const std::byte> data, const char* debug_name) -> void;
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace oxygen::renderer::resources

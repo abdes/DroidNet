@@ -6,9 +6,9 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#include <array>
+#include <algorithm>
 #include <cstdint>
-#include <cstring>
+#include <limits>
 #include <vector>
 
 #include <Oxygen/Core/Types/Frame.h>
@@ -30,14 +30,44 @@ using oxygen::renderer::testing::MakeCookedTexture4x4Bc1Payload;
 using oxygen::renderer::testing::MakeInvalidTightPackedTexture1x1Rgba8Payload;
 using oxygen::renderer::testing::TextureBinderTest;
 
+[[nodiscard]] auto CountSrvViewCreationsForIndex(
+  const oxygen::renderer::testing::FakeGraphics& gfx, const uint32_t index)
+  -> std::size_t
+{
+  return static_cast<std::size_t>(std::count_if(
+    gfx.srv_view_log_.events.begin(), gfx.srv_view_log_.events.end(),
+    [&](const auto& e) { return e.index == index; }));
+}
+
+[[nodiscard]] auto LastSrvViewTextureForIndex(
+  const oxygen::renderer::testing::FakeGraphics& gfx, const uint32_t index)
+  -> const oxygen::graphics::Texture*
+{
+  for (auto it = gfx.srv_view_log_.events.rbegin();
+    it != gfx.srv_view_log_.events.rend(); ++it) {
+    if (it->index == index) {
+      return it->texture;
+    }
+  }
+  return nullptr;
+}
+
+[[nodiscard]] auto CaptureErrorTexturePtr(
+  const oxygen::renderer::testing::FakeGraphics& gfx,
+  const oxygen::bindless::ShaderVisibleIndex error_index)
+  -> const oxygen::graphics::Texture*
+{
+  return LastSrvViewTextureForIndex(gfx, error_index.get());
+}
+
 //! The same key must always map to the same bindless SRV index.
 /*! The TextureBinder must not allocate multiple descriptors for repeated
     requests of the same resource key. */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_SameKey_IsStable)
+NOLINT_TEST_F(TextureBinderTest, SameKey_IsStable)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
 
   // Act
   const auto index_0 = Binder().GetOrAllocate(key);
@@ -51,7 +81,7 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_SameKey_IsStable)
 //! ResourceKey(0) is a renderer-side fallback sentinel.
 /*! The binder must not trigger descriptor allocation for this key and must not
     return the shared error-texture index. */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_ZeroKey_ReturnsPlaceholder)
+NOLINT_TEST_F(TextureBinderTest, ZeroKey_ReturnsPlaceholder)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
@@ -64,22 +94,40 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_ZeroKey_ReturnsPlaceholder)
   EXPECT_EQ(AllocatedSrvCount(), before);
 }
 
-//! A load failure must not change the per-resource SRV index.
-/*! When a load fails, the descriptor should be repointed to the error texture,
-    but the shader-visible handle returned by GetOrAllocate must remain stable.
- */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_LoadFailure_PreservesIndex)
+//! Load failures repoint the per-entry descriptor to the error texture.
+/*! The shader-visible index returned by GetOrAllocate must remain stable, but
+    the underlying SRV view should be repointed (via
+   ResourceRegistry::UpdateView) to the shared error texture.
+
+    This test observes repointing via FakeGraphics SRV view creation telemetry,
+    without accessing any TextureBinder internals.
+*/
+NOLINT_TEST_F(TextureBinderTest, LoadFailure_RepointsToError)
 {
   // Arrange
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  const auto before = AllocatedSrvCount();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
+
+  const auto error_index = Binder().GetErrorTextureIndex();
+  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  ASSERT_NE(error_texture, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
 
   // Act
   const auto index_0 = Binder().GetOrAllocate(key);
   const auto index_1 = Binder().GetOrAllocate(key);
 
-  // Assert
+  // Assert: stable SRV index, single allocation.
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, Binder().GetErrorTextureIndex());
+  EXPECT_NE(index_0, error_index);
+  EXPECT_EQ(AllocatedSrvCount(), before + 1U);
+
+  // Assert: descriptor for this entry is repointed to the shared error texture.
+  const auto* const bound_texture
+    = LastSrvViewTextureForIndex(Gfx(), index_0.get());
+  ASSERT_NE(bound_texture, nullptr);
+  EXPECT_EQ(bound_texture, error_texture);
 }
 
 //! Descriptor repoint must happen only after upload completion.
@@ -89,39 +137,40 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_LoadFailure_PreservesIndex)
     This test drives completion deterministically by controlling the fake
     transfer queue's completed fence value.
 */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_RepointOccursOnlyAfterCompletion)
+NOLINT_TEST_F(TextureBinderTest, RepointOccursOnlyAfterCompletion)
 {
-  // Arrange: preload a valid CPU-side texture resource into the AssetLoader
-  // cache using the buffer path, so StartLoadTexture returns immediately.
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  // Arrange: preload a valid CPU-side texture resource so StartLoadTexture
+  // completes immediately.
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
-
-  std::shared_ptr<oxygen::data::TextureResource> decoded;
-  AssetLoaderRef().StartLoadTextureFromBuffer(key,
-    std::span<const uint8_t>(payload.data(), payload.size()),
-    [&](std::shared_ptr<oxygen::data::TextureResource> tex) {
-      decoded = std::move(tex);
-    });
-  ASSERT_NE(decoded, nullptr);
+  const ResourceKey key = Loader().PreloadCookedTexture(
+    std::span<const uint8_t>(payload.data(), payload.size()));
 
   // Set a non-invalid frame slot so UploadTracker records a creation slot.
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  const auto srv_index = Binder().GetOrAllocate(key);
-  (void)srv_index;
+  const auto error_index = Binder().GetErrorTextureIndex();
+  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  ASSERT_NE(error_texture, nullptr);
 
-  const auto before = Binder().DebugGetEntry(key);
-  ASSERT_TRUE(before.has_value());
-  ASSERT_TRUE(before->pending_fence.has_value());
-  ASSERT_TRUE(before->placeholder_texture);
-  ASSERT_TRUE(before->is_placeholder);
-  ASSERT_FALSE(before->load_failed);
+  Gfx().srv_view_log_.events.clear();
+
+  const auto srv_index = Binder().GetOrAllocate(key);
+  const auto u_srv_index = srv_index.get();
 
   auto q
     = GfxPtr()->GetCommandQueue(oxygen::graphics::SingleQueueStrategy().KeyFor(
       oxygen::graphics::QueueRole::kTransfer));
   ASSERT_NE(q, nullptr);
+
+  // After allocation and load submission, the entry must have an SRV view
+  // registered at its bindless slot.
+  const auto creations_after_allocate
+    = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
+  ASSERT_GE(creations_after_allocate, 1U);
+
+  // The entry must not have been repointed to the error texture.
+  EXPECT_NE(LastSrvViewTextureForIndex(Gfx(), u_srv_index), error_texture);
 
   // Simulate that the transfer queue has NOT completed yet.
   q->QueueSignalCommand(0);
@@ -131,28 +180,24 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_RepointOccursOnlyAfterCompletion)
   // Act: binder frame start should not observe completion -> no repoint.
   Binder().OnFrameStart();
 
-  // Assert: still pending, placeholder not reclaimed.
-  const auto mid = Binder().DebugGetEntry(key);
-  ASSERT_TRUE(mid.has_value());
-  EXPECT_TRUE(mid->pending_fence.has_value());
-  EXPECT_TRUE(mid->placeholder_texture);
-  EXPECT_TRUE(mid->is_placeholder);
+  // Assert: no repoint while upload is incomplete.
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
+    creations_after_allocate);
 
-  // Now simulate completion by advancing the queue's completed fence.
-  q->QueueSignalCommand(*before->pending_fence);
+  // Now simulate completion by advancing the queue's completed fence beyond
+  // any possible registered upload fence.
+  q->QueueSignalCommand((std::numeric_limits<uint64_t>::max)());
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 3 });
 
   // Act: binder should now observe completion and repoint.
   Binder().OnFrameStart();
 
-  // Assert: ticket drained and placeholder reclaimed after repoint.
-  const auto after = Binder().DebugGetEntry(key);
-  ASSERT_TRUE(after.has_value());
-  EXPECT_FALSE(after->pending_fence.has_value());
-  EXPECT_FALSE(after->placeholder_texture);
-  EXPECT_FALSE(after->is_placeholder);
-  EXPECT_FALSE(after->load_failed);
+  // Assert: exactly one additional SRV view creation at the same index,
+  // indicating a descriptor repoint via UpdateView.
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
+    creations_after_allocate + 1U);
+  EXPECT_NE(LastSrvViewTextureForIndex(Gfx(), u_srv_index), error_texture);
 }
 
 //! Cooked texture layout violations must be rejected deterministically.
@@ -161,91 +206,70 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_RepointOccursOnlyAfterCompletion)
     assumptions, the binder must repoint to the error texture and must not
     allocate additional descriptors on subsequent calls.
 */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_InvalidCookedLayout_IsRejected)
+NOLINT_TEST_F(TextureBinderTest, InvalidCookedLayout_IsRejected)
 {
   // Arrange: preload a decoded resource that violates the cooked layout
   // assumptions (tight-packed rows).
   const auto before = AllocatedSrvCount();
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
   const auto payload = MakeInvalidTightPackedTexture1x1Rgba8Payload();
+  Loader().PreloadCookedTexture(
+    key, std::span<const uint8_t>(payload.data(), payload.size()));
 
-  std::shared_ptr<oxygen::data::TextureResource> decoded;
-  AssetLoaderRef().StartLoadTextureFromBuffer(key,
-    std::span<const uint8_t>(payload.data(), payload.size()),
-    [&](std::shared_ptr<oxygen::data::TextureResource> tex) {
-      decoded = std::move(tex);
-    });
-  ASSERT_NE(decoded, nullptr);
+  const auto error_index = Binder().GetErrorTextureIndex();
+  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  ASSERT_NE(error_texture, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
 
   // Act
   const auto index_0 = Binder().GetOrAllocate(key);
-  const auto snapshot_0 = Binder().DebugGetEntry(key);
   const auto index_1 = Binder().GetOrAllocate(key);
-  const auto snapshot_1 = Binder().DebugGetEntry(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_NE(index_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
-  ASSERT_TRUE(snapshot_0.has_value());
-  EXPECT_TRUE(snapshot_0->load_failed);
-  EXPECT_FALSE(snapshot_0->is_placeholder);
-  EXPECT_FALSE(snapshot_0->pending_fence.has_value());
-  EXPECT_FALSE(snapshot_0->placeholder_texture);
-
-  ASSERT_TRUE(snapshot_1.has_value());
-  EXPECT_TRUE(snapshot_1->load_failed);
-  EXPECT_FALSE(snapshot_1->is_placeholder);
-  EXPECT_FALSE(snapshot_1->placeholder_texture);
+  const auto* const bound_texture
+    = LastSrvViewTextureForIndex(Gfx(), index_0.get());
+  ASSERT_NE(bound_texture, nullptr);
+  EXPECT_EQ(bound_texture, error_texture);
 }
 
-//! Upload submission failures must keep the placeholder bound.
-/*! If the UploadCoordinator cannot submit work (e.g. staging allocation/map
-    fails), the binder must keep the placeholder SRV active (no descriptor
-    repoint to error) and mark the entry as failed deterministically.
-*/
 //! Unsupported formats must be rejected via the error texture.
 /*! This covers the F3 creation/format mismatch behavior: the binder must
     repoint the per-entry descriptor to the shared error texture while keeping
     the SRV index stable.
 */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_UnsupportedFormat_Rejected)
+NOLINT_TEST_F(TextureBinderTest, UnsupportedFormat_Rejected)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
   const auto payload = MakeCookedTexture4x4Bc1Payload();
+  Loader().PreloadCookedTexture(
+    key, std::span<const uint8_t>(payload.data(), payload.size()));
 
-  std::shared_ptr<oxygen::data::TextureResource> decoded;
-  AssetLoaderRef().StartLoadTextureFromBuffer(key,
-    std::span<const uint8_t>(payload.data(), payload.size()),
-    [&](std::shared_ptr<oxygen::data::TextureResource> tex) {
-      decoded = std::move(tex);
-    });
-  ASSERT_NE(decoded, nullptr);
+  const auto error_index = Binder().GetErrorTextureIndex();
+  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  ASSERT_NE(error_texture, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
 
   // Act
   const auto index_0 = Binder().GetOrAllocate(key);
-  const auto snapshot_0 = Binder().DebugGetEntry(key);
   const auto index_1 = Binder().GetOrAllocate(key);
-  const auto snapshot_1 = Binder().DebugGetEntry(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_NE(index_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
-  ASSERT_TRUE(snapshot_0.has_value());
-  EXPECT_TRUE(snapshot_0->load_failed);
-  EXPECT_FALSE(snapshot_0->is_placeholder);
-  EXPECT_FALSE(snapshot_0->pending_fence.has_value());
-  EXPECT_FALSE(snapshot_0->placeholder_texture);
-
-  ASSERT_TRUE(snapshot_1.has_value());
-  EXPECT_TRUE(snapshot_1->load_failed);
-  EXPECT_FALSE(snapshot_1->is_placeholder);
-  EXPECT_FALSE(snapshot_1->placeholder_texture);
+  const auto* const bound_texture
+    = LastSrvViewTextureForIndex(Gfx(), index_0.get());
+  ASSERT_NE(bound_texture, nullptr);
+  EXPECT_EQ(bound_texture, error_texture);
 }
 
 //! Forced-error mode must be deterministic.
@@ -258,33 +282,31 @@ NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_UnsupportedFormat_Rejected)
     placeholder texture should be released (deferred) to avoid leaking GPU
     resources.
 */
-NOLINT_TEST_F(TextureBinderTest, GetOrAllocate_ForcedError_IsDeterministic)
+NOLINT_TEST_F(TextureBinderTest, ForcedError_IsDeterministic)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
-  const ResourceKey key = AssetLoaderRef().MintSyntheticTextureKey();
+  const ResourceKey key = Loader().MintSyntheticTextureKey();
+
+  const auto error_index = Binder().GetErrorTextureIndex();
+  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  ASSERT_NE(error_texture, nullptr);
+
+  Gfx().srv_view_log_.events.clear();
 
   // Act
   const auto index_0 = Binder().GetOrAllocate(key);
-  const auto snapshot_0 = Binder().DebugGetEntry(key);
   const auto index_1 = Binder().GetOrAllocate(key);
-  const auto snapshot_1 = Binder().DebugGetEntry(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
   EXPECT_NE(index_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
-  ASSERT_TRUE(snapshot_0.has_value());
-  EXPECT_FALSE(snapshot_0->pending_fence.has_value());
-  EXPECT_TRUE(snapshot_0->load_failed);
-  EXPECT_FALSE(snapshot_0->is_placeholder);
-  EXPECT_FALSE(snapshot_0->placeholder_texture);
-
-  ASSERT_TRUE(snapshot_1.has_value());
-  EXPECT_TRUE(snapshot_1->load_failed);
-  EXPECT_FALSE(snapshot_1->is_placeholder);
-  EXPECT_FALSE(snapshot_1->placeholder_texture);
+  const auto* const bound_texture
+    = LastSrvViewTextureForIndex(Gfx(), index_0.get());
+  ASSERT_NE(bound_texture, nullptr);
+  EXPECT_EQ(bound_texture, error_texture);
 }
 
 } // namespace

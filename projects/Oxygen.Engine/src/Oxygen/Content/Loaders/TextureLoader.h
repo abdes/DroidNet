@@ -152,16 +152,4 @@ inline auto LoadTextureResource(LoaderContext context)
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadTextureResource)>);
 
-//! Unload function for TextureResource.
-inline auto UnloadTextureResource(
-  const std::shared_ptr<data::TextureResource>& /*resource*/,
-  AssetLoader& /*loader*/) noexcept -> void
-{
-  // TODO: cleanup GPU resources for the texture.
-  (void)0; // Placeholder for future GPU resource cleanup
-}
-
-static_assert(oxygen::content::UnloadFunction<decltype(UnloadTextureResource),
-  data::TextureResource>);
-
 } // namespace oxygen::content::loaders

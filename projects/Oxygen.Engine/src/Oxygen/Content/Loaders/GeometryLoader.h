@@ -13,6 +13,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -57,6 +59,7 @@ namespace detail {
       std::shared_ptr<data::BufferResource>>
   {
     using namespace oxygen::data::pak;
+    using data::BufferResource;
 
     DCHECK_NOTNULL_F(
       context.desc_reader, "expecting desc_reader not to be null");
@@ -86,6 +89,24 @@ namespace detail {
     }
 
     if (context.parse_only) {
+      return { nullptr, nullptr };
+    }
+
+    if (context.dependency_collector) {
+      auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+        if (resource_index == 0) {
+          return;
+        }
+        internal::ResourceRef ref {
+          .source = context.source_token,
+          .resource_type_id = BufferResource::ClassTypeId(),
+          .resource_index = resource_index,
+        };
+        context.dependency_collector->AddResourceDependency(ref);
+      };
+
+      collect_buffer_ref(info.vertex_buffer);
+      collect_buffer_ref(info.index_buffer);
       return { nullptr, nullptr };
     }
 
@@ -252,8 +273,8 @@ namespace detail {
     return desc;
   }
 
-  auto LoadSubMeshViews(serio::AnyReader& reader, uint32_t mesh_view_count)
-    -> std::vector<data::pak::MeshViewDesc>
+  inline auto LoadSubMeshViews(serio::AnyReader& reader,
+    uint32_t mesh_view_count) -> std::vector<data::pak::MeshViewDesc>
   {
     using namespace oxygen::data;
     using namespace oxygen::data::pak;
@@ -364,6 +385,12 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
     std::shared_ptr<const MaterialAsset> material;
     if (context.parse_only) {
       material = MaterialAsset::CreateDefault();
+    } else if (context.dependency_collector) {
+      if (sm_desc.material_asset_key != AssetKey {}) {
+        context.dependency_collector->AddAssetDependency(
+          sm_desc.material_asset_key);
+      }
+      material = MaterialAsset::CreateDefault();
     } else if (sm_desc.material_asset_key != AssetKey {}) {
       // Save reader position before loading material asset
       auto saved_position = reader.Position();
@@ -423,7 +450,7 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   return builder.Build();
 }
 
-auto LoadGeometryAsset(LoaderContext context)
+inline auto LoadGeometryAsset(LoaderContext context)
   -> std::unique_ptr<data::GeometryAsset>
 {
   using namespace oxygen::data;
@@ -474,16 +501,5 @@ auto LoadGeometryAsset(LoaderContext context)
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);
-
-//! Unload function for GeometryAsset.
-inline auto UnloadGeometryAsset(std::shared_ptr<data::GeometryAsset> /*asset*/,
-  AssetLoader& /*loader*/) noexcept -> void
-{
-  // Nothing to do for a geometry asset, its dependency resources will do the
-  // work when unloaded.
-}
-
-static_assert(oxygen::content::UnloadFunction<decltype(UnloadGeometryAsset),
-  data::GeometryAsset>);
 
 } // namespace oxygen::content::loaders
