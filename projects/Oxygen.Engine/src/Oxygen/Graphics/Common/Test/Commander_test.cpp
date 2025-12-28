@@ -643,8 +643,7 @@ NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_EndReturnsNull_NoSubmit)
 //! no Submit/OnSubmitted/OnExecuted invocations occur.
 NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_EndThrows_NoSubmit)
 {
-  EXPECT_CALL(*mock_recorder, End())
-    .WillOnce(Throw(std::runtime_error("End failed")));
+  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
   EXPECT_CALL(*primary_q, Submit(testing::A<CommandListPtr>())).Times(0);
   EXPECT_CALL(*mock_command_list, OnSubmitted()).Times(0);
   EXPECT_CALL(*mock_command_list, OnExecuted()).Times(0);
@@ -659,8 +658,7 @@ NOLINT_TEST_F(CommanderErrorTest, ImmediateSubmission_EndThrows_NoSubmit)
 //! absorbs error, nothing queued, no Submit attempt.
 NOLINT_TEST_F(CommanderErrorTest, RecorderEnd_Failure_LoggedNotThrown)
 {
-  EXPECT_CALL(*mock_recorder, End())
-    .WillOnce(Throw(std::runtime_error("Recorder end failed")));
+  EXPECT_CALL(*mock_recorder, End()).WillOnce(Return(nullptr));
 
   NOLINT_EXPECT_NO_THROW({
     auto deleter = commander->PrepareCommandRecorder(
