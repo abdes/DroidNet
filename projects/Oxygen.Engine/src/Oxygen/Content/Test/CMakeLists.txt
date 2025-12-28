@@ -36,6 +36,9 @@ m_gtest_program(
   Loaders
   SOURCES
     "AssetHeaderLoader_test.cpp"
+    "AssetLoader_async_test.cpp"
+    "AssetLoader_geometry_async_test.cpp"
+    "AssetLoader_buffer_from_buffer_async_test.cpp"
     "AssetLoader_basic_test.cpp"
     "EngineTagFactory_test_impl.cpp"
     "AssetLoader_deps_test.cpp"
@@ -48,6 +51,7 @@ m_gtest_program(
     "TextureLoader_test.cpp"
     "VirtualPathResolver_test.cpp"
     "Utils/PakUtils.h"
+    "AssetLoader_cancellation_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Content.Loaders.Tests

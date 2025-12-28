@@ -9,13 +9,8 @@
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
-#include <Oxygen/content/EngineTag.h>
 
 #if defined(OXYGEN_ENGINE_TESTING)
-
-namespace oxygen::content::internal {
-auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
-} // namespace oxygen::content::internal
 
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
@@ -49,13 +44,12 @@ auto TextureBinderTest::SetUp() -> void
   staging_provider_
     = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4, 0.5f);
 
-  asset_loader_ = std::make_unique<content::AssetLoader>(
-    content::internal::EngineTagFactory::Get());
+  texture_loader_ = std::make_unique<FakeTextureResourceLoader>();
 
   texture_binder_ = std::make_unique<resources::TextureBinder>(
-    observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() },
-    observer_ptr { asset_loader_.get() });
+    observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
+    observer_ptr { uploader_.get() },
+    observer_ptr<content::TextureResourceLoader> { texture_loader_.get() });
 }
 
 auto TextureBinderTest::AllocatedSrvCount() const -> uint32_t

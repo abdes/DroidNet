@@ -130,8 +130,9 @@ m_gtest_program(
     "Fakes/Graphics.h"
     "Resources/TextureBinderTest.cpp"
     "Resources/TextureBinderTest.h"
-    "Resources/TextureBinder_test.cpp"
-    "Resources/TextureBinderUploadFailure_test.cpp"
+    "Resources/TextureBinder_basic_test.cpp"
+    "Resources/TextureBinder_upload_test.cpp"
+    "Resources/TextureBinder_failures_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Renderer.TextureBinder.Tests
@@ -146,10 +147,27 @@ m_gtest_program(
     "Fakes/Graphics.h"
     "Resources/MaterialBinderTest.cpp"
     "Resources/MaterialBinderTest.h"
-    "Resources/MaterialBinder_test.cpp"
+    "Resources/MaterialBinder_basic_test.cpp"
+    "Resources/MaterialBinder_binding_test.cpp"
+    "Resources/MaterialBinder_placeholder_test.cpp"
+    "Resources/MaterialBinder_lifecycle_test.cpp"
+    "Resources/MaterialBinder_error_stress_test.cpp"
 )
 target_compile_definitions(
   Oxygen.Renderer.MaterialBinder.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)
+
+# TextureBinder unit tests (no backend dependency)
+m_gtest_program(
+  TransformUploader
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/TransformUploader_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.TransformUploader.Tests
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )

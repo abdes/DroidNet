@@ -4,31 +4,41 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Renderer/Resources/TextureBinder.h>
-
 #include <algorithm>
-#include <array>
 #include <cstddef>
-#include <cstring>
+#include <cstdint>
+#include <exception>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <span>
-#include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
+#include <Oxygen/Content/TextureResourceLoader.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Upload/Errors.h>
+#include <Oxygen/Renderer/Upload/StagingProvider.h>
+#include <Oxygen/Renderer/Upload/Types.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 namespace oxygen::renderer::resources {
@@ -36,15 +46,16 @@ namespace oxygen::renderer::resources {
 namespace {
 
   struct UploadLayout {
-    std::vector<oxygen::engine::upload::UploadSubresource> dst_subresources;
-    oxygen::engine::upload::UploadTextureSourceView src_view;
+    std::vector<engine::upload::UploadSubresource> dst_subresources;
+    engine::upload::UploadTextureSourceView src_view;
     std::size_t trailing_bytes { 0U };
   };
 
   struct UploadLayoutFailure {
-    enum class Reason {
+    enum class Reason : uint8_t {
       kDataTooSmall,
       kMipAlignmentOverflow,
+      kArithmeticOverflow,
     };
 
     Reason reason { Reason::kDataTooSmall };
@@ -61,13 +72,18 @@ namespace {
     if (alignment == 0U) {
       return value;
     }
+    DCHECK_F(
+      (alignment & (alignment - 1U)) == 0U, "alignment must be a power of two");
     const auto mask = alignment - 1U;
+    if (value > (std::numeric_limits<std::size_t>::max)() - mask) {
+      return (std::numeric_limits<std::size_t>::max)();
+    }
     return (value + mask) & ~mask;
   }
 
   [[nodiscard]] auto BuildTexture2DUploadLayout(
     const graphics::TextureDesc& desc,
-    const oxygen::graphics::detail::FormatInfo& format_info,
+    const graphics::detail::FormatInfo& format_info,
     const std::span<const std::byte> data_bytes,
     const std::size_t row_pitch_alignment,
     const std::size_t mip_placement_alignment)
@@ -88,12 +104,52 @@ namespace {
     for (std::uint32_t mip = 0; mip < mip_count; ++mip) {
       const auto mip_w = (std::max)(desc.width >> mip, 1U);
       const auto mip_h = (std::max)(desc.height >> mip, 1U);
-      const auto bytes_per_row = mip_w * format_info.bytes_per_block;
+      const auto bytes_per_block = format_info.bytes_per_block;
+      if (bytes_per_block == 0U
+        || mip_w > (std::numeric_limits<std::size_t>::max)()
+            / static_cast<std::size_t>(bytes_per_block)) {
+        return UploadLayoutFailure {
+          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+          .mip = mip,
+          .layer = 0U,
+          .offset = offset,
+          .required_bytes = 0U,
+          .total_bytes = total_data_size,
+        };
+      }
+
+      const auto bytes_per_row
+        = static_cast<std::size_t>(mip_w) * bytes_per_block;
       const auto row_pitch = AlignUpSize(bytes_per_row, row_pitch_alignment);
-      const auto slice_pitch = row_pitch * mip_h;
+      if (row_pitch == (std::numeric_limits<std::size_t>::max)()) {
+        return UploadLayoutFailure {
+          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+          .mip = mip,
+          .layer = 0U,
+          .offset = offset,
+          .required_bytes = 0U,
+          .total_bytes = total_data_size,
+        };
+      }
+
+      if (mip_h > 0U
+        && row_pitch > (std::numeric_limits<std::size_t>::max)()
+            / static_cast<std::size_t>(mip_h)) {
+        return UploadLayoutFailure {
+          .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+          .mip = mip,
+          .layer = 0U,
+          .offset = offset,
+          .required_bytes = 0U,
+          .total_bytes = total_data_size,
+        };
+      }
+
+      const auto slice_pitch = row_pitch * static_cast<std::size_t>(mip_h);
 
       for (std::uint32_t layer = 0; layer < array_layers; ++layer) {
-        if (offset + slice_pitch > total_data_size) {
+        if (offset > total_data_size
+          || slice_pitch > (total_data_size - offset)) {
           return UploadLayoutFailure {
             .reason = UploadLayoutFailure::Reason::kDataTooSmall,
             .mip = mip,
@@ -104,22 +160,20 @@ namespace {
           };
         }
 
-        layout.dst_subresources.push_back(
-          oxygen::engine::upload::UploadSubresource {
-            .mip = mip,
-            .array_slice = layer,
-            .x = 0,
-            .y = 0,
-            .z = 0,
-            .width = mip_w,
-            .height = mip_h,
-            .depth = 1,
-          });
+        layout.dst_subresources.push_back(engine::upload::UploadSubresource {
+          .mip = mip,
+          .array_slice = layer,
+          .x = 0,
+          .y = 0,
+          .z = 0,
+          .width = mip_w,
+          .height = mip_h,
+          .depth = 1,
+        });
 
         layout.src_view.subresources.push_back(
-          oxygen::engine::upload::UploadTextureSourceSubresource {
-            .bytes = std::span<const std::byte>(
-              data_bytes.data() + offset, slice_pitch),
+          engine::upload::UploadTextureSourceSubresource {
+            .bytes = data_bytes.subspan(offset, slice_pitch),
             .row_pitch = static_cast<std::uint32_t>(row_pitch),
             .slice_pitch = static_cast<std::uint32_t>(slice_pitch),
           });
@@ -130,6 +184,16 @@ namespace {
       if (mip + 1U < mip_count) {
         const auto aligned_offset
           = AlignUpSize(offset, mip_placement_alignment);
+        if (aligned_offset == (std::numeric_limits<std::size_t>::max)()) {
+          return UploadLayoutFailure {
+            .reason = UploadLayoutFailure::Reason::kArithmeticOverflow,
+            .mip = mip,
+            .layer = 0U,
+            .offset = offset,
+            .required_bytes = 0U,
+            .total_bytes = total_data_size,
+          };
+        }
         if (aligned_offset > total_data_size) {
           return UploadLayoutFailure {
             .reason = UploadLayoutFailure::Reason::kMipAlignmentOverflow,
@@ -156,7 +220,7 @@ namespace {
   };
 
   struct PrepareTexture2DUploadFailure {
-    enum class Reason {
+    enum class Reason : uint8_t {
       kUnsupportedFormat,
       kUnsupportedDepth,
       kBadDataAlignment,
@@ -172,7 +236,7 @@ namespace {
   };
 
   [[nodiscard]] auto PrepareTexture2DUpload(
-    Graphics& gfx, const data::TextureResource& tex_res)
+    const Graphics& gfx, const data::TextureResource& tex_res)
     -> std::variant<PreparedTexture2DUpload, PrepareTexture2DUploadFailure>
   {
     // Build GPU texture description.
@@ -190,8 +254,7 @@ namespace {
     constexpr std::size_t kRowPitchAlignment = 256U;
     constexpr std::size_t kMipPlacementAlignment = 512U;
 
-    const auto& format_info
-      = oxygen::graphics::detail::GetFormatInfo(desc.format);
+    const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
     if (format_info.block_size != 1U || format_info.bytes_per_block == 0U) {
       return PrepareTexture2DUploadFailure {
         .reason = PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat,
@@ -230,8 +293,7 @@ namespace {
     }
 
     const auto& data_span = tex_res.GetData();
-    const auto data_bytes = std::span<const std::byte>(
-      reinterpret_cast<const std::byte*>(data_span.data()), data_span.size());
+    const auto data_bytes = std::as_bytes(data_span);
 
     const auto layout_result = BuildTexture2DUploadLayout(desc, format_info,
       data_bytes, kRowPitchAlignment, kMipPlacementAlignment);
@@ -276,11 +338,6 @@ namespace {
     return view_desc;
   }
 
-  [[nodiscard]] auto IsFallbackSentinel(const content::ResourceKey key) -> bool
-  {
-    return key == static_cast<content::ResourceKey>(0);
-  }
-
   auto ReleaseTextureNextFrame(graphics::ResourceRegistry& registry,
     graphics::detail::DeferredReclaimer& reclaimer,
     std::shared_ptr<graphics::Texture>&& texture) -> void
@@ -293,8 +350,9 @@ namespace {
   }
 
   //! Generate a magenta/black checkerboard pattern for an error texture.
-  auto GenerateErrorTextureData(std::uint32_t width, std::uint32_t height,
-    std::uint32_t tile_size_px) -> std::vector<std::uint32_t>
+  auto GenerateErrorTextureData(const std::uint32_t width,
+    const std::uint32_t height, const std::uint32_t tile_size_px)
+    -> std::vector<std::uint32_t>
   {
     CHECK_F(width > 0 && height > 0, "Invalid error texture dimensions");
     CHECK_F(tile_size_px > 0, "Invalid error texture tile size");
@@ -305,11 +363,11 @@ namespace {
 
     // Packed RGBA8 in little-endian memory is 0xAABBGGRR. This value produces
     // R=255, G=0, B=255, A=255.
-    constexpr std::uint32_t kMagenta = 0xFFFF00FFU;
-    constexpr std::uint32_t kBlack = 0xFF000000U;
 
     for (std::uint32_t y = 0; y < height; ++y) {
       for (std::uint32_t x = 0; x < width; ++x) {
+        constexpr std::uint32_t kBlack = 0xFF000000U;
+        constexpr std::uint32_t kMagenta = 0xFFFF00FFU;
         const bool is_magenta
           = ((x / tile_size_px) + (y / tile_size_px)) % 2 == 0;
         pixels[static_cast<std::size_t>(y) * width + x]
@@ -324,18 +382,264 @@ namespace {
 
 //=== TextureBinder Implementation ===========================================//
 
+class TextureBinder::Impl {
+public:
+  Impl(observer_ptr<Graphics> gfx, observer_ptr<ProviderT> staging_provider,
+    observer_ptr<CoordinatorT> uploader,
+    observer_ptr<content::TextureResourceLoader> texture_loader);
+
+  ~Impl();
+
+  OXYGEN_MAKE_NON_COPYABLE(Impl)
+  OXYGEN_MAKE_NON_MOVABLE(Impl)
+
+  auto OnFrameStart() -> void;
+  auto OnFrameEnd() -> void;
+  auto GetOrAllocate(const content::ResourceKey& resource_key)
+    -> ShaderVisibleIndex;
+  [[nodiscard]] auto GetErrorTextureIndex() const -> ShaderVisibleIndex;
+
+private:
+  enum class FailurePolicy : uint8_t {
+    kBindErrorTexture,
+    kKeepPlaceholderBound,
+  };
+
+  struct TextureEntry {
+    bool is_placeholder { true };
+    bool load_failed { false };
+
+    std::optional<engine::upload::UploadTicket> pending_ticket;
+    std::optional<graphics::TextureViewDescription> pending_view_desc;
+
+    std::shared_ptr<graphics::Texture> texture;
+    std::shared_ptr<graphics::Texture> placeholder_texture;
+
+    ShaderVisibleIndex srv_index { kInvalidShaderVisibleIndex };
+    bindless::HeapIndex descriptor_index { kInvalidBindlessHeapIndex };
+  };
+
+  struct CallbackGate {
+    std::mutex mutex;
+    bool alive { true };
+  };
+
+  auto CreatePlaceholderTexture() -> std::shared_ptr<graphics::Texture>;
+  auto CreateErrorTexture() -> std::shared_ptr<graphics::Texture>;
+  auto InitiateAsyncLoad(content::ResourceKey resource_key, TextureEntry& entry)
+    -> void;
+
+  auto OnTextureResourceLoaded(content::ResourceKey resource_key,
+    std::shared_ptr<data::TextureResource> tex_res) -> void;
+
+  auto HandleLoadFailure(content::ResourceKey resource_key, TextureEntry& entry,
+    FailurePolicy policy,
+    std::shared_ptr<graphics::Texture>&& texture_to_release) -> void;
+
+  [[nodiscard]] auto TryRepointEntryToErrorTexture(
+    content::ResourceKey resource_key, const TextureEntry& entry) const -> bool;
+
+  auto ReleaseEntryPlaceholderIfOwned(TextureEntry& entry) -> void;
+
+  auto FindEntryOrLog(content::ResourceKey resource_key) -> TextureEntry*;
+
+  auto SubmitTextureUpload(content::ResourceKey resource_key,
+    TextureEntry& entry, const graphics::TextureDesc& desc,
+    std::shared_ptr<graphics::Texture>&& new_texture,
+    std::vector<engine::upload::UploadSubresource>&& dst_subresources,
+    engine::upload::UploadTextureSourceView&& src_view,
+    std::size_t trailing_bytes) -> void;
+
+  auto SubmitTextureData(const std::shared_ptr<graphics::Texture>& texture,
+    std::span<const std::byte> data, const char* debug_name) -> void;
+
+  observer_ptr<Graphics> gfx_;
+  observer_ptr<engine::upload::UploadCoordinator> uploader_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<content::TextureResourceLoader> texture_loader_;
+
+  std::shared_ptr<CallbackGate> callback_gate_;
+
+  std::unordered_map<content::ResourceKey, TextureEntry> texture_map_;
+
+  // The singleton global placeholder and error textures.
+  std::shared_ptr<graphics::Texture> placeholder_texture_;
+  ShaderVisibleIndex placeholder_tex_svi_ { kInvalidShaderVisibleIndex };
+  std::shared_ptr<graphics::Texture> error_texture_;
+  ShaderVisibleIndex error_text_svi_ { kInvalidShaderVisibleIndex };
+
+  // Telemetry stats
+  std::uint64_t total_get_or_allocate_calls_ { 0U };
+  std::uint64_t total_upload_submissions_ { 0U };
+  std::uint64_t cache_hits_ { 0U };
+  std::uint64_t load_failures_ { 0U };
+};
+
 TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
-  observer_ptr<engine::upload::UploadCoordinator> uploader,
-  observer_ptr<engine::upload::StagingProvider> staging_provider,
-  observer_ptr<content::AssetLoader> asset_loader)
-  : gfx_(std::move(gfx))
-  , uploader_(std::move(uploader))
-  , staging_provider_(std::move(staging_provider))
-  , asset_loader_(std::move(asset_loader))
+  observer_ptr<ProviderT> staging_provider, observer_ptr<CoordinatorT> uploader,
+  observer_ptr<content::TextureResourceLoader> texture_loader)
+  : impl_(
+      std::make_unique<Impl>(gfx, staging_provider, uploader, texture_loader))
+{
+}
+
+TextureBinder::~TextureBinder() = default;
+
+auto TextureBinder::OnFrameStart() -> void { impl_->OnFrameStart(); }
+
+/*!
+ TextureBinder frame-end hook.
+
+ `OnFrameEnd()` is intentionally a no-op.
+
+ TextureBinder drains upload completions and repoints descriptors during
+ `OnFrameStart()`. Any GPU-safe destruction is handled by the graphics
+ backend's `DeferredReclaimer` on `Graphics::BeginFrame()` when the frame slot
+ cycles.
+*/
+auto TextureBinder::OnFrameEnd() -> void { impl_->OnFrameEnd(); }
+
+// Index-based allocation has been removed. Use the ResourceKey-only API.
+
+auto TextureBinder::GetOrAllocate(const content::ResourceKey& resource_key)
+  -> ShaderVisibleIndex
+{
+  return impl_->GetOrAllocate(resource_key);
+}
+
+auto TextureBinder::Impl::GetOrAllocate(
+  const content::ResourceKey& resource_key) -> ShaderVisibleIndex
+{
+  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
+  ++total_get_or_allocate_calls_;
+
+  // ResourceKey(0) is treated as a renderer-side fallback sentinel.
+  // Never pass it to the AssetLoader (which expects valid, type-encoded keys).
+  if (resource_key.IsFallback()) {
+    // This is an extremely hot path in typical renderer usage.
+    // Keep the trace available, but only at very high verbosity.
+    DLOG_F(6, "TextureBinder GetOrAllocate: fallback sentinel -> placeholder");
+    return placeholder_tex_svi_;
+  }
+
+  auto it = texture_map_.find(resource_key);
+  if (it != texture_map_.end()) {
+    ++cache_hits_;
+    // Cache hits can be extremely frequent (per-frame, per-material).
+    DLOG_F(6, "TextureBinder GetOrAllocate: cache hit -> srv_index {}",
+      it->second.srv_index);
+    // Preserve per-resource stable indices. On failure, the descriptor is
+    // repointed to the error texture, but the shader-visible handle remains
+    // the entry's SRV index.
+    return it->second.srv_index;
+  }
+
+  DLOG_SCOPE_F(4, "TextureBinder GetOrAllocate (allocate)");
+  DLOG_F(4, "resource: {}", resource_key);
+
+  TextureEntry entry;
+  entry.texture = CreatePlaceholderTexture();
+  if (!entry.texture) {
+    LOG_F(ERROR,
+      "Failed to create per-entry placeholder texture for resource key: {}",
+      resource_key);
+    ++load_failures_;
+    entry.load_failed = true;
+    entry.is_placeholder = false;
+    entry.texture = error_texture_;
+    entry.srv_index = error_text_svi_;
+    texture_map_.emplace(resource_key, std::move(entry));
+    DLOG_F(3, "allocated: per-entry placeholder failed -> error texture");
+    return error_text_svi_;
+  }
+
+  entry.placeholder_texture = entry.texture;
+
+  auto& registry = gfx_->GetResourceRegistry();
+  auto& allocator = gfx_->GetDescriptorAllocator();
+
+  const auto view_desc = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
+
+  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
+    graphics::DescriptorVisibility::kShaderVisible);
+  if (!handle.IsValid()) {
+    LOG_F(ERROR, "Failed to allocate descriptor for resource key: {}",
+      resource_key);
+    ++load_failures_;
+
+    // Release the per-entry placeholder immediately (it is not registered).
+    entry.texture.reset();
+    entry.placeholder_texture.reset();
+
+    entry.load_failed = true;
+    entry.is_placeholder = false;
+    entry.texture = error_texture_;
+    entry.srv_index = error_text_svi_;
+    entry.descriptor_index = kInvalidBindlessHeapIndex;
+
+    texture_map_.emplace(resource_key, std::move(entry));
+    DLOG_F(
+      3, "allocated: descriptor allocation failed -> cached error texture");
+    return error_text_svi_;
+  }
+
+  entry.descriptor_index = handle.GetBindlessHandle();
+  DLOG_F(4, "descriptor_index: {}", entry.descriptor_index);
+
+  entry.srv_index
+    = ShaderVisibleIndex(allocator.GetShaderVisibleIndex(handle).get());
+
+  registry.Register(entry.texture);
+  registry.RegisterView(*entry.texture, std::move(handle), view_desc);
+
+  // Insert before initiating the load to ensure completion callbacks can
+  // always resolve the entry even if the load completes synchronously.
+  const auto result_index = entry.srv_index;
+  auto [insert_it, inserted]
+    = texture_map_.emplace(resource_key, std::move(entry));
+  DCHECK_F(inserted);
+
+  // Initiate async load using the opaque ResourceKey.
+  InitiateAsyncLoad(resource_key, insert_it->second);
+
+  DLOG_F(4, "Allocated SRV index {} for resource key {}", result_index,
+    resource_key);
+
+  DLOG_F(4, "srv_index: {}", result_index);
+
+  return result_index;
+}
+
+auto TextureBinder::GetErrorTextureIndex() const -> ShaderVisibleIndex
+{
+  return impl_->GetErrorTextureIndex();
+}
+
+#ifdef OXYGEN_ENGINE_TESTING
+auto TextureBinder::DebugGetEntry(content::ResourceKey key) const
+  -> std::optional<DebugEntrySnapshot>
+{
+  return impl_->DebugGetEntry(key);
+}
+#endif
+
+//=== TextureBinder::Impl Implementation =====================================//
+
+TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
+  const observer_ptr<ProviderT> staging_provider,
+  const observer_ptr<CoordinatorT> uploader,
+  const observer_ptr<content::TextureResourceLoader> texture_loader)
+  : gfx_(gfx)
+  , uploader_(uploader)
+  , staging_provider_(staging_provider)
+  , texture_loader_(texture_loader)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
-  CHECK_NOTNULL_F(asset_loader_, "AssetLoader cannot be null");
+  CHECK_NOTNULL_F(texture_loader_, "TextureResourceLoader cannot be null");
+
+  callback_gate_ = std::make_shared<CallbackGate>();
+  CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
 
   error_texture_ = CreateErrorTexture();
   CHECK_NOTNULL_F(error_texture_, "Failed to create error texture");
@@ -352,7 +656,7 @@ TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
   CHECK_F(
     error_handle.IsValid(), "Failed to allocate error texture descriptor");
 
-  error_texture_index_
+  error_text_svi_
     = ShaderVisibleIndex(allocator.GetShaderVisibleIndex(error_handle).get());
 
   registry.Register(error_texture_);
@@ -364,7 +668,7 @@ TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
     LOG_F(ERROR,
       "Failed to create placeholder texture; using error texture instead");
     placeholder_texture_ = error_texture_;
-    placeholder_texture_index_ = error_texture_index_;
+    placeholder_tex_svi_ = error_text_svi_;
   } else {
     auto placeholder_handle
       = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
@@ -372,7 +676,7 @@ TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
     CHECK_F(placeholder_handle.IsValid(),
       "Failed to allocate placeholder texture descriptor");
 
-    placeholder_texture_index_ = ShaderVisibleIndex(
+    placeholder_tex_svi_ = ShaderVisibleIndex(
       allocator.GetShaderVisibleIndex(placeholder_handle).get());
 
     registry.Register(placeholder_texture_);
@@ -381,22 +685,28 @@ TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
   }
 
   LOG_F(INFO, "TextureBinder initialized with error texture at SRV index: {}",
-    error_texture_index_);
+    error_text_svi_);
   LOG_F(INFO,
     "TextureBinder initialized with placeholder texture at SRV index: {}",
-    placeholder_texture_index_);
+    placeholder_tex_svi_);
 }
 
-TextureBinder::~TextureBinder()
+TextureBinder::Impl::~Impl()
 {
+  if (callback_gate_) {
+    std::scoped_lock lock(callback_gate_->mutex);
+    callback_gate_->alive = false;
+  }
+
   LOG_SCOPE_F(INFO, "TextureBinder Statistics");
-  LOG_F(INFO, "total requests : {}", total_requests_);
+  LOG_F(INFO, "GetOrAllocate calls  : {}", total_get_or_allocate_calls_);
+  LOG_F(INFO, "upload submissions   : {}", total_upload_submissions_);
   LOG_F(INFO, "cache hits     : {}", cache_hits_);
   LOG_F(INFO, "load failures  : {}", load_failures_);
   LOG_F(INFO, "textures loaded: {}", texture_map_.size());
 }
 
-auto TextureBinder::OnFrameStart() -> void
+auto TextureBinder::Impl::OnFrameStart() -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DLOG_SCOPE_F(5, "TextureBinder OnFrameStart");
@@ -431,10 +741,10 @@ auto TextureBinder::OnFrameStart() -> void
     DLOG_F(4, "is_placeholder: {}", entry.is_placeholder);
     DLOG_F(4, "load_failed: {}", entry.load_failed);
 
-    LOG_F(INFO, "Upload ticket {} completed for resource key {}", ticket.id,
+    DLOG_F(2, "Upload ticket {} completed for resource key {}", ticket.id,
       resource_key);
 
-    const auto result = *maybe_result;
+    const auto& result = *maybe_result;
     DLOG_F(4, "result.success: {}", result.success);
     if (!result.success) {
       // Upload failure: keep the placeholder bound.
@@ -501,115 +811,11 @@ auto TextureBinder::OnFrameStart() -> void
   }
 }
 
-/*!
- TextureBinder frame-end hook.
+auto TextureBinder::Impl::OnFrameEnd() -> void { }
 
- `OnFrameEnd()` is intentionally a no-op.
-
- TextureBinder drains upload completions and repoints descriptors during
- `OnFrameStart()`. Any GPU-safe destruction is handled by the graphics
- backend's `DeferredReclaimer` on `Graphics::BeginFrame()` when the frame slot
- cycles.
-*/
-auto TextureBinder::OnFrameEnd() -> void { }
-
-// Index-based allocation has been removed. Use the ResourceKey-only API.
-
-auto TextureBinder::GetOrAllocate(content::ResourceKey resource_key)
-  -> ShaderVisibleIndex
+auto TextureBinder::Impl::GetErrorTextureIndex() const -> ShaderVisibleIndex
 {
-  DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
-  ++total_requests_;
-
-  // ResourceKey(0) is treated as a renderer-side fallback sentinel.
-  // Never pass it to the AssetLoader (which expects valid, type-encoded keys).
-  if (IsFallbackSentinel(resource_key)) {
-    // This is an extremely hot path in typical renderer usage.
-    // Keep the trace available, but only at very high verbosity.
-    DLOG_F(6, "TextureBinder GetOrAllocate: fallback sentinel -> placeholder");
-    return placeholder_texture_index_;
-  }
-
-  auto it = texture_map_.find(resource_key);
-  if (it != texture_map_.end()) {
-    ++cache_hits_;
-    // Cache hits can be extremely frequent (per-frame, per-material).
-    DLOG_F(6, "TextureBinder GetOrAllocate: cache hit -> srv_index {}",
-      it->second.srv_index);
-    // Preserve per-resource stable indices. On failure, the descriptor is
-    // repointed to the error texture, but the shader-visible handle remains
-    // the entry's SRV index.
-    return it->second.srv_index;
-  }
-
-  DLOG_SCOPE_F(4, "TextureBinder GetOrAllocate (allocate)");
-  DLOG_F(4, "resource: {}", resource_key);
-
-  TextureEntry entry;
-  entry.texture = CreatePlaceholderTexture();
-  if (!entry.texture) {
-    LOG_F(ERROR,
-      "Failed to create per-entry placeholder texture for resource key: {}",
-      resource_key);
-    ++load_failures_;
-    entry.load_failed = true;
-    entry.srv_index = error_texture_index_;
-    texture_map_.emplace(resource_key, std::move(entry));
-    DLOG_F(3, "allocated: per-entry placeholder failed -> error texture");
-    return error_texture_index_;
-  }
-
-  entry.placeholder_texture = entry.texture;
-
-  // Store the opaque key so we can hand it to AssetLoader when starting
-  // the async load. ResourceKey remains opaque outside of this TU.
-  entry.resource_key = resource_key;
-
-  auto& registry = gfx_->GetResourceRegistry();
-  auto& allocator = gfx_->GetDescriptorAllocator();
-
-  const auto view_desc = MakeTextureSrvViewDesc(Format::kRGBA8UNorm, {}, {});
-
-  auto handle = allocator.Allocate(graphics::ResourceViewType::kTexture_SRV,
-    graphics::DescriptorVisibility::kShaderVisible);
-  if (!handle.IsValid()) {
-    LOG_F(ERROR, "Failed to allocate descriptor for resource key: {}",
-      resource_key);
-    ++load_failures_;
-    DLOG_F(3, "allocated: descriptor allocation failed -> error texture");
-    return error_texture_index_;
-  }
-
-  entry.descriptor_index = handle.GetBindlessHandle();
-  DLOG_F(4, "descriptor_index: {}", entry.descriptor_index);
-
-  entry.srv_index
-    = ShaderVisibleIndex(allocator.GetShaderVisibleIndex(handle).get());
-
-  registry.Register(entry.texture);
-  registry.RegisterView(*entry.texture, std::move(handle), view_desc);
-
-  // Insert before initiating the load to ensure completion callbacks can
-  // always resolve the entry even if the load completes synchronously.
-  const auto result_index = entry.srv_index;
-  auto [insert_it, inserted]
-    = texture_map_.emplace(resource_key, std::move(entry));
-  DCHECK_F(inserted);
-
-  // Initiate async load using the opaque ResourceKey.
-  InitiateAsyncLoad(resource_key, insert_it->second);
-
-  LOG_F(INFO, "Allocated SRV index {} for resource key {}", result_index,
-    resource_key);
-
-  DLOG_F(4, "srv_index: {}", result_index);
-
-  return result_index;
-}
-
-auto TextureBinder::GetErrorTextureIndex() const -> ShaderVisibleIndex
-{
-  return error_texture_index_;
+  return error_text_svi_;
 }
 
 //=== Private Implementation =================================================//
@@ -620,7 +826,7 @@ auto TextureBinder::GetErrorTextureIndex() const -> ShaderVisibleIndex
 
  @return Placeholder texture, or nullptr on failure
 */
-auto TextureBinder::CreatePlaceholderTexture()
+auto TextureBinder::Impl::CreatePlaceholderTexture()
   -> std::shared_ptr<graphics::Texture>
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -642,9 +848,9 @@ auto TextureBinder::CreatePlaceholderTexture()
       return nullptr;
     }
 
-    const std::array<std::byte, sizeof(std::uint32_t)> white_pixel_data {
-      std::byte(0xFF), std::byte(0xFF), std::byte(0xFF), std::byte(0xFF)
-    };
+    constexpr std::array white_pixel_data { static_cast<std::byte>(0xFF),
+      static_cast<std::byte>(0xFF), static_cast<std::byte>(0xFF),
+      static_cast<std::byte>(0xFF) };
     SubmitTextureData(texture, white_pixel_data, "TextureBinder.Placeholder");
 
     return texture;
@@ -659,7 +865,8 @@ auto TextureBinder::CreatePlaceholderTexture()
 
  @return Error texture, or nullptr on failure
 */
-auto TextureBinder::CreateErrorTexture() -> std::shared_ptr<graphics::Texture>
+auto TextureBinder::Impl::CreateErrorTexture()
+  -> std::shared_ptr<graphics::Texture>
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   graphics::TextureDesc desc;
@@ -683,10 +890,9 @@ auto TextureBinder::CreateErrorTexture() -> std::shared_ptr<graphics::Texture>
     constexpr std::uint32_t kTileSizePx = 32;
     const auto pixels
       = GenerateErrorTextureData(desc.width, desc.height, kTileSizePx);
-    const std::span<const std::byte> pixel_bytes {
-      reinterpret_cast<const std::byte*>(pixels.data()),
-      pixels.size() * sizeof(std::uint32_t)
-    };
+
+    const std::span pixel_span = pixels;
+    const std::span<const std::byte> pixel_bytes = std::as_bytes(pixel_span);
     SubmitTextureData(texture, pixel_bytes, "TextureBinder.ErrorTexture");
 
     return texture;
@@ -703,7 +909,7 @@ auto TextureBinder::CreateErrorTexture() -> std::shared_ptr<graphics::Texture>
  @param resource_key Opaque ResourceKey identifying the resource to load
  @param entry Texture entry to update when load completes
 */
-auto TextureBinder::InitiateAsyncLoad(content::ResourceKey resource_key,
+auto TextureBinder::Impl::InitiateAsyncLoad(content::ResourceKey resource_key,
   [[maybe_unused]] TextureEntry& entry) -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -711,22 +917,19 @@ auto TextureBinder::InitiateAsyncLoad(content::ResourceKey resource_key,
   DLOG_F(3, "resource: {}", resource_key);
   LOG_F(INFO, "Initiating async load for resource key: {}", resource_key);
 
-  if (!asset_loader_) {
-    LOG_F(INFO, "AssetLoader is unavailable; texture {} will keep placeholder",
-      resource_key);
-    return;
-  }
+  texture_loader_->StartLoadTexture(resource_key,
+    [gate = callback_gate_, this, resource_key](
+      // NOLINTNEXTLINE(*-unnecessary-value-param)
+      std::shared_ptr<data::TextureResource> tex_res) -> void {
+      if (!gate) {
+        return;
+      }
 
-  // Start only if the caller provided an opaque ResourceKey in the entry
-  // (ResourceKey-aware callers route through the ResourceKey overload).
-  if (!entry.resource_key.has_value()) {
-    LOG_F(INFO, "No opaque ResourceKey available for {}; keeping placeholder",
-      resource_key);
-    return;
-  }
+      std::scoped_lock lock(gate->mutex);
+      if (!gate->alive) {
+        return;
+      }
 
-  asset_loader_->StartLoadTexture(*entry.resource_key,
-    [this, resource_key](std::shared_ptr<data::TextureResource> tex_res) {
       this->OnTextureResourceLoaded(resource_key, std::move(tex_res));
     });
 }
@@ -736,8 +939,6 @@ auto TextureBinder::InitiateAsyncLoad(content::ResourceKey resource_key,
 
  This method is invoked on the engine/render thread by `AssetLoader` and is
  allowed to mutate graphics resources and `texture_map_`.
-
- Preconditions are enforced via `DCHECK_*`:
 
  - `gfx_` must be valid
  - `uploader_` and `staging_provider_` must be available for upload
@@ -752,7 +953,9 @@ auto TextureBinder::InitiateAsyncLoad(content::ResourceKey resource_key,
  @param resource_key Opaque key for the entry being updated.
  @param tex_res Loaded texture resource, or `nullptr` on load failure.
 */
-auto TextureBinder::OnTextureResourceLoaded(content::ResourceKey resource_key,
+auto TextureBinder::Impl::OnTextureResourceLoaded(
+  const content::ResourceKey resource_key,
+  // NOLINTNEXTLINE(*-unnecessary-value-param) - moved from a lambda capture
   std::shared_ptr<data::TextureResource> tex_res) -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -760,7 +963,7 @@ auto TextureBinder::OnTextureResourceLoaded(content::ResourceKey resource_key,
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
 
   TextureEntry* entry_ptr = this->FindEntryOrLog(resource_key);
-  if (!entry_ptr) {
+  if (entry_ptr == nullptr) {
     return;
   }
 
@@ -787,7 +990,7 @@ auto TextureBinder::OnTextureResourceLoaded(content::ResourceKey resource_key,
 
   const auto prepared_result = PrepareTexture2DUpload(*gfx_, *tex_res);
   if (std::holds_alternative<PrepareTexture2DUploadFailure>(prepared_result)) {
-    const auto failure
+    const auto& failure
       = std::get<PrepareTexture2DUploadFailure>(prepared_result);
     switch (failure.reason) {
     case PrepareTexture2DUploadFailure::Reason::kUnsupportedFormat:
@@ -809,18 +1012,28 @@ auto TextureBinder::OnTextureResourceLoaded(content::ResourceKey resource_key,
       break;
     case PrepareTexture2DUploadFailure::Reason::kLayoutFailure: {
       DCHECK_F(failure.layout_failure.has_value());
-      const auto lf = *failure.layout_failure;
+      const auto& lf = *failure.layout_failure;
 
       DLOG_F(2, "failure: upload layout");
 
       switch (lf.reason) {
       case UploadLayoutFailure::Reason::kDataTooSmall:
         LOG_F(ERROR,
-          "TextureResource data too small for expected mip/array layout");
+          "TextureResource data too small: mip {} layer {} offset {} need {} "
+          "bytes (total {})",
+          lf.mip, lf.layer, lf.offset, lf.required_bytes, lf.total_bytes);
         break;
       case UploadLayoutFailure::Reason::kMipAlignmentOverflow:
-        LOG_F(
-          ERROR, "TextureResource data too small after mip alignment padding");
+        LOG_F(ERROR,
+          "TextureResource mip alignment overflow: mip {} offset {} padding "
+          "{} (total {})",
+          lf.mip, lf.offset, lf.required_bytes, lf.total_bytes);
+        break;
+      case UploadLayoutFailure::Reason::kArithmeticOverflow:
+        LOG_F(ERROR,
+          "TextureResource upload layout arithmetic overflow: mip {} offset "
+          "{} (total {})",
+          lf.mip, lf.offset, lf.total_bytes);
         break;
       }
       break;
@@ -832,15 +1045,16 @@ auto TextureBinder::OnTextureResourceLoaded(content::ResourceKey resource_key,
     return;
   }
 
-  auto prepared = std::get<PreparedTexture2DUpload>(prepared_result);
+  PreparedTexture2DUpload prepared
+    = std::get<PreparedTexture2DUpload>(prepared_result);
   this->SubmitTextureUpload(resource_key, entry, prepared.desc,
     std::move(prepared.new_texture),
     std::move(prepared.layout.dst_subresources),
     std::move(prepared.layout.src_view), prepared.layout.trailing_bytes);
 }
 
-auto TextureBinder::FindEntryOrLog(content::ResourceKey resource_key)
-  -> TextureEntry*
+auto TextureBinder::Impl::FindEntryOrLog(
+  const content::ResourceKey resource_key) -> TextureEntry*
 {
   auto it = texture_map_.find(resource_key);
   if (it == texture_map_.end()) {
@@ -851,11 +1065,12 @@ auto TextureBinder::FindEntryOrLog(content::ResourceKey resource_key)
   return &it->second;
 }
 
-auto TextureBinder::SubmitTextureUpload(content::ResourceKey resource_key,
-  TextureEntry& entry, const graphics::TextureDesc& desc,
+auto TextureBinder::Impl::SubmitTextureUpload(
+  const content::ResourceKey resource_key, TextureEntry& entry,
+  const graphics::TextureDesc& desc,
   std::shared_ptr<graphics::Texture>&& new_texture,
-  std::vector<oxygen::engine::upload::UploadSubresource>&& dst_subresources,
-  oxygen::engine::upload::UploadTextureSourceView&& src_view,
+  std::vector<engine::upload::UploadSubresource>&& dst_subresources,
+  engine::upload::UploadTextureSourceView&& src_view,
   const std::size_t trailing_bytes) -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -877,10 +1092,10 @@ auto TextureBinder::SubmitTextureUpload(content::ResourceKey resource_key,
       trailing_bytes);
   }
 
-  oxygen::engine::upload::UploadRequest req {
-    .kind = oxygen::engine::upload::UploadKind::kTexture2D,
+  engine::upload::UploadRequest req {
+    .kind = engine::upload::UploadKind::kTexture2D,
     .debug_name = desc.debug_name,
-    .desc = oxygen::engine::upload::UploadTextureDesc {
+    .desc = engine::upload::UploadTextureDesc {
       .dst = new_texture,
       .width = desc.width,
       .height = desc.height,
@@ -904,6 +1119,8 @@ auto TextureBinder::SubmitTextureUpload(content::ResourceKey resource_key,
     return;
   }
 
+  ++total_upload_submissions_;
+
   DLOG_F(3, "ticket: {}", upload_result->id);
 
   // Register the created texture so the ResourceRegistry can manage it and
@@ -922,9 +1139,7 @@ auto TextureBinder::SubmitTextureUpload(content::ResourceKey resource_key,
   entry.texture = std::move(new_texture);
   entry.is_placeholder = true;
   entry.load_failed = false;
-  ++total_requests_; // count this as an async load request for metrics
-
-  LOG_F(INFO, "InitiateAsyncLoad: submitted upload ticket {} for resource {}",
+  DLOG_F(3, "InitiateAsyncLoad: submitted upload ticket {} for resource {}",
     entry.pending_ticket->id, resource_key);
 }
 
@@ -944,8 +1159,9 @@ auto TextureBinder::SubmitTextureUpload(content::ResourceKey resource_key,
  @param texture_to_release Optional newly-created texture that should be
    released via deferred reclamation.
 */
-auto TextureBinder::HandleLoadFailure(content::ResourceKey resource_key,
-  TextureEntry& entry, const FailurePolicy policy,
+auto TextureBinder::Impl::HandleLoadFailure(
+  const content::ResourceKey resource_key, TextureEntry& entry,
+  const FailurePolicy policy,
   std::shared_ptr<graphics::Texture>&& texture_to_release) -> void
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -964,8 +1180,15 @@ auto TextureBinder::HandleLoadFailure(content::ResourceKey resource_key,
   entry.load_failed = true;
 
   if (texture_to_release) {
-    gfx_->GetDeferredReclaimer().RegisterDeferredRelease(
-      std::move(texture_to_release));
+    auto& registry = gfx_->GetResourceRegistry();
+    auto& reclaimer = gfx_->GetDeferredReclaimer();
+    try {
+      registry.UnRegisterResource(*texture_to_release);
+    } catch (const std::exception&) {
+      // Not registered (or already unregistered); safe to continue.
+      (void)0;
+    }
+    reclaimer.RegisterDeferredRelease(std::move(texture_to_release));
   }
 
   if (policy == FailurePolicy::kKeepPlaceholderBound) {
@@ -997,8 +1220,9 @@ auto TextureBinder::HandleLoadFailure(content::ResourceKey resource_key,
  @param entry Entry containing the descriptor index to update.
  @return `true` if the view was updated, otherwise `false`.
 */
-auto TextureBinder::TryRepointEntryToErrorTexture(
-  content::ResourceKey resource_key, TextureEntry& entry) -> bool
+auto TextureBinder::Impl::TryRepointEntryToErrorTexture(
+  const content::ResourceKey resource_key, const TextureEntry& entry) const
+  -> bool
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   CHECK_NOTNULL_F(error_texture_, "Error texture must be initialized");
@@ -1030,7 +1254,8 @@ auto TextureBinder::TryRepointEntryToErrorTexture(
 
  @param entry Entry whose placeholder may be released.
 */
-auto TextureBinder::ReleaseEntryPlaceholderIfOwned(TextureEntry& entry) -> void
+auto TextureBinder::Impl::ReleaseEntryPlaceholderIfOwned(TextureEntry& entry)
+  -> void
 {
   if (!entry.placeholder_texture) {
     return;
@@ -1051,7 +1276,7 @@ auto TextureBinder::ReleaseEntryPlaceholderIfOwned(TextureEntry& entry) -> void
     registry, reclaimer, std::move(entry.placeholder_texture));
 }
 
-auto TextureBinder::SubmitTextureData(
+auto TextureBinder::Impl::SubmitTextureData(
   const std::shared_ptr<graphics::Texture>& texture,
   const std::span<const std::byte> data, const char* debug_name) -> void
 {
@@ -1060,8 +1285,7 @@ auto TextureBinder::SubmitTextureData(
   }
 
   const auto& desc = texture->GetDescriptor();
-  const auto& format_info
-    = oxygen::graphics::detail::GetFormatInfo(desc.format);
+  const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
   if (format_info.block_size != 1U || format_info.bytes_per_block == 0U) {
     LOG_F(ERROR, "TextureBinder upload only supports non-BC formats");
     return;
@@ -1082,17 +1306,17 @@ auto TextureBinder::SubmitTextureData(
     return;
   }
 
-  oxygen::engine::upload::UploadTextureSourceView src_view;
+  engine::upload::UploadTextureSourceView src_view;
   src_view.subresources.push_back({
     .bytes = data,
     .row_pitch = bytes_per_row,
     .slice_pitch = bytes_per_row * desc.height,
   });
 
-  oxygen::engine::upload::UploadRequest req {
-    .kind = oxygen::engine::upload::UploadKind::kTexture2D,
+  engine::upload::UploadRequest req {
+    .kind = engine::upload::UploadKind::kTexture2D,
     .debug_name = debug_name,
-    .desc = oxygen::engine::upload::UploadTextureDesc {
+    .desc = engine::upload::UploadTextureDesc {
       .dst = texture,
       .width = desc.width,
       .height = desc.height,

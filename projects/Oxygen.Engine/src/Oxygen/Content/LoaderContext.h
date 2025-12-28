@@ -6,12 +6,19 @@
 
 #pragma once
 
+#include <memory>
+
+#include <Oxygen/Content/Internal/SourceToken.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
 namespace oxygen::content {
+
+namespace internal {
+  struct DependencyCollector;
+} // namespace internal
 
 // Forward declarations for loader context
 class AssetLoader;
@@ -26,6 +33,13 @@ struct LoaderContext {
 
   //! Key of the current asset being loaded (for dependency registration)
   data::AssetKey current_asset_key {};
+
+  //! Opaque token representing the mounted source being decoded.
+  /*!
+   This token is safe to copy across threads and MUST be used by async decode
+   pipelines when recording `internal::ResourceRef` dependencies.
+  */
+  internal::SourceToken source_token {};
 
   //! Reader, already positioned at the start of the asset/resource descriptor
   //! to load.
@@ -55,11 +69,24 @@ struct LoaderContext {
 
   //! Whether offline mode must not perform GPU side effects.
   /*!
-   When true and `offline` is true, loader implementations must treat offline
-   mode as a strict contract: do not create, upload, or otherwise touch GPU
-   resources.
+    When true, loader implementations must treat offline mode as a strict
+    contract: do not create, upload, or otherwise touch GPU resources.
   */
   bool work_offline { false };
+
+  //! Optional dependency collector for async decode pipelines.
+  /*!
+   When non-null, loader implementations MAY record dependency identities into
+   this collector instead of mutating the loader dependency graph directly.
+
+   This is intended for "pure decode" loaders used by the async pipeline,
+   where dependency graph mutation is deferred to an owning-thread publish
+   step.
+
+  @note The collector is shared to provide strong lifetime guarantees across
+  thread-pool execution and cancellation paths.
+  */
+  std::shared_ptr<internal::DependencyCollector> dependency_collector {};
 
   //! Source PAK file from which the asset/resource is being loaded. Guaranteed
   //! to be valid during a load operation.

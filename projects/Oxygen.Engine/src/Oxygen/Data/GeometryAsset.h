@@ -180,6 +180,22 @@ public:
     return material_;
   }
 
+  //! Returns the optional PAK descriptor used to construct this submesh.
+  [[nodiscard]] auto Descriptor() const noexcept
+    -> const std::optional<pak::SubMeshDesc>&
+  {
+    return desc_;
+  }
+
+  //! Set runtime-only material after async publish.
+  void SetMaterial(std::shared_ptr<const MaterialAsset> material)
+  {
+    if (!material) {
+      throw std::logic_error("SubMesh material must not be null");
+    }
+    material_ = std::move(material);
+  }
+
 protected:
   // Allow MeshBuilder to set up mesh views directly
   friend class MeshBuilder;
@@ -492,6 +508,39 @@ public:
     return submeshes_;
   }
 
+  //! Set runtime-only buffer resources after async publish.
+  void SetBufferResources(std::shared_ptr<BufferResource> vertex_buffer,
+    std::shared_ptr<BufferResource> index_buffer) noexcept
+  {
+    auto* referenced
+      = std::get_if<detail::ReferencedBufferStorage>(&buffer_storage_);
+    if (!referenced) {
+      return;
+    }
+
+    referenced->vertex_buffer_resource = std::move(vertex_buffer);
+    referenced->index_buffer_resource = std::move(index_buffer);
+    referenced->initialized = false;
+    referenced->cached_index_type = detail::IndexType::kNone;
+  }
+
+  //! Set runtime-only submesh material after async publish.
+  void SetSubMeshMaterial(
+    size_t submesh_index, std::shared_ptr<const MaterialAsset> material)
+  {
+    if (submesh_index >= submeshes_.size()) {
+      throw std::out_of_range("submesh_index");
+    }
+    submeshes_[submesh_index].SetMaterial(std::move(material));
+  }
+
+  //! Returns the optional PAK descriptor used to construct this mesh.
+  [[nodiscard]] auto Descriptor() const noexcept
+    -> const std::optional<pak::MeshDesc>&
+  {
+    return desc_;
+  }
+
   //! Returns the minimum corner of the mesh's axis-aligned bounding box (AABB).
   [[nodiscard]] auto BoundingBoxMin() const noexcept -> const glm::vec3&
   {
@@ -539,7 +588,11 @@ protected:
   void SetName(std::string name) { name_ = std::move(name); }
 
   // Only for MeshBuilder: set PAK descriptor for bounding optimization
-  void SetDescriptor(pak::MeshDesc desc) { desc_ = std::move(desc); }
+  void SetDescriptor(pak::MeshDesc desc)
+  {
+    desc_ = std::move(desc);
+    ComputeBounds();
+  }
 
 private:
   //! Computes bounding box and sphere - handles both PAK and procedural cases.

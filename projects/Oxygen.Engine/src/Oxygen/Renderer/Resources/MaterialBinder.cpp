@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Renderer/Resources/ITextureBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
@@ -129,7 +130,7 @@ auto MakeMaterialKey(
 //! Serialize MaterialAsset data into MaterialConstants format.
 auto SerializeMaterialConstants(
   const oxygen::engine::sceneprep::MaterialRef& material,
-  oxygen::renderer::resources::TextureBinder& texture_binder) noexcept
+  oxygen::renderer::resources::ITextureBinder& texture_binder) noexcept
   -> oxygen::engine::MaterialConstants
 {
   oxygen::engine::MaterialConstants constants;
@@ -187,7 +188,7 @@ namespace oxygen::renderer::resources {
 MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
   observer_ptr<engine::upload::UploadCoordinator> uploader,
   observer_ptr<engine::upload::StagingProvider> provider,
-  observer_ptr<TextureBinder> texture_binder)
+  observer_ptr<ITextureBinder> texture_binder)
   : gfx_(std::move(gfx))
   , uploader_(std::move(uploader))
   , staging_provider_(std::move(provider))

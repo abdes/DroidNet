@@ -8,6 +8,8 @@
 
 #include <memory>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -60,6 +62,8 @@ inline auto LoadBufferResource(LoaderContext context)
   if (desc.size_bytes > 0) {
     constexpr std::size_t buf_index
       = IndexOf<data::BufferResource, ResourceTypeList>::value;
+    DCHECK_NOTNULL_F(std::get<buf_index>(context.data_readers),
+      "expecting data reader for BufferResource to be valid");
     auto& data_reader = *std::get<buf_index>(context.data_readers);
 
     check_result(data_reader.Seek(desc.data_offset), "Buffer Data");
@@ -74,16 +78,5 @@ inline auto LoadBufferResource(LoaderContext context)
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadBufferResource)>);
-
-//! Unload function for BufferResource.
-inline auto UnloadBufferResource(
-  std::shared_ptr<data::BufferResource> /*resource*/, AssetLoader& /*loader*/) noexcept -> void
-{
-  // TODO: cleanup GPU resources for the buffer.
-  (void)0; // Placeholder for future GPU resource cleanup
-}
-
-static_assert(oxygen::content::UnloadFunction<decltype(UnloadBufferResource),
-  data::BufferResource>);
 
 } // namespace oxygen::content::loaders

@@ -7,7 +7,6 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -19,8 +18,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
 #include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
@@ -29,7 +28,7 @@
 
 namespace oxygen::renderer::resources {
 
-class TextureBinder;
+class ITextureBinder;
 
 //! Manages GPU material resources with deduplication and bindless access.
 /*!
@@ -125,7 +124,7 @@ public:
   OXGN_RNDR_API MaterialBinder(observer_ptr<Graphics> gfx,
     observer_ptr<engine::upload::UploadCoordinator> uploader,
     observer_ptr<engine::upload::StagingProvider> provider,
-    observer_ptr<TextureBinder> texture_binder);
+    observer_ptr<ITextureBinder> texture_binder);
 
   OXYGEN_MAKE_NON_COPYABLE(MaterialBinder)
   OXYGEN_MAKE_NON_MOVABLE(MaterialBinder)
@@ -183,7 +182,7 @@ public:
 
   @see GetOrAllocate, IsValidHandle
    */
-  auto Update(engine::sceneprep::MaterialHandle handle,
+  OXGN_RNDR_API auto Update(engine::sceneprep::MaterialHandle handle,
     std::shared_ptr<const data::MaterialAsset> material) -> void;
 
   //! Check if a handle is valid.
@@ -266,7 +265,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
-  observer_ptr<TextureBinder> texture_binder_;
+  observer_ptr<ITextureBinder> texture_binder_;
 
   // Atlas-based material storage (Phase 1+)
   std::unique_ptr<engine::upload::AtlasBuffer> materials_atlas_;

@@ -106,10 +106,11 @@ protected:
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { inline_transfers_.get() });
-    texture_binder_ = std::make_unique<oxygen::renderer::resources::TextureBinder>(
-      observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-      observer_ptr { staging_provider_.get() },
-      observer_ptr<oxygen::content::AssetLoader> {});
+    texture_binder_
+      = std::make_unique<oxygen::renderer::resources::TextureBinder>(
+        observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
+        observer_ptr { uploader_.get() },
+        observer_ptr<oxygen::content::TextureResourceLoader> {});
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },

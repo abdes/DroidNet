@@ -1,22 +1,7 @@
 //===----------------------------------------------------------------------===//
-// Copyright (c) DroidNet
-//
-// This file is part of Oxygen.Engine.
-//
-// Oxygen.Engine is free software: you can redistribute it and/or modify it
-// under the terms of the GNU General Public License as published by the Free
-// Software Foundation, either version 3 of the License, or (at your option)
-// any later version.
-//
-// Oxygen.Engine is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
-// details.
-//
-// You should have received a copy of the GNU General Public License along with
-// Oxygen.Engine. If not, see <https://www.gnu.org/licenses/>.
-//
-// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
@@ -63,13 +48,13 @@ auto MaterialBinderTest::SetUp() -> void
   staging_provider_
     = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4);
 
-  asset_loader_ = std::make_unique<content::AssetLoader>(
-    content::internal::EngineTagFactory::Get());
+  texture_binder_ = std::make_unique<FakeTextureBinder>();
 
-  texture_binder_ = std::make_unique<resources::TextureBinder>(
-    observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
-    observer_ptr { staging_provider_.get() },
-    observer_ptr { asset_loader_.get() });
+  // Create a dedicated descriptor allocator for texture bindings so tests
+  // can observe texture-binder allocations independently from the graphics
+  // backend allocator (material atlas SRV creation etc.).
+  texture_descriptor_allocator_ = std::make_unique<MiniDescriptorAllocator>();
+  texture_binder_->SetDescriptorAllocator(texture_descriptor_allocator_.get());
 
   material_binder_ = std::make_unique<resources::MaterialBinder>(
     observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },
@@ -87,13 +72,13 @@ auto MaterialBinderTest::Uploader() -> engine::upload::UploadCoordinator&
   return *uploader_;
 }
 
-auto MaterialBinderTest::AssetLoaderRef() -> content::AssetLoader&
+auto MaterialBinderTest::TextureBinderRef() -> resources::ITextureBinder&
 {
-  return *asset_loader_;
-}
-
-auto MaterialBinderTest::TextureBinderRef() -> resources::TextureBinder&
-{
+  // When tests explicitly obtain a reference to the texture binder we
+  // assume they intend to request concrete allocations; enable allocation on
+  // request so subsequent `GetOrAllocate` calls will create shader-visible
+  // descriptors.
+  texture_binder_->SetAllocateOnRequest(true);
   return *texture_binder_;
 }
 
@@ -104,11 +89,49 @@ auto MaterialBinderTest::MaterialBinderRef() -> resources::MaterialBinder&
 
 auto MaterialBinderTest::AllocatedTextureSrvCount() const -> uint32_t
 {
+  // Prefer allocator used by the FakeTextureBinder (if configured) so tests
+  // measure texture-binder allocations independently from other descriptor
+  // activity (e.g. material atlas SRV creation). Fall back to the graphics
+  // allocator when no texture-specific allocator is set.
+  if (texture_binder_) {
+    if (auto* ta = texture_binder_->GetDescriptorAllocator()) {
+      return ta
+        ->GetAllocatedDescriptorsCount(graphics::ResourceViewType::kTexture_SRV,
+          graphics::DescriptorVisibility::kShaderVisible)
+        .get();
+    }
+  }
+
   const auto& allocator = gfx_->GetDescriptorAllocator();
   return allocator
     .GetAllocatedDescriptorsCount(graphics::ResourceViewType::kTexture_SRV,
       graphics::DescriptorVisibility::kShaderVisible)
     .get();
+}
+
+auto MaterialBinderTest::GetPlaceholderIndexForKey(
+  const content::ResourceKey& key) -> ShaderVisibleIndex
+{
+  // Return the index currently associated with `key` from the fake binder.
+  // The fake binder mimics the production binder by allocating a
+  // shader-visible descriptor for per-entry placeholders immediately,
+  // so this will return a valid, stable index for non-reserved keys.
+  if (texture_binder_) {
+    return texture_binder_->GetOrAllocate(key);
+  }
+  return ShaderVisibleIndex { 0U };
+}
+
+void MaterialBinderTest::SetTextureBinderAllocateOnRequest(bool v)
+{
+  if (texture_binder_)
+    texture_binder_->SetAllocateOnRequest(v);
+}
+
+void MaterialBinderTest::SetTextureBinderErrorKey(
+  const content::ResourceKey& key)
+{
+  texture_binder_->SetErrorKey(key);
 }
 
 } // namespace oxygen::renderer::testing

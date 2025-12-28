@@ -65,6 +65,24 @@ struct TextureCommandLog {
   std::vector<TextureUploadRegion> regions {};
 };
 
+//! Logs SRV view creations for bindless indices.
+/*! This is used by higher-level tests (e.g., TextureBinder) to observe when a
+    descriptor slot is first registered and when it is repointed via
+    ResourceRegistry::UpdateView, without adding any test-only API surface to
+    production code.
+
+    The log records the bindless heap index (which maps 1:1 to shader-visible
+    index in this fake backend) and the Texture instance that produced the
+    native view.
+*/
+struct SrvViewCreationLog {
+  struct Event {
+    uint32_t index { 0 };
+    const Texture* texture { nullptr };
+  };
+  std::vector<Event> events;
+};
+
 //! Lightweight CommandList used by the fake command recorder in tests.
 class FakeCommandList final : public CommandList {
 public:
@@ -338,6 +356,10 @@ public:
   {
     return descriptor_allocator_;
   }
+  auto GetDescriptorAllocator() -> graphics::DescriptorAllocator&
+  {
+    return descriptor_allocator_;
+  }
   [[nodiscard]] auto CreateSurface(
     std::weak_ptr<platform::Window>, observer_ptr<CommandQueue>) const
     -> std::unique_ptr<graphics::Surface> override
@@ -362,9 +384,11 @@ public:
     class FakeTexture final : public Texture {
       OXYGEN_TYPED(FakeTexture)
     public:
-      FakeTexture(std::string_view name, const TextureDesc& desc)
+      FakeTexture(std::string_view name, const TextureDesc& desc,
+        SrvViewCreationLog* srv_view_log)
         : Texture(name)
         , desc_(desc)
+        , srv_view_log_(srv_view_log)
       {
       }
 
@@ -382,10 +406,17 @@ public:
 
     protected:
       [[nodiscard]] auto CreateShaderResourceView(
-        const oxygen::graphics::DescriptorHandle&, oxygen::Format,
-        oxygen::TextureType, oxygen::graphics::TextureSubResourceSet) const
+        const oxygen::graphics::DescriptorHandle& descriptor_handle,
+        oxygen::Format, oxygen::TextureType,
+        oxygen::graphics::TextureSubResourceSet) const
         -> oxygen::graphics::NativeView override
       {
+        if (srv_view_log_) {
+          srv_view_log_->events.push_back(SrvViewCreationLog::Event {
+            .index = descriptor_handle.GetBindlessHandle().get(),
+            .texture = this,
+          });
+        }
         // Use the texture object's address as a stable unique view handle.
         return oxygen::graphics::NativeView(this, Texture::ClassTypeId());
       }
@@ -413,9 +444,10 @@ public:
 
     private:
       TextureDesc desc_ {};
+      SrvViewCreationLog* srv_view_log_ { nullptr };
     };
 
-    return std::make_shared<FakeTexture>("FakeTexture", desc);
+    return std::make_shared<FakeTexture>("FakeTexture", desc, &srv_view_log_);
   }
   [[nodiscard]] auto CreateTextureFromNativeObject(const TextureDesc&,
     const graphics::NativeResource&) const -> std::shared_ptr<Texture> override
@@ -569,6 +601,7 @@ public:
 
   BufferCommandLog buffer_log_ {};
   TextureCommandLog texture_log_ {};
+  mutable SrvViewCreationLog srv_view_log_ {};
   std::map<QueueKey, std::shared_ptr<CommandQueue>> queues_ {};
   mutable MiniDescriptorAllocator descriptor_allocator_ {};
   // Test injection flags (mutable to allow const CreateBuffer)

@@ -57,18 +57,21 @@ set(
   "ResourceKey.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
+  "TextureResourceLoader.h"
 )
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES
   "AssetLoader.cpp"
   "LooseCookedInspection.cpp"
   "PakFile.cpp"
+  "ResourceKey.cpp"
   "VirtualPathResolver.cpp"
   "Internal/ContentSource.h"
   "Internal/LooseCookedIndex.h"
   "Internal/LooseCookedIndex.cpp"
   "Internal/InternalResourceKey.h"
   "Internal/LooseCookedIndexLoad.h"
+  "Internal/DependencyCollector.h"
   "Internal/ResourceRef.h"
   "Internal/SourceToken.h"
   "Loaders/BufferLoader.h"

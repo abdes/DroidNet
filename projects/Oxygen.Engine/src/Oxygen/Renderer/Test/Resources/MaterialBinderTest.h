@@ -1,34 +1,22 @@
 //===----------------------------------------------------------------------===//
-// Copyright (c) DroidNet
-//
-// This file is part of Oxygen.Engine.
-//
-// Oxygen.Engine is free software: you can redistribute it and/or modify it
-// under the terms of the GNU General Public License as published by the Free
-// Software Foundation, either version 3 of the License, or (at your option)
-// any later version.
-//
-// Oxygen.Engine is distributed in the hope that it will be useful, but WITHOUT
-// ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
-// FOR A PARTICULAR PURPOSE. See the GNU General Public License for more
-// details.
-//
-// You should have received a copy of the GNU General Public License along with
-// Oxygen.Engine. If not, see <https://www.gnu.org/licenses/>.
-//
-// SPDX-License-Identifier: GPL-3.0-or-later
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
 #pragma once
 
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Renderer/Resources/ITextureBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
-#include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 #include <Oxygen/Testing/GTest.h>
 
 #include <memory>
+#include <optional>
+#include <unordered_map>
 
 namespace oxygen::renderer::testing {
 
@@ -39,18 +27,97 @@ protected:
   [[nodiscard]] auto GfxPtr() const -> observer_ptr<::oxygen::Graphics>;
 
   [[nodiscard]] auto Uploader() -> engine::upload::UploadCoordinator&;
-  [[nodiscard]] auto AssetLoaderRef() -> content::AssetLoader&;
-  [[nodiscard]] auto TextureBinderRef() -> resources::TextureBinder&;
+  [[nodiscard]] auto TextureBinderRef() -> resources::ITextureBinder&;
   [[nodiscard]] auto MaterialBinderRef() -> resources::MaterialBinder&;
 
   [[nodiscard]] auto AllocatedTextureSrvCount() const -> uint32_t;
 
+  // Test helpers to control / observe FakeTextureBinder behavior.
+  [[nodiscard]] auto GetPlaceholderIndexForKey(const content::ResourceKey& key)
+    -> ShaderVisibleIndex;
+  void SetTextureBinderAllocateOnRequest(bool v);
+
+  // Test helper: mark a ResourceKey which the FakeTextureBinder will report as
+  // error.
+  void SetTextureBinderErrorKey(const content::ResourceKey& key);
+
 private:
+  class FakeTextureBinder final : public resources::ITextureBinder {
+  public:
+    FakeTextureBinder() = default;
+
+    void SetDescriptorAllocator(graphics::DescriptorAllocator* a)
+    {
+      allocator_ = a;
+    }
+
+    [[nodiscard]] auto GetDescriptorAllocator() const
+      -> graphics::DescriptorAllocator*
+    {
+      return allocator_;
+    }
+
+    void SetErrorKey(content::ResourceKey key) { error_key_ = key; }
+    void SetAllocateOnRequest(bool v) { allocate_on_request_ = v; }
+
+    [[nodiscard]] auto GetOrAllocate(const content::ResourceKey& key)
+      -> ShaderVisibleIndex override
+    {
+      if (error_key_.has_value() && error_key_.value() == key) {
+        return GetErrorTextureIndex();
+      }
+
+      auto it = map_.find(key);
+      if (it != map_.end()) {
+        return it->second;
+      }
+
+      // If a descriptor allocator is provided and explicit allocation is
+      // enabled, allocate a shader-visible descriptor to reflect real
+      // TextureBinder behavior in tests. When allocation is disabled the
+      // binder returns placeholder indices without consuming descriptors so
+      // MaterialBinder can be exercised without triggering SRV allocations.
+      if (allocator_ && allocate_on_request_) {
+        const auto handle
+          = allocator_->Allocate(graphics::ResourceViewType::kTexture_SRV,
+            graphics::DescriptorVisibility::kShaderVisible);
+        const auto idx
+          = static_cast<uint32_t>(handle.GetBindlessHandle().get());
+        const auto sv = ShaderVisibleIndex { idx };
+        map_.emplace(key, sv);
+        return sv;
+      }
+
+      auto [newIt, inserted]
+        = map_.try_emplace(key, ShaderVisibleIndex { next_ });
+      if (inserted) {
+        ++next_;
+      }
+      return newIt->second;
+    }
+
+    [[nodiscard]] auto GetErrorTextureIndex() const
+      -> ShaderVisibleIndex override
+    {
+      return ShaderVisibleIndex { 0U };
+    }
+
+  private:
+    std::unordered_map<content::ResourceKey, ShaderVisibleIndex> map_;
+    std::uint32_t next_ { 1U };
+    std::optional<content::ResourceKey> error_key_;
+    graphics::DescriptorAllocator* allocator_ { nullptr };
+    // The fake should mimic real TextureBinder: allocate shader-visible
+    // descriptors for per-entry placeholders immediately. Tests may toggle
+    // this for diagnostics, but the default behavior matches production.
+    bool allocate_on_request_ { true };
+  };
+
   std::shared_ptr<FakeGraphics> gfx_;
   std::unique_ptr<engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
-  std::unique_ptr<content::AssetLoader> asset_loader_;
-  std::unique_ptr<resources::TextureBinder> texture_binder_;
+  std::unique_ptr<FakeTextureBinder> texture_binder_;
+  std::unique_ptr<graphics::DescriptorAllocator> texture_descriptor_allocator_;
   std::unique_ptr<resources::MaterialBinder> material_binder_;
 };
 

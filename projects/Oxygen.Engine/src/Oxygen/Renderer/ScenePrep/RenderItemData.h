@@ -9,13 +9,10 @@
 #include <cstdint>
 #include <memory>
 
-#include <glm/glm.hpp>
 #include <glm/vec4.hpp>
 
-#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/ScenePrep/Types.h>
-#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::data {
 class GeometryAsset;
