@@ -72,7 +72,7 @@ NOLINT_TEST_F(InputEventsTest, PlatformComposesCorrectlyInHeadlessMode)
 
   Platform platform(config_);
   EXPECT_TRUE(platform.HasComponent<InputEvents>());
-  EXPECT_FALSE(platform.HasComponent<EventPump>());
+  EXPECT_TRUE(platform.HasComponent<EventPump>());
 }
 
 // NOLINTNEXTLINE
