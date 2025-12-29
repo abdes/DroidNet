@@ -32,7 +32,7 @@ template <typename T> decltype(auto) tee(T&& value)
 
 using Meter = oxygen::NamedType<unsigned long long, struct MeterParameter,
   oxygen::Addable, oxygen::Comparable>;
-constexpr Meter operator"" _meter(unsigned long long value)
+constexpr Meter operator""_meter(unsigned long long value)
 {
   return Meter(value);
 }
