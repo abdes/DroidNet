@@ -12,6 +12,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
@@ -23,6 +24,16 @@ namespace oxygen::graphics {
 
 class ShaderCompiler : public Composition {
 public:
+  struct ShaderCompileOptions {
+    //! Additional include directories used by the compiler.
+    /*!
+     Paths are interpreted by the backend compiler (e.g., DXC for D3D12).
+     Callers should prefer absolute paths to avoid dependence on working
+     directory.
+    */
+    std::vector<std::filesystem::path> include_dirs;
+  };
+
   struct Config {
     std::string name;
 
@@ -53,25 +64,44 @@ public:
           encoded in UTF-8.
    \param shader_info The shader profile containing information that
           will drive how the shader will be compiled.
+   \param options Compiler options.
    \return A unique pointer to the shader byte code; `nullptr` if the shader
            could not be compiled.
   */
   OXGN_GFX_NDAPI virtual auto CompileFromFile(
     const std::filesystem::path& shader_full_path,
-    const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>;
+    const ShaderInfo& shader_info, const ShaderCompileOptions& options) const
+    -> std::unique_ptr<IShaderByteCode>;
+
+  //! Compiles a shader from a file using default compile options.
+  [[nodiscard]] auto CompileFromFile(
+    const std::filesystem::path& shader_full_path,
+    const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>
+  {
+    return CompileFromFile(shader_full_path, shader_info, {});
+  }
 
   //! Compiles a shader from a string.
   /*!
    \param shader_source The source code of the shader, encoded in UTF-8.
    \param shader_info The shader profile containing information that
           will drive how the shader will be compiled.
+   \param options Compiler options.
    \return A unique pointer to the shader byte code; `nullptr` if the shader
            could not be compiled.
   */
   [[nodiscard]] virtual auto CompileFromSource(
-    const std::u8string& shader_source, const ShaderInfo& shader_info) const
+    const std::u8string& shader_source, const ShaderInfo& shader_info,
+    const ShaderCompileOptions& options) const
     -> std::unique_ptr<IShaderByteCode>
     = 0;
+
+  //! Compiles a shader from a string using default compile options.
+  [[nodiscard]] auto CompileFromSource(const std::u8string& shader_source,
+    const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>
+  {
+    return CompileFromSource(shader_source, shader_info, {});
+  }
 
   [[nodiscard]] auto GetName() const noexcept
   {
@@ -79,6 +109,12 @@ public:
   }
 
 protected:
+  [[nodiscard]] auto GetConfig() const noexcept -> const Config&
+  {
+    return config_;
+  }
+
+private:
   Config config_ {};
 };
 

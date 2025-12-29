@@ -23,29 +23,29 @@ class IShaderByteCode;
 
 namespace d3d12 {
 
-    class ShaderCompiler : public graphics::ShaderCompiler {
-        using Base = graphics::ShaderCompiler;
+  class ShaderCompiler : public graphics::ShaderCompiler {
+    using Base = graphics::ShaderCompiler;
 
-    public:
-        explicit ShaderCompiler(Config config);
+  public:
+    explicit ShaderCompiler(Config config);
 
-        ~ShaderCompiler() override;
+    ~ShaderCompiler() override;
 
-        OXYGEN_MAKE_NON_COPYABLE(ShaderCompiler);
-        OXYGEN_DEFAULT_MOVABLE(ShaderCompiler);
+    OXYGEN_MAKE_NON_COPYABLE(ShaderCompiler);
+    OXYGEN_DEFAULT_MOVABLE(ShaderCompiler);
 
-        [[nodiscard]] auto CompileFromSource(
-            const std::u8string& shader_source,
-            const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode> override;
+    [[nodiscard]] auto CompileFromSource(const std::u8string& shader_source,
+      const ShaderInfo& shader_info, const ShaderCompileOptions& options) const
+      -> std::unique_ptr<IShaderByteCode> override;
 
-    private:
-        // Compiler and Utils
-        Microsoft::WRL::ComPtr<IDxcCompiler3> compiler_;
-        Microsoft::WRL::ComPtr<IDxcUtils> utils_;
+  private:
+    // Compiler and Utils
+    Microsoft::WRL::ComPtr<IDxcCompiler3> compiler_;
+    Microsoft::WRL::ComPtr<IDxcUtils> utils_;
 
-        // Default include handler
-        Microsoft::WRL::ComPtr<IDxcIncludeHandler> include_processor_;
-    };
+    // Default include handler
+    Microsoft::WRL::ComPtr<IDxcIncludeHandler> include_processor_;
+  };
 
 } // namespace d3d12
 

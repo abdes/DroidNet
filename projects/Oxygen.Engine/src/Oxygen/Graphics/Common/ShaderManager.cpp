@@ -7,10 +7,15 @@
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 
 #include <chrono>
+#include <cstdlib>
 #include <filesystem>
+#include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <string>
+#include <string_view>
+#include <unordered_set>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
@@ -26,22 +31,144 @@ using oxygen::graphics::ShaderManager;
 
 namespace {
 
-auto CalculateShaderSourceHash(const std::u8string& shader_source) -> uint64_t
+auto GetEnvVar(const char* name) -> std::optional<std::string>
 {
-  return oxygen::ComputeFNV1a64(shader_source.data(), shader_source.size());
+#ifdef _MSC_VER
+  char* value = nullptr;
+  size_t len = 0;
+  if (_dupenv_s(&value, &len, name) != 0 || value == nullptr) {
+    return std::nullopt;
+  }
+  std::unique_ptr<char, decltype(&std::free)> holder(value, &std::free);
+  return std::string(holder.get());
+#else
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return std::nullopt;
+  }
+  return std::string(value);
+#endif
 }
 
-auto ComputeSourceHash(const std::filesystem::path& source_path) -> uint64_t
+auto ReadFileContent(const std::filesystem::path& file_path)
+  -> std::optional<std::string>
 {
-  std::ifstream file(source_path, std::ios::binary);
+  std::ifstream file(file_path, std::ios::binary);
   if (!file) {
-    return 0;
+    return std::nullopt;
   }
 
   std::string content(
     (std::istreambuf_iterator(file)), std::istreambuf_iterator<char>());
-  return CalculateShaderSourceHash(
-    std::u8string(content.begin(), content.end()));
+  return content;
+}
+
+auto ExtractQuotedIncludes(std::string_view source) -> std::vector<std::string>
+{
+  std::vector<std::string> includes;
+
+  size_t pos = 0;
+  while (pos < source.size()) {
+    const size_t line_end = source.find_first_of("\r\n", pos);
+    const auto line = source.substr(pos,
+      (line_end == std::string_view::npos) ? source.size() - pos
+                                           : line_end - pos);
+
+    const size_t inc = line.find("#include");
+    if (inc != std::string_view::npos) {
+      const size_t first_quote = line.find('"', inc);
+      if (first_quote != std::string_view::npos) {
+        const size_t second_quote = line.find('"', first_quote + 1);
+        if (second_quote != std::string_view::npos
+          && second_quote > first_quote + 1) {
+          includes.emplace_back(
+            line.substr(first_quote + 1, second_quote - first_quote - 1));
+        }
+      }
+    }
+
+    if (line_end == std::string_view::npos) {
+      break;
+    }
+    pos = source.find_first_not_of("\r\n", line_end);
+    if (pos == std::string_view::npos) {
+      break;
+    }
+  }
+
+  return includes;
+}
+
+auto ResolveIncludePath(const std::filesystem::path& including_file,
+  std::string_view include_name,
+  const std::vector<std::filesystem::path>& include_dirs)
+  -> std::optional<std::filesystem::path>
+{
+  const std::filesystem::path include_rel(include_name);
+
+  {
+    auto candidate = including_file.parent_path() / include_rel;
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const auto& dir : include_dirs) {
+    auto candidate = dir / include_rel;
+    if (exists(candidate)) {
+      return candidate;
+    }
+  }
+
+  return std::nullopt;
+}
+
+auto ComputeSourceHashWithIncludes(const std::filesystem::path& source_path,
+  const std::vector<std::filesystem::path>& include_dirs) -> uint64_t
+{
+  std::unordered_set<std::string> visited;
+  size_t seed = 0;
+
+  std::vector<std::filesystem::path> stack;
+  stack.emplace_back(source_path);
+
+  while (!stack.empty()) {
+    auto current = std::move(stack.back());
+    stack.pop_back();
+
+    std::error_code ec;
+    const auto canonical = weakly_canonical(current, ec);
+    const std::string key
+      = (ec ? current.lexically_normal() : canonical).string();
+    if (!visited.insert(key).second) {
+      continue;
+    }
+
+    const auto content_opt = ReadFileContent(current);
+    if (!content_opt.has_value()) {
+      oxygen::HashCombine(seed, key);
+      oxygen::HashCombine(seed, uint64_t { 0 });
+      continue;
+    }
+
+    const auto& content = *content_opt;
+    const auto content_hash
+      = oxygen::ComputeFNV1a64(content.data(), content.size());
+    oxygen::HashCombine(seed, key);
+    oxygen::HashCombine(seed, content_hash);
+
+    const auto includes = ExtractQuotedIncludes(content);
+    for (const auto& inc : includes) {
+      if (auto resolved = ResolveIncludePath(current, inc, include_dirs);
+        resolved.has_value()) {
+        stack.emplace_back(std::move(*resolved));
+      } else {
+        oxygen::HashCombine(seed, inc);
+      }
+    }
+  }
+
+  return static_cast<uint64_t>(seed);
 }
 
 auto IsSourceFileNewer(const CompiledShaderInfo& info) -> bool
@@ -108,7 +235,7 @@ inline auto Store(AnyWriter& writer, const ShaderType& value) -> Result<void>
 //! Store specialization for ArchiveHeader.
 inline auto Load(AnyReader& reader, ShaderType& value) -> Result<void>
 {
-  std::underlying_type_t<ShaderType> shader_type_value;
+  std::underlying_type_t<ShaderType> shader_type_value = 0;
   CHECK_RESULT(reader.ReadInto(shader_type_value));
   if (shader_type_value
       < static_cast<std::underlying_type_t<ShaderType>>(ShaderType::kUnknown)
@@ -128,23 +255,21 @@ namespace {
 auto GetWorkspaceRoot() -> std::filesystem::path
 {
   // Detect GitHub Actions CI for running tests during CI
-  const char* github_actions = std::getenv("GITHUB_ACTIONS");
-  if (github_actions && std::string(github_actions) == "true") {
+  const auto github_actions = GetEnvVar("GITHUB_ACTIONS");
+  if (github_actions.has_value() && *github_actions == "true") {
     // Use GITHUB_WORKSPACE as base if set
-    const char* github_workspace = std::getenv("GITHUB_WORKSPACE");
-    if (github_workspace) {
-      return github_workspace;
-    } else {
-      auto cwd = std::filesystem::current_path();
-      LOG_F(WARNING, "GITHUB_WORKSPACE not set, using current directory: {}",
-        cwd.string());
-      return cwd;
+    const auto github_workspace = GetEnvVar("GITHUB_WORKSPACE");
+    if (github_workspace.has_value()) {
+      return *github_workspace;
     }
-  } else {
-    // FIXME: replace hardcoded path
-    // Local/dev: use hardcoded project root
-    return "F:/projects/DroidNet/projects/Oxygen.Engine/";
+    auto cwd = std::filesystem::current_path();
+    LOG_F(WARNING, "GITHUB_WORKSPACE not set, using current directory: {}",
+      cwd.string());
+    return cwd;
   }
+  // FIXME: replace hardcoded path
+  // Local/dev: use hardcoded project root
+  return "F:/projects/DroidNet/projects/Oxygen.Engine/";
 }
 
 auto GetArchivePath(const ShaderManager::Config& config)
@@ -204,9 +329,10 @@ auto ShaderManager::AddCompiledShader(CompiledShader shader) -> bool
 auto ShaderManager::GetShaderBytecode(std::string_view unique_id) const
   -> std::shared_ptr<IShaderByteCode>
 {
-  const auto it = std::ranges::find_if(shader_cache_, [&](const auto& pair) {
-    return pair.second.info.shader_unique_id == unique_id;
-  });
+  const auto it
+    = std::ranges::find_if(shader_cache_, [&](const auto& pair) -> auto {
+        return pair.second.info.shader_unique_id == unique_id;
+      });
 
   if (it == shader_cache_.end()) {
     return nullptr;
@@ -225,7 +351,16 @@ auto ShaderManager::IsShaderOutdated(const ShaderInfo& shader) const -> bool
 
   // Check file exists and hash matches
   const auto& info = it->second.info;
-  if (const auto current_hash = ComputeSourceHash(info.source_file_path);
+  std::vector<std::filesystem::path> include_dirs;
+  if (config_.source_dir.has_value()) {
+    include_dirs.emplace_back(GetWorkspaceRoot() / config_.source_dir.value());
+  }
+  for (const auto& dir : config_.include_dirs) {
+    include_dirs.emplace_back(GetWorkspaceRoot() / dir);
+  }
+
+  if (const auto current_hash
+    = ComputeSourceHashWithIncludes(info.source_file_path, include_dirs);
     current_hash != info.source_hash) {
     return true;
   }
@@ -252,8 +387,10 @@ void ShaderManager::UpdateOutdatedShaders()
     return;
   }
 
-  const auto result = std::ranges::all_of(outdated,
-    [this](const auto& profile) { return CompileAndAddShader(profile); });
+  const auto result
+    = std::ranges::all_of(outdated, [this](const auto& profile) -> auto {
+        return CompileAndAddShader(profile);
+      });
 
   if (result) {
     LOG_F(
@@ -269,8 +406,10 @@ void ShaderManager::UpdateOutdatedShaders()
 auto ShaderManager::RecompileAll() -> bool
 {
   shader_cache_.clear();
-  return std::ranges::all_of(shader_infos_,
-    [this](const auto& profile) { return CompileAndAddShader(profile); });
+  return std::ranges::all_of(
+    shader_infos_, [this](const auto& profile) -> auto {
+      return CompileAndAddShader(profile);
+    });
 }
 
 namespace {
@@ -420,12 +559,21 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
   source_path /= config_.source_dir.value();
   source_path /= profile.relative_path;
 
-  auto bytecode = config_.compiler->CompileFromFile(source_path, profile);
+  ShaderCompiler::ShaderCompileOptions compile_options {};
+  compile_options.include_dirs.emplace_back(
+    GetWorkspaceRoot() / config_.source_dir.value());
+  for (const auto& dir : config_.include_dirs) {
+    compile_options.include_dirs.emplace_back(GetWorkspaceRoot() / dir);
+  }
+
+  auto bytecode
+    = config_.compiler->CompileFromFile(source_path, profile, compile_options);
   if (!bytecode) {
     return false;
   }
 
-  const auto source_hash = ComputeSourceHash(source_path);
+  const auto source_hash
+    = ComputeSourceHashWithIncludes(source_path, compile_options.include_dirs);
 
   CompiledShaderInfo info { profile.type, MakeShaderIdentifier(profile),
     source_path.string(), source_hash, bytecode->Size(),
@@ -437,7 +585,7 @@ auto ShaderManager::CompileAndAddShader(const ShaderInfo& profile) -> bool
 
 auto ShaderManager::HasShader(std::string_view unique_id) const noexcept -> bool
 {
-  return std::ranges::any_of(shader_cache_, [&](const auto& pair) {
+  return std::ranges::any_of(shader_cache_, [&](const auto& pair) -> auto {
     return pair.second.info.shader_unique_id == unique_id;
   });
 }

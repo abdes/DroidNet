@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
+#include <filesystem>
 #include <limits>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <d3dcommon.h>
 #include <dxcapi.h>
@@ -28,6 +31,102 @@ using oxygen::graphics::d3d12::ShaderCompiler;
 using oxygen::windows::ThrowOnFailed;
 
 namespace {
+
+void LogCompilationErrors(IDxcBlob* error_blob);
+
+struct DxcCompileArgs {
+  std::wstring entry_point;
+  std::vector<std::wstring> include_dirs;
+  std::vector<LPCWSTR> argv;
+};
+
+auto MakeDxcArguments(const wchar_t* profile_name,
+  const std::string& entry_point_utf8,
+  const std::vector<std::filesystem::path>& include_dirs) -> DxcCompileArgs
+{
+  DxcCompileArgs args {};
+
+  oxygen::string_utils::Utf8ToWide(entry_point_utf8, args.entry_point);
+
+  args.argv.emplace_back(L"-Ges");
+  args.argv.emplace_back(L"-T");
+  args.argv.emplace_back(profile_name);
+
+  args.include_dirs.reserve(include_dirs.size());
+  for (const auto& include_dir : include_dirs) {
+    if (include_dir.empty()) {
+      continue;
+    }
+    args.include_dirs.emplace_back(include_dir.wstring());
+    args.argv.emplace_back(L"-I");
+    args.argv.emplace_back(args.include_dirs.back().c_str());
+  }
+
+#if !defined(NDEBUG)
+  args.argv.emplace_back(L"-Od"); // Disable optimizations
+  args.argv.emplace_back(L"-Zi"); // Enable debug information
+  args.argv.emplace_back(L"-Qembed_debug"); // Embed PDB in shader container
+#else // NDEBUG
+  args.argv.emplace_back(L"-O3"); // Optimization level 3
+#endif // NDEBUG
+
+  args.argv.emplace_back(L"-E");
+  args.argv.emplace_back(args.entry_point.c_str());
+
+  return args;
+}
+
+auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
+  const DxcBuffer& source_buffer, DxcCompileArgs& args,
+  const std::string& shader_identifier)
+  -> std::unique_ptr<oxygen::graphics::IShaderByteCode>
+{
+  ComPtr<IDxcResult> result;
+  HRESULT hr = compiler.Compile(&source_buffer, args.argv.data(),
+    static_cast<uint32_t>(args.argv.size()), &include_handler,
+    IID_PPV_ARGS(&result));
+  if (FAILED(hr)) {
+    LOG_F(ERROR, "DXC Compile call failed: {:x}", hr);
+    return {};
+  }
+  DCHECK_NOTNULL_F(result);
+
+  hr = result->GetStatus(&hr);
+  if (FAILED(hr)) {
+    ComPtr<IDxcBlobEncoding> error_blob;
+    hr = result->GetErrorBuffer(&error_blob);
+    if (error_blob != nullptr) {
+      LOG_F(ERROR, "Failed to compile shader {}", shader_identifier);
+      LogCompilationErrors(error_blob.Get());
+    }
+    return {};
+  }
+
+  ComPtr<IDxcBlob> output;
+  ThrowOnFailed(result->GetResult(&output));
+  if (output == nullptr) {
+    LOG_F(ERROR, "GetResult returned null blob");
+    return {};
+  }
+
+  const size_t size = output->GetBufferSize();
+  if (size == 0) {
+    LOG_F(ERROR, "Shader compilation succeeded but produced empty bytecode");
+
+    ComPtr<IDxcBlobWide> output_name_blob;
+    ComPtr<IDxcBlob> warning_blob;
+    hr = result->GetOutput(
+      DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), &output_name_blob);
+    if (SUCCEEDED(hr) && (warning_blob != nullptr)) {
+      LogCompilationErrors(warning_blob.Get());
+    }
+    return {};
+  }
+
+  LOG_F(1, "Shader bytecode size = {}", output->GetBufferSize());
+  return std::make_unique<oxygen::graphics::ShaderByteCode<ComPtr<IDxcBlob>>>(
+    std::move(output));
+}
 
 void LogCompilationErrors(IDxcBlob* error_blob)
 {
@@ -84,7 +183,8 @@ ShaderCompiler::ShaderCompiler(Config config)
 ShaderCompiler::~ShaderCompiler() = default;
 
 auto ShaderCompiler::CompileFromSource(const std::u8string& shader_source,
-  const ShaderInfo& shader_info) const -> std::unique_ptr<IShaderByteCode>
+  const ShaderInfo& shader_info, const ShaderCompileOptions& options) const
+  -> std::unique_ptr<IShaderByteCode>
 {
   DCHECK_F(shader_source.size() < (std::numeric_limits<uint32_t>::max)());
 
@@ -100,22 +200,8 @@ auto ShaderCompiler::CompileFromSource(const std::u8string& shader_source,
     static_cast<UINT32>(shader_source.size()), CP_UTF8,
     src_blob.GetAddressOf()));
 
-  std::vector<const wchar_t*> arguments;
-  arguments.emplace_back(L"-Ges");
-  arguments.emplace_back(L"-T");
-  arguments.emplace_back(profile_name);
-#if !defined(NDEBUG)
-  arguments.emplace_back(L"-Od"); // Disable optimizations
-  arguments.emplace_back(L"-Zi"); // Enable debug information
-  arguments.emplace_back(L"-Qembed_debug"); // Embed PDB in shader container
-#else // NDEBUG
-  arguments.emplace_back(L"-O3"); // Optimization level 3
-#endif // NDEBUG
-
-  std::wstring entry_point {};
-  string_utils::Utf8ToWide(shader_info.entry_point, entry_point);
-  arguments.emplace_back(L"-E");
-  arguments.emplace_back(entry_point.c_str());
+  auto args = MakeDxcArguments(
+    profile_name, shader_info.entry_point, options.include_dirs);
 
   //// Add defines to arguments
   // for (const auto& define : defines)
@@ -129,58 +215,23 @@ auto ShaderCompiler::CompileFromSource(const std::u8string& shader_source,
   // }
 
   DxcBuffer source_buffer {
-    .Ptr = source_buffer.Ptr = src_blob->GetBufferPointer(),
-    .Size = source_buffer.Size = src_blob->GetBufferSize(),
-    .Encoding = source_buffer.Encoding = DXC_CP_UTF8,
+    .Ptr = src_blob->GetBufferPointer(),
+    .Size = src_blob->GetBufferSize(),
+    .Encoding = DXC_CP_UTF8,
   };
 
-  ComPtr<IDxcResult> result;
-  HRESULT hr = compiler_->Compile(&source_buffer, arguments.data(),
-    static_cast<uint32_t>(arguments.size()), include_processor_.Get(),
-    IID_PPV_ARGS(&result));
-  if (FAILED(hr)) {
-    LOG_F(ERROR, "DXC Compile call failed: {:x}", hr);
-    return {};
-  }
-  DCHECK_NOTNULL_F(result);
+  auto* const compiler = compiler_.Get();
+  auto* const include_handler = include_processor_.Get();
+  DCHECK_NOTNULL_F(compiler);
+  DCHECK_NOTNULL_F(include_handler);
 
-  hr = result->GetStatus(&hr);
-  if (FAILED(hr)) {
-    ComPtr<IDxcBlobEncoding> error_blob;
-    hr = result->GetErrorBuffer(&error_blob);
-    if (error_blob != nullptr) {
-      LOG_F(ERROR, "Failed to compile shader from source");
-      LogCompilationErrors(error_blob.Get());
-    }
+  auto bytecode = CompileDxc(*compiler, *include_handler, source_buffer, args,
+    shader_info.relative_path);
+  if (!bytecode) {
     return {};
   }
+
   LOG_F(
     INFO, "Shader at `{}` compiled successfully", shader_info.relative_path);
-
-  ComPtr<IDxcBlob> output;
-  ThrowOnFailed(result->GetResult(&output));
-
-  if (output == nullptr) {
-    LOG_F(ERROR, "GetResult returned null blob");
-    return {};
-  }
-
-  size_t size = output->GetBufferSize();
-  if (size == 0) {
-    LOG_F(ERROR, "Shader compilation succeeded but produced empty bytecode");
-
-    // Check if we have any warnings
-    ComPtr<IDxcBlobWide> output_name_blob;
-    ComPtr<IDxcBlob> warning_blob;
-    hr = result->GetOutput(
-      DXC_OUT_ERRORS, IID_PPV_ARGS(&warning_blob), &output_name_blob);
-    if (SUCCEEDED(hr) && (warning_blob != nullptr)) {
-      LogCompilationErrors(warning_blob.Get());
-    }
-    return {};
-  }
-
-  LOG_F(1, "Shader bytecode size = {}", output->GetBufferSize());
-
-  return std::make_unique<ShaderByteCode<ComPtr<IDxcBlob>>>(std::move(output));
+  return bytecode;
 }
