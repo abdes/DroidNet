@@ -95,6 +95,7 @@ set(
   "ScenePrep/Concepts.h"
   "ScenePrep/Extractors.h"
   "ScenePrep/Finalizers.h"
+  "ScenePrep/GeometryRef.h"
   "ScenePrep/Handles.h"
   "ScenePrep/MaterialRef.h"
   "ScenePrep/RenderItemData.h"
