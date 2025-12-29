@@ -185,7 +185,7 @@ private:
   //! Indices of items that passed filtering.
   std::vector<std::size_t> retained_indices_;
 
-  //! Modern geometry uploader with deduplication and bindless access.
+  //! Modern geometry uploader with stable handles and bindless access.
   std::unique_ptr<renderer::resources::GeometryUploader> geometry_uploader_;
 
   //! Persistent transform deduplication and GPU buffer management.

@@ -25,6 +25,7 @@
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -106,8 +107,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.roughness = 0.9f;
   desc.ambient_occlusion = 1.0f;
   // Leave texture indices at default invalid (no textures)
+  const AssetKey asset_key { .guid = GenerateAssetGuid() };
   return std::make_shared<const MaterialAsset>(
-    desc, std::vector<ShaderReference> {});
+    asset_key, desc, std::vector<ShaderReference> {});
 };
 
 //! Build a 2-LOD sphere GeometryAsset (high and low tessellation).
@@ -177,10 +179,13 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
 
   if (kUseSingleLodForTest) {
     return std::make_shared<oxygen::data::GeometryAsset>(
+      oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
       geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh0) });
   }
 
-  return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
+    geo_desc,
     std::vector<std::shared_ptr<Mesh>> { std::move(mesh0), std::move(mesh1) });
 }
 
@@ -261,6 +266,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
   return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
     geo_desc, std::vector<std::shared_ptr<Mesh>> { std::move(mesh) });
 }
 
@@ -1204,8 +1210,7 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
   }
 
   if (!main_camera_.HasCamera()) {
-    auto camera
-      = std::make_unique<PerspectiveCamera>();
+    auto camera = std::make_unique<PerspectiveCamera>();
     const bool attached = main_camera_.AttachCamera(std::move(camera));
     CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   }
@@ -1298,8 +1303,9 @@ auto MainModule::UpdateSceneMutations(const float delta_time) -> void
         desc.base_color[1] = 0.3f;
         desc.base_color[2] = 1.0f;
         desc.base_color[3] = 1.0f;
+        const data::AssetKey asset_key { .guid = data::GenerateAssetGuid() };
         auto blue = std::make_shared<const data::MaterialAsset>(
-          desc, std::vector<data::ShaderReference> {});
+          asset_key, desc, std::vector<data::ShaderReference> {});
         r.SetMaterialOverride(lod, 1, blue);
       } else {
         r.ClearMaterialOverride(lod, 1);

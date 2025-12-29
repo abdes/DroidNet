@@ -27,8 +27,20 @@ namespace oxygen::data {
 */
 class Asset : public Object {
 public:
+  //! Constructs an asset with a stable asset key.
+  explicit Asset(AssetKey asset_key) noexcept
+    : asset_key_(asset_key)
+  {
+  }
+
   //! Virtual destructor for interface.
   virtual ~Asset() = default;
+
+  //! Returns the stable identity key for this asset.
+  [[nodiscard]] auto GetAssetKey() const noexcept -> AssetKey
+  {
+    return asset_key_;
+  }
 
   //! Returns the asset type field from the header (for debugging).
   auto GetAssetType() const noexcept -> AssetType
@@ -76,6 +88,9 @@ public:
 protected:
   //! Returns the asset header (to be implemented by derived classes).
   virtual auto GetHeader() const noexcept -> const pak::AssetHeader& = 0;
+
+private:
+  AssetKey asset_key_ {};
 };
 
 } // namespace oxygen::data

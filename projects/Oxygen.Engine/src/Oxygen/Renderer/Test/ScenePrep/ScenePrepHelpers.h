@@ -129,7 +129,8 @@ inline auto MakeGeometryWithLods(const size_t lod_count, const glm::vec3 bb_min,
   for (size_t i = 0; i < lod_count; ++i) {
     lods.emplace_back(MakeSimpleMesh(static_cast<uint32_t>(i)));
   }
-  return std::make_shared<data::GeometryAsset>(desc, std::move(lods));
+  return std::make_shared<data::GeometryAsset>(
+    AssetKey {}, desc, std::move(lods));
 }
 
 //! Build a GeometryAsset with per-LOD submesh counts.
@@ -153,7 +154,8 @@ inline auto MakeGeometryWithLODSubmeshes(
   for (const auto count : per_lod_counts) {
     lods.emplace_back(MakeMeshWithSubmeshes(lod++, count));
   }
-  return std::make_shared<data::GeometryAsset>(desc, std::move(lods));
+  return std::make_shared<data::GeometryAsset>(
+    AssetKey {}, desc, std::move(lods));
 }
 
 } // namespace oxygen::engine::sceneprep::testing

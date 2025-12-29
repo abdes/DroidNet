@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <bit>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -31,6 +32,14 @@ using oxygen::renderer::testing::MaterialBinderTest;
   using oxygen::data::pak::kMaterialFlag_NoTextureSampling;
   using oxygen::data::pak::MaterialAssetDesc;
 
+  oxygen::data::AssetKey asset_key { .guid = {} };
+  const auto bits = std::bit_cast<std::uint32_t>(base_color_r);
+  asset_key.guid[0] = static_cast<std::uint8_t>((bits >> 0U) & 0xFFU);
+  asset_key.guid[1] = static_cast<std::uint8_t>((bits >> 8U) & 0xFFU);
+  asset_key.guid[2] = static_cast<std::uint8_t>((bits >> 16U) & 0xFFU);
+  asset_key.guid[3] = static_cast<std::uint8_t>((bits >> 24U) & 0xFFU);
+  asset_key.guid[15] = 0x4DU;
+
   MaterialAssetDesc desc {};
   desc.flags |= kMaterialFlag_NoTextureSampling;
   desc.base_color[0] = base_color_r;
@@ -39,7 +48,7 @@ using oxygen::renderer::testing::MaterialBinderTest;
   desc.base_color[3] = 1.0F;
 
   // No runtime texture keys provided -> ResourceKey{0} for all slots.
-  return std::make_shared<oxygen::data::MaterialAsset>(desc);
+  return std::make_shared<oxygen::data::MaterialAsset>(asset_key, desc);
 }
 
 class MaterialBinderEdgeTest : public MaterialBinderTest { };

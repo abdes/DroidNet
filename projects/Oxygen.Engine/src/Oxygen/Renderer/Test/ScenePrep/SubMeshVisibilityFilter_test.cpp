@@ -287,7 +287,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
   const auto mesh = MakeSpreadMesh(0, centers);
   oxygen::data::pak::GeometryAssetDesc desc {};
   desc.lod_count = 1;
-  const auto geom = std::make_shared<GeometryAsset>(desc, std::vector { mesh });
+  const auto geom = std::make_shared<GeometryAsset>(
+    oxygen::data::AssetKey {}, desc, std::vector { mesh });
 
   SetGeometry(geom);
   SeedVisibilityAndTransform();

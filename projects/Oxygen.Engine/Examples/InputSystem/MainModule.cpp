@@ -16,6 +16,7 @@
 #include <imgui.h>
 
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -221,8 +222,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.roughness = 0.6f;
   desc.ambient_occlusion = 1.0f;
   // Leave texture indices invalid (no textures)
+  const AssetKey asset_key { .guid = GenerateAssetGuid() };
   return std::make_shared<const MaterialAsset>(
-    desc, std::vector<ShaderReference> {});
+    asset_key, desc, std::vector<ShaderReference> {});
 }
 
 auto CheckLimits(float& direction, float& new_distance) -> void
@@ -498,7 +500,9 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
       geo_desc.bounding_box_max[1] = bb_max.y;
       geo_desc.bounding_box_max[2] = bb_max.z;
 
-      auto sphere_geo = std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
+      auto sphere_geo = std::make_shared<oxygen::data::GeometryAsset>(
+        oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
+        geo_desc,
         std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 
       // Create a node and attach the geometry
@@ -557,8 +561,7 @@ auto MainModule::EnsureMainCamera(const int width, const int height) -> void
   }
 
   if (!main_camera_.HasCamera()) {
-    auto camera
-      = std::make_unique<PerspectiveCamera>();
+    auto camera = std::make_unique<PerspectiveCamera>();
     const bool attached = main_camera_.AttachCamera(std::move(camera));
     CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
     // Set an initial camera position looking towards -Z so the origin is

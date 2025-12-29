@@ -39,7 +39,8 @@ using oxygen::renderer::testing::MaterialBinderTest;
   desc.base_color[2] = 0.25F;
   desc.base_color[3] = 1.0F;
 
-  return std::make_shared<oxygen::data::MaterialAsset>(desc,
+  return std::make_shared<oxygen::data::MaterialAsset>(
+    oxygen::data::AssetKey {}, desc,
     std::vector<oxygen::data::ShaderReference> {},
     std::vector { base_color_key, normal_key });
 }

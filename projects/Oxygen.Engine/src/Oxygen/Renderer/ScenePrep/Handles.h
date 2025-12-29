@@ -77,11 +77,16 @@ constexpr auto to_string(MaterialHandle h)
 /*!
  Assigned during collection via `GeometryUploader::GetOrAllocate(mesh)`.
 
- Uses content-based hashing: identical meshes receive the same handle, while
- unique meshes allocate new handles. Multiple items referencing the same mesh
- receive the same handle at collection time. During finalization, handles map
- to GPU vertex/index buffer SRV indices, enabling bindless access during
- rendering.
+ Geometry deduplication (identical content resolving to a single asset identity)
+ is owned by the asset loader and its cache.
+
+ GeometryUploader may perform lightweight interning: repeated requests for the
+ same geometry identity (AssetKey, LOD index) return the same handle.
+ GeometryUploader must not attempt runtime content hashing of vertex/index
+ buffers.
+
+ During finalization, handles map to GPU vertex/index buffer SRV indices,
+ enabling bindless access during rendering.
 
  Handles remain stable for the lifetime of the residency entry but may be
  recycled during long-running execution; do not assume monotonically increasing

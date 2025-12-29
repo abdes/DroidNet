@@ -184,7 +184,7 @@ protected:
     std::vector<std::shared_ptr<Mesh>> lods;
     lods.push_back(mesh);
     const auto geometry
-      = std::make_shared<GeometryAsset>(desc, std::move(lods));
+      = std::make_shared<GeometryAsset>(AssetKey {}, desc, std::move(lods));
 
     Node().GetRenderable().SetGeometry(geometry);
   }

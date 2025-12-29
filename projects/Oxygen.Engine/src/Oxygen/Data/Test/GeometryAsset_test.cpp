@@ -13,6 +13,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 // Project
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -91,7 +92,8 @@ public:
     desc.bounding_box_max[2] = 0.0f;
 
     std::vector<std::shared_ptr<Mesh>> lods = { mesh0, mesh1 };
-    return std::make_unique<GeometryAsset>(desc, std::move(lods));
+    return std::make_unique<GeometryAsset>(
+      oxygen::data::AssetKey {}, desc, std::move(lods));
   }
 };
 

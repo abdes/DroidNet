@@ -67,10 +67,11 @@ class MaterialAsset : public Asset {
   OXYGEN_TYPED(MaterialAsset)
 
 public:
-  explicit MaterialAsset(pak::MaterialAssetDesc desc,
+  explicit MaterialAsset(AssetKey asset_key, pak::MaterialAssetDesc desc,
     std::vector<ShaderReference> shader_refs = {},
     std::vector<oxygen::content::ResourceKey> texture_resource_keys = {})
-    : desc_(std::move(desc))
+    : Asset(asset_key)
+    , desc_(std::move(desc))
     , shader_refs_(std::move(shader_refs))
     , texture_resource_keys_(std::move(texture_resource_keys))
   {

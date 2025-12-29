@@ -6,8 +6,14 @@
 
 #include "./AssetLoader_test.h"
 
+#include <Oxygen/Base/ObserverPtr.h>
+
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
@@ -23,6 +29,10 @@ using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
+using oxygen::observer_ptr;
+using oxygen::co::Co;
+using oxygen::co::testing::TestEventLoop;
+
 //=== AssetLoader Dependency Mgmt Tests ===-----------------------------------//
 
 namespace {
@@ -37,27 +47,54 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("material_with_textures");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto material_key = CreateTestAssetKey("textured_material");
 
-  // Act
-  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(material, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
 
-  // Verify that texture dependencies are properly referenced
-  // All texture indices should be valid (>= 0), with 0 being the default
-  // texture
-  const auto base_color_idx = material->GetBaseColorTexture();
-  const auto normal_idx = material->GetNormalTexture();
-  const auto roughness_idx = material->GetRoughnessTexture();
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
 
-  // All indices should be valid (0 = default texture, >0 = specific textures)
-  EXPECT_GE(base_color_idx, 0);
-  EXPECT_GE(normal_idx, 0);
-  EXPECT_GE(roughness_idx, 0);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, NotNull());
+
+      if (material) {
+        // Verify that texture dependencies are properly referenced.
+        // All texture indices should be valid (>= 0), with 0 being the default
+        // texture.
+        const auto base_color_idx = material->GetBaseColorTexture();
+        const auto normal_idx = material->GetNormalTexture();
+        const auto roughness_idx = material->GetRoughnessTexture();
+
+        // All indices should be valid (0 = default texture, >0 = specific
+        // textures).
+        EXPECT_GE(base_color_idx, 0);
+        EXPECT_GE(normal_idx, 0);
+        EXPECT_GE(roughness_idx, 0);
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: AssetLoader handles geometry with buffer dependencies
@@ -70,36 +107,66 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("geometry_with_buffers");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto geometry_key = CreateTestAssetKey("buffered_geometry");
 
-  // Act
-  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(geometry, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
 
-  // Verify that buffer dependencies are properly loaded
-  // The geometry should have at least one mesh with valid buffer references
-  const auto meshes = geometry->Meshes();
-  EXPECT_FALSE(meshes.empty());
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
 
-  if (!meshes.empty()) {
-    const auto& first_mesh = meshes[0];
-    ASSERT_THAT(first_mesh, NotNull());
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadGeometryAsset);
 
-    // Verify mesh has buffer data available
-    // Note: VertexCount/IndexCount may be 0 for default/empty buffers (index 0)
-    // but the mesh should still be valid and have buffer references
-    EXPECT_GE(first_mesh->VertexCount(), 0);
-    EXPECT_GE(first_mesh->IndexCount(), 0);
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
 
-    // If the mesh has indices, it should be marked as indexed
-    if (first_mesh->IndexCount() > 0) {
-      EXPECT_TRUE(first_mesh->IsIndexed());
-    }
-  }
+      loader.AddPakFile(pak_path);
+
+      const auto geometry
+        = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+      EXPECT_THAT(geometry, NotNull());
+
+      if (geometry) {
+        // Verify that buffer dependencies are properly loaded.
+        // The geometry should have at least one mesh with valid buffer
+        // references.
+        const auto meshes = geometry->Meshes();
+        EXPECT_FALSE(meshes.empty());
+
+        if (!meshes.empty()) {
+          const auto& first_mesh = meshes[0];
+          EXPECT_THAT(first_mesh, NotNull());
+
+          // Verify mesh has buffer data available.
+          // Note: VertexCount/IndexCount may be 0 for default/empty buffers
+          // (index 0), but the mesh should still be valid and have buffer
+          // references.
+          EXPECT_GE(first_mesh->VertexCount(), 0);
+          EXPECT_GE(first_mesh->IndexCount(), 0);
+
+          // If the mesh has indices, it should be marked as indexed.
+          if (first_mesh->IndexCount() > 0) {
+            EXPECT_TRUE(first_mesh->IsIndexed());
+          }
+        }
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: Cycle detection prevents insertion of an edge creating a cycle

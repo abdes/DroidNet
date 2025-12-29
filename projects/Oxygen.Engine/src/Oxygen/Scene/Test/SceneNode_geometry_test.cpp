@@ -25,6 +25,7 @@ protected:
   static auto MakeSingleLodGeometry(std::shared_ptr<oxygen::data::Mesh> mesh)
     -> std::shared_ptr<const oxygen::data::GeometryAsset>
   {
+    using oxygen::data::AssetKey;
     using oxygen::data::GeometryAsset;
     using oxygen::data::pak::GeometryAssetDesc;
 
@@ -34,13 +35,15 @@ protected:
 
     std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
     lods.push_back(std::move(mesh));
-    return std::make_shared<GeometryAsset>(std::move(desc), std::move(lods));
+    return std::make_shared<GeometryAsset>(
+      AssetKey {}, std::move(desc), std::move(lods));
   }
 
   static auto MakeTwoLodGeometry(std::shared_ptr<oxygen::data::Mesh> lod0,
     std::shared_ptr<oxygen::data::Mesh> lod1)
     -> std::shared_ptr<const oxygen::data::GeometryAsset>
   {
+    using oxygen::data::AssetKey;
     using oxygen::data::GeometryAsset;
     using oxygen::data::pak::GeometryAssetDesc;
 
@@ -50,7 +53,8 @@ protected:
     std::vector<std::shared_ptr<oxygen::data::Mesh>> lods;
     lods.push_back(std::move(lod0));
     lods.push_back(std::move(lod1));
-    return std::make_shared<GeometryAsset>(std::move(desc), std::move(lods));
+    return std::make_shared<GeometryAsset>(
+      AssetKey {}, std::move(desc), std::move(lods));
   }
 };
 

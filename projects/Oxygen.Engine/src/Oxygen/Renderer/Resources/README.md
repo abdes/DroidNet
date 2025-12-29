@@ -14,7 +14,7 @@ The Resources module is responsible for:
 ### Key Components
 
 - **ResourceCoordinator**: Orchestrates all resource processing and owns the workers
-- **GeometryUploader**: Maps geometry assets to GPU buffers, deduplicates, schedules uploads
+- **GeometryUploader**: Maps geometry assets to GPU buffers, interns mesh identities, schedules uploads
 - **MaterialBinder**: Maps material assets to GPU buffers, manages bindless slots, schedules uploads
 - **TransformUploader**: Deduplicates and uploads transform matrices
 - **HandleAllocator**: Allocates stable, versioned handles

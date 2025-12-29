@@ -657,11 +657,12 @@ auto AssetLoader::ReleaseAsset(const data::AssetKey& key) -> bool
   AssertOwningThread();
   // Enable eviction notifications for the whole release cascade, since
   // dependency check-ins may evict multiple entries (resources and/or assets).
-  auto eviction_guard
-    = content_cache_.OnEviction([&]([[maybe_unused]] uint64_t cache_key,
-                                  std::shared_ptr<void> value, TypeId type_id) {
-        LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
-      });
+  auto eviction_guard = content_cache_.OnEviction(
+    [&]([[maybe_unused]] uint64_t cache_key,
+      [[maybe_unused]] std::shared_ptr<void> value, TypeId type_id) {
+      static_cast<void>(value);
+      LOG_F(2, "Evict entry: key_hash={} type_id={}", cache_key, type_id);
+    });
 
   // Recursively release (check in) the asset and all its dependencies.
   ReleaseAssetTree(key);
@@ -1460,7 +1461,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           if (!offset) {
             co_return nullptr;
           }
-          if (auto seek_res = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+          if (auto seek_res
+            = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
             !seek_res) {
             co_return nullptr;
           }
@@ -1468,7 +1470,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
 
-          auto loader_it = resource_loaders_.find(data::TextureResource::ClassTypeId());
+          auto loader_it
+            = resource_loaders_.find(data::TextureResource::ClassTypeId());
           if (loader_it == resource_loaders_.end()) {
             LOG_F(ERROR, "No loader registered for resource type id: {}",
               data::TextureResource::ClassTypeId());
@@ -1486,15 +1489,17 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
               .asset_loader = this,
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
-              .data_readers
-              = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .data_readers = std::make_tuple(
+                prepared.buf_reader.get(), prepared.tex_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
 
             auto void_ptr = prepared.loader(context);
-            auto typed = std::static_pointer_cast<data::TextureResource>(void_ptr);
-            if (!typed || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
+            auto typed
+              = std::static_pointer_cast<data::TextureResource>(void_ptr);
+            if (!typed
+              || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
               return std::shared_ptr<data::TextureResource> {};
             }
             return typed;
@@ -1572,7 +1577,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           if (!offset) {
             co_return nullptr;
           }
-          if (auto seek_res = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
+          if (auto seek_res
+            = prepared.desc_reader->Seek(static_cast<size_t>(*offset));
             !seek_res) {
             co_return nullptr;
           }
@@ -1580,7 +1586,8 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
           prepared.buf_reader = source.CreateBufferDataReader();
           prepared.tex_reader = source.CreateTextureDataReader();
 
-          auto loader_it = resource_loaders_.find(data::BufferResource::ClassTypeId());
+          auto loader_it
+            = resource_loaders_.find(data::BufferResource::ClassTypeId());
           if (loader_it == resource_loaders_.end()) {
             LOG_F(ERROR, "No loader registered for resource type id: {}",
               data::BufferResource::ClassTypeId());
@@ -1598,15 +1605,17 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
               .asset_loader = this,
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
-              .data_readers
-              = std::make_tuple(prepared.buf_reader.get(), prepared.tex_reader.get()),
+              .data_readers = std::make_tuple(
+                prepared.buf_reader.get(), prepared.tex_reader.get()),
               .work_offline = work_offline_,
               .source_pak = prepared.source_pak,
             };
 
             auto void_ptr = prepared.loader(context);
-            auto typed = std::static_pointer_cast<data::BufferResource>(void_ptr);
-            if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
+            auto typed
+              = std::static_pointer_cast<data::BufferResource>(void_ptr);
+            if (!typed
+              || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
               return std::shared_ptr<data::BufferResource> {};
             }
             return typed;
@@ -1636,8 +1645,9 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
 }
 
 void oxygen::content::AssetLoader::UnloadObject(
-  uint64_t cache_key, const oxygen::TypeId& type_id)
+  [[maybe_unused]] uint64_t cache_key, const oxygen::TypeId& type_id)
 {
+  static_cast<void>(cache_key);
   if (work_offline_) {
     LOG_F(2, "Skipping unload of type {} due to offline mode", type_id);
     return;
@@ -1659,8 +1669,9 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
   // The resource should always be checked in on release. Whether it remains in
   // the cache or gets evicted is dependent on the eviction policy.
   auto guard = content_cache_.OnEviction(
-    [&](const uint64_t cache_key, std::shared_ptr<void> value,
+    [&](const uint64_t cache_key, [[maybe_unused]] std::shared_ptr<void> value,
       const TypeId type_id) {
+      static_cast<void>(value);
       DCHECK_F(SanityCheckResourceEviction(
         key_hash, cache_key, expected_type_id, type_id));
       LOG_F(2, "Evict resource: key_hash={} type_id={}", cache_key, type_id);
