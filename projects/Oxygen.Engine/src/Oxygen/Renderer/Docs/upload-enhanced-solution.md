@@ -34,7 +34,7 @@ uploads and safe reclamation.
 Phase 2 (Dynamic SRV + mixing)
 
 | Item | Status |
-|---|---|
+| ---- | ------ |
 | Implement dynamic per-frame buffers and descriptor update strategy | Pending |
 | Enable LUT mixing (bit flag) and promotion/demotion heuristics | Pending |
 | Extend tests for promotion/demotion and dynamic path | Pending |
