@@ -54,6 +54,7 @@ set(
   "LooseCookedInspection.h"
   "LoaderContext.h"
   "LoaderFunctions.h"
+  "OperationCancelledException.h"
   "ResourceKey.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
