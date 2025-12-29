@@ -20,9 +20,6 @@
 - `src/Oxygen/Renderer/ScenePrep/Extractors.h` (defensive early-return in `MeshResolver`)
 - `src/Oxygen/Renderer/Resources/DrawMetadataEmitter.*` (small adjustments)
 
-
----
-
 ---
 
 ## Phase 0: Type Renaming (View → ResolvedView)
@@ -350,7 +347,7 @@ Update or create example demonstrating:
 ## Summary of Missing Components
 
 | Component | Priority | Complexity | Depends On |
-|-----------|----------|------------|------------|
+| --------- | -------- | ---------- | ---------- |
 | Rename View → ResolvedView | P0 | Medium | None |
 | Rename PreparedSceneFrame → PreparedScene | P0 | Low | None |
 | RenderContext multi-view state | P0 | Low | Phase 0 |
