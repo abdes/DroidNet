@@ -111,9 +111,12 @@ namespace {
   return true;
 }
 
-// Hash-based key for mesh deduplication. Uses object identity by design, for
-// now.
-auto MakeGeometryKey(const oxygen::data::Mesh& mesh) noexcept -> std::uint64_t
+// Identity key for mesh interning.
+//
+// Deduplication of identical assets is owned by the asset loader. The uploader
+// only interns repeated requests for the same mesh identity.
+auto MakeMeshIdentityKey(const oxygen::data::Mesh& mesh) noexcept
+  -> std::uint64_t
 {
   // Use mesh object identity instead of content-based hashing This
   // automatically handles LOD switching since different LOD meshes are
@@ -161,7 +164,7 @@ GeometryUploader::~GeometryUploader()
   geometry_entries_.clear();
 
   pending_upload_tickets_.clear();
-  mesh_to_handle_.clear();
+  mesh_identity_to_handle_.clear();
 }
 
 auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh)
@@ -188,9 +191,10 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh,
     return engine::sceneprep::GeometryHandle { kInvalidBindlessIndex };
   }
 
-  const auto key = MakeGeometryKey(mesh);
+  const auto key = MakeMeshIdentityKey(mesh);
   LOG_F(2, "mesh key     = {}", key);
-  if (const auto it = mesh_to_handle_.find(key); it != mesh_to_handle_.end()) {
+  if (const auto it = mesh_identity_to_handle_.find(key);
+    it != mesh_identity_to_handle_.end()) {
     const auto h = it->second;
     const auto idx = h.get();
     DCHECK_LT_F(idx, geometry_entries_.size()); // valid index
@@ -230,7 +234,7 @@ auto GeometryUploader::GetOrAllocate(const data::Mesh& mesh,
   DLOG_F(2, "is dirty    : {}", true);
   DLOG_F(2, "is critical : {}", is_critical);
 
-  mesh_to_handle_[key] = handle;
+  mesh_identity_to_handle_[key] = handle;
   ++next_handle_;
 
   return handle;

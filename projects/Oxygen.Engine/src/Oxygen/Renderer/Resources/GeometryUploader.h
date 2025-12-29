@@ -30,20 +30,21 @@ class Mesh;
 namespace oxygen::renderer::resources {
 
 //===----------------------------------------------------------------------===//
-// GeometryUploader: Deduplicates meshes, creates buffers, registers SRVs,
+// GeometryUploader: Interns mesh identities, creates buffers, registers SRVs,
 // schedules uploads
 //===----------------------------------------------------------------------===//
 
-//! Manages GPU geometry resources with deduplication and bindless access.
+//! Manages GPU geometry resources with stable handles and bindless access.
 /*!
  GeometryUploader provides a modern, handle-based API for managing vertex and
- index buffers with automatic deduplication, persistent caching, and efficient
+ index buffers with identity-based interning, persistent state, and efficient
  upload coordination. It follows the same architectural patterns as
  TransformUploader for consistency and maintainability.
 
  ## Key Features:
 
- - **Deduplication**: Identical meshes share GPU resources using content hashing
+- **Interning**: Repeated requests for the same mesh identity return the same
+  handle (asset-loader-owned deduplication).
  - **Handle-based API**: Strong-typed GeometryHandle ensures type safety
  - **Frame lifecycle**: Integrates with Renderer frame and epoch tracking
  - **Bindless rendering**: Stable SRV indices for GPU descriptor arrays
@@ -55,7 +56,8 @@ namespace oxygen::renderer::resources {
  ## Performance Characteristics:
 
  - O(1) handle allocation and lookup after initial setup
- - Persistent caching eliminates redundant GPU resource creation
+ - Persistent state avoids redundant GPU resource creation for the same mesh
+   identity
  - Batch uploads minimize GPU submission overhead
  - Frame-coherent dirty tracking reduces unnecessary work
 
@@ -127,7 +129,7 @@ public:
   OXGN_RNDR_API auto OnFrameStart(
     renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
-  //! Deduplication and handle management
+  //! Handle interning and management
   auto GetOrAllocate(const data::Mesh& mesh)
     -> engine::sceneprep::GeometryHandle;
 
@@ -191,9 +193,9 @@ private:
 
   Epoch current_epoch_ { 1 }; // 0 reserved for 'never'
 
-  using MeshKey = std::uint64_t; // Simple hash key for deduplication
+  using MeshIdentityKey = std::uint64_t; // Identity key for interning
   using GeometryHandle = engine::sceneprep::GeometryHandle;
-  std::unordered_map<MeshKey, GeometryHandle> mesh_to_handle_;
+  std::unordered_map<MeshIdentityKey, GeometryHandle> mesh_identity_to_handle_;
   GeometryHandle next_handle_ { 0U };
   std::vector<GeometryEntry> geometry_entries_;
 

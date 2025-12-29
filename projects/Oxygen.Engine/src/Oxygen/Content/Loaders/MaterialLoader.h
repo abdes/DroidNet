@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <bit>
 #include <memory>
 
 #include <Oxygen/Base/Logging.h>
@@ -15,6 +16,7 @@
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -169,8 +171,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   if (!context.parse_only && !context.dependency_collector) {
     throw std::runtime_error(
-      "MaterialAsset loader requires a dependency collector; sync dependency "
-      "loads are not supported");
+      "MaterialAsset loader requires a dependency collector; "
+      "non-parse-only loads must be orchestrated via async publish");
   }
 
   if (!context.parse_only) {
@@ -200,8 +202,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
 
   // Create the material asset with the loaded shader references and runtime
   // per-slot texture resource keys produced during loading.
-  auto material_asset
-    = std::make_unique<data::MaterialAsset>(desc, std::move(shader_refs));
+  auto material_asset = std::make_unique<data::MaterialAsset>(
+    context.current_asset_key, desc, std::move(shader_refs));
 
   return material_asset;
 }

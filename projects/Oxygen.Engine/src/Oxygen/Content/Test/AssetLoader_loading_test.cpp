@@ -12,19 +12,30 @@
 #include <fstream>
 
 #include "./AssetLoader_test.h"
+#include <Oxygen/Base/ObserverPtr.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/GeometryLoader.h>
+#include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 
 using testing::IsNull;
 using testing::NotNull;
 
 using oxygen::content::internal::InternalResourceKey;
 
+using oxygen::observer_ptr;
+using oxygen::co::Co;
+using oxygen::co::testing::TestEventLoop;
 using oxygen::data::BufferResource;
 using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
@@ -396,15 +407,39 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_material");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto material_key = CreateTestAssetKey("test_material");
 
-  // Act
-  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(material, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, NotNull());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: AssetLoader can load a simple geometry asset from PAK file
@@ -417,15 +452,41 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_geometry");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto geometry_key = CreateTestAssetKey("test_geometry");
 
-  // Act
-  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(geometry, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadGeometryAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto geometry
+        = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+      EXPECT_THAT(geometry, NotNull());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: AssetLoader can load a material from a loose cooked root
@@ -441,27 +502,52 @@ NOLINT_TEST_F(
   const auto cooked_root = temp_dir_ / "loose_cooked";
   const auto material_key = CreateTestAssetKey("loose_material");
   WriteLooseCookedMaterialWithTexture(cooked_root, material_key);
-  asset_loader_->AddLooseCookedRoot(cooked_root);
 
-  // Act
-  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(material, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
 
-  constexpr uint16_t kSourceId = 0x8000;
-  constexpr uint16_t kTextureTypeIndex = 1;
-  const auto resource_key
-    = InternalResourceKey(kSourceId, kTextureTypeIndex, 1).GetRawKey();
-  EXPECT_THAT(
-    asset_loader_->GetResource<TextureResource>(resource_key), NotNull());
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddLooseCookedRoot(cooked_root);
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, NotNull());
+
+      if (material) {
+        const auto base_color_key = material->GetBaseColorTextureKey();
+        EXPECT_NE(base_color_key.get(), 0U);
+        EXPECT_THAT(
+          loader.GetResource<TextureResource>(base_color_key), NotNull());
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: Loose cooked container ids are assigned deterministically
 /*!
  Scenario: Mounts two loose cooked roots and loads a material from each.
- Verifies that the texture dependency for each material is cached under the
- expected source id (0x8000 for the first root, 0x8001 for the second root).
+ Verifies that each material's texture dependency is cached and that the
+ resulting runtime ResourceKeys differ across distinct sources.
 */
 NOLINT_TEST_F(
   AssetLoaderLoadingTest, LoadAsset_LooseCookedMultipleRoots_AssignsStableIds)
@@ -476,34 +562,54 @@ NOLINT_TEST_F(
   WriteLooseCookedMaterialWithTexture(cooked_root_a, material_key_a);
   WriteLooseCookedMaterialWithTexture(cooked_root_b, material_key_b);
 
-  asset_loader_->AddLooseCookedRoot(cooked_root_a);
-  asset_loader_->AddLooseCookedRoot(cooked_root_b);
+  TestEventLoop el;
 
-  // Act
-  const auto material_a
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key_a);
-  const auto material_b
-    = asset_loader_->LoadAsset<MaterialAsset>(material_key_b);
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
 
-  // Assert
-  EXPECT_THAT(material_a, NotNull());
-  EXPECT_THAT(material_b, NotNull());
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
 
-  constexpr uint16_t kFirstLooseSourceId = 0x8000;
-  constexpr uint16_t kSecondLooseSourceId = 0x8001;
-  constexpr uint16_t kTextureTypeIndex = 1;
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
 
-  const auto tex_key_a
-    = InternalResourceKey(kFirstLooseSourceId, kTextureTypeIndex, 1)
-        .GetRawKey();
-  const auto tex_key_b
-    = InternalResourceKey(kSecondLooseSourceId, kTextureTypeIndex, 1)
-        .GetRawKey();
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
 
-  EXPECT_THAT(
-    asset_loader_->GetResource<TextureResource>(tex_key_a), NotNull());
-  EXPECT_THAT(
-    asset_loader_->GetResource<TextureResource>(tex_key_b), NotNull());
+      loader.AddLooseCookedRoot(cooked_root_a);
+      loader.AddLooseCookedRoot(cooked_root_b);
+
+      const auto material_a
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key_a);
+      const auto material_b
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key_b);
+
+      EXPECT_THAT(material_a, NotNull());
+      EXPECT_THAT(material_b, NotNull());
+
+      if (material_a && material_b) {
+        const auto tex_key_a = material_a->GetBaseColorTextureKey();
+        const auto tex_key_b = material_b->GetBaseColorTextureKey();
+
+        EXPECT_NE(tex_key_a.get(), 0U);
+        EXPECT_NE(tex_key_b.get(), 0U);
+        EXPECT_NE(tex_key_a.get(), tex_key_b.get());
+
+        EXPECT_THAT(loader.GetResource<TextureResource>(tex_key_a), NotNull());
+        EXPECT_THAT(loader.GetResource<TextureResource>(tex_key_b), NotNull());
+      }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: Mount fails when textures.table is not a multiple of entry size
@@ -533,35 +639,57 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("complex_geometry");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto geometry_key = CreateTestAssetKey("complex_geometry");
 
-  // Act
-  const auto geometry = asset_loader_->LoadAsset<GeometryAsset>(geometry_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(geometry, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
 
-  if (geometry) {
-    // Verify geometry has meshes and buffer dependencies
-    const auto meshes = geometry->Meshes();
-    EXPECT_FALSE(meshes.empty());
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
 
-    // Verify each mesh has valid properties
-    for (size_t i = 0; i < meshes.size(); ++i) {
-      const auto& mesh = meshes[i];
-      EXPECT_THAT(mesh, NotNull())
-        << "Mesh at index " << i << " should not be null";
+    loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+    loader.RegisterLoader(oxygen::content::loaders::LoadGeometryAsset);
 
-      if (mesh) {
-        // Check basic mesh properties - buffered geometry should have vertex
-        // data
-        EXPECT_GE(mesh->VertexCount(), 0) << "Vertex count for mesh " << i;
-        EXPECT_GE(mesh->IndexCount(), 0) << "Index count for mesh " << i;
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto geometry
+        = co_await loader.LoadAssetAsync<GeometryAsset>(geometry_key);
+      EXPECT_THAT(geometry, NotNull());
+
+      if (geometry) {
+        const auto meshes = geometry->Meshes();
+        EXPECT_FALSE(meshes.empty());
+
+        for (size_t i = 0; i < meshes.size(); ++i) {
+          const auto& mesh = meshes[i];
+          EXPECT_THAT(mesh, NotNull())
+            << "Mesh at index " << i << " should not be null";
+
+          if (mesh) {
+            EXPECT_GE(mesh->VertexCount(), 0) << "Vertex count for mesh " << i;
+            EXPECT_GE(mesh->IndexCount(), 0) << "Index count for mesh " << i;
+          }
+        }
       }
-    }
-  }
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: AssetLoader returns nullptr for non-existent asset
@@ -572,16 +700,37 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(AssetLoaderLoadingTest, LoadAsset_NonExistent_ReturnsNull)
 {
   // Arrange
-  const auto pak_path = GeneratePakFile("simple_material");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto non_existent_key = CreateTestAssetKey("non_existent_asset");
 
-  // Act
-  const auto result = asset_loader_->LoadAsset<MaterialAsset>(non_existent_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(result, IsNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      const auto result
+        = co_await loader.LoadAssetAsync<MaterialAsset>(non_existent_key);
+      EXPECT_THAT(result, IsNull());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: AssetLoader caches loaded assets
@@ -594,18 +743,44 @@ NOLINT_TEST_F(
 {
   // Arrange
   const auto pak_path = GeneratePakFile("simple_material");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto material_key = CreateTestAssetKey("test_material");
 
-  // Act
-  const auto material1 = asset_loader_->LoadAsset<MaterialAsset>(material_key);
-  const auto material2 = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(material1, NotNull());
-  EXPECT_THAT(material2, NotNull());
-  EXPECT_EQ(material1, material2); // Same instance due to caching
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddPakFile(pak_path);
+
+      const auto material1
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      const auto material2
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+
+      EXPECT_THAT(material1, NotNull());
+      EXPECT_THAT(material2, NotNull());
+      EXPECT_EQ(material1.get(), material2.get());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: Loose cooked sources do not break PAK discovery
@@ -619,18 +794,41 @@ NOLINT_TEST_F(
   // Arrange
   const auto cooked_root = temp_dir_ / "loose_cooked_root";
   WriteMinimalLooseCookedIndex(cooked_root);
-  asset_loader_->AddLooseCookedRoot(cooked_root);
-
   const auto pak_path = GeneratePakFile("simple_material");
-  asset_loader_->AddPakFile(pak_path);
-
   const auto material_key = CreateTestAssetKey("test_material");
 
-  // Act
-  const auto material = asset_loader_->LoadAsset<MaterialAsset>(material_key);
+  TestEventLoop el;
 
-  // Assert
-  EXPECT_THAT(material, NotNull());
+  // Act + Assert
+  (oxygen::co::Run)(el, [&]() -> Co<> {
+    using oxygen::content::AssetLoader;
+    using oxygen::content::AssetLoaderConfig;
+
+    oxygen::co::ThreadPool pool(el, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+    AssetLoader loader(
+      oxygen::content::internal::EngineTagFactory::Get(), config);
+
+    loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
+    loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
+
+    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    {
+      co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+
+      loader.AddLooseCookedRoot(cooked_root);
+      loader.AddPakFile(pak_path);
+
+      const auto material
+        = co_await loader.LoadAssetAsync<MaterialAsset>(material_key);
+      EXPECT_THAT(material, NotNull());
+
+      loader.Stop();
+      co_return oxygen::co::kJoin;
+    };
+  });
 }
 
 //! Test: Loose cooked roots do not consume dense PAK index space

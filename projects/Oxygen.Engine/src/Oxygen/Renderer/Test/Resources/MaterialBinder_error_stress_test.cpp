@@ -50,7 +50,7 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
     const ResourceKey normal { static_cast<uint32_t>(100001 + (i * 2)) };
 
     auto desc = std::make_shared<oxygen::data::MaterialAsset>(
-      oxygen::data::pak::MaterialAssetDesc {},
+      oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {},
       std::vector { base, normal });
 
@@ -81,7 +81,7 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
     oxygen::frame::Slot { 1 });
 
   const auto mat = std::make_shared<oxygen::data::MaterialAsset>(
-    oxygen::data::pak::MaterialAssetDesc {},
+    oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
     std::vector<oxygen::data::ShaderReference> {},
     std::vector { base, normal });
   oxygen::engine::sceneprep::MaterialRef ref;
@@ -111,7 +111,7 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, StressAllocation)
     const ResourceKey normal { static_cast<uint32_t>(300000 + i) };
 
     auto m = std::make_shared<oxygen::data::MaterialAsset>(
-      oxygen::data::pak::MaterialAssetDesc {},
+      oxygen::data::AssetKey {}, oxygen::data::pak::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {},
       std::vector { base, normal });
 

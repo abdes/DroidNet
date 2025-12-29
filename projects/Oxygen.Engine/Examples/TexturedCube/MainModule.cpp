@@ -28,6 +28,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -285,18 +286,20 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
 
   desc.base_color_texture = base_color_texture_resource_index;
 
+  const AssetKey asset_key { .guid = GenerateAssetGuid() };
+
   // Runtime: when a ResourceKey is provided, bind it to the material's base
   // color texture slot (opaque to the renderer).
   if (base_color_texture_key != static_cast<oxygen::content::ResourceKey>(0)) {
     std::vector<oxygen::content::ResourceKey> texture_keys;
     texture_keys.push_back(base_color_texture_key);
-    return std::make_shared<const MaterialAsset>(
-      desc, std::vector<ShaderReference> {}, std::move(texture_keys));
+    return std::make_shared<const MaterialAsset>(asset_key, desc,
+      std::vector<ShaderReference> {}, std::move(texture_keys));
   }
 
   // Default: no runtime texture keys (use fallback/placeholder behavior).
   return std::make_shared<const MaterialAsset>(
-    desc, std::vector<ShaderReference> {});
+    asset_key, desc, std::vector<ShaderReference> {});
 }
 
 auto BuildCubeGeometry(
@@ -341,7 +344,9 @@ auto BuildCubeGeometry(
   geo_desc.bounding_box_max[1] = bb_max.y;
   geo_desc.bounding_box_max[2] = bb_max.z;
 
-  return std::make_shared<oxygen::data::GeometryAsset>(geo_desc,
+  return std::make_shared<oxygen::data::GeometryAsset>(
+    oxygen::data::AssetKey { .guid = oxygen::data::GenerateAssetGuid() },
+    geo_desc,
     std::vector<std::shared_ptr<oxygen::data::Mesh>> { std::move(mesh) });
 }
 

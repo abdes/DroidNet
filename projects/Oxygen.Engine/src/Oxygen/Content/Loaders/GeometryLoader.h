@@ -497,7 +497,7 @@ inline auto LoadGeometryAsset(LoaderContext context)
 
   // Construct and return GeometryAsset with LOD meshes
   return std::make_unique<GeometryAsset>(
-    std::move(desc), std::move(lod_meshes));
+    context.current_asset_key, std::move(desc), std::move(lod_meshes));
 }
 
 static_assert(oxygen::content::LoadFunction<decltype(LoadGeometryAsset)>);

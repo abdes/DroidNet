@@ -12,6 +12,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 // Project
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
@@ -29,7 +30,7 @@ protected:
 
   std::shared_ptr<const MaterialAsset> MakeMaterial() const
   {
-    return std::make_shared<const MaterialAsset>(
+    return std::make_shared<const MaterialAsset>(oxygen::data::AssetKey {},
       oxygen::data::pak::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {});
   }

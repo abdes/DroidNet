@@ -9,6 +9,47 @@
 #include <Oxygen/Data/MaterialAsset.h>
 
 using oxygen::data::MaterialAsset;
+namespace {
+
+constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey { {
+  0x4d,
+  0x41,
+  0x54,
+  0x5f,
+  0x44,
+  0x45,
+  0x46,
+  0x41,
+  0x55,
+  0x4c,
+  0x54,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+} };
+
+constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey { {
+  0x4d,
+  0x41,
+  0x54,
+  0x5f,
+  0x44,
+  0x45,
+  0x42,
+  0x55,
+  0x47,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+  0x5f,
+} };
+
+} // namespace
 
 //! Creates a default material for procedural meshes and fallback scenarios.
 /*!
@@ -85,7 +126,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     std::vector<ShaderReference> shader_refs {};
 
     return std::make_shared<const MaterialAsset>(
-      std::move(desc), std::move(shader_refs));
+      kDefaultMaterialAssetKey, std::move(desc), std::move(shader_refs));
   }();
 
   return kDefaultMaterial;
@@ -127,6 +168,6 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   debug_desc.base_color[3] = 1.0f; // A - fully opaque
   debug_desc.roughness = 1.0f; // Fully rough (no reflections)
 
-  return std::make_shared<const MaterialAsset>(
+  return std::make_shared<const MaterialAsset>(kDebugMaterialAssetKey,
     std::move(debug_desc), std::vector<ShaderReference> {});
 }

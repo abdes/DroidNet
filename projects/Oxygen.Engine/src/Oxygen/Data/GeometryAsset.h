@@ -646,9 +646,10 @@ class GeometryAsset : public Asset {
   OXYGEN_TYPED(GeometryAsset)
 
 public:
-  GeometryAsset(
-    pak::GeometryAssetDesc desc, std::vector<std::shared_ptr<Mesh>> lod_meshes)
-    : desc_(std::move(desc))
+  GeometryAsset(AssetKey asset_key, pak::GeometryAssetDesc desc,
+    std::vector<std::shared_ptr<Mesh>> lod_meshes)
+    : Asset(asset_key)
+    , desc_(std::move(desc))
     , lod_meshes_(std::move(lod_meshes))
   {
   }

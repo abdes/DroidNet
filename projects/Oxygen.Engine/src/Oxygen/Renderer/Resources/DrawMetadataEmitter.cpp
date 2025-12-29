@@ -137,7 +137,8 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
   if (views_span.empty()) {
     return;
   }
-  // Acquire geometry handle once per lod mesh; GeometryUploader dedups.
+  // Acquire geometry handle once per LOD mesh; GeometryUploader interns the
+  // mesh identity.
   auto& lod_mesh = *lod_mesh_ptr;
   auto geo_handle = geometry_uploader_
     ? geometry_uploader_->GetOrAllocate(lod_mesh)
