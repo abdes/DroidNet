@@ -17,7 +17,7 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Renderer/Resources/ITextureBinder.h>
+#include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/api_export.h>
 
 namespace oxygen {
@@ -95,7 +95,7 @@ namespace oxygen::renderer::resources {
  @see MaterialBinder for integration example
  @see ResourceRegistry for stable index pattern
 */
-class TextureBinder : public ITextureBinder {
+class TextureBinder : public IResourceBinder {
 public:
   using ProviderT = engine::upload::StagingProvider;
   using CoordinatorT = engine::upload::UploadCoordinator;
@@ -108,7 +108,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(TextureBinder)
   OXYGEN_MAKE_NON_MOVABLE(TextureBinder)
 
-  OXGN_RNDR_API ~TextureBinder();
+  OXGN_RNDR_API ~TextureBinder() override;
 
   //! Must be called once per frame before any GetOrAllocate() calls.
   OXGN_RNDR_API auto OnFrameStart() -> void;
@@ -116,31 +116,8 @@ public:
   //! Must be called once per frame after all rendering.
   OXGN_RNDR_API auto OnFrameEnd() -> void;
 
-  //! Get or allocate shader-visible SRV index for texture resource.
-  /*!
-   Returns existing SRV index if resource was previously allocated, otherwise
-   creates a new entry with placeholder texture and initiates async loading.
-
-   @param resource_key Texture resource key from asset system
-   @return Stable SRV index usable in shaders
-
-   @note Same resource key always returns same SRV index
-   @note Resource keys `ResourceKey::kFallback` and `ResourceKey::kPlaceholder`
-    are reserved for the fallback and placeholder textures.
-   @see GetErrorTextureIndex
-  */
   [[nodiscard]] OXGN_RNDR_NDAPI auto GetOrAllocate(
     const content::ResourceKey& resource_key) -> ShaderVisibleIndex override;
-
-  //! Get error-indicator texture SRV index for loading failures.
-  /*!
-   Returns the SRV index for the magenta/black checkerboard error texture,
-   used only when texture loading/creation fails.
-
-   @return SRV index for error-indicator texture
-  */
-  [[nodiscard]] OXGN_RNDR_NDAPI auto GetErrorTextureIndex() const
-    -> ShaderVisibleIndex override;
 
 private:
   class Impl;

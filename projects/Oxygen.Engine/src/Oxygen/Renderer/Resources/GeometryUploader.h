@@ -138,7 +138,7 @@ public:
 
   auto Update(engine::sceneprep::GeometryHandle handle, const data::Mesh& mesh)
     -> void;
-  [[nodiscard]] auto IsValidHandle(
+  [[nodiscard]] auto IsHandleValid(
     engine::sceneprep::GeometryHandle handle) const -> bool;
 
   //! Ensures all geometry GPU resources are prepared for the current frame.

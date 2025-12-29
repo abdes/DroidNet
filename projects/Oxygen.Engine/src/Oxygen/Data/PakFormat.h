@@ -87,6 +87,16 @@ constexpr ResourceIndexT kFallbackResourceIndex = 0;
 //! should still emit 0 but may label it appropriately in diagnostics.
 constexpr ResourceIndexT kNoResourceIndex = 0;
 
+//! Material flag indicating that textures must not be sampled.
+//!
+//! When set, the renderer/shaders must ignore all texture references for the
+//! material and use scalar fallbacks only.
+//!
+//! This flag exists because texture resource index `0` is reserved for the
+//! fallback texture when a fallback exists (textures do). Therefore, a texture
+//! index of `0` cannot unambiguously mean "no texture" for materials.
+constexpr uint32_t kMaterialFlag_NoTextureSampling = (1u << 0);
+
 //! Maximum size for data blobs in bytes
 constexpr DataBlobSizeT kDataBlobMaxSize
   = (std::numeric_limits<uint32_t>::max)();
@@ -442,10 +452,18 @@ static_assert(sizeof(AssetHeader) == 95);
   Each material texture is referenced by an index into the texture resource
   table. The fields `base_color_texture`, `normal_texture`, `metallic_texture`,
   `roughness_texture`, and `ambient_occlusion_texture` map to the main PBR
-  slots. If a slot is set to `kNoResourceIndex` (0), no texture is assigned and
-  the scalar fallback (e.g., `base_color`) is used. `reserved_textures` supports
-  future or custom slots. All indices must be valid or set to
-  `kNoResourceIndex`.
+  slots. `reserved_textures` supports future or custom slots.
+
+  Texture index semantics depend on category rules:
+  - For textures (which define a fallback), index `0` refers to the fallback
+    texture (`kFallbackResourceIndex`). Packers MUST populate texture table
+    entry `0` with the fallback texture.
+  - To explicitly disable texture sampling for a material (use scalar fallbacks
+    such as `base_color`), set the material flag
+  `kMaterialFlag_NoTextureSampling`.
+
+  For non-texture categories that do not define a fallback concept, `0`
+  (`kNoResourceIndex`) denotes an absent / not-assigned reference.
 
   ### Field Details
 

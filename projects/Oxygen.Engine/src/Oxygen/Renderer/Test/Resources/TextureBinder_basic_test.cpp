@@ -7,7 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
-#include <cstddef>
+#include <string>
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
@@ -19,12 +19,21 @@ using oxygen::content::ResourceKey;
 using oxygen::renderer::testing::FakeGraphics;
 using oxygen::renderer::testing::TextureBinderTest;
 
+[[nodiscard]] auto GetTextureDebugName(const oxygen::graphics::Texture* texture)
+  -> std::string_view
+{
+  if (texture == nullptr) {
+    return {};
+  }
+  return texture->GetDescriptor().debug_name;
+}
+
 [[nodiscard]] auto CountSrvViewCreationsForIndex(
   const FakeGraphics& gfx, const uint32_t index) -> std::size_t
 {
-  return static_cast<std::size_t>(std::count_if(
-    gfx.srv_view_log_.events.begin(), gfx.srv_view_log_.events.end(),
-    [&](const auto& e) { return e.index == index; }));
+  return static_cast<std::size_t>(
+    std::ranges::count_if(gfx.srv_view_log_.events,
+      [&](const auto& e) -> auto { return e.index == index; }));
 }
 
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
@@ -39,11 +48,17 @@ using oxygen::renderer::testing::TextureBinderTest;
   return nullptr;
 }
 
-[[nodiscard]] auto CaptureErrorTexturePtr(const FakeGraphics& gfx,
-  const oxygen::bindless::ShaderVisibleIndex error_index)
-  -> const oxygen::graphics::Texture*
+[[nodiscard]] auto FindLastTextureByDebugName(const FakeGraphics& gfx,
+  const std::string_view debug_name) -> const oxygen::graphics::Texture*
 {
-  return LastSrvViewTextureForIndex(gfx, error_index.get());
+  for (auto it = gfx.srv_view_log_.events.rbegin();
+    it != gfx.srv_view_log_.events.rend(); ++it) {
+    if (it->texture != nullptr
+      && GetTextureDebugName(it->texture) == debug_name) {
+      return it->texture;
+    }
+  }
+  return nullptr;
 }
 
 class TextureBinderBasicTest : public TextureBinderTest { };
@@ -58,8 +73,8 @@ NOLINT_TEST_F(TextureBinderBasicTest, SameKey_IsStable)
   const ResourceKey key = Loader().MintSyntheticTextureKey();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
@@ -77,8 +92,8 @@ NOLINT_TEST_F(TextureBinderBasicTest, DifferentKeys_AreDistinct)
   const ResourceKey key_b = Loader().MintSyntheticTextureKey();
 
   // Act
-  const auto index_a = Binder().GetOrAllocate(key_a);
-  const auto index_b = Binder().GetOrAllocate(key_b);
+  const auto index_a = TexBinder().GetOrAllocate(key_a);
+  const auto index_b = TexBinder().GetOrAllocate(key_b);
 
   // Assert
   EXPECT_NE(index_a, index_b);
@@ -94,13 +109,16 @@ NOLINT_TEST_F(TextureBinderBasicTest, PlaceholderKey_NoAllocation)
   const auto before = AllocatedSrvCount();
 
   // Act
-  const auto idx_0 = Binder().GetOrAllocate(ResourceKey::kPlaceholder);
-  const auto idx_1 = Binder().GetOrAllocate(ResourceKey::kPlaceholder);
+  const auto idx_0 = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
+  const auto idx_1 = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
 
   // Assert
   EXPECT_EQ(idx_0, idx_1);
-  EXPECT_NE(idx_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before);
+
+  const auto* const texture = LastSrvViewTextureForIndex(Gfx(), idx_0.get());
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture), "FallbackTexture");
 }
 
 //! Reserved fallback key must not allocate per-entry descriptors.
@@ -112,13 +130,16 @@ NOLINT_TEST_F(TextureBinderBasicTest, FallbackKey_NoAllocation)
   const auto before = AllocatedSrvCount();
 
   // Act
-  const auto idx_0 = Binder().GetOrAllocate(ResourceKey::kFallback);
-  const auto idx_1 = Binder().GetOrAllocate(ResourceKey::kFallback);
+  const auto idx_0 = TexBinder().GetOrAllocate(ResourceKey::kFallback);
+  const auto idx_1 = TexBinder().GetOrAllocate(ResourceKey::kFallback);
 
   // Assert
   EXPECT_EQ(idx_0, idx_1);
-  EXPECT_NE(idx_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before);
+
+  const auto* const texture = LastSrvViewTextureForIndex(Gfx(), idx_0.get());
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture), "FallbackTexture");
 }
 
 //! Reserved keys must never bind the shared error texture.
@@ -133,28 +154,26 @@ NOLINT_TEST_F(TextureBinderBasicTest, ReservedKeys_NeverBindErrorTexture)
   // Arrange
   const auto before = AllocatedSrvCount();
 
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
+  const auto* const error_texture
+    = FindLastTextureByDebugName(Gfx(), "ErrorTexture");
   ASSERT_NE(error_texture, nullptr);
 
   // Act
-  const auto fallback_index = Binder().GetOrAllocate(ResourceKey::kFallback);
+  const auto fallback_index = TexBinder().GetOrAllocate(ResourceKey::kFallback);
   const auto placeholder_index
-    = Binder().GetOrAllocate(ResourceKey::kPlaceholder);
+    = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
 
   // Assert
-  EXPECT_NE(fallback_index, error_index);
-  EXPECT_NE(placeholder_index, error_index);
   EXPECT_EQ(fallback_index, placeholder_index);
   EXPECT_EQ(AllocatedSrvCount(), before);
 
-  ASSERT_GE(CountSrvViewCreationsForIndex(Gfx(), error_index.get()), 1U);
   ASSERT_GE(CountSrvViewCreationsForIndex(Gfx(), placeholder_index.get()), 1U);
 
   const auto* const placeholder_texture
     = LastSrvViewTextureForIndex(Gfx(), placeholder_index.get());
   ASSERT_NE(placeholder_texture, nullptr);
   EXPECT_NE(placeholder_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(placeholder_texture), "FallbackTexture");
 }
 
 //! Cache hits must not recreate SRV views.
@@ -166,14 +185,14 @@ NOLINT_TEST_F(TextureBinderBasicTest, CacheHit_DoesNotRecreateView)
   const ResourceKey key = Loader().MintSyntheticTextureKey();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto u_index = index_0.get();
 
   const auto creations_after_first
     = CountSrvViewCreationsForIndex(Gfx(), u_index);
   ASSERT_GE(creations_after_first, 1U);
 
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);

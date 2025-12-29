@@ -12,6 +12,7 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Value.h>

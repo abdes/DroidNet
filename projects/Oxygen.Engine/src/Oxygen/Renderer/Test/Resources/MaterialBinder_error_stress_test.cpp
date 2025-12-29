@@ -7,7 +7,11 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Renderer/RendererTag.h>
+#include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
 
 namespace {
@@ -22,12 +26,12 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesSmoke)
 {
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   // No materials allocated; EnsureFrameResources should be safe to call.
-  MaterialBinderRef().EnsureFrameResources();
+  MatBinder().EnsureFrameResources();
 }
 
 //! Allocate a large number of materials/textures to detect descriptor
@@ -36,61 +40,59 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
 {
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  const int N = 512;
+  constexpr int N = 512;
   for (int i = 0; i < N; ++i) {
-    const oxygen::content::ResourceKey base { static_cast<uint32_t>(
-      100000 + i * 2) };
-    const oxygen::content::ResourceKey normal { static_cast<uint32_t>(
-      100001 + i * 2) };
+    const ResourceKey base { static_cast<uint32_t>(100000 + (i * 2)) };
+    const ResourceKey normal { static_cast<uint32_t>(100001 + (i * 2)) };
 
     auto desc = std::make_shared<oxygen::data::MaterialAsset>(
       oxygen::data::pak::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {},
-      std::vector<oxygen::content::ResourceKey> { base, normal });
+      std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
     ref.asset = desc;
-    MaterialBinderRef().GetOrAllocate(ref);
+    MatBinder().GetOrAllocate(ref);
 
     // allocate texture SRVs via texture binder
-    const auto tmpBase = TextureBinderRef().GetOrAllocate(base);
-    const auto tmpNormal = TextureBinderRef().GetOrAllocate(normal);
+    [[maybe_unused]] const auto tmpBase = TexBinder().GetOrAllocate(base);
+    [[maybe_unused]] const auto tmpNormal = TexBinder().GetOrAllocate(normal);
   }
 
   // At least some descriptors must have been allocated.
-  EXPECT_GT(AllocatedTextureSrvCount(), 0u);
+  EXPECT_GT(AllocatedTextureSrvCount(), 0U);
 }
 
 //! EnsureFrameResources uploads can be invoked after marking materials dirty
 //! (smoke).
 NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
 {
-  const oxygen::content::ResourceKey base { 120001U };
-  const oxygen::content::ResourceKey normal { 120002U };
+  constexpr ResourceKey base { 120001U };
+  constexpr ResourceKey normal { 120002U };
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
-  auto mat = std::make_shared<oxygen::data::MaterialAsset>(
+  const auto mat = std::make_shared<oxygen::data::MaterialAsset>(
     oxygen::data::pak::MaterialAssetDesc {},
     std::vector<oxygen::data::ShaderReference> {},
-    std::vector<oxygen::content::ResourceKey> { base, normal });
+    std::vector { base, normal });
   oxygen::engine::sceneprep::MaterialRef ref;
   ref.asset = mat;
 
-  const auto h = MaterialBinderRef().GetOrAllocate(ref);
-  ASSERT_TRUE(MaterialBinderRef().IsValidHandle(h));
+  const auto h = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
   // Mark dirty by updating the material in place
-  MaterialBinderRef().Update(h, mat);
-  MaterialBinderRef().EnsureFrameResources();
+  MatBinder().Update(h, mat);
+  MatBinder().EnsureFrameResources();
 
   SUCCEED(); // if we reached here no crash occurred
 }
@@ -100,29 +102,27 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, StressAllocation)
 {
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   for (int i = 0; i < 200; ++i) {
-    const oxygen::content::ResourceKey base { static_cast<uint32_t>(
-      200000 + i) };
-    const oxygen::content::ResourceKey normal { static_cast<uint32_t>(
-      300000 + i) };
+    const ResourceKey base { static_cast<uint32_t>(200000 + i) };
+    const ResourceKey normal { static_cast<uint32_t>(300000 + i) };
 
     auto m = std::make_shared<oxygen::data::MaterialAsset>(
       oxygen::data::pak::MaterialAssetDesc {},
       std::vector<oxygen::data::ShaderReference> {},
-      std::vector<oxygen::content::ResourceKey> { base, normal });
+      std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
     ref.asset = m;
-    MaterialBinderRef().GetOrAllocate(ref);
-    const auto tmpBase = TextureBinderRef().GetOrAllocate(base);
-    const auto tmpNormal = TextureBinderRef().GetOrAllocate(normal);
+    MatBinder().GetOrAllocate(ref);
+    [[maybe_unused]] const auto tmpBase = TexBinder().GetOrAllocate(base);
+    [[maybe_unused]] const auto tmpNormal = TexBinder().GetOrAllocate(normal);
   }
 
-  EXPECT_GT(AllocatedTextureSrvCount(), 0u);
+  EXPECT_GT(AllocatedTextureSrvCount(), 0U);
 }
 
 } // namespace

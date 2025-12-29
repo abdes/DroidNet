@@ -57,7 +57,7 @@ using oxygen::renderer::testing::FakeGraphics;
 
 // -- Base Fixture -------------------------------------------------------------
 
-class TransformUploaderTest : public ::testing::Test {
+class TransformUploaderTest : public testing::Test {
 protected:
   auto SetUp() -> void override
   {
@@ -96,7 +96,8 @@ private:
 class TransformUploaderBasicTest : public TransformUploaderTest { };
 
 //! GetOrAllocate returns a valid handle for a new transform.
-TEST_F(TransformUploaderBasicTest, GetOrAllocateNewTransformReturnsValidHandle)
+NOLINT_TEST_F(
+  TransformUploaderBasicTest, GetOrAllocateNewTransformReturnsValidHandle)
 {
   // Arrange
   constexpr auto transform = glm::mat4 { 1.0F };
@@ -108,11 +109,11 @@ TEST_F(TransformUploaderBasicTest, GetOrAllocateNewTransformReturnsValidHandle)
   const auto handle = uploader.GetOrAllocate(transform);
 
   // Assert
-  EXPECT_TRUE(uploader.IsValidHandle(handle));
+  EXPECT_TRUE(uploader.IsHandleValid(handle));
 }
 
 //! Multiple allocations in the same frame produce different handles.
-TEST_F(TransformUploaderBasicTest,
+NOLINT_TEST_F(TransformUploaderBasicTest,
   GetOrAllocateMultipleTransformsProducesDifferentHandles)
 {
   // Arrange
@@ -132,7 +133,7 @@ TEST_F(TransformUploaderBasicTest,
 
 //! Slot reuse: transforms allocated at the same position in different frames
 //! reuse the same handle.
-TEST_F(TransformUploaderBasicTest,
+NOLINT_TEST_F(TransformUploaderBasicTest,
   GetOrAllocateSlotReuseSamePositionSameHandleAcrossFrames)
 {
   // Arrange
@@ -155,7 +156,7 @@ TEST_F(TransformUploaderBasicTest,
 }
 
 //! ComputeNormalMatrix correctly handles identity matrix.
-TEST_F(
+NOLINT_TEST_F(
   TransformUploaderBasicTest, ComputeNormalMatrixIdentityMatrixReturnsIdentity)
 {
   // Arrange
@@ -170,10 +171,11 @@ TEST_F(
 
   // Assert
   EXPECT_EQ(normals.size(), 1);
-  const auto& normal_mat = normals[0];
+  const auto& normal_mat = normals.front();
   for (int c = 0; c < 4; ++c) {
     for (int r = 0; r < 4; ++r) {
       const float expected = (c == r) ? 1.0F : 0.0F;
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       EXPECT_FLOAT_EQ(normal_mat[c][r], expected)
         << "Mismatch at [" << c << "][" << r << "]";
     }
@@ -181,7 +183,7 @@ TEST_F(
 }
 
 //! EnsureFrameResources allocates GPU buffers for transforms.
-TEST_F(TransformUploaderBasicTest,
+NOLINT_TEST_F(TransformUploaderBasicTest,
   EnsureFrameResourcesAllocatesBuffersReturnsValidSrvIndices)
 {
   // Arrange
@@ -204,7 +206,7 @@ TEST_F(TransformUploaderBasicTest,
 
 //! GetWorldMatrices and GetNormalMatrices return correct data after
 //! allocation.
-TEST_F(TransformUploaderBasicTest,
+NOLINT_TEST_F(TransformUploaderBasicTest,
   GetWorldMatricesAfterAllocationReturnsAllocatedTransforms)
 {
   // Arrange
@@ -221,8 +223,10 @@ TEST_F(TransformUploaderBasicTest,
 
   // Assert
   EXPECT_EQ(matrices.size(), 2);
-  EXPECT_EQ(matrices[0], t1);
-  EXPECT_EQ(matrices[1], t2);
+  EXPECT_EQ(
+    matrices[0], t1); // NOLINT(*-pro-bounds-avoid-unchecked-container-access)
+  EXPECT_EQ(
+    matrices[1], t2); // NOLINT(*-pro-bounds-avoid-unchecked-container-access)
 }
 
 // -- Frame lifecycle and statistics tests -------------------------------------
@@ -230,7 +234,7 @@ TEST_F(TransformUploaderBasicTest,
 class TransformUploaderFrameLifecycleTest : public TransformUploaderTest { };
 
 //! OnFrameStart resets frame write count for slot reuse.
-TEST_F(TransformUploaderFrameLifecycleTest,
+NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
   OnFrameStartResetsCursorAllowsSlotReuseNextFrame)
 {
   // Arrange
@@ -260,7 +264,7 @@ TEST_F(TransformUploaderFrameLifecycleTest,
 }
 
 //! Multiple frames track transform count correctly.
-TEST_F(TransformUploaderFrameLifecycleTest,
+NOLINT_TEST_F(TransformUploaderFrameLifecycleTest,
   MultipleFramesTransformCountGrowsMonotonically)
 {
   // Arrange
@@ -292,7 +296,7 @@ TEST_F(TransformUploaderFrameLifecycleTest,
 class TransformUploaderEdgeCaseTest : public TransformUploaderTest { };
 
 //! Empty transform list doesn't crash on EnsureFrameResources.
-TEST_F(TransformUploaderEdgeCaseTest,
+NOLINT_TEST_F(TransformUploaderEdgeCaseTest,
   EnsureFrameResourcesEmptyTransformsReturnsEarly)
 {
   // Arrange
@@ -301,12 +305,12 @@ TEST_F(TransformUploaderEdgeCaseTest,
     RendererTagFactory::Get(), SequenceNumber { 0 }, Slot { 0 });
 
   // Act & Assert: no allocations, EnsureFrameResources should return early
-  EXPECT_NO_THROW(uploader.EnsureFrameResources());
+  NOLINT_EXPECT_NO_THROW(uploader.EnsureFrameResources());
   EXPECT_EQ(uploader.GetWorldMatrices().size(), 0);
 }
 
 //! Large number of transforms allocated in single frame.
-TEST_F(
+NOLINT_TEST_F(
   TransformUploaderEdgeCaseTest, GetOrAllocateManyTransformsAllHandlesValid)
 {
   // Arrange
@@ -321,7 +325,7 @@ TEST_F(
       = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { static_cast<float>(i) });
     const auto h = uploader.GetOrAllocate(t);
     // Assert each handle is valid
-    EXPECT_TRUE(uploader.IsValidHandle(h));
+    EXPECT_TRUE(uploader.IsHandleValid(h));
   }
 
   // Assert total count
@@ -329,8 +333,9 @@ TEST_F(
   EXPECT_EQ(uploader.GetNormalMatrices().size(), count);
 }
 
-//! IsValidHandle rejects out-of-range handles.
-TEST_F(TransformUploaderEdgeCaseTest, IsValidHandleOutOfRangeHandleReturnsFalse)
+//! IsHandleValid rejects out-of-range handles.
+NOLINT_TEST_F(
+  TransformUploaderEdgeCaseTest, IsHandleValidOutOfRangeHandleReturnsFalse)
 {
   // Arrange
   auto& uploader = TransformUploaderRef();
@@ -343,8 +348,8 @@ TEST_F(TransformUploaderEdgeCaseTest, IsValidHandleOutOfRangeHandleReturnsFalse)
     = oxygen::engine::sceneprep::TransformHandle { 0 };
   constexpr auto invalid_handle
     = oxygen::engine::sceneprep::TransformHandle { 999 };
-  EXPECT_TRUE(uploader.IsValidHandle(valid_handle));
-  EXPECT_FALSE(uploader.IsValidHandle(invalid_handle));
+  EXPECT_TRUE(uploader.IsHandleValid(valid_handle));
+  EXPECT_FALSE(uploader.IsHandleValid(invalid_handle));
 }
 
 // -- Buffer state and lazy loading tests --------------------------------------
@@ -352,7 +357,7 @@ TEST_F(TransformUploaderEdgeCaseTest, IsValidHandleOutOfRangeHandleReturnsFalse)
 class TransformUploaderBufferTest : public TransformUploaderTest { };
 
 //! GetWorldsSrvIndex returns valid SRV when transforms exist.
-TEST_F(TransformUploaderBufferTest,
+NOLINT_TEST_F(TransformUploaderBufferTest,
   GetWorldsSrvIndexWithTransformsReturnsAccessibleIndex)
 {
   // Arrange
@@ -369,7 +374,7 @@ TEST_F(TransformUploaderBufferTest,
 }
 
 //! GetNormalsSrvIndex returns valid SRV when transforms exist.
-TEST_F(TransformUploaderBufferTest,
+NOLINT_TEST_F(TransformUploaderBufferTest,
   GetNormalsSrvIndexWithTransformsReturnsAccessibleIndex)
 {
   // Arrange
@@ -387,7 +392,7 @@ TEST_F(TransformUploaderBufferTest,
 
 //! Slot reuse keeps handle count stable across frames with same allocation
 //! pattern.
-TEST_F(TransformUploaderBufferTest,
+NOLINT_TEST_F(TransformUploaderBufferTest,
   TwoFramesSlotReuseHandleCountStableWhenPatternMatches)
 {
   // Arrange

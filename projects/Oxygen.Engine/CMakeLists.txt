@@ -146,7 +146,7 @@ set(OPTIONS_LIST
   # OXYGEN_WITH_UBSAN        "Instrument code with undefined behavior sanitizer" OFF
   # OXYGEN_WITH_TSAN         "Instrument code with thread sanitizer" OFF
   # OXYGEN_WITH_VALGRIND     "Instrument code with valgrind profilers" OFF
-  OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" ON
+  OXYGEN_WITH_DOXYGEN      "Create targets for doxygen api docs" OFF
   # OXYGEN_WITH_SPHINX       "Create targets for sphinx docs" OFF
   # OXYGEN_WITH_CLANG_FORMAT "Create targets for clang-format" ON
   # OXYGEN_WITH_CLANG_TIDY   "Create targets for clang-tidy" ON

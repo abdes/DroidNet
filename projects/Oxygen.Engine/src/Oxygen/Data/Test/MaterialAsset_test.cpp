@@ -91,7 +91,9 @@ NOLINT_TEST(MaterialAssetBasicTest, DefaultMaterialDomainAndFlags)
   // Assert
   ASSERT_THAT(mat, NotNull());
   EXPECT_EQ(mat->GetMaterialDomain(), oxygen::data::MaterialDomain::kOpaque);
-  EXPECT_EQ(mat->GetFlags(), 0u);
+  EXPECT_EQ(
+    mat->GetFlags() & oxygen::data::pak::kMaterialFlag_NoTextureSampling,
+    oxygen::data::pak::kMaterialFlag_NoTextureSampling);
 }
 
 //! Tests default material texture indices unset (ID 31).

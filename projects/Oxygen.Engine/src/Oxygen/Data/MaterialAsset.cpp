@@ -23,7 +23,7 @@ using oxygen::data::MaterialAsset;
  - **Roughness**: 0.8 (fairly rough, diffuse-like)
  - **Normal Scale**: 1.0 (no normal scaling)
  - **AO**: 1.0 (no ambient occlusion)
- - **Textures**: All indices set to invalid (no textures)
+ - **Textures**: All indices set to fallback; sampling is disabled via flag
  - **Shaders**: Empty (to be filled by rendering system)
 
  @return A shared pointer to a default MaterialAsset
@@ -54,7 +54,7 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
 
     // Material properties
     desc.material_domain = static_cast<uint8_t>(MaterialDomain::kOpaque);
-    desc.flags = 0; // No special flags
+    desc.flags = pak::kMaterialFlag_NoTextureSampling;
     desc.shader_stages = 0; // No shaders initially (filled by renderer)
 
     // PBR material values - neutral defaults
@@ -67,17 +67,16 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.roughness = 0.8f; // Fairly rough (diffuse-like)
     desc.ambient_occlusion = 1.0f; // No AO
 
-    // Texture indices - all invalid (no textures bound)
-    constexpr pak::ResourceIndexT kInvalidTexture = pak::ResourceIndexT(-1);
-    desc.base_color_texture = kInvalidTexture;
-    desc.normal_texture = kInvalidTexture;
-    desc.metallic_texture = kInvalidTexture;
-    desc.roughness_texture = kInvalidTexture;
-    desc.ambient_occlusion_texture = kInvalidTexture;
+    // Texture indices - fallback texture. Sampling is disabled via flags.
+    desc.base_color_texture = pak::kFallbackResourceIndex;
+    desc.normal_texture = pak::kFallbackResourceIndex;
+    desc.metallic_texture = pak::kFallbackResourceIndex;
+    desc.roughness_texture = pak::kFallbackResourceIndex;
+    desc.ambient_occlusion_texture = pak::kFallbackResourceIndex;
 
-    // Initialize reserved arrays to zero
+    // Initialize reserved arrays to fallback.
     std::fill(std::begin(desc.reserved_textures),
-      std::end(desc.reserved_textures), kInvalidTexture);
+      std::end(desc.reserved_textures), pak::kFallbackResourceIndex);
     std::fill(
       std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
 
