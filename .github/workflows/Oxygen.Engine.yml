@@ -22,10 +22,12 @@ jobs:
 
     steps:
       - uses: ilammy/msvc-dev-cmd@v1
-      - name: Download VC++ Redistributable
+      - name: Install VC++ Redistributable (x64)
+        shell: pwsh
+        working-directory: ${{ github.workspace }}
         run: |
-          curl -L -o vc_redist.x64.exe https://aka.ms/vs/17/release/vc_redist.x64.exe
-          .\vc_redist.x64.exe /quiet /install
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "vc_redist.x64.exe"
+          Start-Process -FilePath ".\vc_redist.x64.exe" -ArgumentList "/quiet", "/install" -Wait
 
       - name: Checkout repository
         uses: actions/checkout@v4
