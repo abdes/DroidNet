@@ -28,6 +28,7 @@ namespace {
 {
   for (int c = 0; c < 4; ++c) {
     for (int r = 0; r < 4; ++r) {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       if (!std::isfinite(m[c][r])) {
         return false;
       }
@@ -105,7 +106,9 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   } else {
     // Reuse existing slot in this frame by order; update.
     index = frame_write_count_;
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     transforms_[index] = transform;
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     normal_matrices_[index] = ComputeNormalMatrix(transform);
   }
 
@@ -114,7 +117,7 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform)
   return handle;
 }
 
-auto TransformUploader::IsValidHandle(
+auto TransformUploader::IsHandleValid(
   engine::sceneprep::TransformHandle handle) const -> bool
 {
   const auto idx = handle.get();
@@ -167,6 +170,7 @@ auto TransformUploader::GetWorldsSrvIndex() const -> ShaderVisibleIndex
 {
   if (worlds_srv_index_ == kInvalidShaderVisibleIndex) {
     // Trigger lazy upload if not yet done
+    // NOLINTNEXTLINE(*-pro-type-const-cast) - EnsureFrameResources is not const
     const_cast<TransformUploader*>(this)->EnsureFrameResources();
   }
   return worlds_srv_index_;
@@ -176,6 +180,7 @@ auto TransformUploader::GetNormalsSrvIndex() const -> ShaderVisibleIndex
 {
   if (normals_srv_index_ == kInvalidShaderVisibleIndex) {
     // Trigger lazy upload if not yet done
+    // NOLINTNEXTLINE(*-pro-type-const-cast) - EnsureFrameResources is not const
     const_cast<TransformUploader*>(this)->EnsureFrameResources();
   }
   return normals_srv_index_;
@@ -197,20 +202,28 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   -> glm::mat4
 {
   // Extract upper-left 3x3
-  const float a00 = world[0][0], a01 = world[0][1], a02 = world[0][2];
-  const float a10 = world[1][0], a11 = world[1][1], a12 = world[1][2];
-  const float a20 = world[2][0], a21 = world[2][1], a22 = world[2][2];
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
+  const float a00 = world[0][0];
+  const float a01 = world[0][1];
+  const float a02 = world[0][2];
+  const float a10 = world[1][0];
+  const float a11 = world[1][1];
+  const float a12 = world[1][2];
+  const float a20 = world[2][0];
+  const float a21 = world[2][1];
+  const float a22 = world[2][2];
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 
   // Compute determinant
-  const float det = a00 * (a11 * a22 - a12 * a21)
-    - a01 * (a10 * a22 - a12 * a20) + a02 * (a10 * a21 - a11 * a20);
+  const float det = (a00 * (a11 * a22 - a12 * a21))
+    - (a01 * (a10 * a22 - a12 * a20)) + (a02 * (a10 * a21 - a11 * a20));
 
-  constexpr float kDetEps = 1e-12f;
+  constexpr float kDetEps = 1e-12F;
   if (!std::isfinite(det) || std::fabs(det) <= kDetEps) {
-    return glm::mat4 { 1.0f };
+    return glm::mat4 { 1.0F };
   }
 
-  const float inv_det = 1.0f / det;
+  const float inv_det = 1.0F / det;
 
   // Inverse of 3x3 (cofactor matrix transposed)
   const float i00 = (a11 * a22 - a12 * a21) * inv_det;
@@ -224,7 +237,8 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   const float i22 = (a00 * a11 - a01 * a10) * inv_det;
 
   // Transpose to get inverse-transpose
-  glm::mat4 result { 1.0f };
+  glm::mat4 result { 1.0F };
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
   result[0][0] = i00;
   result[0][1] = i10;
   result[0][2] = i20;
@@ -234,6 +248,7 @@ auto TransformUploader::ComputeNormalMatrix(const glm::mat4& world) noexcept
   result[2][0] = i02;
   result[2][1] = i12;
   result[2][2] = i22;
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
   return result;
 }
 

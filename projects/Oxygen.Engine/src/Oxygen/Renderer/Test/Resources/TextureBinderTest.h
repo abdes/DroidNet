@@ -23,7 +23,6 @@
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTestPayloads.h>
 #include <Oxygen/Renderer/Upload/StagingProvider.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
-#include <Oxygen/Renderer/Upload/UploadPolicy.h>
 
 namespace oxygen::renderer::testing {
 
@@ -106,32 +105,32 @@ class TextureBinderTest : public ::testing::Test {
 protected:
   TextureBinderTest() = default;
 
-  virtual auto ConfigureGraphics(renderer::testing::FakeGraphics&) -> void { }
+  virtual auto ConfigureGraphics(FakeGraphics& /*gfx*/) -> void { }
 
   auto SetUp() -> void override;
 
-  [[nodiscard]] auto Gfx() -> renderer::testing::FakeGraphics& { return *gfx_; }
-  [[nodiscard]] auto GfxPtr() const -> observer_ptr<::oxygen::Graphics>
+  [[nodiscard]] auto Gfx() const -> FakeGraphics& { return *gfx_; }
+  [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>
   {
-    return observer_ptr<::oxygen::Graphics>(gfx_.get());
+    return observer_ptr<Graphics>(gfx_.get());
   }
 
-  [[nodiscard]] auto Uploader() -> engine::upload::UploadCoordinator&
+  [[nodiscard]] auto Uploader() const -> engine::upload::UploadCoordinator&
   {
     return *uploader_;
   }
 
-  [[nodiscard]] auto Staging() -> engine::upload::StagingProvider&
+  [[nodiscard]] auto Staging() const -> engine::upload::StagingProvider&
   {
     return *staging_provider_;
   }
 
-  [[nodiscard]] auto Loader() -> FakeTextureResourceLoader&
+  [[nodiscard]] auto Loader() const -> FakeTextureResourceLoader&
   {
     return *texture_loader_;
   }
 
-  [[nodiscard]] auto Binder() -> resources::TextureBinder&
+  [[nodiscard]] auto TexBinder() const -> resources::TextureBinder&
   {
     return *texture_binder_;
   }
@@ -139,7 +138,7 @@ protected:
   [[nodiscard]] auto AllocatedSrvCount() const -> uint32_t;
 
 private:
-  std::shared_ptr<renderer::testing::FakeGraphics> gfx_;
+  std::shared_ptr<FakeGraphics> gfx_;
   std::unique_ptr<engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
   std::unique_ptr<FakeTextureResourceLoader> texture_loader_;

@@ -4,15 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <cstdint>
 #include <memory>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+
 #include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
 
 namespace {
@@ -39,7 +41,7 @@ using oxygen::renderer::testing::MaterialBinderTest;
 
   return std::make_shared<oxygen::data::MaterialAsset>(desc,
     std::vector<oxygen::data::ShaderReference> {},
-    std::vector<oxygen::content::ResourceKey> { base_color_key, normal_key });
+    std::vector { base_color_key, normal_key });
 }
 
 class MaterialBinderBasicTest : public MaterialBinderTest { };
@@ -52,18 +54,18 @@ NOLINT_TEST_F(MaterialBinderBasicTest, SameMaterialReturnsSameHandle)
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
   ref.asset = MakeMaterial(base_color_key, normal_key, 100000U, 200000U);
 
-  const auto handle0 = MaterialBinderRef().GetOrAllocate(ref);
-  const auto handle1 = MaterialBinderRef().GetOrAllocate(ref);
+  const auto handle0 = MatBinder().GetOrAllocate(ref);
+  const auto handle1 = MatBinder().GetOrAllocate(ref);
 
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(handle0));
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(handle1));
+  EXPECT_TRUE(MatBinder().IsHandleValid(handle0));
+  EXPECT_TRUE(MatBinder().IsHandleValid(handle1));
   EXPECT_EQ(handle0, handle1);
 }
 
@@ -78,7 +80,7 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
@@ -88,11 +90,11 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
   oxygen::engine::sceneprep::MaterialRef ref1;
   ref1.asset = MakeMaterial(base_color_key1, normal_key1, 11U, 21U);
 
-  const auto handle0 = MaterialBinderRef().GetOrAllocate(ref0);
-  const auto handle1 = MaterialBinderRef().GetOrAllocate(ref1);
+  const auto handle0 = MatBinder().GetOrAllocate(ref0);
+  const auto handle1 = MatBinder().GetOrAllocate(ref1);
 
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(handle0));
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(handle1));
+  EXPECT_TRUE(MatBinder().IsHandleValid(handle0));
+  EXPECT_TRUE(MatBinder().IsHandleValid(handle1));
   EXPECT_NE(handle0, handle1);
 }
 
@@ -101,15 +103,15 @@ NOLINT_TEST_F(MaterialBinderBasicTest, HandleNullAndInvalid)
 {
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
   ref.asset = nullptr;
 
-  const auto handle = MaterialBinderRef().GetOrAllocate(ref);
-  EXPECT_FALSE(MaterialBinderRef().IsValidHandle(handle));
+  const auto handle = MatBinder().GetOrAllocate(ref);
+  EXPECT_FALSE(MatBinder().IsHandleValid(handle));
 }
 
 //! Identical material content should deduplicate (same handle returned).
@@ -120,22 +122,51 @@ NOLINT_TEST_F(MaterialBinderBasicTest, ContentEqualityDedupes)
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
   auto b = MakeMaterial(base_color_key, normal_key, 1U, 2U);
 
-  oxygen::engine::sceneprep::MaterialRef ra, rb;
+  oxygen::engine::sceneprep::MaterialRef ra;
+  oxygen::engine::sceneprep::MaterialRef rb;
   ra.asset = a;
   rb.asset = b;
 
-  const auto ha = MaterialBinderRef().GetOrAllocate(ra);
-  const auto hb = MaterialBinderRef().GetOrAllocate(rb);
+  const auto ha = MatBinder().GetOrAllocate(ra);
+  const auto hb = MatBinder().GetOrAllocate(rb);
 
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(ha));
-  EXPECT_TRUE(MaterialBinderRef().IsValidHandle(hb));
+  EXPECT_TRUE(MatBinder().IsHandleValid(ha));
+  EXPECT_TRUE(MatBinder().IsHandleValid(hb));
+  EXPECT_EQ(ha, hb);
+}
+
+//! Deduplication is based on ResourceKeys, not raw author indices.
+NOLINT_TEST_F(MaterialBinderBasicTest, DedupIgnoresRawAuthorIndicesForSameKeys)
+{
+  const ResourceKey base_color_key { 11101U };
+  const ResourceKey normal_key { 11102U };
+
+  Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(
+    oxygen::renderer::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+
+  auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  auto b = MakeMaterial(base_color_key, normal_key, 999999U, 888888U);
+
+  oxygen::engine::sceneprep::MaterialRef ra;
+  oxygen::engine::sceneprep::MaterialRef rb;
+  ra.asset = a;
+  rb.asset = b;
+
+  const auto ha = MatBinder().GetOrAllocate(ra);
+  const auto hb = MatBinder().GetOrAllocate(rb);
+
+  EXPECT_TRUE(MatBinder().IsHandleValid(ha));
+  EXPECT_TRUE(MatBinder().IsHandleValid(hb));
   EXPECT_EQ(ha, hb);
 }
 } // namespace

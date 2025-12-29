@@ -6,17 +6,18 @@
 
 #pragma once
 
-#include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/DescriptorHandle.h>
-#include <Oxygen/Renderer/Resources/ITextureBinder.h>
-#include <Oxygen/Renderer/Resources/MaterialBinder.h>
-#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <memory>
 #include <optional>
 #include <unordered_map>
+
+#include <Oxygen/Testing/GTest.h>
+
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Renderer/Resources/IResourceBinder.h>
+#include <Oxygen/Renderer/Resources/MaterialBinder.h>
+#include <Oxygen/Renderer/Test/Fakes/Graphics.h>
 
 namespace oxygen::renderer::testing {
 
@@ -24,25 +25,29 @@ class MaterialBinderTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override;
 
-  [[nodiscard]] auto GfxPtr() const -> observer_ptr<::oxygen::Graphics>;
+  [[nodiscard]] auto GfxPtr() const -> observer_ptr<Graphics>;
 
-  [[nodiscard]] auto Uploader() -> engine::upload::UploadCoordinator&;
-  [[nodiscard]] auto TextureBinderRef() -> resources::ITextureBinder&;
-  [[nodiscard]] auto MaterialBinderRef() -> resources::MaterialBinder&;
+  [[nodiscard]] auto Uploader() const -> engine::upload::UploadCoordinator&;
+  [[nodiscard]] auto TexBinder() const -> resources::IResourceBinder&;
+  [[nodiscard]] auto MatBinder() const -> resources::MaterialBinder&;
 
   [[nodiscard]] auto AllocatedTextureSrvCount() const -> uint32_t;
 
+  [[nodiscard]] auto TexBinderGetOrAllocateTotalCalls() const -> uint32_t;
+  [[nodiscard]] auto TexBinderGetOrAllocateCallsForKey(
+    const content::ResourceKey& key) const -> uint32_t;
+
   // Test helpers to control / observe FakeTextureBinder behavior.
-  [[nodiscard]] auto GetPlaceholderIndexForKey(const content::ResourceKey& key)
-    -> ShaderVisibleIndex;
-  void SetTextureBinderAllocateOnRequest(bool v);
+  [[nodiscard]] auto GetPlaceholderIndexForKey(
+    const content::ResourceKey& key) const -> ShaderVisibleIndex;
+  void SetTextureBinderAllocateOnRequest(bool v) const;
 
   // Test helper: mark a ResourceKey which the FakeTextureBinder will report as
   // error.
-  void SetTextureBinderErrorKey(const content::ResourceKey& key);
+  void SetTextureBinderErrorKey(const content::ResourceKey& key) const;
 
 private:
-  class FakeTextureBinder final : public resources::ITextureBinder {
+  class FakeTextureBinder final : public resources::IResourceBinder {
   public:
     FakeTextureBinder() = default;
 
@@ -60,14 +65,29 @@ private:
     void SetErrorKey(content::ResourceKey key) { error_key_ = key; }
     void SetAllocateOnRequest(bool v) { allocate_on_request_ = v; }
 
+    [[nodiscard]] auto GetOrAllocateTotalCalls() const -> uint32_t
+    {
+      return get_or_allocate_total_calls_;
+    }
+
+    [[nodiscard]] auto GetOrAllocateCallsForKey(
+      const content::ResourceKey& key) const -> uint32_t
+    {
+      const auto it = get_or_allocate_calls_by_key_.find(key);
+      return it == get_or_allocate_calls_by_key_.end() ? 0U : it->second;
+    }
+
     [[nodiscard]] auto GetOrAllocate(const content::ResourceKey& key)
       -> ShaderVisibleIndex override
     {
+      ++get_or_allocate_total_calls_;
+      ++get_or_allocate_calls_by_key_[key];
+
       if (error_key_.has_value() && error_key_.value() == key) {
         return GetErrorTextureIndex();
       }
 
-      auto it = map_.find(key);
+      const auto it = map_.find(key);
       if (it != map_.end()) {
         return it->second;
       }
@@ -77,7 +97,7 @@ private:
       // TextureBinder behavior in tests. When allocation is disabled the
       // binder returns placeholder indices without consuming descriptors so
       // MaterialBinder can be exercised without triggering SRV allocations.
-      if (allocator_ && allocate_on_request_) {
+      if ((allocator_ != nullptr) && allocate_on_request_) {
         const auto handle
           = allocator_->Allocate(graphics::ResourceViewType::kTexture_SRV,
             graphics::DescriptorVisibility::kShaderVisible);
@@ -96,14 +116,16 @@ private:
       return newIt->second;
     }
 
-    [[nodiscard]] auto GetErrorTextureIndex() const
-      -> ShaderVisibleIndex override
+    [[nodiscard]] static auto GetErrorTextureIndex() -> ShaderVisibleIndex
     {
       return ShaderVisibleIndex { 0U };
     }
 
   private:
     std::unordered_map<content::ResourceKey, ShaderVisibleIndex> map_;
+    std::unordered_map<content::ResourceKey, uint32_t>
+      get_or_allocate_calls_by_key_;
+    uint32_t get_or_allocate_total_calls_ { 0U };
     std::uint32_t next_ { 1U };
     std::optional<content::ResourceKey> error_key_;
     graphics::DescriptorAllocator* allocator_ { nullptr };

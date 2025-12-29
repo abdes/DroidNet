@@ -4,17 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <cstdint>
 #include <memory>
+
+#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-#include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
+
+#include <Oxygen/Renderer/Test/Resources/MaterialBinderTest.h>
 
 namespace {
 
@@ -40,7 +42,7 @@ using oxygen::renderer::testing::MaterialBinderTest;
 
   return std::make_shared<oxygen::data::MaterialAsset>(desc,
     std::vector<oxygen::data::ShaderReference> {},
-    std::vector<oxygen::content::ResourceKey> { base_color_key, normal_key });
+    std::vector { base_color_key, normal_key });
 }
 
 class MaterialBinderPlaceholderTest : public MaterialBinderTest { };
@@ -50,12 +52,12 @@ class MaterialBinderPlaceholderTest : public MaterialBinderTest { };
 NOLINT_TEST_F(
   MaterialBinderPlaceholderTest, PlaceholderRepointingUpdatesConstants)
 {
-  const ResourceKey base_color_key { 5001U };
-  const ResourceKey normal_key { 5002U };
+  constexpr ResourceKey base_color_key { 5001U };
+  constexpr ResourceKey normal_key { 5002U };
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
@@ -67,20 +69,20 @@ NOLINT_TEST_F(
     base_color_key, normal_key, kRawBaseColorIndex, kRawNormalIndex);
 
   // Allocate material before textures exist — binder may use placeholders.
-  const auto material_handle = MaterialBinderRef().GetOrAllocate(ref);
-  ASSERT_TRUE(MaterialBinderRef().IsValidHandle(material_handle));
+  const auto material_handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(material_handle));
 
   // Now create the textures — binder is expected to repoint constants to final
   // SRV indices.
   const auto expected_base_color_srv
-    = TextureBinderRef().GetOrAllocate(base_color_key).get();
-  const auto expected_normal_srv
-    = TextureBinderRef().GetOrAllocate(normal_key).get();
+    = TexBinder().GetOrAllocate(base_color_key).get();
+  const auto expected_normal_srv = TexBinder().GetOrAllocate(normal_key).get();
 
-  const auto all_constants = MaterialBinderRef().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(
     static_cast<std::size_t>(material_handle.get()), all_constants.size());
   const auto& constants
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = all_constants[static_cast<std::size_t>(material_handle.get())];
 
   EXPECT_EQ(constants.base_color_texture_index, expected_base_color_srv);
@@ -94,35 +96,34 @@ NOLINT_TEST_F(
 //! must repoint.
 NOLINT_TEST_F(MaterialBinderPlaceholderTest, RepointingAcrossFrames)
 {
-  const ResourceKey base_color_key { 51001U };
-  const ResourceKey normal_key { 51002U };
+  constexpr ResourceKey base_color_key { 51001U };
+  constexpr ResourceKey normal_key { 51002U };
 
   // Frame 1: allocate material only
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
   ref.asset = MakeMaterial(base_color_key, normal_key, 9U, 10U);
-  const auto h = MaterialBinderRef().GetOrAllocate(ref);
-  ASSERT_TRUE(MaterialBinderRef().IsValidHandle(h));
+  const auto h = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
   // Frame 2: allocate textures
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 2 });
 
-  const auto expectedBase
-    = TextureBinderRef().GetOrAllocate(base_color_key).get();
-  const auto expectedNormal
-    = TextureBinderRef().GetOrAllocate(normal_key).get();
+  const auto expectedBase = TexBinder().GetOrAllocate(base_color_key).get();
+  const auto expectedNormal = TexBinder().GetOrAllocate(normal_key).get();
 
-  const auto all_constants = MaterialBinderRef().GetMaterialConstants();
+  const auto all_constants = MatBinder().GetMaterialConstants();
   ASSERT_LT(static_cast<std::size_t>(h.get()), all_constants.size());
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto& constants = all_constants[static_cast<std::size_t>(h.get())];
 
   EXPECT_EQ(constants.base_color_texture_index, expectedBase);
@@ -133,12 +134,12 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, RepointingAcrossFrames)
 //! placeholder for the missing one.
 NOLINT_TEST_F(MaterialBinderPlaceholderTest, PartialResourceAvailability)
 {
-  const ResourceKey base_color_key { 51011U };
-  const ResourceKey normal_key { 51012U };
+  constexpr ResourceKey base_color_key { 51011U };
+  constexpr ResourceKey normal_key { 51012U };
 
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
-  MaterialBinderRef().OnFrameStart(
+  MatBinder().OnFrameStart(
     oxygen::renderer::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
 
@@ -146,13 +147,13 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, PartialResourceAvailability)
   ref.asset = MakeMaterial(base_color_key, normal_key, 123U, 456U);
 
   // Allocate only one texture
-  const auto baseSrv = TextureBinderRef().GetOrAllocate(base_color_key).get();
-  const auto h = MaterialBinderRef().GetOrAllocate(ref);
-  ASSERT_TRUE(MaterialBinderRef().IsValidHandle(h));
+  const auto baseSrv = TexBinder().GetOrAllocate(base_color_key).get();
+  const auto h = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
   const auto constants
-    = MaterialBinderRef()
-        .GetMaterialConstants()[static_cast<std::size_t>(h.get())];
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+    = MatBinder().GetMaterialConstants()[static_cast<std::size_t>(h.get())];
   EXPECT_EQ(constants.base_color_texture_index, baseSrv);
   // Normal texture not allocated yet — expect not equal to baseSrv (placeholder
   // or zero)

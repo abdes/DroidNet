@@ -7,7 +7,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <algorithm>
-#include <cstddef>
+#include <string>
 
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTest.h>
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTestPayloads.h>
@@ -21,12 +21,27 @@ using oxygen::renderer::testing::MakeCookedTexture4x4Bc1Payload;
 using oxygen::renderer::testing::MakeInvalidTightPackedTexture1x1Rgba8Payload;
 using oxygen::renderer::testing::TextureBinderTest;
 
+[[nodiscard]] auto GetTextureDebugName(const oxygen::graphics::Texture* texture)
+  -> std::string_view
+{
+  if (texture == nullptr) {
+    return {};
+  }
+  return texture->GetDescriptor().debug_name;
+}
+
+[[nodiscard]] auto MakePlaceholderDebugName(const ResourceKey key)
+  -> std::string
+{
+  return std::string("Placeholder(") + oxygen::content::to_string(key) + ")";
+}
+
 [[nodiscard]] auto CountSrvViewCreationsForIndex(
   const FakeGraphics& gfx, const uint32_t index) -> std::size_t
 {
-  return static_cast<std::size_t>(std::count_if(
-    gfx.srv_view_log_.events.begin(), gfx.srv_view_log_.events.end(),
-    [&](const auto& e) { return e.index == index; }));
+  return static_cast<std::size_t>(
+    std::ranges::count_if(gfx.srv_view_log_.events,
+      [&](const auto& e) -> auto { return e.index == index; }));
 }
 
 [[nodiscard]] auto LastSrvViewTextureForIndex(const FakeGraphics& gfx,
@@ -41,13 +56,6 @@ using oxygen::renderer::testing::TextureBinderTest;
   return nullptr;
 }
 
-[[nodiscard]] auto CaptureErrorTexturePtr(const FakeGraphics& gfx,
-  const oxygen::bindless::ShaderVisibleIndex error_index)
-  -> const oxygen::graphics::Texture*
-{
-  return LastSrvViewTextureForIndex(gfx, error_index.get());
-}
-
 class TextureBinderFailureTest : public TextureBinderTest { };
 
 class TextureBinderUploadFailureTest : public TextureBinderTest {
@@ -59,23 +67,34 @@ protected:
 };
 
 //! Error texture index must be stable and backed by a real SRV view.
-/*! The binder exposes the shared error texture SRV index for debugging and
-    for systems that want a deterministic error binding. The getter must be
-    stable and it must correspond to a real SRV view created by the backend.
+/*! The binder must use a single shared error texture for all failures.
+    This is verified purely via fake-backend SRV view creation telemetry and
+    the publicly observable `TextureDesc::debug_name`.
 */
-NOLINT_TEST_F(TextureBinderFailureTest, GetErrorTextureIndex_IsStable)
+NOLINT_TEST_F(TextureBinderFailureTest, ErrorTexture_IsSharedAndObservable)
 {
   // Arrange
-  const auto idx_0 = Binder().GetErrorTextureIndex();
-  const auto idx_1 = Binder().GetErrorTextureIndex();
+  const auto before = AllocatedSrvCount();
+  const ResourceKey key_a = Loader().MintSyntheticTextureKey();
+  const ResourceKey key_b = Loader().MintSyntheticTextureKey();
+
+  Gfx().srv_view_log_.events.clear();
+
+  // Act
+  const auto idx_a = TexBinder().GetOrAllocate(key_a);
+  const auto idx_b = TexBinder().GetOrAllocate(key_b);
 
   // Assert
-  EXPECT_EQ(idx_0, idx_1);
-  EXPECT_NE(idx_0, Binder().GetOrAllocate(ResourceKey::kFallback));
-  EXPECT_NE(idx_0, Binder().GetOrAllocate(ResourceKey::kPlaceholder));
+  EXPECT_NE(idx_a, idx_b);
+  EXPECT_EQ(AllocatedSrvCount(), before + 2U);
 
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), idx_0);
-  ASSERT_NE(error_texture, nullptr);
+  const auto* const tex_a = LastSrvViewTextureForIndex(Gfx(), idx_a.get());
+  const auto* const tex_b = LastSrvViewTextureForIndex(Gfx(), idx_b.get());
+  ASSERT_NE(tex_a, nullptr);
+  ASSERT_NE(tex_b, nullptr);
+  EXPECT_EQ(GetTextureDebugName(tex_a), "ErrorTexture");
+  EXPECT_EQ(GetTextureDebugName(tex_b), "ErrorTexture");
+  EXPECT_EQ(tex_a, tex_b);
 }
 
 //! Load failures repoint the per-entry descriptor to the error texture.
@@ -91,25 +110,20 @@ NOLINT_TEST_F(TextureBinderFailureTest, LoadFailure_RepointsToError)
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
 
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
-  ASSERT_NE(error_texture, nullptr);
-
   Gfx().srv_view_log_.events.clear();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, error_index);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
   const auto* const bound_texture
     = LastSrvViewTextureForIndex(Gfx(), index_0.get());
   ASSERT_NE(bound_texture, nullptr);
-  EXPECT_EQ(bound_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(bound_texture), "ErrorTexture");
 }
 
 //! Forced-error mode must be deterministic.
@@ -123,28 +137,23 @@ NOLINT_TEST_F(TextureBinderFailureTest, ForcedError_IsDeterministic)
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
 
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
-  ASSERT_NE(error_texture, nullptr);
-
   Gfx().srv_view_log_.events.clear();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
   const auto u_index = index_0.get();
   const auto creations_after_first
     = CountSrvViewCreationsForIndex(Gfx(), u_index);
 
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, error_index);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
   const auto* const bound_texture = LastSrvViewTextureForIndex(Gfx(), u_index);
   ASSERT_NE(bound_texture, nullptr);
-  EXPECT_EQ(bound_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(bound_texture), "ErrorTexture");
 
   EXPECT_EQ(
     CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_first);
@@ -162,28 +171,22 @@ NOLINT_TEST_F(TextureBinderFailureTest, InvalidCookedLayout_Rejected)
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
   const auto payload = MakeInvalidTightPackedTexture1x1Rgba8Payload();
-  Loader().PreloadCookedTexture(
-    key, std::span<const uint8_t>(payload.data(), payload.size()));
-
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
-  ASSERT_NE(error_texture, nullptr);
+  Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
   Gfx().srv_view_log_.events.clear();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, error_index);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
   const auto* const bound_texture
     = LastSrvViewTextureForIndex(Gfx(), index_0.get());
   ASSERT_NE(bound_texture, nullptr);
-  EXPECT_EQ(bound_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(bound_texture), "ErrorTexture");
 }
 
 //! Unsupported formats must be rejected via the error texture.
@@ -196,28 +199,22 @@ NOLINT_TEST_F(TextureBinderFailureTest, UnsupportedFormat_Rejected)
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
   const auto payload = MakeCookedTexture4x4Bc1Payload();
-  Loader().PreloadCookedTexture(
-    key, std::span<const uint8_t>(payload.data(), payload.size()));
-
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture = CaptureErrorTexturePtr(Gfx(), error_index);
-  ASSERT_NE(error_texture, nullptr);
+  Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
   Gfx().srv_view_log_.events.clear();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, error_index);
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
   const auto* const bound_texture
     = LastSrvViewTextureForIndex(Gfx(), index_0.get());
   ASSERT_NE(bound_texture, nullptr);
-  EXPECT_EQ(bound_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(bound_texture), "ErrorTexture");
 }
 
 //! Upload submission failures must keep the placeholder bound.
@@ -232,23 +229,16 @@ NOLINT_TEST_F(
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
-  Loader().PreloadCookedTexture(
-    key, std::span<const uint8_t>(payload.data(), payload.size()));
-
-  const auto error_index = Binder().GetErrorTextureIndex();
-  const auto* const error_texture
-    = LastSrvViewTextureForIndex(Gfx(), error_index.get());
-  ASSERT_NE(error_texture, nullptr);
+  Loader().PreloadCookedTexture(key, std::span(payload.data(), payload.size()));
 
   Gfx().srv_view_log_.events.clear();
 
   // Act
-  const auto index_0 = Binder().GetOrAllocate(key);
-  const auto index_1 = Binder().GetOrAllocate(key);
+  const auto index_0 = TexBinder().GetOrAllocate(key);
+  const auto index_1 = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_NE(index_0, Binder().GetErrorTextureIndex());
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
 
   const auto u_index = index_0.get();
@@ -259,7 +249,8 @@ NOLINT_TEST_F(
 
   const auto* const bound_texture = LastSrvViewTextureForIndex(Gfx(), u_index);
   ASSERT_NE(bound_texture, nullptr);
-  EXPECT_NE(bound_texture, error_texture);
+  EXPECT_EQ(GetTextureDebugName(bound_texture), MakePlaceholderDebugName(key));
+  EXPECT_NE(GetTextureDebugName(bound_texture), "ErrorTexture");
 
   EXPECT_EQ(
     CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_allocate);

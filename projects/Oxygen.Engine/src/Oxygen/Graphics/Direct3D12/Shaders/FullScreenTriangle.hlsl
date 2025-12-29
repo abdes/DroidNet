@@ -14,6 +14,12 @@
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
+// -----------------------------------------------------------------------------
+// Material Flags
+// -----------------------------------------------------------------------------
+
+static const uint MATERIAL_FLAG_NO_TEXTURE_SAMPLING = 1u;
+
 // Define vertex structure to match the CPU-side Vertex struct
 struct Vertex {
     float3 position;
@@ -232,7 +238,10 @@ float4 PS(VSOutput input) : SV_Target0 {
 
         const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
 
-        if (mat.base_color_texture_index != 0xFFFFFFFFu) {
+        const bool no_texture_sampling =
+            (mat.flags & MATERIAL_FLAG_NO_TEXTURE_SAMPLING) != 0u;
+
+        if (!no_texture_sampling && mat.base_color_texture_index != 0xFFFFFFFFu) {
             Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             float4 texel = base_tex.Sample(samp, uv);

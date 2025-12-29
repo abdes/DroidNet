@@ -84,7 +84,7 @@ set(
   "Resources/DrawMetadataEmitter.h"
   "Resources/GeometryUploader.cpp"
   "Resources/GeometryUploader.h"
-  "Resources/ITextureBinder.h"
+  "Resources/IResourceBinder.h"
   "Resources/MaterialBinder.cpp"
   "Resources/MaterialBinder.h"
   "Resources/TextureBinder.cpp"

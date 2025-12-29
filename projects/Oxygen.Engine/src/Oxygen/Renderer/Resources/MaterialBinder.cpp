@@ -6,9 +6,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
-#include <limits>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
@@ -16,18 +15,16 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.Constants.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
-#include <Oxygen/Renderer/Resources/ITextureBinder.h>
+#include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/Resources/MaterialBinder.h>
-#include <Oxygen/Renderer/Resources/TextureBinder.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
 #include <Oxygen/Renderer/Types/MaterialConstants.h>
+#include <Oxygen/Renderer/Upload/AtlasBuffer.h>
 #include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 
 using oxygen::engine::upload::AtlasBuffer;
@@ -39,40 +36,44 @@ namespace {
   const oxygen::data::MaterialAsset& material, std::string& error_msg) -> bool
 {
   // Check for reasonable scalar values
+  constexpr float kReasonableScaleMax = 10.0F;
+
   const auto base_color = material.GetBaseColor();
   for (int i = 0; i < 4; ++i) {
+    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
     if (!std::isfinite(base_color[i])) {
       error_msg = "Material base_color contains non-finite values";
       return false;
     }
-    if (base_color[i] < 0.0f || base_color[i] > 10.0f) {
+    if (base_color[i] < 0.0F || base_color[i] > kReasonableScaleMax) {
       error_msg = "Material base_color values out of reasonable range [0, 10]";
       return false;
     }
+    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
   }
 
   const auto metalness = material.GetMetalness();
-  if (!std::isfinite(metalness) || metalness < 0.0f || metalness > 1.0f) {
+  if (!std::isfinite(metalness) || metalness < 0.0F || metalness > 1.0F) {
     error_msg = "Material metalness out of valid range [0, 1]";
     return false;
   }
 
   const auto roughness = material.GetRoughness();
-  if (!std::isfinite(roughness) || roughness < 0.0f || roughness > 1.0f) {
+  if (!std::isfinite(roughness) || roughness < 0.0F || roughness > 1.0F) {
     error_msg = "Material roughness out of valid range [0, 1]";
     return false;
   }
 
   const auto normal_scale = material.GetNormalScale();
-  if (!std::isfinite(normal_scale) || normal_scale < 0.0f
-    || normal_scale > 10.0f) {
+  if (!std::isfinite(normal_scale) || normal_scale < 0.0F
+    || normal_scale > kReasonableScaleMax) {
     error_msg = "Material normal_scale out of reasonable range [0, 10]";
     return false;
   }
 
   const auto ambient_occlusion = material.GetAmbientOcclusion();
-  if (!std::isfinite(ambient_occlusion) || ambient_occlusion < 0.0f
-    || ambient_occlusion > 1.0f) {
+  if (!std::isfinite(ambient_occlusion) || ambient_occlusion < 0.0F
+    || ambient_occlusion > 1.0F) {
     error_msg = "Material ambient_occlusion out of valid range [0, 1]";
     return false;
   }
@@ -85,52 +86,55 @@ auto MakeMaterialKey(
   const oxygen::engine::sceneprep::MaterialRef& material) noexcept
   -> std::uint64_t
 {
-  // Hash based on key material properties for deduplication
-  const auto base_color = material.asset->GetBaseColor();
-  std::uint64_t hash = 0;
+  // Hash based on stable, renderer-facing identity only:
+  // - Material scalar/vector properties
+  // - Texture ResourceKeys (opaque identifiers)
+  // - Domain/flags
+  // Avoid hashing raw author indices to prevent identity leaks and improve
+  // stability across pipelines.
 
-  // Hash base color components (quantized for stability)
-  constexpr float color_scale = 1024.0f;
+  std::size_t seed = 0U;
+  constexpr float kScalarScale = 1024.0F;
+
+  const auto base_color = material.asset->GetBaseColor();
   for (int i = 0; i < 4; ++i) {
+    constexpr float kColorScale = 1024.0F;
     const auto quantized
-      = static_cast<std::uint32_t>(std::round(base_color[i] * color_scale))
-      & 0xFFFF;
-    hash ^= quantized << (i * 16);
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      = static_cast<std::uint32_t>(std::round(base_color[i] * kColorScale));
+    oxygen::HashCombine(seed, quantized);
   }
 
-  // Hash scalar properties (quantized)
-  constexpr float scalar_scale = 1024.0f;
-  const auto metalness_q = static_cast<std::uint32_t>(std::round(
-                             material.asset->GetMetalness() * scalar_scale))
-    & 0xFFFF;
-  const auto roughness_q = static_cast<std::uint32_t>(std::round(
-                             material.asset->GetRoughness() * scalar_scale))
-    & 0xFFFF;
+  const auto metalness_q = static_cast<std::uint32_t>(
+    std::round(material.asset->GetMetalness() * kScalarScale));
+  const auto roughness_q = static_cast<std::uint32_t>(
+    std::round(material.asset->GetRoughness() * kScalarScale));
+  const auto normal_scale_q = static_cast<std::uint32_t>(
+    std::round(material.asset->GetNormalScale() * kScalarScale));
+  const auto ao_q = static_cast<std::uint32_t>(
+    std::round(material.asset->GetAmbientOcclusion() * kScalarScale));
 
-  hash ^= (static_cast<std::uint64_t>(metalness_q) << 32)
-    | (static_cast<std::uint64_t>(roughness_q) << 48);
+  oxygen::HashCombine(seed, metalness_q);
+  oxygen::HashCombine(seed, roughness_q);
+  oxygen::HashCombine(seed, normal_scale_q);
+  oxygen::HashCombine(seed, ao_q);
 
-  // Hash texture indices
-  hash ^= material.asset->GetBaseColorTexture();
-  hash ^= static_cast<std::uint64_t>(material.asset->GetNormalTexture()) << 8;
-  hash ^= static_cast<std::uint64_t>(material.asset->GetMetallicTexture())
-    << 16;
-  hash ^= static_cast<std::uint64_t>(material.asset->GetRoughnessTexture())
-    << 24;
-  hash
-    ^= static_cast<std::uint64_t>(material.asset->GetAmbientOcclusionTexture())
-    << 32;
+  oxygen::HashCombine(seed, material.GetBaseColorTextureKey());
+  oxygen::HashCombine(seed, material.GetNormalTextureKey());
+  oxygen::HashCombine(seed, material.GetMetallicTextureKey());
+  oxygen::HashCombine(seed, material.GetRoughnessTextureKey());
+  oxygen::HashCombine(seed, material.GetAmbientOcclusionTextureKey());
 
-  // Hash flags
-  hash ^= static_cast<std::uint64_t>(material.GetFlags()) << 40;
+  oxygen::HashCombine(seed, material.GetMaterialDomain());
+  oxygen::HashCombine(seed, material.GetFlags());
 
-  return hash;
+  return static_cast<std::uint64_t>(seed);
 }
 
 //! Serialize MaterialAsset data into MaterialConstants format.
 auto SerializeMaterialConstants(
   const oxygen::engine::sceneprep::MaterialRef& material,
-  oxygen::renderer::resources::ITextureBinder& texture_binder) noexcept
+  oxygen::renderer::resources::IResourceBinder& texture_binder) noexcept
   -> oxygen::engine::MaterialConstants
 {
   oxygen::engine::MaterialConstants constants;
@@ -138,6 +142,7 @@ auto SerializeMaterialConstants(
   // Copy base color
   const auto base_color = material.asset->GetBaseColor();
   constants.base_color
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = { base_color[0], base_color[1], base_color[2], base_color[3] };
 
   // Copy scalar properties
@@ -146,25 +151,58 @@ auto SerializeMaterialConstants(
   constants.normal_scale = material.asset->GetNormalScale();
   constants.ambient_occlusion = material.asset->GetAmbientOcclusion();
 
-  // Resolve texture resource keys to SRV indices via TextureBinder
-  constants.base_color_texture_index
-    = texture_binder.GetOrAllocate(material.GetBaseColorTextureKey()).get();
-  constants.normal_texture_index
-    = texture_binder.GetOrAllocate(material.GetNormalTextureKey()).get();
-  constants.metallic_texture_index
-    = texture_binder.GetOrAllocate(material.GetMetallicTextureKey()).get();
-  constants.roughness_texture_index
-    = texture_binder.GetOrAllocate(material.GetRoughnessTextureKey()).get();
-  constants.ambient_occlusion_texture_index
-    = texture_binder.GetOrAllocate(material.GetAmbientOcclusionTextureKey())
-        .get();
+  // Resolve texture resource keys to bindless SRV indices.
+  //
+  // Important semantics (must match shader code):
+  // - `oxygen::kInvalidShaderVisibleIndex` (0xFFFFFFFFu) means "do not sample"
+  //   (use scalar fallback only).
+  // - Valid indices (including 0) are sampled from the bindless heap.
+  //
+  // Contract with PAK format:
+  // - Texture author indices are `0` for the fallback texture.
+  // - "No texture (skip sampling)" is encoded via the material flag
+  //   `kMaterialFlag_NoTextureSampling`.
+  const auto no_texture_sampling
+    = (material.GetFlags() & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+    != 0U;
 
-  LOG_F(INFO,
-    "MaterialBinder: resolved texture SRV indices (base={}, normal={}, "
-    "metal={}, roughness={}, ao={})",
-    constants.base_color_texture_index, constants.normal_texture_index,
-    constants.metallic_texture_index, constants.roughness_texture_index,
-    constants.ambient_occlusion_texture_index);
+  const auto ResolveTextureIndex
+    = [&texture_binder, no_texture_sampling](
+        const oxygen::content::ResourceKey key,
+        const std::uint32_t authored_index) -> uint32_t {
+    if (no_texture_sampling) {
+      return oxygen::kInvalidShaderVisibleIndex.get();
+    }
+
+    if (key.get() != 0U) {
+      return texture_binder.GetOrAllocate(key).get();
+    }
+
+    // No runtime key:
+    // - If author index is 0, the material requests the fallback texture.
+    // - If author index is non-zero, a texture was authored but not resolved
+    //   yet, so bind a shared placeholder to keep sampling stable.
+    if (authored_index == oxygen::data::pak::kFallbackResourceIndex) {
+      return texture_binder
+        .GetOrAllocate(oxygen::content::ResourceKey::kFallback)
+        .get();
+    }
+    return texture_binder
+      .GetOrAllocate(oxygen::content::ResourceKey::kPlaceholder)
+      .get();
+  };
+
+  constants.base_color_texture_index = ResolveTextureIndex(
+    material.GetBaseColorTextureKey(), material.asset->GetBaseColorTexture());
+  constants.normal_texture_index = ResolveTextureIndex(
+    material.GetNormalTextureKey(), material.asset->GetNormalTexture());
+  constants.metallic_texture_index = ResolveTextureIndex(
+    material.GetMetallicTextureKey(), material.asset->GetMetallicTexture());
+  constants.roughness_texture_index = ResolveTextureIndex(
+    material.GetRoughnessTextureKey(), material.asset->GetRoughnessTexture());
+  constants.ambient_occlusion_texture_index
+    = ResolveTextureIndex(material.GetAmbientOcclusionTextureKey(),
+      material.asset->GetAmbientOcclusionTexture());
 
   // Copy flags
   constants.flags = material.GetFlags();
@@ -185,27 +223,168 @@ auto SerializeMaterialConstants(
 
 namespace oxygen::renderer::resources {
 
+//=== MaterialBinder Implementation ========================================//
+
+class MaterialBinder::Impl {
+public:
+  Impl(observer_ptr<Graphics> gfx,
+    observer_ptr<engine::upload::UploadCoordinator> uploader,
+    observer_ptr<engine::upload::StagingProvider> provider,
+    observer_ptr<IResourceBinder> texture_binder);
+
+  ~Impl();
+
+  OXYGEN_MAKE_NON_COPYABLE(Impl)
+  OXYGEN_MAKE_NON_MOVABLE(Impl)
+
+  auto OnFrameStart(RendererTag /*tag*/, frame::Slot slot) -> void;
+  auto GetOrAllocate(const engine::sceneprep::MaterialRef& material)
+    -> engine::sceneprep::MaterialHandle;
+  auto Update(engine::sceneprep::MaterialHandle handle,
+    std::shared_ptr<const data::MaterialAsset> material) -> void;
+  [[nodiscard]] auto IsHandleValid(
+    engine::sceneprep::MaterialHandle handle) const -> bool;
+  [[nodiscard]] auto GetMaterialConstants() const noexcept
+    -> std::span<const engine::MaterialConstants>;
+  [[nodiscard]] auto GetDirtyIndices() const noexcept
+    -> std::span<const std::uint32_t>;
+  auto EnsureFrameResources() -> void;
+  auto OverrideUvTransform(const data::MaterialAsset& material,
+    glm::vec2 uv_scale, glm::vec2 uv_offset) -> bool;
+  [[nodiscard]] auto GetMaterialsSrvIndex() const -> ShaderVisibleIndex;
+
+private:
+  struct MaterialCacheEntry {
+    engine::sceneprep::MaterialHandle handle;
+    std::uint32_t index;
+  };
+
+  auto MarkDirty(std::uint32_t index) -> void;
+  auto MarkAllDirty() -> void;
+  [[nodiscard]] auto FindIndexByHandle(
+    engine::sceneprep::MaterialHandle handle) const
+    -> std::optional<std::uint32_t>;
+  [[nodiscard]] auto EnsureAtlasCapacityOrLog(std::uint32_t desired_count)
+    -> bool;
+
+  auto UpdateKeyMappingForIndex(std::uint32_t index, std::uint64_t new_key)
+    -> void;
+
+  // Deduplication and state
+  std::unordered_map<std::uint64_t, MaterialCacheEntry> material_key_to_handle_;
+  std::unordered_map<const data::MaterialAsset*, std::uint32_t>
+    material_ptr_to_index_;
+  std::vector<std::shared_ptr<const data::MaterialAsset>> materials_;
+  std::vector<engine::MaterialConstants> material_constants_;
+  std::vector<std::uint64_t> material_keys_;
+  std::vector<std::uint32_t> dirty_epoch_;
+  std::vector<std::uint32_t> dirty_indices_;
+  std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
+
+  // Statistics tracking
+  std::uint64_t total_calls_ { 0U };
+  std::uint64_t cache_hits_ { 0U };
+  std::uint64_t total_allocations_ { 0U };
+  std::uint64_t atlas_allocations_ { 0U };
+  std::uint64_t upload_operations_ { 0U };
+
+  // GPU upload dependencies
+  observer_ptr<Graphics> gfx_;
+  observer_ptr<engine::upload::UploadCoordinator> uploader_;
+  observer_ptr<engine::upload::StagingProvider> staging_provider_;
+  observer_ptr<IResourceBinder> texture_binder_;
+
+  // Atlas-based material storage
+  std::unique_ptr<AtlasBuffer> materials_atlas_;
+  std::vector<AtlasBuffer::ElementRef> material_refs_;
+
+  // Current frame slot for atlas element retirement
+  frame::Slot current_frame_slot_ { frame::kInvalidSlot };
+
+  // Frame resource tracking
+  bool uploaded_this_frame_ { false };
+};
+
 MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
   observer_ptr<engine::upload::UploadCoordinator> uploader,
   observer_ptr<engine::upload::StagingProvider> provider,
-  observer_ptr<ITextureBinder> texture_binder)
-  : gfx_(std::move(gfx))
-  , uploader_(std::move(uploader))
-  , staging_provider_(std::move(provider))
-  , texture_binder_(std::move(texture_binder))
+  observer_ptr<IResourceBinder> texture_binder)
+  : impl_(std::make_unique<Impl>(gfx, uploader, provider, texture_binder))
+{
+}
+
+MaterialBinder::~MaterialBinder() = default;
+
+auto MaterialBinder::OnFrameStart(const RendererTag tag, const frame::Slot slot)
+  -> void
+{
+  impl_->OnFrameStart(tag, slot);
+}
+
+auto MaterialBinder::GetOrAllocate(
+  const engine::sceneprep::MaterialRef& material)
+  -> engine::sceneprep::MaterialHandle
+{
+  return impl_->GetOrAllocate(material);
+}
+
+auto MaterialBinder::Update(const engine::sceneprep::MaterialHandle handle,
+  std::shared_ptr<const data::MaterialAsset> material) -> void
+{
+  impl_->Update(handle, std::move(material));
+}
+
+auto MaterialBinder::OverrideUvTransform(const data::MaterialAsset& material,
+  const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
+{
+  return impl_->OverrideUvTransform(material, uv_scale, uv_offset);
+}
+
+auto MaterialBinder::IsHandleValid(
+  const engine::sceneprep::MaterialHandle handle) const -> bool
+{
+  return impl_->IsHandleValid(handle);
+}
+
+auto MaterialBinder::GetMaterialConstants() const noexcept
+  -> std::span<const engine::MaterialConstants>
+{
+  return impl_->GetMaterialConstants();
+}
+
+auto MaterialBinder::EnsureFrameResources() -> void
+{
+  impl_->EnsureFrameResources();
+}
+
+auto MaterialBinder::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
+{
+  return impl_->GetMaterialsSrvIndex();
+}
+
+//=== MaterialBinder::Impl Implementation ==================================//
+
+MaterialBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
+  const observer_ptr<engine::upload::UploadCoordinator> uploader,
+  const observer_ptr<engine::upload::StagingProvider> provider,
+  const observer_ptr<IResourceBinder> texture_binder)
+  : gfx_(gfx)
+  , uploader_(uploader)
+  , staging_provider_(provider)
+  , texture_binder_(texture_binder)
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
   DCHECK_NOTNULL_F(staging_provider_, "StagingProvider cannot be null");
   DCHECK_NOTNULL_F(texture_binder_, "TextureBinder cannot be null");
 
-  // Prepare atlas buffer for material constants storage
   materials_atlas_ = std::make_unique<AtlasBuffer>(gfx_,
     static_cast<std::uint32_t>(sizeof(engine::MaterialConstants)),
     "MaterialConstantsAtlas");
+  CHECK_NOTNULL_F(materials_atlas_, "Failed to create material atlas buffer");
 }
 
-MaterialBinder::~MaterialBinder()
+MaterialBinder::Impl::~Impl()
 {
   LOG_SCOPE_F(INFO, "MaterialBinder Statistics");
   LOG_F(INFO, "total calls       : {}", total_calls_);
@@ -227,48 +406,146 @@ MaterialBinder::~MaterialBinder()
   }
 }
 
-auto MaterialBinder::OnFrameStart(
-  renderer::RendererTag, oxygen::frame::Slot slot) -> void
+auto MaterialBinder::Impl::OnFrameStart(
+  RendererTag /*tag*/, const frame::Slot slot) -> void
 {
   ++current_epoch_;
   if (current_epoch_ == 0U) {
-    // Epoch overflow - reset all dirty tracking
     LOG_F(WARNING,
-      "MaterialBinder::OnFrameStart - epoch overflow, resetting all dirty "
-      "tracking");
+      "MaterialBinder::OnFrameStart - epoch overflow, resetting dirty state");
     current_epoch_ = 1U;
-    std::fill(dirty_epoch_.begin(), dirty_epoch_.end(), 0U);
+    std::ranges::fill(dirty_epoch_, 0U);
   }
 
-  frame_write_count_ = 0U;
   current_frame_slot_ = slot;
   dirty_indices_.clear();
 
-  // Phase 1: Keep cache across frames for stable handle indices.
-  // Cache clearing violated Phase 1 "stable entries" requirement.
-  // The cache enables cross-frame material deduplication and handle stability.
-
-  // Prepare atlas lifecycle (recycle any retired elements for this slot)
   if (materials_atlas_) {
     materials_atlas_->OnFrameStart(slot);
   }
 
-  // Reset frame resource tracking
   uploaded_this_frame_ = false;
 }
 
-auto MaterialBinder::GetOrAllocate(
-  const oxygen::engine::sceneprep::MaterialRef& material)
+auto MaterialBinder::Impl::FindIndexByHandle(
+  const engine::sceneprep::MaterialHandle handle) const
+  -> std::optional<std::uint32_t>
+{
+  const auto u_index = static_cast<std::uint32_t>(handle.get());
+  if (u_index >= materials_.size()) {
+    return std::nullopt;
+  }
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  if (!materials_[u_index]) {
+    return std::nullopt;
+  }
+  return u_index;
+}
+
+auto MaterialBinder::Impl::IsHandleValid(
+  const engine::sceneprep::MaterialHandle handle) const -> bool
+{
+  return FindIndexByHandle(handle).has_value();
+}
+
+auto MaterialBinder::Impl::GetMaterialConstants() const noexcept
+  -> std::span<const engine::MaterialConstants>
+{
+  return { material_constants_.data(), material_constants_.size() };
+}
+
+auto MaterialBinder::Impl::GetDirtyIndices() const noexcept
+  -> std::span<const std::uint32_t>
+{
+  return { dirty_indices_.data(), dirty_indices_.size() };
+}
+
+auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
+{
+  if (index >= dirty_epoch_.size()) {
+    dirty_epoch_.resize(static_cast<std::size_t>(index) + 1U, 0U);
+  }
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
+  if (dirty_epoch_[index] == current_epoch_) {
+    return;
+  }
+  dirty_epoch_[index] = current_epoch_;
+  dirty_indices_.push_back(index);
+  uploaded_this_frame_ = false;
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
+}
+
+auto MaterialBinder::Impl::MarkAllDirty() -> void
+{
+  const auto count = static_cast<std::uint32_t>(material_constants_.size());
+  for (std::uint32_t i = 0U; i < count; ++i) {
+    MarkDirty(i);
+  }
+}
+
+auto MaterialBinder::Impl::EnsureAtlasCapacityOrLog(
+  const std::uint32_t desired_count) -> bool
+{
+  DCHECK_NOTNULL_F(materials_atlas_.get(), "Atlas not initialized");
+  const auto result = materials_atlas_->EnsureCapacity(desired_count, 0.5F);
+  if (!result) {
+    LOG_F(ERROR, "Failed to ensure material atlas capacity: {}",
+      result.error().message());
+    return false;
+  }
+
+  // AtlasBuffer does not migrate live data on resize (by design). If it was
+  // created/resized, previously uploaded material constants are no longer
+  // guaranteed to be present in GPU memory, so force a full re-upload.
+  if (*result != engine::upload::EnsureBufferResult::kUnchanged) {
+    MarkAllDirty();
+  }
+
+  return true;
+}
+
+auto MaterialBinder::Impl::UpdateKeyMappingForIndex(
+  const std::uint32_t index, const std::uint64_t new_key) -> void
+{
+  if (index >= material_keys_.size()) {
+    material_keys_.resize(static_cast<std::size_t>(index) + 1U, 0U);
+  }
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  const auto old_key = material_keys_[index];
+  if (old_key != 0U) {
+    const auto it = material_key_to_handle_.find(old_key);
+    if (it != material_key_to_handle_.end() && it->second.index == index) {
+      material_key_to_handle_.erase(it);
+    }
+  }
+
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  material_keys_[index] = new_key;
+
+  const auto handle = engine::sceneprep::MaterialHandle { index };
+
+  // Canonical-first: if the key already exists, do not remap it. This ensures
+  // GetOrAllocate(key) keeps returning the original handle.
+  const auto [it, inserted] = material_key_to_handle_.try_emplace(
+    new_key, MaterialCacheEntry { .handle = handle, .index = index });
+  if (!inserted) {
+    DLOG_F(4,
+      "MaterialBinder: key {} already mapped to handle {}; ignoring remap to "
+      "handle {}",
+      new_key, it->second.handle.get(), handle.get());
+  }
+}
+
+auto MaterialBinder::Impl::GetOrAllocate(
+  const engine::sceneprep::MaterialRef& material)
   -> engine::sceneprep::MaterialHandle
 {
   ++total_calls_;
 
-  // Handle null materials - return invalid handle that will fail IsValidHandle
   if (!material.asset) {
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  // Validate material
   std::string error_msg;
   if (!ValidateMaterial(*material.asset, error_msg)) {
     LOG_F(ERROR, "Material validation failed: {}", error_msg);
@@ -276,193 +553,103 @@ auto MaterialBinder::GetOrAllocate(
   }
 
   const auto key = MakeMaterialKey(material);
-
   if (const auto it = material_key_to_handle_.find(key);
     it != material_key_to_handle_.end()) {
-    // Found existing handle - verify it's the same material to handle hash
-    // collisions
-    const auto& entry = it->second;
-    const auto cached_handle = entry.handle;
-    const auto idx = entry.index;
-    if (idx < materials_.size()
-      && materials_[idx].get() == material.asset.get()) {
-      // Same material, cache hit - only count when actually reusing existing
-      // storage
-      ++cache_hits_;
-      if (dirty_epoch_[idx] != current_epoch_) {
-        dirty_epoch_[idx] = current_epoch_;
-        dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
-      }
-      // Consume one write slot this frame to keep order stable.
-      ++frame_write_count_;
-      return cached_handle; // Same material, return existing handle
+    const auto idx = it->second.index;
+    if (idx >= materials_.size()) {
+      LOG_F(ERROR, "MaterialBinder: cached index out of range for key {}", key);
+      return engine::sceneprep::kInvalidMaterialHandle;
     }
-    // Hash collision or changed value - treat as same logical material whose
-    // value changed; update in-place to keep handle stable and mark dirty.
-    // This is NOT a cache hit since the material content changed.
+
+    ++cache_hits_;
+
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     const auto* old_ptr = materials_[idx].get();
+    if ((old_ptr != nullptr) && old_ptr != material.asset.get()) {
+      material_ptr_to_index_.erase(old_ptr);
+    }
+    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     materials_[idx] = material.asset;
-    if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
-      && material_ptr_to_index_[old_ptr] == static_cast<std::uint32_t>(idx)) {
-      material_ptr_to_index_.erase(old_ptr);
-    }
-    material_ptr_to_index_[material.asset.get()]
-      = static_cast<std::uint32_t>(idx);
-    material_constants_[idx]
-      = SerializeMaterialConstants(material, *texture_binder_);
-    if (idx >= dirty_epoch_.size()) {
-      dirty_epoch_.resize(idx + 1U, 0U);
-    }
-    dirty_epoch_[idx] = current_epoch_;
-    if (std::find(dirty_indices_.begin(), dirty_indices_.end(),
-          static_cast<std::uint32_t>(idx))
-      == dirty_indices_.end()) {
-      dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
-    }
-    // Rebind new key to same handle for any subsequent calls this frame.
-    material_key_to_handle_[key]
-      = MaterialCacheEntry { cached_handle, static_cast<std::uint32_t>(idx) };
-    ++frame_write_count_;
-    return cached_handle;
+    material_ptr_to_index_[material.asset.get()] = idx;
+
+    return it->second.handle;
   }
 
-  // No cache hit: either a brand new logical material, or a changed value
-  // that should reuse an existing slot this frame. Reuse by frame order.
-  const bool is_new_logical = frame_write_count_ >= materials_.size();
-  std::uint32_t index = 0;
+  const auto index = static_cast<std::uint32_t>(materials_.size());
 
-  if (is_new_logical) {
-    // Append new entries
-    materials_.push_back(material.asset);
-    material_constants_.push_back(
-      SerializeMaterialConstants(material, *texture_binder_));
-    dirty_epoch_.push_back(current_epoch_);
-    index = static_cast<std::uint32_t>(materials_.size() - 1);
-    material_ptr_to_index_[material.asset.get()] = index;
-    ++total_allocations_; // Track logical allocation of new material
-  } else {
-    // Reuse existing slot in this frame by order; mark dirty and update.
-    index = frame_write_count_;
-    const auto* old_ptr = materials_[index].get();
-    materials_[index] = material.asset;
-    if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
-      && material_ptr_to_index_[old_ptr] == index) {
-      material_ptr_to_index_.erase(old_ptr);
-    }
-    material_ptr_to_index_[material.asset.get()] = index;
-    material_constants_[index]
-      = SerializeMaterialConstants(material, *texture_binder_);
-    if (index >= dirty_epoch_.size()) {
-      dirty_epoch_.resize(index + 1U, 0U);
-    }
-    dirty_epoch_[index] = current_epoch_;
-  }
+  const auto constants = SerializeMaterialConstants(material, *texture_binder_);
 
-  // Ensure atlas capacity and allocate one element
-  if (const auto result = materials_atlas_->EnsureCapacity(
-        static_cast<std::uint32_t>(materials_.size()), 0.5f);
-    !result) {
-    LOG_F(ERROR, "Failed to ensure material atlas capacity: {}",
-      result.error().message());
+  // Ensure atlas has capacity before allocating the element ref.
+  if (!EnsureAtlasCapacityOrLog(index + 1U)) {
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  // Ensure element refs array is sized; allocate refs only when new
-  if (material_refs_.size() < materials_.size()) {
-    const auto need
-      = static_cast<std::uint32_t>(materials_.size() - material_refs_.size());
-    for (std::uint32_t n = 0; n < need; ++n) {
-      auto ref = materials_atlas_->Allocate(1);
-      DCHECK_F(ref.has_value(), "Failed to allocate material (atlas)");
-      material_refs_.push_back(*ref);
-      ++atlas_allocations_; // Track atlas element allocation
-    }
+  auto ref = materials_atlas_->Allocate(1);
+  if (!ref.has_value()) {
+    LOG_F(ERROR, "Failed to allocate material atlas element");
+    return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  const auto handle = engine::sceneprep::MaterialHandle { index };
+  materials_.push_back(material.asset);
+  material_constants_.push_back(constants);
+  material_refs_.push_back(*ref);
+  material_ptr_to_index_[material.asset.get()] = index;
+  ++total_allocations_;
+  ++atlas_allocations_;
 
-  // Mark dirty for this frame
-  if (std::find(dirty_indices_.begin(), dirty_indices_.end(), index)
-    == dirty_indices_.end()) {
-    dirty_indices_.push_back(index);
-  }
+  UpdateKeyMappingForIndex(index, key);
+  MarkDirty(index);
 
-  // Release old atlas allocation if we're replacing an existing cache entry
-  if (auto it = material_key_to_handle_.find(key);
-    it != material_key_to_handle_.end()) {
-    const auto old_index = it->second.index;
-    if (old_index < material_refs_.size()) {
-      materials_atlas_->Release(material_refs_[old_index], current_frame_slot_);
-    }
-  }
-
-  // Cache for deduplication: map value key to this handle and index
-  material_key_to_handle_[key] = MaterialCacheEntry { handle, index };
-  if (is_new_logical) {
-    ++total_allocations_;
-  }
-  ++frame_write_count_;
-
-  return handle;
+  return engine::sceneprep::MaterialHandle { index };
 }
 
-auto MaterialBinder::Update(engine::sceneprep::MaterialHandle handle,
+auto MaterialBinder::Impl::Update(
+  const engine::sceneprep::MaterialHandle handle,
   std::shared_ptr<const data::MaterialAsset> material) -> void
 {
-  ++total_calls_; // Track Update calls along with GetOrAllocate calls
+  ++total_calls_;
 
-  const auto idx = static_cast<std::size_t>(handle.get());
-  if (!IsValidHandle(handle)) {
+  const auto maybe_index = FindIndexByHandle(handle);
+  if (!maybe_index.has_value()) {
     LOG_F(WARNING, "Update received invalid handle {}", handle.get());
     return;
   }
 
-  // Handle null material updates
   if (!material) {
     LOG_F(WARNING, "Update received null material for handle {}", handle.get());
     return;
   }
 
-  // Validate the new material data
   std::string error_msg;
   if (!ValidateMaterial(*material, error_msg)) {
     LOG_F(ERROR, "Material update validation failed: {}", error_msg);
     return;
   }
 
-  // Check if the material actually changed (by pointer comparison)
-  if (materials_[idx].get() == material.get()) {
-    ++cache_hits_; // Count as cache hit when no update needed
-    return; // Same material, no update needed
-  }
-
-  const auto* old_ptr = materials_[idx].get();
-  materials_[idx] = material;
-  if (old_ptr && material_ptr_to_index_.count(old_ptr) != 0U
-    && material_ptr_to_index_[old_ptr] == static_cast<std::uint32_t>(idx)) {
-    material_ptr_to_index_.erase(old_ptr);
-  }
-  material_ptr_to_index_[material.get()] = static_cast<std::uint32_t>(idx);
-  // Use MaterialRef wrapper to serialize constants (contains opaque
-  // ResourceKeys)
-  engine::sceneprep::MaterialRef mat_ref { std::move(material) };
-  material_constants_[idx]
+  const auto index = *maybe_index;
+  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
+  engine::sceneprep::MaterialRef mat_ref { material };
+  const auto new_key = MakeMaterialKey(mat_ref);
+  const auto new_constants
     = SerializeMaterialConstants(mat_ref, *texture_binder_);
 
-  // Mark dirty for this frame
-  if (dirty_epoch_[idx] != current_epoch_) {
-    dirty_epoch_[idx] = current_epoch_;
-    dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
+  const auto* old_ptr = materials_[index].get();
+  if (old_ptr != nullptr && old_ptr != material.get()) {
+    material_ptr_to_index_.erase(old_ptr);
   }
+  materials_[index] = std::move(material);
+  material_ptr_to_index_[materials_[index].get()] = index;
+
+  material_constants_[index] = new_constants;
+  UpdateKeyMappingForIndex(index, new_key);
+  MarkDirty(index);
+  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 }
 
-auto MaterialBinder::OverrideUvTransform(const data::MaterialAsset& material,
-  const glm::vec2 uv_scale, const glm::vec2 uv_offset) -> bool
+auto MaterialBinder::Impl::OverrideUvTransform(
+  const data::MaterialAsset& material, const glm::vec2 uv_scale,
+  const glm::vec2 uv_offset) -> bool
 {
-  // TODO: Replace this shared-material mutation with MaterialInstance
-  // support (or per-draw instance constants) so per-object UV overrides do not
-  // affect other objects that share the same MaterialAsset.
-
   const auto ValidateScale = [](const glm::vec2 v) -> bool {
     return std::isfinite(v.x) && std::isfinite(v.y) && v.x > 0.0F && v.y > 0.0F;
   };
@@ -482,143 +669,112 @@ auto MaterialBinder::OverrideUvTransform(const data::MaterialAsset& material,
     return false;
   }
 
-  const auto idx = static_cast<std::size_t>(it->second);
-  if (idx >= material_constants_.size()) {
+  const auto index = it->second;
+  if (index >= material_constants_.size()) {
     return false;
   }
 
-  auto& constants = material_constants_[idx];
+  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+  auto& constants = material_constants_[index];
   constants.uv_scale = uv_scale;
   constants.uv_offset = uv_offset;
-
-  if (idx >= dirty_epoch_.size()) {
-    dirty_epoch_.resize(idx + 1U, 0U);
-  }
-  dirty_epoch_[idx] = current_epoch_;
-  if (std::find(dirty_indices_.begin(), dirty_indices_.end(),
-        static_cast<std::uint32_t>(idx))
-    == dirty_indices_.end()) {
-    dirty_indices_.push_back(static_cast<std::uint32_t>(idx));
-  }
-
-  // If frame resources were already uploaded this frame, the new UV values will
-  // be visible next frame unless EnsureFrameResources is called again.
-  uploaded_this_frame_ = false;
+  MarkDirty(index);
   return true;
 }
 
-auto MaterialBinder::IsValidHandle(
-  engine::sceneprep::MaterialHandle handle) const -> bool
+auto MaterialBinder::Impl::EnsureFrameResources() -> void
 {
-  const auto idx = static_cast<std::size_t>(handle.get());
-  return idx < materials_.size() && materials_[idx] != nullptr;
-}
-
-auto MaterialBinder::GetMaterialConstants() const noexcept
-  -> std::span<const engine::MaterialConstants>
-{
-  return { material_constants_.data(), material_constants_.size() };
-}
-
-auto MaterialBinder::GetDirtyIndices() const noexcept
-  -> std::span<const std::uint32_t>
-{
-  return { dirty_indices_.data(), dirty_indices_.size() };
-}
-
-auto MaterialBinder::EnsureFrameResources() -> void
-{
-  if (uploaded_this_frame_ || materials_.empty()) {
+  if (uploaded_this_frame_) {
     return;
   }
 
-  // Ensure SRV exists even if there are no new uploads this frame
-  if (const auto result = materials_atlas_->EnsureCapacity(
-        std::max<std::uint32_t>(
-          1U, static_cast<std::uint32_t>(materials_.size())),
-        0.5f);
-    !result) {
+  if (current_frame_slot_ == frame::kInvalidSlot) {
     LOG_F(ERROR,
-      "Failed to ensure material atlas capacity for frame resources: {}",
-      result.error().message());
-    return; // Skip uploads if capacity cannot be ensured
+      "EnsureFrameResources() called before OnFrameStart() - frame lifecycle "
+      "violation");
+    return;
   }
 
-  std::vector<oxygen::engine::upload::UploadRequest> requests;
-  requests.reserve(8); // small, will grow if needed
-
-  const auto stride
-    = static_cast<std::uint64_t>(sizeof(engine::MaterialConstants));
-  const auto count = static_cast<std::uint32_t>(materials_.size());
-
-  // Emit per-element requests for dirty entries; coordinator will batch
-  // and coalesce (including contiguous merges) across all buffer requests.
-  // Phase 1: Upload all materials every frame (ignore dirty tracking)
-  for (std::uint32_t i = 0; i < count; ++i) {
-    // Phase 1 behavior: Upload all materials every frame regardless of dirty
-    // status
-
-    // const bool is_dirty = (i < dirty_epoch_.size()) &&
-    // (dirty_epoch_[i] == current_epoch_); if (!is_dirty) {
-    //   continue;
-    // }
-
-    // Material constants
-    if (auto desc
-      = materials_atlas_->MakeUploadDesc(material_refs_[i], stride)) {
-      oxygen::engine::upload::UploadRequest req;
-      req.kind = oxygen::engine::upload::UploadKind::kBuffer;
-      req.debug_name = "MaterialConstants";
-      req.desc = *desc;
-      req.data = oxygen::engine::upload::UploadDataView {
-        std::span<const std::byte>(
-          reinterpret_cast<const std::byte*>(&material_constants_[i]), stride)
-      };
-      requests.push_back(std::move(req));
-    } else {
-      LOG_F(ERROR, "Failed to create upload descriptor for material {}", i);
-    }
+  // Ensure SRV exists even when no uploads are required.
+  const auto desired = std::max<std::uint32_t>(
+    1U, static_cast<std::uint32_t>(materials_.size()));
+  if (!EnsureAtlasCapacityOrLog(desired)) {
+    return;
   }
 
-  if (!requests.empty()) {
-    const auto tickets = uploader_->SubmitMany(
-      std::span { requests.data(), requests.size() }, *staging_provider_);
-    upload_operations_ += requests.size(); // Track number of upload operations
+  if (dirty_indices_.empty() || materials_.empty()) {
+    uploaded_this_frame_ = true;
+    return;
+  }
 
-    // Handle upload submission result
-    if (!tickets.has_value()) {
-      std::error_code ec = tickets.error();
-      LOG_F(ERROR, "Transform upload submission failed: [{}] {}",
-        ec.category().name(), ec.message());
-      return; // Early return on submission failure
+  std::vector<engine::upload::UploadRequest> requests;
+  requests.reserve(dirty_indices_.size());
+
+  const auto stride = sizeof(engine::MaterialConstants);
+  for (const auto index : dirty_indices_) {
+    if (index >= material_refs_.size() || index >= material_constants_.size()) {
+      LOG_F(ERROR, "MaterialBinder: dirty index out of range: {}", index);
+      continue;
     }
 
-    auto& ticket_vector = tickets.value();
-    // Validate upload tickets - if fewer tickets returned than requested, some
-    // failed
-    if (ticket_vector.size() != requests.size()) {
-      LOG_F(ERROR,
-        "Material upload submission failed: expected {} tickets, got {}. {} "
-        "uploads failed.",
-        requests.size(), ticket_vector.size(),
-        requests.size() - ticket_vector.size());
+    // IMPORTANT: AtlasBuffer may recreate its SRV during growth. ElementRef
+    // stores the SRV index that was current at allocation time, which can
+    // become stale across resizes. Use index-based descriptors to avoid SRV
+    // mismatches when reuploading.
+    auto desc = materials_atlas_->MakeUploadDescForIndex(index, stride);
+    if (!desc.has_value()) {
+      LOG_F(ERROR, "Failed to create upload descriptor for material {}", index);
+      continue;
     }
+
+    engine::upload::UploadRequest req;
+    req.kind = engine::upload::UploadKind::kBuffer;
+    req.debug_name = "MaterialConstants";
+    req.desc = *desc;
+    req.data = engine::upload::UploadDataView {
+      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
+      std::as_bytes(
+        std::span<engine::MaterialConstants>(&material_constants_[index], 1))
+        .first(stride)
+    };
+    requests.push_back(std::move(req));
+  }
+
+  if (requests.empty()) {
+    uploaded_this_frame_ = true;
+    return;
+  }
+
+  const auto tickets = uploader_->SubmitMany(
+    std::span { requests.data(), requests.size() }, *staging_provider_);
+  upload_operations_ += requests.size();
+
+  if (!tickets.has_value()) {
+    const std::error_code ec = tickets.error();
+    LOG_F(ERROR, "Material upload submission failed: [{}] {}",
+      ec.category().name(), ec.message());
+    return;
+  }
+
+  if (tickets->size() != requests.size()) {
+    LOG_F(ERROR,
+      "Material upload submission partial failure: expected {} tickets, got "
+      "{}",
+      requests.size(), tickets->size());
   }
 
   uploaded_this_frame_ = true;
 }
 
-auto MaterialBinder::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
+auto MaterialBinder::Impl::GetMaterialsSrvIndex() const -> ShaderVisibleIndex
 {
   DCHECK_NOTNULL_F(materials_atlas_.get(), "Atlas not initialized");
   if (materials_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
-    if (const auto result = materials_atlas_->EnsureCapacity(
-          std::max<std::uint32_t>(
-            1U, static_cast<std::uint32_t>(materials_.size())),
-          0.5f);
-      !result) {
-      LOG_F(ERROR,
-        "Failed to ensure material atlas capacity for SRV creation: {}",
+    const auto desired = std::max<std::uint32_t>(
+      1U, static_cast<std::uint32_t>(materials_.size()));
+    const auto result = materials_atlas_->EnsureCapacity(desired, 0.5F);
+    if (!result) {
+      LOG_F(ERROR, "Failed to ensure material atlas capacity for SRV: {}",
         result.error().message());
       return kInvalidShaderVisibleIndex;
     }

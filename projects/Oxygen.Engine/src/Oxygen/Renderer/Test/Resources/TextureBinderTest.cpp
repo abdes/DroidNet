@@ -6,11 +6,13 @@
 
 #include <Oxygen/Renderer/Test/Resources/TextureBinderTest.h>
 
+#include "Oxygen/Platform/Input.h"
+
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/Upload/UploaderTag.h>
 
-#if defined(OXYGEN_ENGINE_TESTING)
+#ifdef OXYGEN_ENGINE_TESTING
 
 namespace oxygen::engine::upload::internal {
 auto UploaderTagFactory::Get() noexcept -> UploaderTag
@@ -34,15 +36,16 @@ auto TextureBinderTest::SetUp() -> void
 {
   using graphics::SingleQueueStrategy;
 
-  gfx_ = std::make_shared<renderer::testing::FakeGraphics>();
+  gfx_ = std::make_shared<FakeGraphics>();
   ConfigureGraphics(*gfx_);
   gfx_->CreateCommandQueues(SingleQueueStrategy());
 
   uploader_ = std::make_unique<engine::upload::UploadCoordinator>(
     observer_ptr { gfx_.get() }, engine::upload::DefaultUploadPolicy());
 
+  constexpr float kSlack = 0.5F;
   staging_provider_
-    = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4, 0.5f);
+    = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4, kSlack);
 
   texture_loader_ = std::make_unique<FakeTextureResourceLoader>();
 

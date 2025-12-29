@@ -110,7 +110,7 @@ public:
     -> engine::sceneprep::TransformHandle;
 
   //! Check if a handle is valid
-  OXGN_RNDR_NDAPI auto IsValidHandle(
+  OXGN_RNDR_NDAPI auto IsHandleValid(
     engine::sceneprep::TransformHandle handle) const -> bool;
 
   //! Upload transforms to GPU - must be called after OnFrameStart()

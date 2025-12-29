@@ -286,7 +286,7 @@ auto GeometryUploader::OnFrameStart(renderer::RendererTag, frame::Slot slot)
   RetireCompletedUploads();
 }
 
-auto GeometryUploader::IsValidHandle(
+auto GeometryUploader::IsHandleValid(
   engine::sceneprep::GeometryHandle handle) const -> bool
 {
   const auto idx = static_cast<std::size_t>(handle.get());

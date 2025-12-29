@@ -148,6 +148,7 @@ m_gtest_program(
     "Resources/MaterialBinderTest.cpp"
     "Resources/MaterialBinderTest.h"
     "Resources/MaterialBinder_basic_test.cpp"
+    "Resources/MaterialBinder_edge_test.cpp"
     "Resources/MaterialBinder_binding_test.cpp"
     "Resources/MaterialBinder_placeholder_test.cpp"
     "Resources/MaterialBinder_lifecycle_test.cpp"

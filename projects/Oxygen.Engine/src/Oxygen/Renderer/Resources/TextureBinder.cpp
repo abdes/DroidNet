@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <variant>
@@ -21,6 +22,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -350,12 +352,15 @@ namespace {
   }
 
   //! Generate a magenta/black checkerboard pattern for an error texture.
-  auto GenerateErrorTextureData(const std::uint32_t width,
-    const std::uint32_t height, const std::uint32_t tile_size_px)
-    -> std::vector<std::uint32_t>
+  auto GenerateErrorTextureData(const Extent<uint32_t> extent,
+    const std::uint32_t tile_size_px) -> std::vector<std::uint32_t>
   {
-    CHECK_F(width > 0 && height > 0, "Invalid error texture dimensions");
+    CHECK_F(extent.width > 0 && extent.height > 0,
+      "Invalid error texture dimensions");
     CHECK_F(tile_size_px > 0, "Invalid error texture tile size");
+
+    const auto width = extent.width;
+    const auto height = extent.height;
 
     std::vector<std::uint32_t> pixels;
     pixels.resize(
@@ -370,7 +375,7 @@ namespace {
         constexpr std::uint32_t kMagenta = 0xFFFF00FFU;
         const bool is_magenta
           = ((x / tile_size_px) + (y / tile_size_px)) % 2 == 0;
-        pixels[static_cast<std::size_t>(y) * width + x]
+        pixels.at((static_cast<std::size_t>(y) * width) + x)
           = is_magenta ? kMagenta : kBlack;
       }
     }
@@ -424,7 +429,8 @@ private:
     bool alive { true };
   };
 
-  auto CreatePlaceholderTexture() -> std::shared_ptr<graphics::Texture>;
+  auto CreatePlaceholderTexture(std::optional<content::ResourceKey> for_key)
+    -> std::shared_ptr<graphics::Texture>;
   auto CreateErrorTexture() -> std::shared_ptr<graphics::Texture>;
   auto InitiateAsyncLoad(content::ResourceKey resource_key, TextureEntry& entry)
     -> void;
@@ -538,7 +544,7 @@ auto TextureBinder::Impl::GetOrAllocate(
   DLOG_F(4, "resource: {}", resource_key);
 
   TextureEntry entry;
-  entry.texture = CreatePlaceholderTexture();
+  entry.texture = CreatePlaceholderTexture(resource_key);
   if (!entry.texture) {
     LOG_F(ERROR,
       "Failed to create per-entry placeholder texture for resource key: {}",
@@ -610,19 +616,6 @@ auto TextureBinder::Impl::GetOrAllocate(
   return result_index;
 }
 
-auto TextureBinder::GetErrorTextureIndex() const -> ShaderVisibleIndex
-{
-  return impl_->GetErrorTextureIndex();
-}
-
-#ifdef OXYGEN_ENGINE_TESTING
-auto TextureBinder::DebugGetEntry(content::ResourceKey key) const
-  -> std::optional<DebugEntrySnapshot>
-{
-  return impl_->DebugGetEntry(key);
-}
-#endif
-
 //=== TextureBinder::Impl Implementation =====================================//
 
 TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
@@ -663,7 +656,7 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   registry.RegisterView(
     *error_texture_, std::move(error_handle), error_view_desc);
 
-  placeholder_texture_ = CreatePlaceholderTexture();
+  placeholder_texture_ = CreatePlaceholderTexture(std::nullopt);
   if (!placeholder_texture_) {
     LOG_F(ERROR,
       "Failed to create placeholder texture; using error texture instead");
@@ -826,7 +819,8 @@ auto TextureBinder::Impl::GetErrorTextureIndex() const -> ShaderVisibleIndex
 
  @return Placeholder texture, or nullptr on failure
 */
-auto TextureBinder::Impl::CreatePlaceholderTexture()
+auto TextureBinder::Impl::CreatePlaceholderTexture(
+  const std::optional<content::ResourceKey> for_key)
   -> std::shared_ptr<graphics::Texture>
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
@@ -839,7 +833,12 @@ auto TextureBinder::Impl::CreatePlaceholderTexture()
   desc.mip_levels = 1;
   desc.array_size = 1;
   desc.is_shader_resource = true;
-  desc.debug_name = "TexturePlaceholder";
+  if (for_key.has_value()) {
+    desc.debug_name
+      = std::string("Placeholder(") + content::to_string(*for_key) + ")";
+  } else {
+    desc.debug_name = "FallbackTexture";
+  }
 
   try {
     auto texture = gfx_->CreateTexture(desc);
@@ -868,17 +867,19 @@ auto TextureBinder::Impl::CreatePlaceholderTexture()
 auto TextureBinder::Impl::CreateErrorTexture()
   -> std::shared_ptr<graphics::Texture>
 {
+  constexpr Extent<uint32_t> kTextureDimensions { .width = 256, .height = 256 };
+
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   graphics::TextureDesc desc;
   desc.texture_type = TextureType::kTexture2D;
   desc.format = Format::kRGBA8UNorm;
-  desc.width = 256;
-  desc.height = 256;
+  desc.width = kTextureDimensions.width;
+  desc.height = kTextureDimensions.height;
   desc.depth = 1;
   desc.mip_levels = 1;
   desc.array_size = 1;
   desc.is_shader_resource = true;
-  desc.debug_name = "TextureError";
+  desc.debug_name = "ErrorTexture";
 
   try {
     auto texture = gfx_->CreateTexture(desc);
@@ -889,7 +890,7 @@ auto TextureBinder::Impl::CreateErrorTexture()
 
     constexpr std::uint32_t kTileSizePx = 32;
     const auto pixels
-      = GenerateErrorTextureData(desc.width, desc.height, kTileSizePx);
+      = GenerateErrorTextureData(Extent(desc.width, desc.height), kTileSizePx);
 
     const std::span pixel_span = pixels;
     const std::span<const std::byte> pixel_bytes = std::as_bytes(pixel_span);
