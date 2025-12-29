@@ -137,7 +137,7 @@ auto DescriptorSegment::GlobalToLocalIndex(
   const auto u_capacity = GetCapacity().get();
   const auto u_global_index = global_index.get();
 
-  DCHECK_LT_F(u_global_index, u_base_index + u_capacity,
+  CHECK_LT_F(u_global_index, u_base_index + u_capacity,
     "Global index {} is outside segment capacity (base={}, capacity={})",
     u_global_index, u_base_index, u_capacity);
 

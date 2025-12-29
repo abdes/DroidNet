@@ -48,7 +48,8 @@ auto ExampleModuleBase::BuildDefaultWindowProperties() const
 }
 
 auto ExampleModuleBase::OnAttached(
-  oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept -> bool
+  [[maybe_unused]] oxygen::observer_ptr<oxygen::AsyncEngine> engine) noexcept
+  -> bool
 {
   DCHECK_NOTNULL_F(engine);
   LOG_SCOPE_FUNCTION(INFO);

@@ -327,7 +327,7 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseImplAsync(
     // Peek only, entries will be removed when processed. Skip the node if it
     // became invalid due to mutations in the previous siblings visits.
     if (!UpdateNodeImpl(entry_ref)) [[unlikely]] {
-      const auto& handle = entry_ref.visited_node.handle;
+      [[maybe_unused]] const auto& handle = entry_ref.visited_node.handle;
       DLOG_F(2, "skipping, no longer in scene", to_string_compact(handle));
       Traits::pop(container);
       continue;

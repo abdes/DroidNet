@@ -54,7 +54,8 @@ InputSystem::InputSystem(co::ReaderContext<platform::InputEvent> input_reader)
   AddComponent<ObjectMetadata>("InputSystem");
 }
 
-auto InputSystem::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
+auto InputSystem::OnAttached(observer_ptr<AsyncEngine> /*engine*/) noexcept
+  -> bool
 {
   // InputSystem is now ready for frame-based processing
   return true;
@@ -70,7 +71,7 @@ void InputSystem::SetName(std::string_view name) noexcept
   GetComponent<ObjectMetadata>().SetName(name);
 }
 
-auto InputSystem::OnFrameStart(FrameContext& context) -> void
+auto InputSystem::OnFrameStart(FrameContext& /*context*/) -> void
 {
   // Begin frame tracking for all actions
   for (auto& action : actions_) {
@@ -172,7 +173,7 @@ auto InputSystem::OnSnapshot(FrameContext& context) -> void
   // TODO: Integrate with FrameContext::SetInputSnapshot when types align.
 }
 
-auto InputSystem::OnFrameEnd(FrameContext& context) -> void
+auto InputSystem::OnFrameEnd(FrameContext& /*context*/) -> void
 {
   // Clear frame data for next frame
   frame_events_.clear();

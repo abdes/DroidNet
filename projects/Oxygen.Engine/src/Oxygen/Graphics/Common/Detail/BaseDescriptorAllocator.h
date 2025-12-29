@@ -520,7 +520,7 @@ private:
           const size_t idx = HeapIndex(view_type, visibility);
           const auto key = heap_strategy_->GetHeapKey(view_type, visibility);
           keys_[idx] = key;
-        } catch (const std::exception& ex) {
+        } catch ([[maybe_unused]] const std::exception& ex) {
           DLOG_F(2, "combination ({}, {}) not supported by strategy: {}",
             nostd::to_string(view_type), nostd::to_string(visibility),
             ex.what());

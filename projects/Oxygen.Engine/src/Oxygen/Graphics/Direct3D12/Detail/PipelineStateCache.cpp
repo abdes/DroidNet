@@ -620,7 +620,7 @@ PipelineStateCache::~PipelineStateCache()
   LOG_SCOPE_FUNCTION(INFO);
 
   for (auto& entry_tuple : graphics_pipelines_ | std::views::values) {
-    auto& desc = std::get<0>(entry_tuple);
+    [[maybe_unused]] auto& desc = std::get<0>(entry_tuple);
     DLOG_F(2, "pipeline state: {}", desc.GetName());
     auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
     DLOG_F(2, " .. pipeline state release");
@@ -632,7 +632,7 @@ PipelineStateCache::~PipelineStateCache()
   graphics_pipelines_.clear();
 
   for (auto& entry_tuple : compute_pipelines_ | std::views::values) {
-    auto& desc = std::get<0>(entry_tuple);
+    [[maybe_unused]] auto& desc = std::get<0>(entry_tuple);
     DLOG_F(2, "pipeline state: {}", desc.GetName());
     auto& [pipeline_state, root_signature] = std::get<1>(entry_tuple);
     DLOG_F(2, " .. pipeline state release");

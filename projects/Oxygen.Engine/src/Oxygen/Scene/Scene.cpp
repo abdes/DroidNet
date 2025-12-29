@@ -127,7 +127,8 @@ void Scene::SetName(const std::string_view name) noexcept
 }
 
 void Scene::LogPartialFailure(
-  const std::vector<uint8_t>& results, const std::string& operation_name) const
+  [[maybe_unused]] const std::vector<uint8_t>& results,
+  [[maybe_unused]] const std::string& operation_name) const
 {
 #if defined(NDEBUG)
   return;
@@ -146,7 +147,7 @@ void Scene::LogPartialFailure(
 //------------------------------------------------------------------------------
 
 auto Scene::RelativeIsAlive(const NodeHandle& relative,
-  const SceneNode& target) const -> std::optional<SceneNode>
+  [[maybe_unused]] const SceneNode& target) const -> std::optional<SceneNode>
 {
   if (!relative.IsValid()) {
     return std::nullopt;

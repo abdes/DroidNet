@@ -63,7 +63,7 @@ auto RenderPass::Execute(
   try {
     co_await DoExecute(recorder);
   } catch (const std::exception& ex) {
-    DLOG_F(ERROR, "{}: Execute failed: {}", GetName(), ex.what());
+    LOG_F(ERROR, "{}: Execute failed: {}", GetName(), ex.what());
     throw; // Re-throw to propagate the error
   }
 
@@ -193,11 +193,10 @@ auto RenderPass::IssueDrawCallsOverPass(
     }
   } catch (const std::exception& ex) {
     // Catch-all to honor noexcept: log and return
-    DLOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: {}",
-      GetName(), ex.what());
+    LOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: {}", GetName(),
+      ex.what());
   } catch (...) {
-    DLOG_F(ERROR,
-      "RenderPass '{}' IssueDrawCallsOverPass failed: unknown error",
+    LOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: unknown error",
       GetName());
   }
 }
@@ -221,12 +220,12 @@ auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
       ++emitted_count;
     } catch (const std::exception& ex) {
       ++draw_errors;
-      DLOG_F(ERROR, "RenderPass '{}' draw_index={} failed: {}. Draw dropped.",
+      LOG_F(ERROR, "RenderPass '{}' draw_index={} failed: {}. Draw dropped.",
         GetName(), draw_index, ex.what());
       continue;
     } catch (...) {
       ++draw_errors;
-      DLOG_F(ERROR,
+      LOG_F(ERROR,
         "RenderPass '{}' draw_index={} failed: unknown error. Draw dropped.",
         GetName(), draw_index);
       continue;

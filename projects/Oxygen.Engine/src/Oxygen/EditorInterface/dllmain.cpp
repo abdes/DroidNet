@@ -7,7 +7,7 @@
 #include <windows.h>
 
 auto APIENTRY DllMain(
-  HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) -> BOOL
+  HMODULE /*hModule*/, DWORD ul_reason_for_call, LPVOID /*lpReserved*/) -> BOOL
 {
   switch (ul_reason_for_call) {
   case DLL_PROCESS_ATTACH:

@@ -52,8 +52,8 @@ auto InlineTransfersCoordinator::RegisterProvider(
     static_cast<const void*>(provider.get()));
 }
 
-auto InlineTransfersCoordinator::NotifyInlineWrite(
-  SizeBytes size, std::string_view source_label) noexcept -> void
+auto InlineTransfersCoordinator::NotifyInlineWrite(SizeBytes size,
+  [[maybe_unused]] std::string_view source_label) noexcept -> void
 {
   pending_inline_bytes_.fetch_add(size.get(), std::memory_order_relaxed);
   has_pending_inline_writes_.store(true, std::memory_order_release);
@@ -86,7 +86,7 @@ auto InlineTransfersCoordinator::RetireCompleted() -> void
 {
   const auto fence_raw
     = synthetic_fence_counter_.fetch_add(1, std::memory_order_acq_rel) + 1;
-  const auto retired_bytes
+  [[maybe_unused]] const auto retired_bytes
     = pending_inline_bytes_.exchange(0, std::memory_order_acq_rel);
   const auto fence = graphics::FenceValue { fence_raw };
   auto tag = MakeUploaderTag();

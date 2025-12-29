@@ -20,15 +20,13 @@ auto ResourceBarrierCommand::DoExecute(CommandContext& ctx) -> void
     return;
   }
 
+#ifndef NDEBUG
   DLOG_F(3, "barriers   : {}", barriers_.size());
-
-  // Basic validation: ensure 'after' is not unknown
   for (auto& b : barriers_) {
-    const auto before = b.GetStateBefore();
-    const auto after = b.GetStateAfter();
     DLOG_F(3, "resource   : {}", b.GetResource());
-    DLOG_F(3, "transition : {} -> {}", before, after);
+    DLOG_F(3, "transition : {} -> {}", b.GetStateBefore(), b.GetStateAfter());
   }
+#endif // NDEBUG
 
   // Apply barriers into the headless observed state map provided by the
   // CommandContext. Do not call the record-time ResourceStateTracker here;

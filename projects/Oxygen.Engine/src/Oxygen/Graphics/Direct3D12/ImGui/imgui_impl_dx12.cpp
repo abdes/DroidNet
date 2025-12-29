@@ -1080,7 +1080,7 @@ bool ImGui_ImplDX12_Init(ID3D12Device* device, int num_frames_in_flight,
   queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
   queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
   queueDesc.NodeMask = 1;
-  HRESULT hr = device->CreateCommandQueue(
+  [[maybe_unused]] HRESULT hr = device->CreateCommandQueue(
     &queueDesc, IID_PPV_ARGS(&init_info.CommandQueue));
   IM_ASSERT(SUCCEEDED(hr));
 

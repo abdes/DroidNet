@@ -174,7 +174,7 @@ auto Commander::RegisterDeferredOnExecute(
       try {
         DCHECK_NOTNULL_F(l);
         l->OnExecuted();
-      } catch (const std::exception& e) {
+      } catch ([[maybe_unused]] const std::exception& e) {
         DLOG_F(WARNING, "-failed- with exception: {}", e.what());
       }
     }
@@ -190,7 +190,7 @@ auto Commander::RegisterDeferredOnExecute(
     try {
       DCHECK_NOTNULL_F(l);
       l->OnExecuted();
-    } catch (const std::exception& e) {
+    } catch ([[maybe_unused]] const std::exception& e) {
       DLOG_F(WARNING, "-failed- with exception: {}", e.what());
     }
   });

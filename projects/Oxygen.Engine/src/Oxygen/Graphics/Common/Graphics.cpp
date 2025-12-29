@@ -117,7 +117,7 @@ auto Graphics::Stop() -> void
 }
 
 auto Graphics::BeginFrame(
-  frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void
+  frame::SequenceNumber /*frame_number*/, frame::Slot frame_slot) -> void
 {
   // Flush all command queues to ensure GPU work is submitted before releasing
   // resources
