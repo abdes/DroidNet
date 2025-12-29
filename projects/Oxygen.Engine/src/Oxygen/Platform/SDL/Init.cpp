@@ -29,6 +29,15 @@ Platform::~Platform()
 {
   LOG_SCOPE_FUNCTION(1);
 
+  // Tear down higher-level objects that may own SDL resources (e.g. windows)
+  // before terminating SDL itself. Otherwise, window destruction would happen
+  // after SDL_Quit() during base class teardown, which can trigger CRT leak
+  // reports and/or undefined behavior.
+  Stop();
+  if (HasComponent<platform::WindowManager>()) {
+    Windows().ReleaseAllWindows();
+  }
+
   // ->Final<- thing to do is to terminate SDL3.
   platform::sdl::Terminate();
 }
