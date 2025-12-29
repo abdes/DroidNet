@@ -484,13 +484,15 @@ auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
   std::vector<D3D12_RESOURCE_BARRIER> d3d12_barriers;
   d3d12_barriers.reserve(barriers.size());
 
-  // Diasgnostic logs
+// Diasgnostic logs
+#ifndef NDEBUG
   if (!barriers.empty()) {
     DLOG_SCOPE_F(3, "Executing barriers");
     for (const auto& b : barriers) {
       DLOG_F(3, "  - {}", oxygen::graphics::detail::to_string(b));
     }
   }
+#endif // NDEBUG
 
   for (const auto& barrier : barriers) {
     const auto& desc_variant = barrier.GetDescriptor();

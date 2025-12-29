@@ -18,8 +18,8 @@ using oxygen::scene::SceneNodeImpl;
 // SceneNode::Transform Validator Implementations
 // =============================================================================
 
-auto SceneNode::Transform::LogSafeCallError(const char* reason) const noexcept
-  -> void
+auto SceneNode::Transform::LogSafeCallError(
+  [[maybe_unused]] const char* reason) const noexcept -> void
 {
   try {
     DLOG_F(ERROR, "Operation on SceneNode::Transform {} failed: {}",

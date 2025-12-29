@@ -55,7 +55,7 @@ auto Scene::SafeCallImpl(
       auto&& /*self_ref*/) mutable noexcept {
       try {
         return func(state);
-      } catch (const std::exception& ex) {
+      } catch ([[maybe_unused]] const std::exception& ex) {
         DLOG_F(ERROR, "scene operation failed due to exception: {}", ex.what());
         return decltype(func(state)) {}; // Return default-constructed type
       } catch (...) {

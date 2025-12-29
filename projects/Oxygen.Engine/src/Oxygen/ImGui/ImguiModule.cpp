@@ -248,9 +248,9 @@ auto ImGuiModule::OnFrameEnd(engine::FrameContext& /*context*/) -> void
       ImGui::EndFrame();
     }
   } catch (const std::exception& ex) {
-    DLOG_F(1, "ImGuiModule::OnFrameEnd: EndFrame threw: {}", ex.what());
+    LOG_F(1, "ImGuiModule::OnFrameEnd: EndFrame threw: {}", ex.what());
   } catch (...) {
-    DLOG_F(1, "ImGuiModule::OnFrameEnd: EndFrame threw unknown exception");
+    LOG_F(1, "ImGuiModule::OnFrameEnd: EndFrame threw unknown exception");
   }
 
   frame_started_ = false;

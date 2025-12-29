@@ -1663,7 +1663,7 @@ auto AssetLoader::ReleaseResource(const ResourceKey key) -> bool
   AssertOwningThread();
   const auto key_hash = HashResourceKey(key);
   const internal::InternalResourceKey internal_key(key);
-  const auto expected_type_id
+  [[maybe_unused]] const auto expected_type_id
     = GetResourceTypeIdByIndex(internal_key.GetResourceTypeIndex());
 
   // The resource should always be checked in on release. Whether it remains in

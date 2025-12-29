@@ -205,12 +205,12 @@ NOLINT_TEST_F(AssetLoaderDependencyTest, CycleDetection_PreventsInsertion)
   EXPECT_NO_THROW(asset_loader_->AddAssetDependency(key_b, key_a));
 
   // Test that releasing assets works correctly (should not crash)
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a, false));
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b, false));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b));
 
   // Test idempotence - releasing again should still return true
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a, false));
-  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b, false));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_a));
+  EXPECT_TRUE(asset_loader_->ReleaseAsset(key_b));
 #endif
 }
 

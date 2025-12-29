@@ -180,12 +180,10 @@ auto TranslateKeyboardEvent(const SDL_Event& event)
   if (key_code == Key::kNone) {
     // This is not a key code we are interested to handle. Do not generate an
     // event for it
-    const uint32_t key = event.key.key;
-    const uint32_t scan_code = event.key.scancode;
     DLOG_F(2,
       "Keyboard event with key code = {} (scan code = {}) is not "
       "something we can handle. Ignoring event.",
-      key, scan_code);
+      event.key.key, event.key.scancode);
     return {};
   }
 
@@ -339,7 +337,8 @@ auto InputEvents::ProcessPlatformEvents() -> co::Co<>
     if (input_event) {
       // Try to send synchronously if possible
       if (!channel_.Full()) {
-        const auto success = channel_writer_.TrySend(std::move(input_event));
+        [[maybe_unused]] const auto success
+          = channel_writer_.TrySend(std::move(input_event));
         DCHECK_F(success);
       } else {
         // We can unlock the event pump here as we are already full , and we

@@ -172,9 +172,9 @@ auto CommandQueue::Submit(
   }
 
   const auto returned_id = executor_->ExecuteAsync(this, std::move(submission));
-
-  LOG_F(INFO, "Headless Submit(span) enqueued pending submission (role={})",
-    nostd::to_string(queue_role_));
+  LOG_F(INFO,
+    "Headless Submit(span) enqueued pending submission (role={}) -> id={}",
+    nostd::to_string(queue_role_), returned_id);
 }
 
 auto CommandQueue::Flush() const -> void

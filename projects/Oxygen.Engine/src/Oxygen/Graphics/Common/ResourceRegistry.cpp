@@ -94,7 +94,8 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id)
 
 auto ResourceRegistry::RegisterView(NativeResource resource, NativeView view,
   DescriptorHandle view_handle, std::any view_description, size_t key_hash,
-  ResourceViewType view_type, DescriptorVisibility visibility) -> NativeView
+  [[maybe_unused]] ResourceViewType view_type,
+  [[maybe_unused]] DescriptorVisibility visibility) -> NativeView
 {
   // The resource native object is constructed from a reference to the resource
   // and its type ID. It must be valid.
@@ -228,7 +229,7 @@ auto ResourceRegistry::UnRegisterViewNoLock(
 
   DLOG_F(4, "remove cache entry");
   // Use std::erase_if to efficiently find and remove the matching cache entry
-  const size_t erased_count
+  [[maybe_unused]] const size_t erased_count
     = std::erase_if(view_cache_, [&resource, &view](const auto& cache_pair) {
         return cache_pair.first.resource == resource
           && cache_pair.second.view_object == view;
@@ -288,7 +289,7 @@ auto ResourceRegistry::UnRegisterResourceViewsNoLock(
     return;
   }
 
-  const size_t view_count = descriptors.size();
+  [[maybe_unused]] const size_t view_count = descriptors.size();
   DLOG_F(2, "{} view{} to un-register", view_count, view_count == 1 ? "" : "s");
 
   // Release all descriptors and remove from descriptor_to_resource_ map

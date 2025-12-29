@@ -337,7 +337,7 @@ TraversalResult SceneTraversal<SceneT>::TraverseImpl(
     // Peek only, entries will be removed when processed. Skip the node if it
     // became invalid due to mutations in the previous siblings visits.
     if (!UpdateNodeImpl(entry_ref)) [[unlikely]] {
-      const auto& handle = entry_ref.visited_node.handle;
+      [[maybe_unused]] const auto& handle = entry_ref.visited_node.handle;
       DLOG_F(
         2, "skipping, no longer in scene", to_string_compact(handle).c_str());
       Traits::pop(container);
@@ -458,7 +458,7 @@ std::size_t SceneTraversal<SceneT>::UpdateTransforms()
   std::size_t updated_count
     = 0; // Batch process with dirty transform filter for efficiency
   [[maybe_unused]] auto result = Traverse(
-    [&](const auto& node, const bool dry_run) -> VisitResult {
+    [&](const auto& node, [[maybe_unused]] const bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "UpdateTransforms uses kPreOrder and should never receive "
         "dry_run=true");
@@ -489,8 +489,8 @@ std::size_t SceneTraversal<SceneT>::UpdateTransforms(
     = 0; // Batch process from specific roots with dirty transform filter
   [[maybe_unused]] auto result = TraverseHierarchies(
     starting_nodes,
-    [this, &updated_count](
-      const MutableVisitedNode& node, const bool dry_run) -> VisitResult {
+    [this, &updated_count](const MutableVisitedNode& node,
+      [[maybe_unused]] const bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "UpdateTransforms uses kPreOrder and should never receive "
         "dry_run=true");

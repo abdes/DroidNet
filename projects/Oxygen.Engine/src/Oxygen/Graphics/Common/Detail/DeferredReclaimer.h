@@ -122,7 +122,8 @@ private:
   std::unique_ptr<Impl> impl_;
 
   //! Logs the release of a resource.
-  template <typename T> static auto LogRelease(const T* resource) -> void
+  template <typename T>
+  static auto LogRelease([[maybe_unused]] const T* resource) -> void
   {
 #if !defined(NDEBUG)
     if (!resource) {

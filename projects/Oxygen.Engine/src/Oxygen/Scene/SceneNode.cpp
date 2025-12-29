@@ -27,7 +27,8 @@ using OrthographicCamera = oxygen::scene::OrthographicCamera;
 // SceneNode Validator Implementations
 // =============================================================================
 
-auto SceneNode::LogSafeCallError(const char* reason) const noexcept -> void
+auto SceneNode::LogSafeCallError(
+  [[maybe_unused]] const char* reason) const noexcept -> void
 {
   try {
     DLOG_F(ERROR, "Operation on SceneNode {} failed: {}",

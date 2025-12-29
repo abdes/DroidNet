@@ -120,9 +120,9 @@ protected:
     try {
       // Reserve will create initial segments when none exist according to
       // BaseDescriptorAllocator::Reserve.
-      allocator_->Reserve(ResourceViewType::kStructuredBuffer_SRV,
+      auto _ = allocator_->Reserve(ResourceViewType::kStructuredBuffer_SRV,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
-      allocator_->Reserve(ResourceViewType::kSampler,
+      _ = allocator_->Reserve(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
 
       // Ensure a default sampler exists for bindless texture sampling.
@@ -289,7 +289,7 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
   return std::unique_ptr<Surface>(std::move(surface));
 }
 
-auto Graphics::CreateSurfaceFromNative(void* native_handle,
+auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
   const observer_ptr<graphics::CommandQueue> command_queue) const
   -> std::shared_ptr<Surface>
 {

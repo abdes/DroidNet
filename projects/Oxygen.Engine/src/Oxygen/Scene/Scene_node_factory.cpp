@@ -254,7 +254,7 @@ auto Scene::DestroyNode(SceneNode& node) noexcept -> bool
         RemoveRootNode(handle);
       }
 
-      const auto removed = nodes_->Erase(handle);
+      [[maybe_unused]] const auto removed = nodes_->Erase(handle);
       DCHECK_EQ_F(removed, 1);
       node.Invalidate();
       return true;
@@ -547,7 +547,8 @@ auto Scene::CreateNodeFrom(SceneNode& original, const std::string& new_name)
 {
   DLOG_SCOPE_F(3, "Clone Into Parent");
   return SafeCall(NodeIsValidAndInScene(original),
-    [&](const SafeCallState& state) -> std::optional<SceneNode> {
+    [&](
+      [[maybe_unused]] const SafeCallState& state) -> std::optional<SceneNode> {
       DCHECK_EQ_F(state.node, &original);
       DCHECK_NOTNULL_F(state.node_impl);
 
@@ -693,7 +694,7 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
   const NonMutatingTraversal traversal(starting_node.scene_weak_.lock());
   const auto traversal_result = traversal.TraverseHierarchy(
     starting_node,
-    [&](const auto& node, bool dry_run) -> VisitResult {
+    [&](const auto& node, [[maybe_unused]] bool dry_run) -> VisitResult {
       DCHECK_F(!dry_run,
         "CloneHierarchy uses kPreOrder and should never receive dry_run=true");
 
@@ -741,7 +742,7 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
           cloned_parent_impl->MarkTransformDirty();
         }
         return VisitResult::kContinue;
-      } catch (const std::exception& ex) {
+      } catch ([[maybe_unused]] const std::exception& ex) {
         DLOG_F(ERROR, "Failed to clone node {}: {}", name, ex.what());
         // Clean up any nodes we've created so far
         for (const auto& handle : cloned_nodes) {

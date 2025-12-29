@@ -110,7 +110,6 @@ auto WriteSingleAssetPakWithBrowseIndex(const std::filesystem::path& pak_path,
   const uint64_t browse_offset = directory_offset + sizeof(AssetDirectoryEntry);
   const uint64_t browse_size = sizeof(PakBrowseIndexHeader)
     + sizeof(PakBrowseIndexEntry) + strings.size();
-  const uint64_t footer_offset = browse_offset + browse_size;
 
   dir.entry_offset = directory_offset;
   dir.desc_offset = 0;
@@ -241,7 +240,8 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_InvalidVirtualPath_Throws)
  Scenario: Creates a `.pak` with an embedded browse index and resolves a known
  virtual path.
 */
-NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_PakBrowseIndex_Found_ReturnsKey)
+NOLINT_TEST(
+  VirtualPathResolverTest, ResolveAssetKey_PakBrowseIndex_Found_ReturnsKey)
 {
   // Arrange
   const auto root

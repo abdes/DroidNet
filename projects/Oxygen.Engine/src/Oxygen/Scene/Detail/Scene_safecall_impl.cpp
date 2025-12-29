@@ -18,7 +18,7 @@
 
 using oxygen::scene::Scene;
 
-void Scene::LogSafeCallError(const char* reason) noexcept
+void Scene::LogSafeCallError([[maybe_unused]] const char* reason) noexcept
 {
   try {
     DLOG_F(ERROR, "Graph operation failed: {}", reason);

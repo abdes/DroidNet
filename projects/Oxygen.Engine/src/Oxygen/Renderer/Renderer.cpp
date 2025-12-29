@@ -320,7 +320,7 @@ auto Renderer::OnPreRender(FrameContext& context) -> co::Co<>
       resolved_views_.insert_or_assign(view_ctx.id, resolved);
 
       // Build frame data for this view (scene prep, culling, draw list)
-      const auto draw_count
+      [[maybe_unused]] const auto draw_count
         = RunScenePrep(view_ctx.id, resolved, context, first);
       first = false;
 

@@ -828,20 +828,19 @@ public:
                 key_hash);
               recreated = true;
             } else {
-              DLOG_F(WARNING,
-                "-discarded- could not create native view with new "
-                "description");
+              LOG_F(WARNING,
+                "-discarded- could not create view with new description");
             }
           } else {
-            DLOG_F(WARNING, "-discarded- updater returned no description");
+            LOG_F(WARNING, "-discarded- updater returned no description");
           }
         } catch (std::exception& ex) {
           // Swallow and fall through to unified release below.
-          DLOG_F(WARNING, "-discarded- with exception: {}", ex.what());
+          LOG_F(WARNING, "-discarded- with exception: {}", ex.what());
           (void)0;
         } catch (...) {
           // Swallow and fall through to unified release below.
-          DLOG_F(WARNING, "-discarded- with unknown exception");
+          LOG_F(WARNING, "-discarded- with unknown exception");
           (void)0;
         }
 
