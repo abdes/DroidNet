@@ -138,7 +138,10 @@ protected:
           sampler_desc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
           sampler_desc.MipLODBias = 0.0f;
           sampler_desc.MaxAnisotropy = 1;
-          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+          // ComparisonFunc is only used with D3D12_FILTER_COMPARISON_*.
+          // Keep it as NEVER for non-comparison filters to avoid the DX12
+          // debug-layer warning CREATE_SAMPLER_COMPARISON_FUNC_IGNORED.
+          sampler_desc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
           sampler_desc.BorderColor[0] = 0.0f;
           sampler_desc.BorderColor[1] = 0.0f;
           sampler_desc.BorderColor[2] = 0.0f;
