@@ -96,7 +96,10 @@ Buffer::Buffer(BufferDesc desc, const Graphics* gfx)
   } else if ((desc_.usage & BufferUsage::kIndex) == BufferUsage::kIndex) {
     initial_state = D3D12_RESOURCE_STATE_INDEX_BUFFER;
   } else if ((desc_.usage & BufferUsage::kStorage) == BufferUsage::kStorage) {
-    initial_state = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    // D3D12 debug layer warning #1328 (CREATERESOURCE_STATE_IGNORED): for
+    // buffers, the runtime effectively creates the resource in COMMON and
+    // ignores an initial UAV state. Transition explicitly before first UAV use.
+    initial_state = D3D12_RESOURCE_STATE_COMMON;
   } else if ((desc_.usage & BufferUsage::kIndirect) == BufferUsage::kIndirect) {
     initial_state = D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT;
   }
