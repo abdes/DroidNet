@@ -88,7 +88,7 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}\.ccache
         run: |
-          conan install . --profile:host=profiles/windows-github.ini --profile:build=profiles/windows-github.ini --output-folder=out/build --build=missing --deployer=full_deploy -s build_type=Release
+          conan install . --profile:host=profiles/windows-github.ini --profile:build=profiles/windows-github.ini --build=missing -s build_type=Release --deployer-folder=out/install --deployer-package=Oxygen/0.1.0
 
       - name: Install DXC compiler
         run: ./GetDXC.ps1 packages/DXC
