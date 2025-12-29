@@ -702,7 +702,10 @@ bool ImGui_ImplDX12_CreateDeviceObjects()
     staticSampler[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
     staticSampler[0].MipLODBias = 0.f;
     staticSampler[0].MaxAnisotropy = 0;
-    staticSampler[0].ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    // ComparisonFunc is only used with D3D12_FILTER_COMPARISON_*.
+    // Keep it as NEVER for non-comparison filters to avoid the DX12
+    // debug-layer warning CREATE_SAMPLER_COMPARISON_FUNC_IGNORED.
+    staticSampler[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
     staticSampler[0].BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
     staticSampler[0].MinLOD = 0.f;
     staticSampler[0].MaxLOD = D3D12_FLOAT32_MAX;
