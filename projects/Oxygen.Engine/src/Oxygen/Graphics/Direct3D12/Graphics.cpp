@@ -128,8 +128,8 @@ protected:
       // Ensure a default sampler exists for bindless texture sampling.
       // The current shaders use SamplerDescriptorHeap[0].
       if (!default_sampler_.IsValid()) {
-        default_sampler_ = allocator_->Allocate(ResourceViewType::kSampler,
-          DescriptorVisibility::kShaderVisible);
+        default_sampler_ = allocator_->Allocate(
+          ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
         if (default_sampler_.IsValid()) {
           D3D12_SAMPLER_DESC sampler_desc {};
           sampler_desc.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -149,8 +149,8 @@ protected:
           sampler_desc.MinLOD = 0.0f;
           sampler_desc.MaxLOD = D3D12_FLOAT32_MAX;
 
-          device->CreateSampler(&sampler_desc,
-            allocator_->GetCpuHandle(default_sampler_));
+          device->CreateSampler(
+            &sampler_desc, allocator_->GetCpuHandle(default_sampler_));
           DLOG_F(2, "Default sampler created at bindless index {}",
             default_sampler_.GetBindlessHandle().get());
         }
