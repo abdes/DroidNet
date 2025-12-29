@@ -47,7 +47,15 @@ function(gtest_program program_name)
   endif()
 
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
-  gtest_discover_tests(${program_name} DISCOVERY_TIMEOUT 60)
+
+  # Set the DLL path relative to the build directory
+  set(RUNTIME_DLL_PATH "${CMAKE_BINARY_DIR}/../install/bin")
+  # For all test targets, set the PATH environment
+  gtest_discover_tests(
+    ${program_name}
+    DISCOVERY_TIMEOUT 60
+    WORKING_DIRECTORY ${RUNTIME_DLL_PATH}
+  )
 
   # Define the test
   add_test(NAME ${program_name} COMMAND ${program_name})
