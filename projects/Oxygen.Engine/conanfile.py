@@ -89,13 +89,13 @@ class OxygenConan(ConanFile):
         self.version = load(self, Path(self.recipe_folder) / "VERSION").strip()
 
     def requirements(self):
-        self.requires("fmt/11.2.0")
-        self.requires("sdl/3.2.20")
-        self.requires("imgui/1.92.3")
-        self.requires("asio/1.34.2")
+        self.requires("fmt/12.1.0")
+        self.requires("sdl/3.2.28")
+        self.requires("imgui/1.92.5")
+        self.requires("asio/1.36.0")
         self.requires("glm/1.0.1")
         self.requires("nlohmann_json/3.11.3")
-        self.requires("json-schema-validator/2.3.0")
+        self.requires("json-schema-validator/2.4.0")
         self.requires("stduuid/1.2.3")
         self.requires("magic_enum/0.9.7")
 
@@ -106,7 +106,7 @@ class OxygenConan(ConanFile):
         self.test_requires(ref)
         self._test_deps.add(ref.split("/")[0])
 
-        ref = "benchmark/1.9.1"
+        ref = "benchmark/1.9.4"
         self.test_requires(ref)
         self._test_deps.add(ref.split("/")[0])
 
