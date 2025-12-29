@@ -81,6 +81,7 @@ set(
   "Types/ShaderType.h"
   "Types/TextureType.h"
   "Types/View.h"
+  "Types/ViewHelpers.h"
   "Types/ViewPort.h"
   "Types/ViewResolver.h"
   "Version.h"
