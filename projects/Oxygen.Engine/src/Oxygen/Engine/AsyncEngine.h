@@ -114,6 +114,9 @@ public:
   OXGN_NGIN_NDAPI auto GetModule(std::string_view name) const noexcept
     -> std::optional<std::reference_wrapper<engine::EngineModule>>
   {
+    if (!module_manager_) {
+      return std::nullopt;
+    }
     return module_manager_->GetModule(name);
   }
 
@@ -122,6 +125,9 @@ public:
   [[nodiscard]] auto GetModule() const noexcept
     -> std::optional<std::reference_wrapper<T>>
   {
+    if (!module_manager_) {
+      return std::nullopt;
+    }
     return module_manager_->GetModule<T>();
   }
 

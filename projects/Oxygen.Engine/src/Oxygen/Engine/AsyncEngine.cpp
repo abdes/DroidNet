@@ -143,7 +143,10 @@ auto AsyncEngine::Shutdown() -> co::Co<>
   }
 
   // This will shut down all modules synchronously (reverse order).
-  module_manager_.reset();
+  // Move first so any re-entrant or late calls to AsyncEngine::GetModule()
+  // observe a null module_manager_ during teardown.
+  auto module_manager = std::move(module_manager_);
+  module_manager.reset();
 
   // After modules have had an opportunity to perform shutdown work (which may
   // include queue submissions or deferred-release registrations), ensure the
@@ -185,6 +188,9 @@ auto AsyncEngine::Stop() -> void { shutdown_requested_ = true; }
 auto AsyncEngine::RegisterModule(std::unique_ptr<EngineModule> module) noexcept
   -> bool
 {
+  if (!module_manager_) {
+    return false;
+  }
   return module_manager_->RegisterModule(std::move(module));
 }
 
@@ -192,12 +198,18 @@ auto AsyncEngine::RegisterModule(std::unique_ptr<EngineModule> module) noexcept
 // ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::UnregisterModule(std::string_view name) noexcept -> void
 {
+  if (!module_manager_) {
+    return;
+  }
   module_manager_->UnregisterModule(name);
 }
 
 auto AsyncEngine::SubscribeModuleAttached(
   ModuleAttachedCallback cb, const bool replay_existing) -> ModuleSubscription
 {
+  if (!module_manager_) {
+    return {};
+  }
   return module_manager_->SubscribeModuleAttached(
     std::move(cb), replay_existing);
 }
