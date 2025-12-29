@@ -6,7 +6,11 @@
 
 #pragma once
 
-// no extra STL headers required here
+#include <algorithm>
+#include <cstdint>
+#include <limits>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -52,7 +56,7 @@ inline auto ExtractionPreFilter(const ScenePrepContext& /*ctx*/,
     return;
   }
 
-  // FIXME: currently only items with geometry pass.
+  // TODO(engine): Support renderables without geometry.
   // Future Enhancement: Some items should have renderable component but not
   // geometry, and are not supported yet
   item.SetVisible();
@@ -196,8 +200,10 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   // max(abs, rel).
   static constexpr float kBoundsInflationAbs = 0.0f;
   static constexpr float kBoundsInflationRel = 0.01f; // 1% guard band
-  for (uint32_t i = 0, n = static_cast<uint32_t>(submeshes.size()); i < n;
-    ++i) {
+  const auto submesh_count = submeshes.size();
+  CHECK_LE_F(submesh_count, (std::numeric_limits<std::uint32_t>::max)());
+  for (std::uint32_t i = 0, n = static_cast<std::uint32_t>(submesh_count);
+    i < n; ++i) {
     // Visibility mask check first (cheap)
     const bool rend_vis = rend.IsSubmeshVisible(lod, i);
     if (!rend_vis) {
@@ -295,10 +301,16 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
     auto mat_ptr = resolve_material();
     sceneprep::MaterialRef mat_ref { std::move(mat_ptr) };
     const auto mat_handle = state.GetMaterialBinder()->GetOrAllocate(mat_ref);
-    state.CollectItem(RenderItemData {
+
+    sceneprep::GeometryRef geo_ref {
+      .asset_key = item.Geometry()->GetAssetKey(),
       .lod_index = lod,
+      .mesh = item.ResolvedMesh(),
+    };
+
+    state.CollectItem(RenderItemData {
       .submesh_index = index,
-      .geometry = item.Geometry(),
+      .geometry = std::move(geo_ref),
       .material = std::move(mat_ref),
       .material_handle = mat_handle,
       .world_bounding_sphere = item.Renderable().GetWorldBoundingSphere(),

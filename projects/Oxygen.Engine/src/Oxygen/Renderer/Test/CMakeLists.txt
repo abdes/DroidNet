@@ -172,3 +172,25 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_ENGINE_TESTING
 )
+
+# GeometryUploader unit tests
+m_gtest_program(
+  GeometryUploader
+  SOURCES
+    "Fakes/Graphics.h"
+    "Resources/GeometryUploaderTest.cpp"
+    "Resources/GeometryUploaderTest.h"
+    "Resources/GeometryUploader_basic_test.cpp"
+    "Resources/GeometryUploader_lifecycle_test.cpp"
+    "Resources/GeometryUploader_residency_test.cpp"
+    "Resources/GeometryUploader_upload_test.cpp"
+    "Resources/GeometryUploader_retire_test.cpp"
+    "Resources/GeometryUploader_update_test.cpp"
+    "Resources/GeometryUploader_failures_test.cpp"
+    "Resources/GeometryUploader_edge_test.cpp"
+)
+target_compile_definitions(
+  Oxygen.Renderer.GeometryUploader.Tests
+  PRIVATE
+    OXYGEN_ENGINE_TESTING
+)

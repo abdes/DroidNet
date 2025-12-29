@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <span>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
@@ -20,9 +23,6 @@
 #include <Oxygen/Renderer/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Renderer/Upload/TransientStructuredBuffer.h>
 
-using oxygen::engine::DrawMetadata;
-using oxygen::engine::PassMask;
-using oxygen::engine::PassMaskBit;
 namespace {
 
 auto ClassifyMaterialPassMask(const oxygen::data::MaterialAsset* mat)
@@ -73,10 +73,10 @@ DrawMetadataEmitter::DrawMetadataEmitter(observer_ptr<Graphics> gfx,
   observer_ptr<renderer::resources::MaterialBinder> materials,
   observer_ptr<engine::upload::InlineTransfersCoordinator>
     inline_transfers) noexcept
-  : gfx_(std::move(gfx))
-  , geometry_uploader_(std::move(geometry))
-  , material_binder_(std::move(materials))
-  , staging_provider_(std::move(provider))
+  : gfx_(gfx)
+  , geometry_uploader_(geometry)
+  , material_binder_(materials)
+  , staging_provider_(provider)
   , inline_transfers_(inline_transfers)
   , draw_metadata_buffer_(gfx_, *staging_provider_,
       static_cast<std::uint32_t>(sizeof(oxygen::engine::DrawMetadata)),
@@ -113,51 +113,51 @@ auto DrawMetadataEmitter::OnFrameStart(renderer::RendererTag,
 auto DrawMetadataEmitter::EmitDrawMetadata(
   const oxygen::engine::sceneprep::RenderItemData& item) -> void
 {
-  if (!item.geometry) {
+  if (!item.geometry.IsValid()) {
     return;
   }
-  const auto lod_index = item.lod_index;
   const auto submesh_index = item.submesh_index;
-  const auto& geom = *item.geometry;
-  auto meshes_span = geom.Meshes();
-  if (lod_index >= meshes_span.size()) {
-    return;
-  }
-  const auto& lod_mesh_ptr = meshes_span[lod_index];
-  if (!lod_mesh_ptr) {
-    return;
-  }
-  const auto& lod = *lod_mesh_ptr;
-  auto submeshes_span = lod.SubMeshes();
+  const auto& lod = *item.geometry.mesh;
+  const auto submeshes_span = lod.SubMeshes();
   if (submesh_index >= submeshes_span.size()) {
     return;
   }
   const auto& submesh = submeshes_span[submesh_index];
-  auto views_span = submesh.MeshViews();
+  const auto views_span = submesh.MeshViews();
   if (views_span.empty()) {
     return;
   }
-  // Acquire geometry handle once per LOD mesh; GeometryUploader interns the
-  // mesh identity.
-  auto& lod_mesh = *lod_mesh_ptr;
+  // Acquire geometry handle once per LOD mesh; GeometryUploader interns by
+  // stable identity `(AssetKey, lod_index)`.
   auto geo_handle = geometry_uploader_
-    ? geometry_uploader_->GetOrAllocate(lod_mesh)
+    ? geometry_uploader_->GetOrAllocate(item.geometry)
     : oxygen::engine::sceneprep::kInvalidGeometryHandle;
-  for (const auto& view : views_span) {
-    DrawMetadata dm {};
-    // Resolve SRV indices immediately (geometry uploads now happen earlier).
-    if (geometry_uploader_) {
-      const auto indices
-        = geometry_uploader_->GetShaderVisibleIndices(geo_handle);
-      dm.vertex_buffer_index = indices.vertex_srv_index;
-      dm.index_buffer_index = indices.index_srv_index;
-    } else {
-      dm.vertex_buffer_index = ShaderVisibleIndex {};
-      dm.index_buffer_index = ShaderVisibleIndex {};
-    }
 
+  // Resolve SRV indices once per LOD mesh. If geometry is not resident (or
+  // upload failed), indices remain invalid and the draw is skipped.
+  const auto indices = geometry_uploader_
+    ? geometry_uploader_->GetShaderVisibleIndices(geo_handle)
+    : oxygen::renderer::resources::GeometryUploader::
+        MeshShaderVisibleIndices {};
+
+  for (const auto& view : views_span) {
     const auto index_view = view.IndexBuffer();
     const bool has_indices = index_view.Count() > 0;
+
+    // Final runtime behavior (agreed): render nothing when geometry is invalid
+    // or not yet resident. Never issue a draw that references invalid bindless
+    // indices.
+    if (indices.vertex_srv_index == kInvalidShaderVisibleIndex) {
+      continue;
+    }
+    if (has_indices && indices.index_srv_index == kInvalidShaderVisibleIndex) {
+      continue;
+    }
+
+    oxygen::engine::DrawMetadata dm {};
+    dm.vertex_buffer_index = indices.vertex_srv_index;
+    dm.index_buffer_index = indices.index_srv_index;
+
     if (has_indices) {
       dm.first_index = view.FirstIndex();
       dm.base_vertex = static_cast<int32_t>(view.FirstVertex());
@@ -175,12 +175,14 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     // Resolve material handle via MaterialBinder if available
     if (material_binder_ && item.material.asset) {
       const auto stable_handle = material_binder_->GetOrAllocate(item.material);
-      dm.material_handle = stable_handle.get();
+      const auto u_stable_handle = stable_handle.get();
+      dm.material_handle = u_stable_handle;
     }
 
     // Transform indirection
     const auto handle = item.transform_handle;
-    dm.transform_index = handle.get();
+    const auto u_handle = handle.get();
+    dm.transform_index = u_handle;
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
     dm.flags = ClassifyMaterialPassMask(item.material.asset.get());
@@ -215,30 +217,33 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   last_pre_sort_hash_
     = oxygen::ComputeFNV1a64(keys_.data(), keys_.size() * sizeof(SortingKey));
 
-  const size_t n = Cpu().size();
-  std::vector<uint32_t> perm(n);
-  for (uint32_t i = 0; i < n; ++i) {
-    perm[i] = i;
+  const auto n = Cpu().size();
+  DCHECK_LE_F(n, (std::numeric_limits<std::uint32_t>::max)());
+  const auto u_draw_count = static_cast<std::uint32_t>(n);
+  std::vector<std::uint32_t> perm(n);
+  for (std::size_t i = 0; i < n; ++i) {
+    perm[i] = static_cast<std::uint32_t>(i);
   }
-  std::stable_sort(perm.begin(), perm.end(), [&](uint32_t a, uint32_t b) {
-    const auto& ka = keys_[a];
-    const auto& kb = keys_[b];
-    if (ka.pass_mask != kb.pass_mask) {
-      return ka.pass_mask < kb.pass_mask;
-    }
-    if (ka.material_index != kb.material_index) {
-      return ka.material_index < kb.material_index;
-    }
-    if (ka.vb_srv != kb.vb_srv) {
-      return ka.vb_srv < kb.vb_srv;
-    }
-    if (ka.ib_srv != kb.ib_srv) {
-      return ka.ib_srv < kb.ib_srv;
-    }
-    return a < b;
-  });
+  std::stable_sort(
+    perm.begin(), perm.end(), [&](std::uint32_t a, std::uint32_t b) {
+      const auto& ka = keys_[a];
+      const auto& kb = keys_[b];
+      if (ka.pass_mask != kb.pass_mask) {
+        return ka.pass_mask < kb.pass_mask;
+      }
+      if (ka.material_index != kb.material_index) {
+        return ka.material_index < kb.material_index;
+      }
+      if (ka.vb_srv != kb.vb_srv) {
+        return ka.vb_srv < kb.vb_srv;
+      }
+      if (ka.ib_srv != kb.ib_srv) {
+        return ka.ib_srv < kb.ib_srv;
+      }
+      return a < b;
+    });
 
-  std::vector<DrawMetadata> reordered;
+  std::vector<oxygen::engine::DrawMetadata> reordered;
   reordered.reserve(n);
   std::vector<SortingKey> reordered_keys;
   reordered_keys.reserve(n);
@@ -255,8 +260,8 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
   partitions_.clear();
   if (!Cpu().empty()) {
     auto current_mask = Cpu().front().flags;
-    uint32_t range_begin = 0u;
-    for (uint32_t i = 1; i < Cpu().size(); ++i) {
+    std::uint32_t range_begin = 0u;
+    for (std::uint32_t i = 1; i < u_draw_count; ++i) {
       const auto mask = Cpu()[i].flags;
       if (mask != current_mask) {
         partitions_.push_back(
@@ -272,7 +277,7 @@ auto DrawMetadataEmitter::BuildSortingAndPartitions() -> void
     partitions_.push_back(oxygen::engine::PreparedSceneFrame::PartitionRange {
       .pass_mask = current_mask,
       .begin = range_begin,
-      .end = static_cast<uint32_t>(Cpu().size()),
+      .end = u_draw_count,
     });
   }
 

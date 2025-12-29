@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <memory>
+#include <optional>
+
 #include <glm/glm.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
@@ -20,15 +23,13 @@
 
 #include <Oxygen/Renderer/Test/Sceneprep/ScenePrepHelpers.h>
 
-using namespace oxygen::engine;
-using namespace oxygen::engine::sceneprep;
-using oxygen::View;
+namespace sceneprep = oxygen::engine::sceneprep;
+namespace sceneprep_testing = oxygen::engine::sceneprep::testing;
+
 using oxygen::data::GeometryAsset;
 using oxygen::data::MaterialAsset;
-using oxygen::data::MeshBuilder;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
-using namespace oxygen::engine::sceneprep::testing;
 
 namespace {
 
@@ -64,13 +65,14 @@ protected:
     vp.camera_position = { 0.0f, 0.0f, 5.0f };
     view_ = std::make_shared<oxygen::ResolvedView>(vp);
 
-    // rc_ default constructed
-    state_ = std::make_unique<ScenePrepState>(nullptr, nullptr, nullptr);
+    state_
+      = std::make_unique<sceneprep::ScenePrepState>(nullptr, nullptr, nullptr);
   }
 
   static auto BuildSimpleGeometry() -> std::shared_ptr<GeometryAsset>
   {
-    return MakeGeometryWithLods(1, glm::vec3(-1.0f), glm::vec3(1.0f));
+    return sceneprep_testing::MakeGeometryWithLods(
+      1, glm::vec3(-1.0f), glm::vec3(1.0f));
   }
 
   // Accessors for convenience
@@ -78,11 +80,11 @@ protected:
   auto ViewRef()
     -> std::optional<oxygen::observer_ptr<const oxygen::ResolvedView>>
   {
-    return std::optional<oxygen::observer_ptr<const oxygen::ResolvedView>>(
+    return std::make_optional(
       oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get()));
   }
   // ReSharper disable once CppMemberFunctionMayBeConst
-  auto StateRef() -> ScenePrepState& { return *state_; }
+  auto StateRef() -> sceneprep::ScenePrepState& { return *state_; }
 
   static constexpr size_t kNodeCount = 3; // RootA, RootB, ChildOfA
 
@@ -93,42 +95,48 @@ private:
   SceneNode child_of_a_ {};
   std::shared_ptr<oxygen::ResolvedView> view_
     = std::make_shared<oxygen::ResolvedView>(oxygen::ResolvedView::Params {});
-  std::unique_ptr<ScenePrepState> state_ {};
+  std::unique_ptr<sceneprep::ScenePrepState> state_ {};
 };
 
 //! Verifies pipeline is testable by injecting custom stages and calling
 //! Collect across a 3-node scene.
 NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
 {
-  auto pre = [](const ScenePrepContext& /*ctx*/, ScenePrepState& /*st*/,
-               RenderItemProto& it) {
-    it.SetVisible();
-    it.SetGeometry(it.Renderable().GetGeometry());
-    it.SetWorldTransform(it.Transform().GetWorldMatrix());
-  };
-  auto resolve = [](const ScenePrepContext& /*ctx*/, ScenePrepState& /*st*/,
-                   RenderItemProto& it) {
-    if (const auto g = it.Geometry()) {
-      it.ResolveMesh(g->MeshAt(0), 0);
-    } else {
-      it.MarkDropped();
-    }
-  };
-  auto vis = [](const ScenePrepContext& /*ctx*/, ScenePrepState& /*st*/,
-               RenderItemProto& it) {
-    if (!it.ResolvedMesh()) {
-      it.MarkDropped();
-      return;
-    }
-    it.SetVisibleSubmeshes({ 0u });
-  };
-  auto prod = [](const ScenePrepContext& /*ctx*/, ScenePrepState& st,
-                RenderItemProto& it) {
+  auto pre
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        it.SetVisible();
+        it.SetGeometry(it.Renderable().GetGeometry());
+        it.SetWorldTransform(it.Transform().GetWorldMatrix());
+      };
+  auto resolve
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (const auto g = it.Geometry()) {
+          it.ResolveMesh(g->MeshAt(0), 0);
+        } else {
+          it.MarkDropped();
+        }
+      };
+  auto vis
+    = [](const sceneprep::ScenePrepContext& /*ctx*/,
+        sceneprep::ScenePrepState& /*st*/, sceneprep::RenderItemProto& it) {
+        if (!it.ResolvedMesh()) {
+          it.MarkDropped();
+          return;
+        }
+        it.SetVisibleSubmeshes({ 0u });
+      };
+  auto prod = [](const sceneprep::ScenePrepContext& /*ctx*/,
+                sceneprep::ScenePrepState& st, sceneprep::RenderItemProto& it) {
     for (const auto sm : it.VisibleSubmeshes()) {
-      st.CollectItem(RenderItemData {
-        .lod_index = it.ResolvedMeshIndex(),
+      st.CollectItem(sceneprep::RenderItemData {
         .submesh_index = sm,
-        .geometry = it.Geometry(),
+        .geometry = sceneprep::GeometryRef {
+          .asset_key = it.Geometry()->GetAssetKey(),
+          .lod_index = it.ResolvedMeshIndex(),
+          .mesh = it.ResolvedMesh(),
+        },
         .material = MaterialAsset::CreateDefault(),
         .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
         .cast_shadows = it.CastsShadows(),
@@ -137,17 +145,18 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
     }
   };
 
-  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
-    decltype(vis), decltype(prod)>;
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
   ConfigT cfg {
     .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
     .producer = prod,
   };
-  auto final_cfg = CreateStandardFinalizationConfig();
-  const std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
   // Run frame-phase first (no view) to populate cached filtered node list,
@@ -160,9 +169,9 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
 
   ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
   for (const auto& item : StateRef().CollectedItems()) {
-    EXPECT_EQ(item.lod_index, 0u);
+    EXPECT_EQ(item.geometry.lod_index, 0u);
     EXPECT_EQ(item.submesh_index, 0u);
-    EXPECT_TRUE(item.geometry);
+    EXPECT_TRUE(item.geometry.IsValid());
   }
 }
 
@@ -170,30 +179,31 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
 NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
-  auto pre
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++pre_called;
-        it.MarkDropped();
-      };
-  auto resolve = [&](const ScenePrepContext&, ScenePrepState&,
-                   RenderItemProto&) { ++res_called; };
-  auto vis = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
-    ++vis_called;
+  auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto& it) {
+    ++pre_called;
+    it.MarkDropped();
   };
-  auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
-    ++prod_called;
-  };
-  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
-    decltype(vis), decltype(prod)>;
+  auto resolve
+    = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+        sceneprep::RenderItemProto&) { ++res_called; };
+  auto vis = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto&) { ++vis_called; };
+  auto prod
+    = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+        sceneprep::RenderItemProto&) { ++prod_called; };
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
   ConfigT cfg {
     .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
     .producer = prod,
   };
-  auto final_cfg = CreateStandardFinalizationConfig();
-  const std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), std::nullopt,
@@ -214,35 +224,35 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtPreFilter_SkipsDownstream)
 NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
-  auto pre
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++pre_called;
-        it.SetVisible();
-        it.SetGeometry(it.Renderable().GetGeometry());
-        it.SetWorldTransform(it.Transform().GetWorldMatrix());
-      };
-  auto resolve
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++res_called;
-        it.MarkDropped();
-      };
-  auto vis = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
-    ++vis_called;
+  auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto& it) {
+    ++pre_called;
+    it.SetVisible();
+    it.SetGeometry(it.Renderable().GetGeometry());
+    it.SetWorldTransform(it.Transform().GetWorldMatrix());
   };
-  auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
-    ++prod_called;
+  auto resolve = [&](const sceneprep::ScenePrepContext&,
+                   sceneprep::ScenePrepState&, sceneprep::RenderItemProto& it) {
+    ++res_called;
+    it.MarkDropped();
   };
-  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
-    decltype(vis), decltype(prod)>;
+  auto vis = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto&) { ++vis_called; };
+  auto prod
+    = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+        sceneprep::RenderItemProto&) { ++prod_called; };
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
   ConfigT cfg {
     .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
     .producer = prod,
   };
-  auto final_cfg = CreateStandardFinalizationConfig();
-  const std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), std::nullopt,
@@ -263,37 +273,38 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtResolver_SkipsDownstream)
 NOLINT_TEST_F(ScenePrepPipelineTest, Collect_DropAtVisibility_SkipsProducer)
 {
   int pre_called = 0, res_called = 0, vis_called = 0, prod_called = 0;
-  auto pre
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++pre_called;
-        it.SetVisible();
-        it.SetGeometry(it.Renderable().GetGeometry());
-        it.SetWorldTransform(it.Transform().GetWorldMatrix());
-      };
-  auto resolve
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++res_called;
-        it.ResolveMesh(it.Geometry()->MeshAt(0), 0);
-      };
-  auto vis
-    = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto& it) {
-        ++vis_called;
-        it.MarkDropped();
-      };
-  auto prod = [&](const ScenePrepContext&, ScenePrepState&, RenderItemProto&) {
-    ++prod_called;
+  auto pre = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto& it) {
+    ++pre_called;
+    it.SetVisible();
+    it.SetGeometry(it.Renderable().GetGeometry());
+    it.SetWorldTransform(it.Transform().GetWorldMatrix());
   };
-  using ConfigT = CollectionConfig<decltype(pre), void, decltype(resolve),
-    decltype(vis), decltype(prod)>;
+  auto resolve = [&](const sceneprep::ScenePrepContext&,
+                   sceneprep::ScenePrepState&, sceneprep::RenderItemProto& it) {
+    ++res_called;
+    it.ResolveMesh(it.Geometry()->MeshAt(0), 0);
+  };
+  auto vis = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+               sceneprep::RenderItemProto& it) {
+    ++vis_called;
+    it.MarkDropped();
+  };
+  auto prod
+    = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
+        sceneprep::RenderItemProto&) { ++prod_called; };
+  using ConfigT = sceneprep::CollectionConfig<decltype(pre), void,
+    decltype(resolve), decltype(vis), decltype(prod)>;
   ConfigT cfg {
     .pre_filter = pre,
     .mesh_resolver = resolve,
     .visibility_filter = vis,
     .producer = prod,
   };
-  auto final_cfg = CreateStandardFinalizationConfig();
-  const std::unique_ptr<ScenePrepPipeline> pipeline
-    = std::make_unique<ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
+  auto final_cfg = sceneprep::CreateStandardFinalizationConfig();
+  const std::unique_ptr<sceneprep::ScenePrepPipeline> pipeline
+    = std::make_unique<
+      sceneprep::ScenePrepPipelineImpl<ConfigT, decltype(final_cfg)>>(
       cfg, final_cfg);
 
   pipeline->Collect(SceneRef(), std::nullopt,

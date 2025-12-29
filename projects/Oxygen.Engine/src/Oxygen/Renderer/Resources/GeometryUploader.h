@@ -6,22 +6,31 @@
 
 #pragma once
 
-#include <expected>
+#include <cstddef>
 #include <memory>
 #include <span>
-#include <unordered_map>
-#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Types/Epoch.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Renderer/RendererTag.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
-#include <Oxygen/Renderer/Upload/Types.h>
-#include <Oxygen/Renderer/Upload/UploadCoordinator.h>
 #include <Oxygen/Renderer/api_export.h>
+
+namespace oxygen {
+class Graphics;
+} // namespace oxygen
+
+namespace oxygen::engine::sceneprep {
+struct GeometryRef;
+} // namespace oxygen::engine::sceneprep
+
+namespace oxygen::engine::upload {
+class StagingProvider;
+class UploadCoordinator;
+struct UploadTicket;
+} // namespace oxygen::engine::upload
 
 namespace oxygen::data {
 class Mesh;
@@ -36,77 +45,57 @@ namespace oxygen::renderer::resources {
 
 //! Manages GPU geometry resources with stable handles and bindless access.
 /*!
- GeometryUploader provides a modern, handle-based API for managing vertex and
- index buffers with identity-based interning, persistent state, and efficient
- upload coordination. It follows the same architectural patterns as
- TransformUploader for consistency and maintainability.
+ GeometryUploader interns geometry identities and manages the GPU buffers and
+ bindless SRV indices required for rendering.
 
- ## Key Features:
+ This type uses a PIMPL implementation (see `GeometryUploader::Impl`) to keep
+ the public header lightweight and stable: call sites only need the renderer-
+ facing API and do not inherit the full include surface of the upload system,
+ resource registry, or mesh data types.
 
-- **Interning**: Repeated requests for the same mesh identity return the same
-  handle (asset-loader-owned deduplication).
- - **Handle-based API**: Strong-typed GeometryHandle ensures type safety
- - **Frame lifecycle**: Integrates with Renderer frame and epoch tracking
- - **Bindless rendering**: Stable SRV indices for GPU descriptor arrays
- - **Batch uploads**: Efficient upload coordination via UploadCoordinator
- - **Lazy allocation**: GPU resources created only when needed
- - **Upload timing control**: Renderer controls blocking vs. non-blocking
- uploads
+ ### Key Features
 
- ## Performance Characteristics:
+ - **Stable identity**: requests are keyed by `(AssetKey, lod_index)` provided
+   by `engine::sceneprep::GeometryRef`.
+ - **Stable handles**: `engine::sceneprep::GeometryHandle` remains stable for
+   a given identity for the renderer lifetime.
+ - **Bindless safety**: invalid or non-resident geometry yields invalid SRV
+   indices; callers must render nothing in that case.
+ - **Frame-aware work**: `EnsureFrameResources()` is idempotent within a frame.
+ - **Upload coordination**: asynchronous uploads are scheduled through
+   `engine::upload::UploadCoordinator`.
 
- - O(1) handle allocation and lookup after initial setup
- - Persistent state avoids redundant GPU resource creation for the same mesh
-   identity
- - Batch uploads minimize GPU submission overhead
- - Frame-coherent dirty tracking reduces unnecessary work
-
- ## Usage Pattern:
+ ### Usage Pattern
 
  ```cpp
- // Frame setup (once per frame)
- geometry_uploader->OnFrameStart();
+ // Per-frame setup
+ geo_uploader.OnFrameStart(tag, slot);
 
- // Register geometry (as needed)
- auto handle = geometry_uploader->GetOrAllocate(mesh);
+ // Register or update geometry
+ const auto handle = geo_uploader.GetOrAllocate(geo_ref);
 
- // Prepare GPU resources (before rendering)
- geometry_uploader->EnsureFrameResources();
+ // Prepare uploads/resources (safe to call multiple times per frame)
+ geo_uploader.EnsureFrameResources();
 
- // Control upload timing (Renderer decides blocking vs. non-blocking):
- // Non-blocking: EnsureFrameResources() starts uploads asynchronously
- // Blocking: uploader_->AwaitAll(pending_tickets) waits for completion
-
- // Access bindless indices (during rendering)
- auto vtx_srv = geometry_uploader->GetVertexSrvIndex(handle);
- auto idx_srv = geometry_uploader->GetIndexSrvIndex(handle);
+ // Query indices for rendering
+ const auto indices = geo_uploader.GetShaderVisibleIndices(handle);
+ if (indices.vertex_srv_index == kInvalidShaderVisibleIndex) {
+   // Render nothing for this draw.
+ }
  ```
 
- ## Upload Timing Control:
-
- The Renderer controls upload timing via UploadCoordinator methods:
- - **Non-blocking**: Call `EnsureFrameResources()` - uploads happen
- asynchronously
- - **Blocking**: Call `uploader_->AwaitAll(tickets)` after
- `EnsureFrameResources()`
-
- Future enhancements: Async/await API integration for coroutine-based rendering.
-
- ## Frame Lifecycle Requirements:
-
- 1. `OnFrameStart()` must be called once per frame before any other operations
- 2. `EnsureFrameResources()` must be called before accessing SRV indices
- 3. SRV indices remain stable within a frame but may change between frames
-
- @see TransformUploader for architectural reference
- @see UploadCoordinator for upload coordination details
- @see engine::sceneprep::GeometryHandle for handle type definition
+ @note The renderer owns upload timing decisions. It may choose to wait on
+   `GetPendingUploadTickets()` or continue rendering while assets become
+   resident.
+ @warning Do not issue draws that reference invalid SRV indices.
+ @see MaterialBinder for a reference PIMPL binder design
+ @see engine::upload::UploadCoordinator
 */
 class GeometryUploader {
 public:
   struct MeshShaderVisibleIndices {
-    ShaderVisibleIndex vertex_srv_index { kInvalidBindlessIndex };
-    ShaderVisibleIndex index_srv_index { kInvalidBindlessIndex };
+    ShaderVisibleIndex vertex_srv_index { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex index_srv_index { kInvalidShaderVisibleIndex };
   };
 
   /*!
@@ -130,17 +119,19 @@ public:
     renderer::RendererTag, oxygen::frame::Slot slot) -> void;
 
   //! Handle interning and management
-  auto GetOrAllocate(const data::Mesh& mesh)
+  OXGN_RNDR_API auto GetOrAllocate(
+    const engine::sceneprep::GeometryRef& geometry)
     -> engine::sceneprep::GeometryHandle;
 
   //! GetOrAllocate with explicit criticality hint for intelligent batch policy
   //! selection
-  auto GetOrAllocate(const data::Mesh& mesh, bool is_critical)
+  OXGN_RNDR_API auto GetOrAllocate(
+    const engine::sceneprep::GeometryRef& geometry, bool is_critical)
     -> engine::sceneprep::GeometryHandle;
 
-  auto Update(engine::sceneprep::GeometryHandle handle, const data::Mesh& mesh)
-    -> void;
-  [[nodiscard]] auto IsHandleValid(
+  OXGN_RNDR_API auto Update(engine::sceneprep::GeometryHandle handle,
+    const engine::sceneprep::GeometryRef& geometry) -> void;
+  [[nodiscard]] OXGN_RNDR_API auto IsHandleValid(
     engine::sceneprep::GeometryHandle handle) const -> bool;
 
   //! Ensures all geometry GPU resources are prepared for the current frame.
@@ -156,58 +147,16 @@ public:
 
   //! Returns the number of pending upload operations.
   //! Useful for debugging and monitoring upload queue health.
-  [[nodiscard]] auto GetPendingUploadCount() const -> std::size_t
-  {
-    return pending_upload_tickets_.size();
-  }
+  [[nodiscard]] OXGN_RNDR_API auto GetPendingUploadCount() const -> std::size_t;
 
   //! Returns span of pending upload tickets for synchronous waiting.
   //! Used by Renderer to wait for all uploads to complete this frame.
-  [[nodiscard]] auto GetPendingUploadTickets() const
-    -> std::span<const engine::upload::UploadTicket>
-  {
-    return pending_upload_tickets_;
-  }
+  [[nodiscard]] OXGN_RNDR_API auto GetPendingUploadTickets() const
+    -> std::span<const engine::upload::UploadTicket>;
 
 private:
-  struct GeometryEntry {
-    observer_ptr<const data::Mesh> mesh { nullptr };
-    Epoch epoch { epoch::kNever };
-    bool is_dirty { true };
-    bool is_critical { false };
-
-    mutable std::shared_ptr<graphics::Buffer> vertex_buffer { nullptr };
-    mutable std::shared_ptr<graphics::Buffer> index_buffer { nullptr };
-    mutable ShaderVisibleIndex vertex_srv_index { kInvalidBindlessIndex };
-    mutable ShaderVisibleIndex index_srv_index { kInvalidBindlessIndex };
-  };
-
-  auto UploadBuffers() -> void;
-  auto UploadVertexBuffer(const GeometryEntry& dirty_entry)
-    -> std::expected<engine::upload::UploadRequest, bool>;
-  auto UploadIndexBuffer(const GeometryEntry& dirty_entry)
-    -> std::expected<engine::upload::UploadRequest, bool>;
-
-  //! Clean up completed upload tickets
-  auto RetireCompletedUploads() -> void;
-
-  Epoch current_epoch_ { 1 }; // 0 reserved for 'never'
-
-  using MeshIdentityKey = std::uint64_t; // Identity key for interning
-  using GeometryHandle = engine::sceneprep::GeometryHandle;
-  std::unordered_map<MeshIdentityKey, GeometryHandle> mesh_identity_to_handle_;
-  GeometryHandle next_handle_ { 0U };
-  std::vector<GeometryEntry> geometry_entries_;
-
-  observer_ptr<Graphics> gfx_;
-
-  // Upload tracking
-  observer_ptr<engine::upload::UploadCoordinator> uploader_;
-  observer_ptr<engine::upload::StagingProvider> staging_provider_;
-  std::vector<engine::upload::UploadTicket> pending_upload_tickets_;
-
-  // Frame lifecycle tracking
-  bool frame_resources_ensured_ { false };
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 };
 
 } // namespace oxygen::renderer::resources

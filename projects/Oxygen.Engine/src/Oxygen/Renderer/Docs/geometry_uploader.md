@@ -1,202 +1,291 @@
-# GeometryUploader — Improvements Task List
+# GeometryUploader — Design and Operational Contract
 
-This document tracks robustness and contract-compliance improvements for
-`GeometryUploader` (GPU residency management + stable handles + stable shader-visible indices).
+## Purpose
 
-Scope: `src/Oxygen/Renderer/Resources/GeometryUploader.{h,cpp}` and its interaction with
-`UploadCoordinator`, `ResourceRegistry`, and ScenePrep handle contracts.
+`GeometryUploader` is the renderer-facing component responsible for turning CPU mesh data into GPU-resident geometry that shaders can access through bindless SRV indices. It provides:
 
-## Contracts (Must Not Drift)
+- Stable geometry handles for ScenePrep and draw-record generation.
+- GPU buffer allocation/resize and SRV registration for vertex and index buffers.
+- Asynchronous upload scheduling via `UploadCoordinator`.
+- A strict “never bind invalid indices” safety policy: when geometry is invalid or not yet resident, the renderer must render nothing for that item.
 
-### Geometry Identity Input
+This document captures the *why* and the *how* of the current implementation, including contracts, invariants, lifecycle, and pitfalls.
 
-Current (Dec 2025) contract:
+## Scope and Non-Goals
 
-- `GeometryUploader` operates at the **LOD mesh** level.
-  - A `data::GeometryAsset` provides one `data::Mesh` per LOD.
-- Geometry identity is the pair `(data::AssetKey, lod_index)`.
-  - `AssetKey` comes from the owning `data::GeometryAsset` header.
-  - `lod_index` comes from the scene's LOD resolution path
-    (`scene::ActiveMesh::lod`).
-- The returned `GeometryHandle` must be stable for the same
-  `(AssetKey, lod_index)` across frames.
+### In scope
 
-Important: mesh pointer identity is *not* part of the contract.
-Pointers may change on hot-reload; the identity must not.
+- Identity/handle interning at the LOD-mesh level.
+- Residency management (dirty vs ready), upload scheduling, and safe publication of bindless indices.
+- Hot-reload/update semantics for an existing handle.
 
-### GeometryHandle Meaning and Lifetime
+### Out of scope (owned elsewhere)
 
-- `GeometryHandle` is an index into an internal stable table of geometry
-  entries owned by `GeometryUploader`.
-- Handles are scoped to Renderer/ScenePrep usage.
-- Handles may be recycled **only** after explicit asset-eviction notification
-  (future hook). Until streaming/eviction exists, handles remain valid for the
-  renderer lifetime.
+- Asset caching, streaming policies, LRU/eviction, and deduplication of identical content.
+- Choosing placeholder meshes when assets are missing.
+- Instancing/batching policy (built on top of stable handles and SRV indices).
 
-### Update / Hot-Reload Contract
+## System Context
 
-- `Update(handle, mesh)` is a hot-reload/editing path.
-- It must preserve the handle and rebuild GPU buffers as needed.
-- It must not be used to "rebind" a handle to unrelated geometry.
-- Requirement: `Update()` must only be used to update the same
-  `(AssetKey, lod_index)`.
-  - The caller must ensure the updated mesh belongs to the same geometry
-    identity as the handle.
+```mermaid
+flowchart LR
+  ScenePrep[ScenePrep / Collect] -->|GeometryRef| GU[GeometryUploader]
+  GU -->|UploadRequest| UC[UploadCoordinator]
+  UC -->|GPU copies| GFX[Graphics / Transfer Queue]
+  GU -->|Buffers + SRVs| RR[ResourceRegistry / Bindless]
+  Renderer[Renderer] -->|Get indices| GU
+  Renderer -->|Skip draw if invalid| Draw[Draw Emission]
+```
 
-## Final Runtime Behavior (Agreed)
+### Key Collaborators
+
+- **ScenePrep** provides `GeometryRef`, which contains the stable identity inputs and a mesh reference.
+- **UploadCoordinator** schedules uploads and provides ticket completion status and results.
+- **Graphics + ResourceRegistry** own GPU buffers, SRV creation, and descriptor heap bindings.
+
+## Core Contracts (Must Not Drift)
+
+### 1) Geometry Identity
+
+**Identity is defined as:** `(data::AssetKey, lod_index)`.
+
+- `AssetKey` is sourced from the owning geometry asset’s header.
+- `lod_index` is the resolved LOD selection used for rendering.
+
+**Non-contractual:** mesh pointer identity. Mesh instances may change (e.g., hot reload), but the identity does not.
+
+### 2) Handle Meaning and Lifetime
+
+- `engine::sceneprep::GeometryHandle` is a stable index into `GeometryUploader`’s internal entry table.
+- Handles are stable for the renderer lifetime.
+- Handle recycling is reserved for a future explicit asset-eviction notification hook.
+- Invalid handle sentinel: `engine::sceneprep::kInvalidGeometryHandle`.
+
+### 3) Bindless Index Meaning and Invalid Sentinel
+
+- Shader-visible indices returned by `GeometryUploader` are `ShaderVisibleIndex` values.
+- The invalid sentinel for these fields is `kInvalidShaderVisibleIndex`.
+
+**Hard rule:** the renderer must never submit a draw that references invalid bindless indices.
+
+### 4) Update / Hot-Reload
+
+`Update(handle, geometry_ref)` is a hot-reload/editing path.
+
+- It preserves the handle.
+- It schedules rebuild/reupload work.
+- It must not “rebind” a handle to a different `(AssetKey, lod)` identity.
+
+The caller is responsible for ensuring that the updated mesh still corresponds to the same identity.
+
+## Runtime Behavior Policy (User-Visible Semantics)
 
 When geometry is invalid, not yet resident, or upload fails:
 
-- Render **nothing** for that item (drop the draw or emit a zero-count draw).
-- Do **not** fail the frame; other draws and shader execution must proceed normally.
-- Do **not** substitute placeholder/error meshes (no reliable proxy exists).
-- Log clearly on detection (invalid mesh / upload failure / still-not-resident).
+- Render nothing for that item (skip the draw or emit a zero-count draw).
+- Do not fail the frame.
+- Do not substitute placeholder/error meshes.
+- Log the condition in a way that is actionable for content authors and engine developers.
 
-Implementation implication:
+This policy prevents shaders from being invoked with bad SRVs and keeps partial failures isolated.
 
-- The renderer must never issue draw calls that reference invalid bindless indices.
-  If geometry is not resident (or invalid), the draw is skipped/zeroed so shaders are not invoked with bad SRVs.
+## Public API (Renderer-Facing)
 
-## Ownership / Responsibilities
+The public API is intentionally narrow (PIMPL-based) and frame-aware.
 
-- Asset caching, streaming, and eviction are owned by the asset loader and its cache.
-- `GeometryUploader` must not implement its own caching/eviction/LRU policies.
-- Asset deduplication ("these two meshes are the same") is also an asset-loader
-  concern. The loader should ensure identical content resolves to the same
-  asset identity (or stable key) and handle lifetime/eviction.
-- `GeometryUploader` is responsible only for:
-  - creating/maintaining GPU buffers + bindless SRV indices for meshes it is asked to prepare,
-  - scheduling uploads when data is first needed or changes,
-  - ensuring it never causes a frame failure when data is invalid or not resident.
-- `GeometryUploader` may perform lightweight *interning*:
-  - mapping a stable mesh identity/key to a stable `GeometryHandle`,
-  - avoiding duplicate GPU work for repeated requests of the same identity.
-  It must not attempt runtime content hashing of vertex/index data.
-- Future enhancement (not in scope here): react to asset-loader eviction notifications to invalidate/rebuild GPU state.
+- `OnFrameStart(tag, slot)`
+  - Advances the internal epoch and resets per-frame “ensure” state.
+  - Retires completed uploads and refreshes internal pending-ticket lists.
+- `GetOrAllocate(geometry_ref)` / `GetOrAllocate(geometry_ref, is_critical)`
+  - Interns the stable identity to a stable handle.
+  - May mark an existing entry as critical (criticality is sticky and only upgrades).
+  - Validates mesh input; returns invalid handle on invalid input.
+- `Update(handle, geometry_ref)`
+  - Validates mesh input.
+  - Enforces same-identity update (debug assertion + early return on mismatch).
+  - Marks the entry dirty and invalidates published indices until new data is confirmed uploaded.
+- `EnsureFrameResources()`
+  - Idempotent within a frame.
+  - Schedules uploads for dirty entries and refreshes pending ticket lists.
+- `GetShaderVisibleIndices(handle)`
+  - Ensures frame resources (auto-calls `EnsureFrameResources()` if needed).
+  - Returns vertex/index SRV indices for resident geometry, or invalid indices when not resident/invalid.
+- `GetPendingUploadCount()` / `GetPendingUploadTickets()`
+  - Observability hooks for renderer scheduling decisions (e.g., optional waiting).
 
-## Instancing Considerations (Future-Proofing)
+## Internal Model
 
-Instancing in Oxygen means multiple `SceneNode`s can reference the same geometry
-asset while retaining node-local renderable properties (transform, visibility,
-material overrides, etc.). This has specific implications for `GeometryUploader`:
+### Entry Table
 
-- GeometryUploader is **asset-scoped**, not instance-scoped.
-  - The same geometry asset (or resolved LOD mesh identity) must map to the same
-    `GeometryHandle` and the same SRV indices, regardless of how many nodes
-    reference it.
-- Per-node/per-instance properties must **not** influence geometry identity.
-  - Do not key geometry handles by node, transform, per-node flags, or material.
-- Instancing/batching is built on top of GeometryUploader outputs.
-  - ScenePrep/emitters may group draw records by `(geometry_handle, material,
-    pipeline key, ...)` and then emit an instanced draw.
-  - GeometryUploader only provides the VB/IB SRV indices and remains oblivious
-    to instance count.
-- Error handling and logging must be **per asset**, not per instance.
-  - A missing/non-resident asset can affect many instances; avoid logging per
-    instance.
+Internally, `GeometryUploader` maintains a stable vector of per-handle entries and a map from identity to handle.
 
-## Invariants / Acceptance Criteria (Debug + Release)
+Each entry conceptually contains:
 
-These are the non-negotiable correctness properties for implementation.
+- Identity: `asset_key`, `lod_index`
+- Mesh reference: shared ownership of the mesh instance used for upload and subsequent queries
+- Dirtiness/residency tracking:
+  - `is_dirty` (content/residency needs work)
+  - `last_touched_epoch` (debug/diagnostics and future eviction policies)
+- GPU resources:
+  - Vertex buffer and optional index buffer
+  - Published SRV indices (what the renderer may use)
+  - Pending SRV indices (allocated/kept for the next publish)
+- Upload tickets:
+  - Optional pending ticket per buffer (VB/IB)
 
-- Never fail the frame (Release): invalid/not-resident/failed-upload geometry
-  must not crash or abort rendering.
-- Assert on logic errors (Debug): use DCHECK/ASSERT to detect incorrect API
-  usage and programmer mistakes.
-- Never submit a draw that references invalid bindless indices.
-- Logging: clear and actionable, and never emitted per instance (may be
-  de-duplicated per asset event).
-- Upload scheduling: geometry uploads only on first need or content change.
-  Merely being referenced this frame must not schedule an upload.
+### “Touched” vs “Dirty”
 
-## Tracked Tasks
+The design intentionally separates:
 
-### P0 — Correctness bugs (must-fix, implement first)
+- **Touched:** referenced by the scene this epoch/frame.
+- **Dirty:** requires upload work because data is new/changed, resources are missing, or a previous attempt failed.
 
-- [ ] Fix upload ticket retirement logic to handle `std::expected<bool, UploadError>` correctly.
-  - `UploadCoordinator::IsComplete()` returns `expected<bool>`; only retire a ticket when `has_value() && value() == true`.
-  - Decide policy for error case (log + keep ticket vs log + retry).
-  - Touchpoints: `GeometryUploader::RetireCompletedUploads()`, `UploadCoordinator::IsComplete()` contract.
+This prevents per-frame reuploads for stable geometry that is referenced every frame.
 
-- [ ] Return the correct invalid handle sentinel on failure.
-  - Use `engine::sceneprep::kInvalidGeometryHandle` (not a bindless-index constant) for invalid meshes.
-  - Consider changing `GetOrAllocate()` to return `std::expected<GeometryHandle, Error>` to avoid silent invalid-handle propagation.
+## Frame Lifecycle and Control Flow
 
-- [ ] Normalize invalid SRV sentinel usage.
-  - Use `kInvalidShaderVisibleIndex` consistently for `ShaderVisibleIndex` fields (avoid mixing `kInvalidBindlessIndex`).
-  - Ensure header defaults match implementation checks.
+### Typical Per-Frame Flow
 
-- [ ] Make `Update(handle, mesh)` unconditionally schedule a rebuild/upload for the entry.
-  - Must mark dirty even if called in the same epoch.
-  - Must not allow "handle rebinding" to unrelated geometry.
-  - Done when: calling `Update()` results in upload work being scheduled on the
-    next `EnsureFrameResources()`.
+```mermaid
+sequenceDiagram
+  participant R as Renderer
+  participant S as ScenePrep
+  participant G as GeometryUploader
+  participant U as UploadCoordinator
 
-### P1 — Contract alignment (handles / residency / stability)
+  R->>G: OnFrameStart(tag, slot)
+  note over G: Advance epoch, retire completed tickets
 
-- [ ] Separate “touched this frame” from “dirty content”.
-  - Do not treat “referenced this frame” as “needs reupload”.
-  - Add `dirty_epoch` or `dirty` boolean that only flips on:
-    - first-time allocation (no GPU buffer yet),
-    - content change (`Update()` or changed mesh key),
-    - buffer resize/replacement requiring reupload.
-  - Outcome: stop per-frame reuploads of stable geometry.
-  - Done when: a mesh referenced every frame does not produce repeated upload
-    tickets unless its content changes or buffers must grow.
+  S->>G: GetOrAllocate(GeometryRef [, critical])
+  note over G: Intern identity -> stable handle
 
-- [ ] Align handle and API docs with asset-loader-owned deduplication.
-  - GeometryUploader only interns by mesh identity; asset loader owns
-    deduplication.
-  - Done when: public docs and comments do not claim content-hash dedupe.
+  R->>G: EnsureFrameResources()
+  G->>U: Submit upload requests (VB/IB as needed)
+  note over G: Idempotent within the frame
 
-- [ ] Ensure geometry identity remains instance-agnostic (instancing-safe).
-  - Geometry handles and SRVs must depend only on geometry asset identity (and
-    resolved LOD), not on node-local properties.
-  - Done when: changing per-node properties does not change the returned handle
-    for the same mesh identity.
+  R->>G: GetShaderVisibleIndices(handle)
+  note over G: Returns indices if published; otherwise invalid
+  R->>R: Skip draw if any required index invalid
+```
 
-- [ ] Fix mesh lifetime assumptions.
-  - Assumption: mesh identities remain valid while the asset is in the cache.
-  - Ensure code is ready for the future eviction notification hook.
-  - Done when: no long-lived references remain that would outlive asset cache
-    guarantees, and eviction hook can invalidate entries safely.
+### Idempotence Guarantee
 
-- [ ] (Future, not in scope) Add an eviction-notification hook from the asset loader.
-  - On notification: invalidate affected GPU buffers/SRVs and mark the entry dirty for rebuild.
-  - Must be fence-safe (defer release / registry + deferred reclaimer).
+`EnsureFrameResources()` is safe to call multiple times per frame. Internally, a per-frame flag prevents repeated scheduling work once the frame’s “ensure” has completed.
 
-- [ ] Map “critical” geometry to actual upload prioritization.
-  - Set `UploadRequest::priority` based on `is_critical`.
-  - Ensure priority is preserved through `SubmitMany()`.
+## Residency and Publication Rules
 
-### P2 — Error handling / resilience
+### Publication Model
 
-- [ ] Implement the agreed missing-residency / failed-upload policy.
-  - Behavior: show nothing (skip draw or emit zero-count), never fail the frame.
-  - Hard rule: do not submit draw calls that reference invalid SRV indices.
-  - Logging: clear and actionable.
-  - Done when: invalid/not-ready geometry produces no invalid SRV usage and
-    emits clear logs describing the asset/mesh.
+Bindless indices are only *published* (i.e., returned as valid) after upload completion is confirmed successful.
 
-- [ ] Ensure shutdown/destruction is GPU-safe.
-  - Before unregistering or replacing buffers, ensure in-flight uploads are completed or resources are deferred-released.
-  - Consider calling `UploadCoordinator::Shutdown()` at renderer shutdown and/or ensuring all tickets are awaited.
+- On update/hot-reload, previously published indices are invalidated for safety.
+- The uploader keeps “pending” indices/tickets so it can replace data and publish atomically from the renderer’s perspective.
 
-### P3 — Tests (regressions + contract verification)
+### Entry State Machine
 
-- [ ] Add unit tests mirroring `TransformUploader_test` patterns for `GeometryUploader`.
-  - Ticket retirement: tickets are retained until completion.
-  - Dirty vs used: stable mesh does not reupload every frame.
-  - `Update()` in-frame marks dirty and schedules upload.
-  - Invalid mesh returns `kInvalidGeometryHandle`.
-  - Interning behavior matches documented semantics (same mesh identity returns
-    same handle).
+```mermaid
+stateDiagram-v2
+  [*] --> Untracked
+  Untracked --> Dirty: First GetOrAllocate
 
-## Notes / References
+  Dirty --> Uploading: Submit VB/IB tickets
+  Uploading --> Dirty: Submission failed (retry later)
+  Uploading --> Dirty: Ticket error (e.g., TicketNotFound)
+  Uploading --> Resident: Completion success (publish indices)
+  Uploading --> Dirty: Completion failure (log + retry)
 
-- ScenePrep contract overview: `src/Oxygen/Renderer/Docs/scene_prep.md`
-- Handle definitions: `src/Oxygen/Renderer/ScenePrep/Handles.h`
-- Upload helper: `src/Oxygen/Renderer/Upload/UploadHelpers.{h,cpp}`
-- Reference patterns:
-  - `TransformUploader` (frame lifecycle + lazy ensure)
-  - `MaterialBinder` (dirty-epoch tracking + atlas-based stable indices)
+  Resident --> Dirty: Update() or identity's mesh instance changes
+  Resident --> Resident: Referenced again (no reupload)
+
+  Dirty --> Resident: Already resident (no work)
+```
+
+Interpretation:
+
+- “Resident” means the published SRV indices are valid (vertex always, index only if the mesh is indexed).
+- “Dirty” means at least one required resource is not published or must be regenerated.
+
+## Upload Scheduling and Prioritization
+
+### What Triggers Upload Work
+
+An entry is considered for upload scheduling when:
+
+- It is dirty, and
+- It lacks a published SRV index for a required buffer, and
+- It does not already have a pending upload ticket for that buffer.
+
+This avoids duplicated submissions while still allowing retry after failures.
+
+### Criticality
+
+Callers may mark geometry as critical via the `GetOrAllocate(..., is_critical)` overload.
+
+- Criticality is sticky: once an entry becomes critical, it remains so.
+- Critical entries submit upload requests with higher priority.
+
+## Ticket Retirement and Failure Semantics
+
+Upload completion is tracked using `UploadCoordinator::IsComplete(ticket)`, which returns `std::expected<bool, UploadError>`.
+
+**Retirement rules:**
+
+- A ticket is retired only when `IsComplete()` returns a value and that value is `true`.
+- If `IsComplete()` returns an error:
+  - The error is logged.
+  - For `UploadError::kTicketNotFound`, the ticket is dropped and the entry is marked dirty (terminal in practice due to tracker cleanup).
+  - For other errors, the ticket is kept (best-effort retry/reevaluation next frame).
+- If completion is successful but the upload result indicates failure, the entry is marked dirty and indices remain invalid.
+
+This design ensures the system is robust against transient upload coordination failures and never publishes indices for failed uploads.
+
+## Mesh Validation
+
+Meshes are validated at the API boundary (`GetOrAllocate` and `Update`). Validation is designed to catch:
+
+- Empty vertex buffers.
+- Unreasonable sizes that could lead to excessive allocation.
+- Non-finite vertex attributes (positions/normals/UVs).
+- Index buffers that reference out-of-range vertices or invalid topology expectations.
+
+**Contract outcome:** invalid meshes do not get a valid handle (allocation path) and do not mutate existing GPU state (update path).
+
+## Shutdown and Resource Safety
+
+`GeometryUploader` is renderer-lifetime owned and assumes the graphics backend remains valid for its lifetime.
+
+On destruction:
+
+- The graphics backend is flushed to ensure in-flight GPU work completes.
+- GPU buffers are unregistered from the resource registry as best-effort cleanup.
+
+This prevents descriptor registry leaks and reduces risk of freeing resources still in use by the GPU.
+
+## Typical Usage Models
+
+### Scene Collection + Rendering
+
+- ScenePrep resolves LOD and forms `GeometryRef` objects.
+- The renderer calls `GetOrAllocate` for each referenced geometry and stores the resulting handles in draw records.
+- Once per frame (or lazily), the renderer calls `EnsureFrameResources`.
+- At draw emission time, the renderer queries indices via `GetShaderVisibleIndices(handle)`.
+  - If any required SRV index is invalid, the draw is skipped (or made zero-count).
+
+### Hot Reload / Editing
+
+- The asset loader or editor triggers `Update(handle, geometry_ref)` with the same identity.
+- The entry becomes dirty, published indices are invalidated, and the next ensure schedules uploads.
+- Indices become valid again only after confirmed successful upload completion.
+
+## Pitfalls and How to Avoid Them
+
+- **Calling `Update()` with a different identity**
+  - This violates the contract and is treated as a logic error (debug assert + no state change).
+- **Submitting draws with invalid SRV indices**
+  - This is a renderer bug. Always guard draws by checking returned indices.
+- **Assuming mesh pointer identity is stable**
+  - Hot-reload can change mesh instances. Identity is `(AssetKey, LOD)`.
+- **Assuming “referenced this frame” implies “upload this frame”**
+  - `GeometryUploader` intentionally avoids per-frame reupload; only dirty entries schedule uploads.
+- **Logging per instance**
+  - Missing geometry can affect many instances; prefer de-duplicated logging keyed by identity in higher-level systems if repeated warnings become noisy.

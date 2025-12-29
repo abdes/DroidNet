@@ -7,26 +7,20 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Renderer/ScenePrep/GeometryRef.h>
 #include <Oxygen/Renderer/ScenePrep/Handles.h>
 #include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
-
-namespace oxygen::data {
-class GeometryAsset;
-class MaterialAsset;
-}
 
 namespace oxygen::engine::sceneprep {
 
 struct RenderItemData {
-  std::uint32_t lod_index = 0;
   std::uint32_t submesh_index = 0;
 
-  // Asset references (immutable, shareable)
-  std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
+  // Resolved geometry reference (stable identity + resolved LOD mesh).
+  sceneprep::GeometryRef geometry;
   // Renderer-facing material reference that carries source-aware texture keys
   // (opaque `content::ResourceKey`) alongside the material data.
   sceneprep::MaterialRef material;
