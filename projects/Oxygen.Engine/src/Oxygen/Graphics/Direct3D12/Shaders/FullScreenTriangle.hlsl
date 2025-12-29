@@ -14,11 +14,7 @@
 // - The root signature uses one table (t0-unbounded, space0) + direct CBVs.
 //   See MainModule.cpp and CommandRecorder.cpp for details.
 
-// -----------------------------------------------------------------------------
-// Material Flags
-// -----------------------------------------------------------------------------
-
-static const uint MATERIAL_FLAG_NO_TEXTURE_SAMPLING = 1u;
+#include "MaterialFlags.hlsli"
 
 // Define vertex structure to match the CPU-side Vertex struct
 struct Vertex {

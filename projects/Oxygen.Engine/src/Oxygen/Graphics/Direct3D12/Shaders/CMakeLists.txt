@@ -56,6 +56,9 @@ set(DEFAULT_CS_ENTRY_POINT "CS")
 # Find all HLSL files in the Shaders subdirectory
 file(GLOB HLSL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl")
 
+# Shared include files (HLSL headers)
+file(GLOB HLSLI_FILES "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli")
+
 # Create a custom target for compiling shaders
 add_custom_target(
   ${META_MODULE_TARGET}_shaders
@@ -67,6 +70,8 @@ add_custom_target(
 set(
   DXC_COMMON_OPTIONS
   ${dxc_enable_advanced_features}
+  -I
+  "${CMAKE_CURRENT_SOURCE_DIR}"
   $<$<CONFIG:Debug>:${dxc_debug_symbol}>
   $<$<CONFIG:Debug>:${dxc_optimization_debug}>
   $<$<NOT:$<CONFIG:Debug>>:${dxc_optimization_release}>
@@ -218,6 +223,7 @@ foreach(HLSL_FILE ${HLSL_FILES})
         "Compiling shader: ${shader_name}.hlsl for types (${CURRENT_SHADER_TYPES}) ($<CONFIG> mode)"
       DEPENDS
         "${HLSL_FILE}"
+        ${HLSLI_FILES}
       MAIN_DEPENDENCY
         "${HLSL_FILE}" # Important for some generators like Ninja and Visual Studio
     )

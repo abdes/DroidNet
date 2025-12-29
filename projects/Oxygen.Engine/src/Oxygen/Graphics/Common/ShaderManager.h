@@ -67,6 +67,13 @@ public:
     std::optional<std::string> archive_dir;
     std::optional<std::string> source_dir;
 
+    //! Additional include directories for shader compilation.
+    //!
+    //! Paths are relative to the project root (same convention as
+    //! @ref source_dir). The shader manager will always add @ref source_dir as
+    //! an include directory when it is provided.
+    std::vector<std::string> include_dirs;
+
     std::span<const ShaderInfo> shaders;
 
     std::shared_ptr<ShaderCompiler> compiler;
