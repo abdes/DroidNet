@@ -31,13 +31,15 @@ The authoritative definition is in `LoaderContext.h`.
 
 ### Key fields
 
-- `asset_loader`: used for dependency registration (non-null during loads)
 - `current_asset_key`: the asset currently being loaded (empty for resources)
+- `source_token`: identity-safe handle to the mounted source (used for `internal::ResourceRef`)
 - `desc_reader`: positioned at the start of the descriptor to decode
 - `data_readers`: per-resource-type readers positioned at the start of each
   resource data region (do not use `desc_reader` for data regions)
 - `offline`: CPU-only mode flag (no renderer/GPU side effects)
+- `dependency_collector`: optional identity-only dependency handoff for async decode
 - `source_pak`: the `PakFile` the descriptor originates from
+- `parse_only`: skip dependency collection (tooling/unit tests)
 
 ### Loader function shape
 
@@ -56,14 +58,22 @@ dependencies and increments cache reference counts so that a later
 
 ```cpp
 // Asset dependency (e.g., geometry -> material)
-if (material_key != data::AssetKey{} && context.asset_loader) {
-  context.asset_loader->AddAssetDependency(context.current_asset_key, material_key);
+if (!context.parse_only && context.dependency_collector) {
+  if (material_key != data::AssetKey{}) {
+    context.dependency_collector->AddAssetDependency(material_key);
+  }
 }
 
 // Resource dependency (e.g., material -> texture)
-if (context.asset_loader && context.source_pak) {
-  const auto texture_rk = context.asset_loader->MakeResourceKey<data::TextureResource>(*context.source_pak, texture_index);
-  context.asset_loader->AddResourceDependency(context.current_asset_key, texture_rk);
+if (!context.parse_only && context.dependency_collector) {
+  if (texture_index != data::pak::kNoResourceIndex) {
+    internal::ResourceRef ref {
+      .source = context.source_token,
+      .resource_type_id = data::TextureResource::ClassTypeId(),
+      .resource_index = texture_index,
+    };
+    context.dependency_collector->AddResourceDependency(ref);
+  }
 }
 ```
 

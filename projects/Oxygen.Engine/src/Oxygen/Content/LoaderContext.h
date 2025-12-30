@@ -20,17 +20,11 @@ namespace internal {
   struct DependencyCollector;
 } // namespace internal
 
-// Forward declarations for loader context
-class AssetLoader;
 class PakFile;
 
 //! Context passed to loader functions containing all necessary loading state.
 
 struct LoaderContext {
-  //! Asset loader for dependency registration, guaranteed to be valid during a
-  //! load operation.
-  AssetLoader* asset_loader { nullptr };
-
   //! Key of the current asset being loaded (for dependency registration)
   data::AssetKey current_asset_key {};
 

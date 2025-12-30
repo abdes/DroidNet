@@ -8,13 +8,13 @@
 #include <span>
 #include <vector>
 
-#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Internal/DependencyCollector.h>
+#include <Oxygen/Content/Internal/SourceToken.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Content/EngineTag.h>
 
 #include "Mocks/MockStream.h"
 #include "Utils/PakUtils.h"
@@ -23,7 +23,6 @@ using ::testing::AllOf;
 using ::testing::Eq;
 using ::testing::IsNull;
 using ::testing::IsSupersetOf;
-using ::testing::NiceMock;
 using ::testing::NotNull;
 using ::testing::SizeIs;
 
@@ -45,29 +44,6 @@ auto LoadTestTextureResource(const oxygen::content::LoaderContext& /*context*/)
     std::move(desc), std::move(data));
 }
 
-//=== Mock AssetLoader ===----------------------------------------------------//
-
-//! Mock AssetLoader for comprehensive testing with PAK file dependency support.
-class MockAssetLoader : public oxygen::content::AssetLoader {
-public:
-  MockAssetLoader()
-    : oxygen::content::AssetLoader(
-        oxygen::content::internal::EngineTagFactory::Get())
-  {
-    // Register the test TextureResource loader using named functions
-    RegisterLoader(LoadTestTextureResource);
-  }
-
-  MOCK_METHOD(void, AddAssetDependency,
-    (const oxygen::data::AssetKey&, const oxygen::data::AssetKey&), (override));
-  MOCK_METHOD(void, AddResourceDependency,
-    (const oxygen::data::AssetKey&, oxygen::content::ResourceKey), (override));
-
-  // Mock GetPakIndex to return a dummy index for testing
-  MOCK_METHOD(uint16_t, GetPakIndex, (const oxygen::content::PakFile& pak),
-    (const, override));
-};
-
 //=== MaterialLoader Basic Functionality Tests ===----------------------------//
 
 //! Fixture for MaterialLoader basic serialization tests.
@@ -75,7 +51,6 @@ class MaterialLoaderBasicTest : public testing::Test {
 protected:
   using MockStream = oxygen::content::testing::MockStream;
   using Writer = oxygen::serio::Writer<MockStream>;
-  NiceMock<MockAssetLoader> asset_loader;
 
   MaterialLoaderBasicTest()
     : desc_writer_(desc_stream_)
@@ -100,26 +75,16 @@ protected:
     }
 
     return oxygen::content::LoaderContext {
-      .asset_loader = &asset_loader,
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
       .work_offline = true,
-      .source_pak
-      = nullptr, // No PAK file - dependency registration will be skipped
       .parse_only = true,
     };
   }
 
-  //! Helper method to create LoaderContext with mock PAK for dependency
-  //! testing.
-  /*!
-    This creates a context with a dummy PAK file pointer and sets up the mock
-    to return a specific PAK index. This enables testing of the dependency
-    registration logic, though actual texture loading will fail with the
-    mock PAK file.
-  */
-  auto CreateLoaderContextWithMockPak() -> oxygen::content::LoaderContext
+  auto CreateDecodeLoaderContext() -> std::pair<oxygen::content::LoaderContext,
+    std::shared_ptr<oxygen::content::internal::DependencyCollector>>
   {
     if (!desc_stream_.Seek(0)) {
       throw std::runtime_error("Failed to seek desc_stream");
@@ -128,23 +93,20 @@ protected:
       throw std::runtime_error("Failed to seek data_stream");
     }
 
-    // Create a dummy PakFile pointer for the mock
-    static char dummy_pak_storage[sizeof(oxygen::content::PakFile)];
-    auto* dummy_pak
-      = reinterpret_cast<const oxygen::content::PakFile*>(dummy_pak_storage);
+    auto collector
+      = std::make_shared<oxygen::content::internal::DependencyCollector>();
 
-    // Set up mock to return a specific PAK index
-    EXPECT_CALL(asset_loader, GetPakIndex(::testing::Ref(*dummy_pak)))
-      .WillRepeatedly(::testing::Return(42)); // Return dummy PAK index
-
-    return oxygen::content::LoaderContext {
-      .asset_loader = &asset_loader,
+    oxygen::content::LoaderContext context {
       .current_asset_key = oxygen::data::AssetKey {}, // Test asset key
+      .source_token = oxygen::content::internal::SourceToken(7U),
       .desc_reader = &desc_reader_,
       .data_readers = std::make_tuple(&data_reader_, &data_reader_),
       .work_offline = true,
-      .source_pak = dummy_pak, // Provide mock PAK file for dependency tests
+      .dependency_collector = collector,
+      .source_pak = nullptr,
+      .parse_only = false,
     };
+    return { std::move(context), std::move(collector) };
   }
 
   MockStream desc_stream_;
@@ -368,10 +330,11 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_TruncatedHeader_Throws)
 NOLINT_TEST_F(
   MaterialLoaderBasicTest, LoadMaterial_ZeroTextureIndices_NoDependencies)
 {
+  using oxygen::content::internal::ResourceRef;
   using oxygen::content::testing::ParseHexDumpWithOffset;
   using oxygen::data::AssetType;
   using oxygen::data::MaterialDomain;
-  using ::testing::_;
+  using oxygen::data::TextureResource;
 
   // Arrange: Material with all texture indices = 0
   // clang-format off
@@ -430,12 +393,9 @@ NOLINT_TEST_F(
   }
   EXPECT_TRUE(desc_stream_.Seek(0));
 
-  // Expect no resource dependencies to be registered
-  EXPECT_CALL(asset_loader, AddResourceDependency(_, _)).Times(0);
-
   // Act
-  auto context = CreateLoaderContext();
-  auto asset = LoadMaterialAsset(context);
+  auto [context, collector] = CreateDecodeLoaderContext();
+  auto asset = LoadMaterialAsset(std::move(context));
 
   // Assert
   ASSERT_THAT(asset, NotNull());
@@ -446,6 +406,47 @@ NOLINT_TEST_F(
   EXPECT_EQ(asset->GetRoughnessTexture(), 0u);
   EXPECT_EQ(asset->GetAmbientOcclusionTexture(), 0u);
   EXPECT_THAT(asset->GetShaders(), SizeIs(0)); // No shaders
+
+  EXPECT_THAT(collector->ResourceRefDependencies(), SizeIs(0));
+}
+
+//! Test: Non-parse-only loads require a dependency collector.
+NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_NoCollector_Throws)
+{
+  using oxygen::content::testing::ParseHexDumpWithOffset;
+
+  const std::string material_hexdump = R"(
+     0: 01 54 65 73 74 20 4D 61 74 65 72 69 61 6C 00 00
+    16: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    32: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    48: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    64: 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+    80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01
+    96: 00 00 00 00 00 00 00 00 00 00 80 3F 00 00 80 3F
+   112: 00 00 80 3F 00 00 80 3F 00 00 80 3F 00 00 80 3F
+   128: 00 00 80 3F 00 00 80 3F 2A 00 00 00 00 00 00 00
+   144: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   160: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   176: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   192: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   208: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   224: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+   240: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  )";
+
+  {
+    auto pack = desc_writer_.ScopedAlignment(1);
+    auto mat_buf = ParseHexDumpWithOffset(material_hexdump, 256);
+    ASSERT_TRUE(desc_writer_.WriteBlob(mat_buf));
+  }
+  EXPECT_TRUE(desc_stream_.Seek(0));
+
+  auto context = CreateLoaderContext();
+  context.parse_only = false;
+  context.dependency_collector.reset();
+
+  EXPECT_THROW(
+    { (void)LoadMaterialAsset(std::move(context)); }, std::runtime_error);
 }
 
 //! Test: LoadMaterialAsset handles single shader stage correctly.
@@ -608,15 +609,13 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_ShaderReadFailure_Throws)
   EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
 }
 
-//! Test: LoadMaterialAsset throws when texture resource is unavailable.
-/*!
-  Scenario: Tests error handling when a material references a non-zero texture
-  index but the texture resource cannot be loaded. This verifies that the loader
-  properly fails when texture dependencies cannot be satisfied.
-*/
-NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_UnavailableTexture_Throws)
+//! Test: Non-zero texture indices are collected as ResourceRef dependencies.
+NOLINT_TEST_F(
+  MaterialLoaderBasicTest, LoadMaterial_NonZeroTexture_CollectsDependency)
 {
+  using oxygen::content::internal::ResourceRef;
   using oxygen::content::testing::ParseHexDumpWithOffset;
+  using oxygen::data::TextureResource;
 
   // Arrange: Create minimal material with a single non-zero texture index
   // Set base_color_texture = 42 (at offset 0x88)
@@ -646,9 +645,16 @@ NOLINT_TEST_F(MaterialLoaderErrorTest, LoadMaterial_UnavailableTexture_Throws)
   }
   EXPECT_TRUE(desc_stream_.Seek(0));
 
-  // Act + Assert: Should throw due to texture loading failure with mock PAK
-  auto context = CreateLoaderContextWithMockPak();
-  EXPECT_THROW({ (void)LoadMaterialAsset(context); }, std::runtime_error);
+  auto [context, collector] = CreateDecodeLoaderContext();
+  (void)LoadMaterialAsset(std::move(context));
+
+  const ResourceRef expected {
+    .source = oxygen::content::internal::SourceToken { 7 },
+    .resource_type_id = TextureResource::ClassTypeId(),
+    .resource_index = 42,
+  };
+
+  EXPECT_THAT(collector->ResourceRefDependencies(), IsSupersetOf({ expected }));
 }
 
 } // namespace
