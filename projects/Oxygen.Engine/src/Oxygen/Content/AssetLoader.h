@@ -158,26 +158,6 @@ public:
 
   //=== Asset Loading ===-----------------------------------------------------//
 
-  //! Load or get cached asset
-  /*!
-   Loads an asset by key, using the unified content cache. Assets are cached
-   globally across all PAK files.
-
-   @tparam T The asset type (must satisfy IsTyped)
-   @param key The asset key to load
-   @return Shared pointer to the asset, or nullptr if not found
-
-   ### Performance Characteristics
-   - Time Complexity: O(1) if cached, O(log n) + load time if uncached
-   - Memory: Shared assets cached with reference counting
-   - Optimization: Multiple requests return same cached instance
-
-   @note Automatically increments reference count for shared assets
-   @see GetAsset, HasAsset, ReleaseAsset
-  */
-  template <IsTyped T>
-  auto LoadAsset(const data::AssetKey& key) -> std::shared_ptr<T>;
-
   //! Coroutine-based asset load by AssetKey.
   /*!
    Async-only API for assets.
@@ -247,7 +227,7 @@ public:
    @return Shared pointer to cached asset, or nullptr if not cached
 
    @note Does not increment reference count
-   @see LoadAsset, HasAsset
+  @see LoadAssetAsync, HasAsset
   */
   template <IsTyped T>
   auto GetAsset(const data::AssetKey& key) const -> std::shared_ptr<T>
@@ -327,7 +307,7 @@ public:
 
    @note The resource key is deterministic and repeatable for the same inputs
    @note Resource type T must be registered in ResourceTypeList
-   @see LoadResource, AddResourceDependency, ResourceKey
+   @see LoadResourceAsync, AddResourceDependency, ResourceKey
   */
   template <typename T>
   inline auto MakeResourceKey(const PakFile& pak_file, uint32_t resource_index)
@@ -358,50 +338,6 @@ public:
       = static_cast<uint16_t>(IndexOf<T, ResourceTypeList>::value);
     return PackResourceKey(source_index, resource_type_index, resource_index);
   }
-
-  //! Load or get cached resource from a specific PAK file and resource index
-  /*!
-   Loads a resource of type T from the specified PAK file and resource index,
-   or returns a cached instance if already loaded. This function is used when
-   the caller knows both the PAK file and the resource's index within that file.
-
-   @tparam T The resource type (must satisfy PakResource concept)
-   @param pak The PAK file containing the resource
-   @param resource_index The index of the resource within the PAK file
-   @return Shared pointer to the resource, or nullptr if not found
-
-   ### Performance Characteristics
-
-   - Time Complexity: O(1) if cached, O(log n) + load time if uncached
-   - Memory: Shared resources cached with reference counting
-   - Optimization: Multiple requests return the same cached instance
-
-   @note Automatically increments reference count for shared resources
-   @warning Returns nullptr if ResourceKey is invalid or resource not found
-   @see GetResource, HasResource, ReleaseResource
-  */
-  template <PakResource T>
-  auto LoadResource(const PakFile& pak,
-    data::pak::ResourceIndexT resource_index) -> std::shared_ptr<T>;
-
-  //! Load or get cached resource from the current content source.
-  /*!
-   This overload is intended for use inside loader functions. The current
-   source is established by AssetLoader when invoking a loader.
-
-   @tparam T The resource type (must satisfy PakResource concept)
-   @param resource_index The index of the resource within the current source
-   @return Shared pointer to the resource, or nullptr if not found
-
-   @warning Calling this outside of a load operation is invalid.
-  */
-  template <PakResource T>
-  auto LoadResource(data::pak::ResourceIndexT resource_index)
-    -> std::shared_ptr<T>;
-
-  //! Load or get cached resource by source-aware ResourceKey.
-  template <PakResource T>
-  auto LoadResourceByKey(ResourceKey key) -> std::shared_ptr<T>;
 
   //! Coroutine-based resource load by source-aware ResourceKey.
   template <PakResource T>
@@ -765,13 +701,6 @@ private:
 
   OXGN_CNTT_NDAPI auto GetCurrentSourceId() const -> uint16_t;
 
-  OXGN_CNTT_NDAPI auto LoadResourceByKeyErased(TypeId type_id, ResourceKey key)
-    -> std::shared_ptr<void>;
-
-  template <PakResource T>
-  auto LoadResourceUncached(uint16_t source_id,
-    data::pak::ResourceIndexT resource_index) -> std::shared_ptr<T>;
-
   template <typename ResourceT>
   auto PublishResourceDependenciesAsync(
     const data::AssetKey& dependent_asset_key,
@@ -864,12 +793,6 @@ private:
 
 //-- Known Asset Types --
 
-template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::GeometryAsset>(
-  const data::AssetKey& key) -> std::shared_ptr<data::GeometryAsset>;
-
-template OXGN_CNTT_API auto AssetLoader::LoadAsset<data::MaterialAsset>(
-  const data::AssetKey& key) -> std::shared_ptr<data::MaterialAsset>;
-
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::MaterialAsset>(
   const data::AssetKey& key) -> co::Co<std::shared_ptr<data::MaterialAsset>>;
 
@@ -878,17 +801,9 @@ template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::GeometryAsset>(
 
 //-- Known Resource Types --
 
-template OXGN_CNTT_API auto AssetLoader::LoadResource<data::TextureResource>(
-  const PakFile& pak, data::pak::ResourceIndexT resource_index)
-  -> std::shared_ptr<data::TextureResource>;
-
-template OXGN_CNTT_API auto AssetLoader::LoadResource<data::BufferResource>(
-  const PakFile& pak, data::pak::ResourceIndexT resource_index)
-  -> std::shared_ptr<data::BufferResource>;
-
 template OXGN_CNTT_API auto
-  AssetLoader::LoadResourceByKey<data::TextureResource>(ResourceKey)
-    -> std::shared_ptr<data::TextureResource>;
+  AssetLoader::LoadResourceAsync<data::BufferResource>(ResourceKey)
+    -> co::Co<std::shared_ptr<data::BufferResource>>;
 
 template OXGN_CNTT_API auto
   AssetLoader::LoadResourceAsync<data::TextureResource>(ResourceKey)

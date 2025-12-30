@@ -6,10 +6,13 @@
 
 #include <cstdlib>
 
+#include <tuple>
+
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EngineTag.h>
+#include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Data/AssetType.h>
 
 class DummyAsset : public oxygen::Object {
@@ -22,12 +25,28 @@ auto EngineTagFactory::Get() noexcept -> EngineTag { return EngineTag {}; }
 
 } // namespace oxygen::content::internal
 
+namespace {
+
+template <typename... Ts>
+auto TouchLoadResourceAsyncInstantiations(oxygen::TypeList<Ts...>) -> void
+{
+  // Taking the address of each specialization forces the symbol to exist.
+  // This intentionally fails at link-time if any `LoadResourceAsync<T>`
+  // specialization is declared but not explicitly instantiated/exported.
+  [[maybe_unused]] const auto fns
+    = std::tuple { &oxygen::content::AssetLoader::LoadResourceAsync<Ts>... };
+}
+
+} // namespace
+
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   using oxygen::content::internal::EngineTagFactory;
   using enum oxygen::data::AssetType;
 
   oxygen::content::AssetLoader loader(EngineTagFactory::Get());
+
+  TouchLoadResourceAsyncInstantiations(oxygen::content::ResourceTypeList {});
 
   return EXIT_SUCCESS;
 }

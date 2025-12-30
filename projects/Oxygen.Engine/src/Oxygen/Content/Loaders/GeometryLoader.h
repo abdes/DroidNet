@@ -6,13 +6,17 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -22,8 +26,6 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Content/Loaders/Helpers.h>
 
 namespace oxygen::content::loaders {
 
@@ -92,91 +94,29 @@ namespace detail {
       return { nullptr, nullptr };
     }
 
-    if (context.dependency_collector) {
-      auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-        if (resource_index == 0) {
-          return;
-        }
-        internal::ResourceRef ref {
-          .source = context.source_token,
-          .resource_type_id = BufferResource::ClassTypeId(),
-          .resource_index = resource_index,
-        };
-        context.dependency_collector->AddResourceDependency(ref);
+    if (!context.dependency_collector) {
+      LOG_F(ERROR,
+        "GeometryLoader requires a DependencyCollector for non-parse-only "
+        "loads (standard mesh buffers)");
+      throw std::runtime_error(
+        "GeometryLoader requires a DependencyCollector for async decode");
+    }
+
+    auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
+      if (resource_index == 0) {
+        return;
+      }
+      internal::ResourceRef ref {
+        .source = context.source_token,
+        .resource_type_id = BufferResource::ClassTypeId(),
+        .resource_index = resource_index,
       };
+      context.dependency_collector->AddResourceDependency(ref);
+    };
 
-      collect_buffer_ref(info.vertex_buffer);
-      collect_buffer_ref(info.index_buffer);
-      return { nullptr, nullptr };
-    }
-
-    // Load vertex and index buffer data using AssetLoader with robust error
-    // handling
-
-    std::shared_ptr<data::BufferResource> vertex_buffer_resource;
-    std::shared_ptr<data::BufferResource> index_buffer_resource;
-
-    auto vb_resource_key
-      = context.asset_loader->MakeResourceKey<data::BufferResource>(
-        info.vertex_buffer);
-
-    auto ib_resource_key
-      = context.asset_loader->MakeResourceKey<data::BufferResource>(
-        info.index_buffer);
-
-    std::optional<ResourceCleanupGuard> vertex_guard;
-    std::optional<ResourceCleanupGuard> index_guard;
-
-    // Load vertex buffer resource if specified
-    if (info.vertex_buffer != 0) {
-      vertex_buffer_resource
-        = context.asset_loader->LoadResource<data::BufferResource>(
-          info.vertex_buffer);
-      if (!vertex_buffer_resource) {
-        LOG_F(ERROR, "-failed- to load vertex buffer resource: index = {}",
-          info.vertex_buffer);
-        throw std::runtime_error("Failed to load vertex buffer resource");
-      }
-      LOG_F(2, "Loaded vertex buffer resource: {} bytes",
-        vertex_buffer_resource->GetData().size());
-
-      // Create cleanup guard - will auto-release if an exception occurs
-      vertex_guard.emplace(*context.asset_loader, vb_resource_key);
-    }
-
-    // Load index buffer resource if specified
-    if (info.index_buffer != 0) {
-      index_buffer_resource
-        = context.asset_loader->LoadResource<data::BufferResource>(
-          info.index_buffer);
-      if (!index_buffer_resource) {
-        LOG_F(ERROR, "-failed- to load index buffer resource: index = {}",
-          info.index_buffer);
-        throw std::runtime_error("Failed to load index buffer resource");
-      }
-      LOG_F(2, "Loaded index buffer resource: {} bytes",
-        index_buffer_resource->GetData().size());
-
-      // Create cleanup guard - will auto-release if an exception occurs
-      index_guard.emplace(*context.asset_loader, ib_resource_key);
-    }
-
-    // Register dependencies only after all resources are successfully loaded
-    if (info.vertex_buffer != 0) {
-      LOG_F(2, "Registering resource dependency: vertex_buffer = {}",
-        info.vertex_buffer);
-      context.asset_loader->AddResourceDependency(
-        context.current_asset_key, vb_resource_key);
-    }
-
-    if (info.index_buffer != 0) {
-      LOG_F(2, "Registering resource dependency: index_buffer = {}",
-        info.index_buffer);
-      context.asset_loader->AddResourceDependency(
-        context.current_asset_key, ib_resource_key);
-    }
-
-    return { vertex_buffer_resource, index_buffer_resource };
+    collect_buffer_ref(info.vertex_buffer);
+    collect_buffer_ref(info.index_buffer);
+    return { nullptr, nullptr };
   }
 
   // Handles loading and generation for procedural meshes
@@ -391,40 +331,12 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
           sm_desc.material_asset_key);
       }
       material = MaterialAsset::CreateDefault();
-    } else if (sm_desc.material_asset_key != AssetKey {}) {
-      // Save reader position before loading material asset
-      auto saved_position = reader.Position();
-
-      // Attempt to load the actual material asset referenced by the submesh
-      material = context.asset_loader->LoadAsset<MaterialAsset>(
-        sm_desc.material_asset_key);
-
-      // Restore reader position after material loading
-      if (saved_position.has_value()) {
-        auto restore_result = reader.Seek(saved_position.value());
-        if (!restore_result) {
-          LOG_F(
-            ERROR, "Failed to restore reader position after material loading");
-          return nullptr;
-        }
-      }
-
-      if (material) {
-        context.asset_loader->AddAssetDependency(
-          context.current_asset_key, sm_desc.material_asset_key);
-        LOG_F(2,
-          "Successfully loaded material and registered dependency on material "
-          "asset: {}",
-          nostd::to_string(sm_desc.material_asset_key).c_str());
-      } else {
-        LOG_F(WARNING, "Failed to load material asset {}, using default",
-          nostd::to_string(sm_desc.material_asset_key).c_str());
-        material = MaterialAsset::CreateDefault();
-      }
     } else {
-      // Use default material if no material asset key is specified
-      LOG_F(2, "No material asset key specified, using default material");
-      material = MaterialAsset::CreateDefault();
+      LOG_F(ERROR,
+        "GeometryLoader requires a DependencyCollector for non-parse-only "
+        "loads (material dependencies)");
+      throw std::runtime_error(
+        "GeometryLoader requires a DependencyCollector for async decode");
     }
 
     if (should_build_mesh) {
@@ -492,8 +404,6 @@ inline auto LoadGeometryAsset(LoaderContext context)
     auto mesh = LoadMesh(context);
     lod_meshes.push_back(std::move(mesh));
   }
-
-  // Dependencies are registered inline during mesh loading
 
   // Construct and return GeometryAsset with LOD meshes
   return std::make_unique<GeometryAsset>(
