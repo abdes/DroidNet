@@ -33,8 +33,14 @@ The chosen approach is:
 
 ## Key idea: “dependency registration increments lifetime”
 
-Dependencies are registered at decode time by the loaders. Registration is not
-just metadata: it also increments the dependency’s reference count in the cache.
+Dependencies are applied during the owning-thread **publish** step.
+
+Decode discovers dependency identities on worker threads, but worker-thread
+decode must not mutate loader state. Therefore, decode records dependencies into
+an identity-only collector, and publish applies them.
+
+Registration is not just metadata: it also increments the dependency’s
+reference count in the cache.
 
 Concretely:
 
@@ -166,38 +172,56 @@ contract encoded in `AssetLoader.h` is:
 
 ## How loaders should participate (practical guidance)
 
-### Do: register dependencies at point of discovery
+### Do: record dependencies at point of discovery
 
-As you decode an asset descriptor, register every asset/reference you discover
-immediately:
+As you decode an asset descriptor, record every reference you discover
+immediately.
 
-- For asset references: `AddAssetDependency(current, other_asset_key)`
-- For resource references: construct a `ResourceKey` with
-   `MakeResourceKey<ResourceT>(*context.source_pak, index)` and then call
-   `AddResourceDependency(current, key)`
+In the async pipeline, worker-thread decode records dependencies via
+`internal::DependencyCollector` supplied in `LoaderContext`:
+
+- Asset dependencies are recorded as `data::AssetKey`.
+- Resource dependencies are recorded either as `ResourceKey` (already-bound) or
+   as `internal::ResourceRef` (container-relative reference), which is bound to
+   `ResourceKey` on the owning thread.
+
+Examples (decode code):
+
+- Asset reference:
+
+  ```cpp
+  context.dependency_collector->AddAssetDependency(other_asset_key);
+  ```
+
+- Resource reference (container-relative):
+
+  ```cpp
+  context.dependency_collector->AddResourceDependency(internal::ResourceRef{
+      .source = context.source_token,
+      .resource_type_id = ResourceT::ClassTypeId(),
+      .resource_index = index,
+  });
+  ```
+
+Publish (owning thread) binds `ResourceRef -> ResourceKey` and applies
+`Add*Dependency(...)` to mutate the dependency graph and Touch the cache.
 
 ### Do: avoid “hidden” dependencies
 
 If an asset uses a resource/asset but does not register it, the cache refcount
 won’t reflect the true lifetime and eviction can become unsafe.
 
-### Do: avoid leaking dependency checkouts
+### Do not: perform nested loads from loader functions
 
-When a loader calls `LoadResource(...)` (or `LoadAsset(...)`) while decoding an
-owning asset, the returned `shared_ptr<T>` represents a *temporary checkout*.
+Loader functions run on worker threads as part of decode. They must not call
+back into `AssetLoader` and must not trigger nested `Load*` operations.
 
-If the owning asset does not retain that `shared_ptr<T>` long-term (most of our
-formats store indices/handles, not CPU pointers), then the loader must ensure
-that temporary checkout is checked back in after successful dependency
-registration.
+Rationale:
 
-Practical rule:
-
-- Keep the dependency alive via `Add*Dependency(...)` (which does a `Touch(...)`)
-   and then drop the temporary checkout.
-
-If you keep both, you effectively double-count the lifetime and dependencies
-may never reach refcount zero even after `ReleaseAsset(...)`.
+- Nested loads from decode would reintroduce owning-thread mutation from worker
+   threads.
+- The orchestrator coroutine is responsible for loading dependencies, and
+   publish is responsible for applying dependency edges.
 
 ### Do not: retain `LoaderContext` or readers
 
@@ -208,15 +232,15 @@ duration of the load call.
 
 ## Limitations and roadmap linkage
 
-Current (Phase 1):
+Current:
 
-- Load path is synchronous.
-- Dependency registration is manual (by loader code).
-- Cycle detection and some safety checks are debug-focused.
+- Assets and resources are cached in a unified refcounted cache.
+- Dependencies are identity-only and forward-only.
+- Async decode records dependency identities into `DependencyCollector`; publish
+   applies edges and Touches cache entries via `Add*Dependency(...)`.
+- Cycle detection remains a debug-focused safety check.
 
-Next (Phase 2):
+Deferred / out of scope:
 
-- Async CPU decode (`LoadAsync`) that still ends at DecodedCPUReady.
-- In-flight deduplication and cancellation guarantees.
-- Optional “bridge descriptor” data for the Renderer to materialize GPU
-   resources (Content does not submit uploads).
+- GPU residency and GPU-side lifetime management. Content eviction triggers
+   Content unloaders only; Renderer-owned GPU residency is handled separately.

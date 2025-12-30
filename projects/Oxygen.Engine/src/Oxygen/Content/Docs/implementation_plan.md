@@ -1,6 +1,6 @@
 # Content subsystem implementation plan
 
-**Last updated:** 23 Dec 2025
+**Last updated:** 30 Dec 2025
 
 This file is the **single source of truth for roadmap and status** for the
 Content subsystem.
@@ -37,15 +37,15 @@ This table is the **work order**. Higher rows unblock lower rows.
 | 7 | ❌ | P0 | Minimal scene serialization toolchain (cooked, loose) | `scenes_and_levels.md` | Separate from runtime loader; produces cooked scene format |
 | 8 | ❌ | P0 | Asset database (project index, GUID ownership, metadata) | `asset_database_and_ddc.md` | Editor-oriented; maps GUIDs to source/cooked artifacts |
 | 9 | ❌ | P0 | Derived data cache (DDC) for cooked artifacts | `asset_database_and_ddc.md` | Keyed by (inputs + import settings + platform) |
-| 10 | ❌ | P1 | Async CPU load API (`LoadAsync`) + in-flight dedup | `async_cpu_pipeline.md` | Must preserve current cache semantics |
-| 11 | ❌ | P1 | Cancellation propagation + “no partial insertion” guarantee | `async_cpu_pipeline.md` | Deterministic cleanup on cancel/failure |
+| 10 | ✅ | P1 | Async AssetLoader (CPU acquisition) + in-flight dedup | `truly-async-asset-loader.md` | Coroutine-based load APIs are implemented and the owning-thread publish model is enforced; in-flight dedup is in place |
+| 11 | ❌ | P1 | Cancellation propagation + “no partial insertion” guarantee | (TBD) | The loader supports global cancellation via the nursery, but does not yet expose per-operation cancellation tokens or a documented rollback guarantee |
 | 12 | ❌ | P1 | Content observability counters + scoped tracing hooks | (short design below) | Timing: IO/decode/cache-hit/miss/evictions |
 | 13 | ❌ | P1 | Hot reload for loose cooked content | `hot_reload.md` | File watch → invalidation → reload dependents |
 | 14 | ❌ | P1 | Hot reload safety model (generation IDs, handle policy) | `hot_reload.md` | Defines what remains stable for the editor |
-| 15 | ❌ | P2 | Chunk metadata + partial decode hooks (CPU-side) | `streaming_and_chunks.md` | Complements `chunking.md` (format-level) |
+| 15 | ❌ | P2 | Chunk metadata + partial decode hooks (CPU-side) | (TBD) | Complements `chunking.md` (format-level) |
 | 16 | ❌ | P2 | Dependency analyzer output (JSON) | `tooling_and_diagnostics.md` | Graph extraction + refcounts + fan-out stats |
 | 17 | ❌ | P2 | Perf benchmark suite for Content | `tooling_and_diagnostics.md` | Cold/warm/parallel burst scenarios |
-| 18 | ❌ | P3 | Memory mapping prototype for PAK and/or loose cooked | `streaming_and_chunks.md` | Optional optimization; not required for editor unblock |
+| 18 | ❌ | P3 | Memory mapping prototype for PAK and/or loose cooked | (TBD) | Optional optimization; not required for editor unblock |
 | 19 | ⏸ | P4 | Stable resource indices across regenerated loose cooked roots | `loose_cooked_content.md` | Future enhancement: keep `ResourceIndexT` values stable across recooks (patchability / determinism); runtime correctness only requires per-root internal consistency |
 
 **Policy:** Any “big feature” above must have its own design doc (linked).
@@ -70,7 +70,8 @@ Phases communicate dependency order, not strict calendar time.
 
 ### Phase 1 (foundation) — ✅ complete
 
-- Synchronous PAK-based loading
+- Content sources seam + deterministic mounting
+- Async coroutine-based load APIs (assets/resources) with owning-thread publish
 - Unified cache + dependencies + release cascades
 
 ### Phase 1.5 (editor unblock: loose cooked + scenes) — 🔄 in progress
@@ -91,15 +92,16 @@ Acceptance criteria:
 - Editor can load a simple scene/level that references those assets.
 - Dependency tracking and release semantics remain identical to PAK mode.
 
-### Phase 2 (async CPU pipeline) — ❌ planned
+### Phase 2 (cancellation + completeness) — ❌ planned
 
-Objective: non-blocking CPU-side acquisition ending at **DecodedCPUReady**.
+Objective: improve ergonomics and robustness on top of the completed async
+AssetLoader (still ending at **DecodedCPUReady**).
 
 Deliverables:
 
-- `LoadAsync(AssetKey, CancellationToken)` returning when dependencies are CPU-ready.
-- In-flight deduplication (only one decode per key concurrently).
-- Cancellation with rollback (no partial cache insertion).
+- Add per-operation cancellation tokens and a documented rollback guarantee.
+- Expand async coverage as new asset families are added (for example, Scene/Level).
+- Keep in-flight dedup behavior consistent across newly added types.
 
 ### Phase 3 (hot reload + diagnostics) — ❌ planned
 
@@ -179,7 +181,8 @@ This matrix is a convenience view. The ordered task list above is authoritative.
 | Synchronous load | ✅ | Current `AssetLoader::LoadAsset/LoadResource` |
 | Dependency registration | ✅ | Forward-only maps + cache Touch |
 | Safe unloading | ✅ | Resource-before-asset unload ordering asserted in tests |
-| Async CPU pipeline | ❌ | Design + implementation pending |
+| Async AssetLoader (CPU acquisition) | ✅ | Coroutine-based load APIs exist (`LoadAssetAsync` and `LoadResourceAsync`) with owning-thread publish and in-flight dedup |
+| Per-operation cancellation + rollback | ❌ | No cancellation token API or “no partial insertion” guarantee yet |
 | Hot reload | ❌ | Requires invalidation + dependent rebuild |
 
 ### Asset families
@@ -211,9 +214,9 @@ This matrix is a convenience view. The ordered task list above is authoritative.
 | Loose cooked content design | `loose_cooked_content.md` |
 | Scene/Level (maps) design | `scenes_and_levels.md` |
 | Asset DB + DDC design | `asset_database_and_ddc.md` |
-| Async CPU pipeline design | `async_cpu_pipeline.md` |
+| Async loader architecture | `truly-async-asset-loader.md` |
 | Hot reload design | `hot_reload.md` |
-| Streaming + chunks (runtime-facing) | `streaming_and_chunks.md` |
+| Streaming + chunks (runtime-facing) | (TBD) |
 | Tooling + diagnostics | `tooling_and_diagnostics.md` |
 | GPU uploads (Renderer) | `../../Renderer/Upload/README.md` |
 
