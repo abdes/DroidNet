@@ -25,6 +25,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
 
 #include "DumpContext.h"
 #include "PakFileDumper.h"
@@ -416,22 +417,22 @@ private:
 class ResourceTableDumper {
 public:
   virtual ~ResourceTableDumper() = default;
-  virtual void Dump(
-    const PakFile& pak, DumpContext& ctx, AssetLoader& asset_loader) const
+  virtual auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<>
     = 0;
 };
 
 class BufferResourceTableDumper : public ResourceTableDumper {
 public:
-  void Dump(const PakFile& pak, DumpContext& ctx,
-    AssetLoader& asset_loader) const override
+  auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<> override
   {
     if (!ctx.show_resources) {
-      return;
+      co_return;
     }
     if (!pak.HasTableOf<BufferResource>()) {
       std::cout << "    No buffer resource table present\n\n";
-      return;
+      co_return;
     }
     using namespace PrintUtils;
     SubSeparator("BUFFER RESOURCES");
@@ -443,8 +444,10 @@ public:
       for (size_t i = 0; i < (std::min)(buffer_count, static_cast<size_t>(20));
         ++i) {
         try {
-          auto buffer_resource = asset_loader.LoadResource<BufferResource>(
+          const auto key = asset_loader.MakeResourceKey<BufferResource>(
             pak, static_cast<uint32_t>(i));
+          auto buffer_resource
+            = co_await asset_loader.LoadResourceAsync<BufferResource>(key);
           if (buffer_resource) {
             std::cout << "      [" << i << "] Buffer Resource:\n";
             Field(
@@ -485,20 +488,21 @@ public:
       }
     }
     std::cout << "\n";
+    co_return;
   }
 };
 
 class TextureResourceTableDumper : public ResourceTableDumper {
 public:
-  void Dump(const PakFile& pak, DumpContext& ctx,
-    AssetLoader& asset_loader) const override
+  auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<> override
   {
     if (!ctx.show_resources) {
-      return;
+      co_return;
     }
     if (!pak.HasTableOf<TextureResource>()) {
       std::cout << "    No texture resource table present\n\n";
-      return;
+      co_return;
     }
     using namespace PrintUtils;
     SubSeparator("TEXTURE RESOURCES");
@@ -510,8 +514,10 @@ public:
       for (size_t i = 0; i < (std::min)(texture_count, static_cast<size_t>(20));
         ++i) {
         try {
-          auto texture_resource = asset_loader.LoadResource<TextureResource>(
+          const auto key = asset_loader.MakeResourceKey<TextureResource>(
             pak, static_cast<uint32_t>(i));
+          auto texture_resource
+            = co_await asset_loader.LoadResourceAsync<TextureResource>(key);
           if (texture_resource) {
             std::cout << "      [" << i << "] Texture Resource:\n";
             Field(
@@ -547,6 +553,7 @@ public:
       }
     }
     std::cout << "\n";
+    co_return;
   }
 };
 
@@ -579,7 +586,11 @@ private:
     dumpers_;
   class DefaultResourceTableDumper : public ResourceTableDumper {
   public:
-    void Dump(const PakFile&, DumpContext&, AssetLoader&) const override { }
+    auto DumpAsync(const PakFile&, DumpContext&, AssetLoader&) const
+      -> oxygen::co::Co<> override
+    {
+      co_return;
+    }
   } default_dumper_;
 };
 
@@ -590,17 +601,18 @@ public:
   {
   }
 
-  void Dump(
-    const PakFile& pak, DumpContext& ctx, AssetLoader& asset_loader) const
+  auto DumpAsync(const PakFile& pak, DumpContext& ctx,
+    AssetLoader& asset_loader) const -> oxygen::co::Co<>
   {
     if (!ctx.show_resources) {
-      return;
+      co_return;
     }
     using namespace PrintUtils;
     Separator("RESOURCE TABLES");
-    registry_.Get("buffer").Dump(pak, ctx, asset_loader);
-    registry_.Get("texture").Dump(pak, ctx, asset_loader);
+    co_await registry_.Get("buffer").DumpAsync(pak, ctx, asset_loader);
+    co_await registry_.Get("texture").DumpAsync(pak, ctx, asset_loader);
     // TODO: Add more resource types as needed
+    co_return;
   }
 
 private:
@@ -609,7 +621,8 @@ private:
 
 //=== PakFileDumper Class ===================================================//
 
-void PakFileDumper::Dump(const PakFile& pak, AssetLoader& asset_loader)
+auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
+  -> oxygen::co::Co<>
 {
   using namespace PrintUtils;
   Separator("PAK FILE ANALYSIS: " + ctx_.pak_path.filename().string());
@@ -621,11 +634,12 @@ void PakFileDumper::Dump(const PakFile& pak, AssetLoader& asset_loader)
   PrintPakFooter(pak);
   ResourceTableDumperRegistry resource_registry;
   ResourceTablesDumper resource_tables_dumper(resource_registry);
-  resource_tables_dumper.Dump(pak, ctx_, asset_loader);
+  co_await resource_tables_dumper.DumpAsync(pak, ctx_, asset_loader);
   AssetDumperRegistry registry;
   AssetDirectoryDumper dir_dumper(registry);
   dir_dumper.Dump(pak, ctx_);
   Separator("ANALYSIS COMPLETE");
+  co_return;
 }
 
 void PakFileDumper::PrintPakHeader(const PakFile& pak)

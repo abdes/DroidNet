@@ -10,9 +10,16 @@
 #include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/EngineTag.h>
+#include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
-#include <Oxygen/content/EngineTag.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/OxCo/asio.h>
 
 #include "DumpContext.h"
 #include "PakFileDumper.h"
@@ -76,6 +83,7 @@ static auto PrintUsage(const char* program_name) -> void
 auto main(int argc, char** argv) -> int
 {
   using namespace oxygen::content;
+  using oxygen::observer_ptr;
 
   if (argc < 2) {
     PrintUsage(argv[0]);
@@ -108,11 +116,33 @@ auto main(int argc, char** argv) -> int
 
   try {
     PakFile pak(ctx.pak_path);
-    AssetLoaderConfig loader_config { .work_offline = true };
-    AssetLoader asset_loader(EngineTagFactory::Get(), loader_config);
-    asset_loader.AddPakFile(ctx.pak_path);
-    PakFileDumper dumper(ctx);
-    dumper.Dump(pak, asset_loader);
+
+    asio::io_context io;
+    (oxygen::co::Run)(io, [&]() -> oxygen::co::Co<> {
+      oxygen::co::ThreadPool pool(io, 2);
+      AssetLoaderConfig loader_config {
+        .thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool },
+        .work_offline = true,
+      };
+
+      AssetLoader asset_loader(EngineTagFactory::Get(), loader_config);
+      asset_loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
+      asset_loader.RegisterLoader(
+        oxygen::content::loaders::LoadTextureResource);
+
+      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &asset_loader);
+        asset_loader.Run();
+
+        asset_loader.AddPakFile(ctx.pak_path);
+        PakFileDumper dumper(ctx);
+        co_await dumper.DumpAsync(pak, asset_loader);
+
+        asset_loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    });
   } catch (const std::exception& ex) {
     std::cerr << "Error: " << ex.what() << "\n";
     return 2;

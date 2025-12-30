@@ -8,6 +8,8 @@
 
 #include <utility>
 
+#include <Oxygen/OxCo/Co.h>
+
 #include "DumpContext.h"
 
 namespace oxygen::content {
@@ -22,8 +24,8 @@ public:
   {
   }
 
-  void Dump(const oxygen::content::PakFile& pak,
-    oxygen::content::AssetLoader& asset_loader);
+  auto DumpAsync(const oxygen::content::PakFile& pak,
+    oxygen::content::AssetLoader& asset_loader) -> oxygen::co::Co<>;
 
 private:
   DumpContext ctx_;

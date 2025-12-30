@@ -34,7 +34,7 @@ namespace oxygen::renderer::testing {
 class FakeTextureResourceLoader final : public content::TextureResourceLoader {
 public:
   FakeTextureResourceLoader() = default;
-  ~FakeTextureResourceLoader() override = default;
+  ~FakeTextureResourceLoader() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(FakeTextureResourceLoader)
   OXYGEN_DEFAULT_MOVABLE(FakeTextureResourceLoader)

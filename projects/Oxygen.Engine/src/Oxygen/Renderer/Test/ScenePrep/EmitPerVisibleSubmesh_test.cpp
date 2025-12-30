@@ -113,8 +113,7 @@ protected:
       = std::make_unique<oxygen::renderer::resources::TextureBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { uploader_.get() },
-        observer_ptr<oxygen::content::TextureResourceLoader> {
-          texture_loader_.get() });
+        observer_ptr { texture_loader_.get() });
     auto material_binder
       = std::make_unique<oxygen::renderer::resources::MaterialBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { uploader_.get() },

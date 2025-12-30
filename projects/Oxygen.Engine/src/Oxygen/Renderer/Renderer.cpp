@@ -164,7 +164,7 @@ auto Renderer::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool
     auto texture_binder = std::make_unique<renderer::resources::TextureBinder>(
       observer_ptr { gfx.get() },
       observer_ptr { upload_staging_provider_.get() },
-      observer_ptr { uploader_.get() }, asset_loader_);
+      observer_ptr { uploader_.get() }, observer_ptr { asset_loader_.get() });
 
     auto mat_binder = std::make_unique<renderer::resources::MaterialBinder>(
       observer_ptr { gfx.get() }, observer_ptr { uploader_.get() },
