@@ -66,8 +66,10 @@ NOLINT_TEST_F(
   constexpr uint32_t kRawNormalIndex = 888888U;
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(
+  ref.resolved_asset = MakeMaterial(
     base_color_key, normal_key, kRawBaseColorIndex, kRawNormalIndex);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   // Allocate material before textures exist — binder may use placeholders.
   const auto material_handle = MatBinder().GetOrAllocate(ref);
@@ -108,7 +110,9 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, RepointingAcrossFrames)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 9U, 10U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 9U, 10U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
@@ -145,7 +149,9 @@ NOLINT_TEST_F(MaterialBinderPlaceholderTest, PartialResourceAvailability)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 123U, 456U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 123U, 456U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   // Allocate only one texture
   const auto baseSrv = TexBinder().GetOrAllocate(base_color_key).get();

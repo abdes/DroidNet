@@ -65,8 +65,10 @@ NOLINT_TEST_F(MaterialBinderBindingTest,
   constexpr uint32_t kRawNormalIndex = 654321U;
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(
+  ref.resolved_asset = MakeMaterial(
     base_color_key, normal_key, kRawBaseColorIndex, kRawNormalIndex);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto material_handle = MatBinder().GetOrAllocate(ref);
 
@@ -107,7 +109,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, MissingResourceFallback)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
@@ -130,10 +134,14 @@ NOLINT_TEST_F(MaterialBinderBindingTest, SharedSrvIndicesForSameResource)
 
   // Two materials differ in color but reference same texture keys.
   oxygen::engine::sceneprep::MaterialRef a;
-  a.asset = MakeMaterial(base_color_key, normal_key, 42U, 43U);
+  a.resolved_asset = MakeMaterial(base_color_key, normal_key, 42U, 43U);
+  a.source_asset_key = a.resolved_asset->GetAssetKey();
+  a.resolved_asset_key = a.resolved_asset->GetAssetKey();
 
   oxygen::engine::sceneprep::MaterialRef b;
-  b.asset = MakeMaterial(base_color_key, normal_key, 44U, 45U);
+  b.resolved_asset = MakeMaterial(base_color_key, normal_key, 44U, 45U);
+  b.source_asset_key = b.resolved_asset->GetAssetKey();
+  b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
   const auto handleA = MatBinder().GetOrAllocate(a);
   const auto handleB = MatBinder().GetOrAllocate(b);
@@ -182,7 +190,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, BindlessIndexStabilityWithinFrame)
   const auto placeholder_base = GetPlaceholderIndexForKey(base_color_key);
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
@@ -236,7 +246,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, PlaceholderReferenceCounting)
   const auto before_count = AllocatedTextureSrvCount();
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 77U, 88U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 77U, 88U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
@@ -281,7 +293,10 @@ NOLINT_TEST_F(
   constexpr uint32_t kRawNormal = 666666U;
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, kRawBase, kRawNormal);
+  ref.resolved_asset
+    = MakeMaterial(base_color_key, normal_key, kRawBase, kRawNormal);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto handle = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(handle));
@@ -308,7 +323,9 @@ NOLINT_TEST_F(MaterialBinderBindingTest, CacheHitDoesNotCallTextureBinder)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 7U, 8U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto calls_before = TexBinderGetOrAllocateTotalCalls();
   const auto base_calls_before

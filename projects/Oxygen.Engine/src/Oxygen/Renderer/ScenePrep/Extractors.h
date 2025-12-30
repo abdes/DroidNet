@@ -286,20 +286,42 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& /*ctx*/,
   const auto lod = item.ResolvedMeshIndex();
   const auto& submeshes = item.ResolvedMesh()->SubMeshes();
   for (auto index : visible_submeshes) {
-    // Material selection chain as a local lambda
-    auto resolve_material
-      = [&]() -> std::shared_ptr<const data::MaterialAsset> {
-      if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, index)) {
-        return mat;
-      }
-      if (auto mesh_mat = submeshes[index].Material()) {
-        return mesh_mat;
-      }
-      return data::MaterialAsset::CreateDefault();
+    struct ResolvedMaterial {
+      std::shared_ptr<const data::MaterialAsset> resolved;
+      oxygen::data::AssetKey source_key {};
     };
 
-    auto mat_ptr = resolve_material();
-    sceneprep::MaterialRef mat_ref { std::move(mat_ptr) };
+    // Material selection chain as a local lambda
+    auto resolve_material = [&]() -> ResolvedMaterial {
+      if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, index)) {
+        const auto key = mat->GetAssetKey();
+        return {
+          .resolved = std::move(mat),
+          .source_key = key,
+        };
+      }
+      if (auto mesh_mat = submeshes[index].Material()) {
+        const auto key = mesh_mat->GetAssetKey();
+        return {
+          .resolved = std::move(mesh_mat),
+          .source_key = key,
+        };
+      }
+      return {
+        .resolved = data::MaterialAsset::CreateDefault(),
+        .source_key = oxygen::data::AssetKey {},
+      };
+    };
+
+    auto resolved = resolve_material();
+    const auto resolved_key = resolved.resolved
+      ? resolved.resolved->GetAssetKey()
+      : oxygen::data::AssetKey {};
+    sceneprep::MaterialRef mat_ref {
+      .source_asset_key = resolved.source_key,
+      .resolved_asset_key = resolved_key,
+      .resolved_asset = std::move(resolved.resolved),
+    };
     const auto mat_handle = state.GetMaterialBinder()->GetOrAllocate(mat_ref);
 
     sceneprep::GeometryRef geo_ref {

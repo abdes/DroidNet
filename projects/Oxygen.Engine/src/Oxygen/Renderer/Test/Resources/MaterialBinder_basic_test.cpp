@@ -60,7 +60,10 @@ NOLINT_TEST_F(MaterialBinderBasicTest, SameMaterialReturnsSameHandle)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 100000U, 200000U);
+  ref.resolved_asset
+    = MakeMaterial(base_color_key, normal_key, 100000U, 200000U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto handle0 = MatBinder().GetOrAllocate(ref);
   const auto handle1 = MatBinder().GetOrAllocate(ref);
@@ -86,10 +89,14 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DifferentMaterialsReturnDifferentHandle)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref0;
-  ref0.asset = MakeMaterial(base_color_key0, normal_key0, 10U, 20U);
+  ref0.resolved_asset = MakeMaterial(base_color_key0, normal_key0, 10U, 20U);
+  ref0.source_asset_key = ref0.resolved_asset->GetAssetKey();
+  ref0.resolved_asset_key = ref0.resolved_asset->GetAssetKey();
 
   oxygen::engine::sceneprep::MaterialRef ref1;
-  ref1.asset = MakeMaterial(base_color_key1, normal_key1, 11U, 21U);
+  ref1.resolved_asset = MakeMaterial(base_color_key1, normal_key1, 11U, 21U);
+  ref1.source_asset_key = ref1.resolved_asset->GetAssetKey();
+  ref1.resolved_asset_key = ref1.resolved_asset->GetAssetKey();
 
   const auto handle0 = MatBinder().GetOrAllocate(ref0);
   const auto handle1 = MatBinder().GetOrAllocate(ref1);
@@ -109,7 +116,7 @@ NOLINT_TEST_F(MaterialBinderBasicTest, HandleNullAndInvalid)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = nullptr;
+  ref.resolved_asset = nullptr;
 
   const auto handle = MatBinder().GetOrAllocate(ref);
   EXPECT_FALSE(MatBinder().IsHandleValid(handle));
@@ -132,8 +139,12 @@ NOLINT_TEST_F(MaterialBinderBasicTest, ContentEqualityDedupes)
 
   oxygen::engine::sceneprep::MaterialRef ra;
   oxygen::engine::sceneprep::MaterialRef rb;
-  ra.asset = a;
-  rb.asset = b;
+  ra.resolved_asset = a;
+  rb.resolved_asset = b;
+  ra.source_asset_key = ra.resolved_asset->GetAssetKey();
+  ra.resolved_asset_key = ra.resolved_asset->GetAssetKey();
+  rb.source_asset_key = rb.resolved_asset->GetAssetKey();
+  rb.resolved_asset_key = rb.resolved_asset->GetAssetKey();
 
   const auto ha = MatBinder().GetOrAllocate(ra);
   const auto hb = MatBinder().GetOrAllocate(rb);
@@ -160,8 +171,12 @@ NOLINT_TEST_F(MaterialBinderBasicTest, DedupIgnoresRawAuthorIndicesForSameKeys)
 
   oxygen::engine::sceneprep::MaterialRef ra;
   oxygen::engine::sceneprep::MaterialRef rb;
-  ra.asset = a;
-  rb.asset = b;
+  ra.resolved_asset = a;
+  rb.resolved_asset = b;
+  ra.source_asset_key = ra.resolved_asset->GetAssetKey();
+  ra.resolved_asset_key = ra.resolved_asset->GetAssetKey();
+  rb.source_asset_key = rb.resolved_asset->GetAssetKey();
+  rb.resolved_asset_key = rb.resolved_asset->GetAssetKey();
 
   const auto ha = MatBinder().GetOrAllocate(ra);
   const auto hb = MatBinder().GetOrAllocate(rb);

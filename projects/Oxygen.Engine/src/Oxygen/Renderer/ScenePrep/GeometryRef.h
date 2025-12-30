@@ -38,6 +38,8 @@ struct GeometryRef {
   {
     return mesh != nullptr;
   }
+
+  explicit operator bool() const noexcept { return IsValid(); }
 };
 
 } // namespace oxygen::engine::sceneprep
