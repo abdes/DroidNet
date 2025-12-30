@@ -514,9 +514,13 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
           std::memcpy(packed.data() + sizeof(TextureResourceDesc),
             rgba8_padded.data(), rgba8_padded.size());
 
-          auto tex = co_await asset_loader->LoadTextureFromBufferAsync(
-            custom_texture_key_,
-            std::span<const std::uint8_t>(packed.data(), packed.size()));
+          auto tex = co_await asset_loader->LoadResourceAsync<
+            oxygen::data::TextureResource>(
+            oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+              .key = custom_texture_key_,
+              .bytes
+              = std::span<const std::uint8_t>(packed.data(), packed.size()),
+            });
           if (!tex) {
             png_status_message_ = "Texture buffer decode failed";
           } else {

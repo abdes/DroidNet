@@ -33,7 +33,7 @@ using oxygen::co::testing::TestEventLoop;
 
 using oxygen::content::AssetLoader;
 using oxygen::content::AssetLoaderConfig;
-using oxygen::content::ResourceCookedData;
+using oxygen::content::CookedResourceData;
 using oxygen::content::ResourceKey;
 using oxygen::content::testing::AssetLoaderLoadingTest;
 
@@ -59,10 +59,11 @@ auto MakeBytesFromHexdump(const std::string& hexdump, const std::size_t size,
 //! Fixture for buffer-provided async load tests.
 class AssetLoaderBufferFromBufferAsyncTest : public AssetLoaderLoadingTest { };
 
-//! Test: LoadResourceFromBufferAsync decodes and caches BufferResource.
+//! Test: LoadResourceAsync(cooked) decodes and caches BufferResource.
 /*!
  Scenario: Provide cooked bytes for a BufferResource and load it using
- `LoadResourceFromBufferAsync<BufferResource>`. Verify the resource is returned
+ `LoadResourceAsync<BufferResource>(CookedResourceData<...>)`. Verify the
+ resource is returned
  and becomes available via `GetResource` under the provided key.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
@@ -103,12 +104,11 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 
       // Act
       std::span<const uint8_t> span(bytes.data(), bytes.size());
-      auto resource
-        = co_await loader.LoadResourceFromBufferAsync<BufferResource>(
-          ResourceCookedData<BufferResource> {
-            .key = key,
-            .bytes = span,
-          });
+      auto resource = co_await loader.LoadResourceAsync<BufferResource>(
+        CookedResourceData<BufferResource> {
+          .key = key,
+          .bytes = span,
+        });
 
       // Assert
       EXPECT_THAT(resource, NotNull());
@@ -127,10 +127,10 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   });
 }
 
-//! Test: StartLoadResourceFromBuffer invokes callback on owning thread.
+//! Test: StartLoadBuffer(cooked) invokes callback on owning thread.
 /*!
  Scenario: Start a buffer-provided BufferResource load via
- `StartLoadResourceFromBuffer<BufferResource>` and verify the callback is
+ `StartLoadBuffer(CookedResourceData<...>)` and verify the callback is
  invoked with a valid result on the owning thread.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
@@ -176,8 +176,8 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       const auto owning_thread = std::this_thread::get_id();
 
       std::span<const uint8_t> span(bytes.data(), bytes.size());
-      loader.StartLoadResourceFromBuffer<BufferResource>(
-        {
+      loader.StartLoadBuffer(
+        CookedResourceData<BufferResource> {
           .key = key,
           .bytes = span,
         },
@@ -201,10 +201,11 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
   });
 }
 
-//! Test: LoadResourceFromBufferAsync decodes and caches TextureResource.
+//! Test: LoadResourceAsync(cooked) decodes and caches TextureResource.
 /*!
  Scenario: Provide cooked bytes for a TextureResource and load it using
- `LoadResourceFromBufferAsync<TextureResource>`. Verify the resource is returned
+ `LoadResourceAsync<TextureResource>(CookedResourceData<...>)`. Verify the
+ resource is returned
  and becomes available via `GetResource` under the provided key.
 */
 NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
@@ -245,12 +246,11 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       loader.Run();
 
       std::span<const uint8_t> span(bytes.data(), bytes.size());
-      auto resource
-        = co_await loader.LoadResourceFromBufferAsync<TextureResource>(
-          ResourceCookedData<TextureResource> {
-            .key = key,
-            .bytes = span,
-          });
+      auto resource = co_await loader.LoadResourceAsync<TextureResource>(
+        CookedResourceData<TextureResource> {
+          .key = key,
+          .bytes = span,
+        });
 
       EXPECT_THAT(resource, NotNull());
       EXPECT_EQ(resource->GetWidth(), 128u);

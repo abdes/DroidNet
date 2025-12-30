@@ -107,8 +107,8 @@ protected:
       = std::make_unique<oxygen::renderer::resources::TransformUploader>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
         observer_ptr { inline_transfers_.get() });
-    texture_loader_ = std::make_unique<
-      oxygen::renderer::testing::FakeTextureResourceLoader>();
+    texture_loader_
+      = std::make_unique<oxygen::renderer::testing::FakeAssetLoader>();
     texture_binder_
       = std::make_unique<oxygen::renderer::resources::TextureBinder>(
         observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
@@ -139,8 +139,7 @@ protected:
   std::unique_ptr<oxygen::engine::upload::InlineTransfersCoordinator>
     inline_transfers_;
   std::unique_ptr<oxygen::renderer::resources::TextureBinder> texture_binder_;
-  std::unique_ptr<oxygen::renderer::testing::FakeTextureResourceLoader>
-    texture_loader_;
+  std::unique_ptr<oxygen::renderer::testing::FakeAssetLoader> texture_loader_;
 };
 // Death: dropped item
 NOLINT_TEST_F(EmitPerVisibleSubmeshTest, DroppedItem_Death)

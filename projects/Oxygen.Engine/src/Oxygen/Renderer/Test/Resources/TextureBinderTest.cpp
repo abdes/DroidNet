@@ -47,7 +47,7 @@ auto TextureBinderTest::SetUp() -> void
   staging_provider_
     = uploader_->CreateRingBufferStaging(frame::SlotCount { 1 }, 4, kSlack);
 
-  texture_loader_ = std::make_unique<FakeTextureResourceLoader>();
+  texture_loader_ = std::make_unique<FakeAssetLoader>();
 
   texture_binder_ = std::make_unique<resources::TextureBinder>(
     observer_ptr { gfx_.get() }, observer_ptr { staging_provider_.get() },
