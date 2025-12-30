@@ -1,608 +1,241 @@
 
-# Truly async AssetLoader (design)
+# Async AssetLoader (architecture)
 
-This document specifies a **truly asynchronous** `AssetLoader` for Oxygen
-Content.
+This document describes the shipped architecture for Oxygen’s async-first Content loader.
 
-Normative terms: **MUST**, **MUST NOT**, **SHOULD**, **MAY**.
+Scope:
 
-This is a design document only. No code changes are introduced here.
+- Cooked-only asset/resource loading from mounted containers (`.pak` and loose cooked roots).
+- Buffer-provided cooked payload decoding (tests/demos/tooling).
+- CPU-side decode + caching + dependency tracking.
 
----
+Out of scope:
 
-## Goals
-
-- The runtime-facing loader is **async-first**: loading MUST NOT block the
- engine/owning thread.
-- A single loader instance supports **mounted cooked containers**:
-  - `.pak` containers (shipping)
-  - loose cooked roots (editor iteration)
-- The loader also supports **buffer-provided cooked payloads** for
- tests/demos/tooling, without conflating this with loose cooked.
-- The public API is **consistent** and non-redundant:
-  - No generic “Load” verb (only **Asset** or **Resource**)
-  - `StartLoad*` exists wherever an awaitable async load exists
-  - `StartLoad*` callback is guaranteed to run on the loader’s owning thread
-- **Single source of truth** for runtime mode/policy:
-  - “Offline” behavior MUST be configured on `AssetLoader` (via
-  `AssetLoaderConfig`), not per-call.
-
-## Non-goals
-
-- Runtime import of authoring formats (PNG/GLTF/FBX/etc.). Runtime Content
- remains **cooked-only**.
-- GPU uploads/residency. Content ends at **DecodedCPUReady**.
-- Hot reload (separate design document).
+- Importing authoring formats (PNG/GLTF/FBX/etc.).
+- GPU uploads/residency. The Content subsystem ends at CPU-decoded objects.
+- Hot reload and priority/urgency scheduling.
 
 ---
 
-## Current state (why this redesign)
+## Key Terms
 
-Observed inconsistencies in the current surface:
+- **Owning thread**: the engine thread that owns an `AssetLoader` instance.
+- **Asset**: identified by `oxygen::data::AssetKey`.
+- **Resource**: identified by `oxygen::content::ResourceKey`.
+- **Content source**: implementation of `oxygen::content::internal::IContentSource` (`PakFileSource`,
+  `LooseCookedSource`).
 
-- Assets are synchronous (`LoadAsset<T>`), resources are mixed
- (`LoadResourceByKey<T>` + `LoadResourceAsync<T>`), and textures have
- extra convenience (`LoadTextureAsync`, `StartLoadTexture*`).
-- Callback-based “StartLoad” exists only for textures.
-- Some APIs accept an `offline` parameter even though offline behavior is a
- global policy decision.
+Internal decode/publish bridge types:
 
-Additionally, the current dependency model requires owning-thread operations
-(`AddAssetDependency`, `AddResourceDependency`), which constrains how far work
-can be pushed off-thread without refactoring.
-
----
-
-## Existing architecture to preserve
-
-### Content sources (PAK and loose cooked)
-
-The code already has an internal seam: `internal::IContentSource`.
-
-- `PakFileSource`: resolves assets and reads descriptor/resources from a single
- `.pak` file.
-- `LooseCookedSource`: resolves assets through a validated
- `container.index.bin`, and reads descriptors/resources from a cooked
- directory.
-
-This is the correct abstraction boundary: **loaders must not care** whether
-bytes came from a PAK section reader or a filesystem reader.
-
-### Identity / locator model
-
-This design explicitly separates **identity** from **access**.
-
-Identity (stable keys):
-
-- `data::AssetKey` is the runtime identity for assets.
-- `ResourceKey` is the runtime identity for resources.
-  - It encodes a 16-bit source id, but that id is an **opaque token** owned by
-    `AssetLoader`.
-
-Access (how bytes are obtained):
-
-- Loaders do not consume keys directly. They consume **resolved access
-  handles** produced by the loader’s resolver.
-- The resolver maps identities to an `internal::IContentSource` instance plus
-  a source-specific locator (e.g. PAK directory entry or loose cooked
-  descriptor path).
-
-@note The design MUST NOT rely on hardcoded numeric ranges of source ids.
-`AssetLoader` already maintains an internal registry mapping `source_id ->
-source instance`; resolution MUST use that mapping.
+- `oxygen::content::LoaderContext` (value-type decode context).
+- `oxygen::content::internal::DependencyCollector` (identity-only dependency handoff).
+- `oxygen::content::internal::SourceToken` (opaque handle for a mounted source).
+- `oxygen::content::internal::ResourceRef` (container-relative resource reference bound to `ResourceKey` during
+  publish).
 
 ---
 
-## Design principles
+## Design Invariants
 
-### 1) Async by design
+### Threading
 
-- Public load APIs MUST be awaitable coroutines (or callback wrappers over
- them).
-- Blocking I/O and CPU-heavy decode MUST be executed off the owning thread
- (typically via the configured thread pool).
+- **Owning-thread only**:
+  - Mutating loader state (mount registry, caches, dependency graph).
+  - Invoking `StartLoad*` callbacks.
+  - Binding `ResourceRef -> ResourceKey`.
 
-### 2) Owning-thread invariants
+- **Worker thread** (thread pool):
+  - Blocking I/O required by loads.
+  - CPU decode of descriptors and resource payloads.
 
-The loader has a single **owning thread** (engine thread). The following MUST
-only occur on the owning thread:
+Rationale: correctness (single-writer state) and a hard guarantee that decode cannot re-enter the loader from worker
+threads.
 
-- Publishing loaded objects into the cache (or at least publishing-visible
- state transitions).
-- Dependency graph mutation / reference-count manipulation.
-- `StartLoad*` callback invocation (guaranteed by engine).
+### “Decode is pure”
 
-### 3) Single source of truth for runtime policy
+Loader functions are pure decode: they must not call back into `AssetLoader`, perform nested loads, or mutate the
+dependency graph. Worker-thread decode can only record dependencies via `DependencyCollector`.
 
-Offline mode is **not** a per-call knob.
+Rationale: keeps worker-thread work side-effect free and makes cancellation and in-flight dedup safe.
 
-- The loader is constructed with a runtime policy (online/offline).
-- LoaderContext MUST derive policy from the loader’s stored config.
+### Identity is stable; access is ephemeral
 
-If the engine needs to change offline/online behavior, it MUST create a
-separate loader instance (or explicitly reinitialize the loader).
+- `AssetKey` and `ResourceKey` are stable identities.
+- Locators/readers/paths are transient access state and must not be stored in caches or dependency graphs.
 
-### 4) Locator-based public API
-
-The public API talks in terms of **identities** (keys) and a small number of
-explicit **inputs**, not storage forms.
-
-- Mounted cooked content is addressed by identity (`AssetKey`, `ResourceKey`).
-- Buffer-provided cooked payloads are addressed by identity plus explicit
-  bytes input (see “Resource cooked data”).
-
-The storage form (PAK vs loose cooked) is not part of the public load methods.
-It is a mount-time concern.
+Rationale: prevents accidental lifetime/threading bugs and keeps caches portable.
 
 ---
 
-## Storage forms: what we support and why
+## Identity Model
 
-### Mounted sources (runtime)
+### `ResourceKey` source-id segregation
 
-The runtime MUST support both PAK and loose cooked sources concurrently.
+`ResourceKey` embeds a 16-bit source id. The runtime uses a codified segregation contract to keep namespaces disjoint:
 
-Rationale:
+- Mounted PAK sources use dense ids starting at `0`.
+- Mounted loose cooked roots use a reserved high range starting at `0x8000`.
+- Synthetic/buffer-provided resources use the reserved sentinel `0xFFFF`.
 
-- PAK is required for shipping.
-- Loose cooked is required for editor iteration.
-- Both already share the `IContentSource` seam.
+These constants live in `Oxygen/Content/Constants.h` and must remain consistent with `ResourceKey` packing.
 
-The API MUST NOT expose “PAK vs loose cooked” in its load methods. The storage
-form is a mount-time choice.
+Rationale: synthetic keys cannot collide with mounted sources, and loose cooked ids remain disjoint from PAK ids without
+requiring filesystem-derived identity.
 
-### Buffer-provided cooked payloads (tests/demos/tooling)
+### `SourceToken` and `ResourceRef`
 
-Buffer-provided loads SHOULD exist, but SHOULD be treated as *ad hoc inputs*,
-not as a third persistent “content source” category.
+Decode code uses `SourceToken` (minted at mount time) as an identity-safe handle for “the source being decoded from”.
+Resource dependencies are recorded as either:
 
-Rationale:
+- `ResourceKey` (already bound identity), or
+- `internal::ResourceRef { SourceToken, TypeId, resource_index }`.
 
-- Demos/tests frequently create cooked payloads in memory.
-- Editor tools may decode a cooked blob without registering it as mounted
- content.
+Binding rule (owning thread): resolve `SourceToken` to the loader-owned source id, map `TypeId` to a `ResourceTypeList`
+index, then pack into `ResourceKey`.
 
-The buffer load path MUST integrate with caching and identity via `ResourceKey`
-(typically a synthetic key minted by the loader).
-
-Critically: buffer-provided bytes are an **input**, not a “content source” the
-engine can enumerate/browse. Buffer inputs do not replace PAK or loose cooked.
+Rationale: decode stays free of loader internals while publish remains the only place aware of key encoding.
 
 ---
 
-## Access abstraction (SOLID, preserves existing seams)
+## Components
 
-This section defines the abstraction that answers: “given an identity, how do
-we obtain bytes (now, and later for streaming)?”
+### `AssetLoader` (orchestrator)
 
-Constraints:
+Responsibilities:
 
-- MUST keep `internal::IContentSource` relevant.
-- MUST keep `serio::AnyReader` relevant for decode.
-- MUST keep `LooseCookedIndex` relevant (asset discovery + descriptor
-  metadata + file layout validation).
-- MUST enable future async I/O and streaming.
+- Own the mount registry and source-id/token maps.
+- Orchestrate async load pipelines (resolve/read/decode/publish).
+- Maintain caches and the dependency graph.
+- Provide in-flight request deduplication keyed by `AssetKey` / `ResourceKey`.
 
-### Internal concepts
+### `internal::IContentSource`
 
-- **Resolved asset access**
-  - Produced by resolving an `AssetKey`.
-  - Contains:
-    - `internal::IContentSource* source`
-    - `internal::AssetLocator locator` (existing `std::variant`)
+Responsibilities:
 
-- **Resolved resource access**
-  - Produced by resolving a `ResourceKey`.
-  - Contains:
-    - `internal::IContentSource* source`
-    - `ResourceKey key`
-    - Resource-type-specific table and data region references (offset/size)
+- Resolve identity to source-local locators.
+- Provide readers for descriptor and resource data regions.
 
-These resolved access objects are the “locator” in the strict sense: they are
-what you need to open readers or schedule reads. Keys remain pure identity.
+The loader does not expose storage form (PAK vs loose cooked) in load APIs.
 
-### I/O surface owned by a content source
+Rationale: keeps the public API identity-based and isolates storage concerns to mount time.
 
-This design MUST NOT introduce a new async I/O library.
+### Loader functions and `LoaderContext`
 
-Async behavior in Content comes from **coroutines + thread-pool offload** of
-existing synchronous reads.
+Loader functions decode cooked bytes into typed CPU objects. `LoaderContext` provides:
 
-`internal::IContentSource` remains a small abstraction over *where cooked bytes
-come from* (PAK sections, loose cooked files). It SHOULD stay narrow and
-decode-oriented.
+- `desc_reader` and `data_readers` (decode inputs).
+- `work_offline` (policy signal: no GPU side effects).
+- `current_asset_key` (for identity-only dependency recording).
+- `source_token` and optional `dependency_collector`.
+- `parse_only` for tooling/unit tests.
 
-At minimum, a content source MUST be able to provide:
-
-- **Descriptor reader** for an already-resolved asset locator.
-- **Table reader** and **data region reader** for each resource type.
-
-For truly async and streaming, sources MAY additionally expose *minimal*
-source-local helpers for reading **byte ranges** into owned buffers.
-
-Requirements for these helpers:
-
-- They are **not** a general-purpose I/O framework.
-- They do not introduce a new event loop, scheduler, or reactor.
-- They are invoked by `AssetLoader` on its configured thread pool.
-- They operate on already-known offsets/sizes (e.g. after table lookup).
-
-Conceptually, this enables chunked/partial reads without changing the decode
-interface.
-
-@note This does not make `AnyReader` obsolete: decoding can keep using
-`AnyReader` by wrapping owned bytes in a memory-backed reader (as already done
-in the current buffer decode path).
-
-### Where loose cooked fits (no confusion)
-
-Loose cooked access remains exactly what it is today:
-
-- `LooseCookedIndex` is used at mount time to:
-  - validate presence/size/SHA of descriptor files and table/data files
-  - map `AssetKey -> descriptor relative path`
-  - locate resource table/data files
-
-At load time:
-
-- Resolving an `AssetKey` yields a `LooseCookedAssetLocator` containing the
-  descriptor file path.
-- Resource table/data reads are satisfied by opening the validated files.
-
-In other words: the index remains the “directory” for a loose cooked container;
-`AnyReader` remains the decode interface; async I/O is an implementation detail
-of the source.
+Rationale: explicit and minimal decode contract that works in both runtime and tooling contexts.
 
 ---
 
-## API specification (technical English)
+## Lifecycle
 
-This section defines the **public** API surface as behavioral specs (not as a
-monolithic class declaration).
+### Construction
 
-### Types
+The loader is constructed with `AssetLoaderConfig`, including:
 
-- **Asset identity**: `data::AssetKey`
-  - Uniquely identifies an asset across all mounted sources.
+- Thread pool for offloading blocking I/O and CPU decode.
+- Offline policy (no GPU side effects).
 
-- **Resource identity**: `ResourceKey`
-  - Uniquely identifies a resource within a specific mounted source.
-  - The embedded source id is opaque; it is interpreted only via the loader’s
-    source registry.
+### Activation
 
-- **Resource cooked data**: (new) `ResourceCookedData<T>`
-  - Contains:
-    - a `ResourceKey` identity under which the decoded result will be cached
-      (typically minted by the loader)
-    - a byte span containing the cooked bytes required to decode a `T`
-  - This is explicitly not “where the resource lives”; it is “bytes provided
-    by the caller.”
-
-### Lifecycle and configuration
-
-- The loader is constructed with `AssetLoaderConfig`.
-- `AssetLoaderConfig` MUST include:
-  - A thread pool used for offloading blocking I/O and CPU decode.
-  - A runtime policy specifying whether the loader operates in offline mode.
-  - A GPU-side-effects policy used to enforce “offline means no GPU work”.
-
-- The loader MUST be activated (nursery opened) before async loads.
-- If a caller attempts to load before activation, the loader MUST fail fast
- (preferred) rather than silently falling back to synchronous work.
+Async loads require the loader to be activated (nursery opened). Load attempts before activation fail fast.
 
 ### Mount management
 
-- The loader MUST support mounting cooked containers:
-  - Add a `.pak` file as a mounted source.
-  - Add a loose cooked root directory as a mounted source.
-  - Clear all mounts.
+Mount operations (`AddPakFile`, `AddLooseCookedRoot`, `ClearMounts`) are owning-thread only. Mounting may perform
+blocking validation work (e.g. loose cooked index validation).
 
-- Mount operations SHOULD be owning-thread only.
+Rationale: mount changes mutate global loader state and must be serialized.
 
-### Asset loading
+### Stop/cancellation
 
-- **Awaitable asset load**
-  - Input: `data::AssetKey` and the asset type `T`.
-  - Output: an awaitable producing `std::shared_ptr<T>`.
-  - Behavior:
-    - If cached, returns the cached instance.
-    - If not cached, schedules necessary I/O and decode work asynchronously.
-    - Publishes the loaded asset into the cache before completion.
-    - Registers dependency edges discovered during decode.
-    - Deduplicates concurrent in-flight requests for the same `AssetKey`.
-    - Never blocks the owning thread.
-
-- **Callback-based asset load** (`StartLoadAsset<T>`)
-  - Equivalent to starting the awaitable asset load in the loader nursery.
-  - MUST invoke the callback on the owning thread.
-  - MUST provide cancellation safety: if the loader is stopped, callbacks are
-  either not invoked or invoked with a null result (policy must be defined
-  explicitly; see “Cancellation”).
-
-### Resource loading (mounted)
-
-- **Awaitable resource load by key**
-  - Input: `ResourceKey` and resource type `T`.
-  - Output: an awaitable producing `std::shared_ptr<T>`.
-  - Behavior:
-    - If cached, returns the cached instance.
-    - If not cached, reads table + payload and decodes on the thread pool.
-    - Publishes the decoded CPU-side resource into the cache.
-    - Never blocks the owning thread.
-    - Deduplicates concurrent in-flight requests for the same key.
-
-- **Callback-based resource load by key** (`StartLoadResource<T>`)
-  - Starts the awaitable resource load in the loader nursery.
-  - MUST invoke the callback on the owning thread.
-
-### Resource loading (buffer-provided)
-
-- **Awaitable resource decode from buffer**
-  - Input: `ResourceCookedData<T>`.
-  - Output: an awaitable producing `std::shared_ptr<T>`.
-  - Behavior:
-    - Decodes the cooked payload from provided bytes (thread pool).
-    - Stores the result in the cache under the input’s `ResourceKey`.
-    - The key SHOULD be minted by the loader to avoid collisions.
-
-- **Callback-based resource decode from buffer** (`StartLoadResourceFromBuffer<T>`)
-  - Starts the awaitable buffer decode in the loader nursery.
-  - MUST invoke the callback on the owning thread.
-
-### Cache and release
-
-Query APIs MAY exist for tools/diagnostics, but MUST be non-blocking:
-
-- “Get cached asset/resource if present” (non-loading).
-- “Has cached asset/resource” (non-loading).
-
-- Release APIs MUST remain explicit and owning-thread:
-  - Releasing an asset triggers release of its dependency tree.
-  - Releasing a resource decrements its usage count.
-
-### Cancellation and Stop()
-
-- `Stop()` cancels in-flight work.
-- Awaitables MUST complete promptly after cancellation by completing
-  exceptionally with `OperationCancelledException`.
+`Stop()` cancels in-flight work. Awaitables complete exceptionally (e.g. `OperationCancelledException`). Callback-based
+`StartLoad*` APIs report failure by invoking callbacks with `nullptr`.
 
 ---
 
-## Truly async implementation strategy (high level)
+## Load Pipelines
 
-This section describes the refactor needed to make assets truly async while
-preserving dependency correctness.
+### Asset load (`LoadAssetAsync<T>`)
 
-### Problem: current loaders register dependencies directly
+1. **Resolve** (owning thread): find the source + locator for the `AssetKey`.
+2. **Read** (thread pool): read descriptor/table/payload bytes as needed.
+3. **Decode** (thread pool): run the registered loader function; record dependencies via `DependencyCollector`.
+4. **Publish** (owning thread):
+   - Store the decoded object in the cache.
+   - Bind `ResourceRef` dependencies to `ResourceKey`.
+   - Mutate the dependency graph.
+   - Fulfill awaiters / invoke `StartLoad*` callbacks.
 
-Existing loader functions call back into `AssetLoader` (dependency registration
-and sometimes nested loads). Those operations are owning-thread only, but we
-want decode to happen off-thread.
+### Resource load (`LoadResourceAsync<T>(ResourceKey)`)
 
-### Required change: split decode from publish
+Same structure as asset loads, scoped to a single resource identity.
 
-Introduce an internal pipeline split:
+### Cooked-bytes resource load (`LoadResourceAsync(CookedResourceData<T>)`)
 
-1. **Resolve** (owning thread)
+The caller provides cooked bytes and an explicit cache identity. The loader:
 
-- Determine which mounted source contains the locator.
-- Produce a source-specific internal locator.
+- Decodes on the thread pool.
+- Publishes to the cache under the provided key.
 
-1. **Read** (thread pool)
-
-- Read descriptor bytes and any required table/payload bytes.
-- Outputs immutable byte buffers.
-
-1. **Decode** (thread pool)
-
-- Parse bytes into a typed object **without touching AssetLoader**.
-- Collect dependency edges into a local collection.
-
-1. **Publish** (owning thread)
-
-- Store the object in the cache.
-- Apply the dependency edges via `AddAssetDependency` / `AddResourceDependency`.
-- Fulfill all awaiting callers and invoke StartLoad callbacks.
-
-This implies a new internal contract for loader functions:
-
-- Loader functions MUST be pure decode:
-  - Input: readers/bytes + an output dependency collector.
-  - Output: decoded CPU-side object plus discovered dependencies.
-  - MUST NOT perform nested loads.
-
-Nested loads become the responsibility of the orchestrator coroutine, which can
-schedule resource loads in parallel and then publish dependencies in one place.
+Synthetic keys for this path must use the synthetic source id (`0xFFFF`).
 
 ---
 
-## Dependency collection (second-level design)
+## Dependency Model
 
-This section specifies how dependencies are represented during async decode,
-without mixing identity with access and without requiring loader callbacks from
-worker threads.
+The runtime dependency graph is identity-only:
 
-### Constraints
+- Asset → Asset: `AssetKey` depends on `AssetKey`.
+- Asset → Resource: `AssetKey` depends on `ResourceKey`.
 
-- Dependency registration MUST happen on the owning thread.
-- Worker-thread decode MUST NOT call back into `AssetLoader`.
-- The dependency graph stored by the runtime cache MUST use stable identities
-  (`AssetKey` / `ResourceKey`).
-- The design MUST work for both PAK and loose cooked.
+Resources are treated as leaf nodes.
 
-### What dependencies exist
+Worker-thread decode never mutates this graph directly; it only records identity dependencies into
+`DependencyCollector`, which is applied during publish.
 
-Oxygen Content uses forward-only edges:
-
-- Asset → Asset: dependent `AssetKey` holds another `AssetKey` alive.
-- Asset → Resource: dependent `AssetKey` holds a `ResourceKey` alive.
-
-Resources are leaf nodes (no resource → * edges).
-
-### Two candidate representations
-
-#### Option A: Collect raw identity keys
-
-Decode produces an object plus a list of dependencies expressed only as keys:
-
-- Asset dependencies: `data::AssetKey`
-- Resource dependencies: `ResourceKey`
-
-How decode constructs `ResourceKey` without calling the loader:
-
-- The orchestrator provides the decode step with an opaque **source token**
-  representing “the container being decoded from”.
-- The decode step uses a small, pure “resource key builder” value to construct
-  `ResourceKey` from:
-  - source token
-  - resource type
-  - resource index
-
-`SourceToken` is defined as an internal strong type (opaque handle) backed by
-`oxygen::NamedType`.
-
-- Representation: `oxygen::content::internal::SourceToken`
-  - Underlying type: `uint32_t`
-  - Skills: `Comparable`, `Hashable`, `Printable`
-  - `to_string(SourceToken)` MUST exist for logging via `nostd::to_string`.
-- Minting: The loader mints a fresh token at mount time.
-- Resolution: The orchestrator/publish step uses the loader’s source registry
-  to map `SourceToken -> loader-owned source id`.
-- Opacity: The token MUST NOT encode or reveal storage form.
-
-Pros:
-
-- Simple: dependencies stored are exactly what the cache/deps system already
-  expects.
-- Stable: keys are portable across threads and do not capture access objects.
-- Easy to deduplicate: in-flight maps naturally key on identities.
-
-Cons:
-
-- Requires a well-defined, stable `ResourceKey` encoding contract.
-- Decode must know resource type indices (or call a helper) to build keys.
-- If key encoding changes, decode code and tooling must be updated.
-
-#### Option B: Collect typed locators with late binding
-
-Decode produces an object plus dependencies in a “not-yet-identity” form, e.g.:
-
-- Asset dependencies: `AssetKey` (already identity)
-- Resource dependencies: `ResourceRef` such as:
-  - “resource of type X at index i in the current container”
-  - optionally “resource in container token S”
-
-Then, on the owning thread during Publish:
-
-- Bind each `ResourceRef` into a `ResourceKey` using the resolver and the
-  loader’s registry.
-
-Pros:
-
-- Decode does not need to understand key encoding.
-- Late binding can validate that referenced indices exist before emitting keys.
-- More flexible if future containers change how resources are addressed.
-
-Cons:
-
-- More complex types and more edge cases.
-- Until binding, dependencies are not cache identities, which complicates
-  in-flight dedup and dependency storage.
-- Easy to accidentally leak access concerns into long-lived objects if locator
-  structs capture source pointers/paths.
-
-### Decision: hybrid with identity at the boundary (approved)
-
-The dependency graph stored in `AssetLoader` MUST be identity-only
-(`AssetKey`, `ResourceKey`).
-
-During worker-thread decode, resource dependencies MAY be represented as either:
-
-- already-built `ResourceKey` (preferred when feasible), or
-- `ResourceRef` (container-relative reference) which is bound to `ResourceKey`
-  on the owning thread during Publish.
-
-Rationale:
-
-- Keeps cache/deps stable and simple.
-- Avoids carrying file paths/readers/locators beyond the load operation.
-- Allows decode code to remain agnostic of key encoding when desired.
-
-### `ResourceRef` (concrete shape)
-
-`ResourceRef` is an **internal** type used only as a short-lived dependency
-representation between:
-
-- the orchestrator coroutine (which knows the current source context), and
-- worker-thread decode (which wants to record “container-relative” resource
-  references), and
-- owning-thread Publish (which binds references into `ResourceKey`).
-
-It MUST NOT be part of the runtime-facing/public `AssetLoader` API surface.
-
-If loader implementations live outside the `AssetLoader` translation unit,
-`ResourceRef` MAY be exposed via an `internal::*` header/namespace, but it MUST
-remain semantically internal (not stable ABI, not intended for general engine
-code).
-
-`ResourceRef` MUST be identity-safe:
-
-- MUST NOT contain `IContentSource*`, filesystem paths, readers, or other access
-  objects.
-- MUST be trivially copyable between threads.
-
-`ResourceRef` MUST contain:
-
-- `SourceToken source`
-  - An opaque token provided by the orchestrator representing “the container
-    currently being decoded from”.
-  - It MUST be sufficient to derive the `ResourceKey` source id via the loader
-    registry.
-- `oxygen::TypeId resource_type_id`
-  - The runtime type id of the resource type (`BufferResource`,
-    `TextureResource`, ...).
-- `data::pak::ResourceIndexT resource_index`
-
-Binding rule (owning thread, during Publish):
-
-1. Resolve the `SourceToken` to the loader-owned source id.
-2. Map `resource_type_id` to a resource type index in `ResourceTypeList`.
-3. Construct `ResourceKey` using (source id, resource type index,
-   resource_index).
-
-@note The binding step is the only place that needs to understand the
-`ResourceKey` encoding. Decode code only needs `TypeId` and an index.
-
-### Async-only public API implication
-
-Public APIs MUST be async-only. There MUST NOT be synchronous load APIs.
-
-- Awaitable APIs cover coroutine callers.
-- `StartLoad*` covers non-coroutine callers.
-
-Rationale: blocking the frame is never acceptable; urgency/priority can be
-introduced later without changing the API shape.
-
-### In-flight deduplication
-
-The loader SHOULD maintain an internal map of “in-flight” tasks keyed by
-`AssetKey` and `ResourceKey` so concurrent requests join the same task.
-
-### Loose cooked specifics
-
-Loose cooked already enforces runtime correctness via:
-
-- mandatory `container.index.bin`
-- file existence/size/SHA validation
-- table/data pairing validation
-
-The async design keeps those validations at mount time.
-At load time, loose cooked becomes just another byte supplier.
+Rationale: ensures dependency graph consistency and avoids worker-thread re-entrancy into `AssetLoader`.
 
 ---
 
-## Deferred topics (future)
+## Public API Contract (summary)
 
-- Request urgency/priority semantics.
-  - The API is async-only; priority MAY be introduced later.
-  - Priority is intentionally unspecified in this design document.
+This document does not restate the full header API; it specifies behavioral contracts the API upholds.
+
+- Async-first entrypoints are coroutine-based (`LoadAssetAsync<T>`, `LoadResourceAsync<T>(ResourceKey)`, and
+  cooked-bytes overloads taking `CookedResourceData<T>`).
+- Callback bridges (`StartLoadAsset<T>`, `StartLoadResource<T>`, and typed conveniences like `StartLoadTexture`) are
+  strictly adapters over the coroutine APIs:
+  - MUST be called from the owning thread.
+  - MUST invoke callbacks on the owning thread.
+  - Report failure by invoking callbacks with `nullptr`.
+  - Require the loader to be activated.
+
+Decode-time dependency recording uses `DependencyCollector`:
+
+- In normal runtime loads, loaders record dependencies into the collector.
+- For tooling and parsing-only tests, `parse_only=true` disables dependency recording.
+
+---
+
+## Caching and Concurrency
+
+- Assets and resources are cached by identity (`AssetKey` / `ResourceKey`).
+- In-flight request deduplication ensures concurrent loads of the same identity join a single underlying task.
+- Cache publication and dependency-graph mutation occur during the owning-thread publish step, providing a single point
+  of serialization for state.
+
+---
+
+## References
+
+- `Oxygen/Content/Constants.h` (source-id segregation constants)
+- `Oxygen/Content/LoaderContext.h` (decode contract)
+- `Oxygen/Content/Internal/DependencyCollector.h` and `Oxygen/Content/Internal/ResourceRef.h` (decode/publish dependency
+  handoff)

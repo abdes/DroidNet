@@ -14,6 +14,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Constants.h>
 #include <Oxygen/Content/Internal/ContentSource.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
@@ -39,11 +40,8 @@ namespace internal = oxygen::content::internal;
 
 namespace oxygen::content {
 
-namespace {
-  // Reserved source id for synthetic keys. This id must not collide with
-  // mounted PAK indices (0..N) or loose cooked sources (0x8000..).
-  constexpr uint16_t kSyntheticSourceId = 0xFFFF;
-} // namespace
+using oxygen::content::constants::kLooseCookedSourceIdBase;
+using oxygen::content::constants::kSyntheticSourceId;
 
 // Implement the private helper declared in the header to avoid exposing the
 // internal header in the public API.
@@ -103,7 +101,6 @@ inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
 } // namespace
 
 //=== Sanity Checking Helper =================================================//
-constexpr uint16_t kLooseCookedSourceIdBase = 0x8000;
 thread_local bool g_has_current_source_id = false;
 thread_local uint16_t g_current_source_id = 0;
 class ScopedCurrentSourceId final {
@@ -201,6 +198,7 @@ auto AssetLoader::IsRunning() const -> bool { return nursery_ != nullptr; }
 
 auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 {
+  AssertOwningThread();
   // Normalize the path to ensure consistent handling
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
   const auto pak_index = static_cast<uint16_t>(impl_->pak_paths.size());
@@ -222,6 +220,7 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
 
 auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 {
+  AssertOwningThread();
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
   impl_->sources.push_back(
     std::make_unique<internal::LooseCookedSource>(normalized));
@@ -242,6 +241,7 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
 auto AssetLoader::ClearMounts() -> void
 {
+  AssertOwningThread();
   impl_->sources.clear();
   impl_->source_ids.clear();
   impl_->source_id_to_index.clear();
@@ -417,7 +417,6 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
     auto reader = std::make_unique<MemoryAnyReader>(span);
 
     LoaderContext context {
-      .asset_loader = this,
       .current_asset_key = {},
       .desc_reader = reader.get(),
       .data_readers = std::make_tuple(reader.get(), reader.get()),
@@ -437,6 +436,10 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
     }
 
     if (type_id == data::TextureResource::ClassTypeId()) {
+      if (auto cached
+        = content_cache_.CheckOut<data::TextureResource>(key_hash)) {
+        co_return cached;
+      }
       auto typed = std::static_pointer_cast<data::TextureResource>(decoded);
       if (!typed
         || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
@@ -446,6 +449,10 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(
       }
       content_cache_.Store(key_hash, typed);
     } else if (type_id == data::BufferResource::ClassTypeId()) {
+      if (auto cached
+        = content_cache_.CheckOut<data::BufferResource>(key_hash)) {
+        co_return cached;
+      }
       auto typed = std::static_pointer_cast<data::BufferResource>(decoded);
       if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
         LOG_F(ERROR, "Loaded resource type mismatch (cooked): expected {}",
@@ -483,6 +490,7 @@ void AssetLoader::StartLoadBuffer(
 
 void AssetLoader::StartLoadTexture(ResourceKey key, TextureCallback on_complete)
 {
+  AssertOwningThread();
   if (!nursery_) {
     throw std::runtime_error(
       "AssetLoader must be activated before StartLoadTexture");
@@ -495,8 +503,13 @@ void AssetLoader::StartLoadTexture(ResourceKey key, TextureCallback on_complete)
 
   nursery_->Start(
     [this, key, on_complete = std::move(on_complete)]() mutable -> co::Co<> {
-      auto res = co_await LoadTextureAsync(key);
-      on_complete(std::move(res));
+      try {
+        auto res = co_await LoadTextureAsync(key);
+        on_complete(std::move(res));
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "StartLoadTexture failed: {}", e.what());
+        on_complete(nullptr);
+      }
       co_return;
     });
 }
@@ -779,7 +792,6 @@ auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,
       ScopedCurrentSourceId source_guard(source_id);
 
       LoaderContext context {
-        .asset_loader = this,
         .current_asset_key = key,
         .source_token = source_token,
         .desc_reader = desc_reader.get(),
@@ -1282,7 +1294,6 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
             ScopedCurrentSourceId source_guard(source_id);
 
             LoaderContext context {
-              .asset_loader = this,
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
               .data_readers = std::make_tuple(
@@ -1398,7 +1409,6 @@ auto AssetLoader::LoadResourceAsync(const oxygen::content::ResourceKey key)
             ScopedCurrentSourceId source_guard(source_id);
 
             LoaderContext context {
-              .asset_loader = this,
               .current_asset_key = {},
               .desc_reader = prepared.desc_reader.get(),
               .data_readers = std::make_tuple(

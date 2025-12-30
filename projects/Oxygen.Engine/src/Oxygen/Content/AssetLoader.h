@@ -10,6 +10,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <thread>
 #include <type_traits>
 #include <unordered_map>
@@ -181,6 +182,7 @@ public:
   void StartLoadAsset(const data::AssetKey& key,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
         "AssetLoader must be activated before StartLoadAsset");
@@ -230,7 +232,7 @@ public:
    @return True if asset is cached, false otherwise
 
    @note Does not trigger loading or affect reference count
-   @see Load, GetAsset
+   @see LoadAssetAsync, GetAsset
   */
   template <IsTyped T> auto HasAsset(const data::AssetKey& key) const -> bool
   {
@@ -397,6 +399,7 @@ public:
   void StartLoadResource(
     ResourceKey key, std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
         "AssetLoader must be activated before StartLoadResource");
@@ -432,6 +435,7 @@ public:
   void StartLoadResource(CookedResourceData<T> cooked,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
+    AssertOwningThread();
     if (!nursery_) {
       throw std::runtime_error(
         "AssetLoader must be activated before StartLoadResource (cooked)");
@@ -723,11 +727,10 @@ private:
   std::thread::id owning_thread_id_ {};
   inline void AssertOwningThread() const
   {
-    // #if !defined(NDEBUG)
-    //     DCHECK_F(owning_thread_id_ == std::this_thread::get_id(),
-    //       "AssetLoader used from non-owning thread in single-threaded Phase
-    //       1");
-    // #endif
+    if (owning_thread_id_ != std::this_thread::get_id()) {
+      throw std::runtime_error(
+        "AssetLoader used from non-owning thread (owning-thread invariant)");
+    }
   }
 
   auto DetectCycle(const data::AssetKey& start, const data::AssetKey& target)
