@@ -60,7 +60,9 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFrames)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 1U, 2U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto handle0 = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(handle0));
@@ -87,9 +89,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, HandlesStableAcrossFramesWithReorder)
   const ResourceKey normal_key_b { 7202U };
 
   oxygen::engine::sceneprep::MaterialRef a;
-  a.asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.resolved_asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.source_asset_key = a.resolved_asset->GetAssetKey();
+  a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::engine::sceneprep::MaterialRef b;
-  b.asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.resolved_asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.source_asset_key = b.resolved_asset->GetAssetKey();
+  b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
   // Frame 1: A then B
   Uploader().OnFrameStart(oxygen::renderer::internal::RendererTagFactory::Get(),
@@ -137,7 +143,9 @@ NOLINT_TEST_F(
   const auto texNormalA = TexBinder().GetOrAllocate(normal_key).get();
 
   oxygen::engine::sceneprep::MaterialRef mA;
-  mA.asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mA.resolved_asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mA.source_asset_key = mA.resolved_asset->GetAssetKey();
+  mA.resolved_asset_key = mA.resolved_asset->GetAssetKey();
   const auto handleA = MatBinder().GetOrAllocate(mA);
   ASSERT_TRUE(MatBinder().IsHandleValid(handleA));
 
@@ -154,7 +162,9 @@ NOLINT_TEST_F(
     oxygen::frame::Slot { 2 });
 
   oxygen::engine::sceneprep::MaterialRef mB;
-  mB.asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mB.resolved_asset = MakeMaterial(base_color_key, normal_key, 111U, 222U);
+  mB.source_asset_key = mB.resolved_asset->GetAssetKey();
+  mB.resolved_asset_key = mB.resolved_asset->GetAssetKey();
   const auto handleB = MatBinder().GetOrAllocate(mB);
   ASSERT_TRUE(MatBinder().IsHandleValid(handleB));
 
@@ -187,7 +197,9 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, EnsureFrameResourcesIdempotent)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeMaterial(base_color_key, normal_key, 5U, 6U);
+  ref.resolved_asset = MakeMaterial(base_color_key, normal_key, 5U, 6U);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
 
@@ -220,7 +232,9 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateMaterialInPlace)
 
   auto a = MakeMaterial(base_color_key, normal_key, 1U, 2U);
   oxygen::engine::sceneprep::MaterialRef ra;
-  ra.asset = a;
+  ra.resolved_asset = a;
+  ra.source_asset_key = ra.resolved_asset->GetAssetKey();
+  ra.resolved_asset_key = ra.resolved_asset->GetAssetKey();
 
   const auto h = MatBinder().GetOrAllocate(ra);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
@@ -258,9 +272,13 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
     oxygen::frame::Slot { 1 });
 
   oxygen::engine::sceneprep::MaterialRef a;
-  a.asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.resolved_asset = MakeMaterial(base_color_key_a, normal_key_a, 1U, 2U);
+  a.source_asset_key = a.resolved_asset->GetAssetKey();
+  a.resolved_asset_key = a.resolved_asset->GetAssetKey();
   oxygen::engine::sceneprep::MaterialRef b;
-  b.asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.resolved_asset = MakeMaterial(base_color_key_b, normal_key_b, 3U, 4U);
+  b.source_asset_key = b.resolved_asset->GetAssetKey();
+  b.resolved_asset_key = b.resolved_asset->GetAssetKey();
 
   const auto ha = MatBinder().GetOrAllocate(a);
   const auto hb = MatBinder().GetOrAllocate(b);
@@ -268,7 +286,7 @@ NOLINT_TEST_F(MaterialBinderLifecycleTest, UpdateDoesNotChangeCanonicalHandle)
   ASSERT_TRUE(MatBinder().IsHandleValid(hb));
 
   // Update hb to match the content of A.
-  MatBinder().Update(hb, a.asset);
+  MatBinder().Update(hb, a.resolved_asset);
 
   // Canonical mapping for A must remain ha.
   const auto h_after = MatBinder().GetOrAllocate(a);

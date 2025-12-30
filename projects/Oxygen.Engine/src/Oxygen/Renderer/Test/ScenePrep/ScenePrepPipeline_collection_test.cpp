@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -17,6 +18,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Renderer/ScenePrep/CollectionConfig.h>
 #include <Oxygen/Renderer/ScenePrep/FinalizationConfig.h>
+#include <Oxygen/Renderer/ScenePrep/MaterialRef.h>
 #include <Oxygen/Renderer/ScenePrep/ScenePrepPipeline.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -130,14 +132,23 @@ NOLINT_TEST_F(ScenePrepPipelineTest, Collect_CustomStages_ProducesPerNode)
   auto prod = [](const sceneprep::ScenePrepContext& /*ctx*/,
                 sceneprep::ScenePrepState& st, sceneprep::RenderItemProto& it) {
     for (const auto sm : it.VisibleSubmeshes()) {
+      const auto default_material = MaterialAsset::CreateDefault();
+      const auto default_material_key = default_material
+        ? default_material->GetAssetKey()
+        : oxygen::data::AssetKey {};
+
       st.CollectItem(sceneprep::RenderItemData {
-        .submesh_index = sm,
+        .submesh_index = static_cast<std::uint32_t>(sm),
         .geometry = sceneprep::GeometryRef {
           .asset_key = it.Geometry()->GetAssetKey(),
-          .lod_index = it.ResolvedMeshIndex(),
+          .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
           .mesh = it.ResolvedMesh(),
         },
-        .material = MaterialAsset::CreateDefault(),
+        .material = sceneprep::MaterialRef {
+          .source_asset_key = default_material_key,
+          .resolved_asset_key = default_material_key,
+          .resolved_asset = default_material,
+        },
         .world_bounding_sphere = it.Renderable().GetWorldBoundingSphere(),
         .cast_shadows = it.CastsShadows(),
         .receive_shadows = it.ReceivesShadows(),

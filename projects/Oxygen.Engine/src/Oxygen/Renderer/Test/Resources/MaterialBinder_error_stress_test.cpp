@@ -55,7 +55,9 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, DescriptorExhaustionStress)
       std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
-    ref.asset = desc;
+    ref.resolved_asset = desc;
+    ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+    ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     MatBinder().GetOrAllocate(ref);
 
     // allocate texture SRVs via texture binder
@@ -85,7 +87,9 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, EnsureFrameResourcesUploads)
     std::vector<oxygen::data::ShaderReference> {},
     std::vector { base, normal });
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = mat;
+  ref.resolved_asset = mat;
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   const auto h = MatBinder().GetOrAllocate(ref);
   ASSERT_TRUE(MatBinder().IsHandleValid(h));
@@ -116,7 +120,9 @@ NOLINT_TEST_F(MaterialBinderErrorStressTest, StressAllocation)
       std::vector { base, normal });
 
     oxygen::engine::sceneprep::MaterialRef ref;
-    ref.asset = m;
+    ref.resolved_asset = m;
+    ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+    ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     MatBinder().GetOrAllocate(ref);
     [[maybe_unused]] const auto tmpBase = TexBinder().GetOrAllocate(base);
     [[maybe_unused]] const auto tmpNormal = TexBinder().GetOrAllocate(normal);

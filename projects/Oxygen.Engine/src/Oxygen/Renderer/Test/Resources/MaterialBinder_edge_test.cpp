@@ -74,7 +74,9 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   constexpr std::uint32_t kInitialCount = 8U;
   for (std::uint32_t i = 0U; i < kInitialCount; ++i) {
     oxygen::engine::sceneprep::MaterialRef ref;
-    ref.asset = MakeSolidMaterial(0.1F + static_cast<float>(i) * 0.1F);
+    ref.resolved_asset = MakeSolidMaterial(0.1F + static_cast<float>(i) * 0.1F);
+    ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+    ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     const auto h = MatBinder().GetOrAllocate(ref);
     ASSERT_TRUE(MatBinder().IsHandleValid(h));
   }
@@ -108,8 +110,10 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   constexpr std::uint32_t kAdditionalCount = 200U;
   for (std::uint32_t i = 0U; i < kAdditionalCount; ++i) {
     oxygen::engine::sceneprep::MaterialRef ref;
-    ref.asset
+    ref.resolved_asset
       = MakeSolidMaterial(2.0F + static_cast<float>(i) * (1.0F / 1024.0F));
+    ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+    ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
     const auto h = MatBinder().GetOrAllocate(ref);
     ASSERT_TRUE(MatBinder().IsHandleValid(h));
   }
@@ -144,7 +148,9 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, NoTexturesSkipsTextureBinder)
   const auto calls_before = TexBinderGetOrAllocateTotalCalls();
 
   oxygen::engine::sceneprep::MaterialRef ref;
-  ref.asset = MakeSolidMaterial(0.25F);
+  ref.resolved_asset = MakeSolidMaterial(0.25F);
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
 
   // Act
   const auto h = MatBinder().GetOrAllocate(ref);

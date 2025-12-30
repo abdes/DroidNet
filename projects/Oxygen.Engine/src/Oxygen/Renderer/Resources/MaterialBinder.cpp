@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -96,7 +97,7 @@ auto MakeMaterialKey(
   std::size_t seed = 0U;
   constexpr float kScalarScale = 1024.0F;
 
-  const auto base_color = material.asset->GetBaseColor();
+  const auto base_color = material.resolved_asset->GetBaseColor();
   for (int i = 0; i < 4; ++i) {
     constexpr float kColorScale = 1024.0F;
     const auto quantized
@@ -106,27 +107,28 @@ auto MakeMaterialKey(
   }
 
   const auto metalness_q = static_cast<std::uint32_t>(
-    std::round(material.asset->GetMetalness() * kScalarScale));
+    std::round(material.resolved_asset->GetMetalness() * kScalarScale));
   const auto roughness_q = static_cast<std::uint32_t>(
-    std::round(material.asset->GetRoughness() * kScalarScale));
+    std::round(material.resolved_asset->GetRoughness() * kScalarScale));
   const auto normal_scale_q = static_cast<std::uint32_t>(
-    std::round(material.asset->GetNormalScale() * kScalarScale));
+    std::round(material.resolved_asset->GetNormalScale() * kScalarScale));
   const auto ao_q = static_cast<std::uint32_t>(
-    std::round(material.asset->GetAmbientOcclusion() * kScalarScale));
+    std::round(material.resolved_asset->GetAmbientOcclusion() * kScalarScale));
 
   oxygen::HashCombine(seed, metalness_q);
   oxygen::HashCombine(seed, roughness_q);
   oxygen::HashCombine(seed, normal_scale_q);
   oxygen::HashCombine(seed, ao_q);
 
-  oxygen::HashCombine(seed, material.GetBaseColorTextureKey());
-  oxygen::HashCombine(seed, material.GetNormalTextureKey());
-  oxygen::HashCombine(seed, material.GetMetallicTextureKey());
-  oxygen::HashCombine(seed, material.GetRoughnessTextureKey());
-  oxygen::HashCombine(seed, material.GetAmbientOcclusionTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetBaseColorTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetNormalTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetMetallicTextureKey());
+  oxygen::HashCombine(seed, material.resolved_asset->GetRoughnessTextureKey());
+  oxygen::HashCombine(
+    seed, material.resolved_asset->GetAmbientOcclusionTextureKey());
 
-  oxygen::HashCombine(seed, material.GetMaterialDomain());
-  oxygen::HashCombine(seed, material.GetFlags());
+  oxygen::HashCombine(seed, material.resolved_asset->GetMaterialDomain());
+  oxygen::HashCombine(seed, material.resolved_asset->GetFlags());
 
   return static_cast<std::uint64_t>(seed);
 }
@@ -140,16 +142,16 @@ auto SerializeMaterialConstants(
   oxygen::engine::MaterialConstants constants;
 
   // Copy base color
-  const auto base_color = material.asset->GetBaseColor();
+  const auto base_color = material.resolved_asset->GetBaseColor();
   constants.base_color
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = { base_color[0], base_color[1], base_color[2], base_color[3] };
 
   // Copy scalar properties
-  constants.metalness = material.asset->GetMetalness();
-  constants.roughness = material.asset->GetRoughness();
-  constants.normal_scale = material.asset->GetNormalScale();
-  constants.ambient_occlusion = material.asset->GetAmbientOcclusion();
+  constants.metalness = material.resolved_asset->GetMetalness();
+  constants.roughness = material.resolved_asset->GetRoughness();
+  constants.normal_scale = material.resolved_asset->GetNormalScale();
+  constants.ambient_occlusion = material.resolved_asset->GetAmbientOcclusion();
 
   // Resolve texture resource keys to bindless SRV indices.
   //
@@ -163,7 +165,8 @@ auto SerializeMaterialConstants(
   // - "No texture (skip sampling)" is encoded via the material flag
   //   `kMaterialFlag_NoTextureSampling`.
   const auto no_texture_sampling
-    = (material.GetFlags() & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
+    = (material.resolved_asset->GetFlags()
+        & oxygen::data::pak::kMaterialFlag_NoTextureSampling)
     != 0U;
 
   const auto ResolveTextureIndex
@@ -192,20 +195,24 @@ auto SerializeMaterialConstants(
       .get();
   };
 
-  constants.base_color_texture_index = ResolveTextureIndex(
-    material.GetBaseColorTextureKey(), material.asset->GetBaseColorTexture());
-  constants.normal_texture_index = ResolveTextureIndex(
-    material.GetNormalTextureKey(), material.asset->GetNormalTexture());
-  constants.metallic_texture_index = ResolveTextureIndex(
-    material.GetMetallicTextureKey(), material.asset->GetMetallicTexture());
-  constants.roughness_texture_index = ResolveTextureIndex(
-    material.GetRoughnessTextureKey(), material.asset->GetRoughnessTexture());
-  constants.ambient_occlusion_texture_index
-    = ResolveTextureIndex(material.GetAmbientOcclusionTextureKey(),
-      material.asset->GetAmbientOcclusionTexture());
+  constants.base_color_texture_index
+    = ResolveTextureIndex(material.resolved_asset->GetBaseColorTextureKey(),
+      material.resolved_asset->GetBaseColorTexture());
+  constants.normal_texture_index
+    = ResolveTextureIndex(material.resolved_asset->GetNormalTextureKey(),
+      material.resolved_asset->GetNormalTexture());
+  constants.metallic_texture_index
+    = ResolveTextureIndex(material.resolved_asset->GetMetallicTextureKey(),
+      material.resolved_asset->GetMetallicTexture());
+  constants.roughness_texture_index
+    = ResolveTextureIndex(material.resolved_asset->GetRoughnessTextureKey(),
+      material.resolved_asset->GetRoughnessTexture());
+  constants.ambient_occlusion_texture_index = ResolveTextureIndex(
+    material.resolved_asset->GetAmbientOcclusionTextureKey(),
+    material.resolved_asset->GetAmbientOcclusionTexture());
 
   // Copy flags
-  constants.flags = material.GetFlags();
+  constants.flags = material.resolved_asset->GetFlags();
 
   // Default UV transform (identity). Runtime/editor can override via
   // MaterialBinder::OverrideUvTransform.
@@ -542,13 +549,21 @@ auto MaterialBinder::Impl::GetOrAllocate(
 {
   ++total_calls_;
 
-  if (!material.asset) {
+  if (!material.resolved_asset) {
+    LOG_F(WARNING,
+      "MaterialBinder::GetOrAllocate: null resolved material (source_key={}, "
+      "resolved_key={})",
+      oxygen::data::to_string(material.source_asset_key),
+      oxygen::data::to_string(material.resolved_asset_key));
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
   std::string error_msg;
-  if (!ValidateMaterial(*material.asset, error_msg)) {
-    LOG_F(ERROR, "Material validation failed: {}", error_msg);
+  if (!ValidateMaterial(*material.resolved_asset, error_msg)) {
+    LOG_F(ERROR,
+      "Material validation failed: {} (source_key={}, resolved_key={})",
+      error_msg, oxygen::data::to_string(material.source_asset_key),
+      oxygen::data::to_string(material.resolved_asset_key));
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
@@ -557,7 +572,11 @@ auto MaterialBinder::Impl::GetOrAllocate(
     it != material_key_to_handle_.end()) {
     const auto idx = it->second.index;
     if (idx >= materials_.size()) {
-      LOG_F(ERROR, "MaterialBinder: cached index out of range for key {}", key);
+      LOG_F(ERROR,
+        "MaterialBinder: cached index out of range for key {} "
+        "(source_key={}, resolved_key={})",
+        key, oxygen::data::to_string(material.source_asset_key),
+        oxygen::data::to_string(material.resolved_asset_key));
       return engine::sceneprep::kInvalidMaterialHandle;
     }
 
@@ -565,12 +584,12 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     const auto* old_ptr = materials_[idx].get();
-    if ((old_ptr != nullptr) && old_ptr != material.asset.get()) {
+    if ((old_ptr != nullptr) && old_ptr != material.resolved_asset.get()) {
       material_ptr_to_index_.erase(old_ptr);
     }
     // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-    materials_[idx] = material.asset;
-    material_ptr_to_index_[material.asset.get()] = idx;
+    materials_[idx] = material.resolved_asset;
+    material_ptr_to_index_[material.resolved_asset.get()] = idx;
 
     return it->second.handle;
   }
@@ -590,10 +609,10 @@ auto MaterialBinder::Impl::GetOrAllocate(
     return engine::sceneprep::kInvalidMaterialHandle;
   }
 
-  materials_.push_back(material.asset);
+  materials_.push_back(material.resolved_asset);
   material_constants_.push_back(constants);
   material_refs_.push_back(*ref);
-  material_ptr_to_index_[material.asset.get()] = index;
+  material_ptr_to_index_[material.resolved_asset.get()] = index;
   ++total_allocations_;
   ++atlas_allocations_;
 
@@ -622,13 +641,18 @@ auto MaterialBinder::Impl::Update(
 
   std::string error_msg;
   if (!ValidateMaterial(*material, error_msg)) {
-    LOG_F(ERROR, "Material update validation failed: {}", error_msg);
+    LOG_F(ERROR, "Material update validation failed: {} (asset_key={})",
+      error_msg, oxygen::data::to_string(material->GetAssetKey()));
     return;
   }
 
   const auto index = *maybe_index;
   // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-  engine::sceneprep::MaterialRef mat_ref { material };
+  engine::sceneprep::MaterialRef mat_ref {
+    .source_asset_key = material->GetAssetKey(),
+    .resolved_asset_key = material->GetAssetKey(),
+    .resolved_asset = material,
+  };
   const auto new_key = MakeMaterialKey(mat_ref);
   const auto new_constants
     = SerializeMaterialConstants(mat_ref, *texture_binder_);
@@ -666,6 +690,8 @@ auto MaterialBinder::Impl::OverrideUvTransform(
 
   const auto it = material_ptr_to_index_.find(&material);
   if (it == material_ptr_to_index_.end()) {
+    DLOG_F(4, "OverrideUvTransform: material not found (asset_key={})",
+      oxygen::data::to_string(material.GetAssetKey()));
     return false;
   }
 
