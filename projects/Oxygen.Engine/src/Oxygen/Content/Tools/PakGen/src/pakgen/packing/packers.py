@@ -6,7 +6,7 @@ All functions are side-effect free and validate sizes.
 from __future__ import annotations
 
 import struct
-from typing import Any, Dict, Sequence, List, Callable
+from typing import Any, Dict, Sequence, List, Callable, Tuple
 
 from .constants import (
     MAGIC,
@@ -14,6 +14,7 @@ from .constants import (
     ASSET_KEY_SIZE,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
+    SCENE_DESC_SIZE,
     MESH_DESC_SIZE,
     SUBMESH_DESC_SIZE,
     MESH_VIEW_DESC_SIZE,
@@ -32,10 +33,350 @@ __all__ = [
     "pack_texture_resource_descriptor",
     "pack_audio_resource_descriptor",
     "pack_geometry_asset_descriptor",
+    "pack_scene_asset_descriptor_and_payload",
     "pack_mesh_descriptor",
     "pack_submesh_descriptor",
     "pack_mesh_view_descriptor",
 ]
+
+
+_COMPONENT_TYPE_RENDERABLE = 0x4853454D  # 'MESH'
+_COMPONENT_TYPE_PERSPECTIVE_CAMERA = 0x4D414350  # 'PCAM'
+_COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA = 0x4D41434F  # 'OCAM'
+
+
+def _asset_key_bytes(value: Any) -> bytes:
+    if isinstance(value, (bytes, bytearray)) and len(value) == ASSET_KEY_SIZE:
+        return bytes(value)
+    if isinstance(value, str):
+        cleaned = value.replace("-", "").strip()
+        if len(cleaned) == 32:
+            try:
+                return bytes.fromhex(cleaned)
+            except ValueError:
+                return b"\x00" * ASSET_KEY_SIZE
+    return b"\x00" * ASSET_KEY_SIZE
+
+
+def _pack_scene_string_table(nodes: List[Dict[str, Any]]):
+    offsets: Dict[str, int] = {"": 0}
+    buf = bytearray(b"\x00")
+    for node in nodes:
+        name = node.get("name", "")
+        if not isinstance(name, str):
+            name = ""
+        if name not in offsets:
+            offsets[name] = len(buf)
+            buf.extend(name.encode("utf-8"))
+            buf.append(0)
+    return bytes(buf), offsets
+
+
+def _pack_node_record(
+    node: Dict[str, Any], *, index: int, name_offset: int, node_count: int
+) -> bytes:
+    node_id = _asset_key_bytes(node.get("node_id"))
+    parent = node.get("parent")
+    if parent is None:
+        parent_index = index
+    else:
+        if not isinstance(parent, int) or parent < 0 or parent >= node_count:
+            raise PakError("E_REF", f"Invalid node parent index: {parent}")
+        parent_index = parent
+    node_flags = int(node.get("flags", 0) or 0)
+    t = node.get("translation", [0.0, 0.0, 0.0])
+    r = node.get("rotation", [0.0, 0.0, 0.0, 1.0])
+    s = node.get("scale", [1.0, 1.0, 1.0])
+
+    def _vec(vals: Any, n: int, default: List[float]) -> List[float]:
+        if not isinstance(vals, list) or len(vals) != n:
+            return default
+        out: List[float] = []
+        for v in vals:
+            out.append(float(v))
+        return out
+
+    t3 = _vec(t, 3, [0.0, 0.0, 0.0])
+    r4 = _vec(r, 4, [0.0, 0.0, 0.0, 1.0])
+    s3 = _vec(s, 3, [1.0, 1.0, 1.0])
+
+    # NodeRecord (PakFormat.h): AssetKey(16) + name_offset(u32) + parent(u32)
+    # + flags(u32) + translation(3f) + rotation(4f) + scale(3f) = 68 bytes.
+    out = (
+        node_id
+        + struct.pack("<I", int(name_offset))
+        + struct.pack("<I", int(parent_index))
+        + struct.pack("<I", int(node_flags))
+        + struct.pack("<3f", *t3)
+        + struct.pack("<4f", *r4)
+        + struct.pack("<3f", *s3)
+    )
+    if len(out) != 68:
+        raise PakError("E_SIZE", f"NodeRecord size mismatch: {len(out)}")
+    return out
+
+
+def _pack_renderable_record(
+    renderable: Dict[str, Any],
+    geometry_name_to_key: Dict[str, bytes],
+    *,
+    node_count: int,
+) -> bytes:
+    node_index = renderable.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError(
+            "E_REF", f"Renderable node_index out of range: {node_index}"
+        )
+
+    geom_key = renderable.get("geometry_asset_key")
+    geometry_key = _asset_key_bytes(geom_key)
+    if geometry_key == b"\x00" * ASSET_KEY_SIZE and geom_key is None:
+        geom_name = renderable.get("geometry")
+        if isinstance(geom_name, str) and geom_name in geometry_name_to_key:
+            geometry_key = geometry_name_to_key[geom_name]
+    if geometry_key == b"\x00" * ASSET_KEY_SIZE:
+        raise PakError("E_REF", "Renderable missing geometry reference")
+
+    visible = renderable.get("visible", 1)
+    visible_u32 = 1 if bool(visible) else 0
+    reserved = b"\x00" * 12
+    out = (
+        struct.pack("<I", int(node_index))
+        + geometry_key
+        + struct.pack("<I", int(visible_u32))
+        + reserved
+    )
+    if len(out) != 36:
+        raise PakError("E_SIZE", f"RenderableRecord size mismatch: {len(out)}")
+    return out
+
+
+def _pack_perspective_camera_record(
+    camera: Dict[str, Any],
+    *,
+    node_count: int,
+) -> bytes:
+    node_index = camera.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError("E_REF", f"Camera node_index out of range: {node_index}")
+
+    fov_y = float(camera.get("fov_y", 0.785398))
+    aspect_ratio = float(camera.get("aspect_ratio", 1.777778))
+    near_plane = float(camera.get("near_plane", 0.1))
+    far_plane = float(camera.get("far_plane", 1000.0))
+    reserved = b"\x00" * 12
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + struct.pack("<4f", fov_y, aspect_ratio, near_plane, far_plane)
+        + reserved
+    )
+    if len(out) != 32:
+        raise PakError(
+            "E_SIZE", f"PerspectiveCameraRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def _pack_orthographic_camera_record(
+    camera: Dict[str, Any],
+    *,
+    node_count: int,
+) -> bytes:
+    node_index = camera.get("node_index", 0)
+    if (
+        not isinstance(node_index, int)
+        or node_index < 0
+        or node_index >= node_count
+    ):
+        raise PakError("E_REF", f"Camera node_index out of range: {node_index}")
+
+    left = float(camera.get("left", -10.0))
+    right = float(camera.get("right", 10.0))
+    bottom = float(camera.get("bottom", -10.0))
+    top = float(camera.get("top", 10.0))
+    near_plane = float(camera.get("near_plane", -100.0))
+    far_plane = float(camera.get("far_plane", 100.0))
+    reserved = b"\x00" * 12
+
+    out = (
+        struct.pack("<I", int(node_index))
+        + struct.pack("<6f", left, right, bottom, top, near_plane, far_plane)
+        + reserved
+    )
+    if len(out) != 40:
+        raise PakError(
+            "E_SIZE", f"OrthographicCameraRecord size mismatch: {len(out)}"
+        )
+    return out
+
+
+def pack_scene_asset_descriptor_and_payload(
+    scene: Dict[str, Any],
+    *,
+    header_builder,
+    geometry_name_to_key: Dict[str, bytes],
+) -> Tuple[bytes, bytes]:
+    """Pack SceneAssetDesc (256 bytes) plus trailing payload.
+
+    Payload layout (offsets are relative to descriptor start):
+    - NodeRecord[]
+    - scene string table (starts with NUL)
+    - SceneComponentTableDesc[] directory (optional)
+    - component table record data (optional)
+
+    Currently supported component tables:
+    - RenderableRecord table (component_type 'MESH')
+    - PerspectiveCameraRecord table (component_type 'PCAM')
+    - OrthographicCameraRecord table (component_type 'OCAM')
+    """
+    nodes = scene.get("nodes", []) or []
+    if not isinstance(nodes, list):
+        raise PakError("E_TYPE", "scene.nodes must be a list")
+    nodes = [n for n in nodes if isinstance(n, dict)]
+    if len(nodes) == 0:
+        raise PakError("E_COUNT", "scene must have at least one node")
+
+    string_table, name_to_offset = _pack_scene_string_table(nodes)
+    node_count = len(nodes)
+    node_records = b"".join(
+        _pack_node_record(
+            n,
+            index=i,
+            name_offset=name_to_offset.get(n.get("name", ""), 0),
+            node_count=node_count,
+        )
+        for i, n in enumerate(nodes)
+    )
+
+    renderables = scene.get("renderables", []) or []
+    if not isinstance(renderables, list):
+        raise PakError("E_TYPE", "scene.renderables must be a list")
+    renderables = [r for r in renderables if isinstance(r, dict)]
+    renderables.sort(key=lambda r: int(r.get("node_index", 0) or 0))
+    renderable_records = b"".join(
+        _pack_renderable_record(r, geometry_name_to_key, node_count=node_count)
+        for r in renderables
+    )
+
+    cameras = scene.get("perspective_cameras", []) or []
+    if not isinstance(cameras, list):
+        raise PakError("E_TYPE", "scene.perspective_cameras must be a list")
+    cameras = [c for c in cameras if isinstance(c, dict)]
+    cameras.sort(key=lambda c: int(c.get("node_index", 0) or 0))
+    camera_records = b"".join(
+        _pack_perspective_camera_record(c, node_count=node_count)
+        for c in cameras
+    )
+
+    ortho_cameras = scene.get("orthographic_cameras", []) or []
+    if not isinstance(ortho_cameras, list):
+        raise PakError("E_TYPE", "scene.orthographic_cameras must be a list")
+    ortho_cameras = [c for c in ortho_cameras if isinstance(c, dict)]
+    ortho_cameras.sort(key=lambda c: int(c.get("node_index", 0) or 0))
+    ortho_camera_records = b"".join(
+        _pack_orthographic_camera_record(c, node_count=node_count)
+        for c in ortho_cameras
+    )
+
+    # Offsets (relative to descriptor start)
+    nodes_offset = SCENE_DESC_SIZE
+    nodes_bytes = len(node_records)
+    strings_offset = nodes_offset + nodes_bytes
+    strings_size = len(string_table)
+
+    component_tables: List[Tuple[int, int, int, bytes]] = []
+    if renderable_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_RENDERABLE,
+                len(renderables),
+                36,
+                renderable_records,
+            )
+        )
+    if camera_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_PERSPECTIVE_CAMERA,
+                len(cameras),
+                32,
+                camera_records,
+            )
+        )
+    if ortho_camera_records:
+        component_tables.append(
+            (
+                _COMPONENT_TYPE_ORTHOGRAPHIC_CAMERA,
+                len(ortho_cameras),
+                40,
+                ortho_camera_records,
+            )
+        )
+
+    component_tables.sort(key=lambda t: t[0])
+
+    component_entries: List[bytes] = []
+    component_data: List[bytes] = []
+    if component_tables:
+        component_dir_offset = strings_offset + strings_size
+        component_dir_size = 20 * len(component_tables)
+        table_data_cursor = component_dir_offset + component_dir_size
+        for component_type, count, entry_size, blob in component_tables:
+            component_entries.append(
+                struct.pack("<I", int(component_type))
+                + struct.pack(
+                    "<QII",
+                    int(table_data_cursor),
+                    int(count),
+                    int(entry_size),
+                )
+            )
+            component_data.append(blob)
+            table_data_cursor += len(blob)
+        component_table_directory_offset = component_dir_offset
+        component_table_count = len(component_tables)
+    else:
+        component_table_directory_offset = 0
+        component_table_count = 0
+
+    # SceneAssetDesc
+    scene.setdefault("type", "scene")
+    header = header_builder(scene)
+    nodes_table = struct.pack("<QII", nodes_offset, node_count, 68)
+    scene_strings = struct.pack("<II", strings_offset, strings_size)
+    dir_off = struct.pack("<Q", int(component_table_directory_offset))
+    dir_count = struct.pack("<I", int(component_table_count))
+
+    desc = (
+        header
+        + nodes_table
+        + scene_strings
+        + dir_off
+        + dir_count
+        + b"\x00" * 125
+    )
+    if len(desc) != SCENE_DESC_SIZE:
+        raise PakError(
+            "E_SIZE",
+            f"Scene descriptor size mismatch: expected {SCENE_DESC_SIZE}, got {len(desc)}",
+        )
+
+    payload = (
+        node_records
+        + string_table
+        + b"".join(component_entries)
+        + b"".join(component_data)
+    )
+    return desc, payload
 
 
 def pack_header(version: int, content_version: int) -> bytes:

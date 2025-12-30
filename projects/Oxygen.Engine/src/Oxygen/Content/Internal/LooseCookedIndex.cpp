@@ -435,6 +435,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
         std::begin(record.sha256), info.sha256.size(), info.sha256.begin());
 
       out.kind_to_file_.insert_or_assign(record.kind, info);
+      out.file_kinds_.push_back(record.kind);
     }
   }
 
@@ -516,6 +517,22 @@ auto LooseCookedIndex::FindVirtualPath(const data::AssetKey& key) const noexcept
   } catch (...) {
     return std::nullopt;
   }
+}
+
+auto LooseCookedIndex::FindAssetType(const data::AssetKey& key) const noexcept
+  -> std::optional<uint8_t>
+{
+  const auto it = key_to_asset_info_.find(key);
+  if (it == key_to_asset_info_.end()) {
+    return std::nullopt;
+  }
+  return it->second.asset_type;
+}
+
+auto LooseCookedIndex::GetAllFileKinds() const noexcept
+  -> std::span<const data::loose_cooked::v1::FileKind>
+{
+  return file_kinds_;
 }
 
 auto LooseCookedIndex::FindAssetKeyByVirtualPath(

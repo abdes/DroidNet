@@ -23,6 +23,7 @@ from .constants import (
     FOOTER_MAGIC,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
+    SCENE_DESC_SIZE,
     DIRECTORY_ENTRY_SIZE,
     ASSET_KEY_SIZE,
     FOOTER_SIZE,
@@ -214,7 +215,11 @@ def validate_pak(info: Dict[str, Any]) -> List[str]:
     if dir_meta["size"] // DIRECTORY_ENTRY_SIZE != dir_meta["asset_count"]:
         issues.append("Directory size/count mismatch")
     for e in info.get("directory_entries", []):
-        if e["desc_size"] in (MATERIAL_DESC_SIZE, GEOMETRY_DESC_SIZE):
+        if e["desc_size"] in (
+            MATERIAL_DESC_SIZE,
+            GEOMETRY_DESC_SIZE,
+            SCENE_DESC_SIZE,
+        ):
             pass
         elif e["desc_size"] < 64:
             issues.append(f"Descriptor size too small for asset {e['key']}")

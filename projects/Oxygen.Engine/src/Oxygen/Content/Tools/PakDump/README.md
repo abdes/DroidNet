@@ -37,6 +37,12 @@ engine (fmt, loguru, etc.)._
 
 ## Usage
 
+Run `--help` for full CLI help:
+
+```bash
+Oxygen.Content.PakDump --help
+```
+
 ```bash
 Oxygen.Content.PakDump <pakfile> [options]
 ```
@@ -44,7 +50,7 @@ Oxygen.Content.PakDump <pakfile> [options]
 ### Options
 
 | Option | Effect |
-|--------|--------|
+| ------ | ------ |
 | `--no-header` | Suppress PAK header section. |
 | `--no-footer` | Suppress PAK footer section. |
 | `--no-directory` | Suppress asset directory listing. |
@@ -125,7 +131,7 @@ Code registers specialized dumpers for known asset/resource types. To extend:
 ## Exit Codes
 
 | Code | Meaning |
-|------|---------|
+| ---- | ------- |
 | `0` | Success. |
 | `1` | Usage error (missing file) or CLI misuse. |
 | `2` | Unhandled runtime error while opening or parsing the pak. |

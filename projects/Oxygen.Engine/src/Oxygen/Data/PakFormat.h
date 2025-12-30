@@ -12,6 +12,7 @@
 #include <limits>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MeshType.h>
 
 //! Oxygen PAK file binary format specification
@@ -713,6 +714,213 @@ struct MeshViewDesc {
 static_assert(sizeof(MeshViewDesc) == 16);
 
 //=== Scene Asset ===---------------------------------------------------------//
+
+//! Scene data table descriptor (16 bytes).
+/*!
+ Describes a packed array of records inside a scene descriptor.
+
+ Offsets are bytes relative to the start of the scene descriptor payload.
+*/
+#pragma pack(push, 1)
+struct SceneDataTable {
+  OffsetT offset = 0;
+  uint32_t count = 0;
+  uint32_t entry_size = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneDataTable) == 16);
+
+//! Scene node table descriptor (alias).
+using SceneNodeTable = SceneDataTable;
+
+//! Index type for scene node tables.
+using SceneNodeIndexT = uint32_t;
+
+//! Scene component table descriptor (alias).
+using SceneComponentTable = SceneDataTable;
+
+//! Index type for scene component tables.
+using SceneComponentIndexT = uint32_t;
+
+//! Scene string table descriptor (8 bytes).
+/*!
+ Describes the packed scene string table blob.
+ Offsets are relative to the start of the scene descriptor payload.
+*/
+#pragma pack(push, 1)
+struct SceneStringTable {
+  StringTableOffsetT offset = 0;
+  StringTableSizeT size = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneStringTable) == 8);
+
+//! Scene asset descriptor (256 bytes)
+/*!
+ Describes a scene (level) asset. As with all asset descriptors in this file,
+ `AssetHeader` is the first field.
+
+ The descriptor is followed by:
+
+ - `NodeRecord nodes[nodes.count];` at `nodes.offset`
+ - `RenderableRecord renderables[renderables.count];` at `renderables.offset`
+ - a packed, NUL-terminated UTF-8 scene string table blob described by
+   `scene_strings`
+
+  `nodes.entry_size` and `renderables.entry_size` MUST match the corresponding
+  struct sizes for the scene format version.
+
+  Strings are stored back-to-back and sized to their actual length.
+  `NodeRecord::scene_name_offset` is a byte offset into the scene string table.
+  The scene string table MUST start with a single `\0` byte so that offset
+  `0` refers to the empty string.
+
+    @note Scene graph indices have no sentinel values by contract. Indices are
+      always valid for their type; out-of-range indices are treated as
+      errors by loaders/tooling.
+*/
+#pragma pack(push, 1)
+struct SceneAssetDesc {
+  AssetHeader header;
+
+  SceneNodeTable nodes = {};
+  SceneStringTable scene_strings = {};
+
+  // Directory of component tables.
+  // Points to an array of `SceneComponentTableDesc` entries.
+  OffsetT component_table_directory_offset = 0;
+  uint32_t component_table_count = 0;
+
+  uint8_t reserved[125] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneAssetDesc) == 256);
+
+//! Scene component table directory entry (future extension point).
+/*!
+ Describes an optional component table attached to scene nodes.
+
+ All offsets are bytes relative to the start of the descriptor payload.
+
+ @note This is reserved for future format versions. v1 packers SHOULD emit
+   `component_tables.count == 0`.
+*/
+#pragma pack(push, 1)
+struct SceneComponentTableDesc {
+  uint32_t component_type = 0; // Format-defined component kind
+  SceneComponentTable table = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneComponentTableDesc) == 20);
+
+#pragma pack(push, 1)
+
+//! Scene node flags for `NodeRecord::node_flags`.
+constexpr uint32_t kSceneNodeFlag_Visible = (1u << 0);
+constexpr uint32_t kSceneNodeFlag_Static = (1u << 1);
+constexpr uint32_t kSceneNodeFlag_CastsShadows = (1u << 2);
+constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1u << 3);
+constexpr uint32_t kSceneNodeFlag_RayCastingSelectable = (1u << 4);
+constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform = (1u << 5);
+
+//! Node record used by the cooked scene descriptor (68 bytes).
+/*!
+  Describes a single node in the scene hierarchy. Nodes are stored in a flat
+  array in the `SceneAssetDesc`.
+
+  ### Hierarchy
+  - The node at index 0 is always the root node.
+  - `parent_index` refers to the index of the parent node in the same table.
+  - If `parent_index` equals the node's own index, the node has no parent (is a
+    root).
+
+  ### Transform
+  - Transforms are local to the parent.
+  - Rotation is stored as a quaternion (x, y, z, w).
+
+  @see SceneAssetDesc
+*/
+struct NodeRecord {
+  AssetKey node_id; // Stable GUID for the node
+  StringTableOffsetT scene_name_offset = 0; // Offset into scene string table
+
+  SceneNodeIndexT parent_index = 0; // Index of parent node (or self if root)
+
+  //! Bitfield of `kSceneNodeFlag_*` constants
+  uint32_t node_flags = 0;
+
+  // Local Transform (TRS)
+  float translation[3] = { 0.0F, 0.0F, 0.0F };
+  float rotation[4] = { 0.0F, 0.0F, 0.0F, 1.0F }; // Quaternion (XYZW)
+  float scale[3] = { 1.0F, 1.0F, 1.0F };
+};
+#pragma pack(pop)
+static_assert(sizeof(NodeRecord) == 68);
+
+#pragma pack(push, 1)
+
+//! Renderable component record (36 bytes).
+/*!
+  Attaches a geometry asset to a scene node.
+
+  ### Relationships
+  - Links to a `NodeRecord` via `node_index`.
+  - References a `GeometryAsset` via `geometry_key`.
+
+  @note Component tables are typically sorted by `node_index` for efficient
+  loading.
+*/
+struct RenderableRecord {
+  SceneNodeIndexT node_index = 0; // Index of the owner node
+  AssetKey geometry_key; // Geometry asset to render
+  uint32_t visible = 1; // Visibility flag (boolean)
+  uint8_t reserved[12] = {}; // Reserved for future use (e.g. LOD bias)
+};
+#pragma pack(pop)
+static_assert(sizeof(RenderableRecord) == 36);
+
+#pragma pack(push, 1)
+
+//! Perspective camera component record (32 bytes).
+/*!
+  Attaches a perspective camera to a scene node.
+
+  ### Coordinate System
+  - The camera looks down the -Z axis in its local space.
+  - FOV is vertical, in radians.
+*/
+struct PerspectiveCameraRecord {
+  SceneNodeIndexT node_index = 0; // Index of the owner node
+  float fov_y = 0.785398f; // Vertical FOV in radians (~45 deg)
+  float aspect_ratio = 1.777778f; // Width / Height (default 16:9)
+  float near_plane = 0.1f; // Distance to near clipping plane
+  float far_plane = 1000.0f; // Distance to far clipping plane
+  uint8_t reserved[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(PerspectiveCameraRecord) == 32);
+
+#pragma pack(push, 1)
+
+//! Orthographic camera component record (40 bytes).
+/*!
+  Attaches an orthographic camera to a scene node.
+
+  ### Volume
+  - Defined by a box (left, right, bottom, top, near, far) in local space.
+*/
+struct OrthographicCameraRecord {
+  SceneNodeIndexT node_index = 0; // Index of the owner node
+  float left = -10.0f;
+  float right = 10.0f;
+  float bottom = -10.0f;
+  float top = 10.0f;
+  float near_plane = -100.0f;
+  float far_plane = 100.0f;
+  uint8_t reserved[12] = {};
+};
+#pragma pack(pop)
+static_assert(sizeof(OrthographicCameraRecord) == 40);
 
 } // namespace oxygen::data::pak::v1
 

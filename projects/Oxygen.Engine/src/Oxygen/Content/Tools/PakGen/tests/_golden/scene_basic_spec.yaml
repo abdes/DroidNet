@@ -1,0 +1,127 @@
+# Golden spec used to generate tests/_golden/scene_basic.pak
+# Purpose: manual + automated binary-format validation (directory entries, offsets, CRC).
+
+version: 1
+content_version: 1
+
+buffers: []
+textures: []
+audios: []
+
+assets:
+  - type: material
+    name: MatA
+    asset_key: "11111111111111111111111111111111"
+    alignment: 1
+
+  - type: geometry
+    name: GeoPlayer
+    asset_key: "22222222222222222222222222222222"
+    alignment: 1
+    lods:
+      - name: lod0
+        mesh_type: 0
+        submeshes:
+          - name: sm0
+            material: MatA
+            mesh_views:
+              - first_index: 0
+                index_count: 0
+                first_vertex: 0
+                vertex_count: 0
+
+  - type: geometry
+    name: GeoWeapon
+    asset_key: "44444444444444444444444444444444"
+    alignment: 1
+    lods:
+      - name: lod0
+        mesh_type: 0
+        submeshes:
+          - name: sm0
+            material: MatA
+            mesh_views:
+              - first_index: 0
+                index_count: 0
+                first_vertex: 0
+                vertex_count: 0
+
+  - type: geometry
+    name: GeoTree
+    asset_key: "55555555555555555555555555555555"
+    alignment: 1
+    lods:
+      - name: lod0
+        mesh_type: 0
+        submeshes:
+          - name: sm0
+            material: MatA
+            mesh_views:
+              - first_index: 0
+                index_count: 0
+                first_vertex: 0
+                vertex_count: 0
+
+  - type: scene
+    name: SceneA
+    asset_key: "33333333333333333333333333333333"
+    alignment: 1
+    nodes:
+      - name: Root
+        parent: 0
+        node_id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        flags: 0
+
+      - name: Player
+        parent: 0
+        node_id: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        flags: 0
+
+      - name: Weapon
+        parent: 1
+        node_id: "cccccccccccccccccccccccccccccccc"
+        flags: 0
+
+      - name: Tree
+        parent: 0
+        node_id: "dddddddddddddddddddddddddddddddd"
+        flags: 0
+
+      - name: PlayerCamera
+        parent: 1
+        node_id: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        flags: 0
+
+      - name: OrthoCamera
+        parent: 0
+        node_id: "ffffffffffffffffffffffffffffffff"
+        flags: 0
+
+    renderables:
+      - node_index: 1
+        geometry: GeoPlayer
+        visible: true
+
+      - node_index: 2
+        geometry: GeoWeapon
+        visible: true
+
+      - node_index: 3
+        geometry: GeoTree
+        visible: true
+
+    perspective_cameras:
+      - node_index: 4
+        fov_y: 0.785398
+        aspect_ratio: 1.777778
+        near_plane: 0.1
+        far_plane: 1000.0
+
+    orthographic_cameras:
+      - node_index: 5
+        left: -2.0
+        right: 2.0
+        bottom: -1.0
+        top: 1.0
+        near_plane: -10.0
+        far_plane: 10.0

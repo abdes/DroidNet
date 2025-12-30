@@ -1,0 +1,31 @@
+# Invalid scene spec: renderable references a missing geometry asset
+version: 1
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "ffffffff"
+
+assets:
+  - name: "test_scene_invalid_unknown_geometry"
+    type: "scene"
+    asset_key: "66666666-7777-8888-9999-aaaaaaaaaaaa"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "mesh_node"
+        parent: 0
+    renderables:
+      - node_index: 1
+        geometry: "missing_geometry"

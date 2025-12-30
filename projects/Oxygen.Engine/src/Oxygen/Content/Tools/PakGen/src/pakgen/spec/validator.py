@@ -123,7 +123,12 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
         for a in assets_list
         if isinstance(a, dict) and a.get("type") == "geometry"
     ]
-    if len(mats) + len(geos) > MAX_ASSETS_TOTAL:
+    scenes = [
+        a
+        for a in assets_list
+        if isinstance(a, dict) and a.get("type") == "scene"
+    ]
+    if len(mats) + len(geos) + len(scenes) > MAX_ASSETS_TOTAL:
         _err(errors, "E_COUNT", "Total assets exceed limit", "assets")
     for i, m in enumerate(mats):
         path = f"assets[{i}]"  # material
@@ -171,6 +176,98 @@ def _schema_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         "Too many mesh views",
                         spath + ".mesh_views",
                     )
+
+        for i, s in enumerate(scenes):
+            path = f"assets[{i}]"  # scene
+            if not isinstance(s, dict):
+                _err(errors, "E_TYPE", "Asset must be object", path)
+                continue
+            name = s.get("name")
+            if not isinstance(name, str):
+                _err(errors, "E_FIELD", "Missing name", path)
+            elif len(name.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+                _err(errors, "E_NAME_LEN", "Name too long", path + ".name")
+
+            nodes = s.get("nodes")
+            if nodes is None:
+                _err(errors, "E_FIELD", "Scene missing nodes", path + ".nodes")
+            elif not isinstance(nodes, list):
+                _err(errors, "E_TYPE", "nodes must be a list", path + ".nodes")
+            else:
+                if len(nodes) == 0:
+                    _err(
+                        errors,
+                        "E_COUNT",
+                        "Scene must contain at least one node",
+                        path + ".nodes",
+                    )
+                for ni, node in enumerate(nodes):
+                    npath = f"{path}.nodes[{ni}]"
+                    if not isinstance(node, dict):
+                        _err(errors, "E_TYPE", "Node must be object", npath)
+                        continue
+                    nname = node.get("name")
+                    if not isinstance(nname, str):
+                        _err(
+                            errors,
+                            "E_FIELD",
+                            "Node missing name",
+                            npath + ".name",
+                        )
+                    elif len(nname.encode("utf-8")) > ASSET_NAME_MAX_LENGTH:
+                        _err(
+                            errors,
+                            "E_NAME_LEN",
+                            "Name too long",
+                            npath + ".name",
+                        )
+                    parent = node.get("parent")
+                    if parent is not None and not isinstance(parent, int):
+                        _err(
+                            errors,
+                            "E_TYPE",
+                            "parent must be int or null",
+                            npath + ".parent",
+                        )
+                    node_id = node.get("node_id")
+                    if node_id is not None and not isinstance(node_id, str):
+                        _err(
+                            errors,
+                            "E_TYPE",
+                            "node_id must be hex string",
+                            npath + ".node_id",
+                        )
+
+            renderables = s.get("renderables")
+            if renderables is not None and not isinstance(renderables, list):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "renderables must be a list",
+                    path + ".renderables",
+                )
+
+            perspective_cameras = s.get("perspective_cameras")
+            if perspective_cameras is not None and not isinstance(
+                perspective_cameras, list
+            ):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "perspective_cameras must be a list",
+                    path + ".perspective_cameras",
+                )
+
+            orthographic_cameras = s.get("orthographic_cameras")
+            if orthographic_cameras is not None and not isinstance(
+                orthographic_cameras, list
+            ):
+                _err(
+                    errors,
+                    "E_TYPE",
+                    "orthographic_cameras must be a list",
+                    path + ".orthographic_cameras",
+                )
     return errors
 
 
@@ -381,6 +478,171 @@ def _semantic_phase(spec: Dict[str, Any]) -> List[ValidationErrorRecord]:
                         "mip_levels exceed dimension limit",
                         f"textures[{ti}].mip_levels",
                     )
+
+    # Scene references: node parent indices + renderable geometry keys
+    def _clean_key_hex(val: Any) -> str | None:
+        if not isinstance(val, str):
+            return None
+        cleaned = val.replace("-", "").strip().lower()
+        if len(cleaned) != 32:
+            return None
+        try:
+            bytes.fromhex(cleaned)
+        except ValueError:
+            return None
+        return cleaned
+
+    geometry_name_to_key: Dict[str, str] = {}
+    for a in spec.get("assets", []) or []:
+        if not isinstance(a, dict) or a.get("type") != "geometry":
+            continue
+        gname = a.get("name")
+        if not isinstance(gname, str):
+            continue
+        raw_key = a.get("asset_key")
+        key_hex = _clean_key_hex(raw_key)
+        if key_hex is None:
+            key_hex = "00" * 16
+        geometry_name_to_key[gname] = key_hex
+
+    known_geometry_keys = set(geometry_name_to_key.values())
+
+    for si, s in enumerate(
+        [
+            a
+            for a in (spec.get("assets", []) or [])
+            if isinstance(a, dict) and a.get("type") == "scene"
+        ]
+    ):
+        if not isinstance(s, dict):
+            continue
+        nodes = s.get("nodes", []) or []
+        if not isinstance(nodes, list):
+            continue
+        node_count = len(nodes)
+        if node_count > 0:
+            root = nodes[0] if isinstance(nodes[0], dict) else {}
+            root_parent = root.get("parent") if isinstance(root, dict) else None
+            if root_parent not in (None, 0):
+                _err(
+                    errors,
+                    "E_SCENE_ROOT",
+                    "Root node parent must be null or 0",
+                    f"scenes[{si}].nodes[0].parent",
+                )
+
+        for ni, node in enumerate(nodes):
+            if not isinstance(node, dict):
+                continue
+            parent = node.get("parent")
+            if parent is None:
+                if ni != 0:
+                    _err(
+                        errors,
+                        "E_SCENE_PARENT",
+                        "Only node 0 may have null parent",
+                        f"scenes[{si}].nodes[{ni}].parent",
+                    )
+            elif isinstance(parent, int):
+                if parent < 0 or parent >= node_count:
+                    _err(
+                        errors,
+                        "E_SCENE_PARENT",
+                        "parent out of range",
+                        f"scenes[{si}].nodes[{ni}].parent",
+                    )
+
+        renderables = s.get("renderables", []) or []
+        if not isinstance(renderables, list):
+            continue
+        for ri, r in enumerate(renderables):
+            rpath = f"scenes[{si}].renderables[{ri}]"
+            if not isinstance(r, dict):
+                _err(errors, "E_TYPE", "Renderable must be object", rpath)
+                continue
+            node_index = r.get("node_index")
+            if not isinstance(node_index, int):
+                _err(
+                    errors,
+                    "E_FIELD",
+                    "Renderable missing node_index",
+                    rpath + ".node_index",
+                )
+            elif node_index < 0 or node_index >= node_count:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "node_index out of range",
+                    rpath + ".node_index",
+                )
+
+            geom_key = _clean_key_hex(r.get("geometry_asset_key"))
+            if geom_key is None:
+                geom_name = r.get("geometry")
+                if isinstance(geom_name, str):
+                    geom_key = geometry_name_to_key.get(geom_name)
+            if geom_key is None:
+                _err(
+                    errors,
+                    "E_REF",
+                    "Renderable must reference geometry_asset_key (hex) or geometry (name)",
+                    rpath,
+                )
+            elif geom_key not in known_geometry_keys:
+                _err(
+                    errors,
+                    "E_REF",
+                    "Unknown geometry reference",
+                    rpath + ".geometry_asset_key",
+                )
+
+        perspective_cameras = s.get("perspective_cameras", []) or []
+        if not isinstance(perspective_cameras, list):
+            continue
+        for ci, c in enumerate(perspective_cameras):
+            cpath = f"scenes[{si}].perspective_cameras[{ci}]"
+            if not isinstance(c, dict):
+                _err(errors, "E_TYPE", "Camera must be object", cpath)
+                continue
+            node_index = c.get("node_index")
+            if not isinstance(node_index, int):
+                _err(
+                    errors,
+                    "E_FIELD",
+                    "Camera missing node_index",
+                    cpath + ".node_index",
+                )
+            elif node_index < 0 or node_index >= node_count:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "node_index out of range",
+                    cpath + ".node_index",
+                )
+
+        orthographic_cameras = s.get("orthographic_cameras", []) or []
+        if not isinstance(orthographic_cameras, list):
+            continue
+        for ci, c in enumerate(orthographic_cameras):
+            cpath = f"scenes[{si}].orthographic_cameras[{ci}]"
+            if not isinstance(c, dict):
+                _err(errors, "E_TYPE", "Camera must be object", cpath)
+                continue
+            node_index = c.get("node_index")
+            if not isinstance(node_index, int):
+                _err(
+                    errors,
+                    "E_FIELD",
+                    "Camera missing node_index",
+                    cpath + ".node_index",
+                )
+            elif node_index < 0 or node_index >= node_count:
+                _err(
+                    errors,
+                    "E_RANGE",
+                    "node_index out of range",
+                    cpath + ".node_index",
+                )
     return errors
 
 
@@ -407,7 +669,8 @@ def run_binary_validation(
         [
             a
             for a in (spec.get("assets", []) or [])
-            if isinstance(a, dict) and a.get("type") in ("material", "geometry")
+            if isinstance(a, dict)
+            and a.get("type") in ("material", "geometry", "scene")
         ]
     )
     if spec_asset_count != asset_count:

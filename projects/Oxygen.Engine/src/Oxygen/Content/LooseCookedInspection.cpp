@@ -56,6 +56,10 @@ auto LooseCookedInspection::LoadFromFile(
       out.descriptor_size = *size;
     }
 
+    if (const auto type = index.FindAssetType(key); type) {
+      out.asset_type = *type;
+    }
+
     if (const auto sha = index.FindDescriptorSha256(key); sha) {
       base::Sha256Digest digest = {};
       std::copy_n(sha->begin(), digest.size(), digest.begin());
@@ -65,14 +69,7 @@ auto LooseCookedInspection::LoadFromFile(
     impl_->assets.push_back(std::move(out));
   }
 
-  const std::array<data::loose_cooked::v1::FileKind, 4> kinds = {
-    data::loose_cooked::v1::FileKind::kBuffersTable,
-    data::loose_cooked::v1::FileKind::kBuffersData,
-    data::loose_cooked::v1::FileKind::kTexturesTable,
-    data::loose_cooked::v1::FileKind::kTexturesData,
-  };
-
-  for (const auto kind : kinds) {
+  for (const auto kind : index.GetAllFileKinds()) {
     const auto rel = index.FindFileRelPath(kind);
     if (!rel) {
       continue;

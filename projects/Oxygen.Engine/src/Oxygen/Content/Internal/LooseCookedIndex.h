@@ -59,6 +59,9 @@ public:
   [[nodiscard]] auto FindVirtualPath(const data::AssetKey& key) const noexcept
     -> std::optional<std::string_view>;
 
+  [[nodiscard]] auto FindAssetType(const data::AssetKey& key) const noexcept
+    -> std::optional<uint8_t>;
+
   [[nodiscard]] auto FindAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
     -> std::optional<data::AssetKey>;
@@ -68,6 +71,9 @@ public:
   {
     return asset_keys_;
   }
+
+  [[nodiscard]] auto GetAllFileKinds() const noexcept
+    -> std::span<const data::loose_cooked::v1::FileKind>;
 
   [[nodiscard]] auto FindFileRelPath(
     data::loose_cooked::v1::FileKind kind) const noexcept
@@ -100,6 +106,7 @@ private:
   std::vector<data::AssetKey> asset_keys_;
   std::unordered_map<data::AssetKey, AssetInfo> key_to_asset_info_;
   std::unordered_map<uint32_t, data::AssetKey> virtual_path_offset_to_key_;
+  std::vector<data::loose_cooked::v1::FileKind> file_kinds_;
   std::unordered_map<data::loose_cooked::v1::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
 };

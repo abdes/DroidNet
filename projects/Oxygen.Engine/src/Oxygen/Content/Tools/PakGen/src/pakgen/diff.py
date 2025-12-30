@@ -294,7 +294,10 @@ def _gather_pak_assets(
         elif header["asset_type"] == 2:  # geometry
             geo = _parse_geometry_descriptor(desc_slice)
             record.update(geo)
-            var_start = e["desc_offset"] + e["desc_size"]
+            # Directory entry desc_size includes the full descriptor payload.
+            # For geometry, the variable blob begins immediately after the
+            # fixed-size 256-byte GeometryAssetDesc.
+            var_start = e["desc_offset"] + 256
             if geo.get("lod_count"):
                 record.update(
                     _parse_geometry_variable_blob(
