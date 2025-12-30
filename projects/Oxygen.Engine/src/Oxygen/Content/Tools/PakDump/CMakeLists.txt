@@ -32,11 +32,26 @@ asap_push_module("${META_MODULE_NAME}")
 add_executable(
   ${META_MODULE_TARGET}
   "main.cpp"
+  "AssetDumpers.h"
+  "AssetDumper.h"
+  "AssetDumpHelpers.h"
+  "DefaultAssetDumper.h"
+  "GeometryAssetDumper.h"
+  "MaterialAssetDumper.h"
+  "SceneAssetDumper.h"
   "DumpContext.h"
   "PakFileDumper.cpp"
   "PakFileDumper.h"
   "PrintUtils.h"
   "PrintUtils.cpp"
+)
+
+# Convenience build target: allow building by module name (matches OUTPUT_NAME)
+# in addition to the generated target name (e.g. oxygen-content-pakdump).
+add_custom_target(
+  ${META_MODULE_NAME}
+  DEPENDS
+    ${META_MODULE_TARGET}
 )
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 set_target_properties(
@@ -60,6 +75,7 @@ target_link_libraries(
     oxygen::core
     oxygen::data
     oxygen::content
+    oxygen::clap
 )
 
 # ==============================================================================

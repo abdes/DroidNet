@@ -40,6 +40,7 @@ from .packers import (
     pack_material_asset_descriptor,
     pack_shader_reference_entries,
     pack_geometry_asset_descriptor,
+    pack_scene_asset_descriptor_and_payload,
     pack_mesh_descriptor,
     pack_submesh_descriptor,
     pack_mesh_view_descriptor,
@@ -183,7 +184,7 @@ def _patch_crc(path: Path):
 def _write_assets_and_directory_from_plan(
     f, build: BuildPlan, pak_plan: PakPlan
 ):
-    """Emit asset descriptors (materials then geometries) and directory per plan.
+    """Emit asset descriptors (materials, geometries, scenes) and directory per plan.
 
     Uses plan.assets ordering & descriptor offsets. Geometry variable blobs are
     emitted immediately after their base descriptor (matching planner sizing).
@@ -254,10 +255,21 @@ def _write_assets_and_directory_from_plan(
                     out += pack_mesh_view_descriptor(mv)
         return out
 
-    # Material / geometry sources from build plan (original specs)
+    # Material / geometry / scene sources from build plan (original specs)
     materials = build.assets.material_assets
     geometries = build.assets.geometry_assets
+    scenes = build.assets.scene_assets
     material_count = len(materials)
+    geometry_count = len(geometries)
+
+    geometry_name_to_key: dict[str, bytes] = {}
+    for geom_spec, asset_key, _atype, _align in geometries:
+        if isinstance(geom_spec, dict):
+            nm = geom_spec.get("name")
+            if isinstance(nm, str) and isinstance(
+                asset_key, (bytes, bytearray)
+            ):
+                geometry_name_to_key[nm] = bytes(asset_key)
 
     # Emit descriptors following plan order
     rep = get_reporter()
@@ -300,7 +312,7 @@ def _write_assets_and_directory_from_plan(
                 raise RuntimeError(
                     f"Material size mismatch plan={asset_plan.descriptor_size} actual={len(desc)}"
                 )
-        else:  # geometry
+        elif asset_plan.asset_type == "geometry":
             # Geometry index in build list: (idx - material_count)
             g_idx = idx - material_count
             geom_spec, asset_key, _atype, alignment = geometries[g_idx]
@@ -320,6 +332,30 @@ def _write_assets_and_directory_from_plan(
                 raise RuntimeError(
                     f"Geometry size mismatch plan_total={expected_total} actual={written}"
                 )
+        elif asset_plan.asset_type == "scene":
+            s_idx = idx - material_count - geometry_count
+            scene_spec, _scene_key, _atype, _align = scenes[s_idx]
+            if not isinstance(scene_spec, dict):
+                scene_spec = {}
+            scene_spec.setdefault("type", "scene")
+            base_desc, payload = pack_scene_asset_descriptor_and_payload(
+                scene_spec,
+                header_builder=header_builder,
+                geometry_name_to_key=geometry_name_to_key,
+            )
+            f.write(base_desc)
+            if payload:
+                f.write(payload)
+            expected_total = (
+                asset_plan.descriptor_size + asset_plan.variable_extra_size
+            )
+            written = len(base_desc) + len(payload)
+            if written != expected_total:
+                raise RuntimeError(
+                    f"Scene size mismatch plan_total={expected_total} actual={written}"
+                )
+        else:  # pragma: no cover
+            raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
         rep.advance("write.assets")
     rep.end_task("write.assets")
 
@@ -343,17 +379,24 @@ def _write_assets_and_directory_from_plan(
                 if isinstance(mat, dict)
                 else b"\x00" * 16
             )
-            asset_type_code = 1
-        else:
+        elif asset_plan.asset_type == "geometry":
             g_idx = idx - material_count
             _geom_spec, key, _atype, _align = geometries[g_idx]
-            asset_type_code = 2
+        elif asset_plan.asset_type == "scene":
+            s_idx = idx - material_count - geometry_count
+            _scene_spec, key, _atype, _align = scenes[s_idx]
+        else:  # pragma: no cover
+            raise RuntimeError(f"Unknown asset type {asset_plan.asset_type}")
+        asset_type_code = ASSET_TYPE_MAP.get(asset_plan.asset_type, 0)
+        total_desc_size = int(
+            asset_plan.descriptor_size + (asset_plan.variable_extra_size or 0)
+        )
         entry = pack_directory_entry(
             asset_key=key,
             asset_type=asset_type_code,
             entry_offset=entry_pos,
             desc_offset=asset_plan.descriptor_offset,
-            desc_size=asset_plan.descriptor_size,
+            desc_size=total_desc_size,
         )
         f.write(entry)
         entry_written += 1

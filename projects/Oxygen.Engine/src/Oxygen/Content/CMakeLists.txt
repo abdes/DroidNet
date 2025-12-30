@@ -79,6 +79,7 @@ set(
   "Loaders/BufferLoader.h"
   "Loaders/GeometryLoader.h"
   "Loaders/MaterialLoader.h"
+  "Loaders/SceneLoader.h"
   "Loaders/TextureLoader.h"
   "Loaders/Helpers.h"
 )

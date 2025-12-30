@@ -26,6 +26,8 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     """
     repo_root = Path(__file__).parent
     golden_spec = repo_root / "_golden" / "minimal_spec.json"
+    if not golden_spec.exists():
+        golden_spec = repo_root / "_golden" / "minimal_spec.yaml"
     golden_pak = repo_root / "_golden" / "minimal_ref.pak"
     assert golden_spec.exists(), "Golden spec missing"
     assert (
@@ -33,7 +35,7 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     ), "Golden pak missing (run build_minimal_ref.py to regenerate intentionally)"
 
     # Rebuild using current code
-    spec_copy = tmp_path / "spec.json"
+    spec_copy = tmp_path / f"spec{golden_spec.suffix}"
     spec_copy.write_bytes(golden_spec.read_bytes())
     out_pak = tmp_path / "out_minimal.pak"
     build_pak(BuildOptions(input_spec=spec_copy, output_path=out_pak))

@@ -38,6 +38,7 @@
 #include <Oxygen/data/AssetKey.h>
 #include <Oxygen/data/GeometryAsset.h>
 #include <Oxygen/data/MaterialAsset.h>
+#include <Oxygen/data/SceneAsset.h>
 
 namespace oxygen::content {
 
@@ -163,6 +164,8 @@ public:
       co_return co_await LoadMaterialAssetAsyncImpl(key);
     } else if constexpr (std::is_same_v<T, data::GeometryAsset>) {
       co_return co_await LoadGeometryAssetAsyncImpl(key);
+    } else if constexpr (std::is_same_v<T, data::SceneAsset>) {
+      co_return co_await LoadSceneAssetAsyncImpl(key);
     } else {
       throw std::runtime_error(
         "LoadAssetAsync<T> is not implemented for this asset type yet");
@@ -663,6 +666,9 @@ private:
   OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
     -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
+  OXGN_CNTT_API auto LoadSceneAssetAsyncImpl(const data::AssetKey& key)
+    -> co::Co<std::shared_ptr<data::SceneAsset>>;
+
   OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
     TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
     -> co::Co<std::shared_ptr<void>>;
@@ -800,6 +806,10 @@ private:
     in_flight_geometry_assets_;
 
   std::unordered_map<uint64_t,
+    co::Shared<co::Co<std::shared_ptr<data::SceneAsset>>>>
+    in_flight_scene_assets_;
+
+  std::unordered_map<uint64_t,
     co::Shared<co::Co<std::shared_ptr<data::TextureResource>>>>
     in_flight_textures_;
 
@@ -839,6 +849,9 @@ template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::MaterialAsset>(
 
 template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::GeometryAsset>(
   const data::AssetKey& key) -> co::Co<std::shared_ptr<data::GeometryAsset>>;
+
+template OXGN_CNTT_API auto AssetLoader::LoadAssetAsync<data::SceneAsset>(
+  const data::AssetKey& key) -> co::Co<std::shared_ptr<data::SceneAsset>>;
 
 //-- Known Resource Types --
 

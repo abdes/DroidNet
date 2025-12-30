@@ -47,7 +47,4 @@ protected:
   std::vector<std::filesystem::path> generated_paks_;
 };
 
-//! Fixture for AssetLoader dependency tests
-class AssetLoaderDependencyTest : public AssetLoaderLoadingTest { };
-
 } // namespace oxygen::content::testing

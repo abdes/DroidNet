@@ -17,7 +17,9 @@ Related:
 ## Scope and constraints
 
 - No runtime import of source formats (FBX/GLTF/PNG/etc.). The editor must cook to runtime formats first.
-- Scenes are not cooked in this workflow; scenes are edited live and reference assets by **virtual path**.
+- Scenes can be handled in two editor workflows:
+  - **Live-edited scenes** (not cooked): scenes reference assets by **virtual path** and the editor resolves them to `data::AssetKey`.
+  - **Cooked scene descriptors** (optional): scenes are emitted as cooked descriptors (`AssetType::kScene`) and can be loaded from loose cooked roots or `.pak` like any other asset.
 - Runtime loads assets by `data::AssetKey` and resources by `ResourceKey`.
 - Editor responsibilities bridge **virtual paths** to runtime identifiers.
 

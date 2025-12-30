@@ -10,6 +10,8 @@ summary of its contents.
 
 - Confirm a cooked root is structurally valid (index + referenced files).
 - Quickly list asset entries and file records from `container.index.bin`.
+- Confirm cooked scene descriptors (`AssetType::kScene`) are present and
+  discoverable in a loose cooked root.
 - Debug SHA-256 digest mismatches reported by the Content module.
 
 ## Build
@@ -64,6 +66,8 @@ Notes:
 
 - If neither `--assets` nor `--files` is specified, both sections are printed.
 - `--digests` includes SHA-256 values if present in the index.
+- Asset entries include the cooked `type` (e.g. `material`, `geometry`,
+  `scene`).
 
 Examples:
 

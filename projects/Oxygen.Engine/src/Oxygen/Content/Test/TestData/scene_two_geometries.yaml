@@ -1,0 +1,107 @@
+# Scene asset with renderables referencing two different geometries
+version: 1
+content_version: 1
+
+buffers:
+  - name: "default_empty_buffer"
+    data_hex: ""
+    size: 0
+    usage: 0
+
+  - name: "vertex_buffer"
+    usage: 1
+    stride: 72
+    format: 0
+    data_hex: "000000000000000000000000000000000000803f00000000000000000000003f0000803f000000000000000000000000000000000000803f000000000000803f0000803e0000803f0000803f0000000000000000000000000000803f000000000000003f0000003f0000803f000000000000000000000000000000000000803fabaaaa3eabaa2a3f0000803e0000803f000000400000000000000000000000000000803f000000000000803f0000003f0000803f000000000000000000000000000000000000803fabaa2a3fabaaaa3e0000803e0000803f"
+
+  - name: "index_buffer"
+    usage: 2
+    stride: 0
+    format: 10
+    data_hex: "000000000100000002000000"
+
+textures:
+  - name: "default_texture"
+    width: 1
+    height: 1
+    format: 30
+    texture_type: 3
+    compression_type: 0
+    data_hex: "ffffffff"
+
+assets:
+  - name: "simple_material"
+    type: "material"
+    asset_key: "11111111-2222-3333-4444-555555555555"
+    material_domain: 0
+    flags: 0
+    shader_stages: 0x44
+    base_color: [0.0, 1.0, 0.0, 1.0]
+
+    shader_references:
+      - shader_unique_id: "VS@FullScreenTriangle.hlsl"
+        shader_hash: 0x1234567890abcdef
+      - shader_unique_id: "PS@FullScreenTriangle.hlsl"
+        shader_hash: 0xfedcba0987654321
+
+  - name: "test_geometry"
+    type: "geometry"
+    asset_key: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    bounding_box_min: [-1.0, -1.0, -1.0]
+    bounding_box_max: [1.0, 1.0, 1.0]
+    lods:
+      - name: "lod0"
+        mesh_type: 1
+        vertex_buffer: "vertex_buffer"
+        index_buffer: "index_buffer"
+        bounding_box_min: [-1.0, -1.0, -1.0]
+        bounding_box_max: [1.0, 1.0, 1.0]
+        submeshes:
+          - name: "submesh0"
+            material: "simple_material"
+            bounding_box_min: [-1.0, -1.0, -1.0]
+            bounding_box_max: [1.0, 1.0, 1.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 3
+                first_vertex: 0
+                vertex_count: 3
+
+  - name: "buffered_geometry"
+    type: "geometry"
+    asset_key: "ffffffff-eeee-dddd-cccc-bbbbbbbbbbbb"
+    bounding_box_min: [-2.0, -2.0, -2.0]
+    bounding_box_max: [2.0, 2.0, 2.0]
+    lods:
+      - name: "lod0"
+        mesh_type: 1
+        vertex_buffer: "vertex_buffer"
+        index_buffer: "index_buffer"
+        bounding_box_min: [-2.0, -2.0, -2.0]
+        bounding_box_max: [2.0, 2.0, 2.0]
+        submeshes:
+          - name: "submesh0"
+            material: "simple_material"
+            bounding_box_min: [-2.0, -2.0, -2.0]
+            bounding_box_max: [2.0, 2.0, 2.0]
+            mesh_views:
+              - first_index: 0
+                index_count: 3
+                first_vertex: 0
+                vertex_count: 3
+
+  - name: "test_scene_two_geometries"
+    type: "scene"
+    asset_key: "55555555-6666-7777-8888-999999999999"
+    nodes:
+      - name: "root"
+        parent: 0
+      - name: "mesh_node_a"
+        parent: 0
+      - name: "mesh_node_b"
+        parent: 0
+    renderables:
+      - node_index: 1
+        geometry: "test_geometry"
+      - node_index: 2
+        geometry: "buffered_geometry"

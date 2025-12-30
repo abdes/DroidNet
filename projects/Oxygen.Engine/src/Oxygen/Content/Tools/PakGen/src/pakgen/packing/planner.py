@@ -38,9 +38,11 @@ class ResourceCollectionResult:
 class AssetCollectionResult:
     material_assets: List[Dict[str, Any]]
     geometry_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
+    scene_assets: List[Tuple[Dict[str, Any], bytes, int, int]]
     total_assets: int = 0
     total_materials: int = 0
     total_geometries: int = 0
+    total_scenes: int = 0
 
 
 @dataclass(slots=True)
@@ -215,6 +217,9 @@ def to_plan_dict(plan: PakPlan) -> Dict[str, Any]:  # lightweight serializer
             },
         },
     }
+    scenes = sum(1 for a in plan.assets if a.asset_type == "scene")
+    if scenes:
+        out["statistics"]["asset_counts"]["scenes"] = scenes  # type: ignore[index]
     return out
 
 
@@ -307,6 +312,7 @@ def collect_assets(
     rep = get_reporter()
     materials: List[Dict[str, Any]] = []
     geometries: List[Tuple[Dict[str, Any], bytes, int, int]] = []
+    scenes: List[Tuple[Dict[str, Any], bytes, int, int]] = []
     if not isinstance(assets_list, list):
         rep.error("Spec 'assets' must be a list")
         raise ValueError("Spec 'assets' must be a list")
@@ -319,6 +325,7 @@ def collect_assets(
     # Pre-count per type to size tasks
     material_entries = [a for a in assets_list if a.get("type") == "material"]
     geometry_entries = [a for a in assets_list if a.get("type") == "geometry"]
+    scene_entries = [a for a in assets_list if a.get("type") == "scene"]
     if material_entries:
         rep.start_task(
             "assets.material", "Material assets", total=len(material_entries)
@@ -327,10 +334,13 @@ def collect_assets(
         rep.start_task(
             "assets.geometry", "Geometry assets", total=len(geometry_entries)
         )
+    if scene_entries:
+        rep.start_task("assets.scene", "Scene assets", total=len(scene_entries))
     for entry in assets_list:
         if not isinstance(entry, dict) or entry.get("type") not in (
             "material",
             "geometry",
+            "scene",
         ):
             # Skip unsupported types silently for now (future: error)
             continue
@@ -363,9 +373,17 @@ def collect_assets(
                 delay = simulate_material_delay
             if delay and delay > 0:
                 time.sleep(delay)
-        else:  # geometry
+        elif entry.get("type") == "geometry":
             geometries.append((entry, key_bytes, 0, entry.get("alignment", 1)))
             rep.advance("assets.geometry", current_item=entry["name"])
+            delay = simulate_delay
+            if delay is None:
+                delay = simulate_material_delay
+            if delay and delay > 0:
+                time.sleep(delay)
+        elif entry.get("type") == "scene":
+            scenes.append((entry, key_bytes, 0, entry.get("alignment", 1)))
+            rep.advance("assets.scene", current_item=entry["name"])
             delay = simulate_delay
             if delay is None:
                 delay = simulate_material_delay
@@ -375,12 +393,16 @@ def collect_assets(
         rep.end_task("assets.material")
     if geometry_entries:
         rep.end_task("assets.geometry")
+    if scene_entries:
+        rep.end_task("assets.scene")
         # Assets summary
-        total_assets = len(material_entries) + len(geometry_entries)
+        total_assets = (
+            len(material_entries) + len(geometry_entries) + len(scene_entries)
+        )
         if total_assets:
             rep.status(
                 "Assets summary: materials="
-                + f"{len(material_entries)} geometries={len(geometry_entries)} total={total_assets}"
+                + f"{len(material_entries)} geometries={len(geometry_entries)} scenes={len(scene_entries)} total={total_assets}"
             )
         max_assets_total = (
             MAX_RESOURCES_PER_TYPE * 2
@@ -392,9 +414,11 @@ def collect_assets(
     return AssetCollectionResult(
         materials,
         geometries,
+        scenes,
         total_assets=total_assets,
         total_materials=len(material_entries),
         total_geometries=len(geometry_entries),
+        total_scenes=len(scene_entries),
     )
 
 
@@ -451,6 +475,7 @@ def compute_pak_plan(
         RESOURCE_ENTRY_SIZES,
         MATERIAL_DESC_SIZE,
         GEOMETRY_DESC_SIZE,
+        SCENE_DESC_SIZE,
         DIRECTORY_ENTRY_SIZE,
         MESH_DESC_SIZE,
         SUBMESH_DESC_SIZE,
@@ -580,7 +605,8 @@ def compute_pak_plan(
     # Align to DATA_ALIGNMENT once before descriptors region.
     materials = build_plan.assets.material_assets
     geometries = build_plan.assets.geometry_assets
-    if materials or geometries:
+    scenes = build_plan.assets.scene_assets
+    if materials or geometries or scenes:
         cursor_aligned, pad_before_assets = align(
             cursor, DATA_ALIGNMENT, "assets_region"
         )
@@ -602,6 +628,18 @@ def compute_pak_plan(
             return name if isinstance(name, str) else ""
 
         geometries = sorted(geometries, key=_geom_name)
+
+        def _scene_name(entry):
+            spec = entry[0] if entry and isinstance(entry[0], dict) else {}
+            name = spec.get("name")
+            return name if isinstance(name, str) else ""
+
+        scenes = sorted(scenes, key=_scene_name)
+
+        # Keep build_plan asset lists in the same order the plan assumes.
+        build_plan.assets.material_assets = materials
+        build_plan.assets.geometry_assets = geometries
+        build_plan.assets.scene_assets = scenes
 
     # Material descriptors
     for m in materials:
@@ -680,6 +718,99 @@ def compute_pak_plan(
             )
         )
         cursor += GEOMETRY_DESC_SIZE + variable_size
+
+    # Scene descriptors + payload
+    NODE_RECORD_SIZE = 68
+    COMPONENT_TABLE_DESC_SIZE = 20
+    RENDERABLE_RECORD_SIZE = 36
+    PERSPECTIVE_CAMERA_RECORD_SIZE = 32
+    ORTHOGRAPHIC_CAMERA_RECORD_SIZE = 40
+
+    def _scene_string_table_size(nodes_list: List[Dict[str, Any]]) -> int:
+        offsets: dict[str, int] = {"": 0}
+        buf = bytearray(b"\x00")
+        for node in nodes_list:
+            name = node.get("name") if isinstance(node, dict) else ""
+            if not isinstance(name, str):
+                name = ""
+            if name not in offsets:
+                offsets[name] = len(buf)
+                buf.extend(name.encode("utf-8"))
+                buf.append(0)
+        return len(buf)
+
+    for scene_spec, asset_key, _asset_type, alignment in scenes:
+        cursor_aligned, _pad_scene = align(
+            cursor, alignment or 1, "asset_scene"
+        )
+        cursor = cursor_aligned
+        key_hex = (
+            asset_key.hex() if isinstance(asset_key, (bytes, bytearray)) else ""
+        )
+        nodes_list = scene_spec.get("nodes", []) or []
+        nodes_list = nodes_list if isinstance(nodes_list, list) else []
+        nodes_dicts = [n for n in nodes_list if isinstance(n, dict)]
+        node_count = len(nodes_dicts)
+        strings_size = _scene_string_table_size(nodes_dicts)
+
+        renderables_list = scene_spec.get("renderables", []) or []
+        renderables_list = (
+            renderables_list if isinstance(renderables_list, list) else []
+        )
+        renderable_count = sum(
+            1 for r in renderables_list if isinstance(r, dict)
+        )
+
+        cameras_list = scene_spec.get("perspective_cameras", []) or []
+        cameras_list = cameras_list if isinstance(cameras_list, list) else []
+        camera_count = sum(1 for c in cameras_list if isinstance(c, dict))
+
+        ortho_cameras_list = scene_spec.get("orthographic_cameras", []) or []
+        ortho_cameras_list = (
+            ortho_cameras_list if isinstance(ortho_cameras_list, list) else []
+        )
+        ortho_camera_count = sum(
+            1 for c in ortho_cameras_list if isinstance(c, dict)
+        )
+
+        component_table_count = 0
+        if renderable_count > 0:
+            component_table_count += 1
+        if camera_count > 0:
+            component_table_count += 1
+        if ortho_camera_count > 0:
+            component_table_count += 1
+        component_dir_bytes = component_table_count * COMPONENT_TABLE_DESC_SIZE
+        component_data_bytes = (
+            renderable_count * RENDERABLE_RECORD_SIZE
+            + camera_count * PERSPECTIVE_CAMERA_RECORD_SIZE
+            + ortho_camera_count * ORTHOGRAPHIC_CAMERA_RECORD_SIZE
+        )
+
+        variable_size = (
+            node_count * NODE_RECORD_SIZE
+            + strings_size
+            + component_dir_bytes
+            + component_data_bytes
+        )
+
+        sname = ""
+        if isinstance(scene_spec, dict):
+            nm = scene_spec.get("name")
+            if isinstance(nm, str):
+                sname = nm
+        assets.append(
+            AssetPlan(
+                asset_type="scene",
+                key_hex=key_hex,
+                descriptor_offset=cursor,
+                descriptor_size=SCENE_DESC_SIZE,
+                alignment=alignment or 1,
+                variable_extra_size=variable_size,
+                name=sname,
+            )
+        )
+        cursor += SCENE_DESC_SIZE + variable_size
 
     # Directory (only if assets present)
     if assets:

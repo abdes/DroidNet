@@ -22,7 +22,6 @@
 
 using testing::NotNull;
 
-using oxygen::content::testing::AssetLoaderDependencyTest;
 using oxygen::data::AssetKey;
 using oxygen::data::BufferResource;
 using oxygen::data::GeometryAsset;
@@ -32,10 +31,14 @@ using oxygen::data::TextureResource;
 using oxygen::observer_ptr;
 using oxygen::co::Co;
 using oxygen::co::testing::TestEventLoop;
+using oxygen::content::testing::AssetLoaderLoadingTest;
 
 //=== AssetLoader Dependency Mgmt Tests ===-----------------------------------//
 
 namespace {
+
+//! Fixture for AssetLoader dependency tests
+class AssetLoaderDependencyTest : public AssetLoaderLoadingTest { };
 
 //! Test: AssetLoader handles material with texture dependencies
 /*!

@@ -23,6 +23,7 @@
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -161,6 +162,7 @@ AssetLoader::AssetLoader(
   // Register asset loaders
   RegisterLoader(loaders::LoadGeometryAsset);
   RegisterLoader(loaders::LoadMaterialAsset);
+  RegisterLoader(loaders::LoadSceneAsset);
 
   // Register resource loaders
   RegisterLoader(loaders::LoadBufferResource);
@@ -190,6 +192,7 @@ void AssetLoader::Stop()
   // The per-operation erase guards tolerate the entry already being absent.
   in_flight_material_assets_.clear();
   in_flight_geometry_assets_.clear();
+  in_flight_scene_assets_.clear();
   in_flight_textures_.clear();
   in_flight_buffers_.clear();
 }
@@ -1173,6 +1176,92 @@ auto AssetLoader::LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
 
   co::Shared shared(std::move(op));
   in_flight_geometry_assets_.insert_or_assign(hash_key, shared);
+  co_return co_await shared;
+}
+
+auto AssetLoader::LoadSceneAssetAsyncImpl(const data::AssetKey& key)
+  -> co::Co<std::shared_ptr<data::SceneAsset>>
+{
+  DLOG_SCOPE_F(2, "AssetLoader LoadSceneAssetAsync");
+  DLOG_F(2, "key     : {}", nostd::to_string(key).c_str());
+  DLOG_F(2, "offline : {}", work_offline_);
+
+  AssertOwningThread();
+
+  const auto hash_key = HashAssetKey(key);
+  if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
+    co_return cached;
+  }
+
+  if (auto it = in_flight_scene_assets_.find(hash_key);
+    it != in_flight_scene_assets_.end()) {
+    co_return co_await it->second;
+  }
+
+  auto op
+    = [this, key, hash_key]() -> co::Co<std::shared_ptr<data::SceneAsset>> {
+    struct EraseOnExit final {
+      AssetLoader* loader;
+      uint64_t key_hash;
+      ~EraseOnExit() noexcept
+      {
+        loader->in_flight_scene_assets_.erase(key_hash);
+      }
+    } erase { this, hash_key };
+
+    try {
+      if (auto cached = content_cache_.CheckOut<data::SceneAsset>(hash_key)) {
+        co_return cached;
+      }
+
+      auto decoded_result = co_await DecodeAssetAsyncErasedImpl(
+        data::SceneAsset::ClassTypeId(), key);
+      auto decoded
+        = std::static_pointer_cast<data::SceneAsset>(decoded_result.asset);
+      if (!decoded || decoded->GetTypeId() != data::SceneAsset::ClassTypeId()) {
+        LOG_F(ERROR, "Loaded asset type mismatch (async): expected {}, got {}",
+          data::SceneAsset::ClassTypeNamePretty(),
+          decoded ? decoded->GetTypeName() : "nullptr");
+        co_return nullptr;
+      }
+      if (!decoded_result.dependency_collector) {
+        LOG_F(ERROR, "Missing dependency collector for decoded scene asset");
+        co_return nullptr;
+      }
+
+      // Publish: store the scene asset, then load asset dependencies and
+      // register dependency edges.
+      content_cache_.Store(hash_key, decoded);
+
+      // Publish only what needs async residency management:
+      // geometry assets referenced by renderable components.
+      // Other scene node components (camera/light/etc.) are embedded records
+      // and are not assets/resources.
+      std::unordered_set<data::AssetKey> seen_geometry_keys;
+      for (const auto& renderable :
+        decoded->GetComponents<pak::RenderableRecord>()) {
+        if (!seen_geometry_keys.insert(renderable.geometry_key).second) {
+          continue;
+        }
+
+        auto geom
+          = co_await LoadGeometryAssetAsyncImpl(renderable.geometry_key);
+        if (!geom) {
+          continue;
+        }
+
+        AddAssetDependency(key, renderable.geometry_key);
+        content_cache_.CheckIn(HashAssetKey(renderable.geometry_key));
+      }
+
+      co_return decoded;
+    } catch (const co::TaskCancelledException& e) {
+      throw OperationCancelledException(e.what());
+    }
+  }();
+
+  co::Shared shared(std::move(op));
+  in_flight_scene_assets_.insert_or_assign(hash_key, shared);
   co_return co_await shared;
 }
 

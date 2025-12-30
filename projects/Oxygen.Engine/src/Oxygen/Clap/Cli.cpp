@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <vector>
 
 #include <fmt/format.h>
 #include <fmt/printf.h>
@@ -34,22 +35,23 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
     program_name_ = cla.ProgramName();
   }
 
-  auto args = cla.Args();
+  const auto args_span = cla.Args();
+  std::vector<std::string> args(args_span.begin(), args_span.end());
 
   // Simplify processing by transforming the shor or long option forms of
   // `version` and `help` into the corresponding unified command name.
   if (!args.empty()) {
-    std::string first = args[0];
+    const std::string_view first = args[0];
     if (has_version_command_
       && (first == Command::VERSION_SHORT || first == Command::VERSION_LONG)) {
-      first.assign(Command::VERSION);
+      args[0].assign(Command::VERSION);
     } else if (has_help_command_
       && (first == Command::HELP_SHORT || first == Command::HELP_LONG)) {
-      first.assign(Command::HELP);
+      args[0].assign(Command::HELP);
     }
   }
 
-  const parser::Tokenizer tokenizer { cla.Args() };
+  const parser::Tokenizer tokenizer { args };
   CommandLineContext context(ProgramName(), active_command_, ovm_);
   context.theme = &CliTheme::Dark(); // Set a default theme
   parser::CmdLineParser parser(context, tokenizer, commands_);

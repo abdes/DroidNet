@@ -1,0 +1,13 @@
+# Golden spec used to generate tests/_golden/minimal_ref.pak
+
+version: 1
+content_version: 1
+
+buffers: []
+textures: []
+audios: []
+
+assets:
+  - type: material
+    name: MatRef
+    asset_key: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

@@ -50,6 +50,7 @@ def manifest_dict(
     # Derive counts from assets list (PakPlan.assets is a flat list of AssetPlan)
     materials = sum(1 for a in pak_plan.assets if a.asset_type == "material")
     geometries = sum(1 for a in pak_plan.assets if a.asset_type == "geometry")
+    scenes = sum(1 for a in pak_plan.assets if a.asset_type == "scene")
     d: dict[str, Any] = {
         "version": 1,
         "file_size": pak_plan.file_size,
@@ -67,6 +68,8 @@ def manifest_dict(
         "spec_hash": spec_hash,
         "sha256": file_sha256,
     }
+    if scenes:
+        d["counts"]["scenes"] = scenes
     if zero_length_resources:
         d["zero_length_resources"] = zero_length_resources
     if warnings:

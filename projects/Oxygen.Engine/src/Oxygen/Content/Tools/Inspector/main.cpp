@@ -6,13 +6,13 @@
 
 #include <array>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
-#include <exception>
-#include <memory>
 #include <string_view>
 
 #include <Oxygen/Clap/Cli.h>
@@ -26,6 +26,7 @@
 #include <Oxygen/Content/EngineTag.h>
 #include <Oxygen/Content/LooseCookedInspection.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
 namespace oxygen::content::internal {
@@ -59,6 +60,18 @@ struct DumpOptions {
   bool files = false;
   bool show_digests = false;
 };
+
+auto AssetTypeToString(const uint8_t asset_type) -> std::string_view
+{
+  using oxygen::data::AssetType;
+
+  const auto max = static_cast<uint8_t>(AssetType::kMaxAssetType);
+  if (asset_type > max) {
+    return "unknown";
+  }
+
+  return oxygen::data::to_string(static_cast<AssetType>(asset_type));
+}
 
 auto FileKindToString(const FileKind kind) -> std::string_view
 {
@@ -140,6 +153,8 @@ auto DumpAssets(
 
   for (const auto& e : entries) {
     os << "- key='" << oxygen::data::to_string(e.key) << "'";
+    os << " type='" << AssetTypeToString(e.asset_type) << "'(";
+    os << static_cast<unsigned>(e.asset_type) << ")'";
 
     if (!e.virtual_path.empty()) {
       os << " vpath='" << e.virtual_path << "'";
@@ -308,8 +323,8 @@ auto main(int argc, char** argv) -> int
 
     std::cerr << "ERROR: Unknown command\n";
     return 1;
-  } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
+  } catch (const std::exception& /*ex*/) {
+    // The error is already printed by the CLI parser.
     return 3;
   }
 }

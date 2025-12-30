@@ -9,6 +9,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/MeshType.h>
 
@@ -42,6 +43,21 @@ auto oxygen::data::to_string(oxygen::data::MeshType value) noexcept -> const
     case MeshType::kNavigation:   return "Navigation";
     case MeshType::kBillboard:    return "Billboard";
     case MeshType::kVoxel:        return "Voxel";
+    // clang-format on
+  }
+
+  return "__NotSupported__";
+}
+
+auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
+  -> const char*
+{
+  switch (value) {
+    // clang-format off
+    case ComponentType::kUnknown:            return "__Unknown__";
+    case ComponentType::kRenderable:         return "MESH";
+    case ComponentType::kPerspectiveCamera:  return "PCAM";
+    case ComponentType::kOrthographicCamera: return "OCAM";
     // clang-format on
   }
 

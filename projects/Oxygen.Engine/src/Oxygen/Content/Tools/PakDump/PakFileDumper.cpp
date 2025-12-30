@@ -4,15 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <bit>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include <fmt/format.h>
 
@@ -23,10 +30,12 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 
+#include "AssetDumpers.h"
 #include "DumpContext.h"
 #include "PakFileDumper.h"
 #include "PrintUtils.h"
@@ -60,25 +69,7 @@ auto PrintResourceData(std::span<const uint8_t> data,
   }
 }
 
-//=== Asset Type Names =======================================================//
-
-auto GetAssetTypeName(uint8_t asset_type) -> const char*
-{
-  return nostd::to_string(static_cast<AssetType>(asset_type));
-}
-
 //=== PAK Structure Dumping Functions ========================================//
-
-auto PrintAssetKey(const AssetKey& key, DumpContext& ctx) -> void
-{
-  using namespace PrintUtils;
-  if (ctx.verbose) {
-    Field("GUID", to_string(key));
-    Bytes("Raw bytes", reinterpret_cast<const uint8_t*>(&key), sizeof(key));
-  } else {
-    Field("GUID", to_string(key));
-  }
-}
 
 auto PrintResourceRegion(
   const std::string& name, uint64_t offset, uint64_t size) -> void
@@ -134,283 +125,6 @@ auto FooterMagicOk(const PakFooter& footer) -> bool
 }
 
 } // namespace
-
-/*!
- Helper function to print asset descriptor data (the metadata describing
- assets). This is separate from resource data - it reads the descriptor/metadata
- that describes how to interpret the asset.
- */
-//=== Shader Reference Printing =============================================//
-
-namespace {
-constexpr size_t kMaterialAssetDescSize = 256;
-constexpr size_t kShaderReferenceDescSize = 216;
-}
-// Prints all fields of a MaterialAssetDesc (including AssetHeader fields)
-auto PrintMaterialDescriptorFields(const MaterialAssetDesc* mat) -> void
-{
-  const AssetHeader& h = mat->header;
-  using namespace PrintUtils;
-  std::cout << "    --- Material Descriptor Fields ---\n";
-  Field("Asset Type", static_cast<int>(h.asset_type), 8);
-  Field("Name", std::string(h.name, strnlen(h.name, kMaxNameSize)), 8);
-  Field("Version", static_cast<int>(h.version), 8);
-  Field("Streaming Priority", static_cast<int>(h.streaming_priority), 8);
-  Field("Content Hash", ToHexString(h.content_hash), 8);
-  Field("Variant Flags", ToHexString(h.variant_flags), 8);
-  // MaterialAssetDesc fields
-  Field("Material Domain", static_cast<int>(mat->material_domain), 8);
-  Field("Flags", ToHexString(mat->flags), 8);
-  Field("Shader Stages", ToHexString(mat->shader_stages), 8);
-  Field("Base Color",
-    fmt::format("[{:.3f}, {:.3f}, {:.3f}, {:.3f}]", mat->base_color[0],
-      mat->base_color[1], mat->base_color[2], mat->base_color[3]),
-    8);
-  Field("Normal Scale", mat->normal_scale, 8);
-  Field("Metalness", mat->metalness, 8);
-  Field("Roughness", mat->roughness, 8);
-  Field("Ambient Occlusion", mat->ambient_occlusion, 8);
-  Field("Base Color Texture", mat->base_color_texture, 8);
-  Field("Normal Texture", mat->normal_texture, 8);
-  Field("Metallic Texture", mat->metallic_texture, 8);
-  Field("Roughness Texture", mat->roughness_texture, 8);
-  Field("Ambient Occlusion Texture", mat->ambient_occlusion_texture, 8);
-  std::cout << "\n";
-}
-
-auto PrintShaderReference(const uint8_t* data, size_t size, size_t idx,
-  size_t offset, DumpContext& ctx) -> void
-{
-  if (size < kShaderReferenceDescSize) {
-    std::cout << "      [" << idx
-              << "] ShaderReferenceDesc: (insufficient data)\n";
-    return;
-  }
-  // Parse fields
-  const char* unique_id = reinterpret_cast<const char*>(data);
-  uint64_t shader_hash = *reinterpret_cast<const uint64_t*>(data + 192);
-  // Print fields
-  std::cout << "      [" << idx << "] ShaderReferenceDesc:\n";
-  using namespace PrintUtils;
-  Field("Unique ID", std::string(unique_id, strnlen(unique_id, 192)), 10);
-  Field("Shader Hash", ToHexString(shader_hash), 10);
-  // Only print hex dump if requested
-  if (ctx.show_asset_descriptors) {
-    std::cout << "        Hex Dump (offset " << offset << ", size "
-              << kShaderReferenceDescSize << "):\n";
-    PrintUtils::HexDump(
-      data, kShaderReferenceDescSize, kShaderReferenceDescSize);
-  }
-}
-
-auto PrintMaterialShaderReferences(
-  const uint8_t* data, size_t desc_size, DumpContext& ctx) -> void
-{
-  if (desc_size < kMaterialAssetDescSize)
-    return;
-  // Shader stages is at offset 100 (AssetHeader=95, +1 domain, +4 flags)
-  uint32_t shader_stages = *reinterpret_cast<const uint32_t*>(data + 100);
-  // Count set bits
-  size_t num_refs = 0;
-  for (uint32_t s = shader_stages; s; s >>= 1)
-    num_refs += (s & 1);
-  if (num_refs == 0)
-    return;
-  std::cout << "    Shader References (" << num_refs << "):\n";
-  size_t base_offset = kMaterialAssetDescSize;
-  for (size_t i = 0; i < num_refs; ++i) {
-    if (base_offset + kShaderReferenceDescSize > desc_size)
-      break;
-    PrintShaderReference(
-      data + base_offset, desc_size - base_offset, i, base_offset, ctx);
-    base_offset += kShaderReferenceDescSize;
-  }
-}
-
-auto PrintAssetData(const PakFile& pak, const AssetDirectoryEntry& entry,
-  DumpContext& ctx) -> void
-{
-  try {
-    auto reader = pak.CreateReader(entry);
-
-    // Read the full descriptor (and shader refs if present)
-    size_t bytes_to_read = static_cast<size_t>(entry.desc_size);
-    auto data_result = reader.ReadBlob(bytes_to_read);
-
-    if (data_result.has_value()) {
-      const auto& data = data_result.value();
-      // Print hex dump if requested
-      if (ctx.show_asset_descriptors) {
-        std::cout << "    Asset Descriptor Preview (" << data.size()
-                  << " bytes read):\n";
-        PrintUtils::HexDump(reinterpret_cast<const uint8_t*>(data.data()),
-          (std::min)(data.size(), ctx.max_data_bytes), ctx.max_data_bytes);
-      }
-
-      // If this is a material asset, print all descriptor fields
-      if (entry.asset_type == 1 && data.size() >= kMaterialAssetDescSize) {
-        const MaterialAssetDesc* mat
-          = reinterpret_cast<const MaterialAssetDesc*>(data.data());
-        PrintMaterialDescriptorFields(mat);
-        PrintMaterialShaderReferences(
-          reinterpret_cast<const uint8_t*>(data.data()), data.size(), ctx);
-      }
-    } else {
-      std::cout << "    Failed to read asset descriptor data\n";
-    }
-
-  } catch (const std::exception& ex) {
-    std::cout << "    Failed to read asset descriptor data: " << ex.what()
-              << "\n";
-  }
-}
-
-auto PrintAssetEntry(const AssetDirectoryEntry& entry, size_t idx,
-  const PakFile& pak, DumpContext& ctx) -> void
-{
-  std::cout << "Asset #" << idx << ":\n";
-  PrintAssetKey(entry.asset_key, ctx);
-  std::cout << "    --- asset metadata ---\n";
-  PrintUtils::Field("Asset Type",
-    std::string(GetAssetTypeName(entry.asset_type)) + " ("
-      + std::to_string(entry.asset_type) + ")");
-  PrintUtils::Field("Entry Offset", ToHexString(entry.entry_offset));
-  PrintUtils::Field("Desc Offset", ToHexString(entry.desc_offset));
-  PrintUtils::Field("Desc Size", std::to_string(entry.desc_size) + " bytes");
-
-  // Print asset descriptor if requested
-  PrintAssetData(pak, entry, ctx);
-  std::cout << "\n";
-}
-
-auto PrintAssetDirectory(const PakFile& pak, DumpContext& ctx) -> void
-{
-  if (!ctx.show_directory) {
-    return;
-  }
-
-  using namespace PrintUtils;
-  Separator("ASSET DIRECTORY");
-
-  auto dir = pak.Directory();
-  Field("Asset Count", dir.size());
-  std::cout << "\n";
-
-  for (size_t i = 0; i < dir.size(); ++i) {
-    PrintAssetEntry(dir[i], i, pak, ctx);
-  }
-}
-
-//=== AssetDumper Interface and Registry ===================================//
-
-class AssetDumper {
-public:
-  virtual ~AssetDumper() = default;
-  virtual void Dump(const PakFile& pak, const AssetDirectoryEntry& entry,
-    DumpContext& ctx, size_t idx) const
-    = 0;
-};
-
-class MaterialAssetDumper : public AssetDumper {
-public:
-  void Dump(const PakFile& pak, const AssetDirectoryEntry& entry,
-    DumpContext& ctx, size_t idx) const override
-  {
-    std::cout << "Asset #" << idx << ":\n";
-    PrintAssetKey(entry.asset_key, ctx);
-    std::cout << "    --- asset metadata ---\n";
-    PrintUtils::Field("Asset Type",
-      std::string(GetAssetTypeName(entry.asset_type)) + " ("
-        + std::to_string(entry.asset_type) + ")");
-    PrintUtils::Field("Entry Offset", ToHexString(entry.entry_offset));
-    PrintUtils::Field("Desc Offset", ToHexString(entry.desc_offset));
-    PrintUtils::Field("Desc Size", std::to_string(entry.desc_size) + " bytes");
-    PrintAssetData(pak, entry, ctx);
-    std::cout << "\n";
-  }
-};
-
-// TODO: Add more AssetDumper implementations for other asset types (Geometry,
-// Texture, etc.)
-
-class DefaultAssetDumper : public AssetDumper {
-public:
-  void Dump(const PakFile& pak, const AssetDirectoryEntry& entry,
-    DumpContext& ctx, size_t idx) const override
-  {
-    std::cout << "Asset #" << idx << ":\n";
-    PrintAssetKey(entry.asset_key, ctx);
-    std::cout << "    --- asset metadata ---\n";
-    PrintUtils::Field("Asset Type",
-      std::string(GetAssetTypeName(entry.asset_type)) + " ("
-        + std::to_string(entry.asset_type) + ")");
-    PrintUtils::Field("Entry Offset", ToHexString(entry.entry_offset));
-    PrintUtils::Field("Desc Offset", ToHexString(entry.desc_offset));
-    PrintUtils::Field("Desc Size", std::to_string(entry.desc_size) + " bytes");
-    PrintAssetData(pak, entry, ctx);
-    std::cout << "\n";
-  }
-};
-
-class AssetDumperRegistry {
-public:
-  AssetDumperRegistry()
-  {
-    // Register known asset type dumpers
-    Register(
-      1, std::make_unique<MaterialAssetDumper>()); // 1 = MaterialAssetType
-    // TODO: Register other asset type dumpers as needed
-  }
-
-  const AssetDumper& Get(uint8_t asset_type) const
-  {
-    auto it = dumpers_.find(asset_type);
-    if (it != dumpers_.end()) {
-      return *it->second;
-    }
-    return default_dumper_;
-  }
-
-  void Register(uint8_t asset_type, std::unique_ptr<AssetDumper> dumper)
-  {
-    dumpers_[asset_type] = std::move(dumper);
-  }
-
-private:
-  std::unordered_map<uint8_t, std::unique_ptr<AssetDumper>> dumpers_;
-  DefaultAssetDumper default_dumper_;
-};
-
-//=== AssetDirectoryDumper =================================================//
-
-class AssetDirectoryDumper {
-public:
-  AssetDirectoryDumper(const AssetDumperRegistry& registry)
-    : registry_(registry)
-  {
-  }
-
-  void Dump(const PakFile& pak, DumpContext& ctx) const
-  {
-    if (!ctx.show_directory) {
-      return;
-    }
-    using namespace PrintUtils;
-    Separator("ASSET DIRECTORY");
-    auto dir = pak.Directory();
-    Field("Asset Count", dir.size());
-    std::cout << "\n";
-    for (size_t i = 0; i < dir.size(); ++i) {
-      const auto& entry = dir[i];
-      registry_.Get(entry.asset_type).Dump(pak, entry, ctx, i);
-    }
-  }
-
-private:
-  const AssetDumperRegistry& registry_;
-};
-
-//=== PakFileDumper Class ===================================================//
 
 //=== ResourceTableDumper Interface and Registry ===========================//
 
@@ -635,8 +349,8 @@ auto PakFileDumper::DumpAsync(const PakFile& pak, AssetLoader& asset_loader)
   ResourceTableDumperRegistry resource_registry;
   ResourceTablesDumper resource_tables_dumper(resource_registry);
   co_await resource_tables_dumper.DumpAsync(pak, ctx_, asset_loader);
-  AssetDumperRegistry registry;
-  AssetDirectoryDumper dir_dumper(registry);
+  oxygen::content::pakdump::AssetDumperRegistry registry;
+  oxygen::content::pakdump::AssetDirectoryDumper dir_dumper(registry);
   dir_dumper.Dump(pak, ctx_);
   Separator("ANALYSIS COMPLETE");
   co_return;
