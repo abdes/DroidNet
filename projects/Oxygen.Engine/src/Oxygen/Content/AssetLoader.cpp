@@ -353,20 +353,20 @@ private:
 };
 } // namespace
 
-auto AssetLoader::LoadTextureFromBufferAsync(
-  ResourceKey key, std::span<const uint8_t> bytes)
+auto AssetLoader::LoadTextureAsync(
+  CookedResourceData<data::TextureResource> cooked)
   -> co::Co<std::shared_ptr<data::TextureResource>>
 {
-  auto decoded = co_await LoadResourceFromBufferAsyncErased(
-    data::TextureResource::ClassTypeId(), key, bytes);
+  auto decoded = co_await LoadResourceAsyncFromCookedErased(
+    data::TextureResource::ClassTypeId(), cooked.key, cooked.bytes);
   co_return std::static_pointer_cast<data::TextureResource>(std::move(decoded));
 }
 
-auto AssetLoader::LoadResourceFromBufferAsyncErased(
+auto AssetLoader::LoadResourceAsyncFromCookedErased(
   const TypeId type_id, const ResourceKey key, std::span<const uint8_t> bytes)
   -> co::Co<std::shared_ptr<void>>
 {
-  DLOG_SCOPE_F(2, "AssetLoader LoadResourceFromBufferAsync");
+  DLOG_SCOPE_F(2, "AssetLoader LoadResourceAsync (cooked)");
   DLOG_F(2, "type_id : {}", type_id);
   DLOG_F(2, "key     : {}", key);
   DLOG_F(2, "bytes   : {}", bytes.size());
@@ -376,12 +376,12 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
 
   if (!nursery_) {
     throw std::runtime_error("AssetLoader must be activated before async loads "
-                             "(LoadResourceFromBufferAsyncErased)");
+                             "(LoadResourceAsyncFromCookedErased)");
   }
   if (!thread_pool_) {
     throw std::runtime_error(
       "AssetLoader requires a thread pool for async loads "
-      "(LoadResourceFromBufferAsyncErased)");
+      "(LoadResourceAsyncFromCookedErased)");
   }
 
   const auto key_hash = HashResourceKey(key);
@@ -396,7 +396,7 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
     }
   } else {
     throw std::runtime_error(
-      "LoadResourceFromBufferAsync is not implemented for this resource type");
+      "LoadResourceAsync(cooked) is not implemented for this resource type");
   }
 
   // Copy bytes eagerly to ensure the payload outlives thread-pool execution.
@@ -405,7 +405,7 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
   auto decode_fn =
     [this, type_id,
       owned_bytes = std::move(owned_bytes)]() mutable -> std::shared_ptr<void> {
-    DLOG_SCOPE_F(2, "AssetLoader DecodeResourceFromBuffer");
+    DLOG_SCOPE_F(2, "AssetLoader DecodeResource (cooked)");
 
     auto it = resource_loaders_.find(type_id);
     if (it == resource_loaders_.end()) {
@@ -440,7 +440,7 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
       auto typed = std::static_pointer_cast<data::TextureResource>(decoded);
       if (!typed
         || typed->GetTypeId() != data::TextureResource::ClassTypeId()) {
-        LOG_F(ERROR, "Loaded resource type mismatch (buffer): expected {}",
+        LOG_F(ERROR, "Loaded resource type mismatch (cooked): expected {}",
           data::TextureResource::ClassTypeNamePretty());
         co_return nullptr;
       }
@@ -448,7 +448,7 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
     } else if (type_id == data::BufferResource::ClassTypeId()) {
       auto typed = std::static_pointer_cast<data::BufferResource>(decoded);
       if (!typed || typed->GetTypeId() != data::BufferResource::ClassTypeId()) {
-        LOG_F(ERROR, "Loaded resource type mismatch (buffer): expected {}",
+        LOG_F(ERROR, "Loaded resource type mismatch (cooked): expected {}",
           data::BufferResource::ClassTypeNamePretty());
         co_return nullptr;
       }
@@ -461,16 +461,27 @@ auto AssetLoader::LoadResourceFromBufferAsyncErased(
   }
 }
 
-void AssetLoader::StartLoadTextureFromBuffer(ResourceKey key,
-  std::span<const uint8_t> bytes,
-  std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+void AssetLoader::StartLoadTexture(
+  CookedResourceData<data::TextureResource> cooked, TextureCallback on_complete)
 {
-  StartLoadResourceFromBuffer<data::TextureResource>(
-    { .key = key, .bytes = bytes }, std::move(on_complete));
+  StartLoadResource<data::TextureResource>(
+    std::move(cooked), std::move(on_complete));
 }
 
-void AssetLoader::StartLoadTexture(ResourceKey key,
-  std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
+void AssetLoader::StartLoadBuffer(
+  const ResourceKey key, BufferCallback on_complete)
+{
+  StartLoadResource<data::BufferResource>(key, std::move(on_complete));
+}
+
+void AssetLoader::StartLoadBuffer(
+  CookedResourceData<data::BufferResource> cooked, BufferCallback on_complete)
+{
+  StartLoadResource<data::BufferResource>(
+    std::move(cooked), std::move(on_complete));
+}
+
+void AssetLoader::StartLoadTexture(ResourceKey key, TextureCallback on_complete)
 {
   if (!nursery_) {
     throw std::runtime_error(
@@ -1489,6 +1500,16 @@ auto AssetLoader::MintSyntheticTextureKey() -> ResourceKey
     = next_synthetic_texture_index_.fetch_add(1, std::memory_order_relaxed);
   const auto resource_type_index = static_cast<uint16_t>(
     IndexOf<data::TextureResource, ResourceTypeList>::value);
+  return PackResourceKey(
+    kSyntheticSourceId, resource_type_index, synthetic_index);
+}
+
+auto AssetLoader::MintSyntheticBufferKey() -> ResourceKey
+{
+  const uint32_t synthetic_index
+    = next_synthetic_buffer_index_.fetch_add(1, std::memory_order_relaxed);
+  const auto resource_type_index = static_cast<uint16_t>(
+    IndexOf<data::BufferResource, ResourceTypeList>::value);
   return PackResourceKey(
     kSyntheticSourceId, resource_type_index, synthetic_index);
 }

@@ -33,8 +33,11 @@ auto TouchLoadResourceAsyncInstantiations(oxygen::TypeList<Ts...>) -> void
   // Taking the address of each specialization forces the symbol to exist.
   // This intentionally fails at link-time if any `LoadResourceAsync<T>`
   // specialization is declared but not explicitly instantiated/exported.
-  [[maybe_unused]] const auto fns
-    = std::tuple { &oxygen::content::AssetLoader::LoadResourceAsync<Ts>... };
+  [[maybe_unused]] const auto fns = std::tuple {
+    static_cast<oxygen::co::Co<std::shared_ptr<Ts>> (
+      oxygen::content::AssetLoader::*)(oxygen::content::ResourceKey)>(
+      &oxygen::content::AssetLoader::LoadResourceAsync<Ts>)...,
+  };
 }
 
 } // namespace

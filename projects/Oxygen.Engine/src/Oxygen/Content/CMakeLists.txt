@@ -58,7 +58,7 @@ set(
   "ResourceKey.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
-  "TextureResourceLoader.h"
+  "IAssetLoader.h"
 )
 set(
   OXYGEN_CONTENT_PRIVATE_SOURCES

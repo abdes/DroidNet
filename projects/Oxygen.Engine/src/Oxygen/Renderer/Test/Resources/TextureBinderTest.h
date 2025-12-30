@@ -15,7 +15,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/TextureResourceLoader.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Renderer/Resources/TextureBinder.h>
@@ -31,24 +31,122 @@ namespace oxygen::renderer::testing {
  This fake avoids OxCo activation requirements by completing loads
  synchronously on the calling thread.
 */
-class FakeTextureResourceLoader final : public content::TextureResourceLoader {
+class FakeAssetLoader final : public content::IAssetLoader {
 public:
-  FakeTextureResourceLoader() = default;
-  ~FakeTextureResourceLoader() = default;
+  FakeAssetLoader() = default;
+  ~FakeAssetLoader() = default;
 
-  OXYGEN_MAKE_NON_COPYABLE(FakeTextureResourceLoader)
-  OXYGEN_DEFAULT_MOVABLE(FakeTextureResourceLoader)
+  OXYGEN_MAKE_NON_COPYABLE(FakeAssetLoader)
+  OXYGEN_DEFAULT_MOVABLE(FakeAssetLoader)
 
   void StartLoadTexture(content::ResourceKey key,
     std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
     override
   {
-    const auto it = results_.find(key);
-    if (it == results_.end()) {
+    const auto it = textures_.find(key);
+    if (it == textures_.end()) {
       on_complete(nullptr);
       return;
     }
     on_complete(it->second);
+  }
+
+  void StartLoadTexture(
+    content::CookedResourceData<data::TextureResource> cooked,
+    TextureCallback on_complete) override
+  {
+    const auto decoded = DecodeCookedTexturePayload(cooked.bytes);
+    textures_.insert_or_assign(cooked.key, decoded);
+    on_complete(std::move(decoded));
+  }
+
+  void StartLoadBuffer(
+    content::ResourceKey /*key*/, BufferCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  void StartLoadBuffer(
+    content::CookedResourceData<data::BufferResource> /*cooked*/,
+    BufferCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  void StartLoadMaterialAsset(
+    const data::AssetKey& /*key*/, MaterialCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  void StartLoadGeometryAsset(
+    const data::AssetKey& /*key*/, GeometryCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
+  [[nodiscard]] auto GetTexture(content::ResourceKey key) const noexcept
+    -> std::shared_ptr<data::TextureResource> override
+  {
+    const auto it = textures_.find(key);
+    if (it == textures_.end()) {
+      return nullptr;
+    }
+    return it->second;
+  }
+
+  [[nodiscard]] auto GetBuffer(content::ResourceKey /*key*/) const noexcept
+    -> std::shared_ptr<data::BufferResource> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetMaterialAsset(
+    const data::AssetKey& /*key*/) const noexcept
+    -> std::shared_ptr<data::MaterialAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto GetGeometryAsset(
+    const data::AssetKey& /*key*/) const noexcept
+    -> std::shared_ptr<data::GeometryAsset> override
+  {
+    return nullptr;
+  }
+
+  [[nodiscard]] auto HasTexture(content::ResourceKey key) const noexcept
+    -> bool override
+  {
+    return textures_.contains(key);
+  }
+
+  [[nodiscard]] auto HasBuffer(content::ResourceKey /*key*/) const noexcept
+    -> bool override
+  {
+    return false;
+  }
+
+  [[nodiscard]] auto HasMaterialAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return false;
+  }
+
+  [[nodiscard]] auto HasGeometryAsset(
+    const data::AssetKey& /*key*/) const noexcept -> bool override
+  {
+    return false;
+  }
+
+  auto ReleaseResource(content::ResourceKey key) -> bool override
+  {
+    return textures_.erase(key) > 0U;
+  }
+
+  auto ReleaseAsset(const data::AssetKey& /*key*/) -> bool override
+  {
+    return false;
   }
 
   [[nodiscard]] auto MintSyntheticTextureKey() -> content::ResourceKey override
@@ -56,15 +154,20 @@ public:
     return content::ResourceKey { next_key_++ };
   }
 
+  [[nodiscard]] auto MintSyntheticBufferKey() -> content::ResourceKey override
+  {
+    return content::ResourceKey { next_key_++ };
+  }
+
   auto SetTexture(content::ResourceKey key,
     std::shared_ptr<data::TextureResource> texture) -> void
   {
-    results_.insert_or_assign(key, std::move(texture));
+    textures_.insert_or_assign(key, std::move(texture));
   }
 
   auto SetLoadFailure(content::ResourceKey key) -> void
   {
-    results_.insert_or_assign(key, nullptr);
+    textures_.insert_or_assign(key, nullptr);
   }
 
   [[nodiscard]] auto PreloadCookedTexture(std::span<const std::uint8_t> payload)
@@ -88,7 +191,7 @@ public:
 private:
   std::unordered_map<content::ResourceKey,
     std::shared_ptr<data::TextureResource>>
-    results_;
+    textures_;
 
   std::uint64_t next_key_ { 1U };
 };
@@ -98,7 +201,7 @@ private:
     UploadCoordinator + staging provider) without depending on the
     UploadCoordinator test suite.
 
-    The harness also owns a fake TextureResourceLoader and constructs a
+    The harness also owns a fake IAssetLoader and constructs a
     TextureBinder ready for tests.
 */
 class TextureBinderTest : public ::testing::Test {
@@ -125,7 +228,7 @@ protected:
     return *staging_provider_;
   }
 
-  [[nodiscard]] auto Loader() const -> FakeTextureResourceLoader&
+  [[nodiscard]] auto Loader() const -> FakeAssetLoader&
   {
     return *texture_loader_;
   }
@@ -141,7 +244,7 @@ private:
   std::shared_ptr<FakeGraphics> gfx_;
   std::unique_ptr<engine::upload::UploadCoordinator> uploader_;
   std::shared_ptr<engine::upload::StagingProvider> staging_provider_;
-  std::unique_ptr<FakeTextureResourceLoader> texture_loader_;
+  std::unique_ptr<FakeAssetLoader> texture_loader_;
   std::unique_ptr<resources::TextureBinder> texture_binder_;
 };
 

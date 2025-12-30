@@ -14,8 +14,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Renderer/Resources/IResourceBinder.h>
 #include <Oxygen/Renderer/api_export.h>
@@ -103,7 +103,7 @@ public:
   OXGN_RNDR_API TextureBinder(observer_ptr<Graphics> gfx,
     observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> uploader,
-    observer_ptr<content::TextureResourceLoader> texture_loader);
+    observer_ptr<content::IAssetLoader> texture_loader);
 
   OXYGEN_MAKE_NON_COPYABLE(TextureBinder)
   OXYGEN_MAKE_NON_MOVABLE(TextureBinder)

@@ -18,10 +18,10 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -44,24 +44,6 @@ namespace internal {
   struct ResourceRef;
   struct DependencyCollector;
 } // namespace internal
-
-//! Cooked bytes input for decoding a resource from an in-memory buffer.
-/*!
- Provides a typed wrapper over a cooked byte payload plus the `ResourceKey`
- identity under which the decoded result will be cached.
-
- Buffer-provided loads are treated as *ad hoc inputs*: they do not require a
- mounted content source and are not enumerable through the loader.
-
- @tparam T The resource type (must satisfy PakResource).
-*/
-template <PakResource T> struct ResourceCookedData final {
-  //! Cache identity for the decoded resource.
-  ResourceKey key {};
-
-  //! Cooked bytes required to decode `T`.
-  std::span<const uint8_t> bytes {};
-};
 
 //! Configuration and tuning parameters for AssetLoader.
 /*!
@@ -93,9 +75,13 @@ struct AssetLoaderConfig final {
   bool work_offline { false };
 };
 
-class AssetLoader : public oxygen::co::LiveObject,
-                    public TextureResourceLoader {
+class AssetLoader : public oxygen::co::LiveObject, public IAssetLoader {
 public:
+  using IAssetLoader::BufferCallback;
+  using IAssetLoader::GeometryCallback;
+  using IAssetLoader::MaterialCallback;
+  using IAssetLoader::TextureCallback;
+
   //! LiveObject contract
   [[nodiscard]] OXGN_CNTT_API auto ActivateAsync(co::TaskStarted<> started = {})
     -> co::Co<> override;
@@ -276,7 +262,7 @@ public:
    eviction is determined individually by reference counts and dependents.
    @see LoadAsset, HasAsset, ReleaseResource
   */
-  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool;
+  OXGN_CNTT_API auto ReleaseAsset(const data::AssetKey& key) -> bool override;
 
   //=== Resource Loading =====================================================//
 
@@ -343,6 +329,16 @@ public:
   template <PakResource T>
   auto LoadResourceAsync(ResourceKey key) -> co::Co<std::shared_ptr<T>>;
 
+  //! Coroutine-based resource decode from caller-provided cooked bytes.
+  template <PakResource T>
+  auto LoadResourceAsync(CookedResourceData<T> cooked)
+    -> co::Co<std::shared_ptr<T>>
+  {
+    auto decoded = co_await LoadResourceAsyncFromCookedErased(
+      T::ClassTypeId(), cooked.key, cooked.bytes);
+    co_return std::static_pointer_cast<T>(std::move(decoded));
+  }
+
   //! Coroutine-based convenience for texture loads.
   /*!
     Async-only API: returns the CPU-side decoded `TextureResource` on
@@ -352,48 +348,41 @@ public:
   OXGN_CNTT_API auto LoadTextureAsync(ResourceKey key)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
 
-  //! Coroutine-based convenience for decoding a texture from an in-memory
-  //! byte buffer. The loader must not perform GPU work; it returns a
-  //! CPU-side `data::TextureResource` on success or `nullptr` on failure.
-  OXGN_CNTT_API auto LoadTextureFromBufferAsync(
-    ResourceKey key, std::span<const uint8_t> bytes)
+  //! Coroutine-based convenience for decoding a texture from cooked bytes.
+  OXGN_CNTT_API auto LoadTextureAsync(
+    CookedResourceData<data::TextureResource> cooked)
     -> co::Co<std::shared_ptr<data::TextureResource>>;
-
-  //! Coroutine-based resource decode from an in-memory cooked byte buffer.
-  /*!
-   This API is intended for tests/demos/tooling where the caller provides the
-   cooked payload directly.
-
-   @tparam T The resource type (must satisfy PakResource).
-   @param cooked Buffer-provided cooked payload plus cache identity.
-   @return Shared pointer to the decoded resource, or nullptr on failure.
-
-   @note The bytes are treated as an input only; this does not mount a source.
-  */
-  template <PakResource T>
-  auto LoadResourceFromBufferAsync(ResourceCookedData<T> cooked)
-    -> co::Co<std::shared_ptr<T>>
-  {
-    auto decoded = co_await LoadResourceFromBufferAsyncErased(
-      T::ClassTypeId(), cooked.key, cooked.bytes);
-    co_return std::static_pointer_cast<T>(std::move(decoded));
-  }
-
-  //! Convenience: schedule a texture-from-buffer load on the loader nursery
-  //! and invoke `on_complete` on the engine thread when the CPU-side payload
-  //! is ready. Deprecated in favor of awaiting the coroutine directly.
-  OXGN_CNTT_API void StartLoadTextureFromBuffer(ResourceKey key,
-    std::span<const uint8_t> bytes,
-    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete);
 
   //! Convenience: schedule a texture load on the loader nursery and invoke
   //! `on_complete` on the engine thread when the CPU-side payload is ready.
   /*! Deprecated: prefer co_awaiting `LoadTextureAsync` directly when
       possible. This helper simply starts a coroutine inside the loader's
       nursery and will invoke the callback when complete. */
-  OXGN_CNTT_API void StartLoadTexture(ResourceKey key,
-    std::function<void(std::shared_ptr<data::TextureResource>)> on_complete)
-    override;
+  OXGN_CNTT_API void StartLoadTexture(
+    ResourceKey key, TextureCallback on_complete) override;
+
+  OXGN_CNTT_API void StartLoadTexture(
+    CookedResourceData<data::TextureResource> cooked,
+    TextureCallback on_complete) override;
+
+  OXGN_CNTT_API void StartLoadBuffer(
+    ResourceKey key, BufferCallback on_complete) override;
+
+  OXGN_CNTT_API void StartLoadBuffer(
+    CookedResourceData<data::BufferResource> cooked,
+    BufferCallback on_complete) override;
+
+  OXGN_CNTT_API void StartLoadMaterialAsset(
+    const data::AssetKey& key, MaterialCallback on_complete) override
+  {
+    StartLoadAsset<data::MaterialAsset>(key, std::move(on_complete));
+  }
+
+  OXGN_CNTT_API void StartLoadGeometryAsset(
+    const data::AssetKey& key, GeometryCallback on_complete) override
+  {
+    StartLoadAsset<data::GeometryAsset>(key, std::move(on_complete));
+  }
 
   //! Start an async resource load and invoke a callback on completion.
   /*!
@@ -430,26 +419,26 @@ public:
       });
   }
 
-  //! Start a buffer-provided resource decode and invoke a callback.
+  //! Start a cooked-bytes resource decode and invoke a callback.
   /*!
    This is the callback bridge for non-coroutine callers.
 
    @tparam T The resource type (must satisfy PakResource).
-   @param cooked Buffer-provided cooked payload plus cache identity.
+   @param cooked Cooked payload plus cache identity.
    @param on_complete Callback invoked on the owning thread with the decoded
      resource (or nullptr on failure).
   */
   template <PakResource T>
-  void StartLoadResourceFromBuffer(ResourceCookedData<T> cooked,
+  void StartLoadResource(CookedResourceData<T> cooked,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
     if (!nursery_) {
       throw std::runtime_error(
-        "AssetLoader must be activated before StartLoadResourceFromBuffer");
+        "AssetLoader must be activated before StartLoadResource (cooked)");
     }
     if (!thread_pool_) {
       throw std::runtime_error(
-        "AssetLoader requires a thread pool for StartLoadResourceFromBuffer");
+        "AssetLoader requires a thread pool for StartLoadResource (cooked)");
     }
 
     nursery_->Start(
@@ -458,17 +447,63 @@ public:
         on_complete = std::move(on_complete)]() mutable -> co::Co<> {
         try {
           std::span<const uint8_t> span(bytes.data(), bytes.size());
-          auto res = co_await LoadResourceFromBufferAsync<T>({
+          auto res = co_await LoadResourceAsync<T>({
             .key = key,
             .bytes = span,
           });
           on_complete(std::move(res));
         } catch (const std::exception& e) {
-          LOG_F(ERROR, "StartLoadResourceFromBuffer failed: {}", e.what());
+          LOG_F(ERROR, "StartLoadResource (cooked) failed: {}", e.what());
           on_complete(nullptr);
         }
         co_return;
       });
+  }
+
+  [[nodiscard]] auto GetTexture(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::TextureResource> override
+  {
+    return GetResource<data::TextureResource>(key);
+  }
+
+  [[nodiscard]] auto GetBuffer(ResourceKey key) const noexcept
+    -> std::shared_ptr<data::BufferResource> override
+  {
+    return GetResource<data::BufferResource>(key);
+  }
+
+  [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::MaterialAsset> override
+  {
+    return GetAsset<data::MaterialAsset>(key);
+  }
+
+  [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& key) const noexcept
+    -> std::shared_ptr<data::GeometryAsset> override
+  {
+    return GetAsset<data::GeometryAsset>(key);
+  }
+
+  [[nodiscard]] auto HasTexture(ResourceKey key) const noexcept -> bool override
+  {
+    return HasResource<data::TextureResource>(key);
+  }
+
+  [[nodiscard]] auto HasBuffer(ResourceKey key) const noexcept -> bool override
+  {
+    return HasResource<data::BufferResource>(key);
+  }
+
+  [[nodiscard]] auto HasMaterialAsset(const data::AssetKey& key) const noexcept
+    -> bool override
+  {
+    return HasAsset<data::MaterialAsset>(key);
+  }
+
+  [[nodiscard]] auto HasGeometryAsset(const data::AssetKey& key) const noexcept
+    -> bool override
+  {
+    return HasAsset<data::GeometryAsset>(key);
   }
 
   //! Get cached resource without loading
@@ -523,7 +558,7 @@ public:
    @note This method is idempotent: repeated calls after eviction return false.
    @see LoadResource, HasResource, ReleaseAsset, AnyCache
   */
-  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool;
+  OXGN_CNTT_API auto ReleaseResource(ResourceKey key) -> bool override;
 
   //! Mint a synthetic, texture-typed ResourceKey suitable for buffer-driven
   //! loads.
@@ -531,9 +566,8 @@ public:
    The returned key is validly encoded for `TextureResource` but does not refer
    to any mounted content source.
 
-   This enables workflows where the application provides cooked bytes (or raw
-   image bytes) directly and the renderer treats the identity as an opaque
-   `ResourceKey`.
+  This enables workflows where the application provides cooked bytes directly
+  and the renderer treats the identity as an opaque `ResourceKey`.
 
    @return A new unique ResourceKey for a texture.
 
@@ -541,6 +575,9 @@ public:
          treat the key as opaque.
   */
   [[nodiscard]] OXGN_CNTT_API auto MintSyntheticTextureKey()
+    -> ResourceKey override;
+
+  [[nodiscard]] OXGN_CNTT_API auto MintSyntheticBufferKey()
     -> ResourceKey override;
 
   //! Register a load function for assets or resources (unified interface)
@@ -622,7 +659,7 @@ private:
   OXGN_CNTT_API auto LoadGeometryAssetAsyncImpl(const data::AssetKey& key)
     -> co::Co<std::shared_ptr<data::GeometryAsset>>;
 
-  OXGN_CNTT_API auto LoadResourceFromBufferAsyncErased(
+  OXGN_CNTT_API auto LoadResourceAsyncFromCookedErased(
     TypeId type_id, ResourceKey key, std::span<const uint8_t> bytes)
     -> co::Co<std::shared_ptr<void>>;
 
@@ -768,6 +805,7 @@ private:
     in_flight_buffers_;
 
   std::atomic<uint32_t> next_synthetic_texture_index_ { 1 };
+  std::atomic<uint32_t> next_synthetic_buffer_index_ { 1 };
 
 public:
   // Debug-only dependent enumeration helper (implemented via forward scan).

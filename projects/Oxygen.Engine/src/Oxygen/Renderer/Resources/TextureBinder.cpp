@@ -23,8 +23,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Content/TextureResourceLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -391,7 +391,7 @@ class TextureBinder::Impl {
 public:
   Impl(observer_ptr<Graphics> gfx, observer_ptr<ProviderT> staging_provider,
     observer_ptr<CoordinatorT> uploader,
-    observer_ptr<content::TextureResourceLoader> texture_loader);
+    observer_ptr<content::IAssetLoader> texture_loader);
 
   ~Impl();
 
@@ -462,7 +462,7 @@ private:
   observer_ptr<Graphics> gfx_;
   observer_ptr<engine::upload::UploadCoordinator> uploader_;
   observer_ptr<engine::upload::StagingProvider> staging_provider_;
-  observer_ptr<content::TextureResourceLoader> texture_loader_;
+  observer_ptr<content::IAssetLoader> texture_loader_;
 
   std::shared_ptr<CallbackGate> callback_gate_;
 
@@ -483,7 +483,7 @@ private:
 
 TextureBinder::TextureBinder(observer_ptr<Graphics> gfx,
   observer_ptr<ProviderT> staging_provider, observer_ptr<CoordinatorT> uploader,
-  observer_ptr<content::TextureResourceLoader> texture_loader)
+  observer_ptr<content::IAssetLoader> texture_loader)
   : impl_(
       std::make_unique<Impl>(gfx, staging_provider, uploader, texture_loader))
 {
@@ -621,7 +621,7 @@ auto TextureBinder::Impl::GetOrAllocate(
 TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
   const observer_ptr<ProviderT> staging_provider,
   const observer_ptr<CoordinatorT> uploader,
-  const observer_ptr<content::TextureResourceLoader> texture_loader)
+  const observer_ptr<content::IAssetLoader> texture_loader)
   : gfx_(gfx)
   , uploader_(uploader)
   , staging_provider_(staging_provider)
@@ -629,7 +629,7 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
 {
   DCHECK_NOTNULL_F(gfx_, "Graphics cannot be null");
   DCHECK_NOTNULL_F(uploader_, "UploadCoordinator cannot be null");
-  CHECK_NOTNULL_F(texture_loader_, "TextureResourceLoader cannot be null");
+  CHECK_NOTNULL_F(texture_loader_, "IAssetLoader cannot be null");
 
   callback_gate_ = std::make_shared<CallbackGate>();
   CHECK_NOTNULL_F(callback_gate_, "Failed to create callback gate");
