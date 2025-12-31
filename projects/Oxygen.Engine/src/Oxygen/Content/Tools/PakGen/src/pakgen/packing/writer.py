@@ -435,10 +435,11 @@ def write_pak(
     logger = get_logger()
     version = pak_plan.version
     content_version = pak_plan.content_version
+    guid = pak_plan.guid
     with section(f"Write PAK {output_path.name}"):
         with output_path.open("wb") as f:
             # Header (always at 0)
-            f.write(pack_header(version, content_version))
+            f.write(pack_header(version, content_version, guid))
             # Resource regions
             data_offsets = _write_resource_regions_from_plan(
                 f, build_plan, pak_plan

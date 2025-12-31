@@ -379,9 +379,15 @@ def pack_scene_asset_descriptor_and_payload(
     return desc, payload
 
 
-def pack_header(version: int, content_version: int) -> bytes:
-    reserved = b"\x00" * 52
-    data = struct.pack("<8sHH52s", MAGIC, version, content_version, reserved)
+def pack_header(version: int, content_version: int, guid: bytes) -> bytes:
+    if len(guid) != 16:
+        raise PakError("E_SIZE", f"GUID size mismatch: {len(guid)}")
+    if guid == b"\x00" * 16:
+        raise PakError("E_GUID", "PAK header GUID must be non-zero")
+    reserved = b"\x00" * 36
+    data = struct.pack(
+        "<8sHH16s36s", MAGIC, version, content_version, guid, reserved
+    )
     if len(data) != 64:
         raise PakError("E_SIZE", f"Header size mismatch: {len(data)}")
     return data

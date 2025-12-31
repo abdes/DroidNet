@@ -213,20 +213,10 @@ public:
   {
   }
 
-  ~SceneLoader()
-  {
-    LOG_F(INFO, "SceneLoader: Destroying loader. Restoring verbosity.");
-    if (previous_verbosity_ != loguru::Verbosity_INVALID) {
-      loguru::g_stderr_verbosity = previous_verbosity_;
-    }
-  }
+  ~SceneLoader() { LOG_F(INFO, "SceneLoader: Destroying loader."); }
 
   void Start(const data::AssetKey& key)
   {
-    // Boost verbosity for troubleshooting
-    previous_verbosity_ = loguru::g_stderr_verbosity;
-    loguru::g_stderr_verbosity = loguru::Verbosity_1;
-
     LOG_F(INFO, "SceneLoader: Starting load for scene key: {}",
       oxygen::data::to_string(key));
 
@@ -458,7 +448,6 @@ private:
   bool failed_ { false };
   bool consumed_ { false };
   int linger_frames_ { 0 };
-  int previous_verbosity_ { loguru::Verbosity_INVALID };
 };
 
 MainModule::MainModule(const oxygen::examples::common::AsyncEngineApp& app)
@@ -774,6 +763,12 @@ auto MainModule::ApplyOrbitAndZoom() -> void
     return;
   }
 
+  const auto camera_handle = active_camera_.GetHandle();
+  if (orbit_camera_ != camera_handle) {
+    orbit_camera_ = camera_handle;
+    SyncOrbitFromActiveCamera();
+  }
+
   // Zoom via mouse wheel actions
   if (zoom_in_action_ && zoom_in_action_->WasTriggeredThisFrame()) {
     orbit_distance_
@@ -831,6 +826,46 @@ auto MainModule::ApplyOrbitAndZoom() -> void
   auto tf = active_camera_.GetTransform();
   tf.SetLocalPosition(cam_pos);
   tf.SetLocalRotation(MakeLookRotationFromPosition(cam_pos, camera_target_));
+}
+
+auto MainModule::SyncOrbitFromActiveCamera() -> void
+{
+  if (!active_camera_.IsAlive()) {
+    return;
+  }
+
+  auto tf = active_camera_.GetTransform();
+  const auto cam_pos_opt = tf.GetLocalPosition();
+  const auto cam_rot_opt = tf.GetLocalRotation();
+  if (!cam_pos_opt || !cam_rot_opt) {
+    return;
+  }
+
+  const auto cam_pos = *cam_pos_opt;
+  const auto cam_rot = *cam_rot_opt;
+
+  // Orbit target: keep orbiting around the scene center (origin).
+  // We only sync the controller's yaw/pitch/distance from the camera pose.
+  camera_target_ = glm::vec3(0.0f, 0.0f, 0.0f);
+
+  const glm::vec3 offset = cam_pos - camera_target_;
+  const float dist_len2 = glm::dot(offset, offset);
+  if (dist_len2 <= 1e-8f) {
+    orbit_distance_ = 6.0f;
+    orbit_yaw_rad_ = -glm::half_pi<float>();
+    orbit_pitch_rad_ = 0.0f;
+    was_orbiting_last_frame_ = false;
+    return;
+  }
+
+  const float distance
+    = std::clamp(std::sqrt(dist_len2), min_cam_distance_, max_cam_distance_);
+  orbit_distance_ = distance;
+  const glm::vec3 dir = offset / distance;
+
+  orbit_pitch_rad_ = std::asin(std::clamp(dir.z, -1.0f, 1.0f));
+  orbit_yaw_rad_ = std::atan2(dir.y, dir.x);
+  was_orbiting_last_frame_ = false;
 }
 
 auto MainModule::EnsureViewCameraRegistered() -> void

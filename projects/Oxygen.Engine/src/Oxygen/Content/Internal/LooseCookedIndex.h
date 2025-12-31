@@ -19,6 +19,7 @@
 
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::internal {
 
@@ -43,6 +44,8 @@ public:
   */
   [[nodiscard]] static auto LoadFromFile(
     const std::filesystem::path& index_path) -> LooseCookedIndex;
+
+  [[nodiscard]] auto Guid() const noexcept -> data::SourceKey;
 
   [[nodiscard]] auto FindDescriptorRelPath(
     const data::AssetKey& key) const noexcept
@@ -109,6 +112,7 @@ private:
   std::vector<data::loose_cooked::v1::FileKind> file_kinds_;
   std::unordered_map<data::loose_cooked::v1::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
+  data::SourceKey guid_;
 };
 
 } // namespace oxygen::content::internal

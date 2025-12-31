@@ -104,7 +104,7 @@ constexpr DataBlobSizeT kDataBlobMaxSize
 
 //=== PAK File Format Structures ===------------------------------------------//
 
-//! Fixed-size header at the start of the PAK file (64 bytes)
+//! Fixed-size header at the start of the PAK file (256 bytes)
 /*!
  The header contains metadata about the PAK file format version, content
  version, and reserved space for future extensions. It is always located at the
@@ -115,11 +115,12 @@ struct PakHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 0, 0, 0 };
   uint16_t version = 1; // Format version
   uint16_t content_version = 0; // Content version
+  uint8_t guid[16] = {}; // Unique identifier for this PAK
   // Reserved for future use
-  uint8_t reserved[52] = {};
+  uint8_t reserved[228] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(PakHeader) == 64);
+static_assert(sizeof(PakHeader) == 256);
 
 //! Resource region offset/size descriptor (16 bytes).
 /*!

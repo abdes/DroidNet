@@ -22,6 +22,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -139,6 +140,9 @@ public:
 
   //! Get the PAK content version from the header.
   OXGN_CNTT_NDAPI auto ContentVersion() const noexcept -> uint16_t;
+
+  //! Get the PAK GUID from the header.
+  OXGN_CNTT_NDAPI auto Guid() const noexcept -> data::SourceKey;
 
   //=== Resource Table Access ===---------------------------------------------//
 

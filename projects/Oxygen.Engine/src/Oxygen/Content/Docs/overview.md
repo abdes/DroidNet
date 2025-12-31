@@ -109,16 +109,50 @@ directory).
 - The editor is responsible for registering sources in a deterministic order
   for Play-in-Editor workflows.
 
+### Stable source identity: `data::SourceKey`
+
+Every mounted cooked source has a **stable, globally-unique identity** that is
+derived from its container/header GUID and represented in code as
+`data::SourceKey`.
+
+- **PAK sources**: `data::pak::PakHeader.guid` (16 bytes) is the source GUID.
+  Runtime derives `data::SourceKey` from these bytes.
+- **Loose cooked roots**: `data::IndexHeader.guid` (16 bytes, in
+  `container.index.bin`) is the source GUID. Runtime derives `data::SourceKey`
+  from these bytes.
+
+Contract:
+
+- Source GUIDs MUST be **non-zero**.
+- Source GUIDs MUST be **globally unique** across all mounted sources.
+
+Rationale: the loader and caches must treat two different cooked sources as
+different even if their internal indices overlap. If two mounts share the same
+source GUID (including the all-zero GUID), cache aliasing and wrong-scene/wrong-
+asset behavior is expected.
+
 ### `AssetKey` vs `ResourceKey`
 
-- `data::AssetKey` is a stable, engine-wide identifier for assets.
-- `ResourceKey` is an engine-wide identifier for resources, but it *encodes* a
-  16-bit source id and a source-scoped resource index.
+- `data::AssetKey` is a stable, engine-wide identifier for assets (a GUID).
+- `ResourceKey` is the runtime-facing cache key for resources. It is stable for
+  the lifetime of a particular mount configuration, but it is **not a durable
+  persisted identifier** because it encodes a runtime-assigned 16-bit source id.
+
+Canonical identity rules:
+
+- **Asset identity**: `data::AssetKey` MUST be globally unique across all mounts.
+- **Resource identity**: a resource is uniquely identified by
+  `(SourceKey, resource_type, resource_index)`.
+  - `resource_index` is source-scoped.
+  - `resource_type` is the loader’s resource type list index used in
+    `ResourceKey` packing.
 
 #### Source id policy (contract)
 
-`ResourceKey` includes a 16-bit source id. Source ids are segregated by source
-type:
+`ResourceKey` includes a 16-bit **source id**. This is a **runtime-assigned mount
+namespace id**, not the stable source GUID.
+
+Source ids are segregated by source type:
 
 - PAK ids: dense `0..N-1` in PAK registration order.
 - Loose cooked ids: start at `0x8000` in loose-cooked registration order.

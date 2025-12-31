@@ -216,6 +216,8 @@ auto RunDumpIndex(const DumpOptions& opts) -> int
     const bool dump_files = opts.files || (!opts.assets && !opts.files);
 
     std::cout << "cooked_root='" << cooked_root.string() << "'\n";
+    std::cout << "index_guid='" << oxygen::data::to_string(inspection.Guid())
+              << "'\n";
 
     if (dump_assets) {
       std::cout << "\n[assets]\n";

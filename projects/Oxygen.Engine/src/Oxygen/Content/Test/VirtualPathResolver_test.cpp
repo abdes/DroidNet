@@ -46,6 +46,13 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
     | oxygen::data::loose_cooked::v1::kHasFileRecords;
+
+  // The runtime loader rejects indexes with an all-zero GUID.
+  // For these tests we only need a valid (non-zero) value.
+  for (size_t i = 0; i < sizeof(header.guid); ++i) {
+    header.guid[i] = static_cast<uint8_t>(i + 1);
+  }
+
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = static_cast<uint64_t>(strings.size());
   header.asset_entries_offset

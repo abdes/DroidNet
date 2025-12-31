@@ -78,6 +78,8 @@ auto PakFile::ReadHeader(serio::FileStream<>* stream) -> void
 
   LOG_F(INFO, "format version  : {}", header_.version);
   LOG_F(INFO, "content version : {}", header_.content_version);
+  LOG_F(INFO, "pak guid        : {}",
+    oxygen::data::to_string(data::SourceKey::FromBytes(header_.guid)));
 
   if (std::memcmp(header_.magic, kHeaderMagic.data(), kHeaderMagic.size())
     != 0) {
@@ -128,8 +130,8 @@ auto PakFile::ReadFooter(serio::FileStream<>* stream) -> void
   }
 }
 
-auto PakFile::ReadBrowseIndex(serio::FileStream<>* stream, const size_t file_size)
-  -> void
+auto PakFile::ReadBrowseIndex(
+  serio::FileStream<>* stream, const size_t file_size) -> void
 {
   LOG_SCOPE_FUNCTION(INFO);
 
@@ -169,14 +171,15 @@ auto PakFile::ReadBrowseIndex(serio::FileStream<>* stream, const size_t file_siz
   const auto header = header_result.value();
   constexpr std::array<uint8_t, 8> kBrowseMagic
     = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
-  if (std::memcmp(header.magic, kBrowseMagic.data(), kBrowseMagic.size()) != 0) {
+  if (std::memcmp(header.magic, kBrowseMagic.data(), kBrowseMagic.size())
+    != 0) {
     LOG_F(ERROR, "Browse index magic mismatch (ignoring)");
     return;
   }
 
   if (header.version != 1) {
-    LOG_F(ERROR, "Unsupported browse index version {} (ignoring)",
-      header.version);
+    LOG_F(
+      ERROR, "Unsupported browse index version {} (ignoring)", header.version);
     return;
   }
 
@@ -297,7 +300,8 @@ PakFile::PakFile(const std::filesystem::path& path)
 
   const auto size_result = meta_stream_->Size();
   if (!size_result) {
-    LOG_F(ERROR, "Failed to get pak file size: {}", size_result.error().message());
+    LOG_F(
+      ERROR, "Failed to get pak file size: {}", size_result.error().message());
     throw std::runtime_error("Failed to get pak file size");
   }
   ReadBrowseIndex(meta_stream_.get(), size_result.value());
@@ -315,8 +319,9 @@ auto PakFile::BrowseIndex() const noexcept -> std::span<const BrowseEntry>
   return { browse_index_.data(), browse_index_.size() };
 }
 
-auto PakFile::ResolveAssetKeyByVirtualPath(const std::string_view virtual_path)
-  const noexcept -> std::optional<data::AssetKey>
+auto PakFile::ResolveAssetKeyByVirtualPath(
+  const std::string_view virtual_path) const noexcept
+  -> std::optional<data::AssetKey>
 {
   const auto it = browse_vpath_to_key_.find(virtual_path);
   if (it == browse_vpath_to_key_.end()) {
@@ -399,6 +404,11 @@ auto PakFile::FormatVersion() const noexcept -> uint16_t
 auto PakFile::ContentVersion() const noexcept -> uint16_t
 {
   return header_.content_version;
+}
+
+auto PakFile::Guid() const noexcept -> data::SourceKey
+{
+  return data::SourceKey::FromBytes(header_.guid);
 }
 
 /*!

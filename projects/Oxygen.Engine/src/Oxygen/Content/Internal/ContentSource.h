@@ -19,12 +19,13 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-#include <Oxygen/Content/Internal/LooseCookedIndex.h>
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Content/Internal/LooseCookedIndex.h>
 
 namespace oxygen::content::internal {
 
@@ -66,6 +67,9 @@ public:
   auto operator=(IContentSource&&) -> IContentSource& = delete;
 
   [[nodiscard]] virtual auto DebugName() const noexcept -> std::string_view = 0;
+
+  [[nodiscard]] virtual auto GetSourceKey() const noexcept -> data::SourceKey
+    = 0;
 
   [[nodiscard]] virtual auto FindAsset(const data::AssetKey& key) const noexcept
     -> std::optional<AssetLocator>
@@ -116,6 +120,11 @@ public:
   [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
   {
     return debug_name_;
+  }
+
+  [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
+  {
+    return pak_.Guid();
   }
 
   [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept
@@ -336,6 +345,11 @@ public:
   [[nodiscard]] auto DebugName() const noexcept -> std::string_view override
   {
     return debug_name_;
+  }
+
+  [[nodiscard]] auto GetSourceKey() const noexcept -> data::SourceKey override
+  {
+    return index_.Guid();
   }
 
   [[nodiscard]] auto FindAsset(const data::AssetKey& key) const noexcept

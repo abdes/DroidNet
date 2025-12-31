@@ -18,6 +18,13 @@ namespace {
 //! Fixture for AssetLoader dependency tests
 class LooseCookedIndexTest : public AssetLoaderBasicTest { };
 
+auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+{
+  for (uint8_t i = 0; i < 16; ++i) {
+    header.guid[i] = static_cast<uint8_t>(i + 1);
+  }
+}
+
 //! Test: Descriptor SHA-256 verification uses the standard digest
 /*!
  Scenario: Writes a descriptor file containing "abc" and records the known
@@ -50,6 +57,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -139,6 +147,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_MinimalIndex_Succeeds)
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -182,6 +191,7 @@ NOLINT_TEST_F(
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 999;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -226,6 +236,7 @@ NOLINT_TEST_F(
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -274,6 +285,7 @@ NOLINT_TEST_F(LooseCookedIndexTest,
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -325,6 +337,7 @@ NOLINT_TEST_F(LooseCookedIndexTest,
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -387,6 +400,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -449,6 +463,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -508,6 +523,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFileKind_Throws)
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -563,6 +579,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateFileKind_Throws)
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -632,6 +649,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DuplicateAssetKey_Throws)
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -710,6 +728,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -815,6 +834,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_TableWithoutData_Throws)
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -881,6 +901,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_DataWithoutTable_Throws)
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -959,6 +980,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -1037,6 +1059,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -1090,6 +1113,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_UnknownFlags_Throws)
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = 0x80000000u;
@@ -1133,6 +1157,7 @@ NOLINT_TEST_F(
   const auto index_path = cooked_root / "container.index.bin";
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasFileRecords;
@@ -1183,6 +1208,7 @@ NOLINT_TEST_F(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths;
@@ -1209,6 +1235,41 @@ NOLINT_TEST_F(
   }
 
   // Act & Assert
+  EXPECT_THROW(
+    { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+}
+
+//! Test: Verify that an index without a GUID (all zeros) is rejected.
+NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRoot_NoGuid_Throws)
+{
+  using oxygen::data::loose_cooked::v1::FileRecord;
+  using oxygen::data::loose_cooked::v1::IndexHeader;
+
+  const auto cooked_root = temp_dir_ / "loose_cooked_no_guid";
+  std::filesystem::create_directories(cooked_root);
+  const auto index_path = cooked_root / "container.index.bin";
+
+  IndexHeader header {};
+  header.version = 1;
+  header.content_version = 0;
+  header.flags = 0;
+  header.string_table_offset = sizeof(IndexHeader);
+  header.string_table_size = 1; // "\0"
+  header.asset_entries_offset = sizeof(IndexHeader) + 1;
+  header.asset_count = 0;
+  header.file_records_offset = header.asset_entries_offset;
+  header.file_record_count = 0;
+  header.file_record_size = sizeof(FileRecord);
+
+  // Leave GUID as zeros (default initialization)
+
+  {
+    std::ofstream out(index_path, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(&header), sizeof(header));
+    const char zero = 0;
+    out.write(&zero, 1);
+  }
+
   EXPECT_THROW(
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
 }

@@ -71,7 +71,7 @@ static constexpr uint32_t kKnownIndexFlags
 
 #pragma pack(push, 1)
 
-//! Fixed-size header at the start of the loose cooked index (80 bytes).
+//! Fixed-size header at the start of the loose cooked index (256 bytes).
 struct IndexHeader {
   char magic[8] = { 'O', 'X', 'L', 'C', 'I', 'D', 'X', 0 };
   uint16_t version = 1; // Schema version
@@ -92,11 +92,11 @@ struct IndexHeader {
   CountT file_record_count = 0;
   uint32_t file_record_size = 0; // sizeof(FileRecord) for this schema
 
-  // Reserved for future extensions.
-  uint8_t reserved[16] = {};
+  uint8_t guid[16] = {}; // Unique identifier for this loose cooked source
+  uint8_t reserved[176] = {};
 };
 #pragma pack(pop)
-static_assert(sizeof(IndexHeader) == 80);
+static_assert(sizeof(IndexHeader) == 256);
 
 //! Asset directory entry.
 /*! Stores the runtime identity plus the descriptor-relative path.

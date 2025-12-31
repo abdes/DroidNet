@@ -47,6 +47,13 @@ using oxygen::data::SceneAsset;
 
 namespace {
 
+auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+{
+  for (uint8_t i = 0; i < 16; ++i) {
+    header.guid[i] = static_cast<uint8_t>(i + 1);
+  }
+}
+
 auto WriteLooseCookedSceneWithSingleRootNode(
   const std::filesystem::path& cooked_root,
   const oxygen::data::AssetKey& scene_key) -> void
@@ -105,6 +112,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths;

@@ -26,9 +26,30 @@ def safe_read_file(path: Path, max_size: int = 100 * 1024 * 1024) -> bytes:
 def read_data_from_spec(
     entry: dict[str, Any], base_dir: Path, max_size: int = 100 * 1024 * 1024
 ) -> bytes:
-    sources = [k for k in ("data_hex", "file", "data") if k in entry]
+    # Accept both legacy and convenience keys.
+    # - 'file': relative path to a file
+    # - 'path': alias for 'file' used by some specs/tests
+    sources: list[str] = []
+    if "data_hex" in entry:
+        sources.append("data_hex")
+    # Treat null file/path as "not provided" so callers can include it as a
+    # placeholder without conflicting with data_hex/data.
+    if "file" in entry and entry.get("file") is not None:
+        sources.append("file")
+    if "path" in entry and entry.get("path") is not None:
+        sources.append("path")
+    if "data" in entry:
+        sources.append("data")
+
+    # Special-case: allow explicit zero-length resources without a data source.
+    # This supports specs that declare 'size: 0' (and optionally 'path: null').
     if not sources:
-        raise DataError("No data source (data_hex|file|data) provided")
+        size_field = (
+            entry.get("size") or entry.get("data_size") or entry.get("length")
+        )
+        if size_field in (None, 0):
+            return b""
+        raise DataError("No data source (data_hex|file|path|data) provided")
     if len(sources) > 1:
         raise DataError(f"Multiple data sources: {sources}")
     src = sources[0]
@@ -45,10 +66,20 @@ def read_data_from_spec(
             return bytes.fromhex(h)
         except ValueError as e:
             raise DataError(f"invalid hex: {e}") from e
-    if src == "file":
-        p = entry["file"]
+    if src in ("file", "path"):
+        p = entry[src]
+        if p is None:
+            # Common pattern for zero-length placeholders.
+            size_field = (
+                entry.get("size")
+                or entry.get("data_size")
+                or entry.get("length")
+            )
+            if size_field in (None, 0):
+                return b""
+            raise DataError(f"{src} is null for non-zero-sized resource")
         if not isinstance(p, str):
-            raise DataError("file path must be string")
+            raise DataError(f"{src} path must be string")
         resolved = safe_file_path(base_dir, p)
         return safe_read_file(resolved, max_size)
     # src == 'data'

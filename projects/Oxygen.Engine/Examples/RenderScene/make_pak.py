@@ -63,6 +63,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "-a",
+        "--all",
+        action="store_true",
+        help=(
+            "Build all specs in bulk: convert all *.glb in ./glb/ to YAML and build them, "
+            "and also build all *.yaml/*.yml specs in the current directory."
+        ),
+    )
+    parser.add_argument(
         "--data-mode",
         choices=["file", "hex"],
         default="file",
@@ -77,6 +86,77 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     cwd = Path.cwd()
+
+    def build_one(input_path: Path) -> None:
+        input_path = input_path.resolve()
+        if not input_path.exists():
+            raise SystemExit(f"Input file not found: {input_path}")
+
+        out_dir = cwd / "pak"
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        suffix = input_path.suffix.lower()
+        stem = input_path.stem
+        pak_path = out_dir / f"{stem}.pak"
+        manifest_path = out_dir / f"{stem}.manifest.json"
+
+        if suffix == ".glb":
+            spec_path = out_dir / f"{stem}.yaml"
+            # 1) GLB -> YAML (+payload)
+            from glb_to_pak_spec import GLBToPakSpec  # local module
+            import yaml
+
+            converter = GLBToPakSpec(
+                input_path, output_path=spec_path, data_mode=args.data_mode
+            )
+            spec = converter.generate_spec()
+            spec_path.write_text(
+                yaml.dump(spec, sort_keys=False), encoding="utf-8"
+            )
+            print(f"Wrote: {spec_path}")
+        elif suffix in (".yaml", ".yml"):
+            spec_path = input_path
+        else:
+            raise SystemExit(
+                f"Unsupported input type: '{suffix}'. Expected *.glb or *.yaml/*.yml"
+            )
+
+        # 2) YAML -> PAK
+        repo_root = _workspace_root_from_here()
+        BuildOptions, build_pak = _import_pakgen_api(repo_root)
+
+        build_pak(
+            BuildOptions(
+                input_spec=spec_path,
+                output_path=pak_path,
+                manifest_path=manifest_path,
+                deterministic=args.deterministic,
+            )
+        )
+
+        print(f"Wrote: {pak_path}")
+        print(f"Wrote: {manifest_path}")
+
+    if args.all:
+        if args.input is not None:
+            raise SystemExit(
+                "--all/-a cannot be used together with an input file argument"
+            )
+
+        yaml_specs = sorted(cwd.glob("*.yaml")) + sorted(cwd.glob("*.yml"))
+        glb_dir = cwd / "glb"
+        glbs = sorted(glb_dir.glob("*.glb")) if glb_dir.is_dir() else []
+
+        if not yaml_specs and not glbs:
+            raise SystemExit(
+                "No inputs found for --all: expected *.yaml/*.yml in the current directory "
+                "and/or *.glb files in ./glb/"
+            )
+
+        for path in yaml_specs + glbs:
+            build_one(path)
+        return 0
+
     input_path = args.input
     if input_path is None:
         candidates = (
@@ -92,52 +172,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         input_path = candidates[0]
 
-    input_path = input_path.resolve()
-    if not input_path.exists():
-        raise SystemExit(f"Input file not found: {input_path}")
-
-    out_dir = cwd / "pak"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    suffix = input_path.suffix.lower()
-    stem = input_path.stem
-    pak_path = out_dir / f"{stem}.pak"
-    manifest_path = out_dir / f"{stem}.manifest.json"
-
-    if suffix == ".glb":
-        spec_path = out_dir / f"{stem}.yaml"
-        # 1) GLB -> YAML (+payload)
-        from glb_to_pak_spec import GLBToPakSpec  # local module
-        import yaml
-
-        converter = GLBToPakSpec(
-            input_path, output_path=spec_path, data_mode=args.data_mode
-        )
-        spec = converter.generate_spec()
-        spec_path.write_text(yaml.dump(spec, sort_keys=False), encoding="utf-8")
-        print(f"Wrote: {spec_path}")
-    elif suffix in (".yaml", ".yml"):
-        spec_path = input_path
-    else:
-        raise SystemExit(
-            f"Unsupported input type: '{suffix}'. Expected *.glb or *.yaml/*.yml"
-        )
-
-    # 2) YAML -> PAK
-    repo_root = _workspace_root_from_here()
-    BuildOptions, build_pak = _import_pakgen_api(repo_root)
-
-    build_pak(
-        BuildOptions(
-            input_spec=spec_path,
-            output_path=pak_path,
-            manifest_path=manifest_path,
-            deterministic=args.deterministic,
-        )
-    )
-
-    print(f"Wrote: {pak_path}")
-    print(f"Wrote: {manifest_path}")
+    build_one(input_path)
     return 0
 
 

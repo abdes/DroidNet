@@ -9,7 +9,7 @@ from typing import Final
 MAGIC: Final = b"OXPAK\x00\x00\x00"
 FOOTER_MAGIC: Final = b"OXPAKEND"
 
-HEADER_SIZE: Final = 64
+HEADER_SIZE: Final = 256
 FOOTER_SIZE: Final = 256
 DIRECTORY_ENTRY_SIZE: Final = 64
 
