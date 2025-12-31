@@ -9,9 +9,9 @@
 #include <vector>
 
 #include <Oxygen/Content/Internal/DependencyCollector.h>
-#include <Oxygen/Content/Internal/SourceToken.h>
 #include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
+#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>

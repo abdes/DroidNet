@@ -59,6 +59,7 @@ set(
   "ResourceKey.h"
   "ResourceTable.h"
   "ResourceTypeList.h"
+  "SourceToken.h"
   "IAssetLoader.h"
 )
 set(
@@ -75,7 +76,6 @@ set(
   "Internal/LooseCookedIndexLoad.h"
   "Internal/DependencyCollector.h"
   "Internal/ResourceRef.h"
-  "Internal/SourceToken.h"
   "Loaders/BufferLoader.h"
   "Loaders/GeometryLoader.h"
   "Loaders/MaterialLoader.h"
