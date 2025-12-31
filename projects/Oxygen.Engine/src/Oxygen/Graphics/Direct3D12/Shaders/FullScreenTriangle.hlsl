@@ -77,20 +77,15 @@ cbuffer SceneConstants : register(b1) {
     float4x4 projection_matrix;               // 64-bytes
     float3 camera_position;                   // 12-bytes
     uint frame_slot;                          // 4-bytes
-    // Aligned at 8 bytes here
-    float time_seconds;                       // 4-bytes
     uint64_t frame_seq_num;                   // 8-bytes
+    float time_seconds;                       // 4-bytes
+    uint _pad0;                               // 4-bytes
 
     // Dynamic bindless slots for the SRVs for various resource types.
-    // These are allocated in the descriptor heap and their indices are
-    // provided here for shader access.
     uint bindless_draw_metadata_slot;         // 4 bytes
     uint bindless_transforms_slot;            // 4 bytes
     uint bindless_normal_matrices_slot;       // 4 bytes
     uint bindless_material_constants_slot;    // 4 bytes
-
-    // Padding to ensure 16-byte alignment (HLSL packs to 16-byte boundaries)
-    uint _pad0;                               // 4 bytes
 } // Total is 176 bytes
 
 // Draw index passed as a root constant (32-bit value at register b2)
@@ -109,8 +104,70 @@ struct VSOutput {
     float4 position : SV_POSITION;
     float3 color : COLOR;
     float2 uv : TEXCOORD0;
+    float3 world_pos : TEXCOORD1;
     float3 world_normal : NORMAL;
+    float3 world_tangent : TANGENT;
+    float3 world_bitangent : BINORMAL;
 };
+
+// -----------------------------------------------------------------------------
+// PBR helpers (metallic-roughness, GGX)
+// -----------------------------------------------------------------------------
+
+static const float kPi = 3.14159265359;
+
+float3 SrgbToLinear(float3 c)
+{
+    // IEC 61966-2-1:1999
+    c = saturate(c);
+    const float3 lo = c / 12.92;
+    const float3 hi = pow((c + 0.055) / 1.055, 2.4);
+    return lerp(hi, lo, step(c, 0.04045));
+}
+
+float3 LinearToSrgb(float3 c)
+{
+    c = max(c, 0.0);
+    const float3 lo = c * 12.92;
+    const float3 hi = 1.055 * pow(c, 1.0 / 2.4) - 0.055;
+    return saturate(lerp(hi, lo, step(c, 0.0031308)));
+}
+
+float DistributionGGX(float NdotH, float roughness)
+{
+    const float a = max(roughness * roughness, 1e-4);
+    const float a2 = a * a;
+    const float denom = (NdotH * NdotH) * (a2 - 1.0) + 1.0;
+    return a2 / max(kPi * denom * denom, 1e-6);
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+    // UE4-style k for direct lighting.
+    const float r = roughness + 1.0;
+    const float k = (r * r) / 8.0;
+    return NdotV / max(NdotV * (1.0 - k) + k, 1e-6);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    const float ggxV = GeometrySchlickGGX(NdotV, roughness);
+    const float ggxL = GeometrySchlickGGX(NdotL, roughness);
+    return ggxV * ggxL;
+}
+
+float3 FresnelSchlick(float cosTheta, float3 F0)
+{
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float3 DecodeNormalTS(float3 n)
+{
+    // Normal maps are typically stored as [0..1]; remap to [-1..1].
+    n = n * 2.0 - 1.0;
+    // Re-normalize after remap.
+    return normalize(n);
+}
 
 // -----------------------------------------------------------------------------
 // Normal Matrix Integration Notes
@@ -158,7 +215,7 @@ VSOutput VS(uint vertexID : SV_VertexID) {
     uint actual_vertex_index;
     if (meta.is_indexed) {
         // For indexed rendering, get the index buffer and read the actual vertex index
-        Buffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
+        StructuredBuffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
         actual_vertex_index = index_buffer[meta.first_index + vertexID] + (uint)meta.base_vertex;
     } else {
         // For non-indexed rendering, use the vertex ID directly
@@ -191,12 +248,17 @@ VSOutput VS(uint vertexID : SV_VertexID) {
         normal_mat = (float3x3)world_matrix;
     }
     float3 n_ws = normalize(mul(normal_mat, vertex.normal));
+    float3 t_ws = normalize(mul(normal_mat, vertex.tangent));
+    float3 b_ws = normalize(mul(normal_mat, vertex.bitangent));
     float4 view_pos = mul(view_matrix, world_pos);
     float4 proj_pos = mul(projection_matrix, view_pos);
     output.position = proj_pos;
     output.color = vertex.color.rgb;
     output.uv = vertex.texcoord;
+    output.world_pos = world_pos.xyz;
     output.world_normal = n_ws;
+    output.world_tangent = t_ws;
+    output.world_bitangent = b_ws;
     return output;
 }
 
@@ -213,14 +275,19 @@ float4 PS(VSOutput input) : SV_Target0 {
     const float  light_intensity = 1.0;
     const float3 ambient_color = float3(0.2, 0.2, 0.2);
 
-    // Half-Lambert term (softens the terminator, avoids harsh falloff)
-    float ndotl = 0.5 * dot(normalize(input.world_normal), -light_dir_ws) + 0.5;
-    ndotl = saturate(ndotl);
-    float3 lighting = ambient_color + (ndotl * light_intensity);
-
-    // Base color defaults
+    // Material defaults
     float3 base_rgb = float3(1.0, 1.0, 1.0);
     float  base_a   = 1.0;
+    float  metalness = 0.0;
+    float  roughness = 1.0;
+    float  ao = 1.0;
+
+    float3 N = normalize(input.world_normal);
+    float3 V = normalize(camera_position - input.world_pos);
+
+    // Use a directional light coming *from* light_dir_ws.
+    float3 L = normalize(-light_dir_ws);
+    float3 H = normalize(V + L);
 
     // If material constants available, modulate by base_color
     if (bindless_draw_metadata_slot != 0xFFFFFFFFu &&
@@ -231,6 +298,9 @@ float4 PS(VSOutput input) : SV_Target0 {
         MaterialConstants mat = materials[meta.material_handle];
         base_rgb = mat.base_color.rgb;
         base_a   = mat.base_color.a;
+        metalness = saturate(mat.metalness);
+        roughness = saturate(mat.roughness);
+        ao = saturate(mat.ambient_occlusion);
 
         const float2 uv = input.uv * mat.uv_scale + mat.uv_offset;
 
@@ -241,11 +311,96 @@ float4 PS(VSOutput input) : SV_Target0 {
             Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
             SamplerState samp = SamplerDescriptorHeap[0];
             float4 texel = base_tex.Sample(samp, uv);
-            base_rgb *= texel.rgb;
+            // Base-color (albedo) textures are authored in sRGB. Since the engine
+            // currently binds RGBA8 as UNORM (non-sRGB) and renders to a non-sRGB
+            // swapchain/backbuffer, we must manually convert.
+            base_rgb *= SrgbToLinear(texel.rgb);
             base_a   *= texel.a;
+        }
+
+        // Normal map (tangent-space)
+        if (!no_texture_sampling && mat.normal_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> nrm_tex = ResourceDescriptorHeap[mat.normal_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            float3 n_ts = DecodeNormalTS(nrm_tex.Sample(samp, uv).xyz);
+            n_ts.xy *= mat.normal_scale;
+            n_ts = normalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
+
+            float3 T = normalize(input.world_tangent);
+            float3 B = normalize(input.world_bitangent);
+            float3 NN = normalize(input.world_normal);
+
+            // Orthonormalize TBN to reduce artifacts.
+            T = normalize(T - NN * dot(NN, T));
+            B = normalize(cross(NN, T));
+
+            float3x3 TBN = float3x3(T, B, NN);
+            N = normalize(mul(TBN, n_ts));
+        }
+
+        // Scalar maps (if present)
+        if (!no_texture_sampling && mat.metallic_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            metalness *= saturate(m_tex.Sample(samp, uv).r);
+        }
+        if (!no_texture_sampling && mat.roughness_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            roughness *= saturate(r_tex.Sample(samp, uv).r);
+        }
+        if (!no_texture_sampling && mat.ambient_occlusion_texture_index != 0xFFFFFFFFu) {
+            Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
+            SamplerState samp = SamplerDescriptorHeap[0];
+            ao *= saturate(ao_tex.Sample(samp, uv).r);
         }
     }
 
-    float3 shaded = input.color * base_rgb * lighting * light_color;
-    return float4(shaded, base_a);
+    // -------------------------------------------------------------------------
+    // Direct lighting (GGX specular + Lambert diffuse)
+    // -------------------------------------------------------------------------
+
+    const float NdotL = saturate(dot(N, L));
+    const float NdotV = saturate(dot(N, V));
+    const float NdotH = saturate(dot(N, H));
+    const float VdotH = saturate(dot(V, H));
+
+    // Base reflectance
+    float3 F0 = float3(0.04, 0.04, 0.04);
+    F0 = lerp(F0, base_rgb, metalness);
+
+    const float3 F = FresnelSchlick(VdotH, F0);
+    const float  D = DistributionGGX(NdotH, roughness);
+    const float  G = GeometrySmith(NdotV, NdotL, roughness);
+
+    const float3 numerator = D * G * F;
+    const float  denom = max(4.0 * NdotV * NdotL, 1e-6);
+    const float3 specular = numerator / denom;
+
+    const float3 kS = F;
+    const float3 kD = (1.0 - kS) * (1.0 - metalness);
+    const float3 diffuse = kD * base_rgb / kPi;
+
+    const float3 direct = (diffuse + specular) * light_color * light_intensity * NdotL;
+
+    // Simple ambient terms.
+    // Keep ambient conservative so the directional light still reads clearly.
+    // Diffuse ambient should respect metalness (metals have ~no diffuse term).
+    const float3 ambient_diffuse = ambient_color * (kD * base_rgb) * ao;
+
+    // Specular ambient approximation (NOT real IBL): keep it conservative but
+    // strong enough that fully metallic materials don't go to near-black.
+    const float3 F_amb = FresnelSchlick(NdotV, F0);
+    const float amb_spec_scale = lerp(0.02, 0.25, metalness);
+    const float amb_view = 0.25 + 0.75 * NdotV;
+    const float3 ambient_specular
+        = ambient_color * F_amb * (1.0 - roughness) * amb_spec_scale * amb_view;
+
+    const float3 ambient = ambient_diffuse + (ambient_specular * ao);
+
+    const float3 shaded = (ambient + direct) * input.color;
+
+    // Output to the swapchain backbuffer (RGBA8_UNORM). Encode to sRGB so
+    // linear lighting reads correctly on display.
+    return float4(LinearToSrgb(shaded), base_a);
 }

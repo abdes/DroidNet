@@ -16,6 +16,7 @@ from .constants import (
     ASSET_NAME_MAX_LENGTH,
     MAX_RESOURCES_PER_TYPE,
     MAX_ASSETS_TOTAL,
+    MAX_RESOURCE_SIZES,
 )
 from ..utils.io import read_data_from_spec
 
@@ -265,9 +266,15 @@ def collect_resources(
                     rep.error(f"Duplicate {rtype} name: {name}")
                     raise ValueError(f"Duplicate {rtype} name: {name}")
                 try:
-                    data = read_data_from_spec(entry, base_dir)
-                except Exception:
-                    data = b""
+                    max_size = int(
+                        MAX_RESOURCE_SIZES.get(rtype, 100 * 1024 * 1024)
+                    )
+                    data = read_data_from_spec(
+                        entry, base_dir, max_size=max_size
+                    )
+                except Exception as e:
+                    rep.error(f"Failed to read {rtype} data for '{name}': {e}")
+                    raise
                 data_blobs[rtype].append(data)
                 total_bytes += len(data)
                 index_map[rtype][name] = idx
@@ -277,6 +284,53 @@ def collect_resources(
                     # Sleep after updating progress so increment is visible immediately
                     time.sleep(simulate_delay)
             rep.end_task(f"res.{rtype}")
+
+            # Texture resource indices: reserve index 0 for fallback / none.
+            # Runtime loaders treat index 0 as kNoResourceIndex and will skip
+            # collecting/loading dependencies for it. Therefore, we must never
+            # assign a real, user-provided texture to index 0.
+            if rtype == "texture":
+                fallback_name = "__fallback_texture"
+                if fallback_name not in index_map[rtype]:
+                    if len(desc_fields[rtype]) >= MAX_RESOURCES_PER_TYPE:
+                        rep.error(
+                            f"Too many {rtype} resources (needs room for fallback): "
+                            f"{len(desc_fields[rtype])}/{MAX_RESOURCES_PER_TYPE}"
+                        )
+                        raise ValueError(
+                            f"Too many {rtype} resources (needs room for fallback): {len(desc_fields[rtype])}"
+                        )
+
+                    # 1x1 RGBA8_UNORM white texel. Values align with existing
+                    # example spec constants (texture_type=3, format=30).
+                    fallback_spec = {
+                        "name": fallback_name,
+                        "texture_type": 3,
+                        "compression_type": 0,
+                        "width": 1,
+                        "height": 1,
+                        "depth": 1,
+                        "array_layers": 1,
+                        "mip_levels": 1,
+                        "format": 30,
+                        "alignment": 256,
+                        "data_hex": "ffffffff",
+                    }
+                    # NOTE: D3D12 upload paths often align row pitch to 256
+                    # bytes. A 1x1 RGBA8 subresource therefore needs at least
+                    # 256 bytes of data for a successful upload.
+                    fallback_data = b"\xff\xff\xff\xff" + b"\x00" * (256 - 4)
+
+                    # Insert at the front and shift all existing indices by +1.
+                    data_blobs[rtype].insert(0, fallback_data)
+                    desc_fields[rtype].insert(0, fallback_spec)
+                    total_bytes += len(fallback_data)
+
+                    old_map = index_map[rtype]
+                    new_map: Dict[str, int] = {fallback_name: 0}
+                    for k, v in old_map.items():
+                        new_map[k] = int(v) + 1
+                    index_map[rtype] = new_map
         # Summary after all resource types processed
         counts = {rt: len(desc_fields[rt]) for rt in resource_types}
         if any(counts.values()):
@@ -515,23 +569,14 @@ def compute_pak_plan(
             # Writer tolerates zero-length emission naturally.
             pass
 
-    # Resource regions (apply deterministic ordering inside each type by original spec index map key if flag set)
+    # Resource regions
     for rtype in ["texture", "buffer", "audio"]:
         blobs = build_plan.resources.data_blobs.get(rtype, [])
         descs = build_plan.resources.desc_fields.get(rtype, [])
-        if deterministic and descs:
-            # Preserve original spec order for buffers because asset descriptors
-            # reference buffer indices implicitly by their original declaration
-            # order (after default/fallback at index 0). Sorting would change
-            # semantic indices and break geometry vertex/index buffer mapping.
-            if rtype not in ("buffer",):
-                paired = list(zip(descs, blobs))
-                paired.sort(key=lambda p: p[0].get("name", ""))
-                if paired:
-                    descs_sorted, blobs_sorted = zip(*paired)
-                    build_plan.resources.desc_fields[rtype] = list(descs_sorted)  # type: ignore[index]
-                    build_plan.resources.data_blobs[rtype] = list(blobs_sorted)  # type: ignore[index]
-                    blobs = build_plan.resources.data_blobs.get(rtype, [])
+        # IMPORTANT: Do not reorder resource lists, even in deterministic mode.
+        # Resource indices are semantic and referenced by packed asset
+        # descriptors (e.g., material texture indices). Reordering resources
+        # would desynchronize the index map computed during collection.
         if not blobs:
             regions.append(
                 RegionPlan(

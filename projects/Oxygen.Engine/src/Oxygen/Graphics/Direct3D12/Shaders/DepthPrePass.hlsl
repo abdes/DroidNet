@@ -59,20 +59,15 @@ cbuffer SceneConstants : register(b1) {
     float4x4 projection_matrix;               // 64-bytes
     float3 camera_position;                   // 12-bytes
     uint frame_slot;                          // 4-bytes
-    // Aligned at 8 bytes here
-    float time_seconds;                       // 4-bytes
     uint64_t frame_seq_num;                   // 8-bytes
+    float time_seconds;                       // 4-bytes
+    uint _pad0;                               // 4-bytes
 
     // Dynamic bindless slots for the SRVs for various resource types.
-    // These are allocated in the descriptor heap and their indices are
-    // provided here for shader access.
     uint bindless_draw_metadata_slot;         // 4 bytes
     uint bindless_transforms_slot;            // 4 bytes
     uint bindless_normal_matrices_slot;       // 4 bytes
     uint bindless_material_constants_slot;    // 4 bytes
-
-    // Padding to ensure 16-byte alignment (HLSL packs to 16-byte boundaries)
-    uint _pad0;                               // 4 bytes
 } // Total is 176 bytes
 
 // Draw index passed as a root constant (32-bit value at register b2)
@@ -128,7 +123,7 @@ VS_OUTPUT_DEPTH VS(uint vertexID : SV_VertexID) {
     uint actual_vertex_index;
     if (meta.is_indexed) {
         // For indexed rendering, get the index buffer and read the actual vertex index
-        Buffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
+        StructuredBuffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
         actual_vertex_index = index_buffer[meta.first_index + vertexID] + (uint)meta.base_vertex;
     } else {
         // For non-indexed rendering, use the vertex ID directly
