@@ -8,6 +8,7 @@
 #pragma managed(push, off)
 
 #include <functional>
+#include <string>
 
 #include <EditorModule/EditorCommand.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -18,7 +19,7 @@ class EditorModule;
 
 class CreateSceneCommand final : public EditorCommand {
 public:
-  using OnComplete = std::function<void(bool)>;
+  using OnComplete = std::function<void(bool, std::string)>;
 
   CreateSceneCommand(EditorModule *module, std::string name,
                      OnComplete cb = nullptr)

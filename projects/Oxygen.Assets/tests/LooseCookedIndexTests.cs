@@ -27,6 +27,7 @@ public sealed class LooseCookedIndexTests
         var read = LooseCookedIndex.Read(ms);
 
         _ = read.ContentVersion.Should().Be(doc.ContentVersion);
+        _ = read.SourceGuid.Should().Be(doc.SourceGuid);
         _ = read.Assets.Should().HaveCount(2);
         _ = read.Files.Should().HaveCount(2);
 
@@ -135,6 +136,7 @@ public sealed class LooseCookedIndexTests
         return new Document(
             ContentVersion: 7,
             Flags: IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords,
+            SourceGuid: Guid.ParseExact("00112233-4455-6677-8899-aabbccddeeff", "D"),
             Assets:
             [
                 new AssetEntry(

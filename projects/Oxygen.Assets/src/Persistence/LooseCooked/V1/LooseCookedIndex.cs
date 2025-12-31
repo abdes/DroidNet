@@ -19,7 +19,8 @@ namespace Oxygen.Assets.Persistence.LooseCooked.V1;
 /// </remarks>
 public static class LooseCookedIndex
 {
-    public const int HeaderSize = 80;
+    // Must match oxygen::data::loose_cooked::v1::IndexHeader (see Oxygen/Data/LooseCookedIndexFormat.h)
+    public const int HeaderSize = 256;
     public const int AssetEntrySize = 76;
     public const int FileRecordSize = 64;
     public const int Sha256Size = 32;
@@ -45,7 +46,7 @@ public static class LooseCookedIndex
         var assets = ReadAssetsSection();
         var files = ReadFileRecordsSection();
 
-        return new Document(headerFields.ContentVersion, headerFields.Flags, assets, files);
+        return new Document(headerFields.ContentVersion, headerFields.Flags, headerFields.SourceGuid, assets, files);
 
         byte[] ReadStringTable() => ReadBlock(stream, headerFields.StringTableOffset, checked((int)headerFields.StringTableSize));
 
@@ -79,6 +80,7 @@ public static class LooseCookedIndex
         EnsureSeekable(stream, nameof(Write));
 
         var computedFlags = ComputeEffectiveFlags(document);
+        var sourceGuid = document.SourceGuid == Guid.Empty ? Guid.NewGuid() : document.SourceGuid;
         var (stringTableBytes, offsets) = BuildStringTable(document);
         var layout = ComputeLayout(document, stringTableBytes.Length);
 
@@ -102,7 +104,8 @@ public static class LooseCookedIndex
                 layout.AssetEntriesOffset,
                 (uint)document.Assets.Count,
                 layout.FileRecordsOffset,
-                (uint)document.Files.Count);
+                (uint)document.Files.Count,
+                sourceGuid);
         }
 
         void WriteStringTable()
@@ -209,6 +212,8 @@ public static class LooseCookedIndex
         var fileRecordCount = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(56, 4));
         var fileRecordSize = BinaryPrimitives.ReadUInt32LittleEndian(header.Slice(60, 4));
 
+        var sourceGuid = new Guid(header.Slice(64, 16));
+
         ValidateKnownFlags(flagsRaw);
 
         return new HeaderFields(
@@ -221,7 +226,8 @@ public static class LooseCookedIndex
             assetEntrySize,
             fileRecordsOffset,
             fileRecordCount,
-            fileRecordSize);
+            fileRecordSize,
+            sourceGuid);
     }
 
     private static void ValidateHeaderFields(HeaderFields headerFields, ulong length)
@@ -398,7 +404,8 @@ public static class LooseCookedIndex
         ulong assetEntriesOffset,
         uint assetCount,
         ulong fileRecordsOffset,
-        uint fileRecordCount)
+        uint fileRecordCount,
+        Guid sourceGuid)
     {
         Span<byte> header = stackalloc byte[HeaderSize];
         header.Clear();
@@ -414,6 +421,7 @@ public static class LooseCookedIndex
         BinaryPrimitives.WriteUInt64LittleEndian(header.Slice(48, 8), fileRecordCount > 0 ? fileRecordsOffset : 0);
         BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(56, 4), fileRecordCount);
         BinaryPrimitives.WriteUInt32LittleEndian(header.Slice(60, 4), (uint)FileRecordSize);
+        sourceGuid.TryWriteBytes(header.Slice(64, 16));
         stream.Write(header);
     }
 
@@ -566,7 +574,8 @@ public static class LooseCookedIndex
         uint AssetEntrySize,
         ulong FileRecordsOffset,
         uint FileRecordCount,
-        uint FileRecordSize);
+        uint FileRecordSize,
+        Guid SourceGuid);
 
     [StructLayout(LayoutKind.Auto)]
     private readonly record struct FileLayout(

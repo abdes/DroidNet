@@ -123,7 +123,8 @@ namespace oxygen::interop::module {
 
     // Scene management API
     // Create scene and invoke optional completion callback on the engine thread
-    auto CreateScene(std::string_view name, std::function<void(bool)> onComplete)
+    auto CreateScene(std::string_view name,
+      std::function<void(bool, std::string)> onComplete)
       -> void;
     void ApplyCreateScene(std::string_view name);
 

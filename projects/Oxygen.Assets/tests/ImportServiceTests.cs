@@ -203,6 +203,7 @@ public sealed class ImportServiceTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: 0,
+            SourceGuid: Guid.ParseExact("99999999-8888-7777-6666-555555555555", "D"),
             Assets: Array.Empty<AssetEntry>(),
             Files:
             [

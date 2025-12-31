@@ -21,14 +21,21 @@ namespace oxygen::interop::module {
     try {
       module_->ApplyCreateScene(name_);
       if (cb_) {
-        try { cb_(true); }
+        try { cb_(true, std::string{}); }
         catch (...) { /* swallow */ }
       }
     }
-    catch (...) {
-      // swallow: command should not throw across engine boundary
+    catch (const std::exception& e) {
+      LOG_F(ERROR, "CreateSceneCommand failed: {}", e.what());
       if (cb_) {
-        try { cb_(false); }
+        try { cb_(false, e.what()); }
+        catch (...) {}
+      }
+    }
+    catch (...) {
+      LOG_F(ERROR, "CreateSceneCommand failed: unknown exception");
+      if (cb_) {
+        try { cb_(false, "unknown exception"); }
         catch (...) {}
       }
     }
