@@ -50,6 +50,7 @@ public sealed class LooseCookedIndexValidatorTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords,
+            SourceGuid: Guid.ParseExact("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "D"),
             Assets:
             [
                 new AssetEntry(
@@ -95,6 +96,7 @@ public sealed class LooseCookedIndexValidatorTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: IndexFeatures.HasVirtualPaths,
+            SourceGuid: Guid.ParseExact("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "D"),
             Assets:
             [
                 new AssetEntry(
@@ -136,6 +138,7 @@ public sealed class LooseCookedIndexValidatorTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: IndexFeatures.HasVirtualPaths,
+            SourceGuid: Guid.ParseExact("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "D"),
             Assets:
             [
                 new AssetEntry(
@@ -174,6 +177,7 @@ public sealed class LooseCookedIndexValidatorTests
         var doc = new Document(
             ContentVersion: 1,
             Flags: IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords,
+            SourceGuid: Guid.ParseExact("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee", "D"),
             Assets: [],
             Files:
             [

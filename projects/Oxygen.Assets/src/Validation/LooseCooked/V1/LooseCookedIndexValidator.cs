@@ -68,13 +68,13 @@ public static class LooseCookedIndexValidator
         }
         catch (Exception ex) when (ex is InvalidPathException or StorageException)
         {
-            return (new Document(0, IndexFeatures.None, [], []),
+            return (new Document(0, IndexFeatures.None, Guid.Empty, [], []),
                 [new LooseCookedValidationIssue("index.open", $"Failed to locate index: {ex.Message}")]);
         }
 
         if (!await indexDoc.ExistsAsync().ConfigureAwait(false))
         {
-            return (new Document(0, IndexFeatures.None, [], []),
+                return (new Document(0, IndexFeatures.None, Guid.Empty, [], []),
                 [new LooseCookedValidationIssue("index.missing", "container.index.bin is missing.")]);
         }
 
@@ -93,7 +93,7 @@ public static class LooseCookedIndexValidator
         }
         catch (Exception ex) when (ex is InvalidDataException or NotSupportedException or StorageException)
         {
-            return (new Document(0, IndexFeatures.None, [], []),
+            return (new Document(0, IndexFeatures.None, Guid.Empty, [], []),
                 [new LooseCookedValidationIssue("index.parse", $"Failed to parse container.index.bin: {ex.Message}")]);
         }
     }

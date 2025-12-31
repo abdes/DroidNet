@@ -93,7 +93,9 @@ public sealed partial class SceneEngineSync : ISceneEngineSync
             var created = await world.CreateSceneAsync(scene.Name).ConfigureAwait(false);
             if (!created)
             {
-                this.LogFailedToSyncSceneWithEngine(new InvalidOperationException("CreateSceneAsync failed"), scene);
+                this.LogFailedToSyncSceneWithEngine(
+                    new InvalidOperationException("CreateSceneAsync returned false"),
+                    scene);
                 return;
             }
             this.LogCreatedSceneInEngine(scene);

@@ -27,6 +27,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
         var indexDoc = new Document(
             ContentVersion: 1,
             Flags: IndexFeatures.HasVirtualPaths,
+               SourceGuid: Guid.ParseExact("11111111-2222-3333-4444-555555555555", "D"),
             Assets:
             [
                 new AssetEntry(

@@ -49,13 +49,29 @@ using namespace oxygen::interop::module;
 namespace Oxygen::Interop::World {
 
   namespace {
+    static System::Threading::Tasks::Task<bool>^ CreateFailedBoolTask(
+      const char* message)
+    {
+      auto tcs = gcnew System::Threading::Tasks::TaskCompletionSource<bool>();
+      tcs->SetException(gcnew System::InvalidOperationException(
+        gcnew System::String(message)));
+      return tcs->Task;
+    }
+
     // Helper to build a native completion callback that posts into a managed
     // TaskCompletionSource. The pointer is owned by the callback and deleted
     // after invocation to avoid leaks.
-    static std::function<void(bool)> MakeTcsCallback(msclr::gcroot<System::Threading::Tasks::TaskCompletionSource<bool>^>* ptr) {
-      return [ptr](bool ok) mutable {
+    static std::function<void(bool, std::string)> MakeTcsCallback(
+      msclr::gcroot<System::Threading::Tasks::TaskCompletionSource<bool>^>* ptr)
+    {
+      return [ptr](bool ok, std::string error) mutable {
         try {
-          (*ptr)->SetResult(ok);
+          if (ok) {
+            (*ptr)->SetResult(true);
+          } else {
+            auto msg = gcnew System::String(error.c_str());
+            (*ptr)->SetException(gcnew System::InvalidOperationException(msg));
+          }
         }
         catch (...) {
           // swallow
@@ -147,12 +163,15 @@ namespace Oxygen::Interop::World {
 
   System::Threading::Tasks::Task<bool>^ OxygenWorld::CreateSceneAsync(String^ name) {
     auto native_ctx = context_->NativePtr();
-    if (!native_ctx || !native_ctx->engine)
-      return Task<bool>::FromResult(false);
+    if (!native_ctx)
+      return CreateFailedBoolTask("CreateSceneAsync failed: native context is null");
+
+    if (!native_ctx->engine)
+      return CreateFailedBoolTask("CreateSceneAsync failed: native engine is null");
 
     auto editor_module = native_ctx->engine->GetModule<EditorModule>();
     if (!editor_module)
-      return Task<bool>::FromResult(false);
+      return CreateFailedBoolTask("CreateSceneAsync failed: EditorModule is not available");
 
     msclr::interop::marshal_context marshal;
     auto native_name = marshal.marshal_as<std::string>(name);
@@ -165,11 +184,19 @@ namespace Oxygen::Interop::World {
       auto cb = MakeTcsCallback(tcs_ptr);
       editor_module->get().CreateScene(native_name, std::move(cb));
     }
+    catch (const std::exception& e) {
+      // Ensure we don't leak the allocated pointer on error
+      try { delete tcs_ptr; }
+      catch (...) {}
+      tcs->SetException(gcnew System::InvalidOperationException(
+        gcnew System::String(e.what())));
+    }
     catch (...) {
       // Ensure we don't leak the allocated pointer on error
       try { delete tcs_ptr; }
       catch (...) {}
-      tcs->SetResult(false);
+      tcs->SetException(gcnew System::InvalidOperationException(
+        "CreateSceneAsync failed: unknown native exception"));
     }
 
     return tcs->Task;

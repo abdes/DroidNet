@@ -7,5 +7,6 @@ namespace Oxygen.Assets.Persistence.LooseCooked.V1;
 public sealed record Document(
     ushort ContentVersion,
     IndexFeatures Flags,
+    Guid SourceGuid,
     IReadOnlyList<AssetEntry> Assets,
     IReadOnlyList<FileRecord> Files);

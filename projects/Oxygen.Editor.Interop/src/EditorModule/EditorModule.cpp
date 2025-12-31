@@ -130,9 +130,10 @@ namespace oxygen::interop::module {
     // engine modules (renderer) during command recording.
     engine_ = engine;
 
-    asset_loader_ = engine->GetAssetLoader();
-    DCHECK_NOTNULL_F(asset_loader_,
-      "EditorModule requires AssetLoader - set config.enable_asset_loader = true");
+    // IMPORTANT: Do not touch AssetLoader here.
+    // EngineRunner registers EditorModule from the UI thread, but AssetLoader
+    // enforces an owning-thread invariant. We acquire it lazily on the engine
+    // thread in OnFrameStart.
 
     // InputSystem is registered by the engine interface layer during the
     // engine startup sequence. In the editor, EditorModule may be registered
@@ -176,6 +177,13 @@ namespace oxygen::interop::module {
     DCHECK_NOTNULL_F(registry_);
     DCHECK_NOTNULL_F(view_manager_);
 
+    if (!asset_loader_) {
+      asset_loader_ = engine_->GetAssetLoader();
+      DCHECK_NOTNULL_F(asset_loader_,
+        "EditorModule requires AssetLoader - set config.enable_asset_loader = true");
+      roots_dirty_ = true;
+    }
+
     if (!path_resolver_) {
       LOG_F(INFO, "Initializing VirtualPathResolver on engine thread");
       path_resolver_ = std::make_unique<oxygen::content::VirtualPathResolver>();
@@ -184,6 +192,11 @@ namespace oxygen::interop::module {
 
     if (roots_dirty_) {
       std::lock_guard lock(roots_mutex_);
+      if (!asset_loader_.get()->IsRunning()) {
+        LOG_F(INFO,
+          "Deferring cooked-roots sync: AssetLoader not activated yet");
+        return;
+      }
       LOG_F(INFO, "Syncing {} cooked roots to AssetLoader and PathResolver", mounted_roots_.size());
       asset_loader_.get()->ClearMounts();
       path_resolver_->ClearMounts();
@@ -604,7 +617,7 @@ namespace oxygen::interop::module {
   }
 
   auto EditorModule::CreateScene(std::string_view name,
-    std::function<void(bool)> onComplete) -> void {
+    std::function<void(bool, std::string)> onComplete) -> void {
     LOG_F(INFO, "EditorModule::CreateScene called: name='{}'", name);
     // Marshal scene creation to the engine thread by enqueuing a command
     // that will execute during FrameStart. Provide onComplete callback so
@@ -616,6 +629,19 @@ namespace oxygen::interop::module {
 
   void EditorModule::ApplyCreateScene(std::string_view name) {
     LOG_F(INFO, "EditorModule::ApplyCreateScene: creating scene '{}'", name);
+    if (scene_) {
+      try {
+        ApplyDestroyScene();
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "ApplyCreateScene: failed to destroy existing scene: {}",
+          e.what());
+        scene_.reset();
+      } catch (...) {
+        LOG_F(ERROR,
+          "ApplyCreateScene: failed to destroy existing scene: unknown error");
+        scene_.reset();
+      }
+    }
     scene_ = std::make_shared<oxygen::scene::Scene>(std::string(name));
   }
 
@@ -731,12 +757,25 @@ namespace oxygen::interop::module {
     LOG_F(INFO, "EditorModule::ApplyDestroyScene: destroying current scene");
     // Ensure all views are destroyed/cleaned up before releasing the scene.
     if (view_manager_) {
-      view_manager_->DestroyAllViews();
+      try {
+        view_manager_->DestroyAllViews();
+      } catch (const std::exception& e) {
+        LOG_F(ERROR, "ApplyDestroyScene: DestroyAllViews failed: {}", e.what());
+      } catch (...) {
+        LOG_F(ERROR, "ApplyDestroyScene: DestroyAllViews failed: unknown");
+      }
     }
 
     // Clear all node GUID to native handle mappings so they can be re-registered
     // if the same scene (or another scene using the same node IDs) is reloaded.
-    NodeRegistry::ClearAll();
+    try {
+      NodeRegistry::ClearAll();
+    } catch (const std::exception& e) {
+      LOG_F(ERROR, "ApplyDestroyScene: NodeRegistry::ClearAll failed: {}",
+        e.what());
+    } catch (...) {
+      LOG_F(ERROR, "ApplyDestroyScene: NodeRegistry::ClearAll failed: unknown");
+    }
 
     // Reset scene after views have been released to avoid traversals seeing
     // an invalid scene during frame phases.

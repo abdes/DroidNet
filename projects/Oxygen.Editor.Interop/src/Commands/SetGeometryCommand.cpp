@@ -11,6 +11,9 @@
 #include <Commands/SetGeometryCommand.h>
 #include <EditorModule/EditorCommand.h>
 
+#include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/data/AssetKey.h>
+
 namespace oxygen::interop::module {
 
   void SetGeometryCommand::Execute(CommandContext& context) {
@@ -18,11 +21,14 @@ namespace oxygen::interop::module {
       return;
     }
 
-    auto sceneNode = context.Scene->GetNode(node_);
-    if (!sceneNode || !sceneNode->IsAlive())
+    const auto scene_node_opt = context.Scene->GetNode(node_);
+    if (!scene_node_opt || !scene_node_opt->IsAlive())
       return;
 
+    auto scene_node = *scene_node_opt;
+
     std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
+    bool started_async_load = false;
 
     // 1. Check for procedural geometry
     const std::string generatedPrefix = "asset:///Engine/Generated/BasicShapes/";
@@ -65,7 +71,8 @@ namespace oxygen::interop::module {
         oxygen::data::pak::GeometryAssetDesc geo_desc{};
         geo_desc.header.asset_type = 6; // Geometry type
         geo_desc.header.version = 1;
-        std::strncpy(geo_desc.header.name, type.c_str(), sizeof(geo_desc.header.name));
+        strncpy_s(geo_desc.header.name, sizeof(geo_desc.header.name),
+          type.c_str(), _TRUNCATE);
         geo_desc.lod_count = 1;
 
         const auto bbox_min = mesh->BoundingBoxMin();
@@ -80,11 +87,13 @@ namespace oxygen::interop::module {
         std::vector<std::shared_ptr<oxygen::data::Mesh>> lod_meshes;
         lod_meshes.push_back(std::move(mesh));
 
-        geometry = std::make_shared<oxygen::data::GeometryAsset>(geo_desc, std::move(lod_meshes));
+        geometry = std::make_shared<oxygen::data::GeometryAsset>(
+          oxygen::data::AssetKey{}, geo_desc, std::move(lod_meshes));
       }
     }
     // 2. Check for content assets
     else if (context.PathResolver && context.AssetLoader) {
+      const std::string asset_uri = assetUri_;
       std::string_view uri = assetUri_;
       if (uri.starts_with("asset:")) {
         uri.remove_prefix(6);
@@ -101,19 +110,59 @@ namespace oxygen::interop::module {
       auto key = context.PathResolver->ResolveAssetKey(virtualPath);
       if (key) {
         LOG_F(INFO, "SetGeometryCommand: resolved key, loading asset...");
-        geometry = context.AssetLoader->LoadAsset<oxygen::data::GeometryAsset>(*key);
+        geometry = context.AssetLoader->GetAsset<oxygen::data::GeometryAsset>(*key);
         if (!geometry) {
-          LOG_F(ERROR, "SetGeometryCommand: failed to load geometry asset for key");
+          started_async_load = true;
+          const auto asset_key = *key;
+          const auto node = scene_node;
+          context.AssetLoader->StartLoadAsset<oxygen::data::GeometryAsset>(
+            asset_key,
+            [node, asset_uri](
+              std::shared_ptr<oxygen::data::GeometryAsset> loaded) {
+              if (!loaded) {
+                LOG_F(ERROR,
+                  "SetGeometryCommand: async load failed for '{}'", asset_uri);
+                return;
+              }
+
+              if (!node.IsAlive()) {
+                LOG_F(WARNING,
+                  "SetGeometryCommand: node no longer alive; skipping geometry "
+                  "apply for '{}'", asset_uri);
+                return;
+              }
+
+              LOG_F(INFO,
+                "SetGeometryCommand: applying async geometry '{}'", asset_uri);
+              try {
+                node.GetRenderable().SetGeometry(std::move(loaded));
+                LOG_F(INFO,
+                  "SetGeometryCommand: async geometry applied successfully");
+              } catch (const std::exception& e) {
+                LOG_F(ERROR,
+                  "SetGeometryCommand: exception in async SetGeometry: {}",
+                  e.what());
+                throw;
+              } catch (...) {
+                LOG_F(ERROR,
+                  "SetGeometryCommand: unknown exception in async SetGeometry");
+                throw;
+              }
+            });
         }
       } else {
         LOG_F(WARNING, "SetGeometryCommand: could not resolve asset key for virtual path '{}'", virtualPath);
       }
     }
 
+    if (started_async_load) {
+      return;
+    }
+
     if (geometry) {
       LOG_F(INFO, "SetGeometryCommand: applying geometry to scene node");
       try {
-        sceneNode->GetRenderable().SetGeometry(geometry);
+        scene_node.GetRenderable().SetGeometry(geometry);
         LOG_F(INFO, "SetGeometryCommand: geometry applied successfully");
       } catch (const std::exception& e) {
         LOG_F(ERROR, "SetGeometryCommand: exception in SetGeometry: {}", e.what());

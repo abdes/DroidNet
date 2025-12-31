@@ -140,6 +140,7 @@ public sealed class LooseCookedBuildService
         var updatedDoc = new Document(
             ContentVersion: doc.ContentVersion,
             Flags: doc.Flags,
+            SourceGuid: doc.SourceGuid == Guid.Empty ? Guid.NewGuid() : doc.SourceGuid,
             Assets: doc.Assets,
             Files: fileRecords.Values.OrderBy(static f => f.RelativePath, StringComparer.Ordinal).ToList());
 
@@ -196,7 +197,7 @@ public sealed class LooseCookedBuildService
         CancellationToken cancellationToken)
     {
         var indexPath = $"{AssetPipelineConstants.CookedFolderName}/{mountPoint}/{AssetPipelineConstants.IndexFileName}";
-        var (existingAssets, existingFiles) = await TryLoadExistingIndexAsync(files, indexPath, cancellationToken).ConfigureAwait(false);
+        var (existingSourceGuid, existingAssets, existingFiles) = await TryLoadExistingIndexAsync(files, indexPath, cancellationToken).ConfigureAwait(false);
 
         var updatedAssetKeys = new HashSet<AssetKey>();
         var virtualPathToKey = BuildVirtualPathToKeyMap(existingAssets);
@@ -239,9 +240,12 @@ public sealed class LooseCookedBuildService
 
         var dedupedAssets = DeduplicateAssetsByVirtualPath(existingAssets.Values, updatedAssetKeys);
 
+        var sourceGuid = existingSourceGuid == Guid.Empty ? Guid.NewGuid() : existingSourceGuid;
+
         var document = new Document(
             ContentVersion: ContentVersion,
             Flags: IndexFeatures.None,
+            SourceGuid: sourceGuid,
             Assets: dedupedAssets,
             Files: existingFiles.Values.OrderBy(static f => f.RelativePath, StringComparer.Ordinal).ToList());
 
@@ -271,9 +275,10 @@ public sealed class LooseCookedBuildService
         }
     }
 
-    private static async Task<(Dictionary<AssetKey, AssetEntry> assets, Dictionary<string, FileRecord> files)>
+    private static async Task<(Guid sourceGuid, Dictionary<AssetKey, AssetEntry> assets, Dictionary<string, FileRecord> files)>
         TryLoadExistingIndexAsync(IImportFileAccess files, string indexPath, CancellationToken cancellationToken)
     {
+        var existingSourceGuid = Guid.Empty;
         var existingAssets = new Dictionary<AssetKey, AssetEntry>();
         var existingFiles = new Dictionary<string, FileRecord>(StringComparer.Ordinal);
 
@@ -282,11 +287,12 @@ public sealed class LooseCookedBuildService
             var existingBytes = await files.ReadAllBytesAsync(indexPath, cancellationToken).ConfigureAwait(false);
             if (existingBytes.Length == 0)
             {
-                return (existingAssets, existingFiles);
+                return (existingSourceGuid, existingAssets, existingFiles);
             }
 
             using var ms = new MemoryStream(existingBytes.ToArray());
             var existingDoc = LooseCookedIndex.Read(ms);
+            existingSourceGuid = existingDoc.SourceGuid;
 
             foreach (var asset in existingDoc.Assets)
             {
@@ -303,7 +309,7 @@ public sealed class LooseCookedBuildService
             // Index doesn't exist yet.
         }
 
-        return (existingAssets, existingFiles);
+        return (existingSourceGuid, existingAssets, existingFiles);
     }
 
     private static async Task UpdateAssetEntriesAsync(
