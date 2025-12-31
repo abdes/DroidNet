@@ -8,8 +8,8 @@
 
 #include <memory>
 
-#include <Oxygen/Content/Internal/SourceToken.h>
 #include <Oxygen/Content/ResourceTypeList.h>
+#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>

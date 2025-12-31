@@ -10,7 +10,7 @@
 #include <string>
 
 #include <Oxygen/Composition/Typed.h>
-#include <Oxygen/Content/Internal/SourceToken.h>
+#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::internal {
