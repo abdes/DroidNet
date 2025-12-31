@@ -41,7 +41,8 @@ ASSET_TYPE_MAP: Final = {
 }
 
 MAX_RESOURCE_SIZES: Final = {
-    "texture": 256 * 1024 * 1024,
+    # Textures can exceed 256 MiB when stored as raw RGBA8.
+    "texture": 1024 * 1024 * 1024,
     "buffer": 64 * 1024 * 1024,
     "audio": 32 * 1024 * 1024,
 }

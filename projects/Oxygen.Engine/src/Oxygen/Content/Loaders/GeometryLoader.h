@@ -103,9 +103,6 @@ namespace detail {
     }
 
     auto collect_buffer_ref = [&](const ResourceIndexT resource_index) {
-      if (resource_index == 0) {
-        return;
-      }
       internal::ResourceRef ref {
         .source = context.source_token,
         .resource_type_id = BufferResource::ClassTypeId(),

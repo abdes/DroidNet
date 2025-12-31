@@ -253,6 +253,10 @@ auto AssetLoader::ClearMounts() -> void
   impl_->next_source_token_value = 1;
   impl_->next_loose_source_id = kLooseCookedSourceIdBase;
   impl_->pak_paths.clear();
+
+  // Clear the content cache to prevent stale assets from being returned
+  // when switching content sources (e.g. scene swap).
+  content_cache_.Clear();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)

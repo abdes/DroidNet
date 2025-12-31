@@ -201,6 +201,10 @@ private:
 
     std::optional<engine::upload::UploadTicket> pending_vertex_ticket;
     std::optional<engine::upload::UploadTicket> pending_index_ticket;
+
+    // When source indices are 16-bit, we widen to 32-bit for GPU consumption
+    // and keep this staging buffer alive until the upload ticket retires.
+    std::shared_ptr<std::vector<std::uint32_t>> pending_widened_indices;
   };
 
   auto UploadBuffers() -> void;
@@ -668,14 +672,28 @@ auto GeometryUploader::Impl::UploadIndexBuffer(GeometryEntry& dirty_entry)
   const auto& mesh = dirty_entry.mesh;
   DCHECK_F(mesh->IsIndexed());
   const auto& indices = mesh->IndexBuffer();
-  const uint64_t buffer_size = indices.bytes.size();
-  const auto stride = static_cast<uint32_t>(indices.ElementSize());
-  DCHECK_EQ_F(buffer_size % stride, 0);
+  constexpr std::uint32_t kGpuIndexStride = sizeof(std::uint32_t);
+
+  std::span<const std::byte> index_bytes = indices.bytes;
+  if (indices.type == oxygen::data::detail::IndexType::kUInt16) {
+    auto widened = std::make_shared<std::vector<std::uint32_t>>();
+    widened->reserve(indices.Count());
+    for (const auto v : indices.Widened()) {
+      widened->push_back(v);
+    }
+    dirty_entry.pending_widened_indices = widened;
+    index_bytes = std::as_bytes(std::span { *widened });
+  } else {
+    dirty_entry.pending_widened_indices.reset();
+  }
+
+  const uint64_t buffer_size = index_bytes.size();
+  DCHECK_EQ_F(buffer_size % kGpuIndexStride, 0);
 
   DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
   using oxygen::engine::upload::internal::EnsureBufferAndSrv;
-  if (!EnsureBufferAndSrv(
-        *gfx_, index_buffer, srv_index, buffer_size, stride, "IndexBuffer")
+  if (!EnsureBufferAndSrv(*gfx_, index_buffer, srv_index, buffer_size,
+        kGpuIndexStride, "IndexBuffer")
         .has_value()) {
     return std::unexpected { false };
   }
@@ -693,7 +711,7 @@ auto GeometryUploader::Impl::UploadIndexBuffer(GeometryEntry& dirty_entry)
         .size_bytes = buffer_size,
         .dst_offset = 0,
     },
-    .data = engine::upload::UploadDataView { indices.bytes },
+    .data = engine::upload::UploadDataView { index_bytes },
   };
 }
 
@@ -797,13 +815,19 @@ auto GeometryUploader::Impl::RetireCompletedUploads() -> void
     if (entry.mesh == nullptr) {
       entry.pending_vertex_ticket.reset();
       entry.pending_index_ticket.reset();
+      entry.pending_widened_indices.reset();
       continue;
     }
 
     retire_one(entry, entry.pending_vertex_ticket, entry.vertex_srv_index,
       entry.pending_vertex_srv_index);
+
+    const bool had_index_ticket = entry.pending_index_ticket.has_value();
     retire_one(entry, entry.pending_index_ticket, entry.index_srv_index,
       entry.pending_index_srv_index);
+    if (had_index_ticket && !entry.pending_index_ticket.has_value()) {
+      entry.pending_widened_indices.reset();
+    }
 
     // Dirty until all required resources are published.
     const bool vertex_ready

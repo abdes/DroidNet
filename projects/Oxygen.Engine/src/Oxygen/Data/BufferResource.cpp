@@ -65,7 +65,7 @@ BufferResource::BufferResource(
   // 1. Formatted buffers (element_format != 0) must have element_stride == 0.
   if (desc_.element_format != 0) {
     DCHECK_EQ_F(desc_.element_stride, 0u,
-      "formatted buffer must have zero element_stride (was %u)",
+      "formatted buffer must have zero element_stride (was {})",
       desc_.element_stride);
   }
   // 2. Structured/raw buffers (element_format == 0) with stride > 1 must have
