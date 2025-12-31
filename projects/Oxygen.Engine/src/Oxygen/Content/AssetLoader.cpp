@@ -20,13 +20,13 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
-#include <Oxygen/Content/Internal/SourceToken.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Content/Loaders/MaterialLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Content/SourceToken.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -208,6 +208,19 @@ AssetLoader::~AssetLoader() = default;
 // LiveObject activation: open the nursery used by the AssetLoader
 auto AssetLoader::ActivateAsync(co::TaskStarted<> started) -> co::Co<>
 {
+  // AssetLoader enforces a single-thread (owning-thread) policy for its
+  // public API. The engine may construct the AssetLoader on a different thread
+  // than the one that runs the engine loop (e.g., editor creates the engine on
+  // the UI thread). Bind ownership to the activation thread, which is the
+  // engine thread in normal operation.
+  LOG_F(INFO,
+    "AssetLoader::ActivateAsync thread={} previous_owner={}",
+    std::hash<std::thread::id>{}(std::this_thread::get_id()),
+    std::hash<std::thread::id>{}(owning_thread_id_));
+  owning_thread_id_ = std::this_thread::get_id();
+  LOG_F(INFO,
+    "AssetLoader::ActivateAsync bound owner={}",
+    std::hash<std::thread::id>{}(owning_thread_id_));
   return co::OpenNursery(nursery_, std::move(started));
 }
 
@@ -325,6 +338,10 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
 auto AssetLoader::ClearMounts() -> void
 {
+  LOG_F(INFO,
+    "AssetLoader::ClearMounts thread={} owner={}",
+    std::hash<std::thread::id>{}(std::this_thread::get_id()),
+    std::hash<std::thread::id>{}(owning_thread_id_));
   AssertOwningThread();
   impl_->sources.clear();
   impl_->source_ids.clear();
