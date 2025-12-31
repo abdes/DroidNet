@@ -7,6 +7,7 @@
 #include <array>
 #include <cstring>
 #include <limits>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,7 +27,9 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -38,6 +41,32 @@ using oxygen::content::PakFile;
 using oxygen::content::PakResource;
 namespace pak = oxygen::data::pak;
 namespace internal = oxygen::content::internal;
+
+namespace {
+// Debug-only hash collision tracking for AssetKey hashes.
+#if !defined(NDEBUG)
+std::mutex g_asset_hash_mutex;
+std::unordered_map<uint64_t, oxygen::data::AssetKey> g_asset_hash_to_key;
+#endif
+
+struct ResourceCompositeKey final {
+  oxygen::data::SourceKey source_key;
+  uint16_t resource_type_index = 0;
+  uint32_t resource_index = 0;
+
+  auto operator==(const ResourceCompositeKey&) const -> bool = default;
+};
+
+auto IsZeroGuidBytes(const std::array<uint8_t, 16>& bytes) -> bool
+{
+  for (const auto b : bytes) {
+    if (b != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+} // namespace
 
 namespace oxygen::content {
 
@@ -69,6 +98,11 @@ struct AssetLoader::Impl final {
   // Keep a dense, deterministic PAK index space for ResourceKey encoding.
   // This must not be affected by registering non-PAK sources.
   std::vector<std::filesystem::path> pak_paths;
+
+#if !defined(NDEBUG)
+  std::mutex hash_collision_mutex;
+  std::unordered_map<uint64_t, ResourceCompositeKey> resource_hash_to_key;
+#endif
 };
 } // namespace oxygen::content
 
@@ -205,8 +239,32 @@ auto AssetLoader::AddPakFile(const std::filesystem::path& path) -> void
   // Normalize the path to ensure consistent handling
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
   const auto pak_index = static_cast<uint16_t>(impl_->pak_paths.size());
-  impl_->sources.push_back(
-    std::make_unique<internal::PakFileSource>(normalized));
+
+  auto new_source = std::make_unique<internal::PakFileSource>(normalized);
+#if !defined(NDEBUG)
+  {
+    const auto source_key = new_source->GetSourceKey();
+    const auto u_source_key = source_key.get();
+    if (IsZeroGuidBytes(u_source_key)) {
+      LOG_F(WARNING,
+        "Mounted PAK has zero SourceKey (PakHeader.guid); cache aliasing risk: "
+        "path={}",
+        normalized.string());
+    }
+    for (const auto& existing : impl_->sources) {
+      if (existing && existing->GetSourceKey() == source_key) {
+        LOG_F(WARNING,
+          "Mounted PAK shares SourceKey with an existing source; cache "
+          "aliasing "
+          "risk: source_key={} new_path={}",
+          data::to_string(source_key), normalized.string());
+        break;
+      }
+    }
+  }
+#endif
+
+  impl_->sources.push_back(std::move(new_source));
   impl_->source_ids.push_back(pak_index);
   impl_->source_id_to_index.insert_or_assign(
     pak_index, impl_->sources.size() - 1);
@@ -225,8 +283,31 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 {
   AssertOwningThread();
   std::filesystem::path normalized = std::filesystem::weakly_canonical(path);
-  impl_->sources.push_back(
-    std::make_unique<internal::LooseCookedSource>(normalized));
+
+  auto new_source = std::make_unique<internal::LooseCookedSource>(normalized);
+#if !defined(NDEBUG)
+  {
+    const auto source_key = new_source->GetSourceKey();
+    const auto u_source_key = source_key.get();
+    if (IsZeroGuidBytes(u_source_key)) {
+      LOG_F(WARNING,
+        "Mounted loose cooked root has zero SourceKey (IndexHeader.guid); "
+        "cache aliasing risk: root={}",
+        normalized.string());
+    }
+    for (const auto& existing : impl_->sources) {
+      if (existing && existing->GetSourceKey() == source_key) {
+        LOG_F(WARNING,
+          "Mounted loose cooked root shares SourceKey with an existing source; "
+          "cache aliasing risk: source_key={} new_root={}",
+          data::to_string(source_key), normalized.string());
+        break;
+      }
+    }
+  }
+#endif
+
+  impl_->sources.push_back(std::move(new_source));
 
   const auto source_id = impl_->next_loose_source_id++;
   DCHECK_F(source_id >= kLooseCookedSourceIdBase);
@@ -256,7 +337,7 @@ auto AssetLoader::ClearMounts() -> void
 
   // Clear the content cache to prevent stale assets from being returned
   // when switching content sources (e.g. scene swap).
-  content_cache_.Clear();
+  // content_cache_.Clear();
 }
 
 auto AssetLoader::BindResourceRefToKey(const internal::ResourceRef& ref)
@@ -1665,10 +1746,78 @@ template OXGN_CNTT_API auto
 
 auto AssetLoader::HashAssetKey(const data::AssetKey& key) -> uint64_t
 {
-  return std::hash<data::AssetKey> {}(key);
+  const auto hash = std::hash<data::AssetKey> {}(key);
+
+#if !defined(NDEBUG)
+  {
+    const std::scoped_lock lock(g_asset_hash_mutex);
+    auto [collision_it, inserted] = g_asset_hash_to_key.emplace(hash, key);
+    if (!inserted && collision_it->second != key) {
+      LOG_F(WARNING,
+        "AssetKey hash collision detected: hash=0x{:016x} existing={} new={} "
+        "(cache aliasing risk)",
+        hash, data::to_string(collision_it->second), data::to_string(key));
+    }
+  }
+#endif
+
+  return hash;
 }
 
-auto AssetLoader::HashResourceKey(const ResourceKey& key) -> uint64_t
+auto AssetLoader::HashResourceKey(const ResourceKey& key) const -> uint64_t
 {
-  return std::hash<ResourceKey> {}(key);
+  internal::InternalResourceKey internal_key(key);
+  const auto source_id = internal_key.GetPakIndex();
+
+  // Special case for synthetic keys (SourceID == kSyntheticSourceId)
+  if (source_id == constants::kSyntheticSourceId) {
+    return std::hash<ResourceKey> {}(key);
+  }
+
+  // Look up source
+  const auto source_it = impl_->source_id_to_index.find(source_id);
+  if (source_it == impl_->source_id_to_index.end()) {
+    // Source not found? This shouldn't happen for valid keys.
+    LOG_F(ERROR, "HashResourceKey: SourceID {} not found", source_id);
+    return std::hash<ResourceKey> {}(key);
+  }
+
+  const auto& source = *impl_->sources[source_it->second];
+  const auto source_key = source.GetSourceKey();
+
+  // Hash(SourceGUID, Type, Index)
+  size_t seed = 0;
+  oxygen::HashCombine(seed, source_key);
+  // We manually only include the resource type and the index in the hashing to
+  // guarantee a stable hash. The source id is not stable, as it depends on the
+  // load order.
+  oxygen::HashCombine(seed, internal_key.GetResourceTypeIndex());
+  oxygen::HashCombine(seed, internal_key.GetResourceIndex());
+
+  const auto hash = static_cast<uint64_t>(seed);
+
+#if !defined(NDEBUG)
+  {
+    const std::scoped_lock lock(impl_->hash_collision_mutex);
+    const ResourceCompositeKey composite {
+      .source_key = source_key,
+      .resource_type_index = internal_key.GetResourceTypeIndex(),
+      .resource_index = internal_key.GetResourceIndex(),
+    };
+    auto [it, inserted] = impl_->resource_hash_to_key.emplace(hash, composite);
+    if (!inserted && it->second != composite) {
+      LOG_F(WARNING,
+        "ResourceKey hash collision detected: hash=0x{:016x} "
+        "existing=(source={} type={} index={}) new=(source={} type={} "
+        "index={}) "
+        "(cache aliasing risk)",
+        hash, data::to_string(it->second.source_key),
+        it->second.resource_type_index, it->second.resource_index,
+        data::to_string(composite.source_key), composite.resource_type_index,
+        composite.resource_index);
+    }
+  }
+#endif
+
+  return hash;
 }

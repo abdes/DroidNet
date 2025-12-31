@@ -366,6 +366,7 @@ void PakFileDumper::PrintPakHeader(const PakFile& pak)
   Field("Magic", "OXPAK (verified by successful load)");
   Field("Format Version", pak.FormatVersion());
   Field("Content Version", pak.ContentVersion());
+  Field("GUID", oxygen::data::to_string(pak.Guid()));
   Field("Header Size", std::to_string(sizeof(PakHeader)) + " bytes");
   std::cout << "\n";
 }

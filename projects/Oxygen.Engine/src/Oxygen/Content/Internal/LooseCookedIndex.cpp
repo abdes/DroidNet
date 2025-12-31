@@ -257,6 +257,20 @@ namespace {
     }
   }
 
+  auto ValidateGuid(const IndexHeader& header) -> void
+  {
+    bool all_zeros = true;
+    for (const auto b : header.guid) {
+      if (b != 0) {
+        all_zeros = false;
+        break;
+      }
+    }
+    if (all_zeros) {
+      throw std::runtime_error("Loose cooked index must have a non-zero GUID");
+    }
+  }
+
 } // namespace
 
 auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
@@ -294,6 +308,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   ValidateHeaderFlags(header);
+  ValidateGuid(header);
 
   if (header.asset_entry_size != sizeof(AssetEntry)) {
     throw std::runtime_error("Unexpected AssetEntry size in index header");
@@ -327,6 +342,7 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   LooseCookedIndex out;
+  out.guid_ = data::SourceKey::FromBytes(header.guid);
   out.string_storage_.resize(ToSizeT(header.string_table_size));
   if (auto res = reader.Seek(ToSizeT(header.string_table_offset)); !res) {
     throw std::runtime_error(
@@ -458,6 +474,11 @@ auto LooseCookedIndex::LoadFromFile(const std::filesystem::path& index_path)
   }
 
   return out;
+}
+
+auto LooseCookedIndex::Guid() const noexcept -> data::SourceKey
+{
+  return guid_;
 }
 
 auto LooseCookedIndex::FindDescriptorRelPath(

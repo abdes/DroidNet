@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Tuple, Optional
+import hashlib
+import json
 import time
+import uuid
 
 from ..logging import get_logger, section, step
 from ..reporting import get_reporter
@@ -137,6 +140,7 @@ class PakPlan:
     file_size: int
     version: int
     content_version: int
+    guid: bytes = b"\x00" * 16
     deterministic: bool = False
     # Future: spec hash inputs, ordering rationale, etc.
 
@@ -248,6 +252,17 @@ def collect_resources(
             items = spec.get(rtype + "s", [])
             if not items:
                 continue
+            # Determinism policy:
+            # - buffers: preserve spec order (indices are semantic)
+            # - textures: sort by name for deterministic indexing
+            # - audio: preserve spec order (can be changed later if needed)
+            if rtype == "texture":
+                items = sorted(
+                    items,
+                    key=lambda e: (
+                        (e.get("name") if isinstance(e, dict) else "") or ""
+                    ),
+                )
             rep.start_task(
                 f"res.{rtype}", f"{rtype.title()} resources", total=len(items)
             )
@@ -568,6 +583,128 @@ def compute_pak_plan(
             # enlarge region size and will simply not advance inner cursor.
             # Writer tolerates zero-length emission naturally.
             pass
+
+    def _is_zero_guid(key_bytes: bytes) -> bool:
+        return key_bytes == b"\x00" * 16
+
+    def _gen_asset_guid_bytes(
+        *, pak_guid: bytes, asset_type: str, name: str
+    ) -> bytes:
+        if deterministic:
+            return uuid.uuid5(
+                uuid.NAMESPACE_DNS,
+                f"{pak_guid.hex()}:{asset_type}:{name}",
+            ).bytes
+        return uuid.uuid4().bytes
+
+    # Determine Pak GUID early so generated AssetKeys can be derived from it.
+    if deterministic:
+        spec_name_raw = build_plan.spec.get("name")
+        spec_name = spec_name_raw if isinstance(spec_name_raw, str) else ""
+        spec_fingerprint = hashlib.sha256(
+            json.dumps(
+                build_plan.spec,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest()
+        pak_guid = uuid.uuid5(
+            uuid.NAMESPACE_DNS,
+            f"{spec_name}:{spec_fingerprint}",
+        ).bytes
+    else:
+        pak_guid = uuid.uuid4().bytes
+
+    # Fill missing/zero asset keys.
+    for m in build_plan.assets.material_assets:
+        if not isinstance(m, dict):
+            continue
+        spec = m.get("spec") if isinstance(m.get("spec"), dict) else {}
+        name = spec.get("name") if isinstance(spec.get("name"), str) else ""
+        key = m.get("asset_key", b"\x00" * 16)
+        key_bytes = (
+            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
+        )
+        if _is_zero_guid(key_bytes):
+            m["asset_key"] = _gen_asset_guid_bytes(
+                pak_guid=pak_guid,
+                asset_type="material",
+                name=name,
+            )
+
+    new_geometries: list[tuple[dict[str, Any], bytes, int, int]] = []
+    for geom_spec, key, atype, align_req in build_plan.assets.geometry_assets:
+        name = (
+            geom_spec.get("name")
+            if isinstance(geom_spec.get("name"), str)
+            else ""
+        )
+        key_bytes = (
+            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
+        )
+        if _is_zero_guid(key_bytes):
+            key_bytes = _gen_asset_guid_bytes(
+                pak_guid=pak_guid,
+                asset_type="geometry",
+                name=name,
+            )
+        new_geometries.append((geom_spec, key_bytes, atype, align_req))
+    build_plan.assets.geometry_assets = new_geometries
+
+    new_scenes: list[tuple[dict[str, Any], bytes, int, int]] = []
+    for scene_spec, key, atype, align_req in build_plan.assets.scene_assets:
+        name = (
+            scene_spec.get("name")
+            if isinstance(scene_spec.get("name"), str)
+            else ""
+        )
+        key_bytes = (
+            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
+        )
+        if _is_zero_guid(key_bytes):
+            key_bytes = _gen_asset_guid_bytes(
+                pak_guid=pak_guid,
+                asset_type="scene",
+                name=name,
+            )
+        new_scenes.append((scene_spec, key_bytes, atype, align_req))
+    build_plan.assets.scene_assets = new_scenes
+
+    # Enforce uniqueness of AssetKey within a PAK.
+    seen_keys: dict[bytes, list[str]] = {}
+    for m in build_plan.assets.material_assets:
+        if not isinstance(m, dict):
+            continue
+        spec = m.get("spec") if isinstance(m.get("spec"), dict) else {}
+        name = spec.get("name") if isinstance(spec.get("name"), str) else ""
+        key = m.get("asset_key", b"\x00" * 16)
+        if isinstance(key, (bytes, bytearray)):
+            seen_keys.setdefault(bytes(key), []).append(f"material:{name}")
+    for geom_spec, key, _atype, _align in build_plan.assets.geometry_assets:
+        name = (
+            geom_spec.get("name")
+            if isinstance(geom_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            seen_keys.setdefault(bytes(key), []).append(f"geometry:{name}")
+    for scene_spec, key, _atype, _align in build_plan.assets.scene_assets:
+        name = (
+            scene_spec.get("name")
+            if isinstance(scene_spec.get("name"), str)
+            else ""
+        )
+        if isinstance(key, (bytes, bytearray)):
+            seen_keys.setdefault(bytes(key), []).append(f"scene:{name}")
+
+    duplicates = {k: v for k, v in seen_keys.items() if len(v) > 1}
+    if duplicates:
+        details = ", ".join(
+            f"{k.hex()} -> {v}"
+            for k, v in sorted(duplicates.items(), key=lambda kv: kv[0].hex())
+        )
+        raise ValueError(f"Duplicate asset_key values in spec: {details}")
 
     # Resource regions
     for rtype in ["texture", "buffer", "audio"]:
@@ -922,6 +1059,8 @@ def compute_pak_plan(
     total_padding = sum(padding.values())
     padding_stats = PaddingStats(total=total_padding, by_section=padding)
 
+    # pak_guid is computed up-front to allow deterministic AssetKey generation.
+
     return PakPlan(
         regions=regions,
         tables=tables,
@@ -933,6 +1072,7 @@ def compute_pak_plan(
         file_size=cursor,
         version=int(build_plan.spec.get("version", 1)),
         content_version=int(build_plan.spec.get("content_version", 0)),
+        guid=pak_guid,
         deterministic=deterministic,
     )
 

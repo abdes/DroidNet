@@ -16,6 +16,7 @@ namespace oxygen::content {
 struct LooseCookedInspection::Impl {
   std::vector<AssetEntry> assets;
   std::vector<FileEntry> files;
+  data::SourceKey guid = {};
 };
 
 LooseCookedInspection::LooseCookedInspection()
@@ -39,6 +40,7 @@ auto LooseCookedInspection::LoadFromFile(
 
   impl_->assets.clear();
   impl_->files.clear();
+  impl_->guid = index.Guid();
 
   for (const auto& key : index.GetAllAssetKeys()) {
     AssetEntry out;
@@ -102,6 +104,11 @@ auto LooseCookedInspection::Assets() const noexcept
 auto LooseCookedInspection::Files() const noexcept -> std::span<const FileEntry>
 {
   return impl_->files;
+}
+
+auto LooseCookedInspection::Guid() const noexcept -> data::SourceKey
+{
+  return impl_->guid;
 }
 
 } // namespace oxygen::content

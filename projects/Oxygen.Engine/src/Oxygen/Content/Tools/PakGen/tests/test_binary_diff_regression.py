@@ -38,7 +38,13 @@ def test_binary_diff_regression(tmp_path: Path):  # noqa: N802
     spec_copy = tmp_path / f"spec{golden_spec.suffix}"
     spec_copy.write_bytes(golden_spec.read_bytes())
     out_pak = tmp_path / "out_minimal.pak"
-    build_pak(BuildOptions(input_spec=spec_copy, output_path=out_pak))
+    build_pak(
+        BuildOptions(
+            input_spec=spec_copy,
+            output_path=out_pak,
+            deterministic=True,
+        )
+    )
 
     golden_info = inspect_pak(golden_pak)
     new_info = inspect_pak(out_pak)

@@ -65,6 +65,7 @@ set(
   "ProceduralMeshes.h"
   "SceneAsset.h"
   "ShaderReference.h"
+  "SourceKey.h"
   "TextureResource.h"
   "Vertex.h"
 )
@@ -77,6 +78,7 @@ set(
   "ProceduralMeshes.cpp"
   "SceneAsset.cpp"
   "ShaderReference.cpp"
+  "SourceKey.cpp"
   "TextureResource.cpp"
   "ToStringConverters.cpp"
   "Procedural/ArrowGizmo.cpp"

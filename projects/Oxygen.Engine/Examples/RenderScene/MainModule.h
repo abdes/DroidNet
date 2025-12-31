@@ -94,6 +94,7 @@ private:
   auto InitInputBindings() noexcept -> bool;
   auto EnsureFallbackCamera(const int width, const int height) -> void;
   auto EnsureActiveCameraViewport(const int width, const int height) -> void;
+  auto SyncOrbitFromActiveCamera() -> void;
   auto ApplyOrbitAndZoom() -> void;
   auto EnsureViewCameraRegistered() -> void;
 
@@ -108,6 +109,8 @@ private:
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode active_camera_;
   scene::NodeHandle registered_view_camera_ {};
+
+  scene::NodeHandle orbit_camera_ {};
 
   std::optional<PendingSceneSwap> pending_scene_swap_;
   std::shared_ptr<SceneLoader> scene_loader_;

@@ -19,6 +19,7 @@
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content {
 
@@ -74,6 +75,9 @@ public:
 
   [[nodiscard]] OXGN_CNTT_API auto Files() const noexcept
     -> std::span<const FileEntry>;
+
+  //! Get the GUID from the index header.
+  [[nodiscard]] OXGN_CNTT_API auto Guid() const noexcept -> data::SourceKey;
 
 private:
   struct Impl;

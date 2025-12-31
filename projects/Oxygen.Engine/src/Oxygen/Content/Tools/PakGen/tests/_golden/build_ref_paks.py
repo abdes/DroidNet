@@ -4,7 +4,13 @@ from pakgen.api import BuildOptions, build_pak
 
 
 def build(spec_path: pathlib.Path, out_pak: pathlib.Path) -> None:
-    build_pak(BuildOptions(input_spec=spec_path, output_path=out_pak))
+    build_pak(
+        BuildOptions(
+            input_spec=spec_path,
+            output_path=out_pak,
+            deterministic=True,
+        )
+    )
     print("WROTE", out_pak, out_pak.stat().st_size)
 
 

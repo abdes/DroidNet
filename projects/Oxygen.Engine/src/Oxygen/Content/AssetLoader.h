@@ -707,8 +707,9 @@ private:
   //! Hash an AssetKey for cache storage
   OXGN_CNTT_API static auto HashAssetKey(const data::AssetKey& key) -> uint64_t;
 
-  //! Hash an AssetKey for cache storage
-  OXGN_CNTT_API static auto HashResourceKey(const ResourceKey& key) -> uint64_t;
+  //! Hash a ResourceKey for cache storage (requires instance for SourceKey
+  //! lookup)
+  OXGN_CNTT_API auto HashResourceKey(const ResourceKey& key) const -> uint64_t;
 
   //=== Type-erased Loading/Unloading ===-------------------------------------//
 

@@ -95,7 +95,7 @@ inline auto Load(AnyReader& reader, data::pak::ShaderReferenceDesc& desc)
   return {};
 }
 
-//! Load specialization for Person.
+//! Load specialization for PakHeader.
 inline auto Load(AnyReader& reader, data::pak::PakHeader& header)
   -> Result<void>
 {
@@ -104,6 +104,8 @@ inline auto Load(AnyReader& reader, data::pak::PakHeader& header)
     reinterpret_cast<std::byte*>(header.magic), std::size(header.magic))));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.content_version));
+  CHECK_RESULT(reader.ReadBlobInto(std::span(
+    reinterpret_cast<std::byte*>(header.guid), std::size(header.guid))));
   CHECK_RESULT(reader.Forward(std::size(header.reserved)));
   return {};
 }

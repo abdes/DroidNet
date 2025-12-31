@@ -37,6 +37,10 @@ inline auto Load(AnyReader& reader, data::loose_cooked::v1::IndexHeader& header)
   CHECK_RESULT(reader.ReadInto(header.file_record_count));
   CHECK_RESULT(reader.ReadInto(header.file_record_size));
 
+  CHECK_RESULT(reader.ReadBlobInto(std::span(
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    reinterpret_cast<std::byte*>(header.guid), std::size(header.guid))));
+
   CHECK_RESULT(reader.Forward(std::size(header.reserved)));
   return {};
 }

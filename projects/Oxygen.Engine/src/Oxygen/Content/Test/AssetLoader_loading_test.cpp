@@ -45,6 +45,13 @@ using oxygen::content::testing::AssetLoaderLoadingTest;
 
 namespace {
 
+auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
+{
+  for (uint8_t i = 0; i < 16; ++i) {
+    header.guid[i] = static_cast<uint8_t>(i + 1);
+  }
+}
+
 auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
   -> void
 {
@@ -53,6 +60,7 @@ auto WriteMinimalLooseCookedIndex(const std::filesystem::path& cooked_root)
   std::filesystem::create_directories(cooked_root);
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -178,6 +186,7 @@ auto WriteLooseCookedMaterialWithTexture(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
@@ -253,6 +262,7 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
   strings.push_back('\0');
 
   IndexHeader header {};
+  FillTestGuid(header);
   header.version = 1;
   header.content_version = 0;
   header.flags = oxygen::data::loose_cooked::v1::kHasVirtualPaths
