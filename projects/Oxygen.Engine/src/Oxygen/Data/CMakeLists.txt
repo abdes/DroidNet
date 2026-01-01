@@ -57,6 +57,7 @@ set(
   "BufferResource.h"
   "ComponentType.h"
   "GeometryAsset.h"
+  "HalfFloat.h"
   "LooseCookedIndexFormat.h"
   "MaterialAsset.h"
   "MaterialDomain.h"
@@ -67,6 +68,7 @@ set(
   "ShaderReference.h"
   "SourceKey.h"
   "TextureResource.h"
+  "Unorm16.h"
   "Vertex.h"
 )
 set(

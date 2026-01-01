@@ -104,9 +104,9 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.base_color[2] = 1.0f; // B
     desc.base_color[3] = 1.0f; // A
     desc.normal_scale = 1.0f;
-    desc.metalness = 0.0f; // Non-metallic
-    desc.roughness = 0.8f; // Fairly rough (diffuse-like)
-    desc.ambient_occlusion = 1.0f; // No AO
+    desc.metalness = Unorm16 { 0.0f }; // Non-metallic
+    desc.roughness = Unorm16 { 0.8f }; // Fairly rough (diffuse-like)
+    desc.ambient_occlusion = Unorm16 { 1.0f }; // No AO
 
     // Texture indices - fallback texture. Sampling is disabled via flags.
     desc.base_color_texture = pak::kFallbackResourceIndex;
@@ -115,11 +115,17 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.roughness_texture = pak::kFallbackResourceIndex;
     desc.ambient_occlusion_texture = pak::kFallbackResourceIndex;
 
-    // Initialize reserved arrays to fallback.
-    std::fill(std::begin(desc.reserved_textures),
-      std::end(desc.reserved_textures), pak::kFallbackResourceIndex);
-    std::fill(
-      std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
+    // Tier 1/2 texture indices - fallback texture. Sampling is disabled via
+    // flags.
+    desc.emissive_texture = pak::kFallbackResourceIndex;
+    desc.specular_texture = pak::kFallbackResourceIndex;
+    desc.sheen_color_texture = pak::kFallbackResourceIndex;
+    desc.clearcoat_texture = pak::kFallbackResourceIndex;
+    desc.clearcoat_normal_texture = pak::kFallbackResourceIndex;
+    desc.transmission_texture = pak::kFallbackResourceIndex;
+    desc.thickness_texture = pak::kFallbackResourceIndex;
+
+    std::fill(std::begin(desc.reserved), std::end(desc.reserved), uint8_t { 0 });
 
     // No shader references initially - renderer will provide appropriate
     // shaders
@@ -166,7 +172,7 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   debug_desc.base_color[1] = 0.0f; // G - no green
   debug_desc.base_color[2] = 1.0f; // B - full blue
   debug_desc.base_color[3] = 1.0f; // A - fully opaque
-  debug_desc.roughness = 1.0f; // Fully rough (no reflections)
+  debug_desc.roughness = Unorm16 { 1.0f }; // Fully rough (no reflections)
 
   return std::make_shared<const MaterialAsset>(kDebugMaterialAssetKey,
     std::move(debug_desc), std::vector<ShaderReference> {});

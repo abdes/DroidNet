@@ -218,9 +218,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[2] = rgba.b;
   desc.base_color[3] = rgba.a;
   desc.normal_scale = 1.0f;
-  desc.metalness = 0.0f;
-  desc.roughness = 0.6f;
-  desc.ambient_occlusion = 1.0f;
+  desc.metalness = Unorm16 { 0.0f };
+  desc.roughness = Unorm16 { 0.6f };
+  desc.ambient_occlusion = Unorm16 { 1.0f };
   // Leave texture indices invalid (no textures)
   const AssetKey asset_key { .guid = GenerateAssetGuid() };
   return std::make_shared<const MaterialAsset>(

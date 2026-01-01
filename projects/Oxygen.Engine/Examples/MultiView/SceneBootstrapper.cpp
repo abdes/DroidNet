@@ -36,6 +36,7 @@ namespace {
     using data::MaterialAsset;
     using data::MaterialDomain;
     using data::ShaderReference;
+    using data::Unorm16;
     namespace pak = data::pak;
 
     pak::MaterialAssetDesc desc {};
@@ -54,9 +55,9 @@ namespace {
     desc.base_color[2] = rgba.b;
     desc.base_color[3] = rgba.a;
     desc.normal_scale = 1.0F;
-    desc.metalness = 0.0F;
-    desc.roughness = 0.5F;
-    desc.ambient_occlusion = 1.0F;
+    desc.metalness = Unorm16 { 0.0F };
+    desc.roughness = Unorm16 { 0.5F };
+    desc.ambient_occlusion = Unorm16 { 1.0F };
 
     const AssetKey asset_key { .guid = data::GenerateAssetGuid() };
     return std::make_shared<const MaterialAsset>(

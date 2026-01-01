@@ -280,9 +280,9 @@ auto MakeCubeMaterial(const char* name, const glm::vec4& rgba,
   desc.base_color[3] = rgba.a;
 
   desc.normal_scale = 1.0f;
-  desc.metalness = 0.0f;
-  desc.roughness = 0.6f;
-  desc.ambient_occlusion = 1.0f;
+  desc.metalness = Unorm16 { 0.0f };
+  desc.roughness = Unorm16 { 0.6f };
+  desc.ambient_occlusion = Unorm16 { 1.0f };
 
   desc.base_color_texture = base_color_texture_resource_index;
 
