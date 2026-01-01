@@ -121,6 +121,30 @@ namespace Oxygen.Editor.Data.Migrations
 
                     b.ToTable("TemplatesUsageRecords");
                 });
+
+            modelBuilder.Entity("Oxygen.Editor.Data.Models.WindowPlacements", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PlacementData")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PlacementKey")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlacementKey")
+                        .IsUnique();
+
+                    b.ToTable("WindowPlacements");
+                });
 #pragma warning restore 612, 618
         }
     }
