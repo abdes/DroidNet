@@ -8,11 +8,71 @@
 
 #include "pch.h"
 
+#include <array>
+#include <cstdint>
+#include <mutex>
+#include <string_view>
+#include <unordered_map>
+
 #include <Commands/SetGeometryCommand.h>
 #include <EditorModule/EditorCommand.h>
 
+#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Content/AssetLoader.h>
-#include <Oxygen/data/AssetKey.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+
+namespace {
+
+auto MakeDeterministicAssetKey(std::string_view seed) -> oxygen::data::AssetKey
+{
+  oxygen::data::AssetKey key { };
+
+  const std::uint64_t h1 = oxygen::ComputeFNV1a64(seed.data(), seed.size());
+  const auto salted = std::string(seed) + "#generated_v1";
+  const std::uint64_t h2
+    = oxygen::ComputeFNV1a64(salted.data(), salted.size());
+
+  for (int i = 0; i < 8; ++i) {
+    key.guid[static_cast<std::size_t>(i)]
+      = static_cast<std::uint8_t>((h1 >> (i * 8)) & 0xFF);
+    key.guid[static_cast<std::size_t>(8 + i)]
+      = static_cast<std::uint8_t>((h2 >> (i * 8)) & 0xFF);
+  }
+
+  return key;
+}
+
+auto TryGetCachedGeneratedGeometry(const oxygen::data::AssetKey& key)
+  -> std::shared_ptr<const oxygen::data::GeometryAsset>
+{
+  static std::mutex cache_mutex;
+  static std::unordered_map<oxygen::data::AssetKey,
+    std::weak_ptr<const oxygen::data::GeometryAsset>>
+    cache;
+
+  std::scoped_lock lock(cache_mutex);
+  if (const auto it = cache.find(key); it != cache.end()) {
+    return it->second.lock();
+  }
+  return nullptr;
+}
+
+auto CacheGeneratedGeometry(const oxygen::data::AssetKey& key,
+  const std::shared_ptr<const oxygen::data::GeometryAsset>& geometry) -> void
+{
+  static std::mutex cache_mutex;
+  static std::unordered_map<oxygen::data::AssetKey,
+    std::weak_ptr<const oxygen::data::GeometryAsset>>
+    cache;
+
+  std::scoped_lock lock(cache_mutex);
+  cache[key] = geometry;
+}
+
+} // namespace
 
 namespace oxygen::interop::module {
 
@@ -33,6 +93,13 @@ namespace oxygen::interop::module {
     // 1. Check for procedural geometry
     const std::string generatedPrefix = "asset:///Engine/Generated/BasicShapes/";
     if (assetUri_.compare(0, generatedPrefix.length(), generatedPrefix) == 0) {
+      const auto asset_key = MakeDeterministicAssetKey(assetUri_);
+      geometry = TryGetCachedGeneratedGeometry(asset_key);
+      if (geometry) {
+        // Cached instance ensures shared mesh pointer for this identity,
+        // avoiding per-frame hot-reload thrash in GeometryUploader.
+        started_async_load = false;
+      } else {
       std::string type = assetUri_.substr(generatedPrefix.length());
       std::transform(type.begin(), type.end(), type.begin(), [](unsigned char c) {
         return static_cast<char>(std::tolower(c));
@@ -88,7 +155,9 @@ namespace oxygen::interop::module {
         lod_meshes.push_back(std::move(mesh));
 
         geometry = std::make_shared<oxygen::data::GeometryAsset>(
-          oxygen::data::AssetKey{}, geo_desc, std::move(lod_meshes));
+          asset_key, geo_desc, std::move(lod_meshes));
+        CacheGeneratedGeometry(asset_key, geometry);
+      }
       }
     }
     // 2. Check for content assets
