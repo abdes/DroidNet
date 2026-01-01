@@ -36,14 +36,16 @@ public static class CookedMaterialWriter
     private const int BaseColorOffset = 0x68;
     private const int NormalScaleOffset = 0x78;
     private const int MetalnessOffset = 0x7C;
-    private const int RoughnessOffset = 0x80;
-    private const int AmbientOcclusionOffset = 0x84;
+    private const int RoughnessOffset = 0x7E;
+    private const int AmbientOcclusionOffset = 0x80;
 
-    private const int BaseColorTextureOffset = 0x88;
-    private const int NormalTextureOffset = 0x8C;
-    private const int MetallicTextureOffset = 0x90;
-    private const int RoughnessTextureOffset = 0x94;
-    private const int AmbientOcclusionTextureOffset = 0x98;
+    private const int BaseColorTextureOffset = 0x82;
+    private const int NormalTextureOffset = 0x86;
+    private const int MetallicTextureOffset = 0x8A;
+    private const int RoughnessTextureOffset = 0x8E;
+    private const int AmbientOcclusionTextureOffset = 0x92;
+
+    private const int AlphaCutoffOffset = 0xB8;
 
     /// <summary>
     /// Writes a cooked <c>.omat</c> descriptor for the given material source.
@@ -79,9 +81,11 @@ public static class CookedMaterialWriter
         WriteSingle(desc.Slice(BaseColorOffset + 12, 4), Clamp01(pbr.BaseColorA));
 
         WriteSingle(desc.Slice(NormalScaleOffset, 4), Math.Max(0.0f, material.NormalTexture?.Scale ?? 1.0f));
-        WriteSingle(desc.Slice(MetalnessOffset, 4), Clamp01(pbr.MetallicFactor));
-        WriteSingle(desc.Slice(RoughnessOffset, 4), Clamp01(pbr.RoughnessFactor));
-        WriteSingle(desc.Slice(AmbientOcclusionOffset, 4), Clamp01(material.OcclusionTexture?.Strength ?? 1.0f));
+        WriteUnorm16(desc.Slice(MetalnessOffset, 2), Clamp01(pbr.MetallicFactor));
+        WriteUnorm16(desc.Slice(RoughnessOffset, 2), Clamp01(pbr.RoughnessFactor));
+        WriteUnorm16(desc.Slice(AmbientOcclusionOffset, 2), Clamp01(material.OcclusionTexture?.Strength ?? 1.0f));
+
+        WriteUnorm16(desc.Slice(AlphaCutoffOffset, 2), material.AlphaCutoff);
 
         // MVP: textures are not emitted yet.
         BinaryPrimitives.WriteUInt32LittleEndian(desc.Slice(BaseColorTextureOffset, 4), 0);
@@ -104,19 +108,19 @@ public static class CookedMaterialWriter
 
     private static uint ToFlags(MaterialSource material)
     {
-        // Advisory bit layout from Oxygen.Engine (subject to change until codified in a shared header):
-        // bit 0 = double-sided
-        // bit 1 = alpha test
+        // Must match Oxygen.Engine (data::pak::kMaterialFlag_*):
+        // bit 1 = double-sided
+        // bit 2 = alpha test
         var flags = 0u;
 
         if (material.DoubleSided)
         {
-            flags |= 1u << 0;
+            flags |= 1u << 1;
         }
 
         if (material.AlphaMode == MaterialAlphaMode.Mask)
         {
-            flags |= 1u << 1;
+            flags |= 1u << 2;
         }
 
         return flags;
@@ -139,6 +143,17 @@ public static class CookedMaterialWriter
 
     private static void WriteSingle(Span<byte> destination, float value)
         => BinaryPrimitives.WriteUInt32LittleEndian(destination, (uint)BitConverter.SingleToInt32Bits(value));
+
+    private static void WriteUnorm16(Span<byte> destination, float value)
+    {
+        var clamped = Math.Clamp(value, 0.0f, 1.0f);
+        var scaled = (uint)Math.Round(clamped * 65535.0f, MidpointRounding.AwayFromZero);
+        if (scaled > ushort.MaxValue)
+        {
+            scaled = ushort.MaxValue;
+        }
+        BinaryPrimitives.WriteUInt16LittleEndian(destination, (ushort)scaled);
+    }
 
     private static float Clamp01(float value)
         => Math.Clamp(value, 0.0f, 1.0f);

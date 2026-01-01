@@ -12,8 +12,11 @@
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
 
 #include <algorithm>
 
@@ -209,6 +212,46 @@ inline auto Load(AnyReader& reader, data::pak::AssetDirectoryEntry& entry)
 } // namespace oxygen::serio
 
 namespace oxygen::content::loaders {
+
+//=== Cooked IO Helpers ===--------------------------------------------------//
+
+[[nodiscard]] inline auto ReadUnorm16(
+  serio::AnyReader& reader, data::Unorm16& out) noexcept -> Result<void>
+{
+  uint16_t u_value = 0;
+  auto result = reader.ReadInto(u_value);
+  if (!result) {
+    return result.error();
+  }
+  out = data::Unorm16 { u_value };
+  return {};
+}
+
+[[nodiscard]] inline auto ReadHalfFloat(
+  serio::AnyReader& reader, data::HalfFloat& out) noexcept -> Result<void>
+{
+  uint16_t u_value = 0;
+  auto result = reader.ReadInto(u_value);
+  if (!result) {
+    return result.error();
+  }
+  out = data::HalfFloat { u_value };
+  return {};
+}
+
+[[nodiscard]] inline auto WriteUnorm16(
+  serio::AnyWriter& writer, const data::Unorm16 value) noexcept -> Result<void>
+{
+  const auto u_value = value.get();
+  return writer.Write(u_value);
+}
+
+[[nodiscard]] inline auto WriteHalfFloat(serio::AnyWriter& writer,
+  const data::HalfFloat value) noexcept -> Result<void>
+{
+  const auto u_value = value.get();
+  return writer.Write(u_value);
+}
 
 //! Loads an AssetHeader, using the provided \b reader.
 /*!

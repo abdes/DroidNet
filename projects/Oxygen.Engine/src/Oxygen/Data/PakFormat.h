@@ -11,6 +11,9 @@
 #include <cstdint>
 #include <limits>
 
+#include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Data/HalfFloat.h>
+#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MeshType.h>
@@ -68,6 +71,8 @@ using StringTableOffsetT = uint32_t;
 //! Size type for slices into embedded string tables (4 bytes)
 using StringTableSizeT = uint32_t;
 
+//! 16-bit unsigned normalized scalar.
+
 //=== Constants ===-----------------------------------------------------------//
 
 //! Maximum asset name length including null terminator
@@ -97,6 +102,32 @@ constexpr ResourceIndexT kNoResourceIndex = 0;
 //! fallback texture when a fallback exists (textures do). Therefore, a texture
 //! index of `0` cannot unambiguously mean "no texture" for materials.
 constexpr uint32_t kMaterialFlag_NoTextureSampling = (1u << 0);
+
+//! Material flag indicating that the material should be treated as double-sided.
+//!
+//! When set, the renderer should disable backface culling for this material.
+constexpr uint32_t kMaterialFlag_DoubleSided = (1u << 1);
+
+//! Material flag indicating that the material uses alpha testing (cutout).
+//!
+//! When set, the renderer/shaders should apply alpha cutoff testing using the
+//! material's `alpha_cutoff` parameter.
+constexpr uint32_t kMaterialFlag_AlphaTest = (1u << 2);
+
+//! Material flag indicating that the material is unlit.
+//!
+//! When set, shading should not apply lighting and should render using
+//! base color + emissive only.
+constexpr uint32_t kMaterialFlag_Unlit = (1u << 3);
+
+//! Material flag indicating glTF ORM channel packing semantics.
+//!
+//! When set, the metallic/roughness texture(s) follow glTF conventions:
+//! - Roughness is sampled from the G channel
+//! - Metalness is sampled from the B channel
+//! Ambient occlusion is typically sampled from the R channel of the AO/ORM
+//! texture.
+constexpr uint32_t kMaterialFlag_GltfOrmPacked = (1u << 4);
 
 //! Maximum size for data blobs in bytes
 constexpr DataBlobSizeT kDataBlobMaxSize
@@ -515,9 +546,9 @@ struct MaterialAssetDesc {
   // --- Scalar factors (PBR) ---
   float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f }; // RGBA fallback
   float normal_scale = 1.0f;
-  float metalness = 0.0f;
-  float roughness = 1.0f;
-  float ambient_occlusion = 1.0f;
+  Unorm16 metalness = Unorm16 { 0.0f };
+  Unorm16 roughness = Unorm16 { 1.0f };
+  Unorm16 ambient_occlusion = Unorm16 { 1.0f };
 
   // --- Core texture references (Index into TextureResourceTable,
   // kNoResourceIndex = invalid/none) ---
@@ -528,9 +559,42 @@ struct MaterialAssetDesc {
   ResourceIndexT ambient_occlusion_texture = kNoResourceIndex;
 
   static_assert(kNoResourceIndex == 0);
-  ResourceIndexT reserved_textures[8] = {};
 
-  uint8_t reserved[68] = {};
+  // --- Additional texture references (optional, Tier 1/2) ---
+  ResourceIndexT emissive_texture = kNoResourceIndex;
+  ResourceIndexT specular_texture = kNoResourceIndex;
+  ResourceIndexT sheen_color_texture = kNoResourceIndex;
+  ResourceIndexT clearcoat_texture = kNoResourceIndex;
+  ResourceIndexT clearcoat_normal_texture = kNoResourceIndex;
+  ResourceIndexT transmission_texture = kNoResourceIndex;
+  ResourceIndexT thickness_texture = kNoResourceIndex;
+
+  // --- Additional scalar parameters (Tier 1/2) ---
+  // Emissive
+  HalfFloat emissive_factor[3]
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f },
+        HalfFloat { 0.0f } };
+  // Alpha
+  Unorm16 alpha_cutoff = Unorm16 { 0.5f };
+  // Dielectric response
+  float ior = 1.5f;
+  Unorm16 specular_factor = Unorm16 { 1.0f };
+  // Sheen (KHR_materials_sheen)
+  HalfFloat sheen_color_factor[3]
+    = { HalfFloat { 0.0f }, HalfFloat { 0.0f },
+        HalfFloat { 0.0f } };
+  // Clearcoat (KHR_materials_clearcoat)
+  Unorm16 clearcoat_factor = Unorm16 { 0.0f };
+  Unorm16 clearcoat_roughness = Unorm16 { 0.0f };
+  // Transmission / Volume (KHR_materials_transmission + KHR_materials_volume)
+  Unorm16 transmission_factor = Unorm16 { 0.0f };
+  Unorm16 thickness_factor = Unorm16 { 0.0f };
+  HalfFloat attenuation_color[3]
+    = { HalfFloat { 1.0f }, HalfFloat { 1.0f },
+        HalfFloat { 1.0f } };
+  float attenuation_distance = 0.0f;
+
+  uint8_t reserved[40] = {};
 };
 // Followed by:
 // - Array of ShaderReferenceDesc entries in ascending set-bit order of

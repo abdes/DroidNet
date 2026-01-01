@@ -65,9 +65,12 @@ public:
         mat.base_color[1], mat.base_color[2], mat.base_color[3]),
       8);
     PrintUtils::Field("Normal Scale", mat.normal_scale, 8);
-    PrintUtils::Field("Metalness", mat.metalness, 8);
-    PrintUtils::Field("Roughness", mat.roughness, 8);
-    PrintUtils::Field("Ambient Occlusion", mat.ambient_occlusion, 8);
+    PrintUtils::Field(
+      "Metalness", mat.metalness.ToFloat(), 8);
+    PrintUtils::Field(
+      "Roughness", mat.roughness.ToFloat(), 8);
+    PrintUtils::Field("Ambient Occlusion",
+      mat.ambient_occlusion.ToFloat(), 8);
     PrintUtils::Field("Base Color Texture", mat.base_color_texture, 8);
     PrintUtils::Field("Normal Texture", mat.normal_texture, 8);
     PrintUtils::Field("Metallic Texture", mat.metallic_texture, 8);

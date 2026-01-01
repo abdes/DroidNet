@@ -17,6 +17,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
 
@@ -33,6 +34,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   auto& reader = *context.desc_reader;
 
   using data::ShaderReference;
+  using data::Unorm16;
   using data::pak::kMaxNameSize;
   using data::pak::MaterialAssetDesc;
   using data::pak::ResourceIndexT;
@@ -79,14 +81,13 @@ inline auto LoadMaterialAsset(LoaderContext context)
   auto normal_scale_result = reader.ReadInto<float>(desc.normal_scale);
   check_result(normal_scale_result, "MaterialAssetDesc.normal_scale");
 
-  auto metalness_result = reader.ReadInto<float>(desc.metalness);
+  auto metalness_result = ReadUnorm16(reader, desc.metalness);
   check_result(metalness_result, "MaterialAssetDesc.metalness");
 
-  auto roughness_result = reader.ReadInto<float>(desc.roughness);
+  auto roughness_result = ReadUnorm16(reader, desc.roughness);
   check_result(roughness_result, "MaterialAssetDesc.roughness");
 
-  auto ambient_occlusion_result
-    = reader.ReadInto<float>(desc.ambient_occlusion);
+  auto ambient_occlusion_result = ReadUnorm16(reader, desc.ambient_occlusion);
   check_result(ambient_occlusion_result, "MaterialAssetDesc.ambient_occlusion");
 
   // ReadInto texture resource indices
@@ -112,13 +113,88 @@ inline auto LoadMaterialAsset(LoaderContext context)
   check_result(ambient_occlusion_texture_result,
     "MaterialAssetDesc.ambient_occlusion_texture");
 
-  // Skip reserved texture indices array
-  auto skip_result = reader.Forward(sizeof(desc.reserved_textures));
-  check_result(skip_result, "MaterialAssetDesc.reserved_textures (skip)");
+  auto emissive_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.emissive_texture);
+  check_result(emissive_texture_result, "MaterialAssetDesc.emissive_texture");
 
-  // Skip reserved bytes
-  skip_result = reader.Forward(sizeof(desc.reserved));
-  check_result(skip_result, "MaterialAssetDesc.reserved (skip)");
+  auto specular_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.specular_texture);
+  check_result(specular_texture_result, "MaterialAssetDesc.specular_texture");
+
+  auto sheen_color_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.sheen_color_texture);
+  check_result(
+    sheen_color_texture_result, "MaterialAssetDesc.sheen_color_texture");
+
+  auto clearcoat_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.clearcoat_texture);
+  check_result(clearcoat_texture_result, "MaterialAssetDesc.clearcoat_texture");
+
+  auto clearcoat_normal_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.clearcoat_normal_texture);
+  check_result(clearcoat_normal_texture_result,
+    "MaterialAssetDesc.clearcoat_normal_texture");
+
+  auto transmission_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.transmission_texture);
+  check_result(
+    transmission_texture_result, "MaterialAssetDesc.transmission_texture");
+
+  auto thickness_texture_result
+    = reader.ReadInto<ResourceIndexT>(desc.thickness_texture);
+  check_result(thickness_texture_result, "MaterialAssetDesc.thickness_texture");
+
+  for (auto& i : desc.emissive_factor) {
+    auto emissive_factor_result = ReadHalfFloat(reader, i);
+    check_result(emissive_factor_result, "MaterialAssetDesc.emissive_factor");
+  }
+
+  auto alpha_cutoff_result = ReadUnorm16(reader, desc.alpha_cutoff);
+  check_result(alpha_cutoff_result, "MaterialAssetDesc.alpha_cutoff");
+
+  auto ior_result = reader.ReadInto<float>(desc.ior);
+  check_result(ior_result, "MaterialAssetDesc.ior");
+
+  auto specular_factor_result = ReadUnorm16(reader, desc.specular_factor);
+  check_result(specular_factor_result, "MaterialAssetDesc.specular_factor");
+
+  for (auto& i : desc.sheen_color_factor) {
+    auto sheen_color_factor_result = ReadHalfFloat(reader, i);
+    check_result(
+      sheen_color_factor_result, "MaterialAssetDesc.sheen_color_factor");
+  }
+
+  auto clearcoat_factor_result = ReadUnorm16(reader, desc.clearcoat_factor);
+  check_result(clearcoat_factor_result, "MaterialAssetDesc.clearcoat_factor");
+
+  auto clearcoat_roughness_result
+    = ReadUnorm16(reader, desc.clearcoat_roughness);
+  check_result(
+    clearcoat_roughness_result, "MaterialAssetDesc.clearcoat_roughness");
+
+  auto transmission_factor_result
+    = ReadUnorm16(reader, desc.transmission_factor);
+  check_result(
+    transmission_factor_result, "MaterialAssetDesc.transmission_factor");
+
+  auto thickness_factor_result = ReadUnorm16(reader, desc.thickness_factor);
+  check_result(thickness_factor_result, "MaterialAssetDesc.thickness_factor");
+
+  for (auto& i : desc.attenuation_color) {
+    auto attenuation_color_result = ReadHalfFloat(reader, i);
+    check_result(
+      attenuation_color_result, "MaterialAssetDesc.attenuation_color");
+  }
+
+  auto attenuation_distance_result
+    = reader.ReadInto<float>(desc.attenuation_distance);
+  check_result(
+    attenuation_distance_result, "MaterialAssetDesc.attenuation_distance");
+
+  for (auto& i : desc.reserved) {
+    auto reserved_result = reader.ReadInto<uint8_t>(i);
+    check_result(reserved_result, "MaterialAssetDesc.reserved");
+  }
 
   LOG_F(INFO, "material domain   : {}", desc.material_domain);
   LOG_F(INFO, "flags             : 0x{:08X}", desc.flags);
@@ -127,14 +203,29 @@ inline auto LoadMaterialAsset(LoaderContext context)
     desc.base_color[0], desc.base_color[1], desc.base_color[2],
     desc.base_color[3]);
   LOG_F(INFO, "normal scale      : {:.2f}", desc.normal_scale);
-  LOG_F(INFO, "metalness         : {:.2f}", desc.metalness);
-  LOG_F(INFO, "roughness         : {:.2f}", desc.roughness);
-  LOG_F(INFO, "ambient occlusion : {:.2f}", desc.ambient_occlusion);
+  LOG_F(INFO, "metalness         : {:.2f}", desc.metalness.ToFloat());
+  LOG_F(INFO, "roughness         : {:.2f}", desc.roughness.ToFloat());
+  LOG_F(INFO, "ambient occlusion : {:.2f}", desc.ambient_occlusion.ToFloat());
   LOG_F(INFO, "base color tex    : {}", desc.base_color_texture);
   LOG_F(INFO, "normal tex        : {}", desc.normal_texture);
   LOG_F(INFO, "metallic tex      : {}", desc.metallic_texture);
   LOG_F(INFO, "roughness tex     : {}", desc.roughness_texture);
   LOG_F(INFO, "ambient occ. tex  : {}", desc.ambient_occlusion_texture);
+  LOG_F(INFO, "emissive tex     : {}", desc.emissive_texture);
+  LOG_F(INFO, "specular tex     : {}", desc.specular_texture);
+  LOG_F(INFO, "sheen color tex  : {}", desc.sheen_color_texture);
+  LOG_F(INFO, "clearcoat tex    : {}", desc.clearcoat_texture);
+  LOG_F(INFO, "clearcoat N tex  : {}", desc.clearcoat_normal_texture);
+  LOG_F(INFO, "transmission tex : {}", desc.transmission_texture);
+  LOG_F(INFO, "thickness tex    : {}", desc.thickness_texture);
+  LOG_F(INFO, "alpha cutoff     : {:.3f}", desc.alpha_cutoff.ToFloat());
+  LOG_F(INFO, "ior              : {:.3f}", desc.ior);
+  LOG_F(INFO, "specular factor  : {:.3f}", desc.specular_factor.ToFloat());
+  LOG_F(INFO, "clearcoat        : {:.3f}", desc.clearcoat_factor.ToFloat());
+  LOG_F(INFO, "clearcoat rough. : {:.3f}", desc.clearcoat_roughness.ToFloat());
+  LOG_F(INFO, "transmission     : {:.3f}", desc.transmission_factor.ToFloat());
+  LOG_F(INFO, "thickness        : {:.3f}", desc.thickness_factor.ToFloat());
+  LOG_F(INFO, "attenuation dist : {:.3f}", desc.attenuation_distance);
 
   // TODO: Implement shader refs as resources
   // Currently shader references are embedded data without asset keys
@@ -198,6 +289,13 @@ inline auto LoadMaterialAsset(LoaderContext context)
     collect_texture_ref(desc.metallic_texture);
     collect_texture_ref(desc.roughness_texture);
     collect_texture_ref(desc.ambient_occlusion_texture);
+    collect_texture_ref(desc.emissive_texture);
+    collect_texture_ref(desc.specular_texture);
+    collect_texture_ref(desc.sheen_color_texture);
+    collect_texture_ref(desc.clearcoat_texture);
+    collect_texture_ref(desc.clearcoat_normal_texture);
+    collect_texture_ref(desc.transmission_texture);
+    collect_texture_ref(desc.thickness_texture);
   }
 
   // Create the material asset with the loaded shader references and runtime

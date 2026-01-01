@@ -40,21 +40,22 @@ namespace oxygen::data {
  offset size   name                  description
  ------ ------ --------------------- -------------------------------------------
  0x00   96     header                AssetHeader (type, name, version, etc.)
- 0x60   1      material_domain       Material domain (enum)
- 0x61   4      flags                 Bitfield for material options
- 0x65   4      shader_stages         Bitfield for used shader stages
- 0x69   16     base_color            RGBA fallback color (float[4])
- 0x79   4      normal_scale          Normal map scale (float)
- 0x7D   4      metalness             Metalness scalar (float)
- 0x81   4      roughness             Roughness scalar (float)
- 0x85   4      ambient_occlusion     AO scalar (float)
- 0x89   4      base_color_texture    Index into TextureResourceTable
- 0x8D   4      normal_texture        Index into TextureResourceTable
- 0x91   4      metallic_texture      Index into TextureResourceTable
- 0x95   4      roughness_texture     Index into TextureResourceTable
- 0x99   4      ambient_occlusion_tex Index into TextureResourceTable
- 0x9D   32     reserved_textures     Reserved for future texture indices
- 0xBD   68     reserved              Reserved/padding to 256 bytes
+ 0x5F   1      material_domain       Material domain (enum)
+ 0x60   4      flags                 Bitfield for material options
+ 0x64   4      shader_stages         Bitfield for used shader stages
+ 0x68   16     base_color            RGBA fallback color (float[4])
+ 0x78   4      normal_scale          Normal map scale (float)
+ 0x7C   2      metalness             Metalness scalar (UNorm16)
+ 0x7E   2      roughness             Roughness scalar (UNorm16)
+ 0x80   2      ambient_occlusion     AO scalar (UNorm16)
+ 0x82   4      base_color_texture    Index into TextureResourceTable
+ 0x86   4      normal_texture        Index into TextureResourceTable
+ 0x8A   4      metallic_texture      Index into TextureResourceTable
+ 0x8E   4      roughness_texture     Index into TextureResourceTable
+ 0x92   4      ambient_occlusion_tex Index into TextureResourceTable
+ 0x96   28     tier2_textures        Tier 1/2 texture indices (7 slots)
+ 0xB2   46     tier2_params          Tier 1/2 scalar params (UNorm16 + F16)
+ 0xD8   40     reserved              Reserved for future expansion
  0x100 ...     shader references     Array ShaderReference
  ```
 
@@ -123,19 +124,19 @@ public:
   //! Returns the metalness scalar.
   [[nodiscard]] auto GetMetalness() const noexcept -> float
   {
-    return desc_.metalness;
+    return desc_.metalness.ToFloat();
   }
 
   //! Returns the roughness scalar.
   [[nodiscard]] auto GetRoughness() const noexcept -> float
   {
-    return desc_.roughness;
+    return desc_.roughness.ToFloat();
   }
 
   //! Returns the ambient occlusion scalar.
   [[nodiscard]] auto GetAmbientOcclusion() const noexcept -> float
   {
-    return desc_.ambient_occlusion;
+    return desc_.ambient_occlusion.ToFloat();
   }
 
   //! Returns the index of the base color texture.
