@@ -611,13 +611,14 @@ public partial class ProjectLayoutViewModel(
         this.LogRestoreStateStart();
 
         var selectedFolders = RouteStateMapping.GetSelectedFolders(this.activeRoute);
-        contentBrowserState.SelectedFolders.Clear();
-
         foreach (var relativePath in selectedFolders)
         {
             this.LogRestoreStateAddFolder(relativePath);
-            _ = contentBrowserState.SelectedFolders.Add(relativePath);
         }
+
+        // Important: apply selection via ContentBrowserState so that PropertyChanged is raised.
+        // The assets pane refreshes itself on SelectedFolders PropertyChanged.
+        contentBrowserState.SetSelectedFolders(selectedFolders);
 
         this.LogRestoreStateFinal(string.Join(", ", contentBrowserState.SelectedFolders));
     }
