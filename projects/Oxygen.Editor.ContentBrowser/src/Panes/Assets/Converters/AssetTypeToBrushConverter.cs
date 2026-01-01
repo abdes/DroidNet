@@ -24,10 +24,15 @@ public sealed partial class AssetTypeToBrushConverter : IValueConverter
             return assetType switch
             {
                 AssetType.Image => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x3C, 0x9D, 0xD0)), // teal/blue
+                AssetType.Texture => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x3C, 0x9D, 0xD0)), // teal/blue (same as Image)
                 AssetType.Scene => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xF7, 0xB5, 0x00)), // orange/yellow
                 AssetType.Mesh => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x86, 0xC0, 0x44)), // green
                 AssetType.Folder => TryGetResourceBrush("FolderAssetBrush") ??
                                     new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0xE6, 0xB8, 0x00)), // theme-aware if resource exists
+                AssetType.ImportSettings => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
+                AssetType.CookedData => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
+                AssetType.CookedTable => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
+                AssetType.ForeignAsset => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
                 AssetType.Unknown => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)), // gray
                 _ => new SolidColorBrush(ColorHelper.FromArgb(0xFF, 0x9E, 0x9E, 0x9E)),
             };

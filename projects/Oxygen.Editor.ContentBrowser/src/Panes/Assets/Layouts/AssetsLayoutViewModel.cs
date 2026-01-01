@@ -23,7 +23,7 @@ public abstract class AssetsLayoutViewModel(
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext) : ObservableObject, IRoutingAware, IDisposable
 {
-    private readonly HashSet<string> seenLocations = [];
+    private readonly Dictionary<string, GameAsset> shownByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly IAssetCatalog assetCatalog = assetCatalog;
     private readonly IProject currentProject = currentProject;
     private readonly ContentBrowserState contentBrowserState = contentBrowserState;
@@ -120,10 +120,15 @@ public abstract class AssetsLayoutViewModel(
             _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
             {
                 this.Assets.Clear();
-                this.seenLocations.Clear();
+                this.shownByKey.Clear();
             });
 
-            var items = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
+            var query = new AssetQuery(this.BuildScopeForSelection());
+            var items = await this.assetCatalog.QueryAsync(query).ConfigureAwait(false);
+
+            // Resolve duplicates across catalog sources (e.g. authoring *.otex.json vs cooked *.otex)
+            // by a logical asset key, preferring authoring sources.
+            var selected = new Dictionary<string, GameAsset>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var item in items)
             {
@@ -133,16 +138,92 @@ public abstract class AssetsLayoutViewModel(
                     continue;
                 }
 
-                _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
+                var key = GetLogicalAssetKey(asset);
+                if (!selected.TryGetValue(key, out var existing))
+                {
+                    selected[key] = asset;
+                    continue;
+                }
+
+                if (IsPreferredOver(asset, existing))
+                {
+                    selected[key] = asset;
+                }
+            }
+
+            _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
+            {
+                foreach (var asset in selected.Values.OrderBy(a => a.VirtualPath ?? a.Location, StringComparer.OrdinalIgnoreCase))
                 {
                     this.Assets.Add(asset);
-                    this.seenLocations.Add(asset.Location);
-                });
-            }
+                    this.shownByKey[GetLogicalAssetKey(asset)] = asset;
+                }
+            });
         }
         catch (Exception ex)
         {
             Debug.WriteLine($"[{this.GetType().Name}] Error refreshing assets: {ex.Message}");
+        }
+
+        static bool IsPreferredOver(GameAsset candidate, GameAsset existing)
+        {
+            // Prefer authoring sources (compound extensions like "*.otex.json") over cooked/runtime artifacts.
+            var candidateIsAuthoring = IsAuthoringSource(candidate.VirtualPath);
+            var existingIsAuthoring = IsAuthoringSource(existing.VirtualPath);
+
+            if (candidateIsAuthoring != existingIsAuthoring)
+            {
+                return candidateIsAuthoring;
+            }
+
+            // Otherwise keep the existing deterministic choice.
+            return false;
+        }
+
+        static bool IsAuthoringSource(string? virtualPath)
+        {
+            if (string.IsNullOrEmpty(virtualPath))
+            {
+                return false;
+            }
+
+            return virtualPath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static string GetLogicalAssetKey(GameAsset asset)
+        {
+            var path = asset.VirtualPath ?? asset.Location;
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            // Normalize known authoring sources to their runtime/canonical extension.
+            // Example: "/Content/Textures/Wood.otex.json" -> "/Content/Textures/Wood.otex"
+            if (path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path[..^".json".Length];
+            }
+
+            if (path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path[..^".json".Length];
+            }
+
+            if (path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path[..^".json".Length];
+            }
+
+            if (path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path[..^".json".Length];
+            }
+
+            return path;
         }
     }
 
@@ -154,25 +235,48 @@ public abstract class AssetsLayoutViewModel(
             return;
         }
 
+        var key = GetLogicalAssetKey(asset);
+
         _ = this.hostingContext.Dispatcher.DispatchAsync(() =>
         {
             switch (change.Kind)
             {
                 case AssetChangeKind.Added:
-                    if (this.IsInSelectedFolders(asset) && !this.seenLocations.Contains(asset.Location))
+                    if (!this.IsInSelectedFolders(asset))
+                    {
+                        break;
+                    }
+
+                    if (!this.shownByKey.TryGetValue(key, out var existing))
                     {
                         this.Assets.Add(asset);
-                        this.seenLocations.Add(asset.Location);
+                        this.shownByKey[key] = asset;
+                        break;
+                    }
+
+                    // If we already show an item for this logical key, prefer authoring source.
+                    if (IsAuthoringSource(asset.VirtualPath) && !IsAuthoringSource(existing.VirtualPath))
+                    {
+                        var idx = this.Assets.IndexOf(existing);
+                        if (idx >= 0)
+                        {
+                            this.Assets[idx] = asset;
+                        }
+                        else
+                        {
+                            this.Assets.Add(asset);
+                        }
+
+                        this.shownByKey[key] = asset;
                     }
 
                     break;
 
                 case AssetChangeKind.Removed:
-                    var toRemove = this.Assets.FirstOrDefault(a => string.Equals(a.Location, asset.Location, StringComparison.Ordinal));
-                    if (toRemove != null)
+                    if (this.shownByKey.TryGetValue(key, out var shown) && string.Equals(shown.VirtualPath, asset.VirtualPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        _ = this.Assets.Remove(toRemove);
-                        _ = this.seenLocations.Remove(asset.Location);
+                        _ = this.Assets.Remove(shown);
+                        _ = this.shownByKey.Remove(key);
                     }
 
                     break;
@@ -182,6 +286,85 @@ public abstract class AssetsLayoutViewModel(
                     break;
             }
         });
+
+        static bool IsAuthoringSource(string? virtualPath)
+        {
+            if (string.IsNullOrEmpty(virtualPath))
+            {
+                return false;
+            }
+
+            return virtualPath.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
+                   || virtualPath.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase);
+        }
+
+        static string GetLogicalAssetKey(GameAsset asset)
+        {
+            var path = asset.VirtualPath ?? asset.Location;
+            if (string.IsNullOrEmpty(path))
+            {
+                return string.Empty;
+            }
+
+            if (path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".omat.json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
+                || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase))
+            {
+                return path[..^".json".Length];
+            }
+
+            return path;
+        }
+    }
+
+    private AssetQueryScope BuildScopeForSelection()
+    {
+        var folders = this.contentBrowserState.SelectedFolders;
+        if (folders is null || folders.Count == 0)
+        {
+            return AssetQueryScope.All;
+        }
+
+        // If root is selected, show everything
+        if (folders.Contains(".") || folders.Contains("/"))
+        {
+            return AssetQueryScope.All;
+        }
+
+        var roots = new List<Uri>();
+        foreach (var folder in folders)
+        {
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                continue;
+            }
+
+            var normalized = folder.Replace('\\', '/');
+            if (!normalized.StartsWith('/'))
+            {
+                // Fallback for legacy/non-canonical paths: assume "project" mount.
+                roots.Add(AssetUriHelper.CreateUri("project", normalized));
+                continue;
+            }
+
+            // Expected canonical absolute folder virtual path: "/<Mount>/<Optional/Path>"
+            var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length == 0)
+            {
+                continue;
+            }
+
+            var mountPoint = segments[0];
+            var relative = segments.Length == 1 ? string.Empty : string.Join('/', segments.Skip(1));
+            roots.Add(AssetUriHelper.CreateUri(mountPoint, relative));
+        }
+
+        return roots.Count == 0
+            ? AssetQueryScope.All
+            : new AssetQueryScope(roots, AssetQueryTraversal.Descendants);
     }
 
     private GameAsset? CreateGameAsset(Uri uri)

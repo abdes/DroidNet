@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts.TilesLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -43,14 +43,19 @@
                         <!--  Details  -->
                         <StackPanel Grid.Row="2" Padding="12,8,12,12">
                             <TextBlock
+                                MaxLines="1"
                                 Style="{ThemeResource BodyStrongTextBlockStyle}"
                                 Text="{x:Bind Name}"
-                                TextTrimming="CharacterEllipsis" />
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
                             <TextBlock
                                 Margin="0,2,0,0"
+                                MaxLines="1"
                                 Opacity="0.8"
                                 Style="{ThemeResource CaptionTextBlockStyle}"
-                                Text="{x:Bind AssetType}" />
+                                Text="{x:Bind TypeDisplayName}"
+                                TextTrimming="CharacterEllipsis"
+                                TextWrapping="NoWrap" />
                         </StackPanel>
                     </Grid>
                 </Border>

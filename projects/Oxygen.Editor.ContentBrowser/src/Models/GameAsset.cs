@@ -35,9 +35,29 @@ public enum AssetType
     Texture,
 
     /// <summary>
+    /// Represents cooked data output (e.g. <c>*.data</c>).
+    /// </summary>
+    CookedData,
+
+    /// <summary>
+    /// Represents cooked table output (e.g. <c>*.table</c>).
+    /// </summary>
+    CookedTable,
+
+    /// <summary>
     /// Represents a folder.
     /// </summary>
     Folder,
+
+    /// <summary>
+    /// Represents an import settings file (e.g. <c>*.import</c>).
+    /// </summary>
+    ImportSettings,
+
+    /// <summary>
+    /// Represents a foreign/3rd-party authoring file (e.g. <c>*.glb</c>, <c>*.gltf</c>, <c>*.fbx</c>).
+    /// </summary>
+    ForeignAsset,
 
     /// <summary>
     /// Represents an unknown asset type.
@@ -96,6 +116,25 @@ public class GameAsset
     public AssetType AssetType { get; init; }
 
     /// <summary>
+    /// Gets a user-facing display name for <see cref="AssetType"/>.
+    /// </summary>
+    public string TypeDisplayName
+    {
+        get
+        {
+            return this.AssetType switch
+            {
+                AssetType.Image => BuildTypedDisplayName("Image", this.Location),
+                AssetType.ImportSettings => "Import Settings",
+                AssetType.CookedData => "Cooked Data",
+                AssetType.CookedTable => "Cooked Table",
+                AssetType.ForeignAsset => BuildForeignAssetDisplayName(this.Location),
+                _ => this.AssetType.ToString(),
+            };
+        }
+    }
+
+    /// <summary>
     /// Determines the asset type based on the file extension.
     /// </summary>
     /// <param name="fileName">The name of the file.</param>
@@ -103,6 +142,16 @@ public class GameAsset
     public static AssetType GetAssetType(string fileName)
     {
         var upper = fileName.ToUpperInvariant();
+
+        if (upper.EndsWith(".IMPORT.JSON", StringComparison.Ordinal))
+        {
+            return AssetType.ImportSettings;
+        }
+
+        if (upper.EndsWith(".IMPORT", StringComparison.Ordinal))
+        {
+            return AssetType.ImportSettings;
+        }
 
         // Oxygen-native authoring sources use compound extensions like "*.omat.json".
         // Treat these as their underlying asset types rather than generic JSON.
@@ -123,18 +172,45 @@ public class GameAsset
 
         if (upper.EndsWith(".OTEX.JSON", StringComparison.Ordinal))
         {
-            // For now, keep textures grouped with images (matches existing behavior for ".otex").
-            return AssetType.Image;
+            return AssetType.Texture;
         }
 
         var extension = Path.GetExtension(fileName).ToUpperInvariant();
         return extension switch
         {
-            ".PNG" or ".JPG" or ".JPEG" or ".TGA" or ".OTEX" => AssetType.Image,
-            ".SCENE" or ".OSCENE" or ".GLB" or ".GLTF" => AssetType.Scene,
+            ".PNG" or ".JPG" or ".JPEG" or ".TGA" => AssetType.Image,
+            ".OTEX" => AssetType.Texture,
+            ".SCENE" or ".OSCENE" => AssetType.Scene,
             ".MESH" or ".OGEO" => AssetType.Mesh,
             ".MAT" or ".OMAT" => AssetType.Material,
+            ".DATA" => AssetType.CookedData,
+            ".TABLE" => AssetType.CookedTable,
+            ".GLB" or ".GLTF" or ".FBX" => AssetType.ForeignAsset,
             _ => AssetType.Unknown,
         };
+    }
+
+    private static string BuildForeignAssetDisplayName(string location)
+    {
+        var ext = Path.GetExtension(location);
+        if (string.IsNullOrWhiteSpace(ext))
+        {
+            return "Foreign Asset";
+        }
+
+        ext = ext.TrimStart('.').ToLowerInvariant();
+        return $"Foreign Asset ({ext})";
+    }
+
+    private static string BuildTypedDisplayName(string baseName, string location)
+    {
+        var ext = Path.GetExtension(location);
+        if (string.IsNullOrWhiteSpace(ext))
+        {
+            return baseName;
+        }
+
+        ext = ext.TrimStart('.').ToLowerInvariant();
+        return $"{baseName} ({ext})";
     }
 }

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts.ListLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -34,11 +34,17 @@
                         <TextBlock
                             Grid.Column="1"
                             VerticalAlignment="Center"
-                            Text="{x:Bind Name}" />
+                            MaxLines="1"
+                            Text="{x:Bind Name}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
                         <TextBlock
                             Grid.Column="2"
                             VerticalAlignment="Center"
-                            Text="{x:Bind AssetType}" />
+                            MaxLines="1"
+                            Text="{x:Bind TypeDisplayName}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
                     </Grid>
                 </DataTemplate>
             </ListView.ItemTemplate>
