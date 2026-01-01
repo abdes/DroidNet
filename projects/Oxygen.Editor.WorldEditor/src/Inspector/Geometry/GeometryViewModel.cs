@@ -31,6 +31,7 @@ public partial class GeometryViewModel : ComponentPropertyEditor
     private readonly IAssetCatalog assetCatalog;
     private readonly IMessenger messenger;
     private readonly ObservableCollection<AssetPickerItem> contentItems = [];
+    private readonly Dictionary<string, AssetPickerItem> contentItemsByKey = new(StringComparer.OrdinalIgnoreCase);
     private readonly DispatcherQueue dispatcherQueue;
 
     private IDisposable? assetChangesSubscription;
@@ -78,48 +79,82 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             try
             {
                 var allAssets = await this.assetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All)).ConfigureAwait(false);
-                var meshAssets = allAssets.Where(a => IsMesh(a.Uri)).ToList();
+                var meshAssets = allAssets.Where(a => IsSelectableCookedMesh(a.Uri)).ToList();
 
                 Debug.WriteLine($"[GeometryViewModel] Asset catalog returned {allAssets.Count} assets; {meshAssets.Count} mesh assets");
 
-                var seenUris = new HashSet<Uri>(meshAssets.Select(a => a.Uri));
+                var selectedByKey = new Dictionary<string, AssetRecord>(StringComparer.OrdinalIgnoreCase);
+                foreach (var asset in meshAssets)
+                {
+                    var key = GetMeshLogicalKey(asset.Uri);
+                    if (!selectedByKey.TryGetValue(key, out var existing) || IsPreferredMeshUri(asset.Uri, existing.Uri))
+                    {
+                        selectedByKey[key] = asset;
+                    }
+                }
 
                 // Populate initial items on the UI thread.
                 this.DispatchOnUi(() =>
                     {
-                        foreach (var asset in meshAssets)
+                        foreach (var asset in selectedByKey.Values.OrderBy(a => AssetUriHelper.GetVirtualPath(a.Uri), StringComparer.OrdinalIgnoreCase))
                         {
                             Debug.WriteLine($"[GeometryViewModel] Initial mesh asset: {asset.Name} ({asset.Uri})");
-                            this.contentItems.Add(CreateContentItem(asset));
+                            var item = CreateContentItem(asset);
+                            var key = GetMeshLogicalKey(asset.Uri);
+                            this.contentItemsByKey[key] = item;
+                            this.contentItems.Add(item);
                         }
                     });
 
                 // Subscribe to future changes, deduplicating replayed items.
                 this.assetChangesSubscription = this.assetCatalog.Changes
-                    .Where(n => IsMesh(n.Uri))
+                    .Where(n => IsSelectableCookedMesh(n.Uri))
                     .Subscribe(
                         notification =>
                             this.DispatchOnUi(() =>
                                 {
                                     if (notification.Kind == AssetChangeKind.Added)
                                     {
-                                        if (seenUris.Add(notification.Uri))
+                                        var key = GetMeshLogicalKey(notification.Uri);
+
+                                        if (!this.contentItemsByKey.TryGetValue(key, out var existingItem))
                                         {
                                             Debug.WriteLine($"[GeometryViewModel] New mesh asset added: {notification.Uri}");
                                             var record = new AssetRecord(notification.Uri);
-                                            this.contentItems.Add(CreateContentItem(record));
+                                            var newItem = CreateContentItem(record);
+                                            this.contentItemsByKey[key] = newItem;
+                                            this.contentItems.Add(newItem);
+                                            return;
+                                        }
+
+                                        if (IsPreferredMeshUri(notification.Uri, existingItem.Uri))
+                                        {
+                                            Debug.WriteLine($"[GeometryViewModel] Replacing mesh asset for key '{key}': {existingItem.Uri} -> {notification.Uri}");
+                                            var record = new AssetRecord(notification.Uri);
+                                            var newItem = CreateContentItem(record);
+
+                                            var idx = this.contentItems.IndexOf(existingItem);
+                                            if (idx >= 0)
+                                            {
+                                                this.contentItems[idx] = newItem;
+                                            }
+                                            else
+                                            {
+                                                this.contentItems.Add(newItem);
+                                            }
+
+                                            this.contentItemsByKey[key] = newItem;
                                         }
                                     }
                                     else if (notification.Kind == AssetChangeKind.Removed)
                                     {
-                                        if (seenUris.Remove(notification.Uri))
+                                        var key = GetMeshLogicalKey(notification.Uri);
+                                        if (this.contentItemsByKey.TryGetValue(key, out var existingItem)
+                                            && existingItem.Uri == notification.Uri)
                                         {
                                             Debug.WriteLine($"[GeometryViewModel] Mesh asset removed: {notification.Uri}");
-                                            var itemToRemove = this.contentItems.FirstOrDefault(i => i.Uri == notification.Uri);
-                                            if (itemToRemove is not null)
-                                            {
-                                                this.contentItems.Remove(itemToRemove);
-                                            }
+                                            _ = this.contentItems.Remove(existingItem);
+                                            _ = this.contentItemsByKey.Remove(key);
                                         }
                                     }
                                 }),
@@ -309,8 +344,27 @@ public partial class GeometryViewModel : ComponentPropertyEditor
             ThumbnailModel: "\uE7C3");
     }
 
-    private static bool IsMesh(Uri uri)
+    private static bool IsSelectableCookedMesh(Uri uri)
     {
+        // Geometry picker should list only runtime-consumable (cooked) assets that resolve
+        // to canonical asset:/// URIs under the authoring mount point.
+        // The aggregated ProjectAssetCatalog also includes:
+        //  - project-root files (asset:///project/...) including .cooked/.imported
+        //  - optionally mounted utility roots (Cooked/Imported/Build)
+        //  - engine assets (handled separately in this view model)
+        // We must exclude these to avoid duplicates and ensure applied URIs resolve correctly.
+
+        var mountPoint = AssetUriHelper.GetMountPoint(uri);
+        if (string.IsNullOrWhiteSpace(mountPoint))
+        {
+            return false;
+        }
+
+        if (IsExcludedMountPoint(mountPoint))
+        {
+            return false;
+        }
+
         // Asset URIs can include mount points and may have a leading "//" in AbsolutePath.
         // Use the relative path when possible to make extension detection resilient.
         var path = AssetUriHelper.GetRelativePath(uri);
@@ -321,6 +375,48 @@ public partial class GeometryViewModel : ComponentPropertyEditor
 
         var ext = Path.GetExtension(path).ToUpperInvariant();
         return ext is ".MESH" or ".OGEO";
+
+        static bool IsExcludedMountPoint(string mountPoint)
+            => mountPoint.Equals("project", StringComparison.OrdinalIgnoreCase)
+               || mountPoint.Equals("Engine", StringComparison.OrdinalIgnoreCase)
+               || mountPoint.Equals("Cooked", StringComparison.OrdinalIgnoreCase)
+               || mountPoint.Equals("Imported", StringComparison.OrdinalIgnoreCase)
+               || mountPoint.Equals("Build", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string GetMeshLogicalKey(Uri uri)
+    {
+        // Dedupe mesh variants that share the same virtual path but differ by extension.
+        // Example: "/Content/Models/Foo.mesh" and "/Content/Models/Foo.ogeo" -> "/Content/Models/Foo"
+        var virtualPath = AssetUriHelper.GetVirtualPath(uri);
+        if (string.IsNullOrWhiteSpace(virtualPath))
+        {
+            virtualPath = uri.AbsolutePath;
+        }
+
+        var ext = Path.GetExtension(virtualPath);
+        return string.IsNullOrEmpty(ext)
+            ? virtualPath
+            : virtualPath[..^ext.Length];
+    }
+
+    private static bool IsPreferredMeshUri(Uri candidate, Uri existing)
+    {
+        // Prefer canonical cooked .ogeo assets over legacy/raw .mesh when both exist.
+        var candidateExt = Path.GetExtension(AssetUriHelper.GetRelativePath(candidate)).ToUpperInvariant();
+        var existingExt = Path.GetExtension(AssetUriHelper.GetRelativePath(existing)).ToUpperInvariant();
+
+        if (candidateExt == existingExt)
+        {
+            return false;
+        }
+
+        if (candidateExt == ".OGEO")
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private void DispatchOnUi(Action action)
