@@ -25,6 +25,10 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetType.Material => "\uF515", // material (example glyph)
                 AssetType.Texture => "\uE8B9", // texture (same as image for now)
                 AssetType.Folder => "\uE8B7", // folder (filled)
+                AssetType.ImportSettings => "\uE8A5", // use unknown glyph for now
+                AssetType.CookedData => "\uE8A5", // use unknown glyph for now
+                AssetType.CookedTable => "\uE8A5", // use unknown glyph for now
+                AssetType.ForeignAsset => "\uE8A5", // use unknown glyph for now
                 AssetType.Unknown => "\uE8A5", // unknown
                 _ => "\uE8A5",
             };
