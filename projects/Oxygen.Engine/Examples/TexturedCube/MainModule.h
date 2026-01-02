@@ -38,6 +38,22 @@ public:
     kCustom = 2,
   };
 
+  enum class ImageOrigin : std::uint8_t {
+    kTopLeft = 0,
+    kBottomLeft = 1,
+  };
+
+  enum class UvOrigin : std::uint8_t {
+    kBottomLeft = 0,
+    kTopLeft = 1,
+  };
+
+  enum class OrientationFixMode : std::uint8_t {
+    kNormalizeTextureOnUpload = 0,
+    kNormalizeUvInTransform = 1,
+    kNone = 2,
+  };
+
   explicit MainModule(const oxygen::examples::common::AsyncEngineApp& app);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -88,6 +104,9 @@ private:
   auto ApplyOrbitAndZoom() -> void;
   auto DrawDebugOverlay(engine::FrameContext& context) -> void;
 
+  [[nodiscard]] auto GetEffectiveUvTransform() const
+    -> std::pair<glm::vec2, glm::vec2>;
+
   std::shared_ptr<scene::Scene> scene_;
   scene::SceneNode main_camera_;
   scene::SceneNode cube_node_;
@@ -107,6 +126,14 @@ private:
   glm::vec2 uv_offset_ { 0.0f, 0.0f };
   bool cube_needs_rebuild_ { true };
 
+  // Texture/UV origin normalization controls (demo-only).
+  UvOrigin uv_origin_ { UvOrigin::kBottomLeft };
+  ImageOrigin image_origin_ { ImageOrigin::kTopLeft };
+  OrientationFixMode orientation_fix_mode_
+    { OrientationFixMode::kNormalizeTextureOnUpload };
+  bool extra_flip_u_ { false };
+  bool extra_flip_v_ { false };
+
   std::shared_ptr<const oxygen::data::MaterialAsset> cube_material_;
   std::shared_ptr<oxygen::data::GeometryAsset> cube_geometry_;
   std::vector<std::shared_ptr<oxygen::data::GeometryAsset>>
@@ -114,9 +141,14 @@ private:
 
   std::array<char, 512> png_path_ {};
   bool png_load_requested_ { false };
+  bool png_reupload_requested_ { false };
   std::string png_status_message_ {};
   int png_last_width_ { 0 };
   int png_last_height_ { 0 };
+
+  std::vector<std::byte> png_rgba8_ {};
+  std::uint32_t png_width_ { 0U };
+  std::uint32_t png_height_ { 0U };
 
   glm::vec3 camera_target_ { 0.0f, 0.0f, 0.0f };
   float orbit_yaw_rad_ { -glm::half_pi<float>() };

@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -210,6 +211,58 @@ auto DecodePngRgba8Wic(const std::filesystem::path& file_path,
 
 #endif
 
+auto FlipRgba8Vertically(std::span<std::byte> rgba8, const std::uint32_t width,
+  const std::uint32_t height) -> void
+{
+  if (width == 0U || height == 0U) {
+    return;
+  }
+
+  constexpr std::size_t kBytesPerPixel = 4U;
+  const std::size_t row_bytes = static_cast<std::size_t>(width) * kBytesPerPixel;
+  const std::size_t expected_size
+    = row_bytes * static_cast<std::size_t>(height);
+  if (rgba8.size() < expected_size) {
+    return;
+  }
+
+  std::vector<std::byte> tmp;
+  tmp.resize(row_bytes);
+
+  for (std::uint32_t y = 0U; y < height / 2U; ++y) {
+    const std::size_t y0 = static_cast<std::size_t>(y);
+    const std::size_t y1 = static_cast<std::size_t>(height - 1U - y);
+
+    auto* row0 = rgba8.data() + (y0 * row_bytes);
+    auto* row1 = rgba8.data() + (y1 * row_bytes);
+
+    std::memcpy(tmp.data(), row0, row_bytes);
+    std::memcpy(row0, row1, row_bytes);
+    std::memcpy(row1, tmp.data(), row_bytes);
+  }
+}
+
+auto ApplyUvOriginFix(const glm::vec2 scale, const glm::vec2 offset,
+  const bool flip_u, const bool flip_v)
+  -> std::pair<glm::vec2, glm::vec2>
+{
+  glm::vec2 out_scale = scale;
+  glm::vec2 out_offset = offset;
+
+  // Apply flips in "raw UV" space so UI scale/offset remains intuitive.
+  // u' = (1 - u) * s + o  =>  u' = u * (-s) + (s + o)
+  if (flip_u) {
+    out_offset.x = out_scale.x + out_offset.x;
+    out_scale.x = -out_scale.x;
+  }
+  if (flip_v) {
+    out_offset.y = out_scale.y + out_offset.y;
+    out_scale.y = -out_scale.y;
+  }
+
+  return { out_scale, out_offset };
+}
+
 auto MakeLookRotationFromPosition(const glm::vec3& position,
   const glm::vec3& target, const glm::vec3& up_direction = { 0.0F, 0.0F, 1.0F })
   -> glm::quat
@@ -354,6 +407,27 @@ auto BuildCubeGeometry(
 
 namespace oxygen::examples::textured_cube {
 
+auto MainModule::GetEffectiveUvTransform() const
+  -> std::pair<glm::vec2, glm::vec2>
+{
+  bool fix_u = extra_flip_u_;
+  bool fix_v = extra_flip_v_;
+
+  // If the mesh UV origin and the texture image origin differ, apply a V flip
+  // either by normalizing the texture at upload time (preferred) or by
+  // normalizing UVs via the material UV transform.
+  if (orientation_fix_mode_ == OrientationFixMode::kNormalizeUvInTransform) {
+    if (uv_origin_ != UvOrigin::kTopLeft && image_origin_ == ImageOrigin::kTopLeft) {
+      fix_v = !fix_v;
+    }
+    if (uv_origin_ == UvOrigin::kTopLeft && image_origin_ != ImageOrigin::kTopLeft) {
+      fix_v = !fix_v;
+    }
+  }
+
+  return ApplyUvOriginFix(uv_scale_, uv_offset_, fix_u, fix_v);
+}
+
 MainModule::MainModule(const common::AsyncEngineApp& app)
   : Base(app)
 {
@@ -442,98 +516,134 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 #if !defined(OXYGEN_WINDOWS)
         png_status_message_ = "PNG loading only supported on Windows";
 #else
-        std::vector<std::byte> rgba8;
-        std::uint32_t width = 0;
-        std::uint32_t height = 0;
         std::string decode_error;
-        if (!DecodePngRgba8Wic(png_path, rgba8, width, height, decode_error)) {
+        if (!DecodePngRgba8Wic(
+              png_path, png_rgba8_, png_width_, png_height_, decode_error)) {
           png_status_message_
             = decode_error.empty() ? "PNG decode failed" : decode_error;
         } else {
-          // Use a fresh key each time so the renderer doesn't keep an older
-          // bindless entry for the same key.
-          custom_texture_key_ = asset_loader->MintSyntheticTextureKey();
-
-          // Keep a non-zero resource index for the material-side demo path.
-          if (custom_texture_resource_index_ == 0U) {
-            custom_texture_resource_index_ = 1U;
-          } else {
-            ++custom_texture_resource_index_;
-          }
-
-          using oxygen::data::pak::v1::TextureResourceDesc;
-
-          const auto AlignUp = [](const std::size_t value,
-                                 const std::size_t alignment) -> std::size_t {
-            if (alignment == 0U) {
-              return value;
-            }
-            const auto mask = alignment - 1U;
-            return (value + mask) & ~mask;
-          };
-
-          // TextureBinder expects cooked texture data to be row-pitch aligned
-          // to 256 bytes when the resource advertises alignment=256.
-          constexpr std::size_t kRowPitchAlignment = 256U;
-          constexpr std::size_t kBytesPerPixel = 4U; // RGBA8
-          const std::size_t bytes_per_row
-            = static_cast<std::size_t>(width) * kBytesPerPixel;
-          const std::size_t row_pitch
-            = AlignUp(bytes_per_row, kRowPitchAlignment);
-          const std::size_t padded_size
-            = row_pitch * static_cast<std::size_t>(height);
-
-          std::vector<std::byte> rgba8_padded;
-          rgba8_padded.resize(padded_size);
-          for (std::uint32_t y = 0; y < height; ++y) {
-            const auto dst_offset = static_cast<std::size_t>(y) * row_pitch;
-            const auto src_offset = static_cast<std::size_t>(y) * bytes_per_row;
-            std::memcpy(rgba8_padded.data() + dst_offset,
-              rgba8.data() + src_offset, bytes_per_row);
-          }
-
-          TextureResourceDesc desc {};
-          desc.data_offset = static_cast<oxygen::data::pak::v1::OffsetT>(
-            sizeof(TextureResourceDesc));
-          desc.size_bytes = static_cast<oxygen::data::pak::v1::DataBlobSizeT>(
-            rgba8_padded.size());
-          desc.texture_type
-            = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D);
-          desc.compression_type = 0;
-          desc.width = width;
-          desc.height = height;
-          desc.depth = 1;
-          desc.array_layers = 1;
-          desc.mip_levels = 1;
-          desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
-          desc.alignment = 256;
-
-          std::vector<std::uint8_t> packed;
-          packed.resize(sizeof(TextureResourceDesc) + rgba8_padded.size());
-          std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
-          std::memcpy(packed.data() + sizeof(TextureResourceDesc),
-            rgba8_padded.data(), rgba8_padded.size());
-
-          auto tex = co_await asset_loader->LoadResourceAsync<
-            oxygen::data::TextureResource>(
-            oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
-              .key = custom_texture_key_,
-              .bytes
-              = std::span<const std::uint8_t>(packed.data(), packed.size()),
-            });
-          if (!tex) {
-            png_status_message_ = "Texture buffer decode failed";
-          } else {
-            png_last_width_ = static_cast<int>(tex->GetWidth());
-            png_last_height_ = static_cast<int>(tex->GetHeight());
-            png_status_message_ = "Loaded";
-            texture_index_mode_ = TextureIndexMode::kCustom;
-            cube_needs_rebuild_ = true;
-          }
+          png_reupload_requested_ = true;
         }
 #endif
       }
     }
+  }
+
+  if (png_reupload_requested_) {
+    png_reupload_requested_ = false;
+
+#if !defined(OXYGEN_WINDOWS)
+    png_status_message_ = "PNG upload only supported on Windows";
+#else
+    if (png_rgba8_.empty() || png_width_ == 0U || png_height_ == 0U) {
+      png_status_message_ = "No decoded PNG pixels";
+    } else {
+      auto asset_loader
+        = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      if (!asset_loader) {
+        png_status_message_ = "AssetLoader unavailable";
+      } else {
+        // Use a fresh key each upload so the renderer doesn't keep an older
+        // bindless entry for the same key.
+        custom_texture_key_ = asset_loader->MintSyntheticTextureKey();
+
+        // Keep a non-zero resource index for the material-side demo path.
+        if (custom_texture_resource_index_ == 0U) {
+          custom_texture_resource_index_ = 1U;
+        } else {
+          ++custom_texture_resource_index_;
+        }
+
+        std::vector<std::byte> rgba8 = png_rgba8_;
+
+        bool flip_on_upload = false;
+        if (orientation_fix_mode_
+          == OrientationFixMode::kNormalizeTextureOnUpload) {
+          if (uv_origin_ != UvOrigin::kTopLeft
+            && image_origin_ == ImageOrigin::kTopLeft) {
+            flip_on_upload = true;
+          }
+          if (uv_origin_ == UvOrigin::kTopLeft
+            && image_origin_ != ImageOrigin::kTopLeft) {
+            flip_on_upload = true;
+          }
+        }
+        if (flip_on_upload) {
+          FlipRgba8Vertically(rgba8, png_width_, png_height_);
+        }
+
+        using oxygen::data::pak::v1::TextureResourceDesc;
+
+        const auto AlignUp = [](const std::size_t value,
+                               const std::size_t alignment) -> std::size_t {
+          if (alignment == 0U) {
+            return value;
+          }
+          const auto mask = alignment - 1U;
+          return (value + mask) & ~mask;
+        };
+
+        // TextureBinder expects cooked texture data to be row-pitch aligned
+        // to 256 bytes when the resource advertises alignment=256.
+        constexpr std::size_t kRowPitchAlignment = 256U;
+        constexpr std::size_t kBytesPerPixel = 4U; // RGBA8
+        const std::size_t bytes_per_row
+          = static_cast<std::size_t>(png_width_) * kBytesPerPixel;
+        const std::size_t row_pitch
+          = AlignUp(bytes_per_row, kRowPitchAlignment);
+        const std::size_t padded_size
+          = row_pitch * static_cast<std::size_t>(png_height_);
+
+        std::vector<std::byte> rgba8_padded;
+        rgba8_padded.resize(padded_size);
+        for (std::uint32_t y = 0; y < png_height_; ++y) {
+          const auto dst_offset = static_cast<std::size_t>(y) * row_pitch;
+          const auto src_offset = static_cast<std::size_t>(y) * bytes_per_row;
+          std::memcpy(rgba8_padded.data() + dst_offset,
+            rgba8.data() + src_offset, bytes_per_row);
+        }
+
+        TextureResourceDesc desc {};
+        desc.data_offset = static_cast<oxygen::data::pak::v1::OffsetT>(
+          sizeof(TextureResourceDesc));
+        desc.size_bytes = static_cast<oxygen::data::pak::v1::DataBlobSizeT>(
+          rgba8_padded.size());
+        desc.texture_type
+          = static_cast<std::uint8_t>(oxygen::TextureType::kTexture2D);
+        desc.compression_type = 0;
+        desc.width = png_width_;
+        desc.height = png_height_;
+        desc.depth = 1;
+        desc.array_layers = 1;
+        desc.mip_levels = 1;
+        desc.format = static_cast<std::uint8_t>(oxygen::Format::kRGBA8UNorm);
+        desc.alignment = 256;
+
+        std::vector<std::uint8_t> packed;
+        packed.resize(sizeof(TextureResourceDesc) + rgba8_padded.size());
+        std::memcpy(packed.data(), &desc, sizeof(TextureResourceDesc));
+        std::memcpy(packed.data() + sizeof(TextureResourceDesc),
+          rgba8_padded.data(), rgba8_padded.size());
+
+        auto tex = co_await asset_loader->LoadResourceAsync<
+          oxygen::data::TextureResource>(
+          oxygen::content::CookedResourceData<oxygen::data::TextureResource> {
+            .key = custom_texture_key_,
+            .bytes
+            = std::span<const std::uint8_t>(packed.data(), packed.size()),
+          });
+        if (!tex) {
+          png_status_message_ = "Texture buffer decode failed";
+        } else {
+          png_last_width_ = static_cast<int>(tex->GetWidth());
+          png_last_height_ = static_cast<int>(tex->GetHeight());
+          png_status_message_ = "Loaded";
+          texture_index_mode_ = TextureIndexMode::kCustom;
+          cube_needs_rebuild_ = true;
+        }
+      }
+    }
+#endif
   }
 
   if (cube_needs_rebuild_) {
@@ -565,7 +675,8 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
     cube_material_ = MakeCubeMaterial(
       "CubeMat", { 1.0f, 1.0f, 1.0f, 1.0f }, res_index, base_color_key);
 
-    auto cube_geo = BuildCubeGeometry(cube_material_, uv_scale_, uv_offset_);
+    const auto [uv_scale, uv_offset] = GetEffectiveUvTransform();
+    auto cube_geo = BuildCubeGeometry(cube_material_, uv_scale, uv_offset);
     if (cube_geo) {
       if (cube_geometry_) {
         retired_cube_geometries_.push_back(cube_geometry_);
@@ -577,7 +688,7 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
 
       if (auto* renderer = ResolveRenderer(); renderer && cube_material_) {
         (void)renderer->OverrideMaterialUvTransform(
-          *cube_material_, uv_scale_, uv_offset_);
+          *cube_material_, uv_scale, uv_offset);
       }
 
       constexpr std::size_t kMaxRetired = 16;
@@ -596,8 +707,9 @@ auto MainModule::OnSceneMutation(engine::FrameContext& context) -> co::Co<>
   // shared material mutation.
   if (cube_material_) {
     if (auto* renderer = ResolveRenderer(); renderer) {
+      const auto [uv_scale, uv_offset] = GetEffectiveUvTransform();
       (void)renderer->OverrideMaterialUvTransform(
-        *cube_material_, uv_scale_, uv_offset_);
+        *cube_material_, uv_scale, uv_offset);
     }
   }
 
@@ -858,7 +970,7 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   ImGui::BulletText("RMB + mouse drag: orbit");
 
   ImGui::Separator();
-  ImGui::TextUnformatted("Texture Playground:");
+  ImGui::TextUnformatted("Texture:");
 
   bool changed = false;
   bool rebuild_requested = false;
@@ -866,7 +978,8 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
   {
     int mode = static_cast<int>(texture_index_mode_);
     const bool mode_changed = ImGui::RadioButton(
-      "Forced error", &mode, static_cast<int>(TextureIndexMode::kForcedError));
+      "Forced error", &mode,
+      static_cast<int>(TextureIndexMode::kForcedError));
     ImGui::SameLine();
     const bool mode_changed_2 = ImGui::RadioButton(
       "Fallback (0)", &mode, static_cast<int>(TextureIndexMode::kFallback));
@@ -910,6 +1023,9 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
       ImGui::Text("Last PNG: %dx%d", png_last_width_, png_last_height_);
     }
   }
+
+  ImGui::Separator();
+  ImGui::TextUnformatted("UV:");
 
   constexpr float kUvScaleMin = 0.01f;
   constexpr float kUvScaleMax = 64.0f;
@@ -957,10 +1073,128 @@ auto MainModule::DrawDebugOverlay(engine::FrameContext& /*context*/) -> void
     uv_transform_changed = true;
   }
 
+  ImGui::Separator();
+  ImGui::TextUnformatted("Orientation:");
+
+  if (ImGui::Button("Apply recommended settings")) {
+    orientation_fix_mode_ = OrientationFixMode::kNormalizeTextureOnUpload;
+    uv_origin_ = UvOrigin::kBottomLeft;
+    image_origin_ = ImageOrigin::kTopLeft;
+    extra_flip_u_ = false;
+    extra_flip_v_ = false;
+    uv_transform_changed = true;
+    if (!png_rgba8_.empty()) {
+      png_reupload_requested_ = true;
+    }
+  }
+
+  if (ImGui::CollapsingHeader("Advanced", ImGuiTreeNodeFlags_None)) {
+    ImGui::TextUnformatted(
+      "These controls exist to understand and debug origin mismatches.");
+
+    {
+      int mode = static_cast<int>(orientation_fix_mode_);
+      const bool m0 = ImGui::RadioButton(
+        "Fix: normalize texture on upload", &mode,
+        static_cast<int>(OrientationFixMode::kNormalizeTextureOnUpload));
+      const bool m1 = ImGui::RadioButton(
+        "Fix: normalize UV in transform", &mode,
+        static_cast<int>(OrientationFixMode::kNormalizeUvInTransform));
+      const bool m2 = ImGui::RadioButton(
+        "Fix: none", &mode, static_cast<int>(OrientationFixMode::kNone));
+
+      if (m0 || m1 || m2) {
+        const auto prev = orientation_fix_mode_;
+        orientation_fix_mode_ = static_cast<OrientationFixMode>(mode);
+        uv_transform_changed = true;
+
+        const bool prev_upload
+          = (prev == OrientationFixMode::kNormalizeTextureOnUpload);
+        const bool next_upload
+          = (orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload);
+        if ((prev_upload || next_upload) && !png_rgba8_.empty()) {
+          png_reupload_requested_ = next_upload;
+        }
+      }
+    }
+
+    {
+      int uv_origin = static_cast<int>(uv_origin_);
+      if (ImGui::RadioButton("UV origin: bottom-left (authoring)", &uv_origin,
+            static_cast<int>(UvOrigin::kBottomLeft))) {
+        uv_origin_ = static_cast<UvOrigin>(uv_origin);
+        uv_transform_changed = true;
+        if (!png_rgba8_.empty()
+          && orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload) {
+          png_reupload_requested_ = true;
+        }
+      }
+      if (ImGui::RadioButton("UV origin: top-left", &uv_origin,
+            static_cast<int>(UvOrigin::kTopLeft))) {
+        uv_origin_ = static_cast<UvOrigin>(uv_origin);
+        uv_transform_changed = true;
+        if (!png_rgba8_.empty()
+          && orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload) {
+          png_reupload_requested_ = true;
+        }
+      }
+    }
+
+    {
+      int img_origin = static_cast<int>(image_origin_);
+      if (ImGui::RadioButton("Image origin: top-left (PNG/WIC)", &img_origin,
+            static_cast<int>(ImageOrigin::kTopLeft))) {
+        image_origin_ = static_cast<ImageOrigin>(img_origin);
+        uv_transform_changed = true;
+        if (!png_rgba8_.empty()
+          && orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload) {
+          png_reupload_requested_ = true;
+        }
+      }
+      if (ImGui::RadioButton("Image origin: bottom-left", &img_origin,
+            static_cast<int>(ImageOrigin::kBottomLeft))) {
+        image_origin_ = static_cast<ImageOrigin>(img_origin);
+        uv_transform_changed = true;
+        if (!png_rgba8_.empty()
+          && orientation_fix_mode_
+            == OrientationFixMode::kNormalizeTextureOnUpload) {
+          png_reupload_requested_ = true;
+        }
+      }
+    }
+
+    {
+      bool flip_u = extra_flip_u_;
+      bool flip_v = extra_flip_v_;
+      if (ImGui::Checkbox("Extra flip U", &flip_u)) {
+        extra_flip_u_ = flip_u;
+        uv_transform_changed = true;
+      }
+      ImGui::SameLine();
+      if (ImGui::Checkbox("Extra flip V", &flip_v)) {
+        extra_flip_v_ = flip_v;
+        uv_transform_changed = true;
+      }
+    }
+
+    if (!png_rgba8_.empty()
+      && orientation_fix_mode_ == OrientationFixMode::kNormalizeTextureOnUpload
+      && ImGui::Button("Re-upload PNG")) {
+      png_reupload_requested_ = true;
+      png_status_message_.clear();
+    }
+  }
+
   if (uv_transform_changed && cube_material_) {
     if (auto* renderer = ResolveRenderer(); renderer) {
+      const auto [effective_uv_scale, effective_uv_offset]
+        = GetEffectiveUvTransform();
       (void)renderer->OverrideMaterialUvTransform(
-        *cube_material_, uv_scale_, uv_offset_);
+        *cube_material_, effective_uv_scale, effective_uv_offset);
     }
   }
 
