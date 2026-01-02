@@ -675,7 +675,11 @@ auto MaterialBinder::Impl::OverrideUvTransform(
   const glm::vec2 uv_offset) -> bool
 {
   const auto ValidateScale = [](const glm::vec2 v) -> bool {
-    return std::isfinite(v.x) && std::isfinite(v.y) && v.x > 0.0F && v.y > 0.0F;
+    // Allow negative scale to support common mirroring operations (e.g.
+    // v' = 1 - v). Only require non-zero, finite values.
+    constexpr float kMinAbsScale = 1e-6F;
+    return std::isfinite(v.x) && std::isfinite(v.y)
+      && std::abs(v.x) > kMinAbsScale && std::abs(v.y) > kMinAbsScale;
   };
   const auto ValidateOffset = [](const glm::vec2 v) -> bool {
     return std::isfinite(v.x) && std::isfinite(v.y);
