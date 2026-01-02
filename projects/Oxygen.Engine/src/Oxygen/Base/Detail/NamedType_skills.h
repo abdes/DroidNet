@@ -13,7 +13,9 @@
 #include <functional>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <type_traits>
+#include <utility>
 
 #include <Oxygen/Base/Crtp.h>
 #include <Oxygen/Base/Detail/NamedType_impl.h>
@@ -22,6 +24,41 @@ namespace oxygen {
 
 namespace nt_detail {
   template <typename...> using void_t = void;
+
+  template <typename T, typename = void>
+  struct is_ostream_insertable : std::false_type { };
+
+  template <typename T>
+  struct is_ostream_insertable<T,
+    void_t<decltype(std::declval<std::ostream&>() << std::declval<T const&>())>>
+    : std::true_type { };
+
+  template <typename T>
+  inline constexpr bool is_ostream_insertable_v
+    = is_ostream_insertable<T>::value;
+
+  template <typename T, typename = void>
+  struct has_adl_to_string : std::false_type { };
+
+  template <typename T>
+  struct has_adl_to_string<T,
+    void_t<decltype(to_string(std::declval<T const&>()))>> : std::true_type { };
+
+  template <typename T>
+  inline constexpr bool has_adl_to_string_v = has_adl_to_string<T>::value;
+
+  template <typename T, typename = void>
+  struct has_streamable_adl_to_string : std::false_type { };
+
+  template <typename T>
+  struct has_streamable_adl_to_string<T,
+    void_t<decltype(to_string(std::declval<T const&>())),
+      decltype(std::declval<std::ostream&>()
+        << to_string(std::declval<T const&>()))>> : std::true_type { };
+
+  template <typename T>
+  inline constexpr bool has_streamable_adl_to_string_v
+    = has_streamable_adl_to_string<T>::value;
 
   template <typename NT, typename = void>
   struct has_is_hashable : std::false_type { };
@@ -362,7 +399,19 @@ template <typename Destination> struct OXYGEN_EBCO ImplicitlyConvertibleTo {
 template <typename T> struct OXYGEN_EBCO Printable : Crtp<T, Printable> {
   static constexpr bool is_printable = true;
 
-  void print(std::ostream& os) const { os << this->underlying().get(); }
+  void print(std::ostream& os) const
+  {
+    using UnderlyingT = std::remove_cv_t<
+      std::remove_reference_t<decltype(this->underlying().get())>>;
+
+    if constexpr (nt_detail::is_ostream_insertable_v<UnderlyingT>) {
+      os << this->underlying().get();
+    } else if constexpr (nt_detail::has_streamable_adl_to_string_v<T>) {
+      os << to_string(this->underlying());
+    } else {
+      os << "<unprintable>";
+    }
+  }
 };
 
 template <typename T, typename Parameter, template <typename> class... Skills>
