@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -208,12 +209,76 @@ namespace {
     return value + (alignment - remainder);
   }
 
+  [[nodiscard]] auto Sha256ToHex(const oxygen::base::Sha256Digest& digest)
+    -> std::string
+  {
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string out;
+    out.resize(digest.size() * 2);
+    for (size_t i = 0; i < digest.size(); ++i) {
+      const auto b = digest[i];
+      out[i * 2 + 0] = kHex[(b >> 4) & 0x0F];
+      out[i * 2 + 1] = kHex[b & 0x0F];
+    }
+    return out;
+  }
+
+  [[nodiscard]] auto NormalizeTexturePathId(std::filesystem::path p)
+    -> std::string
+  {
+    if (p.empty()) {
+      return {};
+    }
+
+    p = p.lexically_normal();
+    auto out = p.generic_string();
+
+#if defined(_WIN32)
+    std::transform(out.begin(), out.end(), out.begin(), [](const char c) {
+      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    });
+#endif
+
+    return out;
+  }
+
+  [[nodiscard]] auto RepackRgba8ToRowPitchAligned(
+    const std::span<const std::byte> rgba8_tight, const uint32_t width,
+    const uint32_t height, const uint64_t row_pitch_alignment)
+    -> std::vector<std::byte>
+  {
+    constexpr uint64_t kBytesPerPixel = 4;
+    const auto tight_row_bytes = static_cast<uint64_t>(width) * kBytesPerPixel;
+    const auto row_pitch = AlignUp(tight_row_bytes, row_pitch_alignment);
+    const auto total_bytes = row_pitch * static_cast<uint64_t>(height);
+
+    std::vector<std::byte> out;
+    out.resize(static_cast<size_t>(total_bytes), std::byte { 0 });
+
+    const auto tight_total_bytes
+      = tight_row_bytes * static_cast<uint64_t>(height);
+    if (rgba8_tight.size() < static_cast<size_t>(tight_total_bytes)) {
+      return out;
+    }
+
+    for (uint32_t y = 0; y < height; ++y) {
+      const auto src_row_offset
+        = static_cast<size_t>(static_cast<uint64_t>(y) * tight_row_bytes);
+      const auto dst_row_offset
+        = static_cast<size_t>(static_cast<uint64_t>(y) * row_pitch);
+      std::copy_n(rgba8_tight.data() + src_row_offset,
+        static_cast<size_t>(tight_row_bytes), out.data() + dst_row_offset);
+    }
+    return out;
+  }
+
   struct TextureEmission final {
     using TextureResourceDesc = oxygen::data::pak::TextureResourceDesc;
 
     std::vector<TextureResourceDesc> table;
     std::vector<std::byte> data;
     std::unordered_map<const ufbx_texture*, uint32_t> index_by_file_texture;
+    std::unordered_map<std::string, uint32_t> index_by_texture_id;
   };
 
   [[nodiscard]] auto ResolveFileTexture(const ufbx_texture* texture)
@@ -282,15 +347,23 @@ namespace {
 
     using oxygen::data::pak::TextureResourceDesc;
 
-    // Index 0 is reserved and must exist. Leave it as a 1x1 white RGBA8.
+    constexpr uint64_t kRowPitchAlignment = 256;
+
+    // Index 0 is reserved and must exist.
+    // Use a 1x1 white RGBA8, packed with a 256-byte row pitch to satisfy
+    // the TextureBinder upload contract.
     const std::array<std::byte, 4> white = { std::byte { 0xFF },
       std::byte { 0xFF }, std::byte { 0xFF }, std::byte { 0xFF } };
-    const auto data_offset = AppendAligned(
-      out.data, std::span<const std::byte>(white.data(), white.size()), 256);
+    const auto packed = RepackRgba8ToRowPitchAligned(
+      std::span<const std::byte>(white.data(), white.size()), 1, 1,
+      kRowPitchAlignment);
+    const auto data_offset = AppendAligned(out.data,
+      std::span<const std::byte>(packed.data(), packed.size()),
+      kRowPitchAlignment);
 
     TextureResourceDesc desc {};
     desc.data_offset = data_offset;
-    desc.size_bytes = static_cast<uint32_t>(white.size());
+    desc.size_bytes = static_cast<uint32_t>(packed.size());
     desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
     desc.compression_type = 0;
     desc.width = 1;
@@ -299,7 +372,7 @@ namespace {
     desc.array_layers = 1;
     desc.mip_levels = 1;
     desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-    desc.alignment = 256;
+    desc.alignment = static_cast<uint32_t>(kRowPitchAlignment);
 
     out.table.push_back(desc);
   }
@@ -308,6 +381,8 @@ namespace {
     const ImportRequest& request, CookedContentWriter& cooked_out,
     TextureEmission& out, const ufbx_texture* texture) -> uint32_t
   {
+    constexpr uint64_t kRowPitchAlignment = 256;
+
     const auto* file_tex = ResolveFileTexture(texture);
     if (file_tex == nullptr) {
       return 0;
@@ -325,10 +400,20 @@ namespace {
     const bool is_embedded = (texture != nullptr
       && texture->content.data != nullptr && texture->content.size > 0);
 
+    std::string texture_id;
+    std::filesystem::path resolved;
+
     if (is_embedded) {
       const auto bytes = std::span<const std::byte>(
         reinterpret_cast<const std::byte*>(texture->content.data),
         texture->content.size);
+      texture_id
+        = "embedded:" + Sha256ToHex(oxygen::base::ComputeSha256(bytes));
+      if (const auto it = out.index_by_texture_id.find(texture_id);
+        it != out.index_by_texture_id.end()) {
+        out.index_by_file_texture.insert_or_assign(file_tex, it->second);
+        return it->second;
+      }
       decoded = DecodeImageRgba8FromMemory(bytes);
     } else {
       auto rel = ToStringView(file_tex->relative_filename);
@@ -363,13 +448,25 @@ namespace {
           }
         }
       }
-      std::filesystem::path resolved;
       if (!rel.empty()) {
         resolved = request.source_path.parent_path()
           / std::filesystem::path(std::string(rel));
       } else if (!abs.empty()) {
-        resolved = request.source_path.parent_path()
-          / std::filesystem::path(std::string(abs));
+        const auto abs_path = std::filesystem::path(std::string(abs));
+        resolved = abs_path.is_absolute()
+          ? abs_path
+          : (request.source_path.parent_path() / abs_path);
+      }
+
+      texture_id = !resolved.empty() ? NormalizeTexturePathId(resolved)
+                                     : std::string(id);
+
+      if (!texture_id.empty()) {
+        if (const auto it = out.index_by_texture_id.find(texture_id);
+          it != out.index_by_texture_id.end()) {
+          out.index_by_file_texture.insert_or_assign(file_tex, it->second);
+          return it->second;
+        }
       }
 
       if (!resolved.empty()) {
@@ -412,17 +509,22 @@ namespace {
       height = 1;
     }
 
+    const auto packed_pixels
+      = RepackRgba8ToRowPitchAligned(pixels, width, height, kRowPitchAlignment);
+
     LOG_F(INFO,
       "Emit texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
       "index {}",
       std::string(id).c_str(), width, height, pixels.size(), is_embedded,
       used_placeholder, out.table.size());
 
-    const auto data_offset = AppendAligned(out.data, pixels, 256);
+    const auto data_offset = AppendAligned(out.data,
+      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()),
+      kRowPitchAlignment);
 
     TextureEmission::TextureResourceDesc desc {};
     desc.data_offset = data_offset;
-    desc.size_bytes = static_cast<uint32_t>(pixels.size());
+    desc.size_bytes = static_cast<uint32_t>(packed_pixels.size());
     desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
     desc.compression_type = 0;
     desc.width = width;
@@ -431,11 +533,14 @@ namespace {
     desc.array_layers = 1;
     desc.mip_levels = 1;
     desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
-    desc.alignment = 256;
+    desc.alignment = static_cast<uint32_t>(kRowPitchAlignment);
 
     const auto index = static_cast<uint32_t>(out.table.size());
     out.table.push_back(desc);
     out.index_by_file_texture.insert_or_assign(file_tex, index);
+    if (!texture_id.empty()) {
+      out.index_by_texture_id.insert_or_assign(texture_id, index);
+    }
     return index;
   }
 
