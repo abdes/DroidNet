@@ -587,23 +587,13 @@ def compute_pak_plan(
     def _is_zero_guid(key_bytes: bytes) -> bool:
         return key_bytes == b"\x00" * 16
 
-    def _gen_asset_guid_bytes(
-        *, pak_guid: bytes, asset_type: str, name: str
-    ) -> bytes:
-        if deterministic:
-            return uuid.uuid5(
-                uuid.NAMESPACE_DNS,
-                f"{pak_guid.hex()}:{asset_type}:{name}",
-            ).bytes
-        return uuid.uuid4().bytes
-
     # Determine Pak GUID early so generated AssetKeys can be derived from it.
     if deterministic:
-        spec_name_raw = build_plan.spec.get("name")
-        spec_name = spec_name_raw if isinstance(spec_name_raw, str) else ""
+        spec_for_fingerprint = dict(build_plan.spec)
+        spec_for_fingerprint.pop("name", None)
         spec_fingerprint = hashlib.sha256(
             json.dumps(
-                build_plan.spec,
+                spec_for_fingerprint,
                 sort_keys=True,
                 separators=(",", ":"),
                 ensure_ascii=False,
@@ -611,65 +601,10 @@ def compute_pak_plan(
         ).hexdigest()
         pak_guid = uuid.uuid5(
             uuid.NAMESPACE_DNS,
-            f"{spec_name}:{spec_fingerprint}",
+            f"pak:{spec_fingerprint}",
         ).bytes
     else:
         pak_guid = uuid.uuid4().bytes
-
-    # Fill missing/zero asset keys.
-    for m in build_plan.assets.material_assets:
-        if not isinstance(m, dict):
-            continue
-        spec = m.get("spec") if isinstance(m.get("spec"), dict) else {}
-        name = spec.get("name") if isinstance(spec.get("name"), str) else ""
-        key = m.get("asset_key", b"\x00" * 16)
-        key_bytes = (
-            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
-        )
-        if _is_zero_guid(key_bytes):
-            m["asset_key"] = _gen_asset_guid_bytes(
-                pak_guid=pak_guid,
-                asset_type="material",
-                name=name,
-            )
-
-    new_geometries: list[tuple[dict[str, Any], bytes, int, int]] = []
-    for geom_spec, key, atype, align_req in build_plan.assets.geometry_assets:
-        name = (
-            geom_spec.get("name")
-            if isinstance(geom_spec.get("name"), str)
-            else ""
-        )
-        key_bytes = (
-            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
-        )
-        if _is_zero_guid(key_bytes):
-            key_bytes = _gen_asset_guid_bytes(
-                pak_guid=pak_guid,
-                asset_type="geometry",
-                name=name,
-            )
-        new_geometries.append((geom_spec, key_bytes, atype, align_req))
-    build_plan.assets.geometry_assets = new_geometries
-
-    new_scenes: list[tuple[dict[str, Any], bytes, int, int]] = []
-    for scene_spec, key, atype, align_req in build_plan.assets.scene_assets:
-        name = (
-            scene_spec.get("name")
-            if isinstance(scene_spec.get("name"), str)
-            else ""
-        )
-        key_bytes = (
-            bytes(key) if isinstance(key, (bytes, bytearray)) else b"\x00" * 16
-        )
-        if _is_zero_guid(key_bytes):
-            key_bytes = _gen_asset_guid_bytes(
-                pak_guid=pak_guid,
-                asset_type="scene",
-                name=name,
-            )
-        new_scenes.append((scene_spec, key_bytes, atype, align_req))
-    build_plan.assets.scene_assets = new_scenes
 
     # Enforce uniqueness of AssetKey within a PAK.
     seen_keys: dict[bytes, list[str]] = {}
@@ -680,7 +615,9 @@ def compute_pak_plan(
         name = spec.get("name") if isinstance(spec.get("name"), str) else ""
         key = m.get("asset_key", b"\x00" * 16)
         if isinstance(key, (bytes, bytearray)):
-            seen_keys.setdefault(bytes(key), []).append(f"material:{name}")
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(f"material:{name}")
     for geom_spec, key, _atype, _align in build_plan.assets.geometry_assets:
         name = (
             geom_spec.get("name")
@@ -688,7 +625,9 @@ def compute_pak_plan(
             else ""
         )
         if isinstance(key, (bytes, bytearray)):
-            seen_keys.setdefault(bytes(key), []).append(f"geometry:{name}")
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(f"geometry:{name}")
     for scene_spec, key, _atype, _align in build_plan.assets.scene_assets:
         name = (
             scene_spec.get("name")
@@ -696,7 +635,9 @@ def compute_pak_plan(
             else ""
         )
         if isinstance(key, (bytes, bytearray)):
-            seen_keys.setdefault(bytes(key), []).append(f"scene:{name}")
+            key_bytes = bytes(key)
+            if not _is_zero_guid(key_bytes):
+                seen_keys.setdefault(key_bytes, []).append(f"scene:{name}")
 
     duplicates = {k: v for k, v in seen_keys.items() if len(v) > 1}
     if duplicates:

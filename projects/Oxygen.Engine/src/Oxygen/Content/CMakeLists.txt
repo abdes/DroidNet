@@ -82,6 +82,26 @@ set(
   "Loaders/SceneLoader.h"
   "Loaders/TextureLoader.h"
   "Loaders/Helpers.h"
+  # Imporeters - Internal code
+  "Import/AssetImporter.h"
+  "Import/AssetImporter.cpp"
+  "Import/FbxImporter.cpp"
+  "Import/ImageDecode.h"
+  "Import/ImageDecode.cpp"
+  "Import/CookedContentWriter.h"
+  "Import/Importer.h"
+  "Import/ImportDiagnostics.h"
+  "Import/ImportFormat.h"
+  "Import/Naming.h"
+  "Import/ImportOptions.h"
+  "Import/ImportReport.h"
+  "Import/ImportRequest.h"
+  "Import/LooseCookedLayout.h"
+  "Import/LooseCookedWriter.h"
+  "Import/LooseCookedWriter.cpp"
+  "Import/fbx/ufbx.h"
+  "Import/fbx/ufbx.c"
+  "Import/gltf/cgltf.h"
 )
 
 target_sources(

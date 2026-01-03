@@ -154,13 +154,13 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_Found_ReturnsKey)
   oxygen::data::AssetKey key {};
   key.guid[0] = 0x11;
 
-  WriteSingleAssetIndex(cooked_root, key, "assets/A.bin", "/Content/A.bin");
+  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/Content/A.bin");
+  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
 
   // Assert
   EXPECT_TRUE(resolved.has_value());
@@ -185,15 +185,15 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_DuplicatePath_FirstWins)
   oxygen::data::AssetKey key1 {};
   key1.guid[0] = 0x22;
 
-  WriteSingleAssetIndex(cooked_root0, key0, "assets/A0.bin", "/Content/A.bin");
-  WriteSingleAssetIndex(cooked_root1, key1, "assets/A1.bin", "/Content/A.bin");
+  WriteSingleAssetIndex(cooked_root0, key0, "A0.bin", "/.cooked/A.bin");
+  WriteSingleAssetIndex(cooked_root1, key1, "A1.bin", "/.cooked/A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root0);
   resolver.AddLooseCookedRoot(cooked_root1);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/Content/A.bin");
+  const auto resolved = resolver.ResolveAssetKey("/.cooked/A.bin");
 
   // Assert
   EXPECT_TRUE(resolved.has_value());
@@ -214,13 +214,13 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_NotFound_ReturnsNullopt)
   oxygen::data::AssetKey key {};
   key.guid[0] = 0x11;
 
-  WriteSingleAssetIndex(cooked_root, key, "assets/A.bin", "/Content/A.bin");
+  WriteSingleAssetIndex(cooked_root, key, "A.bin", "/.cooked/A.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddLooseCookedRoot(cooked_root);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/Content/DoesNotExist.bin");
+  const auto resolved = resolver.ResolveAssetKey("/.cooked/DoesNotExist.bin");
 
   // Assert
   EXPECT_FALSE(resolved.has_value());
@@ -238,7 +238,7 @@ NOLINT_TEST(VirtualPathResolverTest, ResolveAssetKey_InvalidVirtualPath_Throws)
 
   // Act & Assert
   EXPECT_THROW(
-    { (void)resolver.ResolveAssetKey("Content/A.bin"); },
+    { (void)resolver.ResolveAssetKey(".cooked/A.bin"); },
     std::invalid_argument);
 }
 
@@ -258,13 +258,13 @@ NOLINT_TEST(
   oxygen::data::AssetKey key {};
   key.guid[0] = 0x33;
 
-  WriteSingleAssetPakWithBrowseIndex(pak_path, key, "/Content/Pak.bin");
+  WriteSingleAssetPakWithBrowseIndex(pak_path, key, "/.cooked/Pak.bin");
 
   oxygen::content::VirtualPathResolver resolver;
   resolver.AddPakFile(pak_path);
 
   // Act
-  const auto resolved = resolver.ResolveAssetKey("/Content/Pak.bin");
+  const auto resolved = resolver.ResolveAssetKey("/.cooked/Pak.bin");
 
   // Assert
   EXPECT_TRUE(resolved.has_value());

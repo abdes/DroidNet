@@ -57,6 +57,7 @@ target_compile_options(${META_MODULE_TARGET} PRIVATE ${OXYGEN_COMMON_CXX_FLAGS})
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::content
     oxygen::platform
     oxygen::input
     oxygen::data

@@ -16,6 +16,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/Import/LooseCookedLayout.h>
 #include <Oxygen/Content/Internal/InternalResourceKey.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
@@ -44,6 +45,8 @@ using oxygen::data::TextureResource;
 using oxygen::content::testing::AssetLoaderLoadingTest;
 
 namespace {
+
+using oxygen::content::import::LooseCookedLayout;
 
 auto FillTestGuid(oxygen::data::loose_cooked::v1::IndexHeader& header) -> void
 {
@@ -94,8 +97,10 @@ auto WriteLooseCookedMaterialWithTexture(
   using oxygen::data::pak::MaterialAssetDesc;
   using oxygen::data::pak::TextureResourceDesc;
 
-  std::filesystem::create_directories(cooked_root / "assets");
-  std::filesystem::create_directories(cooked_root / "resources");
+  const LooseCookedLayout layout {};
+
+  std::filesystem::create_directories(cooked_root / layout.materials_subdir);
+  std::filesystem::create_directories(cooked_root / layout.resources_dir);
 
   // Arrange: write texture data
   const std::vector<std::byte> tex_data = {
@@ -106,7 +111,8 @@ auto WriteLooseCookedMaterialWithTexture(
   };
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.data", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_data_file_name,
+      std::ios::binary);
     out.write(reinterpret_cast<const char*>(tex_data.data()),
       static_cast<std::streamsize>(tex_data.size()));
   }
@@ -140,7 +146,8 @@ auto WriteLooseCookedMaterialWithTexture(
 
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.table", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_table_file_name,
+      std::ios::binary);
     out.write(reinterpret_cast<const char*>(&fallback_desc),
       static_cast<std::streamsize>(sizeof(fallback_desc)));
     out.write(reinterpret_cast<const char*>(&test_desc),
@@ -163,8 +170,12 @@ auto WriteLooseCookedMaterialWithTexture(
   material_desc.base_color_texture = 1;
 
   {
-    std::ofstream out(
-      cooked_root / "assets" / "TestMaterial.mat", std::ios::binary);
+    const auto material_file
+      = LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
+
+    const auto descriptor_relpath
+      = std::filesystem::path(layout.materials_subdir) / material_file;
+    std::ofstream out(cooked_root / descriptor_relpath, std::ios::binary);
     out.write(reinterpret_cast<const char*>(&material_desc),
       static_cast<std::streamsize>(sizeof(material_desc)));
   }
@@ -173,16 +184,17 @@ auto WriteLooseCookedMaterialWithTexture(
   std::string strings;
   strings.push_back('\0');
   const auto off_desc = static_cast<uint32_t>(strings.size());
-  strings += "assets/TestMaterial.mat";
+  strings += std::string(layout.materials_subdir) + "/"
+    + LooseCookedLayout::MaterialDescriptorFileName("TestMaterial");
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/TestMaterial.mat";
+  strings += layout.MaterialVirtualPath("TestMaterial");
   strings.push_back('\0');
   const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += layout.TexturesTableRelPath();
   strings.push_back('\0');
   const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.data";
+  strings += layout.TexturesDataRelPath();
   strings.push_back('\0');
 
   IndexHeader header {};
@@ -239,26 +251,30 @@ auto WriteLooseCookedIndexWithInvalidTexturesTable(
   using oxygen::data::loose_cooked::v1::FileRecord;
   using oxygen::data::loose_cooked::v1::IndexHeader;
 
-  std::filesystem::create_directories(cooked_root / "resources");
+  const LooseCookedLayout layout {};
+
+  std::filesystem::create_directories(cooked_root / layout.resources_dir);
 
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.table", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_table_file_name,
+      std::ios::binary);
     const char byte = 0x7f;
     out.write(&byte, 1);
   }
   {
     std::ofstream out(
-      cooked_root / "resources" / "textures.data", std::ios::binary);
+      cooked_root / layout.resources_dir / layout.textures_data_file_name,
+      std::ios::binary);
   }
 
   std::string strings;
   strings.push_back('\0');
   const auto off_tex_table = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.table";
+  strings += layout.TexturesTableRelPath();
   strings.push_back('\0');
   const auto off_tex_data = static_cast<uint32_t>(strings.size());
-  strings += "resources/textures.data";
+  strings += layout.TexturesDataRelPath();
   strings.push_back('\0');
 
   IndexHeader header {};

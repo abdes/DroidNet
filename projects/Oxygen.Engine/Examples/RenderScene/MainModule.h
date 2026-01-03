@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -14,6 +15,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -34,6 +36,10 @@ namespace oxygen::content {
 class PakFile;
 class LooseCookedInspection;
 } // namespace oxygen::content
+
+namespace oxygen::content::import {
+class AssetImporter;
+} // namespace oxygen::content::import
 
 namespace oxygen::examples::render_scene {
 
@@ -95,6 +101,7 @@ private:
   auto EnsureFallbackCamera(const int width, const int height) -> void;
   auto EnsureActiveCameraViewport(const int width, const int height) -> void;
   auto SyncOrbitFromActiveCamera() -> void;
+  auto SyncTurntableFromActiveCamera() -> void;
   auto ApplyOrbitAndZoom() -> void;
   auto EnsureViewCameraRegistered() -> void;
 
@@ -123,10 +130,28 @@ private:
   std::shared_ptr<oxygen::input::InputMappingContext> camera_controls_ctx_;
 
   glm::vec3 camera_target_ { 0.0f, 0.0f, 0.0f };
-  float orbit_yaw_rad_ { -glm::half_pi<float>() };
-  float orbit_pitch_rad_ { 0.0f };
+
+  enum class OrbitMode {
+    kTrackball = 0,
+    kTurntable = 1,
+  };
+
+  OrbitMode orbit_mode_ { OrbitMode::kTrackball };
+
+  // Trackball-style orbit state (Blender-like): rotate the view quaternion,
+  // and derive camera position from a fixed local offset so the target stays
+  // centered.
+  glm::quat orbit_rot_ { 1.0f, 0.0f, 0.0f, 0.0f }; // Camera local rotation
+  glm::vec3 orbit_offset_local_ { 0.0f, 1.0f, 0.0f };
   float orbit_distance_ { 6.0f };
   float orbit_sensitivity_ { 0.01f };
+
+  // Turntable orbit state (Blender-like horizon lock): yaw/pitch around a fixed
+  // world-up axis (Z). Allows crossing the pole by flipping the up-vector.
+  float turntable_yaw_ { 0.0f };
+  float turntable_pitch_ { 0.0f };
+  bool turntable_inverted_ { false };
+
   float zoom_step_ { 0.75f };
   float min_cam_distance_ { 1.25f };
   float max_cam_distance_ { 40.0f };
@@ -141,6 +166,10 @@ private:
   bool pending_load_loose_index_ { false };
   std::unique_ptr<content::LooseCookedInspection> loose_inspection_;
   std::vector<SceneListItem> loose_scenes_;
+
+  std::filesystem::path content_root_;
+  std::optional<std::filesystem::path> pending_fbx_import_path_;
+  std::unique_ptr<content::import::AssetImporter> asset_importer_;
 
   bool pending_load_scene_ { false };
   std::optional<data::AssetKey> pending_scene_key_;

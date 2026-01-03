@@ -153,7 +153,7 @@ def _parse_asset_header(desc: bytes) -> Dict[str, Any]:
 
 def _parse_material_descriptor(desc: bytes) -> Dict[str, Any]:
     # See pack_material_asset_descriptor for layout. Require 256 bytes.
-    if len(desc) < 136:  # up to ambient_occlusion
+    if len(desc) < 95 + 35:  # up to start of texture indices
         return {"valid": False}
     header = _parse_asset_header(desc)
     if not header.get("valid"):
@@ -165,9 +165,14 @@ def _parse_material_descriptor(desc: bytes) -> Dict[str, Any]:
     shader_stages = struct.unpack_from("<I", desc, base + 5)[0]
     base_color = list(struct.unpack_from("<4f", desc, base + 9))
     normal_scale = struct.unpack_from("<f", desc, base + 25)[0]
-    metalness = struct.unpack_from("<f", desc, base + 29)[0]
-    roughness = struct.unpack_from("<f", desc, base + 33)[0]
-    ambient_occlusion = struct.unpack_from("<f", desc, base + 37)[0]
+
+    # PBR scalars are stored as UNorm16 in PakFormat.h.
+    metalness_u16 = struct.unpack_from("<H", desc, base + 29)[0]
+    roughness_u16 = struct.unpack_from("<H", desc, base + 31)[0]
+    ambient_occlusion_u16 = struct.unpack_from("<H", desc, base + 33)[0]
+    metalness = metalness_u16 / 65535.0
+    roughness = roughness_u16 / 65535.0
+    ambient_occlusion = ambient_occlusion_u16 / 65535.0
     return {
         **header,
         "material_domain": material_domain,

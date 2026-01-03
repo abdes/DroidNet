@@ -28,6 +28,8 @@
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
 
+#include <Oxygen/Content/Import/LooseCookedLayout.h>
+
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -64,7 +66,9 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   using oxygen::data::pak::NodeRecord;
   using oxygen::data::pak::SceneAssetDesc;
 
-  std::filesystem::create_directories(cooked_root / "assets");
+  const oxygen::content::import::LooseCookedLayout layout {};
+
+  std::filesystem::create_directories(cooked_root / layout.scenes_subdir);
 
   // Arrange: write cooked scene descriptor bytes.
   SceneAssetDesc desc {};
@@ -94,7 +98,8 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   std::memcpy(
     bytes.data() + desc.scene_strings.offset, kStrings, sizeof(kStrings) - 1);
 
-  const auto descriptor_relpath = std::string("assets/TestScene.scene");
+  const auto descriptor_relpath
+    = std::string(layout.scenes_subdir) + "/TestScene.scene";
   {
     std::ofstream out(cooked_root / descriptor_relpath, std::ios::binary);
     out.write(reinterpret_cast<const char*>(bytes.data()),
@@ -108,7 +113,7 @@ auto WriteLooseCookedSceneWithSingleRootNode(
   strings += descriptor_relpath;
   strings.push_back('\0');
   const auto off_vpath = static_cast<uint32_t>(strings.size());
-  strings += "/Content/TestScene.scene";
+  strings += std::string(layout.virtual_mount_root) + "/" + descriptor_relpath;
   strings.push_back('\0');
 
   IndexHeader header {};

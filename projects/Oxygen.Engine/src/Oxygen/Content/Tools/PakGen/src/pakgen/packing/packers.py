@@ -11,6 +11,7 @@ from typing import Any, Dict, Sequence, List, Callable, Tuple
 from .constants import (
     MAGIC,
     FOOTER_MAGIC,
+    ASSET_HEADER_SIZE,
     ASSET_KEY_SIZE,
     MATERIAL_DESC_SIZE,
     GEOMETRY_DESC_SIZE,
@@ -474,14 +475,40 @@ def pack_material_asset_descriptor(
     the base material descriptor layout stable while allowing a flexible
     number of shader stages.
     """
-    material_domain = asset.get("material_domain", 0)
-    flags = asset.get("flags", 0)
-    shader_stages = asset.get("shader_stages", 0)
+
+    def to_unorm16(value: float) -> int:
+        clamped = 0.0 if value < 0.0 else (1.0 if value > 1.0 else float(value))
+        scaled = clamped * 65535.0 + 0.5
+        if scaled <= 0.0:
+            return 0
+        if scaled >= 65535.0:
+            return 65535
+        return int(scaled)
+
+    def pack_f16(value: float) -> bytes:
+        # Half precision float. Python's struct supports 'e'.
+        return struct.pack("<e", float(value))
+
+    def pack_f16x3(values: List[float]) -> bytes:
+        v = list(values) if values is not None else [0.0, 0.0, 0.0]
+        while len(v) < 3:
+            v.append(0.0)
+        v = v[:3]
+        return b"".join(pack_f16(x) for x in v)
+
+    material_domain = int(asset.get("material_domain", 0))
+    flags = int(asset.get("flags", 0))
+    shader_stages = int(asset.get("shader_stages", 0))
+
     base_color = asset.get("base_color", [1.0, 1.0, 1.0, 1.0])
-    normal_scale = asset.get("normal_scale", 1.0)
-    metalness = asset.get("metalness", 0.0)
-    roughness = asset.get("roughness", 1.0)
-    ambient_occlusion = asset.get("ambient_occlusion", 1.0)
+    if not isinstance(base_color, list) or len(base_color) != 4:
+        raise PakError("E_SPEC", "base_color must be a list of 4 floats")
+
+    normal_scale = float(asset.get("normal_scale", 1.0))
+    metalness = float(asset.get("metalness", 0.0))
+    roughness = float(asset.get("roughness", 1.0))
+    ambient_occlusion = float(asset.get("ambient_occlusion", 1.0))
+
     texture_refs = asset.get("texture_refs", {})
     texture_map = resource_index_map.get("texture", {})
 
@@ -489,32 +516,95 @@ def pack_material_asset_descriptor(
         ref = texture_refs.get(field)
         return texture_map.get(ref, 0) if ref else 0
 
-    indices = [
-        get_texture_index("base_color_texture"),
-        get_texture_index("normal_texture"),
-        get_texture_index("metallic_texture"),
-        get_texture_index("roughness_texture"),
-        get_texture_index("ambient_occlusion_texture"),
-    ]
-    reserved_textures = [0] * 8
+    # Core PBR slots.
+    base_color_texture = get_texture_index("base_color_texture")
+    normal_texture = get_texture_index("normal_texture")
+    metallic_texture = get_texture_index("metallic_texture")
+    roughness_texture = get_texture_index("roughness_texture")
+    ambient_occlusion_texture = get_texture_index("ambient_occlusion_texture")
+
+    # Tier1/2 texture slots (optional).
+    emissive_texture = get_texture_index("emissive_texture")
+    specular_texture = get_texture_index("specular_texture")
+    sheen_color_texture = get_texture_index("sheen_color_texture")
+    clearcoat_texture = get_texture_index("clearcoat_texture")
+    clearcoat_normal_texture = get_texture_index("clearcoat_normal_texture")
+    transmission_texture = get_texture_index("transmission_texture")
+    thickness_texture = get_texture_index("thickness_texture")
+
+    # Tier1/2 scalar params (optional).
+    emissive_factor = asset.get("emissive_factor", [0.0, 0.0, 0.0])
+    alpha_cutoff = float(asset.get("alpha_cutoff", 0.5))
+    ior = float(asset.get("ior", 1.5))
+    specular_factor = float(asset.get("specular_factor", 1.0))
+    sheen_color_factor = asset.get("sheen_color_factor", [0.0, 0.0, 0.0])
+    clearcoat_factor = float(asset.get("clearcoat_factor", 0.0))
+    clearcoat_roughness = float(asset.get("clearcoat_roughness", 0.0))
+    transmission_factor = float(asset.get("transmission_factor", 0.0))
+    thickness_factor = float(asset.get("thickness_factor", 0.0))
+    attenuation_color = asset.get("attenuation_color", [1.0, 1.0, 1.0])
+    attenuation_distance = float(asset.get("attenuation_distance", 0.0))
     header = header_builder(asset)
+    if len(header) != ASSET_HEADER_SIZE:
+        raise PakError(
+            "E_SIZE",
+            f"AssetHeader size mismatch: expected {ASSET_HEADER_SIZE} got {len(header)}",
+        )
+
+    # Match oxygen::data::pak::MaterialAssetDesc exactly (see PakFormat.h).
+    reserved = b"\x00" * 40
     desc = (
         header
         + struct.pack("<B", material_domain)
         + struct.pack("<I", flags)
         + struct.pack("<I", shader_stages)
-        + struct.pack("<4f", *base_color)
+        + struct.pack("<4f", *[float(x) for x in base_color])
         + struct.pack("<f", normal_scale)
-        + struct.pack("<f", metalness)
-        + struct.pack("<f", roughness)
-        + struct.pack("<f", ambient_occlusion)
-        + b"".join(struct.pack("<I", i) for i in indices)
-        + b"".join(struct.pack("<I", t) for t in reserved_textures)
-        + b"\x00" * 68
+        + struct.pack(
+            "<HHH",
+            to_unorm16(metalness),
+            to_unorm16(roughness),
+            to_unorm16(ambient_occlusion),
+        )
+        + struct.pack(
+            "<IIIIIIIIIIII",
+            base_color_texture,
+            normal_texture,
+            metallic_texture,
+            roughness_texture,
+            ambient_occlusion_texture,
+            emissive_texture,
+            specular_texture,
+            sheen_color_texture,
+            clearcoat_texture,
+            clearcoat_normal_texture,
+            transmission_texture,
+            thickness_texture,
+        )
+        + pack_f16x3(emissive_factor)
+        + struct.pack("<H", to_unorm16(alpha_cutoff))
+        + struct.pack("<f", ior)
+        + struct.pack("<H", to_unorm16(specular_factor))
+        + pack_f16x3(sheen_color_factor)
+        + struct.pack(
+            "<HHHHH",
+            to_unorm16(clearcoat_factor),
+            to_unorm16(clearcoat_roughness),
+            to_unorm16(transmission_factor),
+            to_unorm16(thickness_factor),
+            # attenuation_color is 3x HalfFloat, packed below
+            0,
+        )
     )
-    if len(desc) < MATERIAL_DESC_SIZE:
-        # Pad to fixed size (transitional placeholder padding)
-        desc += b"\x00" * (MATERIAL_DESC_SIZE - len(desc))
+
+    # Replace the last placeholder with attenuation_color and attenuation_distance.
+    # This keeps the packing explicit and readable.
+    desc = (
+        desc[:-2]
+        + pack_f16x3(attenuation_color)
+        + struct.pack("<f", attenuation_distance)
+    )
+    desc += reserved
     if len(desc) != MATERIAL_DESC_SIZE:
         raise PakError(
             "E_SIZE",

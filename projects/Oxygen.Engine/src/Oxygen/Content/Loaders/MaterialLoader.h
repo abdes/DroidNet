@@ -51,6 +51,8 @@ inline auto LoadMaterialAsset(LoaderContext context)
     }
   };
 
+  auto pack = reader.ScopedAlignment(1);
+
   // Read MaterialAssetDesc field-by-field to avoid
   // std::has_unique_object_representations issues with float fields
   MaterialAssetDesc desc;
