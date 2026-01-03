@@ -585,11 +585,11 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(table[0].width, 1u);
   EXPECT_EQ(table[0].height, 1u);
-  EXPECT_EQ(table[0].size_bytes, 4u);
+  EXPECT_EQ(table[0].size_bytes, 256u);
 
   EXPECT_EQ(table[1].width, 2u);
   EXPECT_EQ(table[1].height, 2u);
-  EXPECT_EQ(table[1].size_bytes, 16u);
+  EXPECT_EQ(table[1].size_bytes, 512u);
   EXPECT_EQ(table[1].alignment, 256u);
   EXPECT_EQ(table[1].data_offset % 256u, 0u);
 
@@ -621,6 +621,451 @@ NOLINT_TEST_F(
   EXPECT_NEAR(mat_desc.base_color[1], 0.8F, 1e-4F);
   EXPECT_NEAR(mat_desc.base_color[2], 0.8F, 1e-4F);
   EXPECT_NEAR(mat_desc.base_color[3], 1.0F, 1e-4F);
+}
+
+//! Test: Multiple imports append texture tables.
+/*!
+ Scenario: Import two different FBX files into the same cooked root.
+
+ Verifies:
+ - the second import preserves the first import's textures in textures.table,
+ - textures.table grows (fallback + 2 distinct textures),
+ - both materials reference valid, distinct texture indices.
+*/
+NOLINT_TEST_F(FbxImporterGeometryTest, RealBackend_MultiImport_AppendsTextures)
+{
+  using oxygen::data::pak::MaterialAssetDesc;
+
+  // Arrange
+  const auto temp_dir = MakeTempDir("fbx_importer_real_multi_import_textures");
+  const auto cooked_root = temp_dir / "cooked";
+
+  const auto source_a = temp_dir / "a.fbx";
+  const auto source_b = temp_dir / "b.fbx";
+  const auto tex_a = temp_dir / "a.bmp";
+  const auto tex_b = temp_dir / "b.bmp";
+
+  const char* kFbxA
+    = "; FBX 7.4.0 project file\n"
+      "FBXHeaderExtension:  {\n"
+      "  FBXHeaderVersion: 1003\n"
+      "  FBXVersion: 7400\n"
+      "  Creator: \"OxygenTests\"\n"
+      "}\n"
+      "Definitions:  {\n"
+      "  Version: 100\n"
+      "  Count: 3\n"
+      "  ObjectType: \"Material\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Texture\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Video\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "}\n"
+      "Objects:  {\n"
+      "  Material: 10, \"Material::MatA\", \"\" {\n"
+      "    Version: 102\n"
+      "    ShadingModel: \"phong\"\n"
+      "    Properties70:  {\n"
+      "      P: \"DiffuseColor\", \"Color\", \"\", \"A\",0.8,0.8,0.8\n"
+      "    }\n"
+      "  }\n"
+      "  Video: 30, \"Video::A\", \"Clip\" {\n"
+      "    Type: \"Clip\"\n"
+      "    FileName: \"a.bmp\"\n"
+      "    RelativeFilename: \"a.bmp\"\n"
+      "  }\n"
+      "  Texture: 20, \"Texture::A\", \"TextureVideoClip\" {\n"
+      "    Type: \"TextureVideoClip\"\n"
+      "    Version: 202\n"
+      "    TextureName: \"Texture::A\"\n"
+      "    FileName: \"a.bmp\"\n"
+      "    RelativeFilename: \"a.bmp\"\n"
+      "  }\n"
+      "}\n"
+      "Connections:  {\n"
+      "  C: \"OP\", 20, 10, \"DiffuseColor\"\n"
+      "  C: \"OP\", 30, 20, \"Video\"\n"
+      "}\n";
+
+  const char* kFbxB
+    = "; FBX 7.4.0 project file\n"
+      "FBXHeaderExtension:  {\n"
+      "  FBXHeaderVersion: 1003\n"
+      "  FBXVersion: 7400\n"
+      "  Creator: \"OxygenTests\"\n"
+      "}\n"
+      "Definitions:  {\n"
+      "  Version: 100\n"
+      "  Count: 3\n"
+      "  ObjectType: \"Material\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Texture\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Video\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "}\n"
+      "Objects:  {\n"
+      "  Material: 10, \"Material::MatB\", \"\" {\n"
+      "    Version: 102\n"
+      "    ShadingModel: \"phong\"\n"
+      "    Properties70:  {\n"
+      "      P: \"DiffuseColor\", \"Color\", \"\", \"A\",0.4,0.4,0.4\n"
+      "    }\n"
+      "  }\n"
+      "  Video: 30, \"Video::B\", \"Clip\" {\n"
+      "    Type: \"Clip\"\n"
+      "    FileName: \"b.bmp\"\n"
+      "    RelativeFilename: \"b.bmp\"\n"
+      "  }\n"
+      "  Texture: 20, \"Texture::B\", \"TextureVideoClip\" {\n"
+      "    Type: \"TextureVideoClip\"\n"
+      "    Version: 202\n"
+      "    TextureName: \"Texture::B\"\n"
+      "    FileName: \"b.bmp\"\n"
+      "    RelativeFilename: \"b.bmp\"\n"
+      "  }\n"
+      "}\n"
+      "Connections:  {\n"
+      "  C: \"OP\", 20, 10, \"DiffuseColor\"\n"
+      "  C: \"OP\", 30, 20, \"Video\"\n"
+      "}\n";
+
+  const auto bmp_a = MakeBmp2x2();
+  auto bmp_b = MakeBmp2x2();
+  // Make the second bitmap different so multi-import produces two distinct
+  // texture resources.
+  ASSERT_FALSE(bmp_b.empty());
+  bmp_b.back() ^= std::byte { 0x01 };
+  WriteBinaryFile(
+    tex_a, std::span<const std::byte>(bmp_a.data(), bmp_a.size()));
+  WriteBinaryFile(
+    tex_b, std::span<const std::byte>(bmp_b.data(), bmp_b.size()));
+  WriteTextFile(source_a, kFbxA);
+  WriteTextFile(source_b, kFbxB);
+
+  AssetImporter importer;
+  ImportRequest request_a {
+    .source_path = source_a,
+    .cooked_root = cooked_root,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .options = {},
+  };
+  request_a.options.naming_strategy
+    = std::make_shared<NormalizeNamingStrategy>();
+  request_a.options.import_content
+    = oxygen::content::import::ImportContentFlags::kMaterials
+    | oxygen::content::import::ImportContentFlags::kTextures;
+
+  ImportRequest request_b = request_a;
+  request_b.source_path = source_b;
+
+  // Act
+  const auto report_a = importer.ImportToLooseCooked(request_a);
+  const auto report_b = importer.ImportToLooseCooked(request_b);
+
+  // Assert
+  EXPECT_TRUE(report_a.success);
+  EXPECT_TRUE(report_b.success);
+
+  LooseCookedInspection inspection;
+  inspection.LoadFromRoot(report_b.cooked_root);
+
+  const auto files = inspection.Files();
+  const auto table_it = std::find_if(files.begin(), files.end(),
+    [](const auto& e) { return e.kind == FileKind::kTexturesTable; });
+  ASSERT_NE(table_it, files.end());
+
+  const auto table_path
+    = report_b.cooked_root / std::filesystem::path(table_it->relpath);
+  const auto table_size = std::filesystem::file_size(table_path);
+  ASSERT_EQ(table_size % sizeof(TextureResourceDesc), 0u);
+  const auto texture_count
+    = static_cast<size_t>(table_size / sizeof(TextureResourceDesc));
+  EXPECT_GE(texture_count, 3u);
+
+  std::optional<std::filesystem::path> mat_a_path;
+  std::optional<std::filesystem::path> mat_b_path;
+  for (const auto& a : inspection.Assets()) {
+    if (a.asset_type != static_cast<uint8_t>(AssetType::kMaterial)) {
+      continue;
+    }
+    if (a.virtual_path.find("MatA") != std::string::npos) {
+      mat_a_path
+        = report_b.cooked_root / std::filesystem::path(a.descriptor_relpath);
+    }
+    if (a.virtual_path.find("MatB") != std::string::npos) {
+      mat_b_path
+        = report_b.cooked_root / std::filesystem::path(a.descriptor_relpath);
+    }
+  }
+
+  ASSERT_TRUE(mat_a_path.has_value());
+  ASSERT_TRUE(mat_b_path.has_value());
+
+  auto read_material = [](const std::filesystem::path& p) -> MaterialAssetDesc {
+    MaterialAssetDesc d {};
+    FileStream<> stream(p, std::ios::in);
+    Reader<FileStream<>> reader(stream);
+    auto pack = reader.ScopedAlignment(1);
+    auto read_result = reader.ReadBlobInto(
+      std::as_writable_bytes(std::span<MaterialAssetDesc, 1>(&d, 1)));
+    EXPECT_TRUE(read_result);
+    return d;
+  };
+
+  const auto mat_a = read_material(*mat_a_path);
+  const auto mat_b = read_material(*mat_b_path);
+
+  EXPECT_LT(mat_a.base_color_texture, texture_count);
+  EXPECT_LT(mat_b.base_color_texture, texture_count);
+  EXPECT_NE(mat_a.base_color_texture, 0u);
+  EXPECT_NE(mat_b.base_color_texture, 0u);
+  EXPECT_NE(mat_a.base_color_texture, mat_b.base_color_texture);
+}
+
+//! Test: Reimport does not grow texture tables.
+/*!
+ Scenario: Import the same FBX file twice into the same cooked root.
+
+ Verifies:
+ - textures.table size remains stable after the second import,
+ - the material's texture index remains stable.
+*/
+NOLINT_TEST_F(FbxImporterGeometryTest, RealBackend_Reimport_DedupsTextures)
+{
+  using oxygen::data::pak::MaterialAssetDesc;
+
+  // Arrange
+  const auto temp_dir = MakeTempDir("fbx_importer_real_reimport_textures");
+  const auto cooked_root = temp_dir / "cooked";
+  const auto source_path = temp_dir / "scene.fbx";
+  const auto texture_path = temp_dir / "diffuse.bmp";
+
+  const char* kFbxAscii
+    = "; FBX 7.4.0 project file\n"
+      "FBXHeaderExtension:  {\n"
+      "  FBXHeaderVersion: 1003\n"
+      "  FBXVersion: 7400\n"
+      "  Creator: \"OxygenTests\"\n"
+      "}\n"
+      "Definitions:  {\n"
+      "  Version: 100\n"
+      "  Count: 3\n"
+      "  ObjectType: \"Material\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Texture\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "  ObjectType: \"Video\" {\n"
+      "    Count: 1\n"
+      "  }\n"
+      "}\n"
+      "Objects:  {\n"
+      "  Material: 10, \"Material::Mat\", \"\" {\n"
+      "    Version: 102\n"
+      "    ShadingModel: \"phong\"\n"
+      "    Properties70:  {\n"
+      "      P: \"DiffuseColor\", \"Color\", \"\", \"A\",0.8,0.8,0.8\n"
+      "    }\n"
+      "  }\n"
+      "  Video: 30, \"Video::Diffuse\", \"Clip\" {\n"
+      "    Type: \"Clip\"\n"
+      "    FileName: \"diffuse.bmp\"\n"
+      "    RelativeFilename: \"diffuse.bmp\"\n"
+      "  }\n"
+      "  Texture: 20, \"Texture::Diffuse\", \"TextureVideoClip\" {\n"
+      "    Type: \"TextureVideoClip\"\n"
+      "    Version: 202\n"
+      "    TextureName: \"Texture::Diffuse\"\n"
+      "    FileName: \"diffuse.bmp\"\n"
+      "    RelativeFilename: \"diffuse.bmp\"\n"
+      "  }\n"
+      "}\n"
+      "Connections:  {\n"
+      "  C: \"OP\", 20, 10, \"DiffuseColor\"\n"
+      "  C: \"OP\", 30, 20, \"Video\"\n"
+      "}\n";
+
+  const auto bmp = MakeBmp2x2();
+  WriteBinaryFile(
+    texture_path, std::span<const std::byte>(bmp.data(), bmp.size()));
+  WriteTextFile(source_path, kFbxAscii);
+
+  AssetImporter importer;
+  ImportRequest request {
+    .source_path = source_path,
+    .cooked_root = cooked_root,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .options = {},
+  };
+  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
+  request.options.import_content
+    = oxygen::content::import::ImportContentFlags::kMaterials
+    | oxygen::content::import::ImportContentFlags::kTextures;
+
+  // Act
+  const auto report_a = importer.ImportToLooseCooked(request);
+
+  // Assert
+  EXPECT_TRUE(report_a.success);
+
+  auto get_textures_table_size
+    = [](const std::filesystem::path& cooked_root_path) -> uint64_t {
+    LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root_path);
+    const auto files = inspection.Files();
+    const auto table_it = std::find_if(files.begin(), files.end(),
+      [](const auto& e) { return e.kind == FileKind::kTexturesTable; });
+    EXPECT_NE(table_it, files.end());
+    if (table_it == files.end()) {
+      return 0;
+    }
+    const auto table_path
+      = cooked_root_path / std::filesystem::path(table_it->relpath);
+    return std::filesystem::file_size(table_path);
+  };
+
+  auto get_first_material_base_color_texture
+    = [](const std::filesystem::path& cooked_root_path) -> uint32_t {
+    LooseCookedInspection inspection;
+    inspection.LoadFromRoot(cooked_root_path);
+    const auto material_entry_opt = FindFirstMaterialAsset(inspection);
+    EXPECT_TRUE(material_entry_opt.has_value());
+    if (!material_entry_opt.has_value()) {
+      return 0;
+    }
+
+    const auto mat_path = cooked_root_path
+      / std::filesystem::path(material_entry_opt->descriptor_relpath);
+
+    MaterialAssetDesc mat_desc {};
+    FileStream<> stream(mat_path, std::ios::in);
+    Reader<FileStream<>> reader(stream);
+    auto pack = reader.ScopedAlignment(1);
+    auto read_result = reader.ReadBlobInto(
+      std::as_writable_bytes(std::span<MaterialAssetDesc, 1>(&mat_desc, 1)));
+    EXPECT_TRUE(read_result);
+    return mat_desc.base_color_texture;
+  };
+
+  const auto table_a_size = get_textures_table_size(report_a.cooked_root);
+  const auto tex_index_a
+    = get_first_material_base_color_texture(report_a.cooked_root);
+
+  const auto report_b = importer.ImportToLooseCooked(request);
+  EXPECT_TRUE(report_b.success);
+
+  const auto table_b_size = get_textures_table_size(report_b.cooked_root);
+  EXPECT_EQ(table_a_size, table_b_size);
+
+  const auto tex_index_b
+    = get_first_material_base_color_texture(report_b.cooked_root);
+
+  EXPECT_NE(tex_index_a, 0u);
+  EXPECT_NE(tex_index_b, 0u);
+  EXPECT_EQ(tex_index_a, tex_index_b);
+}
+
+//! Test: Reimport does not grow buffer tables.
+/*!
+ Scenario: Import the same FBX file twice into the same cooked root.
+
+ Verifies:
+ - buffers.table size remains stable after the second import,
+ - the container remains loadable through LooseCookedInspection.
+*/
+NOLINT_TEST_F(FbxImporterGeometryTest, RealBackend_Reimport_DedupsBuffers)
+{
+  // Arrange
+  const auto temp_dir = MakeTempDir("fbx_importer_real_reimport_buffers");
+  const auto cooked_root = temp_dir / "cooked";
+  const auto source_path = temp_dir / "tri.fbx";
+
+  const char* kFbxAscii = "; FBX 7.4.0 project file\n"
+                          "FBXHeaderExtension:  {\n"
+                          "  FBXHeaderVersion: 1003\n"
+                          "  FBXVersion: 7400\n"
+                          "  Creator: \"OxygenTests\"\n"
+                          "}\n"
+                          "Definitions:  {\n"
+                          "  Version: 100\n"
+                          "  Count: 2\n"
+                          "  ObjectType: \"Model\" {\n"
+                          "    Count: 1\n"
+                          "  }\n"
+                          "  ObjectType: \"Geometry\" {\n"
+                          "    Count: 1\n"
+                          "  }\n"
+                          "}\n"
+                          "Objects:  {\n"
+                          "  Model: 1, \"Tri\", \"Mesh\" {\n"
+                          "  }\n"
+                          "  Geometry: 2, \"TriGeo\", \"Mesh\" {\n"
+                          "    Vertices: *9 {\n"
+                          "      a: 0,0,0,  0,1,0,  1,0,0\n"
+                          "    }\n"
+                          "    PolygonVertexIndex: *3 {\n"
+                          "      a: 0,1,-3\n"
+                          "    }\n"
+                          "  }\n"
+                          "}\n"
+                          "Connections:  {\n"
+                          "  C: \"OO\", 2, 1\n"
+                          "}\n";
+
+  WriteTextFile(source_path, kFbxAscii);
+
+  AssetImporter importer;
+  ImportRequest request {
+    .source_path = source_path,
+    .cooked_root = cooked_root,
+    .loose_cooked_layout = LooseCookedLayout {},
+    .source_key = std::nullopt,
+    .options = {},
+  };
+  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
+  request.options.import_content
+    = oxygen::content::import::ImportContentFlags::kGeometry;
+
+  // Act
+  const auto report_a = importer.ImportToLooseCooked(request);
+  const auto report_b = importer.ImportToLooseCooked(request);
+
+  // Assert
+  EXPECT_TRUE(report_a.success);
+  EXPECT_TRUE(report_b.success);
+
+  LooseCookedInspection inspection_a;
+  inspection_a.LoadFromRoot(report_a.cooked_root);
+  const auto files_a = inspection_a.Files();
+  const auto table_a_it = std::find_if(files_a.begin(), files_a.end(),
+    [](const auto& e) { return e.kind == FileKind::kBuffersTable; });
+  ASSERT_NE(table_a_it, files_a.end());
+  const auto table_a_path
+    = report_a.cooked_root / std::filesystem::path(table_a_it->relpath);
+  const auto table_a_size = std::filesystem::file_size(table_a_path);
+
+  LooseCookedInspection inspection_b;
+  inspection_b.LoadFromRoot(report_b.cooked_root);
+  const auto files_b = inspection_b.Files();
+  const auto table_b_it = std::find_if(files_b.begin(), files_b.end(),
+    [](const auto& e) { return e.kind == FileKind::kBuffersTable; });
+  ASSERT_NE(table_b_it, files_b.end());
+  const auto table_b_path
+    = report_b.cooked_root / std::filesystem::path(table_b_it->relpath);
+  const auto table_b_size = std::filesystem::file_size(table_b_path);
+
+  EXPECT_EQ(table_a_size, table_b_size);
 }
 
 //=== UVs + Tangents ===-----------------------------------------------------//
@@ -906,8 +1351,11 @@ NOLINT_TEST_F(
     = ResolveNameWithStrategy(request.options.naming_strategy, "MatB",
       oxygen::content::import::ImportNameKind::kMaterial, 1);
 
-  const auto vp_a = request.loose_cooked_layout.MaterialVirtualPath(mat_a_name);
-  const auto vp_b = request.loose_cooked_layout.MaterialVirtualPath(mat_b_name);
+  const auto scene_ns = request.source_path.stem().string();
+  const auto vp_a = request.loose_cooked_layout.MaterialVirtualPath(
+    scene_ns + "/" + mat_a_name);
+  const auto vp_b = request.loose_cooked_layout.MaterialVirtualPath(
+    scene_ns + "/" + mat_b_name);
   const auto key_a = MakeDeterministicAssetKey(vp_a);
   const auto key_b = MakeDeterministicAssetKey(vp_b);
 

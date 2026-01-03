@@ -10,7 +10,9 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <numbers>
@@ -183,6 +185,19 @@ namespace {
     return "Scene";
   }
 
+  [[nodiscard]] auto NamespaceImportedAssetName(
+    const ImportRequest& request, const std::string_view name) -> std::string
+  {
+    const auto scene_name = BuildSceneName(request);
+    if (scene_name.empty()) {
+      return std::string(name);
+    }
+    if (name.empty()) {
+      return scene_name;
+    }
+    return scene_name + "/" + std::string(name);
+  }
+
   auto TruncateAndNullTerminate(
     char* dst, const size_t dst_size, std::string_view s) -> void
   {
@@ -279,7 +294,212 @@ namespace {
     std::vector<std::byte> data;
     std::unordered_map<const ufbx_texture*, uint32_t> index_by_file_texture;
     std::unordered_map<std::string, uint32_t> index_by_texture_id;
+    std::unordered_map<std::string, uint32_t> index_by_signature;
   };
+
+  [[nodiscard]] auto MakeTextureSignature(
+    const oxygen::data::pak::TextureResourceDesc& desc,
+    const std::span<const std::byte> bytes) -> std::string
+  {
+    const auto digest = oxygen::base::ComputeSha256(bytes);
+
+    std::string signature;
+    signature.reserve(128);
+    signature.append(Sha256ToHex(digest));
+    signature.push_back(':');
+    signature.append(std::to_string(desc.width));
+    signature.push_back('x');
+    signature.append(std::to_string(desc.height));
+    signature.push_back(':');
+    signature.append(std::to_string(desc.mip_levels));
+    signature.push_back(':');
+    signature.append(std::to_string(desc.format));
+    signature.push_back(':');
+    signature.append(std::to_string(desc.alignment));
+    signature.push_back(':');
+    signature.append(std::to_string(desc.size_bytes));
+    return signature;
+  }
+
+  [[nodiscard]] auto TryReadWholeFileBytes(const std::filesystem::path& path)
+    -> std::optional<std::vector<std::byte>>
+  {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)
+      || !std::filesystem::is_regular_file(path, ec)) {
+      return std::nullopt;
+    }
+
+    const auto size_u64 = std::filesystem::file_size(path, ec);
+    if (ec) {
+      return std::nullopt;
+    }
+    if (size_u64 == 0) {
+      return std::vector<std::byte> {};
+    }
+    if (size_u64
+      > static_cast<uint64_t>((std::numeric_limits<size_t>::max)())) {
+      return std::nullopt;
+    }
+
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream.is_open()) {
+      return std::nullopt;
+    }
+
+    std::vector<std::byte> bytes;
+    bytes.resize(static_cast<size_t>(size_u64));
+    stream.read(reinterpret_cast<char*>(bytes.data()),
+      static_cast<std::streamsize>(bytes.size()));
+    if (!stream.good() && !stream.eof()) {
+      return std::nullopt;
+    }
+    return bytes;
+  }
+
+  auto LoadExistingTextureResourcesIfPresent(const std::filesystem::path& root,
+    const LooseCookedLayout& layout, CookedContentWriter& out,
+    TextureEmission& textures) -> void
+  {
+    using TextureResourceDesc = oxygen::data::pak::TextureResourceDesc;
+
+    const auto table_path
+      = root / std::filesystem::path(layout.TexturesTableRelPath());
+    const auto data_path
+      = root / std::filesystem::path(layout.TexturesDataRelPath());
+
+    const auto table_bytes_opt = TryReadWholeFileBytes(table_path);
+    const auto data_bytes_opt = TryReadWholeFileBytes(data_path);
+    if (!table_bytes_opt.has_value() && !data_bytes_opt.has_value()) {
+      return;
+    }
+    if (!table_bytes_opt.has_value() || !data_bytes_opt.has_value()) {
+      ImportDiagnostic diag {
+        .severity = ImportSeverity::kError,
+        .code = "loose_cooked.missing_texture_pair",
+        .message
+        = "existing cooked root has only one of textures.table/textures.data",
+        .source_path = {},
+        .object_path = {},
+      };
+      out.AddDiagnostic(std::move(diag));
+      throw std::runtime_error(
+        "Existing cooked root is missing textures.table or textures.data");
+    }
+
+    const auto& table_bytes = *table_bytes_opt;
+    const auto& data_bytes = *data_bytes_opt;
+
+    if (table_bytes.size() % sizeof(TextureResourceDesc) != 0U) {
+      ImportDiagnostic diag {
+        .severity = ImportSeverity::kError,
+        .code = "loose_cooked.corrupt_textures_table",
+        .message
+        = "textures.table size is not a multiple of TextureResourceDesc",
+        .source_path = {},
+        .object_path = table_path.string(),
+      };
+      out.AddDiagnostic(std::move(diag));
+      throw std::runtime_error("Existing textures.table appears corrupt");
+    }
+
+    const auto count = table_bytes.size() / sizeof(TextureResourceDesc);
+    textures.table.resize(count);
+    if (!table_bytes.empty()) {
+      std::memcpy(
+        textures.table.data(), table_bytes.data(), table_bytes.size());
+    }
+
+    textures.data = data_bytes;
+
+    textures.index_by_signature.clear();
+    textures.index_by_signature.reserve(textures.table.size());
+    for (uint32_t ti = 1; ti < textures.table.size(); ++ti) {
+      const auto& desc = textures.table[ti];
+      const auto begin = static_cast<uint64_t>(desc.data_offset);
+      const auto size = static_cast<uint64_t>(desc.size_bytes);
+      if (size == 0) {
+        continue;
+      }
+      if (begin > textures.data.size()
+        || size > textures.data.size() - static_cast<size_t>(begin)) {
+        ImportDiagnostic diag {
+          .severity = ImportSeverity::kError,
+          .code = "loose_cooked.corrupt_textures_data",
+          .message = "textures.table entry points outside textures.data",
+          .source_path = {},
+          .object_path = table_path.string(),
+        };
+        out.AddDiagnostic(std::move(diag));
+        throw std::runtime_error("Existing textures.data appears corrupt");
+      }
+
+      const auto bytes = std::span<const std::byte>(
+        textures.data.data() + static_cast<size_t>(begin),
+        static_cast<size_t>(size));
+      textures.index_by_signature.emplace(
+        MakeTextureSignature(desc, bytes), ti);
+    }
+    LOG_F(INFO, "Loaded existing textures: count={} bytes={}",
+      textures.table.size(), textures.data.size());
+  }
+
+  auto LoadExistingBufferResourcesIfPresent(const std::filesystem::path& root,
+    const LooseCookedLayout& layout, CookedContentWriter& out,
+    std::vector<oxygen::data::pak::BufferResourceDesc>& buffers_table,
+    std::vector<std::byte>& buffers_data) -> void
+  {
+    using BufferResourceDesc = oxygen::data::pak::BufferResourceDesc;
+
+    const auto table_path
+      = root / std::filesystem::path(layout.BuffersTableRelPath());
+    const auto data_path
+      = root / std::filesystem::path(layout.BuffersDataRelPath());
+
+    const auto table_bytes_opt = TryReadWholeFileBytes(table_path);
+    const auto data_bytes_opt = TryReadWholeFileBytes(data_path);
+    if (!table_bytes_opt.has_value() && !data_bytes_opt.has_value()) {
+      return;
+    }
+    if (!table_bytes_opt.has_value() || !data_bytes_opt.has_value()) {
+      ImportDiagnostic diag {
+        .severity = ImportSeverity::kError,
+        .code = "loose_cooked.missing_buffer_pair",
+        .message
+        = "existing cooked root has only one of buffers.table/buffers.data",
+        .source_path = {},
+        .object_path = {},
+      };
+      out.AddDiagnostic(std::move(diag));
+      throw std::runtime_error(
+        "Existing cooked root is missing buffers.table or buffers.data");
+    }
+
+    const auto& table_bytes = *table_bytes_opt;
+    const auto& data_bytes = *data_bytes_opt;
+
+    if (table_bytes.size() % sizeof(BufferResourceDesc) != 0U) {
+      ImportDiagnostic diag {
+        .severity = ImportSeverity::kError,
+        .code = "loose_cooked.corrupt_buffers_table",
+        .message = "buffers.table size is not a multiple of BufferResourceDesc",
+        .source_path = {},
+        .object_path = table_path.string(),
+      };
+      out.AddDiagnostic(std::move(diag));
+      throw std::runtime_error("Existing buffers.table appears corrupt");
+    }
+
+    const auto count = table_bytes.size() / sizeof(BufferResourceDesc);
+    buffers_table.resize(count);
+    if (!table_bytes.empty()) {
+      std::memcpy(buffers_table.data(), table_bytes.data(), table_bytes.size());
+    }
+
+    buffers_data = data_bytes;
+    LOG_F(INFO, "Loaded existing buffers: count={} bytes={}",
+      buffers_table.size(), buffers_data.size());
+  }
 
   [[nodiscard]] auto ResolveFileTexture(const ufbx_texture* texture)
     -> const ufbx_texture*
@@ -512,18 +732,8 @@ namespace {
     const auto packed_pixels
       = RepackRgba8ToRowPitchAligned(pixels, width, height, kRowPitchAlignment);
 
-    LOG_F(INFO,
-      "Emit texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
-      "index {}",
-      std::string(id).c_str(), width, height, pixels.size(), is_embedded,
-      used_placeholder, out.table.size());
-
-    const auto data_offset = AppendAligned(out.data,
-      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()),
-      kRowPitchAlignment);
-
     TextureEmission::TextureResourceDesc desc {};
-    desc.data_offset = data_offset;
+    desc.data_offset = 0;
     desc.size_bytes = static_cast<uint32_t>(packed_pixels.size());
     desc.texture_type = static_cast<uint8_t>(oxygen::TextureType::kTexture2D);
     desc.compression_type = 0;
@@ -535,12 +745,42 @@ namespace {
     desc.format = static_cast<uint8_t>(oxygen::Format::kRGBA8UNorm);
     desc.alignment = static_cast<uint32_t>(kRowPitchAlignment);
 
+    const auto signature = MakeTextureSignature(desc,
+      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()));
+    if (const auto it = out.index_by_signature.find(signature);
+      it != out.index_by_signature.end()) {
+      const auto existing_index = it->second;
+      out.index_by_file_texture.insert_or_assign(file_tex, existing_index);
+      if (!texture_id.empty()) {
+        out.index_by_texture_id.insert_or_assign(texture_id, existing_index);
+      }
+      LOG_F(INFO,
+        "Reuse texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
+        "index {}",
+        std::string(id).c_str(), width, height, pixels.size(), is_embedded,
+        used_placeholder, existing_index);
+      return existing_index;
+    }
+
+    const auto data_offset = AppendAligned(out.data,
+      std::span<const std::byte>(packed_pixels.data(), packed_pixels.size()),
+      kRowPitchAlignment);
+
+    desc.data_offset = data_offset;
+
+    LOG_F(INFO,
+      "Emit texture '{}' ({}x{}, bytes={}, embedded={}, placeholder={}) -> "
+      "index {}",
+      std::string(id).c_str(), width, height, pixels.size(), is_embedded,
+      used_placeholder, out.table.size());
+
     const auto index = static_cast<uint32_t>(out.table.size());
     out.table.push_back(desc);
     out.index_by_file_texture.insert_or_assign(file_tex, index);
     if (!texture_id.empty()) {
       out.index_by_texture_id.insert_or_assign(texture_id, index);
     }
+    out.index_by_signature.emplace(signature, index);
     return index;
   }
 
@@ -548,13 +788,14 @@ namespace {
     -> const ufbx_texture*
   {
     const auto& pbr = material.pbr.base_color;
-    if (pbr.texture_enabled && !pbr.feature_disabled
-      && pbr.texture != nullptr) {
+    // Some exporters leave `texture_enabled` unset even when a valid texture
+    // connection exists. Prefer the pointer presence while honoring
+    // `feature_disabled`.
+    if (!pbr.feature_disabled && pbr.texture != nullptr) {
       return pbr.texture;
     }
     const auto& fbx = material.fbx.diffuse_color;
-    if (fbx.texture_enabled && !fbx.feature_disabled
-      && fbx.texture != nullptr) {
+    if (!fbx.feature_disabled && fbx.texture != nullptr) {
       return fbx.texture;
     }
     return nullptr;
@@ -564,13 +805,11 @@ namespace {
     -> const ufbx_texture*
   {
     const auto& pbr = material.pbr.normal_map;
-    if (pbr.texture_enabled && !pbr.feature_disabled
-      && pbr.texture != nullptr) {
+    if (!pbr.feature_disabled && pbr.texture != nullptr) {
       return pbr.texture;
     }
     const auto& fbx = material.fbx.normal_map;
-    if (fbx.texture_enabled && !fbx.feature_disabled
-      && fbx.texture != nullptr) {
+    if (!fbx.feature_disabled && fbx.texture != nullptr) {
       return fbx.texture;
     }
     return nullptr;
@@ -580,8 +819,7 @@ namespace {
     -> const ufbx_texture*
   {
     const auto& pbr = material.pbr.metalness;
-    if (pbr.texture_enabled && !pbr.feature_disabled
-      && pbr.texture != nullptr) {
+    if (!pbr.feature_disabled && pbr.texture != nullptr) {
       return pbr.texture;
     }
     return nullptr;
@@ -591,8 +829,7 @@ namespace {
     -> const ufbx_texture*
   {
     const auto& pbr = material.pbr.roughness;
-    if (pbr.texture_enabled && !pbr.feature_disabled
-      && pbr.texture != nullptr) {
+    if (!pbr.feature_disabled && pbr.texture != nullptr) {
       return pbr.texture;
     }
     return nullptr;
@@ -602,8 +839,7 @@ namespace {
     const ufbx_material& material) -> const ufbx_texture*
   {
     const auto& pbr = material.pbr.ambient_occlusion;
-    if (pbr.texture_enabled && !pbr.feature_disabled
-      && pbr.texture != nullptr) {
+    if (!pbr.feature_disabled && pbr.texture != nullptr) {
       return pbr.texture;
     }
     return nullptr;
@@ -784,6 +1020,9 @@ namespace {
       const auto source_path_str = request.source_path.string();
       LOG_SCOPE_F(INFO, "FbxImporter::Import {}", source_path_str.c_str());
 
+      const auto cooked_root = request.cooked_root.value_or(
+        std::filesystem::absolute(request.source_path.parent_path()));
+
       ufbx_load_opts opts {};
       ufbx_error error {};
 
@@ -886,6 +1125,8 @@ namespace {
 
       TextureEmission textures;
       if (want_textures) {
+        LoadExistingTextureResourcesIfPresent(
+          cooked_root, request.loose_cooked_layout, out, textures);
         EnsureFallbackTexture(textures);
       }
 
@@ -961,12 +1202,14 @@ namespace {
       const uint32_t ordinal, const ufbx_material* material,
       TextureEmission& textures, const bool want_textures) -> AssetKey
     {
+      const auto storage_name
+        = NamespaceImportedAssetName(request, material_name);
       const auto virtual_path
-        = request.loose_cooked_layout.MaterialVirtualPath(material_name);
+        = request.loose_cooked_layout.MaterialVirtualPath(storage_name);
 
       const auto relpath
         = request.loose_cooked_layout.DescriptorDirFor(AssetType::kMaterial)
-        + "/" + LooseCookedLayout::MaterialDescriptorFileName(material_name);
+        + "/" + LooseCookedLayout::MaterialDescriptorFileName(storage_name);
 
       AssetKey key {};
       switch (request.options.asset_key_policy) {
@@ -1198,13 +1441,53 @@ namespace {
       std::vector<BufferResourceDesc> buffers_table;
       std::vector<std::byte> buffers_data;
 
+      const auto cooked_root = request.cooked_root.value_or(
+        std::filesystem::absolute(request.source_path.parent_path()));
+      LoadExistingBufferResourcesIfPresent(cooked_root,
+        request.loose_cooked_layout, out, buffers_table, buffers_data);
+
+      std::unordered_map<std::string, uint32_t> buffer_index_by_signature;
+      buffer_index_by_signature.reserve(buffers_table.size());
+      for (uint32_t bi = 0; bi < buffers_table.size(); ++bi) {
+        const auto& desc = buffers_table[bi];
+        const auto begin = static_cast<uint64_t>(desc.data_offset);
+        const auto size = static_cast<uint64_t>(desc.size_bytes);
+        if (size == 0) {
+          continue;
+        }
+        if (begin > buffers_data.size()
+          || size > buffers_data.size() - static_cast<size_t>(begin)) {
+          continue;
+        }
+
+        const auto bytes = std::span<const std::byte>(
+          buffers_data.data() + static_cast<size_t>(begin),
+          static_cast<size_t>(size));
+        const auto digest = oxygen::base::ComputeSha256(bytes);
+
+        std::string signature;
+        signature.reserve(96);
+        signature.append(Sha256ToHex(digest));
+        signature.push_back(':');
+        signature.append(std::to_string(desc.usage_flags));
+        signature.push_back(':');
+        signature.append(std::to_string(desc.element_stride));
+        signature.push_back(':');
+        signature.append(std::to_string(desc.element_format));
+        signature.push_back(':');
+        signature.append(std::to_string(desc.size_bytes));
+
+        buffer_index_by_signature.emplace(std::move(signature), bi);
+      }
+
       auto effective_material_keys = material_keys;
       if (effective_material_keys.empty()) {
         const auto count = static_cast<uint32_t>(scene.materials.count);
         if (count == 0) {
           const auto name = BuildMaterialName("M_Default", request, 0);
+          const auto storage_name = NamespaceImportedAssetName(request, name);
           const auto virtual_path
-            = request.loose_cooked_layout.MaterialVirtualPath(name);
+            = request.loose_cooked_layout.MaterialVirtualPath(storage_name);
 
           AssetKey key {};
           switch (request.options.asset_key_policy) {
@@ -1225,8 +1508,9 @@ namespace {
               ? ToStringView(mat->name)
               : std::string_view {};
             const auto name = BuildMaterialName(authored_name, request, i);
+            const auto storage_name = NamespaceImportedAssetName(request, name);
             const auto virtual_path
-              = request.loose_cooked_layout.MaterialVirtualPath(name);
+              = request.loose_cooked_layout.MaterialVirtualPath(storage_name);
 
             AssetKey key {};
             switch (request.options.asset_key_policy) {
@@ -1253,6 +1537,46 @@ namespace {
         const auto offset = static_cast<uint64_t>(buffers_data.size());
         buffers_data.insert(buffers_data.end(), bytes.begin(), bytes.end());
         return offset;
+      };
+
+      auto GetOrCreateBufferIndex
+        = [&](const std::span<const std::byte> bytes, const uint64_t alignment,
+            const uint32_t usage_flags, const uint32_t element_stride,
+            const uint8_t element_format) -> uint32_t {
+        if (bytes.empty()) {
+          return 0;
+        }
+
+        const auto digest = oxygen::base::ComputeSha256(bytes);
+
+        std::string signature;
+        signature.reserve(96);
+        signature.append(Sha256ToHex(digest));
+        signature.push_back(':');
+        signature.append(std::to_string(usage_flags));
+        signature.push_back(':');
+        signature.append(std::to_string(element_stride));
+        signature.push_back(':');
+        signature.append(std::to_string(element_format));
+        signature.push_back(':');
+        signature.append(std::to_string(bytes.size()));
+
+        if (const auto it = buffer_index_by_signature.find(signature);
+          it != buffer_index_by_signature.end()) {
+          return it->second;
+        }
+
+        BufferResourceDesc desc {};
+        desc.data_offset = append_bytes(bytes, alignment);
+        desc.size_bytes = static_cast<uint32_t>(bytes.size());
+        desc.usage_flags = usage_flags;
+        desc.element_stride = element_stride;
+        desc.element_format = element_format;
+
+        const auto index = static_cast<uint32_t>(buffers_table.size());
+        buffers_table.push_back(desc);
+        buffer_index_by_signature.emplace(std::move(signature), index);
+        return index;
       };
 
       const auto mesh_count = static_cast<uint32_t>(scene.meshes.count);
@@ -1621,17 +1945,12 @@ namespace {
         const auto vb_bytes = std::as_bytes(std::span(vertices));
         constexpr uint32_t vb_stride = sizeof(Vertex);
 
-        BufferResourceDesc vb_desc {};
-        vb_desc.data_offset = append_bytes(vb_bytes, vb_stride);
-        vb_desc.size_bytes = static_cast<uint32_t>(vb_bytes.size());
-        vb_desc.usage_flags
+        const auto vb_usage_flags
           = static_cast<uint32_t>(BufferResource::UsageFlags::kVertexBuffer)
           | static_cast<uint32_t>(BufferResource::UsageFlags::kStatic);
-        vb_desc.element_stride = vb_stride;
-        vb_desc.element_format = static_cast<uint8_t>(oxygen::Format::kUnknown);
-
-        const auto vb_index = static_cast<uint32_t>(buffers_table.size());
-        buffers_table.push_back(vb_desc);
+        const auto vb_index
+          = GetOrCreateBufferIndex(vb_bytes, vb_stride, vb_usage_flags,
+            vb_stride, static_cast<uint8_t>(oxygen::Format::kUnknown));
 
         std::vector<SubMeshDesc> submeshes;
         submeshes.reserve(buckets.size());
@@ -1694,24 +2013,23 @@ namespace {
 
         const auto ib_bytes = std::as_bytes(std::span(indices));
 
-        BufferResourceDesc ib_desc {};
-        ib_desc.data_offset = append_bytes(ib_bytes, alignof(uint32_t));
-        ib_desc.size_bytes = static_cast<uint32_t>(ib_bytes.size());
-        ib_desc.usage_flags
+        const auto ib_usage_flags
           = static_cast<uint32_t>(BufferResource::UsageFlags::kIndexBuffer)
           | static_cast<uint32_t>(BufferResource::UsageFlags::kStatic);
-        ib_desc.element_stride = 0;
-        ib_desc.element_format = static_cast<uint8_t>(oxygen::Format::kR32UInt);
-
-        const auto ib_index = static_cast<uint32_t>(buffers_table.size());
-        buffers_table.push_back(ib_desc);
+        const auto ib_index
+          = GetOrCreateBufferIndex(ib_bytes, alignof(uint32_t), ib_usage_flags,
+            0, static_cast<uint8_t>(oxygen::Format::kR32UInt));
 
         // --- Emit geometry asset descriptor (desc + mesh + submesh + view) ---
+        const auto storage_mesh_name
+          = NamespaceImportedAssetName(request, mesh_name);
+
         const auto geo_virtual_path
-          = request.loose_cooked_layout.GeometryVirtualPath(mesh_name);
+          = request.loose_cooked_layout.GeometryVirtualPath(storage_mesh_name);
         const auto geo_relpath
           = request.loose_cooked_layout.DescriptorDirFor(AssetType::kGeometry)
-          + "/" + LooseCookedLayout::GeometryDescriptorFileName(mesh_name);
+          + "/"
+          + LooseCookedLayout::GeometryDescriptorFileName(storage_mesh_name);
 
         AssetKey geo_key {};
         switch (request.options.asset_key_policy) {
